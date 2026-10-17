@@ -13,11 +13,11 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(448);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(27);
-    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
+    expect(rows).toHaveLength(459);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(28);
+    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(13);
     // #992 and #1016: match the current inventory enforced by scripts/route-policy-audit.ts.
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(86);
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(95);
     expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(239);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(84);
     expect(app.routePolicyExemptions).toEqual([
@@ -46,6 +46,7 @@ describe("final route-policy ledger", () => {
       "GET /api/public/sponsors",
       "GET /api/public/universities",
       "GET /api/tv/config",
+      "GET /api/tv/github",
       "GET /api/tv/mode",
       "GET /api/tv/rooms",
       "GET /api/tv/stream",
@@ -72,6 +73,7 @@ describe("final route-policy ledger", () => {
       "POST /api/applications/confirm",
       "POST /api/applications/decline",
       "POST /api/auth/resend-verification",
+      "POST /api/github/webhook",
       "POST /api/invites/accept",
       "POST /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
       "POST /api/wallet/apple/v1/log",

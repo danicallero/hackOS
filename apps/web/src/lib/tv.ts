@@ -8,10 +8,17 @@ import type { Language } from "@/lib/types";
  * state machines are unit-tested rather than eyeballed on a projector.
  */
 
-export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live";
+export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live" | "github";
 
 /** Modes organisers may select from the TV control surface. */
-export const TV_CONTROL_MODES = ["live", "rooms", "schedule", "sponsors", "wifi"] as const;
+export const TV_CONTROL_MODES = [
+  "live",
+  "rooms",
+  "schedule",
+  "sponsors",
+  "wifi",
+  "github",
+] as const;
 export type TvControlMode = (typeof TV_CONTROL_MODES)[number];
 
 /** The resolved state of the fleet: what to show, and why. */

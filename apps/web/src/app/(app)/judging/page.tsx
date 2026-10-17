@@ -6,6 +6,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -13,7 +14,7 @@ import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
@@ -34,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useSidebar } from "@/components/ui/sidebar";
 import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
@@ -61,12 +63,16 @@ import { invalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
+import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 
 import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
+import { openReviewWindow } from "./open-review-window";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
+
+const FOCUS_MODE_KEY = "hackos.judging.focus-layout";
 
 function showQueueError(t: Translate, err: unknown, fallbackTitle: string) {
   const copy = queueErrorToastContent(
@@ -107,9 +113,33 @@ export default function QueuePage() {
   // only reports edits it cannot save (failed save, conflict, offline), and
   // switching away from those asks first.
   const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  // Focus layout (per viewer): while scoring, the queue hides, the sidebar
+  // collapses and the project sits beside the form. Off keeps the modal form.
+  const [focusMode, setFocusMode] = useState(true);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(FOCUS_MODE_KEY) === "off") setFocusMode(false);
+    } catch {
+      // Storage can be unavailable; the default applies.
+    }
+  }, []);
+  const changeFocusMode = (next: boolean) => {
+    setFocusMode(next);
+    try {
+      window.localStorage.setItem(FOCUS_MODE_KEY, next ? "on" : "off");
+    } catch {
+      // Not persisted this time.
+    }
+  };
+  const { open: sidebarOpen, setOpen: setSidebarOpen } = useSidebar();
+  const collapsedForFocusRef = useRef(false);
+  const reviewWindowRef = useRef<Window | null>(null);
+  const reviewWasOpenRef = useRef(false);
   const selectReviewEntry = (entry: QueueEntry | null) => {
     if (!confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) return false;
     setSelectedReviewEntry(entry);
+    setReviewOpen(entry != null);
     return true;
   };
   const [actionError, setActionError] = useState<string | null>(null);
@@ -119,7 +149,13 @@ export default function QueuePage() {
   const roomView = useLiveQuery<RoomView>(
     (signal) => (activeRoomId ? getRoomView(activeRoomId, signal) : Promise.resolve(null as never)),
     REALTIME_SCOPES.QUEUE,
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_NOTIFY_ENTER],
+    // Pump top-ups (e.g. after resume) call teams with QUEUE_TEAM_CALLED only.
+    [
+      EVENTS.QUEUE_ENTRY_CHANGED,
+      EVENTS.QUEUE_ROOM_CHANGED,
+      EVENTS.QUEUE_NOTIFY_ENTER,
+      EVENTS.QUEUE_TEAM_CALLED,
+    ],
     {
       enabled: canUse && activeRoomId != null,
       queryKey: [activeRoomId],
@@ -144,7 +180,7 @@ export default function QueuePage() {
         ? getRoomPace(activeRoomId, signal, effectiveChallengeId)
         : Promise.resolve(null as never),
     REALTIME_SCOPES.QUEUE,
-    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED, EVENTS.QUEUE_TEAM_CALLED],
     {
       enabled: canUse && activeRoomId != null,
       queryKey: [activeRoomId, effectiveChallengeId],
@@ -281,6 +317,71 @@ export default function QueuePage() {
     };
   }, [effectiveChallengeId, roomView.data, search, t]);
 
+  const reviewTarget = selectedReviewEntry ?? roomView.data?.active ?? null;
+  const reviewTargetId = reviewTarget?.id ?? null;
+  const reviewable =
+    canJudge &&
+    activeRoomId != null &&
+    reviewTarget != null &&
+    (reviewTarget.status === "in_room" ||
+      reviewTarget.status === "presenting" ||
+      selectedReviewEntry != null);
+
+  const closeReviewWindow = useCallback(() => {
+    const existing = reviewWindowRef.current;
+    reviewWindowRef.current = null;
+    if (existing && !existing.closed) existing.close();
+    if (reviewWasOpenRef.current) {
+      reviewWasOpenRef.current = false;
+      setReviewOpen(true);
+    }
+  }, []);
+
+  // A project link is about to open another tab: the evaluation follows in its
+  // own small window instead of staying behind this one.
+  const moveReviewToWindow = useCallback(async () => {
+    if (!reviewable || reviewTargetId == null || !window.matchMedia("(min-width: 1024px)").matches)
+      return;
+    if (reviewWindowRef.current && !reviewWindowRef.current.closed) return;
+    const url = new URL(
+      `/judging-popup/${reviewTargetId}?roomId=${activeRoomId}`,
+      window.location.origin,
+    ).toString();
+    const opened = await openReviewWindow(url, t("scoring"));
+    if (!opened) {
+      toast.error(t("reviewWindowBlocked"), { compactTitle: t("toastOpenReview") });
+      return;
+    }
+    reviewWindowRef.current = opened;
+    reviewWasOpenRef.current = reviewOpen;
+    setReviewOpen(false);
+    opened.addEventListener("pagehide", closeReviewWindow);
+  }, [reviewable, reviewTargetId, activeRoomId, reviewOpen, closeReviewWindow, t]);
+
+  // Coming back to this tab means the window is no longer needed.
+  useEffect(() => {
+    const onReturn = () => {
+      if (document.visibilityState === "visible") closeReviewWindow();
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [closeReviewWindow]);
+
+  const focusing = reviewOpen && focusMode && canJudge;
+  useEffect(() => {
+    if (focusing && sidebarOpen) {
+      collapsedForFocusRef.current = true;
+      setSidebarOpen(false);
+    } else if (!focusing && collapsedForFocusRef.current) {
+      collapsedForFocusRef.current = false;
+      setSidebarOpen(true);
+    }
+  }, [focusing, sidebarOpen, setSidebarOpen]);
+
   if (!canUse) {
     return <AccessDenied ask={t("judgingAccessDeniedDesc")} />;
   }
@@ -311,7 +412,7 @@ export default function QueuePage() {
             WMs, tablet/mobile) instead of overflowing the card. No fixed track
             widths — flex-basis + min-width + flex-wrap handle the reflow. */}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-44 flex-1 space-y-2">
+          <div className="min-w-36 flex-1 space-y-2">
             <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
@@ -335,7 +436,7 @@ export default function QueuePage() {
 
           {/* A room judges exactly one challenge — informational, read-only.
               Change it from the room admin surface, not here. */}
-          <div className="min-w-44 flex-[1.2] space-y-2">
+          <div className="min-w-36 flex-[1.2] space-y-2">
             <p className="text-sm font-medium">{t("challengeLabel")}</p>
             <div className="border-input bg-muted/40 text-muted-foreground flex h-[var(--control-height-default)] w-full min-w-0 items-center gap-2 rounded-control border px-3 text-sm">
               <LockIcon aria-hidden="true" className="size-3.5 shrink-0" />
@@ -343,7 +444,17 @@ export default function QueuePage() {
             </div>
           </div>
 
-          <div className="flex flex-1 flex-wrap items-end gap-2 sm:justify-end">
+          <div className="flex shrink-0 flex-wrap items-end gap-2 sm:justify-end">
+            {canJudge && (
+              <Button
+                variant={focusMode ? "default" : "outline"}
+                aria-pressed={focusMode}
+                onClick={() => changeFocusMode(!focusMode)}
+              >
+                <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
+                {t("judgingExpanded")}
+              </Button>
+            )}
             {isPaused ? (
               <Button
                 disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
@@ -440,8 +551,15 @@ export default function QueuePage() {
       ) : (
         // Two-column region fills the remaining height. Left column is a fixed
         // container whose internal queue list scrolls; right column is the scroll area.
-        <div className="grid min-h-0 gap-5 xl:h-0 xl:flex-1 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="xl:h-full xl:min-h-0">
+        <div
+          className={cn(
+            "grid min-h-0 gap-5 xl:h-0 xl:flex-1",
+            focusing
+              ? "xl:grid-cols-[minmax(0,1fr)_minmax(26rem,34rem)]"
+              : "xl:grid-cols-[360px_minmax(0,1fr)]",
+          )}
+        >
+          <div className={cn("xl:h-full xl:min-h-0", focusing && "hidden")}>
             <QueuePanel
               timingAction={
                 effectiveChallengeId && (
@@ -515,40 +633,52 @@ export default function QueuePage() {
             />
           </div>
 
-          {/* Main column: presentation stays visible above the evaluation; the
-              scoring card owns the remaining height and scrolls its body. */}
-          <div className="flex min-h-0 flex-col gap-5 overflow-hidden xl:h-full">
-            <div className="shrink-0">
-              <PresentationPanel
-                entry={active}
-                challenge={activeChallenge}
-                waitingRoomCount={view.called.length}
-                firstCalledEntry={view.called[0] ?? null}
-                canJudge={canJudge}
-                canOperate={canOperate}
-                busy={busy}
-                onEntryAction={(entry, action, body, label) =>
-                  mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
-                }
-              />
-            </div>
-
-            <ReviewForm
-              key={(selectedReviewEntry ?? active)?.id ?? "none"}
-              entry={selectedReviewEntry ?? active}
+          {/* Main column: the panel scrolls its project body and keeps timers and
+              actions pinned; scoring opens in a modal. */}
+          <div className="min-h-0 xl:h-full">
+            <PresentationPanel
+              entry={active}
               challenge={activeChallenge}
-              panel={view.challenge?.judging_panel_criteria ?? null}
-              roomId={activeRoomId}
-              canJudge={
-                canJudge &&
-                (active?.status === "in_room" ||
-                  active?.status === "presenting" ||
-                  selectedReviewEntry != null)
+              waitingRoomCount={view.called.length}
+              firstCalledEntry={view.called[0] ?? null}
+              canJudge={canJudge}
+              canOperate={canOperate}
+              busy={busy}
+              preparationSeconds={pace.data?.configuredPreparationSeconds ?? null}
+              onOpenReview={() => selectReviewEntry(active)}
+              onExternalOpen={() => void moveReviewToWindow()}
+              onEntryAction={(entry, action, body, label) =>
+                mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)
               }
-              onCloseExisting={selectedReviewEntry ? () => selectReviewEntry(null) : undefined}
-              onUnsavedEditsAtRisk={setReviewEditsAtRisk}
             />
           </div>
+
+          {reviewOpen && (selectedReviewEntry ?? active) && (
+            <div className={focusing ? "min-h-96 xl:h-full xl:min-h-0" : "contents"}>
+              <ReviewForm
+                inline={focusing}
+                key={(selectedReviewEntry ?? active)?.id}
+                entry={(selectedReviewEntry ?? active) as QueueEntry}
+                challenge={activeChallenge}
+                panel={view.challenge?.judging_panel_criteria ?? null}
+                roomId={activeRoomId}
+                canJudge={
+                  canJudge &&
+                  (active?.status === "in_room" ||
+                    active?.status === "presenting" ||
+                    selectedReviewEntry != null)
+                }
+                onClose={() => {
+                  if (confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) {
+                    setSelectedReviewEntry(null);
+                    setReviewOpen(false);
+                  }
+                }}
+                onExternalOpen={() => void moveReviewToWindow()}
+                onUnsavedEditsAtRisk={setReviewEditsAtRisk}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

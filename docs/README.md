@@ -94,6 +94,8 @@ Architecture & modules:
   one, and the four guardrails (typed label keys, the web icon map, the mobile
   Android-symbol map, `pnpm check:copy`) that keep the API, web and mobile from
   drifting apart.
+- [GitHub activity](./github-activity.md) — linking a project to a GitHub repo
+  (private included) through a GitHub App, commit/PR tracking and the TV ranking.
 - [TV screens](./tv-screens.md) — what the venue's screens show and why: the
   manual-selection / default precedence, the combined live screen and its
   payload, venue Wi-Fi, and how each mode adapts to any screen size or aspect

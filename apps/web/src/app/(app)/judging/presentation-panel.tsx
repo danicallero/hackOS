@@ -7,6 +7,7 @@ import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowC
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
@@ -26,6 +27,7 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
+import { externalUrlHref } from "@/lib/external-url";
 import { useLocale } from "@/lib/i18n";
 import {
   canTransition,
@@ -48,6 +50,9 @@ export function PresentationPanel({
   canJudge,
   canOperate,
   busy,
+  preparationSeconds,
+  onOpenReview,
+  onExternalOpen,
   onEntryAction,
 }: {
   entry: QueueEntry | null;
@@ -58,6 +63,11 @@ export function PresentationPanel({
   canJudge: boolean;
   canOperate: boolean;
   busy: string | null;
+  /** Track's configured preparation allowance; null until loaded. */
+  preparationSeconds: number | null;
+  onOpenReview: () => void;
+  /** Fired when a link leaves for another tab, so the evaluation can follow in its own window. */
+  onExternalOpen?: () => void;
   onEntryAction: (
     entry: QueueEntry,
     action:
@@ -87,8 +97,14 @@ export function PresentationPanel({
     timerAction === "resume-timer" ? "resumePresentationTimer" : "pausePresentationTimer";
 
   return (
-    <Surface padding="none" className={cn("overflow-hidden", entry && "border-primary/30")}>
-      <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
+    <Surface
+      padding="none"
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden xl:h-full",
+        entry && "border-primary/30",
+      )}
+    >
+      <div className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5 pb-4">
         <div className="min-w-0">
           <h2 className="truncate text-xl font-semibold text-balance">
             {entry ? entryLabel(entry, t) : t("waitingForNextTeam")}
@@ -103,14 +119,29 @@ export function PresentationPanel({
               : t("bringTeamPrompt")}
           </p>
         </div>
-        {entry ? (
-          <QueueStatusBadge status={entry.status} />
-        ) : (
-          <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {entry && (
+            <Button variant="outline" size="sm" asChild>
+              <a
+                href={`/projects/${entry.repo_id}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={onExternalOpen}
+              >
+                <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
+                {t("openProject")}
+              </a>
+            </Button>
+          )}
+          {entry ? (
+            <QueueStatusBadge status={entry.status} />
+          ) : (
+            <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
+          )}
+        </div>
       </div>
       <Separator />
-      <div className="space-y-4 p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {!entry ? (
           <JudgingEmptyState
             icon={DoorOpenIcon}
@@ -159,85 +190,91 @@ export function PresentationPanel({
             }
           />
         ) : (
-          <>
-            <ProjectInfo entry={entry} challenge={challenge} />
-
-            {(isReady || isPresenting) && (
-              <PreparationTimer
-                enteredAt={entry.room_entered_at ?? null}
-                startedAt={entry.presentation_started_at}
-              />
-            )}
-
-            {isPresenting && (
-              <PresentationTimer
-                startedAt={entry.presentation_started_at}
-                totalMinutes={
-                  entry.presentation_total_seconds != null
-                    ? entry.presentation_total_seconds / 60
-                    : null
-                }
-                pausedAt={entry.presentation_paused_at ?? null}
-                pausedSeconds={entry.presentation_paused_seconds ?? 0}
-              />
-            )}
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              {timerAction ? (
-                <Button
-                  variant="outline"
-                  disabled={!canJudge || busy != null}
-                  loading={busy === `${timerAction}-${entry.id}`}
-                  onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
-                >
-                  {timerAction === "resume-timer" ? (
-                    <PlayIcon aria-hidden="true" className="size-4" />
-                  ) : (
-                    <PauseIcon aria-hidden="true" className="size-4" />
-                  )}
-                  {t(timerLabel)}
-                </Button>
-              ) : (
-                <Button
-                  disabled={!canJudge || !isReady || busy != null}
-                  loading={busy === `start-${entry.id}`}
-                  onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
-                >
-                  <PlayIcon aria-hidden="true" className="size-4" />
-                  {t("start")}
-                </Button>
-              )}
-              {canSendBack && (
-                <AlertModal
-                  title={t("confirmSendBackTitle")}
-                  description={t("confirmSendBackDescription")}
-                  cancelLabel={t("cancel")}
-                  confirmLabel={t("requeueWaitingRoom")}
-                  autoClose
-                  onConfirm={() =>
-                    onEntryAction(
-                      entry,
-                      "send-back",
-                      { reason: "Re-queued to waiting room" },
-                      t("teamSentBackWaiting"),
-                    )
-                  }
-                  trigger={
-                    <Button
-                      variant="outline"
-                      disabled={!canJudge || busy != null}
-                      loading={busy === `send-back-${entry.id}`}
-                    >
-                      <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
-                      {t("requeueWaitingRoom")}
-                    </Button>
-                  }
-                />
-              )}
-            </div>
-          </>
+          <ProjectInfo entry={entry} challenge={challenge} onExternalOpen={onExternalOpen} />
         )}
       </div>
+      {entry && (
+        <div className="bg-card shrink-0 space-y-3 border-t p-4 sm:px-5">
+          {(isReady || isPresenting) && (
+            <PreparationTimer
+              enteredAt={entry.room_entered_at ?? null}
+              startedAt={entry.presentation_started_at}
+              scheduledSeconds={preparationSeconds}
+            />
+          )}
+
+          {isPresenting && (
+            <PresentationTimer
+              startedAt={entry.presentation_started_at}
+              totalMinutes={
+                entry.presentation_total_seconds != null
+                  ? entry.presentation_total_seconds / 60
+                  : null
+              }
+              pausedAt={entry.presentation_paused_at ?? null}
+              pausedSeconds={entry.presentation_paused_seconds ?? 0}
+            />
+          )}
+
+          <div className="grid gap-2 sm:grid-cols-3">
+            {timerAction ? (
+              <Button
+                variant="outline"
+                disabled={!canJudge || busy != null}
+                loading={busy === `${timerAction}-${entry.id}`}
+                onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
+              >
+                {timerAction === "resume-timer" ? (
+                  <PlayIcon aria-hidden="true" className="size-4" />
+                ) : (
+                  <PauseIcon aria-hidden="true" className="size-4" />
+                )}
+                {t(timerLabel)}
+              </Button>
+            ) : (
+              <Button
+                disabled={!canJudge || !isReady || busy != null}
+                loading={busy === `start-${entry.id}`}
+                onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
+              >
+                <PlayIcon aria-hidden="true" className="size-4" />
+                {t("start")}
+              </Button>
+            )}
+            <Button variant="outline" onClick={onOpenReview}>
+              <ListChecksIcon aria-hidden="true" className="size-4" />
+              {t("scoring")}
+            </Button>
+            {canSendBack && (
+              <AlertModal
+                title={t("confirmSendBackTitle")}
+                description={t("confirmSendBackDescription")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("requeueWaitingRoom")}
+                autoClose
+                onConfirm={() =>
+                  onEntryAction(
+                    entry,
+                    "send-back",
+                    { reason: "Re-queued to waiting room" },
+                    t("teamSentBackWaiting"),
+                  )
+                }
+                trigger={
+                  <Button
+                    variant="outline"
+                    disabled={!canJudge || busy != null}
+                    loading={busy === `send-back-${entry.id}`}
+                  >
+                    <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
+                    {t("requeueWaitingRoom")}
+                  </Button>
+                }
+              />
+            )}
+          </div>
+        </div>
+      )}
     </Surface>
   );
 }
@@ -245,9 +282,13 @@ export function PresentationPanel({
 export function ProjectInfo({
   entry,
   challenge,
+  detailsOpen = false,
+  onExternalOpen,
 }: {
   entry: QueueEntry;
   challenge: Challenge | null;
+  detailsOpen?: boolean;
+  onExternalOpen?: () => void;
 }) {
   const { t, language } = useLocale();
   const members = entry.repo_members ?? [];
@@ -270,10 +311,19 @@ export function ProjectInfo({
       Array.isArray(project.responses[field.key]) &&
       (project.responses[field.key] as unknown[]).length > 0,
   );
+  const fieldLinks = (project?.template ?? []).flatMap((field) => {
+    const href = field.judging_link
+      ? externalUrlHref(String(project?.responses[field.key] ?? ""))
+      : null;
+    return href ? [{ label: field.label[language ?? "en"] || field.label.en, href }] : [];
+  });
   const links = [
     { label: "GitHub", href: project?.githubUrl ?? entry.repo_github_url },
     { label: t("projectDemoLink"), href: project?.demoUrl ?? entry.repo_demo_url },
-  ].filter((link): link is { label: string; href: string } => Boolean(link.href));
+  ]
+    .filter((link): link is { label: string; href: string } => Boolean(link.href))
+    .concat(fieldLinks)
+    .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
   return (
     <div className="space-y-4">
       {Boolean(resource.error) && (
@@ -320,7 +370,7 @@ export function ProjectInfo({
         <div className="flex flex-wrap gap-2">
           {links.map((link, i) => (
             <Button key={link.label} variant={i === 0 ? "default" : "outline"} size="sm" asChild>
-              <a href={link.href} target="_blank" rel="noreferrer">
+              <a href={link.href} target="_blank" rel="noreferrer" onClick={onExternalOpen}>
                 <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
                 {link.label}
               </a>
@@ -330,7 +380,7 @@ export function ProjectInfo({
       )}
 
       {project && (
-        <Collapsible className="border-y border-border/60 py-3">
+        <Collapsible defaultOpen={detailsOpen} className="border-y border-border/60 py-3">
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="w-full justify-between">
               {t("judgingProjectDetails")}
@@ -462,9 +512,11 @@ export function PresentationTimer({
 function PreparationTimer({
   enteredAt,
   startedAt,
+  scheduledSeconds,
 }: {
   enteredAt: string | null;
   startedAt: string | null;
+  scheduledSeconds: number | null;
 }) {
   const { t } = useLocale();
   const [now, setNow] = useState(() => Date.now());
@@ -478,7 +530,17 @@ function PreparationTimer({
   return (
     <p className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
       <span>{t("presentationPreparationTime")}</span>
-      <span className="font-mono tabular-nums">{secondsLabel(seconds)}</span>
+      <span
+        className={cn(
+          "font-mono tabular-nums",
+          scheduledSeconds != null && seconds > scheduledSeconds && "text-destructive",
+        )}
+      >
+        {secondsLabel(seconds)}
+        {scheduledSeconds != null && (
+          <span className="text-muted-foreground"> / {secondsLabel(scheduledSeconds)}</span>
+        )}
+      </span>
     </p>
   );
 }

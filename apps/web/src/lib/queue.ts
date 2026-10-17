@@ -143,6 +143,8 @@ export interface ChallengeProgress {
 /** GET /api/queue/rooms/:id/pace (H39). */
 export interface RoomPace {
   estimatedCycleMinutes?: number;
+  /** Track's configured preparation allowance (H32). */
+  configuredPreparationSeconds?: number;
   judgingClosesAt?: string | null;
   estimatedFinishAt?: string | null;
   exceedsJudgingClose?: boolean;

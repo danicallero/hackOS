@@ -99,6 +99,8 @@ export interface TemplateField {
   /** Project form only (H16): this answer is the project's description. */
   project_description?: boolean;
   project_video?: boolean;
+  /** Project form only: shown as an action link in the judging panel. */
+  judging_link?: boolean;
   library_id?: string;
   /** Groups this field under a `FormSection.key` (H11 form builder sections). */
   section_key?: string;

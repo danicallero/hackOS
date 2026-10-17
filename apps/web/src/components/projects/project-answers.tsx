@@ -11,6 +11,7 @@ import { externalUrlHref } from "@/lib/external-url";
 import type { NativeProject } from "@/lib/native-projects";
 import { normalizeProjectMarkdown } from "@/lib/project-text";
 import type { Language } from "@/lib/types";
+import { ProjectImage } from "./project-image";
 import { ProjectVideo } from "./project-video";
 
 /** H16: public project content keeps the organizer's section order and hides unanswered questions. */
@@ -94,21 +95,12 @@ export function ProjectAnswers({
                       <div className="grid gap-3 sm:grid-cols-2">
                         {files.map((file) =>
                           file.mimeType.startsWith("image/") ? (
-                            <a
+                            <ProjectImage
                               key={file.objectKey}
-                              href={assetUrl(file.url)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="overflow-hidden rounded-frame border border-border/60 bg-muted focus-visible:outline-2 focus-visible:outline-ring"
-                            >
-                              {/* biome-ignore lint/performance/noImgElement: policy-checked project images bypass shared optimizer caches. */}
-                              <img
-                                src={assetUrl(file.thumbnailUrl ?? file.url)}
-                                alt={label}
-                                className="aspect-video w-full object-contain"
-                                loading="lazy"
-                              />
-                            </a>
+                              src={assetUrl(file.url)}
+                              thumbnailSrc={assetUrl(file.thumbnailUrl ?? file.url)}
+                              alt={label}
+                            />
                           ) : (
                             <Button
                               key={file.objectKey}

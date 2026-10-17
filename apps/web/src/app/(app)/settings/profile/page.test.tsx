@@ -16,6 +16,7 @@ const session = vi.hoisted(() => ({
   refresh: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./github-row", () => ({ GithubRow: () => null }));
 vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},

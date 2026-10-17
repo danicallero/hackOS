@@ -138,6 +138,8 @@ export const templateFieldSchema = z
     project_description: z.boolean().optional(),
     /** H16: render this configurable text question as a YouTube video. */
     project_video: z.boolean().optional(),
+    /** Project form URL text fields only: shown as an action link in the judging panel. */
+    judging_link: z.boolean().optional(),
     /** Groups this field under a `FormSection.key` (H11 form builder sections). */
     section_key: z.string().optional(),
     /** H11: ungrouped fields can follow a named section without joining it. */
@@ -176,6 +178,9 @@ export const templateFieldSchema = z
   })
   .refine((f) => !f.project_video || f.kind === "text", {
     message: "only a text field can be a project video",
+  })
+  .refine((f) => !f.judging_link || f.kind === "text", {
+    message: "only a text field can be a judging link",
   });
 
 export const libraryDeletionsSchema = z.array(z.uuid());

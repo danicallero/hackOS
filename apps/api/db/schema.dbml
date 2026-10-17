@@ -522,6 +522,58 @@ Table form_library_values {
   name text [not null]
 }
 
+Table github_accounts {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  github_id bigint [unique, not null]
+  login text [not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [pk, not null]
+}
+
+Table github_commits {
+  author_login text
+  committed_at "timestamp with time zone" [not null]
+  repo_id integer [not null]
+  sha text [not null]
+
+  indexes {
+  (repo_id, sha) [pk]
+  }
+}
+
+Table github_pull_requests {
+  author_login text
+  merged_at "timestamp with time zone"
+  number integer [not null]
+  opened_at "timestamp with time zone" [not null]
+  repo_id integer [not null]
+  state text [not null]
+
+  indexes {
+  (repo_id, number) [pk]
+  }
+}
+
+Table github_repo_links {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  full_name text [not null]
+  github_repo_id bigint [unique, not null]
+  installation_id bigint [not null]
+  is_private boolean [not null, default: `false`]
+  linked_by integer
+  repo_id integer [pk, not null]
+}
+
+Table github_user_installations {
+  installation_id bigint [not null]
+  user_id integer [not null]
+  verified_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (user_id, installation_id) [pk]
+  }
+}
+
 Table idempotency_keys {
   completed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -1410,6 +1462,12 @@ Ref: event_email_reminders.created_by > users.id
 Ref: food_intolerances.proposed_by > users.id
 Ref: form_libraries.application_id > applications.id
 Ref: form_library_values.library_id > form_libraries.id
+Ref: github_accounts.user_id > users.id
+Ref: github_commits.repo_id > repos.id
+Ref: github_pull_requests.repo_id > repos.id
+Ref: github_repo_links.linked_by > users.id
+Ref: github_repo_links.repo_id > repos.id
+Ref: github_user_installations.user_id > users.id
 Ref: judging_field_leases.judge_id > users.id
 Ref: judging_field_leases.queue_entry_id > queue_entries.id
 Ref: judging_session.judge_id > users.id

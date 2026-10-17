@@ -7,17 +7,19 @@
 import { EVENTS, reviewScope } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
-import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/csr/WifiSlash";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { Modal } from "@/components/common/modal";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
+import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { overlayVariants } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { useEventSource } from "@/hooks/use-event-source";
 import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
@@ -40,9 +42,11 @@ import {
 } from "@/lib/queue";
 import { toast } from "@/lib/toast";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
+import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
-import { EMPTY_PANEL, errorMessage } from "./helpers";
+import { EMPTY_PANEL, entryLabel, errorMessage } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
+import { ProjectInfo } from "./presentation-panel";
 
 function isTextQuestion(question: Question): boolean {
   return question.kind === "short_text" || question.kind === "long_text";
@@ -89,10 +93,13 @@ export function ReviewForm({
   panel: roomPanel,
   roomId,
   canJudge,
-  onCloseExisting,
+  onClose,
+  standalone = false,
+  inline = false,
+  onExternalOpen,
   onUnsavedEditsAtRisk,
 }: {
-  entry: QueueEntry | null;
+  entry: QueueEntry;
   challenge: Challenge | null;
   /**
    * The room's own judging form (H46). A room serving a shared queue scores
@@ -103,7 +110,13 @@ export function ReviewForm({
   panel?: Question[] | null;
   roomId: number | null;
   canJudge: boolean;
-  onCloseExisting?: () => void;
+  onClose: () => void;
+  /** Rendered alone in its own window, without the project beside it. */
+  standalone?: boolean;
+  /** Rendered as a column of the judging page (focus layout) instead of a window. */
+  inline?: boolean;
+  /** A project link left for another tab; the page moves the evaluation to its own window. */
+  onExternalOpen?: () => void;
   /**
    * Reports edits that cannot be saved right now (failed save, conflict or
    * offline), so the page can confirm before switching entries (#1014).
@@ -111,7 +124,7 @@ export function ReviewForm({
   onUnsavedEditsAtRisk?: (atRisk: boolean) => void;
 }) {
   const { t } = useLocale();
-  const entryId = entry?.id;
+  const entryId = entry.id;
   const panel = roomPanel ?? challenge?.judging_panel_criteria ?? EMPTY_PANEL;
   const [scores, setScores] = useState<Answers>({});
   const [notes, setNotes] = useState("");
@@ -134,6 +147,14 @@ export function ReviewForm({
   const currentEntryRef = useRef<number | undefined>(undefined);
   const panelRef = useRef(panel);
   panelRef.current = panel;
+  const [desktopFloating, setDesktopFloating] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1280px)");
+    const update = () => setDesktopFloating(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
   const [conflict, setConflict] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -383,9 +404,6 @@ export function ReviewForm({
     conflict: t("collaborationConflict"),
     unsaved: t("unsavedChanges"),
   }[syncState];
-  const cardClassName = "relative flex min-h-0 flex-1 flex-col";
-  const bodyClassName =
-    "min-h-0 flex-1 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden";
   const lockedMessage = (field: string) => {
     if (ownedFields.has(field)) return null;
     const lease = leases.find((item) => item.field === field);
@@ -395,225 +413,250 @@ export function ReviewForm({
   };
   const textFieldReadOnly = (field: string) => canJudge && !ownedFields.has(field);
 
-  if (!entryId) {
-    return (
-      <SectionCard
-        title={t("scoring")}
-        description={t("scoringFormDesc")}
-        className={cardClassName}
-        headerClassName="p-3 sm:p-4"
-        bodyClassName={`${bodyClassName} flex flex-col`}
-      >
-        <JudgingEmptyState
-          className="flex-1"
-          icon={DoorOpenIcon}
-          title={t("noActiveEvaluation")}
-          description={t("scoringFormDesc")}
-        />
-      </SectionCard>
-    );
-  }
-
-  return (
-    <SectionCard
-      title={t("scoring")}
-      icon={CheckCircleIcon}
-      className={cardClassName}
-      headerClassName="p-3 sm:p-4"
-      bodyClassName={`${bodyClassName} flex flex-col pb-24 sm:pb-24`}
-      action={
-        <div className="flex flex-wrap items-center gap-2">
-          <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
-            {syncState === "offline" && (
-              <WifiSlashIcon aria-hidden="true" className="mr-1 inline size-4" />
-            )}
-            {syncLabel}
-          </span>
-          <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
-          {onCloseExisting && (
-            <Button size="sm" variant="outline" onClick={onCloseExisting}>
-              {t("closeExistingEvaluation")}
-            </Button>
-          )}
-        </div>
-      }
-      footer={
-        <div className="pointer-events-auto flex flex-wrap justify-end gap-2">
-          <Button
-            className="shadow-sm"
-            variant="outline"
-            size="sm"
-            disabled={!canJudge || !online || saving || loading}
-            onClick={() => save(false)}
-            loading={saving}
-          >
-            {status === "submitted" ? t("saveCorrection") : t("saveDraft")}
-          </Button>
-          {status !== "submitted" && (
-            <Button
-              className="shadow-sm"
-              size="sm"
-              disabled={!canJudge || !online || saving || loading || requiredUnansweredCount > 0}
-              onClick={() => save(true)}
-              loading={saving}
-            >
-              <CheckCircleIcon aria-hidden="true" className="size-4" />
-              {t("submitReview")}
-            </Button>
-          )}
-        </div>
-      }
-      footerClassName="pointer-events-none absolute inset-x-4 bottom-4 z-10 p-0 sm:p-0"
+  // Same shape as the application review: the project in a centred window and
+  // the evaluation docked beside it on wide screens, below it on narrow ones.
+  const renderPanel = (floating: boolean, fill = false, column = false) => (
+    <aside
+      aria-label={t("scoring")}
+      data-dialog-floating={floating ? "" : undefined}
+      className={cn(
+        floating
+          ? [
+              overlayVariants({ elevation: "modal" }),
+              "fixed top-[5vh] bottom-[5vh] left-[calc(50%+12rem)] z-50 w-[min(26rem,calc(50vw-12rem-1rem))] border border-border/60 bg-popover",
+            ]
+          : fill
+            ? "h-dvh"
+            : column
+              ? "h-full rounded-surface border border-border/60 bg-card"
+              : "rounded-surface border border-border/60",
+        "flex min-h-0 flex-col overflow-hidden",
+      )}
     >
-      {loading ? (
-        <Spinner />
-      ) : panel.length === 0 ? (
-        <JudgingEmptyState
-          className="flex-1"
-          icon={ListChecksIcon}
-          title={t("noJudgingCriteria")}
-        />
-      ) : (
-        <div className="space-y-5">
-          {saveError && (
-            <div
-              role="alert"
-              className="border-destructive/40 bg-destructive/5 text-destructive flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
-            >
-              <span>{saveError}</span>
-              {dirty && canJudge && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={!online || saving}
-                  onClick={() => void save(false)}
-                >
-                  {t("retry")}
-                </Button>
+      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3">
+        <CheckCircleIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
+        <h2 className="type-section-title mr-auto truncate">
+          {fill || column ? entryLabel(entry, t) : t("scoring")}
+        </h2>
+        <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
+          {syncState === "offline" && (
+            <WifiSlashIcon aria-hidden="true" className="mr-1 inline size-4" />
+          )}
+          {syncLabel}
+        </span>
+        <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
+        {column && (
+          <button
+            type="button"
+            className={dialogIconButtonClass}
+            onClick={onClose}
+            title={t("close")}
+          >
+            <XIcon aria-hidden="true" />
+            <span className="sr-only">{t("close")}</span>
+          </button>
+        )}
+      </header>
+      <div
+        className={cn(
+          "p-4",
+          (floating || fill || column) && "min-h-0 flex-1 overflow-y-auto overscroll-contain",
+        )}
+      >
+        {loading ? (
+          <Spinner />
+        ) : panel.length === 0 ? (
+          <JudgingEmptyState
+            className="flex-1"
+            icon={ListChecksIcon}
+            title={t("noJudgingCriteria")}
+          />
+        ) : (
+          <div className="space-y-5">
+            {saveError && (
+              <div
+                role="alert"
+                className="border-destructive/40 bg-destructive/5 text-destructive flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
+              >
+                <span>{saveError}</span>
+                {dirty && canJudge && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!online || saving}
+                    onClick={() => void save(false)}
+                  >
+                    {t("retry")}
+                  </Button>
+                )}
+              </div>
+            )}
+            {syncState === "offline" && (
+              <div
+                role="status"
+                className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
+              >
+                {t("offlineEvaluationPending")}
+              </div>
+            )}
+            {syncState === "conflict" && (
+              <div
+                role="alert"
+                className="border-destructive/40 bg-destructive/5 rounded-md border p-3 text-sm"
+              >
+                <p>{t("evaluationConflictDescription")}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => void loadRemote(false)}>
+                    {t("loadLatestEvaluation")}
+                  </Button>
+                  <Button size="sm" onClick={() => void save(false)}>
+                    {t("keepMyEvaluation")}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {externalUpdate && !conflict && (
+              <p role="status" className="text-muted-foreground text-sm">
+                {t("criterionUpdatedElsewhere", { fields: externalUpdate })}
+              </p>
+            )}
+            {requiredUnansweredCount > 0 && (
+              <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-md border p-3 text-sm">
+                <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
+                {requiredUnansweredCount === 1
+                  ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })
+                  : t("requiredFieldUnansweredOther", { count: requiredUnansweredCount })}
+              </div>
+            )}
+            {sessions.length > 0 && (
+              <div className="rounded-md border px-3 py-2">
+                <p className="text-sm font-medium">{t("activeJudges")}</p>
+                <p className="text-muted-foreground text-sm">
+                  {sessions
+                    .map((session) =>
+                      `${session.name ?? t("judgeFallback")} ${session.surname ?? ""}`.trim(),
+                    )
+                    .join(", ")}
+                </p>
+              </div>
+            )}
+            {panel.map((question) => (
+              <QuestionField
+                key={question.key}
+                question={question}
+                value={scores[question.key]}
+                disabled={!canJudge}
+                readOnly={isTextQuestion(question) && textFieldReadOnly(`scores.${question.key}`)}
+                lockedMessage={
+                  isTextQuestion(question) ? lockedMessage(`scores.${question.key}`) : null
+                }
+                onFocus={
+                  isTextQuestion(question)
+                    ? () => void acquireField(`scores.${question.key}`)
+                    : undefined
+                }
+                onBlur={
+                  isTextQuestion(question)
+                    ? () => void releaseField(`scores.${question.key}`)
+                    : undefined
+                }
+                onChange={(value) => {
+                  setScores((current) => ({ ...current, [question.key]: value }));
+                  pendingFieldsRef.current.set(`scores.${question.key}`, value);
+                  dirtyRef.current = true;
+                  setDirty(true);
+                  setExternalUpdate(null);
+                }}
+              />
+            ))}
+            <div className="space-y-2">
+              <Label htmlFor="review-notes">{t("notesLabel")}</Label>
+              <Textarea
+                id="review-notes"
+                value={notes}
+                readOnly={textFieldReadOnly("notes")}
+                onFocus={() => void acquireField("notes")}
+                onBlur={() => void releaseField("notes")}
+                onChange={(event) => {
+                  setNotes(event.target.value);
+                  pendingFieldsRef.current.set("notes", event.target.value);
+                  dirtyRef.current = true;
+                  setDirty(true);
+                }}
+                disabled={!canJudge}
+                placeholder={t("privateJudgingNotes")}
+              />
+              {lockedMessage("notes") && (
+                <p role="status" className="text-muted-foreground text-sm">
+                  {lockedMessage("notes")}
+                </p>
               )}
             </div>
-          )}
-          {syncState === "offline" && (
-            <div
-              role="status"
-              className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
-            >
-              {t("offlineEvaluationPending")}
-            </div>
-          )}
-          {syncState === "conflict" && (
-            <div
-              role="alert"
-              className="border-destructive/40 bg-destructive/5 rounded-md border p-3 text-sm"
-            >
-              <p>{t("evaluationConflictDescription")}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => void loadRemote(false)}>
-                  {t("loadLatestEvaluation")}
-                </Button>
-                <Button size="sm" onClick={() => void save(false)}>
-                  {t("keepMyEvaluation")}
-                </Button>
-              </div>
-            </div>
-          )}
-          {externalUpdate && !conflict && (
-            <p role="status" className="text-muted-foreground text-sm">
-              {t("criterionUpdatedElsewhere", { fields: externalUpdate })}
-            </p>
-          )}
-          {requiredUnansweredCount > 0 && (
-            <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-md border p-3 text-sm">
-              <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
-              {requiredUnansweredCount === 1
-                ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })
-                : t("requiredFieldUnansweredOther", { count: requiredUnansweredCount })}
-            </div>
-          )}
-          {sessions.length > 0 && (
-            <div className="rounded-md border px-3 py-2">
-              <p className="text-sm font-medium">{t("activeJudges")}</p>
-              <p className="text-muted-foreground text-sm">
-                {sessions
-                  .map((session) =>
-                    `${session.name ?? t("judgeFallback")} ${session.surname ?? ""}`.trim(),
-                  )
-                  .join(", ")}
-              </p>
-            </div>
-          )}
-          {panel.map((question) => (
-            <QuestionField
-              key={question.key}
-              question={question}
-              value={scores[question.key]}
-              disabled={!canJudge}
-              readOnly={isTextQuestion(question) && textFieldReadOnly(`scores.${question.key}`)}
-              lockedMessage={
-                isTextQuestion(question) ? lockedMessage(`scores.${question.key}`) : null
-              }
-              onFocus={
-                isTextQuestion(question)
-                  ? () => void acquireField(`scores.${question.key}`)
-                  : undefined
-              }
-              onBlur={
-                isTextQuestion(question)
-                  ? () => void releaseField(`scores.${question.key}`)
-                  : undefined
-              }
-              onChange={(value) => {
-                setScores((current) => ({ ...current, [question.key]: value }));
-                pendingFieldsRef.current.set(`scores.${question.key}`, value);
-                dirtyRef.current = true;
-                setDirty(true);
-                setExternalUpdate(null);
-              }}
-            />
-          ))}
-          <div className="space-y-2">
-            <Label htmlFor="review-notes">{t("notesLabel")}</Label>
-            <Textarea
-              id="review-notes"
-              value={notes}
-              readOnly={textFieldReadOnly("notes")}
-              onFocus={() => void acquireField("notes")}
-              onBlur={() => void releaseField("notes")}
-              onChange={(event) => {
-                setNotes(event.target.value);
-                pendingFieldsRef.current.set("notes", event.target.value);
-                dirtyRef.current = true;
-                setDirty(true);
-              }}
-              disabled={!canJudge}
-              placeholder={t("privateJudgingNotes")}
-            />
-            {lockedMessage("notes") && (
-              <p role="status" className="text-muted-foreground text-sm">
-                {lockedMessage("notes")}
-              </p>
+            {versions.length > 0 && (
+              <details className="rounded-md border p-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {t("evaluationVersionHistory")}
+                </summary>
+                <ol className="mt-3 space-y-2">
+                  {[...versions].reverse().map((version) => (
+                    <li key={version.id} className="text-muted-foreground text-sm">
+                      <span className="text-foreground font-medium">
+                        {`${version.name ?? t("judgeFallback")} ${version.surname ?? ""}`.trim()}
+                      </span>{" "}
+                      · {new Date(version.created_at).toLocaleString()} ·{" "}
+                      {version.changed_fields.map(fieldLabel).join(", ")}
+                    </li>
+                  ))}
+                </ol>
+              </details>
             )}
           </div>
-          {versions.length > 0 && (
-            <details className="rounded-md border p-3">
-              <summary className="cursor-pointer text-sm font-medium">
-                {t("evaluationVersionHistory")}
-              </summary>
-              <ol className="mt-3 space-y-2">
-                {[...versions].reverse().map((version) => (
-                  <li key={version.id} className="text-muted-foreground text-sm">
-                    <span className="text-foreground font-medium">
-                      {`${version.name ?? t("judgeFallback")} ${version.surname ?? ""}`.trim()}
-                    </span>{" "}
-                    · {new Date(version.created_at).toLocaleString()} ·{" "}
-                    {version.changed_fields.map(fieldLabel).join(", ")}
-                  </li>
-                ))}
-              </ol>
-            </details>
-          )}
-        </div>
-      )}
-    </SectionCard>
+        )}
+      </div>
+      <footer className="flex shrink-0 justify-end gap-2 border-t p-3">
+        <Button
+          variant="outline"
+          disabled={!canJudge || !online || saving || loading}
+          onClick={() => save(false)}
+          loading={saving}
+        >
+          {status === "submitted" ? t("saveCorrection") : t("saveDraft")}
+        </Button>
+        {status !== "submitted" && (
+          <Button
+            disabled={!canJudge || !online || saving || loading || requiredUnansweredCount > 0}
+            onClick={() => save(true)}
+            loading={saving}
+          >
+            <CheckCircleIcon aria-hidden="true" className="size-4" />
+            {t("submitReview")}
+          </Button>
+        )}
+      </footer>
+    </aside>
+  );
+
+  if (standalone) return renderPanel(false, true);
+  if (inline) return renderPanel(false, false, true);
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      size="xl"
+      icon={CheckCircleIcon}
+      title={entryLabel(entry, t)}
+      floatingFocus={desktopFloating}
+      className="max-h-[90vh] overflow-visible sm:max-w-3xl lg:left-[calc(50%-13rem)]"
+      floatingContent={desktopFloating ? renderPanel(true) : undefined}
+    >
+      <ProjectInfo
+        entry={entry}
+        challenge={challenge}
+        detailsOpen
+        onExternalOpen={onExternalOpen}
+      />
+      {!desktopFloating && <div className="mt-6 pb-2">{renderPanel(false)}</div>}
+    </Modal>
   );
 }

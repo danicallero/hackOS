@@ -182,6 +182,9 @@ privacy-enhanced embed on activation, and retain a direct YouTube link.
 Gallery answers preserve authored section order, hide empty optional answers,
 render descriptions as Markdown and display images in an adaptive media grid.
 
+A project URL text question can also be marked **Judging panel link** (`judging_link: true`);
+its answer appears beside the repository and demo links as an action in the judging panel.
+
 ## One participant project workspace
 
 Participants open one record in reading mode and use **Edit project** to edit the

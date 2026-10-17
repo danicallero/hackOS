@@ -32,6 +32,7 @@ import {
 } from "@/lib/tv";
 import { cn } from "@/lib/utils";
 import { announcementContent } from "./announcement-content";
+import { GithubView } from "./github-view";
 import { EmbeddedAnnouncement, LiveScreen, ScheduleBlock } from "./live-screen";
 import { MarqueeText } from "./marquee-text";
 import { PublishedWinners } from "./published-winners";
@@ -1055,6 +1056,7 @@ function TvView({ data, error }: { data: TvData | null; error: string | null }) 
     );
   if (mode === "wifi")
     return <WifiView venue={data.venue} event={data.event} announcement={embeddedAnnouncement} />;
+  if (mode === "github") return <GithubView event={data.event} />;
   if (mode === "rooms")
     return <RoomsView rooms={data.rooms} event={data.event} announcement={embeddedAnnouncement} />;
   return null;

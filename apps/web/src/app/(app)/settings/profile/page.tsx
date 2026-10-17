@@ -50,6 +50,7 @@ import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { capabilitiesByDomain, prettifyCapability } from "../../permissions/helpers";
 import { DangerZoneCard } from "./danger-zone";
 import { EmailRow } from "./email-card";
+import { GithubRow } from "./github-row";
 import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
 import { ProfilePhoto } from "./profile-photo";
@@ -425,6 +426,7 @@ function ProfileForm({ me }: { me: Me }) {
             <ul className="min-w-0 divide-y divide-border/60 rounded-surface border border-border/60">
               <EmailRow />
               <PasswordRow />
+              <GithubRow />
             </ul>
           </div>
           {me.roles.length > 0 && <ProfileRoles me={me} />}

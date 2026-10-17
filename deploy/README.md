@@ -174,6 +174,12 @@ requiere autenticación. Las
 claves de firma de Apple/Google son opcionales, pero cada bloque configurado
 debe estar completo. `check-env.sh` no imprime valores secretos.
 
+La integración con GitHub es opcional: `GITHUB_APP_ID`, `GITHUB_APP_SLUG`,
+`GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_PRIVATE_KEY_PEM`
+(PEM o su base64) y `GITHUB_WEBHOOK_SECRET` se configuran juntas (los tres
+últimos son secretos) y solo las recibe `api`. Ver
+[GitHub activity](../docs/github-activity.md).
+
 Las Live Activities (#966) son opcionales: `APNS_KEY_ID` y `APNS_AUTH_KEY_P8`
 (base64 del fichero `.p8`, secreto; en staging va en `hackos.secrets`) se
 configuran juntas y requieren `APPLE_TEAM_IDENTIFIER`. `APNS_BUNDLE_ID`

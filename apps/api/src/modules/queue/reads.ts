@@ -1025,6 +1025,17 @@ export async function roomPace(
     (5 * targetMinutes + samples * Number(timing.observed_presentation_minutes ?? targetMinutes)) /
     (5 + samples);
   const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
+  // The track's configured allowance (H32), same max-over-group rule as queue_group_pace.
+  const configuredPreparationSeconds = challengeIds.length
+    ? Number(
+        (
+          await db.query(
+            `SELECT COALESCE(max(preparation_seconds), 120) AS seconds FROM challenges WHERE id = ANY($1)`,
+            [challengeIds],
+          )
+        ).rows[0].seconds,
+      )
+    : 120;
   const activeEntries = challengeIds.length
     ? (
         await db.query(
@@ -1103,6 +1114,7 @@ export async function roomPace(
     exceedsJudgingClose: insufficientTime,
     estimatedCycleMinutes,
     preparationMinutes,
+    configuredPreparationSeconds,
     timingSampleCount: samples,
     observedPresentationMinutes:
       timing.observed_presentation_minutes == null
