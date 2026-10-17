@@ -37,6 +37,7 @@ export function userOptionLabel(user: UserOption): string {
 export function UserPicker({
   value,
   onChange,
+  onBlur,
   search,
   disabled,
   inDialog = false,
@@ -47,10 +48,12 @@ export function UserPicker({
   id,
   "aria-labelledby": ariaLabelledBy,
   "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
 }: {
   /** Selected user id as a string, or "" when unset. */
   value: string;
   onChange: (value: string, user: UserOption | null) => void;
+  onBlur?: () => void;
   /** Resolves the dropdown options for a (possibly empty) query. */
   search: (query: string) => Promise<UserOption[]>;
   disabled?: boolean;
@@ -64,6 +67,7 @@ export function UserPicker({
   id?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
+  "aria-invalid"?: React.AriaAttributes["aria-invalid"];
 }) {
   const { t } = useLocale();
   const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
@@ -177,7 +181,13 @@ export function UserPicker({
   );
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) onBlur?.();
+      }}
+    >
       <PopoverPrimitive.Trigger asChild>
         <Button
           ref={anchorRef}
@@ -191,6 +201,10 @@ export function UserPicker({
           aria-haspopup="listbox"
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
+          onBlur={() => {
+            if (!open) onBlur?.();
+          }}
           className={cn("w-full justify-between rounded-control font-normal", className)}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>

@@ -128,9 +128,14 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     );
     const publicDetail = (await get(`/api/public/projects/${id}`)).json();
     expect(publicDetail.responses.description).toBe("Submitted");
+    expect((await get(`/api/public/projects/${id}`, owner)).json().responses.description).toBe(
+      "Submitted",
+    );
     expect(publicDetail.template).toEqual([]);
     const own = (await get(`/api/me/projects/${id}`, owner)).json();
     expect(own.responses.description).toBe("Working");
+    expect(own.hasUnsubmittedChanges).toBe(true);
+    expect(publicDetail.hasUnsubmittedChanges).toBe(false);
     expect(own.template[0].key).toBe("new");
   });
   it("applies current name consent to public list and detail while retaining team names", async () => {
@@ -223,4 +228,65 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     );
     expect((await get("/api/public/projects?pageSize=10000")).statusCode).toBe(400);
   });
+});
+
+it("member edit flags honor organizer locks and approved post-deadline reopening", async () => {
+  await pool.query(`UPDATE repos SET lock_reason='organizer_lock' WHERE id=$1`, [id]);
+  const locked = await get(`/api/me/projects/${id}`, owner);
+  expect(locked.json()).toMatchObject({ canEdit: false, canSubmit: false });
+  await setHackingWindow(false);
+  await pool.query(
+    `UPDATE repos SET lock_reason=NULL,submission_status='draft',submitted_at=now() WHERE id=$1`,
+    [id],
+  );
+  const reopened = await get(`/api/me/projects/${id}`, owner);
+  expect(reopened.json()).toMatchObject({ canEdit: true, canSubmit: true });
+});
+
+it("staff corrections publish a new version without rewriting the participant's submission", async () => {
+  const editor = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
+  await app.inject({
+    method: "PUT",
+    url: `/api/me/projects/${id}/draft`,
+    headers: asUser(owner),
+    payload: { responses: { summary: "Original" }, revision: 0 },
+  });
+  await app.inject({
+    method: "POST",
+    url: `/api/me/projects/${id}/submit`,
+    headers: asUser(owner),
+  });
+  await setHackingWindow(false);
+  const corrected = await app.inject({
+    method: "PUT",
+    url: `/api/repos/${id}/draft`,
+    headers: asUser(editor),
+    payload: { responses: { summary: "Corrected" }, revision: 1 },
+  });
+  expect(corrected.statusCode, corrected.body).toBe(200);
+  await pool.query(
+    `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public'`,
+  );
+  expect((await get(`/api/public/projects/${id}`)).json().responses.summary).toBe("Corrected");
+  const versions = await pool.query(
+    `SELECT source,snapshot->'project'->'responses'->>'summary' AS summary FROM project_submission_versions WHERE repo_id=$1 ORDER BY id`,
+    [id],
+  );
+  expect(versions.rows).toEqual([
+    { source: "native", summary: "Original" },
+    { source: "admin", summary: "Corrected" },
+  ]);
+});
+
+it("keeps hidden challenges out of public project details while retaining staff inspection", async () => {
+  const { createChallenge } = await import("../queue/fixtures.js");
+  const challengeId = await createChallenge();
+  await pool.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
+    id,
+    challengeId,
+  ]);
+  await pool.query(`UPDATE event_config SET project_draft_visibility='public'`);
+  expect((await get(`/api/public/projects/${id}`)).json().challenges).toEqual([]);
+  expect((await get(`/api/me/projects/${id}`, owner)).json().challenges[0].id).toBe(challengeId);
+  expect((await get(`/api/repos/${id}`, staff)).json().challenges[0].id).toBe(challengeId);
 });

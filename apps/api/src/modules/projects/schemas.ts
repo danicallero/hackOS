@@ -27,6 +27,7 @@ export const createRepoBodySchema = z.object({
   description: z.string().max(10000).default(""),
   githubUrl: repoUrl.nullable().default(null),
   demoUrl: repoUrl.nullable().default(null),
+  responses: z.record(z.string(), z.unknown()).default({}),
   memberUserIds: z.array(z.number().int().positive()).max(50).default([]),
   challengeIds: z.array(z.number().int().positive()).max(50).default([]),
 });
@@ -47,7 +48,10 @@ export const updateRepoBodySchema = z
 export type UpdateRepoBody = z.infer<typeof updateRepoBodySchema>;
 
 /** POST /api/me/projects (H19) — no memberUserIds: the creator is the sole initial member. */
-export const createMyProjectBodySchema = createRepoBodySchema.omit({ memberUserIds: true });
+export const createMyProjectBodySchema = createRepoBodySchema.omit({
+  memberUserIds: true,
+  responses: true,
+});
 export type CreateMyProjectBody = z.infer<typeof createMyProjectBodySchema>;
 
 export const repoMemberBodySchema = z.object({

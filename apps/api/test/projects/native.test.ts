@@ -152,3 +152,117 @@ describe("Native creation and correction (H19-H21)", () => {
     expect(stale.statusCode).toBe(409);
   });
 });
+
+it("administration creates another team's project with dynamic answers, never self-enrolling", async () => {
+  const template = [
+    {
+      key: "summary",
+      kind: "textarea",
+      required: true,
+      project_description: true,
+      label: { en: "Summary", es: "Resumen", gl: "Resumo" },
+    },
+  ];
+  await pool.query(`INSERT INTO project_form_versions(template) VALUES($1)`, [
+    JSON.stringify(template),
+  ]);
+  await setHackingWindow(false);
+  const result = await app.inject({
+    method: "POST",
+    url: "/api/repos",
+    headers: asUser(staff),
+    payload: {
+      name: "Team project",
+      memberUserIds: [participant],
+      responses: { summary: "Built by the selected team" },
+    },
+  });
+  expect(result.statusCode, result.body).toBe(200);
+  const id = result.json().id;
+  const roster = await pool.query(`SELECT user_id FROM submissions WHERE repo_id=$1`, [id]);
+  expect(roster.rows).toEqual([{ user_id: participant }]);
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/repos/${id}`,
+    headers: asUser(staff),
+  });
+  expect(detail.json().responses.summary).toBe("Built by the selected team");
+  expect(detail.json().description).toBe("Built by the selected team");
+});
+
+it("explicit staff enrollment appends a draft to an existing queue while judging is running", async () => {
+  const first = await app.inject({
+    method: "POST",
+    url: "/api/repos",
+    headers: asUser(staff),
+    payload: { name: "First", memberUserIds: [participant], challengeIds: [challengeId] },
+  });
+  expect(first.statusCode, first.body).toBe(200);
+  const draft = await app.inject({
+    method: "POST",
+    url: "/api/me/projects",
+    headers: asUser(participant),
+    payload: { name: "Late draft" },
+  });
+  expect(draft.statusCode, draft.body).toBe(200);
+  await setHackingWindow(false);
+  await pool.query(
+    `INSERT INTO queue_settings(id,schedule_start_at,schedule_end_at) VALUES(1,now()-interval '1 hour',now()+interval '1 hour') ON CONFLICT(id) DO UPDATE SET schedule_start_at=excluded.schedule_start_at,schedule_end_at=excluded.schedule_end_at`,
+  );
+  const id = draft.json().id;
+  const enter = () =>
+    app.inject({
+      method: "POST",
+      url: `/api/repos/${id}/challenges`,
+      headers: asUser(staff),
+      payload: { challengeId },
+    });
+  const result = await enter();
+  expect(result.statusCode, result.body).toBe(200);
+  expect(result.json().inserted).toBe(true);
+  expect(result.json().entry.position).toBe(2);
+  expect((await enter()).json().inserted).toBe(false);
+  const eligibility = await pool.query(
+    `SELECT r.submission_status,e.eligible FROM repos r JOIN project_eligibility e ON e.repo_id=r.id WHERE r.id=$1`,
+    [id],
+  );
+  expect(eligibility.rows[0]).toMatchObject({ submission_status: "draft", eligible: false });
+  expect(
+    (
+      await pool.query(
+        `SELECT count(*)::int AS n FROM queue_entries WHERE repo_id=$1 AND challenge_id=$2`,
+        [id, challengeId],
+      )
+    ).rows[0].n,
+  ).toBe(1);
+});
+
+it("staff corrections and roster changes cannot cross the fixture boundary", async () => {
+  const fixture = (
+    await pool.query(
+      `INSERT INTO repos(name,is_test_account) VALUES('Fixture only',true) RETURNING id`,
+    )
+  ).rows[0].id;
+  const requests = [
+    { method: "PATCH" as const, url: `/api/repos/${fixture}`, payload: { name: "Changed" } },
+    {
+      method: "PUT" as const,
+      url: `/api/repos/${fixture}/draft`,
+      payload: { responses: { note: "Changed" }, revision: 0 },
+    },
+    {
+      method: "POST" as const,
+      url: `/api/repos/${fixture}/members`,
+      payload: { userId: participant },
+    },
+    { method: "DELETE" as const, url: `/api/repos/${fixture}/members/${participant}` },
+  ];
+  for (const request of requests) {
+    const result = await app.inject({ ...request, headers: asUser(staff) });
+    expect(result.statusCode, result.body).toBe(404);
+  }
+  const row = (
+    await pool.query(`SELECT name,responses,draft_revision FROM repos WHERE id=$1`, [fixture])
+  ).rows[0];
+  expect(row).toEqual({ name: "Fixture only", responses: {}, draft_revision: 0 });
+});

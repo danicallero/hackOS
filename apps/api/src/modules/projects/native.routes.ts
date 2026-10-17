@@ -52,7 +52,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       schema: {
         summary: "Read project challenge estimates",
         description:
-          "Counts each native project once, active members only, with sponsor enterprise scope and no planning/submitted double count (H21).",
+          "Counts each native project once, active members only, with sponsor enterprise scope and no planning/submitted double count (H21). Includes challenge mandatory flags for the authorized project enrollment chooser.",
       },
     },
     (q) => {
@@ -186,7 +186,8 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       schema: {
         params,
         summary: "Read my project",
-        description: "Reads one project through the centralized team and phase policy (#1008).",
+        description:
+          "Reads the authorized working copy, with member/edit/submit/inspection flags, organizer locks, approved reopening and unsubmitted-change status through the centralized team and phase policy (H20,H21).",
       },
     },
     (q) => nativeProject(q.userId, q.params.id),
@@ -229,6 +230,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         items: await nativeProjects(
           q.userId,
           rows.map((row) => row.id),
+          { gallery: true },
         ),
         total: rows[0]?.total ?? 0,
         page,
@@ -244,12 +246,12 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         params,
         summary: "Read gallery project",
         description:
-          "Returns no-store project content and current consented member display through the gallery phase policy; nonmembers receive null names when sharing is disabled (#1008,#1009).",
+          "Returns no-store gallery content from the last submitted snapshot, including for the project’s own team, and current consented active member display through the gallery phase policy; names are null when sharing is disabled (#1008,#1009).",
       },
     },
     (q, reply) => {
       reply.header("Cache-Control", "no-store");
-      return nativeProject(q.userId, q.params.id);
+      return nativeProject(q.userId, q.params.id, { gallery: true });
     },
   );
 }

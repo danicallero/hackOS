@@ -134,8 +134,17 @@ export function registerProjectFileRoutes(app: FastifyInstance) {
       );
       if (!rows[0]) throw new NotFoundError("File not found");
       const project = await nativeProject(q.userId, q.params.id);
-      if (!project?.files.some((file: { objectKey: string }) => file.objectKey === q.query.key))
-        throw new NotFoundError("File not found");
+      let visible = project?.files.some(
+        (file: { objectKey: string }) => file.objectKey === q.query.key,
+      );
+      if (!visible) {
+        // H18/H20: team members may open the submitted gallery while their working copy has different files.
+        const submitted = await nativeProject(q.userId, q.params.id, { gallery: true });
+        visible = submitted?.files.some(
+          (file: { objectKey: string }) => file.objectKey === q.query.key,
+        );
+      }
+      if (!visible) throw new NotFoundError("File not found");
       const key = q.query.thumbnail ? rows[0].thumbnail_key : q.query.key;
       if (!key) throw new NotFoundError("Thumbnail not found");
       const object = await getObject(key);

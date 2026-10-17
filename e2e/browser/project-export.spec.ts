@@ -47,7 +47,7 @@ for (const canExport of [true, false]) {
       return route.fulfill({ json: { items: [], unreadCount: 0 } });
     });
     await page.goto("/projects");
-    await expect(page.getByRole("button", { name: "Create my project" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Create project", exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: "Neural Beans" })).toBeVisible();
     const exportLink = page.getByRole("link", { name: "Export CSV" });
     if (canExport) {

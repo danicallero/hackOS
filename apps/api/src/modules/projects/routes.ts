@@ -203,9 +203,9 @@ export function registerProjectRoutes(app: FastifyInstance): void {
       ...access({ kind: "capability", capability: CAPABILITIES.PROJECTS_EDIT }),
       preHandler: [requireCapability(CAPABILITIES.PROJECTS_EDIT), idempotencyGuard],
       schema: {
-        summary: "Create a project natively (H18), no native involved.",
+        summary: "Create a project for a team (H21)",
         description:
-          "Creates a repo with title/description/links, initial team members and challenge lineup in one transaction. Each challenge enqueues the team at the bottom of that challenge's queue, exactly like a hot edit (H21). Audited; idempotent via Idempotency-Key.",
+          "Creates a submitted project on behalf of the selected team, with dynamic responses, title/description/links and challenge lineup in one transaction. The operator is not automatically a member. Required questions may remain incomplete for an administrative correction. Each challenge enqueues the team at the bottom of that challenge's queue, exactly like a hot edit (H21). Audited; idempotent via Idempotency-Key.",
         body: createRepoBodySchema,
       },
     },
@@ -282,7 +282,8 @@ export function registerProjectRoutes(app: FastifyInstance): void {
         params: repoChallengeParamsSchema.pick({ repoId: true }),
         body: repoChallengeBodySchema,
         summary: "Enter project in challenge",
-        description: "Adds one exact project to one exact challenge queue (H21).",
+        description:
+          "Records challenge intent and appends the project to the end of an existing queue even during judging (H21). Explicit staff enrollment also queues drafts; draft status remains ineligible for calling until submission. Repeated enrollment is idempotent and audited.",
       },
     },
     async (req) => addRepoChallenge(req.userId as number, req.params.repoId, req.body.challengeId),

@@ -3,17 +3,16 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { ListToolbar } from "@/components/common/list-toolbar";
-import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { ProjectsSectionHeader } from "@/components/common/section-navigation";
+import { CreateProjectPanel } from "@/components/projects/create-project-panel";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { API_URL } from "@/lib/env";
@@ -27,42 +26,16 @@ export default function ProjectsPage() {
   const { can, canAny, me } = useSessionContext();
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const allowed =
-    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.JUDGE_PANEL) ||
+    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_EDIT) ||
     Boolean(me?.isEnterpriseJudge || me?.isSponsorRep);
   const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [projects, setProjects] = useState<NativeProject[]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    if (!allowed) return;
-    try {
-      setProjects((await api.get<{ repos: NativeProject[] }>("/api/repos")).repos);
-      setError(null);
-    } catch (cause) {
-      setError(apiErrorText(cause, t, t("couldNotLoadProjects")));
-    } finally {
-      setLoading(false);
-    }
-  }, [allowed, t]);
-  useEffect(() => {
-    void load();
-  }, [load]);
-  async function create(event: React.FormEvent) {
-    event.preventDefault();
-    setCreating(true);
-    setError(null);
-    try {
-      const result = await api.post<{ id: number }>("/api/repos", { name: name.trim() });
-      router.push(`/projects/${result.id}`);
-    } catch (cause) {
-      setError(apiErrorText(cause, t, t("couldNotSaveProject")));
-    } finally {
-      setCreating(false);
-    }
-  }
+  const resource = useServerResource(
+    ["projects", "management"],
+    (signal) => api.get<{ repos: NativeProject[] }>("/api/repos", { signal }),
+    { enabled: allowed },
+  );
+  const projects = resource.data?.repos ?? [];
   const columns: Column<NativeProject>[] = [
     {
       id: "name",
@@ -92,8 +65,8 @@ export default function ProjectsPage() {
   if (!allowed) return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
   return (
     <PageLayout>
-      <PageHeader
-        title={t("projects")}
+      <ProjectsSectionHeader
+        management
         secondaryActions={
           can(CAPABILITIES.EXPORTS_RUN) ? (
             <Button asChild variant="outline">
@@ -102,7 +75,7 @@ export default function ProjectsPage() {
           ) : undefined
         }
         primaryAction={
-          canEdit && <Button onClick={() => setCreateOpen(true)}>{t("createMyProjectCta")}</Button>
+          canEdit && <Button onClick={() => setCreateOpen(true)}>{t("staffCreateProject")}</Button>
         }
       />
       <ListToolbar
@@ -113,38 +86,22 @@ export default function ProjectsPage() {
           placeholder: t("projectNameLabel"),
         }}
       />
-      {error && <ContextualError message={error} onRetry={load} />}
+      {Boolean(resource.error) && (
+        <ContextualError
+          message={apiErrorText(resource.error, t, t("couldNotLoadProjects"))}
+          onRetry={resource.reload}
+        />
+      )}
       <DataTable
         columns={columns}
         data={projects.filter((project) =>
           project.name.toLowerCase().includes(search.toLowerCase()),
         )}
         getRowId={(project) => String(project.id)}
-        loading={loading}
+        loading={resource.loading}
         onRowClick={(project) => router.push(`/projects/${project.id}`)}
       />
-      <SidePanelEditor
-        open={createOpen}
-        onOpenChange={(value) => !creating && setCreateOpen(value)}
-        title={t("createMyProjectCta")}
-        footer={
-          <Button form="staff-create-project" type="submit" loading={creating}>
-            {t("createMyProjectCta")}
-          </Button>
-        }
-      >
-        <form id="staff-create-project" onSubmit={create} className="space-y-2">
-          <Label htmlFor="staff-project-name">{t("projectNameLabel")}</Label>
-          <Input
-            id="staff-project-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-            disabled={creating}
-          />
-        </form>
-        {error && <ContextualError message={error} />}
-      </SidePanelEditor>
+      <CreateProjectPanel open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
   );
 }

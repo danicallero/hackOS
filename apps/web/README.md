@@ -712,8 +712,11 @@ Question-owned catalogue controls (`LibraryPicker` and `LibraryManager`) reuse t
 shared MultiSelect and destructive AlertModal. Catalogue management is embedded in
 the question editor, never the general Libraries settings. See
 [question-owned libraries](../../docs/form-libraries.md). Project reading,
-editing and judging reuse `ProjectAnswers`; new drafts begin editing and existing
-participant records provide an explicit read/edit action in the same workspace.
+reading routes reuse `ProjectOverview` (answers, team, challenges and queue state);
+judging embeds its `ProjectAnswers` content. Staff inspection opens in reading
+mode; new empty participant drafts begin editing. `CreateProjectPanel` collects
+a team and dynamic answers for administrative creation, independently of personal
+project creation. See [project access and lifecycle](../../docs/projects.md#unified-inspection-and-administration-h18h21).
 
 Form validation runs on blur: React Hook Form uses `mode: "onBlur"` and
 `reValidateMode: "onBlur"`; `FormControl` also validates custom controls when

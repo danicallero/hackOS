@@ -5,7 +5,10 @@ import { ApiError } from "@/lib/api";
 import { useProjectDraft } from "./use-project-draft";
 
 const { saveDraft } = vi.hoisted(() => ({ saveDraft: vi.fn() }));
-vi.mock("@/lib/native-projects", () => ({ nativeProjects: { saveDraft } }));
+vi.mock("@/lib/native-projects", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/native-projects")>();
+  return { ...actual, nativeProjects: { ...actual.nativeProjects, saveDraft } };
+});
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const project = { id: 1, revision: 3, responses: { summary: "initial" } };
 let snapshot: ReturnType<typeof useProjectDraft>;

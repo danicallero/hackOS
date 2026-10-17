@@ -1,11 +1,14 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { projectDescriptionField } from "@hackos/shared/forms";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { deletePrefix } from "../../lib/storage.js";
+import { validateResponses } from "../applications/service.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
+import { validateLibraryAnswers } from "../form-libraries/service.js";
 import { hasEventAccess } from "../identity/role.js";
 import {
   assertFixtureSubjectScope,
@@ -23,7 +26,7 @@ import { notifyChallengeQueueChanged } from "../queue/notify.js";
 import { compactQueueGroupPositions, nextBottomPosition } from "../queue/ordering.js";
 import { RESET_PRESENTATION_CLOCK_SQL } from "../queue/presentation-clock.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
-import { nativeEditable, nativeProjects } from "./native.js";
+import { nativeEditable, nativeForm, nativeProjects, snapshotProjectSubmission } from "./native.js";
 import { assertProjectWindow, projectPhase } from "./policy.js";
 
 interface EnqueueOutcome {
@@ -333,7 +336,13 @@ async function staffProject(id: number, scope: RepositoryAccessScope) {
     scope.fixtureMarker === true,
   ]);
   if (!exists.rowCount) throw new NotFoundError("Project not found");
-  return (await nativeProjects(null, [id], true))[0];
+  return {
+    ...(await nativeProjects(null, [id], { staff: scope.fullAccess }))[0],
+    canInspect: true,
+    canEdit: scope.canEdit === true,
+    canSubmit: false,
+    canInvite: false,
+  };
 }
 export async function listProjectMemberCandidates(q: string, limit: number, actorId: number) {
   const marker = await isSyntheticOperator(pool, actorId);
@@ -347,6 +356,7 @@ export async function listProjectMemberCandidates(q: string, limit: number, acto
 export async function addRepoMember(actorId: number, id: number, userId: number) {
   return withTransaction(async (db) => {
     await db.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [id]);
+    await assertQueueRepoScope(db, actorId, id);
     await assertFixtureSubjectScope(db, actorId, userId);
     await db.query(
       `INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active') ON CONFLICT(repo_id,user_id) DO UPDATE SET status='active'`,
@@ -365,6 +375,7 @@ export async function addRepoMember(actorId: number, id: number, userId: number)
 export async function removeRepoMember(actorId: number, id: number, userId: number) {
   return withTransaction(async (db) => {
     await db.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [id]);
+    await assertQueueRepoScope(db, actorId, id);
     await db.query(`DELETE FROM submissions WHERE repo_id=$1 AND user_id=$2`, [id, userId]);
     await audit(db, {
       actorId,
@@ -387,6 +398,7 @@ export async function updateRepo(
       ? await nativeEditable(db, actorId, id)
       : (await db.query(`SELECT * FROM repos WHERE id=$1 FOR UPDATE`, [id])).rows[0];
     if (!before) throw new NotFoundError("Project not found");
+    if (!participant) await assertQueueRepoScope(db, actorId, id);
     if (
       patch.presentationTimingPreference !== undefined &&
       patch.presentationTimingPreference !== before.presentation_timing_preference &&
@@ -404,6 +416,14 @@ export async function updateRepo(
         patch.presentationTimingPreference ?? before.presentation_timing_preference,
       ],
     );
+    if (!participant && before.submission_status === "submitted")
+      await snapshotProjectSubmission(
+        db,
+        actorId,
+        id,
+        (await nativeForm(db))?.version ?? null,
+        "admin",
+      );
     await audit(db, {
       actorId,
       entityType: "project",
@@ -582,7 +602,7 @@ export async function addRepoChallenge(
     const submitted =
       (await db.query(`SELECT submission_status FROM repos WHERE id=$1`, [id])).rows[0]
         ?.submission_status === "submitted";
-    return generated.rowCount && submitted
+    return generated.rowCount && (submitted || !participant)
       ? await enqueueRepoOnChallenge(
           db,
           actorId,
@@ -712,10 +732,25 @@ export async function createRepoNative(
     demoUrl: string | null;
     memberUserIds: number[];
     challengeIds: number[];
+    responses?: Record<string, unknown>;
   },
 ) {
   const result = await withTransaction(async (db) => {
     const marker = await isSyntheticOperator(db, actorId);
+    const responses = input.responses ?? {};
+    const form = await nativeForm(db);
+    validateResponses(
+      (form?.template ?? []).map((field: import("@hackos/shared/forms").TemplateField) => ({
+        ...field,
+        required: false,
+      })),
+      responses,
+    );
+    await validateLibraryAnswers(db, form?.template ?? [], responses, actorId);
+    const descriptionField = projectDescriptionField(form?.template ?? []);
+    const descriptionAnswer = descriptionField ? responses[descriptionField.key] : undefined;
+    const description =
+      typeof descriptionAnswer === "string" ? descriptionAnswer.trim() : input.description;
     for (const userId of new Set(input.memberUserIds)) {
       const user = await db.query(
         `SELECT id FROM users WHERE id=$1 AND account_state='active' AND anonymized_at IS NULL AND is_test_account=$2`,
@@ -731,8 +766,16 @@ export async function createRepoNative(
       if (!challenge.rowCount) throw new NotFoundError("Challenge not found");
     }
     const { rows } = await db.query(
-      `INSERT INTO repos(name,description,github_url,demo_url,created_by,submission_status,submitted_via,submitted_at,is_test_account) VALUES($1,$2,$3,$4,$5,'submitted','admin',now(),$6) RETURNING id`,
-      [input.name, input.description, input.githubUrl, input.demoUrl, actorId, marker],
+      `INSERT INTO repos(name,description,github_url,demo_url,created_by,submission_status,submitted_via,submitted_at,is_test_account,responses) VALUES($1,$2,$3,$4,$5,'submitted','admin',now(),$6,$7) RETURNING id`,
+      [
+        input.name,
+        description,
+        input.githubUrl,
+        input.demoUrl,
+        actorId,
+        marker,
+        JSON.stringify(responses),
+      ],
     );
     const id = rows[0].id;
     for (const userId of new Set(input.memberUserIds))
@@ -755,6 +798,7 @@ export async function createRepoNative(
       const outcome = await enqueueRepoOnChallenge(db, actorId, id, challengeId, "admin");
       if (outcome) outcomes.push(outcome);
     }
+    await snapshotProjectSubmission(db, actorId, id, form?.version ?? null, "admin");
     await audit(db, {
       actorId,
       entityType: "project",

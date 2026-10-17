@@ -4,6 +4,7 @@ import { createAuthorizationContext, userHasCapability } from "../../lib/capabil
 import { ForbiddenError } from "../../lib/errors.js";
 import { getEventTimezone } from "../event/service.js";
 import { hasEventAccess } from "../identity/role.js";
+import { repositoryAccessForUser, repositoryIdsForScope } from "./access.js";
 
 /** SQL owns clock boundaries for every native project projection (#1008). */
 export async function projectPhase(db: Queryable) {
@@ -49,10 +50,12 @@ export async function projectViewer(db: Queryable, userId: number | null) {
   return {
     userId,
     fixtureMarker: rows[0].is_test_account === true,
-    staff: await userHasCapability(
-      createAuthorizationContext(userId, db),
-      CAPABILITIES.PROJECTS_READ,
-    ),
+    staff:
+      (await userHasCapability(
+        createAuthorizationContext(userId, db),
+        CAPABILITIES.PROJECTS_READ,
+      )) ||
+      (await userHasCapability(createAuthorizationContext(userId, db), CAPABILITIES.PROJECTS_EDIT)),
     attendee: await hasEventAccess(db, userId),
   };
 }
@@ -120,6 +123,17 @@ export async function canViewProject(
   const project = rows[0];
   if (!project) return false;
   if (viewer.staff || project.member) return true;
+  if (viewer.userId !== null) {
+    try {
+      const scope = await repositoryAccessForUser(
+        viewer.userId,
+        createAuthorizationContext(viewer.userId, db),
+      );
+      if ((await repositoryIdsForScope(scope)).includes(projectId)) return true;
+    } catch (error) {
+      if (!(error instanceof ForbiddenError)) throw error;
+    }
+  }
   const phase = await projectPhase(db);
   if (project.submission_status === "submitted") return canViewGallery(db, userId);
   return (

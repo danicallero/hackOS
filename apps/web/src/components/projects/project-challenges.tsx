@@ -1,14 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
-import { type NativeProject, nativeProjects } from "@/lib/native-projects";
+import { invalidateProjectReads, type NativeProject, nativeProjects } from "@/lib/native-projects";
 import { PresentationStatus } from "./presentation-status";
 
 type Challenge = NativeProject["challenges"][number] & {
@@ -21,34 +22,34 @@ export function ProjectChallenges({
   project,
   staff,
   children,
+  onChange,
 }: {
   project: NativeProject;
   staff: boolean;
+  onChange?: (challenges: NativeProject["challenges"]) => void;
   /** Further challenge-related settings shown in the same section (presentation time). */
   children?: React.ReactNode;
 }) {
   const { t, language } = useLocale();
   const [challenges, setChallenges] = useState(project.challenges);
-  const [catalogue, setCatalogue] = useState<Challenge[]>([]);
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editable = project.canEdit;
-  useEffect(() => {
-    if (!editable) return;
-    let active = true;
-    void api
-      .get<{ items: Challenge[] }>("/api/public/challenges")
-      .then((result) => {
-        if (active) setCatalogue(result.items);
-      })
-      .catch((cause) => {
-        if (active) setError(apiErrorText(cause, t, t("couldNotLoadChallenge")));
-      });
-    return () => {
-      active = false;
-    };
-  }, [editable, t]);
+  const catalogueResource = useServerResource(
+    ["project-challenges", staff ? "staff" : "public"],
+    async (signal) => {
+      if (!staff)
+        return (await api.get<{ items: Challenge[] }>("/api/public/challenges", { signal })).items;
+      return (
+        await api.get<Array<Challenge & { challengeId: number }>>("/api/projects/estimates", {
+          signal,
+        })
+      ).map((challenge) => ({ ...challenge, id: challenge.challengeId }));
+    },
+    { enabled: editable },
+  );
+  const catalogue = catalogueResource.data ?? [];
   async function change(id: number, remove: boolean) {
     setBusy(true);
     setError(null);
@@ -58,10 +59,12 @@ export function ProjectChallenges({
         else await api.post(`/api/repos/${project.id}/challenges`, { challengeId: id });
       } else if (remove) await nativeProjects.removeChallenge(project.id, id);
       else await nativeProjects.addChallenge(project.id, id);
+      invalidateProjectReads(project.id);
       const updated = staff
         ? await api.get<NativeProject>(`/api/repos/${project.id}`)
         : await nativeProjects.get(project.id);
       setChallenges(updated.challenges);
+      onChange?.(updated.challenges);
       setSelected("");
     } catch (cause) {
       setError(apiErrorText(cause, t, t("couldNotSaveProject")));
@@ -75,7 +78,12 @@ export function ProjectChallenges({
       : challenge.title[language] || challenge.title.en;
   return (
     <SectionCard title={t("challenges")}>
-      {error && <ContextualError message={error} />}
+      {Boolean(error || catalogueResource.error) && (
+        <ContextualError
+          message={error ?? apiErrorText(catalogueResource.error, t, t("couldNotLoadChallenge"))}
+          onRetry={catalogueResource.reload}
+        />
+      )}
       <ul className="divide-y divide-border/60">
         {challenges.map((challenge) => (
           <li className="space-y-2 py-3" key={challenge.id}>

@@ -3503,7 +3503,7 @@
   "projectAudienceTeam": "Solo el equipo",
   "projectAudienceAttendees": "Asistentes",
   "projectAudiencePublic": "Todo el mundo",
-  "projectAudienceStaff": "Organización y patrocinadores",
+  "projectAudienceStaff": "Personal de proyectos",
   "projectSubmitCta": "Entregar proyecto",
   "projectGalleryPhotoNotice": "La galería puede ser pública. Tu nombre en el equipo seguirá visible sin foto.",
   "projectDraftConflict": "Alguien del equipo guardó cambios. Copia tus respuestas sin guardar antes de recargar el proyecto.",
@@ -3571,5 +3571,12 @@
   "judgingProjectDetails": "Detalles del proyecto",
   "projectDemoLink": "Demo",
   "saveLibraryBeforeForm": "Guarda los valores de la biblioteca antes de guardar el formulario.",
-  "discardLibraryChanges": "Descartar cambios"
+  "discardLibraryChanges": "Descartar cambios",
+  "staffCreateProject": "Crear proyecto",
+  "staffCreateProjectNotice": "Crea un proyecto presentado en nombre de un equipo. Los retos seleccionados lo añaden a sus colas.",
+  "projectTeamRequired": "Selecciona al menos una persona del equipo.",
+  "projectFilesAfterCreation": "Añade archivos e imágenes después de crear el proyecto.",
+  "projectReviewTitle": "Revisión de la entrega",
+  "projectResubmitCta": "Actualizar entrega",
+  "projectUnsubmittedChanges": "Tienes cambios que no están en la versión presentada. Vuelve a enviar para actualizarla."
 }

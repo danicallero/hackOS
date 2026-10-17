@@ -1,5 +1,6 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
@@ -18,7 +19,7 @@ import { useSessionContext } from "@/lib/session";
 
 export function ProjectsNavigation() {
   const { t } = useLocale();
-  const { status, isPureApplicant } = useSessionContext();
+  const { status, isPureApplicant, canAny, me } = useSessionContext();
   const pathname = usePathname();
   if (status !== "authenticated") return null;
   return (
@@ -30,7 +31,7 @@ export function ProjectsNavigation() {
           size="sm"
         >
           <Link
-            href="/my-project"
+            href={pathname.startsWith("/my-project/") ? "/my-project?view=all" : "/my-project"}
             aria-current={pathname.startsWith("/my-project") ? "page" : undefined}
           >
             <FolderSimpleIcon aria-hidden="true" />
@@ -44,6 +45,23 @@ export function ProjectsNavigation() {
           {t("projectGallery")}
         </Link>
       </Button>
+      {(canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_EDIT) ||
+        me?.isEnterpriseJudge ||
+        me?.isSponsorRep) && (
+        <Button
+          asChild
+          variant={pathname.startsWith("/projects") ? "secondary" : "ghost"}
+          size="sm"
+        >
+          <Link
+            href="/projects"
+            aria-current={pathname.startsWith("/projects") ? "page" : undefined}
+          >
+            <FolderSimpleIcon aria-hidden="true" />
+            {t("manageProjects")}
+          </Link>
+        </Button>
+      )}
     </ActionGroup>
   );
 }
@@ -107,51 +125,48 @@ export function ProjectsSectionHeader({
   recordName,
   recordState,
   primaryAction,
+  secondaryActions,
+  management = false,
 }: {
   recordAction?: React.ReactNode;
   recordName?: string;
   recordState?: React.ReactNode;
   primaryAction?: React.ReactNode;
+  secondaryActions?: React.ReactNode;
+  management?: boolean;
 }) {
   const { t } = useLocale();
   const { status } = useSessionContext();
   const pathname = usePathname();
   const galleryRecord = pathname.startsWith("/gallery");
   const authenticated = status === "authenticated";
+  const backHref = management ? "/projects" : galleryRecord ? "/gallery" : "/my-project?view=all";
+  const backLabel = t(
+    management ? "manageProjects" : galleryRecord ? "projectGallery" : "myProjects",
+  );
   return (
     <div className="space-y-(--page-section-gap)">
       <PageHeader
-        title={authenticated ? t("projects") : (recordName ?? t("projectGallery"))}
-        primaryAction={primaryAction}
+        title={
+          recordName ??
+          t(management ? "manageProjects" : authenticated ? "projects" : "projectGallery")
+        }
+        state={recordState}
+        primaryAction={recordAction ?? primaryAction}
         secondaryActions={
-          !authenticated && recordName ? (
+          recordName && !authenticated ? (
             <Button asChild variant="outline" size="sm">
-              <Link href="/gallery">
+              <Link href={backHref}>
                 <ArrowLeftIcon aria-hidden="true" />
-                {t("projectGallery")}
+                {backLabel}
               </Link>
             </Button>
-          ) : undefined
+          ) : (
+            secondaryActions
+          )
         }
       />
       <ProjectsNavigation />
-      {authenticated && recordName && (
-        <ActionGroup className="justify-between">
-          <div className="min-w-0 space-y-2">
-            <h2 className="type-page-title text-balance wrap-anywhere">{recordName}</h2>
-            {recordState}
-          </div>
-          <ActionGroup>
-            {recordAction}
-            <Button asChild variant="outline" size="sm">
-              <Link href={galleryRecord ? "/gallery" : "/my-project?view=all"}>
-                <ArrowLeftIcon aria-hidden="true" />
-                {t(galleryRecord ? "projectGallery" : "myProjects")}
-              </Link>
-            </Button>
-          </ActionGroup>
-        </ActionGroup>
-      )}
     </div>
   );
 }

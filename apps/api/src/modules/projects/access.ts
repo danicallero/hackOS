@@ -1,7 +1,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool } from "../../db/pool.js";
-import { getRequestAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
+import {
+  type AuthorizationContext,
+  createAuthorizationContext,
+  getRequestAuthorizationContext,
+  userHasCapability,
+} from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
 import type {
   ContextualPolicyResolver,
@@ -18,6 +23,7 @@ export interface RepositoryAccessScope {
   fullAccess: boolean;
   challengeIds: number[];
   fixtureMarker?: boolean;
+  canEdit?: boolean;
 }
 
 const scopes = new WeakMap<FastifyRequest, RepositoryAccessScope>();
@@ -35,7 +41,13 @@ function repoIdFrom(request: FastifyRequest, locator: ContextualResourceLocator)
 export async function resolveRepositoryAccessScope(
   request: FastifyRequest,
 ): Promise<RepositoryAccessScope> {
-  const userId = request.userId;
+  return repositoryAccessForUser(request.userId, getRequestAuthorizationContext(request));
+}
+
+export async function repositoryAccessForUser(
+  userId: number | null,
+  context: AuthorizationContext = createAuthorizationContext(userId),
+): Promise<RepositoryAccessScope> {
   if (userId == null) throw new UnauthorizedError();
   const { rows: activeRows } = await pool.query<{ is_test_account: boolean }>(
     `SELECT is_test_account FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
@@ -44,9 +56,15 @@ export async function resolveRepositoryAccessScope(
   if (!activeRows[0]) throw new UnauthorizedError("This account is closed or being removed");
   const fixtureMarker = activeRows[0].is_test_account === true;
   if (
-    await userHasCapability(getRequestAuthorizationContext(request), CAPABILITIES.PROJECTS_READ)
+    (await userHasCapability(context, CAPABILITIES.PROJECTS_READ)) ||
+    (await userHasCapability(context, CAPABILITIES.PROJECTS_EDIT))
   ) {
-    return { fullAccess: true, challengeIds: [], fixtureMarker };
+    return {
+      fullAccess: true,
+      challengeIds: [],
+      fixtureMarker,
+      canEdit: await userHasCapability(context, CAPABILITIES.PROJECTS_EDIT),
+    };
   }
 
   const [judgeRows, sponsorRows] = await Promise.all([
@@ -100,6 +118,11 @@ export async function repositoryIdsForScope(scope: RepositoryAccessScope): Promi
           JOIN challenges c ON c.id = qe.challenge_id
          WHERE qe.challenge_id = ANY($1::int[])
            AND c.is_test_account = $2
+        UNION ALL
+        SELECT pc.repo_id FROM project_challenges pc
+          JOIN repos r ON r.id=pc.repo_id AND r.is_test_account=$2
+          JOIN challenges c ON c.id=pc.challenge_id AND c.is_test_account=$2
+          WHERE pc.challenge_id=ANY($1::int[])
        ) visible_repos`,
     [scope.challengeIds, scope.fixtureMarker === true],
   );
