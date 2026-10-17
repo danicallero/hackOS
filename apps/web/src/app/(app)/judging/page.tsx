@@ -342,6 +342,8 @@ export default function QueuePage() {
       canOperate={canOperate}
       busy={busy}
       preparationSeconds={pace.data?.configuredPreparationSeconds ?? null}
+      presentationSeconds={pace.data?.configuredPresentationSeconds ?? null}
+      detailsOpen={focusing}
       onExternalOpen={() => void moveReviewToWindow()}
       onEntryAction={(entry, action, body, label) =>
         mutate(`${action}-${entry.id}`, () => entryAction(entry.id, action, body), label)

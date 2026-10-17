@@ -40,6 +40,7 @@ function render(entry: Partial<QueueEntry>, onEntryAction = vi.fn()) {
         canJudge
         canOperate={false}
         busy={null}
+        presentationSeconds={null}
         preparationSeconds={120}
         onEntryAction={onEntryAction}
       />,

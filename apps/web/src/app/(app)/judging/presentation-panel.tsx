@@ -50,6 +50,8 @@ export function PresentationPanel({
   canOperate,
   busy,
   preparationSeconds,
+  presentationSeconds,
+  detailsOpen,
   onExternalOpen,
   onEntryAction,
 }: {
@@ -63,6 +65,9 @@ export function PresentationPanel({
   busy: string | null;
   /** Track's configured preparation allowance; null until loaded. */
   preparationSeconds: number | null;
+  /** Track's maximum presentation time; null until loaded. */
+  presentationSeconds: number | null;
+  detailsOpen?: boolean;
   /** Fired when a link leaves for another tab, so the evaluation can follow in its own window. */
   onExternalOpen?: () => void;
   onEntryAction: (
@@ -187,7 +192,12 @@ export function PresentationPanel({
             }
           />
         ) : (
-          <ProjectInfo entry={entry} challenge={challenge} onExternalOpen={onExternalOpen} />
+          <ProjectInfo
+            entry={entry}
+            challenge={challenge}
+            detailsOpen={detailsOpen}
+            onExternalOpen={onExternalOpen}
+          />
         )}
       </div>
       {entry && (
@@ -198,6 +208,10 @@ export function PresentationPanel({
               startedAt={entry.presentation_started_at}
               scheduledSeconds={preparationSeconds}
             />
+          )}
+
+          {isReady && presentationSeconds != null && (
+            <PresentationTimer startedAt={null} totalMinutes={presentationSeconds / 60} />
           )}
 
           {isPresenting && (
@@ -280,6 +294,7 @@ export function ProjectInfo({
 }: {
   entry: QueueEntry;
   challenge: Challenge | null;
+  /** Expanded judging shows the project details unfolded. */
   detailsOpen?: boolean;
   onExternalOpen?: () => void;
 }) {
@@ -373,7 +388,11 @@ export function ProjectInfo({
       )}
 
       {project && (
-        <Collapsible defaultOpen={detailsOpen} className="border-y border-border/60 py-3">
+        <Collapsible
+          key={String(detailsOpen)}
+          defaultOpen={detailsOpen}
+          className="border-y border-border/60 py-3"
+        >
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="w-full justify-between">
               {t("judgingProjectDetails")}

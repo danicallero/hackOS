@@ -1036,6 +1036,15 @@ export async function roomPace(
         ).rows[0].seconds,
       )
     : 120;
+  // The longest a presentation may run, as `start` computes it for the entry.
+  const configuredPresentationSeconds = challengeIds.length
+    ? ((
+        await db.query(
+          `SELECT LEAST(min(target_seconds_per_team), min(max_presentation_seconds))::int AS seconds FROM challenges WHERE id = ANY($1)`,
+          [challengeIds],
+        )
+      ).rows[0]?.seconds ?? null)
+    : null;
   const activeEntries = challengeIds.length
     ? (
         await db.query(
@@ -1115,6 +1124,7 @@ export async function roomPace(
     estimatedCycleMinutes,
     preparationMinutes,
     configuredPreparationSeconds,
+    configuredPresentationSeconds,
     timingSampleCount: samples,
     observedPresentationMinutes:
       timing.observed_presentation_minutes == null

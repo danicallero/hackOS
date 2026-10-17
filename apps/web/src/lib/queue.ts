@@ -145,6 +145,8 @@ export interface RoomPace {
   estimatedCycleMinutes?: number;
   /** Track's configured preparation allowance (H32). */
   configuredPreparationSeconds?: number;
+  /** Longest a presentation may run for this track; null when unconfigured. */
+  configuredPresentationSeconds?: number | null;
   judgingClosesAt?: string | null;
   estimatedFinishAt?: string | null;
   exceedsJudgingClose?: boolean;
