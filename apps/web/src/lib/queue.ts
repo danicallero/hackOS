@@ -59,6 +59,8 @@ export interface Room {
   /** Present on the room list projection; omitted by room-scoped reads. */
   enterprise_id?: number | null;
   enterprise_name?: string | null;
+  /** Queue (group) the room serves, shown beside the room name. */
+  queue_name?: string | null;
   created_at: string;
   updated_at: string;
 }

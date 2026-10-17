@@ -10,7 +10,6 @@ import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSim
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
@@ -65,7 +64,7 @@ import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 
-import { challengeName, errorMessage, exportHref, queueErrorToastContent } from "./helpers";
+import { errorMessage, exportHref, queueErrorToastContent } from "./helpers";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
@@ -324,8 +323,6 @@ export default function QueuePage() {
   const active = view?.active ?? null;
   const state = view?.state ?? null;
   const isPaused = state?.is_paused ?? view?.room.status === "paused";
-  const challengeLabel =
-    view?.challenge?.title ?? (activeChallenge ? challengeName(t, activeChallenge) : "—");
 
   const reviewEntry = reviewTarget;
   const showForm = reviewEntry != null && !windowOpen;
@@ -388,7 +385,7 @@ export default function QueuePage() {
             WMs, tablet/mobile) instead of overflowing the card. No fixed track
             widths — flex-basis + min-width + flex-wrap handle the reflow. */}
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-36 flex-1 space-y-2">
+          <div className="w-full min-w-36 space-y-2 sm:w-80">
             <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
@@ -403,24 +400,14 @@ export default function QueuePage() {
               <SelectContent>
                 {rooms.map((room) => (
                   <SelectItem key={room.id} value={String(room.id)}>
-                    {room.name}
+                    {room.queue_name ? `${room.name} - ${room.queue_name}` : room.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* A room judges exactly one challenge — informational, read-only.
-              Change it from the room admin surface, not here. */}
-          <div className="min-w-36 flex-[1.2] space-y-2">
-            <p className="text-sm font-medium">{t("challengeLabel")}</p>
-            <div className="border-input bg-muted/40 text-muted-foreground flex h-[var(--control-height-default)] w-full min-w-0 items-center gap-2 rounded-control border px-3 text-sm">
-              <LockIcon aria-hidden="true" className="size-3.5 shrink-0" />
-              <span className="text-foreground truncate font-medium">{challengeLabel}</span>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-end gap-2 sm:justify-end">
+          <div className="flex shrink-0 flex-wrap items-end gap-2 sm:ml-auto sm:justify-end">
             {canJudge && (
               <Button
                 variant={focusMode ? "default" : "outline"}
