@@ -70,7 +70,11 @@ export function GithubLink({ projectId }: { projectId: number }) {
 
   return (
     <SectionCard title="GitHub" icon={GithubLogoIcon}>
-      {error && <ContextualError message={error} />}
+      {(error ?? (repos.error ? apiErrorText(repos.error, t, t("couldNotLoadProject")) : null)) && (
+        <ContextualError
+          message={error ?? apiErrorText(repos.error, t, t("couldNotLoadProject"))}
+        />
+      )}
       {link ? (
         <div className="flex items-center justify-between gap-3">
           <a
