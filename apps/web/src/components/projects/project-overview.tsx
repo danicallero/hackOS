@@ -20,6 +20,7 @@ export function ProjectOverview({
   assetUrl,
   review,
   showQueue = false,
+  asideExtra,
 }: {
   project: NativeProject;
   language: Language;
@@ -35,6 +36,8 @@ export function ProjectOverview({
   assetUrl: (path: string) => string;
   review?: React.ReactNode;
   showQueue?: boolean;
+  /** Extra card in the right column, after the team. */
+  asideExtra?: React.ReactNode;
 }) {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -84,6 +87,7 @@ export function ProjectOverview({
             </ul>
           </SectionCard>
         )}
+        {asideExtra}
         {(project.githubUrl || project.demoUrl) && (
           <ProjectDescriptionLinks
             links={{ githubUrl: project.githubUrl, demoUrl: project.demoUrl }}
