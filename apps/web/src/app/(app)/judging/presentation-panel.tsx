@@ -332,6 +332,14 @@ export function ProjectInfo({
     .filter((link): link is { label: string; href: string } => Boolean(link.href))
     .concat(fieldLinks)
     .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
+  const projectAnswers = project && (
+    <ProjectAnswers
+      project={project}
+      language={language ?? "en"}
+      assetUrl={(path) => new URL(path, API_URL).toString()}
+    />
+  );
+
   return (
     <div className="space-y-4">
       {Boolean(resource.error) && (
@@ -387,27 +395,20 @@ export function ProjectInfo({
         </div>
       )}
 
-      {project && (
-        <Collapsible
-          key={String(detailsOpen)}
-          defaultOpen={detailsOpen}
-          className="border-y border-border/60 py-3"
-        >
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-full justify-between">
-              {t("judgingProjectDetails")}
-              <CaretDownIcon aria-hidden="true" />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-4">
-            <ProjectAnswers
-              project={project}
-              language={language ?? "en"}
-              assetUrl={(path) => new URL(path, API_URL).toString()}
-            />
-          </CollapsibleContent>
-        </Collapsible>
-      )}
+      {project &&
+        (detailsOpen ? (
+          <div className="border-y border-border/60 py-4">{projectAnswers}</div>
+        ) : (
+          <Collapsible className="border-y border-border/60 py-3">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between">
+                {t("judgingProjectDetails")}
+                <CaretDownIcon aria-hidden="true" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-4">{projectAnswers}</CollapsibleContent>
+          </Collapsible>
+        ))}
       {/* A project can be in more than one queue. Shared queue siblings collapse
           to one row and are named by the queue group. */}
       {(repoChallenges.length > 0 || challenge) && (
