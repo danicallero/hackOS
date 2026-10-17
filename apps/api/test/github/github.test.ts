@@ -112,6 +112,11 @@ describe("project GitHub link", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("reports an invalid app private key as a clear error, not a 500", async () => {
+    const { installationToken } = await import("../../src/modules/github/client.js");
+    await expect(installationToken(123)).rejects.toThrow(/private key is invalid/);
+  });
+
   it("unlinks, audits and drops the tracked activity", async () => {
     const server = await getApp();
     const member = await createUser();

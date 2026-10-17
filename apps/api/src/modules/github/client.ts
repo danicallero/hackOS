@@ -26,7 +26,14 @@ function appJwt(): string {
   const body = `${b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${b64url(
     JSON.stringify({ iat: now - 60, exp: now + 540, iss: config.GITHUB_APP_ID }),
   )}`;
-  const signature = createSign("RSA-SHA256").update(body).sign(privateKey());
+  let signature: Buffer;
+  try {
+    signature = createSign("RSA-SHA256").update(body).sign(privateKey());
+  } catch {
+    throw new ServiceUnavailableError(
+      "GitHub App private key is invalid: set GITHUB_APP_PRIVATE_KEY_PEM to the PEM or its base64",
+    );
+  }
   return `${body}.${b64url(signature)}`;
 }
 
