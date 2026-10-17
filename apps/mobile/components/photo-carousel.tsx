@@ -20,7 +20,7 @@ function Page({ photo, width, height }: { photo: ProjectFile; width: number; hei
       showsHorizontalScrollIndicator={false}
       showsVerticalScrollIndicator={false}
     >
-      {!full.loaded ? <RequestFeedback loading /> : null}
+      {!full.loaded ? <RequestFeedback loading compact /> : null}
       {full.props ? (
         <Image
           {...full.props}

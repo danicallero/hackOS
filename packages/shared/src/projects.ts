@@ -17,7 +17,6 @@ export const projectSettingsSchema = z
     draftVisibility: z.enum(["team_only", "attendees", "public"]),
     galleryOpensAt: z.iso.datetime({ offset: true }).nullable(),
     galleryAudience: z.enum(["staff", "attendees", "public"]),
-    editsLockAt: z.iso.datetime({ offset: true }).nullable(),
     maxTeamSize: z.number().int().positive().max(100).nullable(),
   })
   .strict();

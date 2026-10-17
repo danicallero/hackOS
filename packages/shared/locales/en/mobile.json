@@ -960,6 +960,7 @@
   "projectSend": "Send",
   "scanReplayExpired": "Not synced within {days} days. Log it manually.",
   "galleryNotOpen": "The gallery isn't open yet",
+  "localReminderBody": "Starts at {time}",
   "galleryOpensOn": "The gallery opens {date}",
   "fieldLibrarySearch": "Search values",
   "fieldLibraryAdd": "Add “{name}”",

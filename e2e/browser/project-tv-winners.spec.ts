@@ -9,6 +9,23 @@ test("TV reveals published winners without a mode change", async ({ page }, info
       return route.fallback();
     }
     const path = new URL(route.request().url()).pathname;
+    // The wall refreshes from the public-tv stream, not by polling: once published,
+    // every (re)connection delivers the payload-free invalidation.
+    if (path === "/api/realtime/stream" || path === "/api/tv/stream") {
+      const envelope = {
+        topic: "public-tv",
+        type: "data.changed",
+        id: "1",
+        at: new Date().toISOString(),
+        data: {},
+      };
+      return route.fulfill({
+        contentType: "text/event-stream",
+        body: published
+          ? `event: data.changed\nid: 1\ndata: ${JSON.stringify(envelope)}\n\n`
+          : ": ready\n\n",
+      });
+    }
     if (path === "/api/tv/winners") {
       reads += 1;
       return route.fulfill({

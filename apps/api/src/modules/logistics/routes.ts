@@ -20,6 +20,7 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
 import { isTranslationAvailable } from "../notifications/translate/index.js";
 import {
@@ -317,7 +318,13 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const caller = await callerScheduleAudiences(getRequestAuthorizationContext(req));
-      return { items: await listScheduleForAudiences(caller) };
+      // Callers with the same audience set get the same feed, so one query serves them all.
+      const audienceKey = caller.isStaff ? "staff" : [...caller.audiences].sort().join(",");
+      return {
+        items: await sharedCache("content", `activities:${audienceKey}`, 15, () =>
+          listScheduleForAudiences(caller),
+        ),
+      };
     },
   );
 

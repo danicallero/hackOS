@@ -449,15 +449,25 @@ completes after the editor closed still saves its answer, and reopening the
 project or My Projects waits for them (`settleProjectDrafts`); answers that
 could not be saved are resumed by the next editor instead of dropped.
 
+Activity reminders are scheduled on the device (`lib/local-reminders.ts`,
+`lib/use-local-reminders.ts`, mounted as `LocalReminders` in `app/_layout.tsx`);
+see [notifications.md](./notifications.md#device-local-activity-reminders-h51-h59)
+for the sync triggers, the 50-reminder budget and the server fallback.
+
 Gallery list/detail (`/projects/gallery`, `/projects/:id?gallery=1`) use the
-server's phase/audience projection, never a persisted mobile gallery cache.
+server's phase/audience projection, never a persisted mobile gallery cache. The last result per account and
+filter is kept in memory only: returning from a project shows it untouched and
+refetches quietly only after 30 s, and the list never blanks while refreshing.
 Before the gallery opens (`project_gallery_opens_at`, unset = closed) the API
 answers 403 with `details.reason` `gallery_closed` (and `opensAt`) or
 `gallery_audience`; the gallery shows "The gallery opens …" / "The gallery
 isn't open yet" instead of a permission error. Project staff (PROJECTS_READ)
 browse it at any time. Search and challenge filters are paginated; outdated responses cannot replace
-a newer filter result. Foreground gallery polling rechecks publication every
-15 seconds. Only returned member photos and published winner fields
+a newer filter result. The gallery listens to the `domain:projects`, `domain:directory` and
+`public-content` streams: any signal schedules one quiet refresh after a random
+0–3 s delay (re-reading the pages already shown), and a 60 s poll runs only while one of
+those streams is disconnected (`useStreamRefresh`, also used by the schedule, reminders
+and challenge brief screens). A refresh merges by project id, so unchanged rows are not repainted. Only returned member photos and published winner fields
 are rendered. The gallery photo follows the networking-profile photo toggle,
 which is the only photo control; My Projects has none. Members appear by name
 per H18. Challenge rows on the project page and editor open the challenge brief
@@ -842,8 +852,10 @@ they are not device screenshots or proof of native toolbar behavior.
   connection message only when the request never got a response) in a banner
   at the top of the form, scrolled into view. The schedule has no mobile push
   channel (`content.schedule.changed` rides the public content topic), so the
-  list and detail screens refetch on focus and foreground and poll every
-  `SCHEDULE_POLL_MS` (60 s) while focused; both support pull-to-refresh. On Android, manager schedules also mount one
+  list and detail screens refetch on focus and foreground and on every
+  `public-content` signal (`useStreamRefresh`, random 0–3 s delay; the
+  `SCHEDULE_POLL_MS` (60 s) poll runs only while focused and that stream is
+  disconnected); both support pull-to-refresh. On Android, manager schedules also mount one
   native gesture on the `SectionList`; each row waits for that vertical gesture
   to fail before its horizontal swipe can activate, keeping diagonal/vertical
   drags in the list (issue #626). The row's `hitSlop` additionally excludes its

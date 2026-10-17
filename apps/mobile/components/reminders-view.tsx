@@ -28,6 +28,7 @@ import {
   kindCategory,
   useScheduleNotifications,
 } from "@/lib/use-schedule-notifications";
+import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
 /** "Coming up" shows this many reminders before "See all" (H59). */
@@ -61,6 +62,7 @@ function rowSeparatorInset(timeColumnWidth: number) {
 export function useScheduleReminders() {
   const { language } = useLocale();
   const { data, loading, error, staleSince, load } = useCachedApi("schedule", fetchPublicSchedule);
+  useStreamRefresh(() => void load(), { publicContent: true });
   const items = useMemo(
     () =>
       (data ?? [])

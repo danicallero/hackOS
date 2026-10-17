@@ -197,7 +197,6 @@ export interface EventConfig {
   projectDraftVisibility: "team_only" | "attendees" | "public";
   projectGalleryOpensAt: string | null;
   projectGalleryAudience: "staff" | "attendees" | "public";
-  projectEditsLockAt: string | null;
   projectMaxTeamSize: number | null;
   /** Optional common entry instant used for people accredited earlier. */
   presenceAutoEntryAt: string | null;

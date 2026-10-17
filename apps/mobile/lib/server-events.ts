@@ -1,4 +1,4 @@
-import { EVENTS, REALTIME_SCOPES, type SseEnvelope } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, type SseEnvelope } from "@hackos/shared/events";
 import { RealtimeClient, type ResyncReason } from "@hackos/shared/realtime-client";
 import { AppState, Platform } from "react-native";
 import { authClient } from "./auth-client";
@@ -34,6 +34,8 @@ const client = new RealtimeClient({
 function pathForScope(scope: string): string {
   if (scope === REALTIME_SCOPES.QUEUE) return "/api/queue/stream";
   if (scope === REALTIME_SCOPES.LOGISTICS) return "/api/logistics/stream";
+  if (scope === REALTIME_SCOPES.PUBLIC_CONTENT || scope.startsWith(REALTIME_SCOPES.DOMAIN_PREFIX))
+    return "/api/realtime/stream";
   return "/api/queue/me/stream";
 }
 let identity: string | number | null = null;
@@ -43,7 +45,7 @@ let streamRefs = 0;
 let identityGeneration = 0;
 const scopeRefs = new Map<string, number>();
 const connectedScopes = new Map<string, boolean>();
-export const isServerEventConnected = (scope = REALTIME_SCOPES.PERSONAL): boolean =>
+export const isServerEventConnected = (scope: string = REALTIME_SCOPES.PERSONAL): boolean =>
   connectedScopes.get(scope) === true;
 
 export function setServerEventIdentity(next: string | number | null): void {
@@ -138,4 +140,16 @@ export function startLogisticsEventStream(
   options: boolean | ServerEventStreamOptions = true,
 ): () => void {
   return start(REALTIME_SCOPES.LOGISTICS, "/api/logistics/stream", options);
+}
+/** Payload-free refresh signals for one domain topic (`SSE_TOPICS`), e.g. the project gallery. */
+export function startDomainEventStream(
+  topic: string,
+  options: boolean | ServerEventStreamOptions = true,
+): () => void {
+  return start(domainScope(topic), "/api/realtime/stream", options);
+}
+export function startPublicContentEventStream(
+  options: boolean | ServerEventStreamOptions = true,
+): () => void {
+  return start(REALTIME_SCOPES.PUBLIC_CONTENT, "/api/realtime/stream", options);
 }

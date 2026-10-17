@@ -13,19 +13,18 @@ import {
   withNotificationOverrides,
 } from "./notification-preferences";
 import type { ScheduleItem } from "./schedule";
+import {
+  CHANNEL,
+  isEntrySubscribedFrom,
+  itemCategory,
+  kindCategory,
+  preferenceFor,
+} from "./schedule-subscriptions";
 import { useCachedApi } from "./use-cached-api";
 
+export { isEntrySubscribedFrom, itemCategory, kindCategory };
+
 export type CategoryState = "on" | "off" | "partial";
-
-const CHANNEL = "push" as const;
-
-export function itemCategory(id: number): string {
-  return `schedule:${id}`;
-}
-
-export function kindCategory(kind: string): string {
-  return `schedule:type:${kind}`;
-}
 
 function savePreferences(preferences: NotificationPreferenceUpdate[]) {
   return apiFetch<NotificationPreferences>("/api/me/notification-preferences", {
@@ -33,22 +32,6 @@ function savePreferences(preferences: NotificationPreferenceUpdate[]) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ preferences }),
   });
-}
-
-function preferenceFor(
-  prefs: NotificationPreferences,
-  category: string,
-): NotificationPreferenceUpdate | undefined {
-  return prefs.overrides.find((row) => row.category === category && row.channel === CHANNEL);
-}
-
-function isEntrySubscribedFrom(
-  prefs: NotificationPreferences,
-  item: Pick<ScheduleItem, "id" | "type">,
-): boolean {
-  const own = preferenceFor(prefs, itemCategory(item.id));
-  if (own) return own.enabled;
-  return item.type ? (preferenceFor(prefs, kindCategory(item.type))?.enabled ?? false) : false;
 }
 
 interface PendingWrite {

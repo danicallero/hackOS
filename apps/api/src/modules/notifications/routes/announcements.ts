@@ -10,6 +10,7 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../../lib/route-policy.js";
+import { sharedCache } from "../../../lib/shared-cache.js";
 import { broadcast } from "../../../lib/sse.js";
 import {
   createAnnouncement,
@@ -80,7 +81,9 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
       },
     },
     async () => {
-      const items = await listAnnouncementsPublic(pool);
+      const items = await sharedCache("content", "announcements-public", 15, () =>
+        listAnnouncementsPublic(pool),
+      );
       return { items };
     },
   );

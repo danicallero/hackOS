@@ -1,4 +1,11 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { ApiError } from "@/lib/api";
 import { apiErrorCopy } from "@/lib/api-error-reason";
@@ -19,17 +26,21 @@ function errorKey(error: Error) {
 export function RequestFeedback({
   error,
   loading = false,
+  compact = false,
   onRetry,
   message,
   retrying = false,
 }: {
   error?: Error | null;
   loading?: boolean;
+  /** Inline spinner beside content that is already on screen (no centred block). */
+  compact?: boolean;
   onRetry?: () => void;
   message?: string;
   retrying?: boolean;
 }) {
   const { t } = useLocale();
+  const { height } = useWindowDimensions();
 
   if (loading) {
     return (
@@ -37,7 +48,11 @@ export function RequestFeedback({
         accessibilityLiveRegion="polite"
         accessibilityLabel={t("loading")}
         accessibilityRole="progressbar"
-        style={styles.container}
+        // Centred in a block taller than the header and Dynamic Island, wherever it is mounted.
+        style={[
+          styles.container,
+          compact ? null : { justifyContent: "center", minHeight: height * 0.6 },
+        ]}
       >
         <ActivityIndicator color={colors.accent} />
         <Text selectable style={[styles.message, { color: colors.secondaryLabel }]}>

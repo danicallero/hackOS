@@ -17,6 +17,7 @@ jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ addListener: jest.fn(() => () => {}), setOptions: mockSetOptions }),
 }));
+jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ me: { id: 11 } }) }));
 jest.mock("@/lib/api", () => ({
   apiFetch: jest.fn(),
   getCurrentSessionCookie: () => "session=1",
@@ -80,7 +81,7 @@ import { MyProjectsScreen } from "@/components/my-projects-screen";
 import { NewProjectScreen } from "@/components/new-project-screen";
 import { ProjectChallengesScreen } from "@/components/project-challenges-screen";
 import { ProjectEditor, ProjectReadView } from "@/components/project-detail-screen";
-import { ProjectGalleryScreen } from "@/components/project-gallery-screen";
+import { clearGallerySnapshots, ProjectGalleryScreen } from "@/components/project-gallery-screen";
 import { ProjectInvitesScreen } from "@/components/project-invites-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { NativeProject } from "@/lib/projects";
@@ -100,6 +101,7 @@ const project: NativeProject = {
   presentations: [],
 };
 beforeEach(() => {
+  clearGallerySnapshots();
   mockParams = { id: "5" };
   mockApi.mockReset();
   mockPush.mockReset();

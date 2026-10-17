@@ -111,7 +111,7 @@ export default function AnnouncementsPage() {
 
   // Soft, in-place refresh instead of a hard reload when another admin
   // publishes/edits/deletes an announcement elsewhere (H50).
-  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.CONTENT_ANNOUNCEMENT]);
+  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.DATA_CHANGED]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {

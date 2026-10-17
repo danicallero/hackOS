@@ -11,9 +11,10 @@ import {
   requireCapability,
 } from "../../lib/capabilities.js";
 import { registerRealtimeRoutes } from "../../lib/realtime.routes.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
 import { requireScopedRefreshAccess, scopedRefreshTopic } from "../../lib/sse-access.js";
-import { visibleWinnerRows } from "../challenges/winner-publication.js";
+import { sharedVisibleWinnerRows } from "../challenges/winner-publication.js";
 import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { queueTopicForFixture } from "./broadcast.js";
@@ -185,7 +186,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
     },
     async (q) => {
-      const winners = await visibleWinnerRows(pool, q.userId);
+      const winners = await sharedVisibleWinnerRows(pool, q.userId);
       return winners.length ? { winners } : {};
     },
   );
@@ -199,7 +200,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public TV projection containing only room, challenge and visible team-status fields. It intentionally omits team members, account identifiers, project links and operational cross-room diagnostics.",
       },
     },
-    async () => publicRoomViews(),
+    () => sharedCache("tv", "rooms", 2, publicRoomViews),
   );
 
   // Raw queue events contain operational room and team data. Public walls use
@@ -304,7 +305,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public feed for the TV wall. Returns the mode selected manually by an operator, or the default rooms view when there is no selection.",
       },
     },
-    async () => resolveTvState(),
+    () => sharedCache("tv", "mode", 2, resolveTvState),
   );
 
   typed.patch(
@@ -345,7 +346,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public TV companion feed for venue Wi-Fi details and the operator-chosen display language printed/rendered on the wall. It is intentionally separate from the public event site projection.",
       },
     },
-    async () => tvVenueConfig(),
+    () => sharedCache("tv", "config", 15, tvVenueConfig),
   );
 
   typed.patch(
