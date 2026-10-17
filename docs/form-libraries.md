@@ -57,3 +57,8 @@ rows through `ON DELETE CASCADE`. Deleting an application also cascades its
 catalogues and values. Historical JSON form versions and submission answers are
 purposeful history, not live catalogue rows. Migration `0307_field_libraries.sql`
 adds the two owner/value tables; it does not seed questions or technologies.
+
+The shared catalogue read/proposal routes appear under `form-libraries` in
+Swagger. Owner-scoped management routes stay grouped under applications or
+projects. The generated `apps/api/db/schema.dbml` includes both catalogue tables
+and their cascading ownership relationships.

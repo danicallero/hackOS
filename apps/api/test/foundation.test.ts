@@ -109,6 +109,14 @@ describe("foundation", () => {
     );
     expect(untaggedOperations).toEqual([]);
     expect(operationAt("/api/projects/estimates", "get").tags).toEqual(["projects"]);
+    expect(operationAt("/api/form-libraries/{id}", "get").tags).toEqual(["form-libraries"]);
+    expect(operationAt("/api/form-libraries/{id}/proposals", "post").tags).toEqual([
+      "form-libraries",
+    ]);
+    expect(operationAt("/api/form-libraries/{id}", "get").security).toEqual([
+      { sessionToken: [] },
+      { bearerToken: [] },
+    ]);
     expect(operationAt("/api/challenges", "get").tags).toEqual(["challenges"]);
     expect(operationAt("/api/realtime/stream", "get").tags).toEqual(["foundation"]);
     expect(operationAt("/api/presence/lookup", "post").tags).toEqual(["logistics"]);
