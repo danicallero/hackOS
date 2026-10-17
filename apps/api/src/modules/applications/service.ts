@@ -14,6 +14,7 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from ".
 import { translateEmail } from "../../lib/i18n.js";
 import { broadcast } from "../../lib/sse.js";
 import { getEventName, getEventTimezone } from "../event/service.js";
+import { activeLibraryFields, validateLibraryAnswers } from "../form-libraries/service.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
@@ -297,6 +298,13 @@ export function validateResponses(
       case "checkbox":
         if (typeof value !== "boolean") errors[field.key] = "must be a boolean";
         else if (field.required && value !== true) errors[field.key] = "required";
+        break;
+      case "library":
+        if (
+          !Array.isArray(value) ||
+          value.some((item) => typeof item !== "string" || !item.trim() || item.length > 200)
+        )
+          errors[field.key] = "must be an array";
         break;
       case "multiselect": {
         if (!Array.isArray(value)) {
@@ -709,8 +717,12 @@ export async function submitResponse(
     // typo for DNI). Only non-empty string answers overwrite an existing value.
     const dni = extractDni(merged);
 
-    const enrichedTemplate = await enrichTemplate(app, formVersion.template);
+    const enrichedTemplate = await enrichTemplate(
+      app,
+      await activeLibraryFields(client, formVersion.template),
+    );
     validateResponses(enrichedTemplate, merged);
+    await validateLibraryAnswers(client, enrichedTemplate, merged, userId);
     const storedResponses = stripDietaryResponses(merged);
 
     // Sensitive/logistics data lives on the user row, not the response (H12).

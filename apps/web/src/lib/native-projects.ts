@@ -70,6 +70,7 @@ export const nativeProjects = {
   removeChallenge: (id: number, challengeId: number) =>
     api.delete(`/api/me/projects/${id}/challenges/${challengeId}`),
   definition: () => api.get<ProjectDefinition>("/api/projects/form"),
-  saveDefinition: (body: Pick<ProjectDefinition, "template" | "sections">) =>
-    api.put<ProjectDefinition>("/api/projects/form", body),
+  saveDefinition: (
+    body: Pick<ProjectDefinition, "template" | "sections"> & { library_deletions?: string[] },
+  ) => api.put<ProjectDefinition>("/api/projects/form", body),
 };

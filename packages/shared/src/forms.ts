@@ -16,6 +16,7 @@ export const FIELD_KINDS = [
   "degree",
   "city",
   "images",
+  "library",
 ] as const;
 
 /**
@@ -119,6 +120,7 @@ export const templateFieldSchema = z
       .regex(/^[a-zA-Z0-9_.-]+$/, "field key must be alphanumeric/._-"),
     label: i18nSchema,
     kind: z.enum(FIELD_KINDS),
+    library_id: z.uuid().optional(),
     required: z.boolean().default(false),
     options: z.array(optionSchema).optional(),
     allowed_file_types: z.array(z.string()).optional(),
@@ -134,6 +136,8 @@ export const templateFieldSchema = z
      *  description everywhere (lists, gallery, cards). At most one. A text
      *  field keyed `description` plays this role when no field is marked. */
     project_description: z.boolean().optional(),
+    /** H16: render this configurable text question as a YouTube video. */
+    project_video: z.boolean().optional(),
     /** Groups this field under a `FormSection.key` (H11 form builder sections). */
     section_key: z.string().optional(),
     /** H11: ungrouped fields can follow a named section without joining it. */
@@ -169,10 +173,22 @@ export const templateFieldSchema = z
   })
   .refine((f) => !f.project_description || f.kind === "text" || f.kind === "textarea", {
     message: "only a text field can be the project description",
+  })
+  .refine((f) => !f.project_video || f.kind === "text", {
+    message: "only a text field can be a project video",
   });
+
+export const libraryDeletionsSchema = z.array(z.uuid());
 
 export const templateSchema = z
   .array(templateFieldSchema)
+  .refine(
+    (fields) => {
+      const ids = fields.flatMap((field) => (field.library_id ? [field.library_id] : []));
+      return new Set(ids).size === ids.length;
+    },
+    { message: "each question must own a distinct library" },
+  )
   .refine((fields) => new Set(fields.map((f) => f.key)).size === fields.length, {
     message: "template field keys must be unique",
   })

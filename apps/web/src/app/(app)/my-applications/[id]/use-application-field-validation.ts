@@ -6,7 +6,6 @@ import { validateFieldOnBlur } from "@/lib/application-validation";
 import type { Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 import type { TemplateField } from "../lib";
-import { missingRequiredFields } from "../lib";
 
 interface Options {
   applicationId: number;
@@ -26,8 +25,8 @@ export function useApplicationFieldValidation({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const validateOnBlur = useCallback(
-    (field: TemplateField) => {
-      const message = validateFieldOnBlur(field, values[field.key], t, language);
+    (field: TemplateField, value: unknown = values[field.key]) => {
+      const message = validateFieldOnBlur(field, value, t, language);
       setFieldErrors((current) => {
         const next = { ...current };
         if (message) next[field.key] = message;
@@ -38,9 +37,12 @@ export function useApplicationFieldValidation({
     [language, t, values],
   );
 
-  const checkRequired = useCallback(() => {
-    const missing = missingRequiredFields(template, values);
-    const errors = Object.fromEntries(missing.map((key) => [key, t("fieldRequired")]));
+  const validateFields = useCallback(() => {
+    const errors: Record<string, string> = {};
+    for (const field of template) {
+      const message = validateFieldOnBlur(field, values[field.key], t, language);
+      if (message) errors[field.key] = message;
+    }
     setFieldErrors(errors);
     const firstInvalid = template.find((field) => errors[field.key]);
     if (firstInvalid) {
@@ -48,8 +50,8 @@ export function useApplicationFieldValidation({
         document.getElementById(templateFieldId(firstInvalid.key, applicationId))?.focus();
       });
     }
-    return missing.length === 0;
-  }, [applicationId, t, template, values]);
+    return Object.keys(errors).length === 0;
+  }, [applicationId, language, t, template, values]);
 
-  return { checkRequired, fieldErrors, setFieldErrors, validateOnBlur };
+  return { validateFields, fieldErrors, setFieldErrors, validateOnBlur };
 }

@@ -62,6 +62,8 @@ function ResetPasswordForm() {
   const { t } = useLocale();
   const schema = useMemo(() => resetPasswordSchema(t), [t]);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: { password: "", confirm: "" },
   });

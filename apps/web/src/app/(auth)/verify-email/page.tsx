@@ -87,6 +87,8 @@ function VerifyEmailInner() {
   const [cooldown, setCooldown] = useState(0);
 
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: { email: params.get("email") ?? "" },
   });

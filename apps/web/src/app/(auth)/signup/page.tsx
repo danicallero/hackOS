@@ -99,6 +99,8 @@ function SignUpInner() {
   );
   const schema = useMemo(() => signupSchema(t), [t]);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",

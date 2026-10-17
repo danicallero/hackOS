@@ -960,5 +960,8 @@
   "projectSend": "Send",
   "scanReplayExpired": "Not synced within {days} days. Log it manually.",
   "galleryNotOpen": "The gallery isn't open yet",
-  "galleryOpensOn": "The gallery opens {date}"
+  "galleryOpensOn": "The gallery opens {date}",
+  "fieldLibrarySearch": "Search values",
+  "fieldLibraryAdd": "Add “{name}”",
+  "fieldLibraryRetry": "Could not load the library. Retry"
 }

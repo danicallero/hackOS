@@ -152,6 +152,8 @@ function ProfileForm({ me }: { me: Me }) {
   const shirtSizes = shirtSizeList.sizes;
 
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: valuesFromMe(me),
   });

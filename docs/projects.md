@@ -11,7 +11,8 @@ challenge selections and immutable form version.
 
 Applications and projects share `packages/shared/src/forms.ts`: trilingual
 `TemplateField` definitions, sections and validation. URL questions are text
-fields with `validation.text_condition="url"`. A single image is a file field
+fields with `validation.text_condition="url"`. A project text question can also
+opt into YouTube validation and presentation with `project_video: true`. A single image is a file field
 with image MIME types; a photo list is an `images` field (project form only,
 up to `MAX_IMAGES_PER_FIELD` keys). One text field is the project description
 (`project_description: true`, else a text field keyed `description`; see
@@ -153,3 +154,50 @@ badges omit repo fields. Reveal emits one public `DATA_CHANGED` after commit;
 private winner edits never trigger public invalidation (`lib/sse-routing.ts`).
 A winner may be a project entered in any challenge of the same queue group.
 Regression coverage: `test/challenges/winner-publication.test.ts`.
+
+## Project form exports and video presentation (H16/H54)
+
+The organizer creates all questions, choices, required flags and sections in the
+existing dynamic form editor. Saving preserves that definition exactly; no
+external reporting template, special answer keys or mandatory questions are
+injected. Event-specific requirements belong in the event's form definition.
+
+Organizers with `exports:run` download `/api/exports/projects.csv` from Projects.
+The CSV includes project metadata, one column per configured question, challenge
+selections and separate first/last/email columns for the active submitter and
+additional members. Drafts use the current form. Submitted answers use their
+immutable form version, and deleted historical questions retain a column so
+submitted data is not lost. Choice answers use the form version's display labels.
+Fixture projects and anonymized members are excluded. Downloads are audited,
+private/no-store and neutralize spreadsheet formulas. Gallery audience settings
+still control access to the exported post-event project URLs.
+
+Any project text question can be marked **YouTube video** in the editor's options;
+the persisted `project_video` property controls validation and presentation,
+independently of the question key or label. Supported HTTPS links include watch,
+shorts, embed and youtu.be with an eleven-character video ID. Drafts may remain
+incomplete; submission validates only the questions and video fields configured
+in the form. The web editor and gallery show a video preview, load a
+privacy-enhanced embed on activation, and retain a direct YouTube link.
+Gallery answers preserve authored section order, hide empty optional answers,
+render descriptions as Markdown and display images in an adaptive media grid.
+
+## One participant project workspace
+
+Participants open one record in reading mode and use **Edit project** to edit the
+same questions in the same two-column workspace. Empty new drafts start in editing
+mode. **View project** saves pending answers before returning to the shared reading
+presentation. Team and challenge actions are available while editing. The gallery
+uses the same `ProjectAnswers` renderer, and an active member's edit action opens
+this workspace directly. The judging presentation panel can expand the same answers,
+media and files without leaving its timer or review. Project loading errors stay
+visible with retry rather than silently replacing the project with empty content.
+
+`library` questions use [question-owned catalogues](./form-libraries.md): proposal
+and curation belong to the field, not to event-level Libraries. Their answers and
+CSV exports are arrays of human-readable names, with no count limit.
+
+Project editor fields validate on blur, including phone normalization, required
+consent and configured text/number/selection constraints. Inline errors use the
+same validator as applications and staff response editing. Submission repeats
+validation and focuses the first invalid field; incomplete drafts still autosave.

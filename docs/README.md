@@ -56,6 +56,8 @@ Architecture & modules:
 - [Mutation idempotency matrix](./idempotency-matrix.md) — the retry
   classification for every state-changing API route, including durable
   outbox/object-storage and SSE boundaries.
+- [Question-owned libraries](./form-libraries.md) — dynamic library fields, unlimited
+  participant proposals, inline bulk curation and confirmed cascading deletion.
 - [Native projects](./projects.md) — drafts, autosave, form snapshots,
   phases, gallery/consent, uploads, invitations, queue eligibility and winner
   publication.

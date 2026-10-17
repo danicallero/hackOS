@@ -62,6 +62,8 @@ export default function NewApplicationFormPage() {
   );
 
   const form = useForm<CreateValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(localizedCreateSchema),
     defaultValues: EMPTY,
   });

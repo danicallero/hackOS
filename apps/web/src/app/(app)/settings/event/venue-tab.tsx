@@ -101,6 +101,8 @@ export function VenueTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
   const { t } = useLocale();
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(createSchema(t)),
     defaultValues: {
       venueName: "",

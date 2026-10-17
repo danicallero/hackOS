@@ -396,6 +396,8 @@ function CreateEnterpriseModal({
 }) {
   const { t } = useLocale();
   const form = useForm<CreateValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(createSchema),
     defaultValues: {
       name: "",

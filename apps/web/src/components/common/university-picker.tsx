@@ -36,6 +36,7 @@ interface University {
 export function UniversityPicker({
   value,
   onChange,
+  onBlur,
   disabled,
   inDialog = false,
   className,
@@ -49,6 +50,7 @@ export function UniversityPicker({
   /** Selected university id as a string, or "" when unset. */
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   disabled?: boolean;
   inDialog?: boolean;
   className?: string;
@@ -142,6 +144,7 @@ export function UniversityPicker({
 
   function select(u: University) {
     onChange(String(u.id));
+    onBlur?.();
     setResolvedLabel({ id: String(u.id), name: u.name });
     // A changed selection is just that: it must not leave the previous search
     // text around to look like a second catalogue proposal.
@@ -255,7 +258,13 @@ export function UniversityPicker({
   );
 
   return (
-    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) onBlur?.();
+      }}
+    >
       <PopoverPrimitive.Trigger asChild>
         <Button
           ref={anchorRef}
@@ -263,6 +272,9 @@ export function UniversityPicker({
           type="button"
           variant="outline"
           disabled={disabled}
+          onBlur={() => {
+            if (!open) onBlur?.();
+          }}
           role="combobox"
           aria-controls={listboxId}
           aria-expanded={open}

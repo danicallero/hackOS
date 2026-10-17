@@ -101,7 +101,12 @@ export function IntolerancesManager() {
   const [deleteTarget, setDeleteTarget] = useState<Intolerance | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: EMPTY });
+  const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
+    resolver: zodResolver(schema),
+    defaultValues: EMPTY,
+  });
   const { reset } = form;
 
   const load = useCallback(

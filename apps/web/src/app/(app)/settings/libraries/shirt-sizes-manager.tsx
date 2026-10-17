@@ -66,6 +66,8 @@ export function ShirtSizesManager() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: { shirtSizes: [] },
   });

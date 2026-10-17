@@ -1,3 +1,4 @@
+import { libraryDeletionsSchema } from "@hackos/shared/forms";
 import { z } from "zod";
 
 /**
@@ -59,6 +60,7 @@ export const updateApplicationSchema = z
     // every grant; a non-empty array replaces the full set (H8/H11).
     grants_role_ids: z.array(z.number().int().positive()).nullish(),
     /** Explicit builder key renames, used to carry existing answers forward (H11, H12). */
+    library_deletions: libraryDeletionsSchema.optional(),
     field_renames: z.array(z.object({ from: z.string().min(1), to: z.string().min(1) })).optional(),
   })
   .strict()

@@ -100,6 +100,8 @@ function ClaimInner() {
   const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
 
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       email: "",

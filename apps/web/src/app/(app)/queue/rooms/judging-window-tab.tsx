@@ -156,6 +156,8 @@ export function JudgingWindowTab({ onDirtyChange }: { onDirtyChange?: (dirty: bo
   const [loaded, setLoaded] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       judgingStartsAt: "",
