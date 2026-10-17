@@ -201,3 +201,7 @@ Project editor fields validate on blur, including phone normalization, required
 consent and configured text/number/selection constraints. Inline errors use the
 same validator as applications and staff response editing. Submission repeats
 validation and focuses the first invalid field; incomplete drafts still autosave.
+
+The management list (`/projects`) presents CSV export as a secondary header
+action beside project creation. Export remains gated by `exports:run`,
+independently of the ability to create projects.

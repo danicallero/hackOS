@@ -94,7 +94,7 @@ export default function ProjectsPage() {
     <PageLayout>
       <PageHeader
         title={t("projects")}
-        actions={
+        secondaryActions={
           can(CAPABILITIES.EXPORTS_RUN) ? (
             <Button asChild variant="outline">
               <a href={`${API_URL}/api/exports/projects.csv`}>{t("exportCsv")}</a>
