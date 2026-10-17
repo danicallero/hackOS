@@ -30,7 +30,7 @@ interface Candidate {
 }
 
 /** Links a project to one GitHub repository (private included) through the GitHub App. */
-export function GithubLink({ projectId }: { projectId: number }) {
+export function GithubLink({ projectId, variant }: { projectId: number; variant?: "plain" }) {
   const { t } = useLocale();
   const base = `/api/me/projects/${projectId}/github`;
   const status = useServerResource(["project-github", projectId], (signal) =>
@@ -69,7 +69,7 @@ export function GithubLink({ projectId }: { projectId: number }) {
     });
 
   return (
-    <SectionCard title="GitHub" icon={GithubLogoIcon}>
+    <SectionCard title="GitHub" icon={GithubLogoIcon} variant={variant}>
       {(error ?? (repos.error ? apiErrorText(repos.error, t, t("couldNotLoadProject")) : null)) && (
         <ContextualError
           message={error ?? apiErrorText(repos.error, t, t("couldNotLoadProject"))}

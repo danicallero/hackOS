@@ -493,54 +493,52 @@ export function ProjectEditor({
           </div>
         </div>
       ) : (
-        <>
-          <ProjectOverview
-            showQueue
-            review={
-              staff && (incomplete.length > 0 || status === "draft") ? (
-                <SectionCard title={t("projectReviewTitle")} variant="plain">
-                  {status === "draft" && (
-                    <p className="mb-3 text-sm text-muted-foreground">{t("projectIneligible")}</p>
-                  )}
-                  <ul className="space-y-2">
-                    {incomplete.map((field) => (
-                      <li key={field.key} className="flex flex-wrap justify-between gap-2 text-sm">
-                        <span>{pickText(field.label, language)}</span>
-                        <span className="text-muted-foreground">
-                          {validateFieldOnBlur(field, draft.values[field.key], t, language)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </SectionCard>
-              ) : undefined
-            }
-            project={{
-              ...project,
-              name,
-              submissionStatus: status,
-              responses: draft.values,
-              members,
-              challenges,
-            }}
-            language={language}
-            labels={{
-              team: t("surfaceTeam"),
-              challenges: t("challenges"),
-              details: t("projectDetailsTitle"),
-              pending: t("pendingInvitesTitle"),
-              rank: t("rankLabel"),
-              noMembers: t("noMembers"),
-              noChallenges: t("noChallenges"),
-            }}
-            assetUrl={(path) => new URL(path, API_URL).toString()}
-          />
-          {!staff && project.isMember && (
-            <div className="mt-8 max-w-xl">
-              <GithubLink projectId={project.id} />
-            </div>
-          )}
-        </>
+        <ProjectOverview
+          showQueue
+          asideExtra={
+            !staff && project.isMember ? (
+              <GithubLink projectId={project.id} variant="plain" />
+            ) : undefined
+          }
+          review={
+            staff && (incomplete.length > 0 || status === "draft") ? (
+              <SectionCard title={t("projectReviewTitle")} variant="plain">
+                {status === "draft" && (
+                  <p className="mb-3 text-sm text-muted-foreground">{t("projectIneligible")}</p>
+                )}
+                <ul className="space-y-2">
+                  {incomplete.map((field) => (
+                    <li key={field.key} className="flex flex-wrap justify-between gap-2 text-sm">
+                      <span>{pickText(field.label, language)}</span>
+                      <span className="text-muted-foreground">
+                        {validateFieldOnBlur(field, draft.values[field.key], t, language)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            ) : undefined
+          }
+          project={{
+            ...project,
+            name,
+            submissionStatus: status,
+            responses: draft.values,
+            members,
+            challenges,
+          }}
+          language={language}
+          labels={{
+            team: t("surfaceTeam"),
+            challenges: t("challenges"),
+            details: t("projectDetailsTitle"),
+            pending: t("pendingInvitesTitle"),
+            rank: t("rankLabel"),
+            noMembers: t("noMembers"),
+            noChallenges: t("noChallenges"),
+          }}
+          assetUrl={(path) => new URL(path, API_URL).toString()}
+        />
       )}
     </PageLayout>
   );
