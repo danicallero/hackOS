@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import {
   SCHEDULE_REMINDER_LEAD_MINUTES_MAX,
   SCHEDULE_REMINDER_LEAD_MINUTES_MIN,
@@ -9,6 +10,7 @@ import { z } from "zod";
 import { requireCapability } from "../../../lib/capabilities.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
+import { broadcast } from "../../../lib/sse.js";
 import {
   readNotificationAutomationSettings,
   requestScheduleRemindersRun,
@@ -80,6 +82,8 @@ export function registerAutomationRoutes(app: FastifyInstance): void {
     async (req) => {
       const saved = await saveNotificationAutomationSettings(req.userId as number, req.body);
       await requestScheduleRemindersRun();
+      // Phones schedule their own reminders from the lead and the switch: wake them to reschedule.
+      await broadcast(SSE_TOPICS.PUBLIC_CONTENT, EVENTS.DATA_CHANGED, {});
       return saved;
     },
   );

@@ -4,6 +4,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
 import { deletePrefix } from "../../lib/storage.js";
 import { validateResponses } from "../applications/service.js";
@@ -27,7 +28,7 @@ import { compactQueueGroupPositions, nextBottomPosition } from "../queue/orderin
 import { RESET_PRESENTATION_CLOCK_SQL } from "../queue/presentation-clock.js";
 import { type RepositoryAccessScope, repositoryIdsForScope } from "./access.js";
 import { nativeEditable, nativeForm, nativeProjects, snapshotProjectSubmission } from "./native.js";
-import { assertProjectWindow, projectPhase } from "./policy.js";
+import { assertProjectWindow, canViewGallery, projectPhase } from "./policy.js";
 
 interface EnqueueOutcome {
   entry: Record<string, unknown> & { id: number; challenge_id: number };
@@ -227,6 +228,13 @@ function translationsOf(i18n: unknown, fallback: string | null): Record<string, 
 export async function listPublicChallenges(
   userId: number | null = null,
 ): Promise<PublicChallenge[]> {
+  // Identical for every viewer except whether published winners are shown (H45, H60).
+  const winnersVisible = await canViewGallery(pool, userId);
+  return sharedCache("public-content", `challenges:${winnersVisible}`, 15, () =>
+    computePublicChallenges(winnersVisible),
+  );
+}
+async function computePublicChallenges(winnersVisible: boolean): Promise<PublicChallenge[]> {
   const { rows } = await pool.query(
     `SELECT c.id,
             c.title,
@@ -249,7 +257,7 @@ export async function listPublicChallenges(
       ORDER BY c.available_from NULLS FIRST, c.id ASC`,
   );
 
-  const winners = await visibleWinnerRows(pool, userId);
+  const winners = winnersVisible ? await visibleWinnerRows(pool, null, undefined, true) : [];
   return (rows as Array<Record<string, unknown>>).map((r) => ({
     id: Number(r.id),
     ...(winners.some((w) => w.challengeId === Number(r.id))

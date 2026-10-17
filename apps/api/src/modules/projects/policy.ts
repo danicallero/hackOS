@@ -20,7 +20,7 @@ export async function projectPhase(db: Queryable) {
     COALESCE(project_drafts_open_at,hacking_starts_at) IS NOT NULL
       AND now() >= COALESCE(project_drafts_open_at,hacking_starts_at)
       AND COALESCE(project_submissions_close_at,hacking_ends_at) IS NOT NULL
-      AND now() <= COALESCE(project_edits_lock_at,project_submissions_close_at,hacking_ends_at) AS editing,
+      AND now() <= COALESCE(project_submissions_close_at,hacking_ends_at) AS editing,
     COALESCE(project_drafts_open_at,hacking_starts_at) IS NOT NULL AND now()>=COALESCE(project_drafts_open_at,hacking_starts_at) AND now()<=COALESCE(project_submissions_close_at,hacking_ends_at) AS submitting,
     COALESCE(project_drafts_open_at,hacking_starts_at) IS NOT NULL AND now() >= COALESCE(project_drafts_open_at,hacking_starts_at) AS "draftsOpen",
     project_gallery_opens_at IS NOT NULL AND now() >= project_gallery_opens_at AS "galleryOpen",

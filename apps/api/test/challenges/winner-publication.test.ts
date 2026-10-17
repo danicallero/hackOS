@@ -2,6 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
+import { invalidateSharedCache } from "../../src/lib/shared-cache.js";
 import { asUser, buildTestApp, createUserWithCapabilities, truncateAll } from "../helpers.js";
 import { createChallenge, createRepoWithTeam } from "../queue/fixtures.js";
 
@@ -72,6 +73,9 @@ describe("Winner publication H60", () => {
       `UPDATE challenges SET winners_published_at=now()-interval '1 second' WHERE id=$1`,
       [challengeId],
     );
+    // Direct SQL emits no publication event, which is what invalidates the shared caches.
+    await invalidateSharedCache("gallery");
+    await invalidateSharedCache("public-content");
     const visible = await app.inject({ method: "GET", url });
     expect(visible.json().items.map((item: { id: number }) => item.id)).toEqual([repoId]);
     expect(visible.json().total).toBe(1);
@@ -91,6 +95,8 @@ describe("Winner publication H60", () => {
     });
     expect(unmatched.json().total).toBe(0);
     await pool.query(`UPDATE challenges SET visibility='hidden' WHERE id=$1`, [challengeId]);
+    await invalidateSharedCache("gallery");
+    await invalidateSharedCache("public-content");
     expect((await app.inject({ method: "GET", url })).json().total).toBe(0);
     expect(
       (await app.inject({ method: "GET", url: "/api/public/projects?winnersOnly=false" })).json()

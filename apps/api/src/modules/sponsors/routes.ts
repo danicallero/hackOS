@@ -9,6 +9,7 @@ import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { putObject } from "../../lib/storage.js";
 import {
   enterpriseAccessFor,
@@ -93,7 +94,9 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         description: "Returns visible sponsor enterprises for the public event site (H45).",
       },
     },
-    async () => ({ items: await listPublicSponsors() }),
+    async () => ({
+      items: await sharedCache("public-content", "sponsors", 15, listPublicSponsors),
+    }),
   );
 
   r.get(

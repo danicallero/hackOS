@@ -12,9 +12,11 @@ import type {
   PublicEvent,
   PublicSponsor,
 } from "@/components/public/public-types";
+import { TV_REFRESH_JITTER_MS } from "@/hooks/refresh-jitter";
 import { useElementSize } from "@/hooks/use-element-size";
 import { useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
+import { useJitteredCallback } from "@/hooks/use-jittered-callback";
 import { api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
@@ -973,7 +975,7 @@ export function TvDisplay() {
   // needs (queue/TV plus public content). Always refetch sanitized projections
   // rather than deriving screen state from an SSE payload: raw queue events
   // stay on the operational-only channel.
-  const refreshPublicProjection = useCallback(() => void load(), [load]);
+  const refreshPublicProjection = useJitteredCallback(() => void load(), TV_REFRESH_JITTER_MS);
 
   useEventSource(REALTIME_SCOPES.PUBLIC_TV, {
     events: [EVENTS.DATA_CHANGED],

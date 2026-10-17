@@ -32,8 +32,7 @@ sending `null` clears a nullable field.
 | `event_ends_at` | **Event over** — distinct from `hacking_ends_at` (multi-day events keep going after submissions close). Becomes the Apple pass's `expirationDate` and the Google object's validity end, so Wallet stops surfacing the pass afterwards. `CHECK (ends > starts)`. |
 | `hacking_starts_at`, `hacking_ends_at` | The publicly-"spoken" hacking window; drives the countdown. `CHECK (ends > starts)`. |
 | `show_start_countdown` | Live "hacking starts in" countdown before the start, vs a frozen duration. |
-| `project_drafts_open_at`, `project_submissions_close_at` | H60 project phase bounds. A blank bound inherits `hacking_starts_at`/`hacking_ends_at`; the database clock decides the phase. |
-| `project_edits_lock_at` | Last instant members may edit a submitted project; blank means the submission close. |
+| `project_drafts_open_at`, `project_submissions_close_at` | H60 project phase bounds; editing and submission both close at `project_submissions_close_at`. A blank bound inherits `hacking_starts_at`/`hacking_ends_at`; the database clock decides the phase. |
 | `project_draft_visibility` | Who besides the team sees drafts: `team_only`, `attendees` or `public`. |
 | `project_gallery_opens_at`, `project_gallery_audience` | When the submitted-project gallery opens (blank = closed) and its audience: `staff`, `attendees` or `public`. |
 | `project_max_team_size` | Optional team-size limit used by invitations and queue eligibility; blank is unlimited. See [projects](./projects.md). |

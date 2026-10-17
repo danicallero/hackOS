@@ -710,7 +710,7 @@ function IntroScreen({
         ) : null}
       </View>
 
-      {loading ? <RequestFeedback loading /> : null}
+      {loading ? <RequestFeedback loading compact /> : null}
       {eligibilityError ? <RequestFeedback error={eligibilityError} /> : null}
       {actionError ? <DestructiveNotice message={actionError.message} urgent /> : null}
 

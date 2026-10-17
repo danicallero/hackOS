@@ -9,6 +9,13 @@ export async function truncateAll(): Promise<void> {
   const tables = await testTableList();
   if (tables === "") return;
   await pool.query(`TRUNCATE ${tables} RESTART IDENTITY CASCADE`);
+  // Direct SQL seeding emits no event, so shared read caches must not outlive the data.
+  const { invalidateSharedCache } = await import("../src/lib/shared-cache.js");
+  await Promise.all(
+    ["gallery", "content", "public-content", "tv"].map((namespace) =>
+      invalidateSharedCache(namespace),
+    ),
+  );
 }
 
 let tablesForTruncation: string | undefined;

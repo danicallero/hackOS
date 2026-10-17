@@ -9,6 +9,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
+import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
 function Prose({ text }: { text: string }) {
@@ -32,17 +33,25 @@ function useChallenge(id: number) {
   const { language } = useLocale();
   const [challenge, setChallenge] = useState<ChallengeDetail | null | undefined>(undefined);
   const [error, setError] = useState<Error | null>(null);
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setChallenge(await fetchChallengeDetail(language, id));
-    } catch (cause) {
-      setError(cause as Error);
-    }
-  }, [id, language]);
+  const load = useCallback(
+    async (quiet = false) => {
+      if (!quiet) setError(null);
+      try {
+        const next = await fetchChallengeDetail(language, id);
+        // A quiet refresh keeps the rendered object when nothing changed.
+        setChallenge((current) =>
+          quiet && JSON.stringify(current) === JSON.stringify(next) ? current : next,
+        );
+      } catch (cause) {
+        if (!quiet) setError(cause as Error);
+      }
+    },
+    [id, language],
+  );
   useEffect(() => {
     void load();
   }, [load]);
+  useStreamRefresh(() => void load(true), { publicContent: true });
   return { challenge, error, load };
 }
 

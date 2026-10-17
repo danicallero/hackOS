@@ -159,7 +159,7 @@ the account language.
 
 - **Decision:** submissions close at `event_config.project_submissions_close_at`,
   which inherits `hacking_ends_at` when blank (H60). That is the instant the
-  project phase policy enforces; `project_edits_lock_at` only bounds editing.
+  project phase policy enforces for both editing and submission.
 - Window: the hacking period, from `hacking_starts_at` until the deadline
   passes. **Decision:** participants expect the countdown whenever they are
   hacking, so it is not limited to the last hours; it replaced a 3-hour lead,

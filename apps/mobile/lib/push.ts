@@ -4,6 +4,11 @@ import { Platform } from "react-native";
 import { apiFetch } from "./api";
 
 let registeredToken: { token: string; userId: number } | null = null;
+
+/** The Expo push token this device registered for the signed-in account, if any. */
+export function getRegisteredPushToken(userId: number): string | null {
+  return registeredToken?.userId === userId ? registeredToken.token : null;
+}
 let registration: Promise<void> | null = null;
 
 /**

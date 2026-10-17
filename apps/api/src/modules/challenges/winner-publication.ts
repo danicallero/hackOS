@@ -5,6 +5,7 @@ import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
 import { canViewGallery } from "../projects/policy.js";
 
@@ -91,13 +92,25 @@ export async function visibleWinnerRows(
   db: Queryable,
   userId: number | null,
   projectIds?: number[],
+  /** The caller already ran the gallery audience check for the viewer this result is shared with. */
+  accessChecked = false,
 ) {
-  if (!(await canViewGallery(db, userId))) return [];
+  if (!accessChecked && !(await canViewGallery(db, userId))) return [];
   const { rows } = await db.query(
     `SELECT w.challenge_id AS "challengeId",w.rank,w.repo_id AS "repoId",c.title AS "challengeTitle",r.name AS "repoName" FROM challenge_winners w JOIN challenges c ON c.id=w.challenge_id JOIN repos r ON r.id=w.repo_id WHERE c.winners_published_at IS NOT NULL AND c.winners_published_at<=now() AND c.visibility='visible' AND c.is_test_account=false AND r.is_test_account=false AND r.submission_status='submitted' AND ($1::int[] IS NULL OR r.id=ANY($1)) ORDER BY c.id,w.rank`,
     [projectIds ?? null],
   );
   return rows;
+}
+/**
+ * Published winners once the viewer passes the gallery audience check. The
+ * rows are identical for every allowed viewer, so one query serves them all.
+ */
+export async function sharedVisibleWinnerRows(db: Queryable, userId: number | null) {
+  if (!(await canViewGallery(db, userId))) return [];
+  return sharedCache("public-content", "visible-winners", 15, () =>
+    visibleWinnerRows(db, null, undefined, true),
+  );
 }
 export async function canReadPrivateWinners(
   db: Queryable,

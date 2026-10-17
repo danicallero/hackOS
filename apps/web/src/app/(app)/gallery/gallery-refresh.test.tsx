@@ -1,4 +1,4 @@
-import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -16,47 +16,39 @@ afterEach(async () => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
 });
-it("coalesces public signals and rechecks clock boundaries without navigating", async () => {
+
+it("listens to the gallery streams and refreshes once, jittered, without polling", async () => {
   vi.useFakeTimers();
-  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   root = createRoot(document.createElement("div"));
   await act(async () => root?.render(<GalleryRefresh />));
-  const [scope, options] = mocks.subscribe.mock.calls[0];
-  expect(scope).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
-  expect(options.events).toEqual([EVENTS.DATA_CHANGED]);
+  const scopes = mocks.subscribe.mock.calls.map(([scope]) => scope);
+  expect(scopes).toEqual([
+    REALTIME_SCOPES.PUBLIC_CONTENT,
+    domainScope(SSE_TOPICS.PROJECTS),
+    domainScope(SSE_TOPICS.DIRECTORY),
+  ]);
+  expect(mocks.subscribe.mock.calls[0]?.[1].events).toEqual([EVENTS.DATA_CHANGED]);
+  expect(mocks.subscribe.mock.calls[1]?.[1].events).toEqual([EVENTS.DOMAIN_CHANGED]);
+  // A burst across streams coalesces into one refresh inside the jitter window.
   act(() => {
-    options.onEvent();
-    options.onEvent();
-    options.onResync();
-    vi.advanceTimersByTime(200);
+    mocks.subscribe.mock.calls[0]?.[1].onEvent();
+    mocks.subscribe.mock.calls[1]?.[1].onEvent();
+    mocks.subscribe.mock.calls[2]?.[1].onResync();
+    vi.advanceTimersByTime(3_000);
   });
   expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  act(() => vi.advanceTimersByTime(15_000));
-  expect(mocks.refresh).toHaveBeenCalledTimes(2);
-  await act(async () => root?.unmount());
-  root = null;
-  act(() => vi.advanceTimersByTime(30_000));
-  expect(mocks.refresh).toHaveBeenCalledTimes(2);
+  // No timer-driven refresh without a signal.
+  act(() => vi.advanceTimersByTime(10 * 60_000));
+  expect(mocks.refresh).toHaveBeenCalledTimes(1);
 });
 
-it("recovers a cancelled debounce after rerender and polls only visible pages", async () => {
+it("cancels a pending refresh on unmount", async () => {
   vi.useFakeTimers();
-  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
   root = createRoot(document.createElement("div"));
   await act(async () => root?.render(<GalleryRefresh />));
-  act(() => mocks.subscribe.mock.calls.at(-1)?.[1].onEvent());
-  await act(async () => root?.render(<GalleryRefresh />));
-  act(() => {
-    mocks.subscribe.mock.calls.at(-1)?.[1].onEvent();
-    vi.advanceTimersByTime(200);
-  });
-  expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  act(() => vi.advanceTimersByTime(30_000));
-  expect(mocks.refresh).toHaveBeenCalledTimes(1);
-  visibility.mockReturnValue("visible");
-  act(() => {
-    document.dispatchEvent(new Event("visibilitychange"));
-    vi.advanceTimersByTime(200);
-  });
-  expect(mocks.refresh).toHaveBeenCalledTimes(2);
+  act(() => mocks.subscribe.mock.calls[0]?.[1].onEvent());
+  await act(async () => root?.unmount());
+  root = null;
+  act(() => vi.advanceTimersByTime(10_000));
+  expect(mocks.refresh).not.toHaveBeenCalled();
 });

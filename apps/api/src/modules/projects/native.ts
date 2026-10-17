@@ -233,7 +233,12 @@ export async function nativeProject(
 export async function nativeProjects(
   userId: number | null,
   ids: number[],
-  { staff = false, gallery = false }: { staff?: boolean; gallery?: boolean } = {},
+  {
+    staff = false,
+    gallery = false,
+    /** Gallery access was already verified for every viewer of this projection (shared cache, H18). */
+    galleryChecked = false,
+  }: { staff?: boolean; gallery?: boolean; galleryChecked?: boolean } = {},
 ) {
   if (!ids.length) return [];
   let inspectable = new Set<number>();
@@ -267,7 +272,7 @@ export async function nativeProjects(
     ),
     projectPhase(pool),
     nativeForm(),
-    visibleWinnerRows(pool, userId, ids),
+    visibleWinnerRows(pool, userId, ids, galleryChecked),
   ]);
   return ids.map((id) => {
     const row = projects.rows.find((project) => project.id === id);
