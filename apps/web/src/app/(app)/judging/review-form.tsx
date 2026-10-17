@@ -12,7 +12,6 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/csr/WifiSlash";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { Modal } from "@/components/common/modal";
 import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Spinner } from "@/components/common/spinner";
@@ -46,7 +45,6 @@ import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { EMPTY_PANEL, entryLabel, errorMessage } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
-import { ProjectInfo } from "./presentation-panel";
 
 function isTextQuestion(question: Question): boolean {
   return question.kind === "short_text" || question.kind === "long_text";
@@ -95,8 +93,6 @@ export function ReviewForm({
   canJudge,
   onClose,
   standalone = false,
-  inline = false,
-  onExternalOpen,
   onUnsavedEditsAtRisk,
 }: {
   entry: QueueEntry;
@@ -110,13 +106,10 @@ export function ReviewForm({
   panel?: Question[] | null;
   roomId: number | null;
   canJudge: boolean;
-  onClose: () => void;
+  /** Shows a close button; omit when the form is always on the page. */
+  onClose?: () => void;
   /** Rendered alone in its own window, without the project beside it. */
   standalone?: boolean;
-  /** Rendered as a column of the judging page (focus layout) instead of a window. */
-  inline?: boolean;
-  /** A project link left for another tab; the page moves the evaluation to its own window. */
-  onExternalOpen?: () => void;
   /**
    * Reports edits that cannot be saved right now (failed save, conflict or
    * offline), so the page can confirm before switching entries (#1014).
@@ -147,14 +140,6 @@ export function ReviewForm({
   const currentEntryRef = useRef<number | undefined>(undefined);
   const panelRef = useRef(panel);
   panelRef.current = panel;
-  const [desktopFloating, setDesktopFloating] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 1280px)");
-    const update = () => setDesktopFloating(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
   const [conflict, setConflict] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator === "undefined" || navigator.onLine);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -445,7 +430,7 @@ export function ReviewForm({
           {syncLabel}
         </span>
         <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
-        {column && (
+        {column && onClose && (
           <button
             type="button"
             className={dialogIconButtonClass}
@@ -637,26 +622,6 @@ export function ReviewForm({
   );
 
   if (standalone) return renderPanel(false, true);
-  if (inline) return renderPanel(false, false, true);
 
-  return (
-    <Modal
-      open
-      onOpenChange={(open) => !open && onClose()}
-      size="xl"
-      icon={CheckCircleIcon}
-      title={entryLabel(entry, t)}
-      floatingFocus={desktopFloating}
-      className="max-h-[90vh] overflow-visible sm:max-w-3xl lg:left-[calc(50%-13rem)]"
-      floatingContent={desktopFloating ? renderPanel(true) : undefined}
-    >
-      <ProjectInfo
-        entry={entry}
-        challenge={challenge}
-        detailsOpen
-        onExternalOpen={onExternalOpen}
-      />
-      {!desktopFloating && <div className="mt-6 pb-2">{renderPanel(false)}</div>}
-    </Modal>
-  );
+  return renderPanel(false, false, true);
 }

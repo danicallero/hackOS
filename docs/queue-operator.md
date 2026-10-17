@@ -169,14 +169,17 @@ database connection and should be run during a quiet operational window.
 
 The right column of `/judging` is the team in the room: project summary and
 links (repository, demo and any project question marked **Judging panel link**),
-preparation time as `elapsed / scheduled`, and pinned Start, Scoring and
-Re-queue actions. Only the project body scrolls.
+preparation time as `elapsed / scheduled`, and pinned Start and Re-queue
+actions. The project body scrolls inside its own container.
 
-**Scoring** opens the evaluation form. With the **Expanded judging** button on
-(default, remembered per browser), the queue column hides, the sidebar
-collapses, and the project fills the left side with the form on the right;
-closing restores both. With it off, the form opens as a window over the page
-with the project beside it. A project link that leaves for another tab opens
-the evaluation in its own small window (`/judging-popup/:entryId`, Document
-Picture-in-Picture where available) and closes it when you return. A company
-that scores elsewhere can switch Expanded judging off and ignore Scoring.
+By default the right column stacks the project (top) and the evaluation form
+(bottom), each scrolling inside its own container, with the queue and room
+statistics on the left. **Expanded judging** is a standing preference
+(remembered per browser): while a team is in the room, the queue hides, the
+sidebar collapses, the project (with its Start and Re-queue controls) fills the
+left and the evaluation form sits on the right; when the team leaves, for
+example after the evaluation is submitted, the queue view returns with a short
+transition, and expanded judging comes back with the next team. A project link
+that leaves for another tab opens the evaluation in its own small window
+(`/judging-popup/:entryId`, Document Picture-in-Picture where available) and
+closes it when you return.

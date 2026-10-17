@@ -7,7 +7,6 @@ import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowC
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
-import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
@@ -51,7 +50,6 @@ export function PresentationPanel({
   canOperate,
   busy,
   preparationSeconds,
-  onOpenReview,
   onExternalOpen,
   onEntryAction,
 }: {
@@ -65,7 +63,6 @@ export function PresentationPanel({
   busy: string | null;
   /** Track's configured preparation allowance; null until loaded. */
   preparationSeconds: number | null;
-  onOpenReview: () => void;
   /** Fired when a link leaves for another tab, so the evaluation can follow in its own window. */
   onExternalOpen?: () => void;
   onEntryAction: (
@@ -216,7 +213,7 @@ export function PresentationPanel({
             />
           )}
 
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             {timerAction ? (
               <Button
                 variant="outline"
@@ -241,10 +238,6 @@ export function PresentationPanel({
                 {t("start")}
               </Button>
             )}
-            <Button variant="outline" onClick={onOpenReview}>
-              <ListChecksIcon aria-hidden="true" className="size-4" />
-              {t("scoring")}
-            </Button>
             {canSendBack && (
               <AlertModal
                 title={t("confirmSendBackTitle")}

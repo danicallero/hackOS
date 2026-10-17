@@ -41,7 +41,6 @@ function render(entry: Partial<QueueEntry>, onEntryAction = vi.fn()) {
         canOperate={false}
         busy={null}
         preparationSeconds={120}
-        onOpenReview={() => undefined}
         onEntryAction={onEntryAction}
       />,
     ),
