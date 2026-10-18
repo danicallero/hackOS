@@ -415,6 +415,7 @@ export function ReviewForm({
             : column
               ? "h-full rounded-surface border border-border/60 bg-card"
               : "rounded-surface border border-border/60",
+        !floating && "relative",
         "flex min-h-0 flex-col overflow-hidden",
       )}
     >
@@ -444,7 +445,7 @@ export function ReviewForm({
       </header>
       <div
         className={cn(
-          "p-4",
+          "p-4 pb-20",
           (floating || fill || column) && "min-h-0 flex-1 overflow-y-auto overscroll-contain",
         )}
       >
@@ -598,7 +599,7 @@ export function ReviewForm({
           </div>
         )}
       </div>
-      <footer className="flex shrink-0 justify-end gap-2 border-t px-4 py-3">
+      <footer className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end gap-2 px-4 pb-3 [&>*]:pointer-events-auto">
         <Button
           variant="outline"
           disabled={!canJudge || !online || saving || loading}
