@@ -378,6 +378,117 @@ describe("PublicProfileCard", () => {
     expect(submit()?.disabled).toBe(true);
   });
 
+  it("shows the form immediately and Create profile saves sharing without an early write", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile());
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    expect(byLabel("publicProfileVisible")).toBeNull();
+    expect(container.textContent).toContain("publicProfileAudience");
+    expect(api.put).not.toHaveBeenCalled();
+    expect(byLabel("publicProfileVisible")).toBeNull();
+    expect(byLabel("publicProfileHeadline")).not.toBeNull();
+    vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true }));
+    await save();
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ directoryVisible: true, completeOnboarding: true }),
+      expect.anything(),
+    );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("the hidden-profile choice records no sharing without a manual toggle", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile());
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    expect(byLabel("publicProfileVisible")).toBeNull();
+    vi.mocked(api.put).mockResolvedValue(profile());
+    const hidden = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "networkingOnboardingHidden",
+    );
+    await act(async () => hidden?.click());
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ directoryVisible: false, completeOnboarding: true }),
+      expect.anything(),
+    );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("can opt out after a failed create without publishing edits or reusing its idempotency key", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile({ headline: "Stored headline" }));
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    const user = userEvent.setup();
+    await act(async () =>
+      user.type(byLabel("publicProfileHeadline") as HTMLInputElement, " unsaved"),
+    );
+    vi.mocked(api.put).mockRejectedValueOnce(new Error("Offline"));
+    await save();
+    expect(onFinished).not.toHaveBeenCalled();
+    const createKey = new Headers(vi.mocked(api.put).mock.calls[0][2]?.headers).get(
+      "Idempotency-Key",
+    );
+    vi.mocked(api.put).mockResolvedValue(profile());
+    const hidden = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "networkingOnboardingHidden",
+    );
+    await act(async () => hidden?.click());
+    expect(api.put).toHaveBeenLastCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({
+        directoryVisible: false,
+        headline: "Stored headline",
+        completeOnboarding: true,
+      }),
+      expect.anything(),
+    );
+    expect(
+      new Headers(vi.mocked(api.put).mock.calls[1][2]?.headers).get("Idempotency-Key"),
+    ).not.toBe(createKey);
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("offers no CV upload during onboarding without an application CV", async () => {
+    vi.mocked(api.get).mockResolvedValue(profile({ directoryVisible: true }));
+    await render(<PublicProfileCard onboarding={{ onFinished: vi.fn(), onLater: vi.fn() }} />);
+    expect(container.textContent).not.toContain("uploadCv");
+    expect(container.textContent).not.toContain("publicProfileCv");
+    expect(container.querySelector("input[type=file]")).toBeNull();
+  });
+
+  it("uses the application CV read-only during onboarding, with sharing still optional", async () => {
+    vi.mocked(api.get).mockResolvedValue(
+      profile({
+        directoryVisible: true,
+        cv: {
+          filename: "application-cv.pdf",
+          uploadedAt: "2026-10-10T10:00:00.000Z",
+          source: "application",
+        },
+      }),
+    );
+    const onFinished = vi.fn();
+    await render(<PublicProfileCard onboarding={{ onFinished, onLater: vi.fn() }} />);
+    expect(container.textContent).toContain("application-cv.pdf");
+    expect(container.textContent).toContain("cvFromApplication");
+    expect(container.querySelector("input[type=file]")).toBeNull();
+    const labels = [...container.querySelectorAll("button")].map((button) => button.textContent);
+    expect(labels).not.toContain("uploadCv");
+    expect(labels).not.toContain("replaceCv");
+    expect(labels).not.toContain("removeCv");
+    expect(byLabel("publicProfileShareCv")).not.toBeNull();
+    vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true, shareCv: true }));
+    await act(async () => (byLabel("publicProfileShareCv") as HTMLButtonElement).click());
+    await save();
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ shareCv: true, completeOnboarding: true }),
+      expect.anything(),
+    );
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
   it("shows a CV from the application without upload controls", async () => {
     vi.mocked(api.get).mockResolvedValue(
       profile({

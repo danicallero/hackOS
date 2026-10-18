@@ -80,7 +80,11 @@ import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intol
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
-import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
+import {
+  fieldErrorsFromApi,
+  validateFieldOnBlur,
+  validationErrorSummary,
+} from "@/lib/application-validation";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
@@ -725,7 +729,28 @@ export function ReviewModal({
     });
   }
 
+  function handleEditFieldBlur(field: TemplateField, value: FieldValue) {
+    const message = validateFieldOnBlur(field, value, t, lang);
+    setEditErrors((previous) => {
+      const next = { ...previous };
+      if (message) next[field.key] = message;
+      else delete next[field.key];
+      return next;
+    });
+  }
+
   async function saveEdit() {
+    const errors: Record<string, string> = {};
+    for (const field of answerFields) {
+      if (field.section_key === LOGISTICS_SECTION_KEY) continue;
+      const message = validateFieldOnBlur(field, editValues[field.key], t, lang);
+      if (message) errors[field.key] = message;
+    }
+    setEditErrors(errors);
+    if (Object.keys(errors).length) {
+      document.getElementById(templateFieldId(Object.keys(errors)[0], applicationId))?.focus();
+      return;
+    }
     setSavingEdit(true);
     try {
       // PUT /api/responses/:id (APPLICATIONS_EDIT_RESPONSE) — audited server-side.
@@ -1110,6 +1135,7 @@ export function ReviewModal({
                       setEditValues={setEditValues}
                       editErrors={editErrors}
                       onEditFieldChange={handleEditFieldChange}
+                      onEditFieldBlur={handleEditFieldBlur}
                       savingEdit={savingEdit}
                       saveEdit={saveEdit}
                       answerFields={answerFields}
@@ -1133,6 +1159,7 @@ export function ReviewModal({
                     setEditValues={setEditValues}
                     editErrors={editErrors}
                     onEditFieldChange={handleEditFieldChange}
+                    onEditFieldBlur={handleEditFieldBlur}
                     savingEdit={savingEdit}
                     saveEdit={saveEdit}
                     answerFields={answerFields}
@@ -1152,6 +1179,7 @@ export function ReviewModal({
                   setEditValues={setEditValues}
                   editErrors={editErrors}
                   onEditFieldChange={handleEditFieldChange}
+                  onEditFieldBlur={handleEditFieldBlur}
                   savingEdit={savingEdit}
                   saveEdit={saveEdit}
                   answerFields={answerFields}
@@ -1212,6 +1240,7 @@ function AnswersSection({
   setEditValues,
   editErrors,
   onEditFieldChange,
+  onEditFieldBlur,
   savingEdit,
   saveEdit,
   answerFields,
@@ -1228,6 +1257,7 @@ function AnswersSection({
   setEditValues: (fn: (prev: Record<string, unknown>) => Record<string, unknown>) => void;
   editErrors: Record<string, string>;
   onEditFieldChange: (key: string, value: FieldValue) => void;
+  onEditFieldBlur: (field: TemplateField, value: FieldValue) => void;
   savingEdit: boolean;
   saveEdit: () => Promise<void>;
   answerFields: TemplateField[];
@@ -1274,6 +1304,7 @@ function AnswersSection({
                       disabled={!fieldEditing}
                       error={fieldEditing ? editErrors[f.key] : undefined}
                       onChange={(v) => onEditFieldChange(f.key, v)}
+                      onBlur={(value) => onEditFieldBlur(f, value)}
                       sharedWithSponsors={
                         (fieldEditing ? editValues : response.responses)[sponsorShareKey(f.key)] ===
                         true

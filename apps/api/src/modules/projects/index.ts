@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
-import { registerProjectLifecycleRoutes } from "./lifecycle.routes.js";
+import { registerProjectFileRoutes } from "./files.js";
+import { registerNativeProjectRoutes } from "./native.routes.js";
 import { registerProjectRoutes } from "./routes.js";
 
-/** WS-B1: projects / Devpost import (H16-H17). No workers needed. */
+/** Native projects (#1005–#1009). */
 export async function registerProjectsModule(app: FastifyInstance): Promise<void> {
-  registerProjectLifecycleRoutes(app);
+  registerNativeProjectRoutes(app);
+  registerProjectFileRoutes(app);
   registerProjectRoutes(app);
 }

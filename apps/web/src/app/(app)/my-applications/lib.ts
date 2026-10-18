@@ -24,10 +24,12 @@ export const FIELD_KINDS = [
   "birth_year",
   "date",
   "number",
+  "phone",
   "file",
   "university",
   "degree",
   "city",
+  "images",
 ] as const;
 export type FieldKind = (typeof FIELD_KINDS)[number];
 

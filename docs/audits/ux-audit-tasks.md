@@ -401,7 +401,7 @@ does not mean skip QA.
 | Personal schedule | Timetable | Keep; clarify attendee language and current event state |
 | Personal wallet | Wallet | Keep tabs if URL-backed; one primary wallet action |
 | Personal messages | Inbox | Keep tabs if URL-backed; prioritize unread/next action |
-| Personal profile | Profile, secondary email verification | Keep; make verification state and next action explicit |
+| Personal profile | Profile | Keep; make the account's primary email and verification state clear |
 | Applications | List, application builder, review, decisions | Split detail workflows — UX-04 |
 | Projects | List, project detail | Mostly keep; preserve overview-first layout |
 | Project intake | Import, unmatched records | Keep as a guided import/reconciliation flow; do not merge into projects list |

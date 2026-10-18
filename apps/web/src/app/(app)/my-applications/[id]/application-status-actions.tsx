@@ -10,7 +10,6 @@ import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
 import Link from "next/link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
-import { NetworkingProfileInvite } from "@/components/profile/networking-profile-invite";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
@@ -96,7 +95,6 @@ export function ApplicationStatusActions({
               {t("cantAttendRelease")}
             </Button>
           </div>
-          <NetworkingProfileInvite />
         </SectionCard>
       )}
 

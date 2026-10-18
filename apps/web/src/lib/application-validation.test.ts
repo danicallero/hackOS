@@ -63,3 +63,71 @@ describe("application validation errors", () => {
     expect(validateFieldOnBlur(urlField, "example.org", translate, "en")).toBeNull();
   });
 });
+
+describe("dynamic field validation before submit", () => {
+  const base = { key: "field", label: { en: "Field", es: "Campo", gl: "Campo" } };
+  it.each([
+    ["phone", "123", "fieldMustBePhone"],
+    ["phone", "600111222", null],
+    ["phone", "+44 7911 123456", null],
+    ["text", "   ", "fieldRequired"],
+    ["checkbox", false, "fieldRequired"],
+    ["checkbox", true, null],
+    ["number", Number.NaN, "fieldMustBeNumber"],
+    ["city", { city: "A Coruña", province: "", country: "ES" }, "fieldMustBeCity"],
+    ["city", { city: "A Coruña", province: "A Coruña", country: "ES" }, null],
+    ["library", ["TypeScript", "Rust"], null],
+    ["university", "abc", "fieldMustBeUniversity"],
+  ])("checks %s values on blur", (kind, value, expected) => {
+    expect(
+      validateFieldOnBlur({ ...base, kind: String(kind), required: true }, value, translate, "en"),
+    ).toBe(expected);
+  });
+  it("checks configured options and constraints", () => {
+    const field = {
+      ...base,
+      kind: "multiselect",
+      options: [{ value: "one" }, { value: "two" }],
+      validation: { min_selected: 2 },
+    };
+    expect(validateFieldOnBlur(field, ["old"], translate, "en")).toBe("fieldInvalidOption");
+    expect(validateFieldOnBlur(field, ["one"], translate, "en")).toBe("tooFewSelected");
+    expect(validateFieldOnBlur(field, ["one", "two"], translate, "en")).toBeNull();
+    expect(
+      validateFieldOnBlur(
+        { ...base, kind: "number", validation: { min: 2, max: 5 } },
+        1,
+        translate,
+        "en",
+      ),
+    ).toBe("tooSmall");
+    expect(
+      validateFieldOnBlur(
+        { ...base, kind: "text", validation: { min_length: 4 } },
+        "abc",
+        translate,
+        "en",
+      ),
+    ).toBe("tooShort");
+    expect(
+      validateFieldOnBlur(
+        { ...base, kind: "text", project_video: true },
+        "example.org",
+        translate,
+        "en",
+      ),
+    ).toBe("invalidUrl");
+  });
+});
+
+it("combines text conditions and patterns instead of skipping a passing pattern", () => {
+  const field = {
+    key: "name",
+    kind: "text",
+    label: { en: "Name", es: "Nome", gl: "Nome" },
+    validation: { text_condition: "contains", text_value: "hack", pattern: "^[a-z]+$" },
+  };
+  expect(validateFieldOnBlur(field, "plain", translate, "en")).toBe("mustContainText");
+  expect(validateFieldOnBlur(field, "hack123", translate, "en")).toBe("invalidFormat");
+  expect(validateFieldOnBlur(field, "hackos", translate, "en")).toBeNull();
+});

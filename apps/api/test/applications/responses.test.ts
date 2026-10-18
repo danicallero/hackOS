@@ -416,6 +416,36 @@ describe("application responses (H12)", () => {
     expect(boundary.statusCode).toBe(200);
   });
 
+  it("H12: accepts only well-formed phone numbers at submit", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      template: [
+        {
+          key: "phone",
+          label: { en: "Phone", es: "Teléfono", gl: "Teléfono" },
+          kind: "phone",
+          required: true,
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    const submit = () =>
+      a.inject({
+        method: "POST",
+        url: `/api/applications/${appId}/response/submit`,
+        headers: asUser(user),
+        payload: { food_intolerances: [], shirt_size: "M" },
+      });
+
+    await saveDraft(a, appId, user, { phone: "12345" });
+    const invalid = await submit();
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().error.details.fields.phone).toBe("must be a phone number");
+
+    await saveDraft(a, appId, user, { phone: "+34 600 11 12 22" });
+    expect((await submit()).statusCode).toBe(200);
+  });
+
   it("H11: enforces a text field's contains/email/url validation condition", async () => {
     const a = await getApp();
     const appId = await createApplication({

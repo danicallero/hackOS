@@ -138,7 +138,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
 
   it("keeps pump and pre-call silent outside the judging window (#544)", async () => {
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ maxInWaitingArea: 1, desiredMinutesPerTeam: 5 });
+    const roomId = await createRoom({ maxInWaitingArea: 1 });
     await assignChallengeToRoom(roomId, challengeId);
     const member = await createUser();
     const { repoId } = await createRepoWithTeam([member]);
@@ -165,7 +165,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
 
   it("does not pre-call from a paused room (#544)", async () => {
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ isPaused: true, desiredMinutesPerTeam: 5 });
+    const roomId = await createRoom({ isPaused: true });
     await assignChallengeToRoom(roomId, challengeId);
     const member = await createUser();
     const { repoId } = await createRepoWithTeam([member]);
@@ -178,11 +178,10 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
 
   it("does not let a paused room inflate pre-call capacity", async () => {
     const challengeId = await createChallenge();
-    const activeRoom = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 8 });
+    const activeRoom = await createRoom({ maxInWaitingArea: 0 });
     const pausedRoom = await createRoom({
       maxInWaitingArea: 0,
       isPaused: true,
-      desiredMinutesPerTeam: 2,
     });
     await assignChallengeToRoom(activeRoom, challengeId);
     await assignChallengeToRoom(pausedRoom, challengeId);
@@ -254,7 +253,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
 
   it("H38: emits the pre-call warning once when ETA <= threshold", async () => {
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    const roomId = await createRoom({ maxInWaitingArea: 0 });
     await assignChallengeToRoom(roomId, challengeId);
     const member = await createUser();
     const { repoId } = await createRepoWithTeam([member]);
@@ -293,7 +292,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
 
   it("does not pre-call teams far from the front (ETA above threshold)", async () => {
     const challengeId = await createChallenge();
-    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 10 });
+    const roomId = await createRoom({ maxInWaitingArea: 0 });
     await assignChallengeToRoom(roomId, challengeId);
     const { repoId } = await createRepoWithTeam();
     await enqueueRepo(challengeId, repoId, 1);
@@ -312,7 +311,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
   it("pre-calls a merged repo once and claims only waiting siblings", async () => {
     const { challengeIds } = await createEnterpriseChallenges(2);
     const groupId = await mergeChallengesIntoOneGroup(challengeIds);
-    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    const roomId = await createRoom({ maxInWaitingArea: 0 });
     await assignQueueGroupToRoom(roomId, groupId);
     const member = await createUser();
     const { repoId } = await createRepoWithTeam([member]);
@@ -353,7 +352,7 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
   it("serializes concurrent merged-group claims and notifies only the canonical row", async () => {
     const { challengeIds } = await createEnterpriseChallenges(2);
     const groupId = await mergeChallengesIntoOneGroup(challengeIds);
-    const roomId = await createRoom({ maxInWaitingArea: 0, desiredMinutesPerTeam: 5 });
+    const roomId = await createRoom({ maxInWaitingArea: 0 });
     await assignQueueGroupToRoom(roomId, groupId);
     const member = await createUser();
     const { repoId } = await createRepoWithTeam([member]);

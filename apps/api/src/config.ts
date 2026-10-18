@@ -251,6 +251,19 @@ const envSchema = z.object({
    * Wallet. `APNS_AUTH_KEY_P8` is the base64 of the `.p8` file, like the
    * other PEM secrets above.
    */
+  /**
+   * GitHub App (project repo linking and event activity ranking). All unset
+   * disables the feature. `GITHUB_APP_PRIVATE_KEY_PEM` is the PEM or its base64.
+   */
+  GITHUB_APP_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_SLUG: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_CLIENT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_CLIENT_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_PRIVATE_KEY_PEM: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().optional(),
+  ),
+  GITHUB_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   APNS_KEY_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   APNS_AUTH_KEY_P8: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   /** App bundle id; the APNs topic is `<bundle>.push-type.liveactivity`. */
@@ -413,6 +426,14 @@ export const config = {
     parsed.APPLE_PASS_CERTIFICATE_PEM &&
       parsed.APPLE_PASS_KEY_PEM &&
       parsed.APPLE_WWDR_CERTIFICATE_PEM,
+  ),
+  githubConfigured: Boolean(
+    parsed.GITHUB_APP_ID &&
+      parsed.GITHUB_APP_SLUG &&
+      parsed.GITHUB_APP_CLIENT_ID &&
+      parsed.GITHUB_APP_CLIENT_SECRET &&
+      parsed.GITHUB_APP_PRIVATE_KEY_PEM &&
+      parsed.GITHUB_WEBHOOK_SECRET,
   ),
   liveActivityApnsConfigured: Boolean(
     parsed.APNS_KEY_ID && parsed.APNS_AUTH_KEY_P8 && parsed.APPLE_TEAM_IDENTIFIER,

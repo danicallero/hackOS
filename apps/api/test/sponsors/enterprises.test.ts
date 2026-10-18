@@ -207,9 +207,83 @@ describe("enterprise management (H43-H45)", () => {
     expect(pub.statusCode).toBe(200);
     // Visible rows are public immediately; reveal time is only a trigger.
     expect(pub.json().items.map((s: { name: string }) => s.name)).toEqual([
-      "Future",
       "Zeta Primary",
+      "Future",
       "Alpha Second",
+    ]);
+  });
+
+  it("public list returns everything and filters by kind", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const mk = async (name: string, priority: number, kind?: string) =>
+      a.inject({
+        method: "POST",
+        url: "/api/enterprises",
+        headers: asUser(admin),
+        payload: { name, priority, visibility: "visible", ...(kind ? { kind } : {}) },
+      });
+
+    expect((await mk("Main", 1)).json().kind).toBe("sponsor");
+    await mk("Minor", 3);
+    await mk("Entity B", 1, "collaborator");
+    await mk("Entity A", 4, "collaborator");
+
+    const names = async (url: string) =>
+      (await a.inject({ method: "GET", url })).json().items.map((s: { name: string }) => s.name);
+    // Priority is the only tier key; ties keep creation order.
+    expect(await names("/api/public/sponsors")).toEqual(["Main", "Entity B", "Minor", "Entity A"]);
+    expect(await names("/api/public/sponsors?kind=sponsor")).toEqual(["Main", "Minor"]);
+    expect(await names("/api/public/sponsors?kind=collaborator")).toEqual(["Entity B", "Entity A"]);
+
+    const bad = await a.inject({ method: "GET", url: "/api/public/sponsors?kind=other" });
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it("reorders within one priority group and rejects mixed groups", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
+    const mk = async (name: string, priority: number) =>
+      (
+        await a.inject({
+          method: "POST",
+          url: "/api/enterprises",
+          headers: asUser(admin),
+          payload: { name, priority, visibility: "visible" },
+        })
+      ).json().id as number;
+    const alpha = await mk("Alpha", 2);
+    const beta = await mk("Beta", 2);
+    const top = await mk("Top", 1);
+
+    const reorder = (ids: number[]) =>
+      a.inject({
+        method: "POST",
+        url: "/api/enterprises/reorder",
+        headers: { ...asUser(admin), "idempotency-key": `reorder-${ids.join("-")}` },
+        payload: { ids },
+      });
+    expect((await reorder([beta, alpha])).statusCode).toBe(200);
+    expect((await reorder([alpha, top])).statusCode).toBe(409);
+
+    const pub = await a.inject({ method: "GET", url: "/api/public/sponsors" });
+    expect(pub.json().items.map((s: { name: string }) => s.name)).toEqual(["Top", "Beta", "Alpha"]);
+
+    // Dropping Top into tier 2 between Beta and Alpha moves it there.
+    const moved = await a.inject({
+      method: "POST",
+      url: "/api/enterprises/reorder",
+      headers: { ...asUser(admin), "idempotency-key": "reorder-move" },
+      payload: { ids: [beta, top, alpha], priority: 2 },
+    });
+    expect(moved.statusCode).toBe(200);
+    const after = await a.inject({ method: "GET", url: "/api/public/sponsors" });
+    expect(
+      after.json().items.map((s: { name: string; priority: number }) => [s.name, s.priority]),
+    ).toEqual([
+      ["Beta", 2],
+      ["Top", 2],
+      ["Alpha", 2],
     ]);
   });
 

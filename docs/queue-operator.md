@@ -45,10 +45,10 @@ which only blocks calling the team, and “Being judged in {room}” when a memb
 is in a room or presenting, which also blocks moves. Occupancy is resolved
 through the same shared-member relation as the H30 guard, so a member shared
 with another team counts, and it clears as soon as that entry leaves
-`called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
+`called`/`in_room`/`presenting`. `move-top` on a team in the waiting room sends it right behind the head of the queue, so the head takes the freed slot first instead of the same team being called straight back in; on a queued team it goes to the top. Reordering (`move-top`, `move-to`, `skip`,
 `requeue`) never calls a team, so project eligibility does not block it; an
-ineligible project is still never called (a Devpost import is ineligible only
-by explicit organizer override, H21): the row says “Not eligible for
+ineligible project is still never called (a submitted project is ineligible only
+by explicit organizer override or a team-size violation, H21): the row says “Not eligible for
 judging”, Manual add is not offered, and a manual call answers “Project is
 not eligible for judging” instead of reporting it busy. Eligibility is a
 separate call-time check (`isRepoIneligibleForJudging`) that call-next, the
@@ -147,12 +147,12 @@ confirmation gates: an impact review, an exact confirmation phrase plus an
 irreversible-action acknowledgement, and a final destructive confirmation.
 
 `POST /api/queue/admin/reset` runs as one transaction with exclusive locks on
-the project/import/queue/judging tables and writes one `queue_reset` audit row
-in that same transaction. It removes native and imported projects, project
-memberships, Devpost import/prize records, project-to-challenge mappings,
+the project/queue/judging tables and writes one `queue_reset` audit row
+in that same transaction. It removes projects, project
+memberships, project-to-challenge selections,
 queue entries and movement history, reviews and review versions, judging
 sessions, winners, judge assignments, queue routing/pools, queue preferences,
-project/queue/Devpost claim notifications, and related idempotency records.
+project/queue notifications, and related idempotency records.
 It then restores paused/default room and queue settings and recreates one
 empty queue group per existing challenge.
 
@@ -164,3 +164,33 @@ the request also accepts an `Idempotency-Key` so a retried browser request
 cannot repeat the reset. The reset transaction opts out of the normal
 statement timeout so large deletes can finish, but it still needs an available
 database connection and should be run during a quiet operational window.
+
+## Judging panel layout and evaluation
+
+The top bar of `/judging` holds the room selector, the live numbers (scored,
+average time per team, estimated finish, judging close, pacing target and **Track
+timing**) and two icon actions: the layout toggle (View project) and
+pause/resume. It stays visible in both layouts.
+
+The right column is the team in the room. Its header carries the team name and a
+small **Open project** link, then the preparation time as text, one thin
+presentation bar with `elapsed / target` above it and its alerts (Wrap up, Time
+limit exceeded, Timer paused) beside the time, and the Start/Pause and Re-queue
+actions aligned to the bar. Below: members (one per line), *Presenting for*
+(every challenge the project is queued in, the one in the room first, each with its
+state as a dot and label), commits and pull requests during the hacking window
+(`projects:read`) beside the links (repository and any URL-validated or **Judging
+panel link** question, never a YouTube video, which stays embedded in the project
+information). The card never shows project information: the summary, answers,
+technologies and demo video appear only in **View project**. The card scrolls inside its own container.
+
+By default the right column stacks the project (top) and the evaluation form
+(bottom), each scrolling inside its own container, with the queues on the left.
+**View project** is a standing preference (remembered per browser): while a
+team is in the room, the queue hides, the sidebar collapses, the project fills the
+left with its details unfolded and the evaluation form sits on the right; when the
+team leaves, for example after the evaluation is submitted, the queue view returns
+with a short transition, and View project comes back with the next team. A
+project link opens the project in a new tab first and the evaluation follows in its
+own small window (`/judging-popup/:entryId`, Document Picture-in-Picture where
+available); it closes when you return to the judging tab.

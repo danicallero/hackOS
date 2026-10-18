@@ -488,8 +488,7 @@ export interface DeadlineLiveProps {
   /**
    * The participant's hackOS project status: `submitted` when every project
    * or work group they belong to is submitted, `draft` when one is not, null
-   * when they have none in hackOS (e.g. a Devpost-only team, not imported
-   * yet) — render no status then, never "not submitted".
+   * when they have no project — render no status then, never "not submitted".
    */
   submission: "submitted" | "draft" | null;
   /** Name of the project the status refers to (the unsubmitted one first), or null. */

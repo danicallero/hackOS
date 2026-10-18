@@ -64,6 +64,30 @@ describe("public content catalog (H48, H49)", () => {
     expect(authenticatedPublicPreflight.headers["access-control-allow-credentials"]).toBe("true");
   });
 
+  it("allows the configured web app to read viewer-dependent public projections with cookies", async () => {
+    const { config } = await import("../src/config.js");
+    const server = await getApp();
+    const origin = new URL(config.WEB_URL).origin;
+    for (const path of [
+      "/api/public/projects",
+      "/api/public/challenges/1/winners",
+      "/api/public/activities",
+    ]) {
+      const response = await server.inject({ method: "GET", url: path, headers: { origin } });
+      expect(response.headers["access-control-allow-origin"]).toBe(origin);
+      expect(response.headers["access-control-allow-credentials"]).toBe("true");
+      expect(response.headers.vary).toContain("Origin");
+      const external = await server.inject({
+        method: "GET",
+        url: path,
+        headers: { origin: "https://untrusted.example" },
+      });
+      expect(external.headers["access-control-allow-origin"]).toBe("*");
+      expect(external.headers["access-control-allow-credentials"]).toBeUndefined();
+      expect(external.headers.vary).toContain("Origin");
+    }
+  });
+
   it("lists only visible/published activities, challenges and sponsors without auth", async () => {
     const { pool } = await import("../src/db/pool.js");
 

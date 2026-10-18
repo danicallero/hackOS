@@ -87,19 +87,19 @@ describe("dynamic statistics visibility", () => {
 describe("accounts without current role-derived event access", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 
-  it("hides wallet, projects and inbox", () => {
-    const hidden = ["/wallet", "/my-project", "/inbox"];
+  it("hides wallet and keeps inbox inside Home", () => {
+    const hidden = ["/wallet", "/inbox"];
     const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
       (item) => item.href,
     );
     for (const href of hidden) expect(visible).not.toContain(href);
   });
 
-  it("keeps schedule, my applications and profile", () => {
+  it("keeps Home, applications, Projects and profile", () => {
     const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
       (item) => item.href,
     );
-    expect(visible).toEqual(["/timetable", "/my-applications", "/settings/profile"]);
+    expect(visible).toEqual(["/event", "/my-applications", "/my-project", "/settings/profile"]);
   });
 
   it("a room judge or sponsor rep still keeps operational workspaces, but not event-only personal nav", () => {
@@ -109,7 +109,7 @@ describe("accounts without current role-derived event access", () => {
       const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
         (item) => item.href,
       );
-      expect(visible).toEqual(["/timetable", "/my-applications", "/settings/profile"]);
+      expect(visible).toEqual(["/event", "/my-applications", "/my-project", "/settings/profile"]);
     }
     expect(visibleWorkspaceIds(judge)).toContain("liveJudging");
     expect(visibleWorkspaceIds(sponsor)).toContain("sponsors");
@@ -257,7 +257,10 @@ describe("capability-gated workspace, no association or wildcard", () => {
 
 describe("route stability (deep links, issue #187)", () => {
   it("keeps every previously published href unchanged", () => {
-    const hrefs = [...PERSONAL_NAV, ...WORKSPACES.flatMap((w) => w.items)].map((i) => i.href);
+    const hrefs = [...PERSONAL_NAV, ...WORKSPACES.flatMap((w) => w.items)].flatMap((i) => [
+      i.href,
+      ...(i.activePaths ?? []),
+    ]);
     const legacyHrefs = [
       "/timetable",
       "/my-applications",
@@ -335,7 +338,7 @@ describe("workspace resolution for the top bar (issue #297)", () => {
   });
 
   it("resolves a child route to the workspace of its longest matching parent", () => {
-    expect(workspaceForPath("/projects/import")?.id).toBe("projects");
+    expect(workspaceForPath("/projects/123")?.id).toBe("projects");
     expect(workspaceForPath("/challenges/12")?.id).toBe("sponsors");
   });
 
@@ -383,5 +386,22 @@ describe("cross-capability navigation in every locale (issue #303)", () => {
 
     expect(labels).not.toContain("");
     expect(new Set(labels).size).toBe(labels.length);
+  });
+});
+
+// H18: subpages retain their stable URLs without adding sidebar entries.
+describe("grouped personal destinations", () => {
+  it("keeps gallery inside Projects and inbox/event inside Home", () => {
+    expect(PERSONAL_NAV.find((item) => item.href === "/my-project")?.activePaths).toContain(
+      "/gallery",
+    );
+    expect(PERSONAL_NAV.find((item) => item.href === "/event")?.activePaths).toEqual([
+      "/timetable",
+      "/inbox",
+      "/challenge",
+    ]);
+    expect(
+      PERSONAL_NAV.some((item) => ["/gallery", "/inbox", "/timetable"].includes(item.href)),
+    ).toBe(false);
   });
 });

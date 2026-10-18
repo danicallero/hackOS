@@ -73,6 +73,7 @@ import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
+import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
 import { colors } from "@/theme/colors";
 
@@ -164,16 +165,17 @@ export default function ScheduleScreen() {
   const scheduleScrollGuardEnabled = process.env.EXPO_OS === "android" && canManage;
   const scheduleScrollGesture = useNativeGesture({ enabled: scheduleScrollGuardEnabled });
 
-  // The schedule has no push channel on mobile, so edits by others arrive by
-  // refetching on focus, on foreground (useCachedApi) and every minute while
-  // this tab is the one on screen.
   const focusedRef = useRef(false);
-  const whileFocused = useCallback(() => focusedRef.current, []);
+  const streamDownRef = useRef<() => boolean>(() => true);
+  const whileFocused = useCallback(() => focusedRef.current && streamDownRef.current(), []);
   const { data, loading, error, staleSince, load, setData } = useCachedApi(
     "schedule",
     fetchPublicSchedule,
     { pollMs: SCHEDULE_POLL_MS, pollWhen: whileFocused },
   );
+  // Schedule edits arrive over the payload-free stream; the poll is only a
+  // backup while that stream is disconnected.
+  streamDownRef.current = useStreamRefresh(() => void load(), { publicContent: true });
   // H50 extension: resolve each item's title/description into the viewer's
   // language here so every downstream renderer keeps reading plain
   // item.title/item.description unchanged.

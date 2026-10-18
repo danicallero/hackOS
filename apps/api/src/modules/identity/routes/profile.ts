@@ -22,7 +22,6 @@ import { getEventTimezone } from "../../event/service.js";
 import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
-import { reconcileDevpostParticipantsForUser } from "../../projects/reconciliation.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
 import { getBetterAuthSessionToken } from "../auth.js";
@@ -177,8 +176,6 @@ const userResponseSchema = z.object({
   dni: z.string().nullable(),
   badgeId: z.string().nullable(),
   language: z.string(),
-  secondaryEmail: z.string().nullable(),
-  secondaryEmailVerified: z.boolean(),
   foodIntolerances: z.array(z.number()),
   foodIntoleranceNotes: z.string().nullable(),
   dietaryDataState: z.enum(DIETARY_DATA_STATES),
@@ -200,7 +197,6 @@ const userProjectSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   github_url: z.string().nullable(),
-  devpost_url: z.string().nullable(),
   demo_url: z.string().nullable(),
   prizes: z.array(z.string()),
   challenges: z.array(
@@ -221,8 +217,6 @@ interface UserRow {
   dni: string | null;
   badge_id: string | null;
   language: string;
-  secondary_email: string | null;
-  secondary_email_verified_at: Date | null;
   food_intolerances: number[];
   food_intolerance_notes: string | null;
   dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
@@ -267,8 +261,6 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     dni: row.dni,
     badgeId: row.badge_id,
     language: row.language,
-    secondaryEmail: row.secondary_email,
-    secondaryEmailVerified: row.secondary_email_verified_at !== null,
     foodIntolerances: row.food_intolerances,
     foodIntoleranceNotes: row.food_intolerance_notes,
     dietaryDataState: row.dietary_data_state,
@@ -1172,9 +1164,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
   // is a plain UNIQUE column, NOT a foreign key target: credential login keys
   // the accounts row on user_id (accounts.account_id is the user id as text),
   // and sessions/accounts reference users(id). So this is a single-column
-  // update — no cascading FK work — guarded only by the uniqueness rules that
-  // also protect secondary emails (H6): the address may not already be another
-  // account's primary, nor another account's VERIFIED secondary. Audited (H53).
+  // update — no cascading FK work — guarded by the primary-email uniqueness
+  // constraint. Audited (H53).
   api.patch(
     "/api/users/:id/email",
     {
@@ -1208,25 +1199,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         if (primaryClash.length > 0) {
           throw new ConflictError("That email already belongs to another account", { email });
         }
-        const { rows: secondaryClash } = await client.query(
-          `SELECT id FROM users
-             WHERE secondary_email = $1 AND secondary_email_verified_at IS NOT NULL AND id <> $2
-             LIMIT 1`,
-          [email, targetId],
-        );
-        if (secondaryClash.length > 0) {
-          throw new ConflictError("That email is another account's verified secondary email", {
-            email,
-          });
-        }
-
         // The admin is asserting the corrected address, so it counts as verified
         // (mirrors how staff-set contact data is trusted elsewhere in H7).
         const { rows: afterRows } = await client.query(
           `UPDATE users SET email = $2, email_verified = true WHERE id = $1 RETURNING *`,
           [targetId, email],
         );
-        await reconcileDevpostParticipantsForUser(client, targetId);
         await audit(client, {
           actorId: req.userId,
           entityType: "user",

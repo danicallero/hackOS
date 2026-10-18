@@ -55,11 +55,20 @@ screen cannot grant judging access.
 | `schedule` | The same self-advancing upcoming-agenda component used by `live`, without countdown, sponsors or Wi-Fi |
 | `sponsors` | Event name and sponsor logo wall, without a redundant “Sponsors” wordmark |
 | `wifi` | Full-screen network name + password |
+| `github` | Top committers and pull-request authors, per person and per project team, from `GET /api/tv/github` (polled every 15 s); see [GitHub activity](./github-activity.md) |
 
-Only the five modes above are valid in a Valkey selection. Migration 0404
+Only the six modes above are valid in a Valkey selection. Migration 0404
 removes the retired timetable and its stored entries. A stale or malformed
 Valkey payload is discarded on read; it is never translated into a current
 mode. The countdown remains available as a block of the `live` composition.
+
+### Winners
+
+`GET /api/tv/winners` (public) returns `{}` until a challenge's winners are
+published (H46/#1010), then `{winners:[{challengeId,challengeTitle,rank,repoId,repoName}]}`.
+Publication is scheduled or manual (`/api/challenges/:id/winners/publication`,
+`/publish`) and the reveal arrives over `/api/tv/stream` as a payload-free
+invalidation; screens refetch.
 
 ### Announcements on screens
 

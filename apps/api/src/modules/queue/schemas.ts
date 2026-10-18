@@ -51,7 +51,6 @@ export const queueGroupRoomsBody = z.object({
 
 export const roomQueueStateBody = z.object({
   maxInWaitingArea: z.coerce.number().int().min(1).optional(),
-  desiredMinutesPerTeam: z.coerce.number().int().min(1).max(120).optional(),
 });
 
 export const queueSettingsBody = z.object({
@@ -121,7 +120,7 @@ export const reviewMessageBody = z.object({
 });
 
 /** Every view a screen can show (H42). "live" combines countdown + schedule + sponsors + Wi-Fi. */
-export const tvModeName = z.enum(["rooms", "schedule", "sponsors", "wifi", "live"]);
+export const tvModeName = z.enum(["rooms", "schedule", "sponsors", "wifi", "live", "github"]);
 
 export const tvModeBody = z
   .object({

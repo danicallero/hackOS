@@ -10,6 +10,9 @@ for (const width of [1440, 393]) {
     await page.setViewportSize({ width, height: 1000 });
     let persistedTemplate: Record<string, unknown>[] | null = null;
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const path = new URL(route.request().url()).pathname;
       if (path === "/api/applications/1" && route.request().method() === "PATCH") {
         persistedTemplate = route.request().postDataJSON().template;

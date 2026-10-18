@@ -1,5 +1,6 @@
-import { Image, Text, View } from "react-native";
-import { useApiImage } from "@/components/person-avatar";
+import { Image } from "expo-image";
+import { Text, View } from "react-native";
+import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { colors } from "@/theme/colors";
 
 /** Up to two initials: first and last word, or the first letters of one word. */
@@ -32,7 +33,7 @@ export function UserAvatar({
 }) {
   // The photo route is private: it is fetched with the session, and the
   // initials stay until it arrives or when it cannot load (#934).
-  const source = useApiImage(image);
+  const photo = useApiImage(image);
 
   return (
     <View
@@ -41,7 +42,7 @@ export function UserAvatar({
       importantForAccessibility="no-hide-descendants"
       style={{
         alignItems: "center",
-        backgroundColor: source ? colors.elevatedSurface : colors.accent,
+        backgroundColor: photo.loaded ? colors.elevatedSurface : colors.accent,
         borderCurve: "continuous",
         borderRadius: size / 2,
         height: size,
@@ -50,15 +51,7 @@ export function UserAvatar({
         width: size,
       }}
     >
-      {source ? (
-        <Image
-          testID={testID ? `${testID}-photo` : undefined}
-          accessible={false}
-          source={{ uri: source }}
-          resizeMode="cover"
-          style={{ height: size, width: size }}
-        />
-      ) : (
+      {photo.loaded ? null : (
         <Text
           style={{
             color: colors.accentText,
@@ -69,6 +62,15 @@ export function UserAvatar({
           {avatarInitials(name)}
         </Text>
       )}
+      {photo.props ? (
+        <Image
+          {...photo.props}
+          testID={testID ? `${testID}-photo` : undefined}
+          accessible={false}
+          contentFit="cover"
+          style={[{ height: size, width: size }, !photo.loaded && loadingImageStyle]}
+        />
+      ) : null}
     </View>
   );
 }

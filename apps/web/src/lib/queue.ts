@@ -42,10 +42,8 @@ export interface QueueEntry {
   repo_name?: string;
   repo_description?: string | null;
   repo_github_url?: string | null;
-  repo_devpost_url?: string | null;
   repo_demo_url?: string | null;
   repo_members?: Array<{
-    /** Null when the Devpost participant never matched a system account. */
     userId: number | null;
     email: string;
     name: string | null;
@@ -61,6 +59,8 @@ export interface Room {
   /** Present on the room list projection; omitted by room-scoped reads. */
   enterprise_id?: number | null;
   enterprise_name?: string | null;
+  /** Queue (group) the room serves, shown beside the room name. */
+  queue_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -69,7 +69,6 @@ export interface RoomQueueState {
   room_id: number;
   is_paused: boolean;
   max_in_waiting_area: number;
-  desired_minutes_per_team: number;
   started_at: string | null;
   updated_at: string;
 }
@@ -146,6 +145,10 @@ export interface ChallengeProgress {
 /** GET /api/queue/rooms/:id/pace (H39). */
 export interface RoomPace {
   estimatedCycleMinutes?: number;
+  /** Track's configured preparation allowance (H32). */
+  configuredPreparationSeconds?: number;
+  /** Longest a presentation may run for this track; null when unconfigured. */
+  configuredPresentationSeconds?: number | null;
   judgingClosesAt?: string | null;
   estimatedFinishAt?: string | null;
   exceedsJudgingClose?: boolean;
@@ -686,7 +689,6 @@ export interface ReviewDetail {
     name: string;
     description: string;
     githubUrl: string | null;
-    devpostUrl: string | null;
     demoUrl: string | null;
     members: Array<{ id: number | null; name: string; email: string | null }>;
   };

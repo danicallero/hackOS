@@ -212,6 +212,23 @@ justify section surfaces when open sections fail to communicate ownership.
 Keep their contents as rows rather than nested cards. Dense operational tables,
 overlays and truly selectable/bounded objects still justify surfaces; meaningful changing states still justify status badges.
 
+### Native mobile addendum (2026-10-14, My Projects redesign)
+On iOS, "native" means the system's own chrome, not a lookalike. Page titles
+are the native header (large title, scroll edge blur) and the ScrollView stays
+the screen's direct child (wrap siblings in a fragment, never a View) so the
+header collapses and blurs. Forms are inset-grouped rows with a caption above a
+borderless input, never boxes inside a card. Header actions are native toolbar
+buttons (perfect circles) or liquid-glass buttons; an icon-only button is only
+acceptable for a universal glyph (plus, filter), never for a destination such
+as a gallery or inbox; those get a labelled row or glass button. No badge on
+an icon that already carries a count. Pick one corner radius per role
+(containers 14, buttons capsule) instead of mixing. A filter that grows with
+data (challenges, projects) is a menu, not a sliding segmented control; test
+with 12+ items. Do not duplicate a setting that lives in the profile (photo
+visibility). Do not show a destination the screen's own rows already cover.
+Validation: screenshot light and dark, a single, an empty and a 12+ item
+state, and scroll the list to check the header collapse.
+
 ## [R007] Review feedback copy at its call sites
 
 Status: active
@@ -550,6 +567,12 @@ detail page. Shared patterns need representative content and rendered review.
 
 ### Action
 Use the audited Users and application Responses layouts as the dense-list references.
+Applying PageLayout and the app shell alone does not complete a design-system
+migration: audit every clickable item against the shared Button/IconButton
+contract, and include the established Phosphor icons on sections and actions.
+When reusing public landing content inside the app, omit sections already owned
+by sibling routes and exercise their links in both session states; shared data
+does not justify duplicate destinations or sending signed-in users out of the shell.
 Reuse their actual ListToolbar, FilterMenu and DataTable compositions rather
 than reproducing them with loosely aligned buttons and repeated detail blocks. Keep mixed record
 pages wide enough for their table tabs, constrain only text/form groups, and
@@ -707,7 +730,7 @@ If `gh --version` is older than 2.101, report that blocker.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-10-08
+Date: 2026-10-15
 
 ### Trigger
 Designing a card that offers a main workflow plus an optional alternative
@@ -722,6 +745,11 @@ Order and grouping should show which path is primary and which is the optional
 side route. Explain consequences only where they apply, with no restating text.
 
 ### Action
+When choices are submission outcomes for a form, show the form immediately and
+place those choices in its footer. Do not insert a preliminary chooser that
+makes the primary action open the form instead of submitting it. Keep deferral
+and opt-out available alongside the actual editor.
+
 Lead with the primary path's content, then a quiet "or" divider, then the
 alternative's action beside its consequence. Keep the header for post-state
 actions (such as Request edits). After any reorder, update specs that index
@@ -826,3 +854,65 @@ On a device, open and cancel search repeatedly, including edge taps. Confirm one
 
 ### Exceptions
 Use a custom lifecycle only when the product requires behavior the native control cannot provide.
+
+## [R026] Do not drive the user's simulator while they are looking at it
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-14
+
+### Trigger
+Taking simulator screenshots for a UI task while the user reviews the same
+simulator.
+
+### Mistake
+A background loop terminated and relaunched the dev client every few seconds.
+The relaunch race crashed the app (`ExpoFabricView` AppContextLost) and the
+user saw crashes and half-rendered screens that were an artefact of the loop.
+
+### Lesson
+Automated relaunches are visible to the user and can crash a dev client.
+
+### Action
+Run screenshot sweeps in the foreground, sequentially, with a settle wait after
+each reload, and never leave one running while the user is iterating. Prefer
+Metro hot reload and deep links over terminate/launch. Make fixture servers
+survive tool shutdown so a stopped task does not leave the app on error states.
+
+### Validation
+No crash report during the sweep; the fixture still answers afterwards.
+
+### Exceptions
+None.
+
+## [R027] Keep form requirements in the dynamic form definition
+
+Status: active
+Scope: module:projects
+Source: user-correction
+Date: 2026-10-17
+
+### Trigger
+Adding event or reporting requirements to the configurable project form.
+
+### Mistake
+Saving a form reinserted hardcoded questions, overriding the organizer's choices.
+
+### Lesson
+The saved form definition owns questions, types, order and required flags.
+Exports must derive columns from that definition; presentation behavior must
+be configured independently of question labels and keys.
+
+### Action
+Preserve arbitrary questions and deletions. Export the configured questions
+and answers directly. Use field metadata only for presentation features such as
+video. Do not introduce a preset or special reporting mappings without a request.
+Never silently inject event-specific questions on save or in a migration.
+
+### Validation
+Save empty/custom forms unchanged, rename and delete questions, and verify
+CSV columns follow the current and historical form definitions.
+
+### Exceptions
+Explicit user authorization to populate a particular event's form is allowed.

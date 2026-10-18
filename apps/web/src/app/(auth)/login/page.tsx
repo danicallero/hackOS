@@ -22,7 +22,9 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
+import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
 import {
   type AccountRemovalProgress,
   clearAccountRemovalProgress,
@@ -60,6 +62,8 @@ function LoginInner() {
   const { t } = useLocale();
   const [removalProgress, setRemovalProgress] = useState<AccountRemovalProgress | null>(null);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(
       z.object({
         email: z.string().email(t("validEmail")),
@@ -74,7 +78,10 @@ function LoginInner() {
   // Already signed in: bounce straight to the destination instead of showing
   // the form again — /login isn't admin-only, any signed-in user lands here.
   useEffect(() => {
-    if (status === "authenticated") router.replace(next);
+    if (status !== "authenticated") return;
+    // API paths (the GitHub callback) live on the API origin: navigate there with a full load.
+    if (next.startsWith("/api/")) window.location.assign(`${API_URL}${next}`);
+    else router.replace(next);
   }, [status, next, router]);
 
   useEffect(() => {
@@ -103,6 +110,7 @@ function LoginInner() {
       form.setError("root", { message: localizedSignInError(error, t) });
       return;
     }
+    resetNetworkingOnboardingDeferrals();
     await refresh();
     // The authenticated-status effect above owns the post-login transition
     // (including ?next). A second push here can race a pending sign-out route.

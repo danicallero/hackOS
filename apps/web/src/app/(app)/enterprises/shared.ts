@@ -16,6 +16,8 @@ export interface Enterprise {
   logo_negative_url: string | null;
   description: string | null;
   priority: number | null;
+  kind: "sponsor" | "collaborator";
+  position: number | null;
   visibility: Visibility;
   available_from: string | null;
   director_id: number | null;
@@ -75,4 +77,24 @@ export function enterpriseTabs({
     ...(canManage ? (["members"] as const) : []),
     ...(canManage || isSponsorRep ? (["stand"] as const) : []),
   ];
+}
+
+export interface EnterpriseGroup {
+  priority: number | null;
+  items: Enterprise[];
+}
+
+/** H45: one group per priority, lowest first (unset last); manual order, then creation order, inside. */
+export function groupEnterprises(enterprises: Enterprise[]): EnterpriseGroup[] {
+  const groups = new Map<number | null, EnterpriseGroup>();
+  for (const e of enterprises) {
+    const group = groups.get(e.priority) ?? { priority: e.priority, items: [] };
+    group.items.push(e);
+    groups.set(e.priority, group);
+  }
+  const rank = (n: number | null) => n ?? Number.POSITIVE_INFINITY;
+  for (const group of groups.values()) {
+    group.items.sort((a, b) => rank(a.position) - rank(b.position) || a.id - b.id);
+  }
+  return [...groups.values()].sort((a, b) => rank(a.priority) - rank(b.priority));
 }

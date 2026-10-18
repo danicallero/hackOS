@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool, withTransaction } from "../../../db/pool.js";
@@ -9,6 +10,7 @@ import {
 } from "../../../lib/capabilities.js";
 import { ForbiddenError } from "../../../lib/errors.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
+import { broadcast } from "../../../lib/sse.js";
 import { setPreferencesBodySchema } from "../schemas.js";
 import { getPreferences, QUEUE_STAFF_CATEGORY, setPreferences } from "../service.js";
 
@@ -59,6 +61,12 @@ export function registerPreferenceRoutes(app: FastifyInstance): void {
       await withTransaction(async (client) => {
         await setPreferences(client, req.userId as number, req.body.preferences);
       });
+      // Wakes the account's other devices so they reschedule their local reminders.
+      await broadcast(
+        `${SSE_TOPICS.USER_PREFIX}${req.userId}`,
+        EVENTS.USER_NOTIFICATION_PREFERENCES_CHANGED,
+        {},
+      );
       return getPreferences(pool, req.userId as number);
     },
   );

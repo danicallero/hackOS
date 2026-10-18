@@ -83,10 +83,12 @@ function VerifyEmailInner() {
   // (#188): the application or other same-origin destination they were
   // originally interrupted from, falling back to the schedule.
   const rawNext = params.get("next");
-  const next = safeReturnPath(rawNext, "/timetable");
+  const next = safeReturnPath(rawNext, "/event");
   const [cooldown, setCooldown] = useState(0);
 
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: { email: params.get("email") ?? "" },
   });

@@ -249,11 +249,11 @@ describe("configured deadline and accreditation timings (H19, H20, H22)", () => 
     const pool = await db();
     const drafter = await participant();
     const group = await pool.query<{ id: number }>(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
+      `INSERT INTO repos (name,created_by,submission_status) VALUES ('Rocket',$1,'draft') RETURNING id`,
       [drafter],
     );
     await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
+      `INSERT INTO submissions (repo_id, user_id, status) VALUES ($1, $2, 'active')`,
       [group.rows[0]!.id, drafter],
     );
     await allowLiveActivities();
@@ -362,14 +362,14 @@ describe("submission deadline (H19, H20)", () => {
   it("tracks the project status and enters closing only for a known draft", async () => {
     const pool = await db();
     const drafter = await participant();
-    const devpostOnly = await participant();
+    const withoutProject = await participant();
     const submitter = await participant();
     const group = await pool.query<{ id: number }>(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Rocket', $1) RETURNING id`,
+      `INSERT INTO repos (name,created_by,submission_status) VALUES ('Rocket',$1,'draft') RETURNING id`,
       [drafter],
     );
     await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status) VALUES ($1, $2, 'active')`,
+      `INSERT INTO submissions (repo_id, user_id, status) VALUES ($1, $2, 'active')`,
       [group.rows[0]!.id, drafter],
     );
     const { repoId } = await createRepoWithTeam([submitter], "Shipped");
@@ -407,8 +407,11 @@ describe("submission deadline (H19, H20)", () => {
     expect((await mine(drafter)).deadline?.countdownLastTenSeconds).toBe(false);
     await deadlineIn(0.1);
     expect((await mine(drafter)).deadline?.countdownLastTenSeconds).toBe(true);
-    // Unknown status (Devpost-only, not imported) never claims "not submitted".
-    expect((await mine(devpostOnly)).deadline).toMatchObject({ phase: "open", submission: null });
+    // H19: a participant without a project has no submission status.
+    expect((await mine(withoutProject)).deadline).toMatchObject({
+      phase: "open",
+      submission: null,
+    });
   });
 });
 

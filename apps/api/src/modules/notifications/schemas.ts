@@ -7,6 +7,15 @@ export const registerPushTokenBodySchema = z.object({
   platform: z.enum(["ios", "android"]).optional(),
 });
 
+/** Items a device schedules locally: id plus the start instant it computed the reminder from. */
+export const localRemindersBodySchema = z.object({
+  token: z.string().min(1).max(500),
+  leadMinutes: z.number().int().min(1).max(1440),
+  items: z
+    .array(z.object({ id: z.number().int().positive(), startsAtMs: z.number().int().positive() }))
+    .max(200),
+});
+
 export const preferenceItemSchema = z.object({
   category: z.string().min(1).max(100),
   channel: notificationChannelSchema,

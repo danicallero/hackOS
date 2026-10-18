@@ -11,8 +11,10 @@ import {
   requireCapability,
 } from "../../lib/capabilities.js";
 import { registerRealtimeRoutes } from "../../lib/realtime.routes.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
 import { requireScopedRefreshAccess, scopedRefreshTopic } from "../../lib/sse-access.js";
+import { sharedVisibleWinnerRows } from "../challenges/winner-publication.js";
 import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { queueTopicForFixture } from "./broadcast.js";
@@ -86,7 +88,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
         params: repoIdParam,
         summary: "List a team's queue memberships",
         description:
-          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls to any other room (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A Devpost import is excluded only by an explicit organizer override (H21).",
+          "Every non-cancelled queue entry of the team with its waiting rank, ETA, assigned room and the rooms serving its queue. `busy_room_id`/`busy_room_name`/`busy_status` report where a team member (shared-member relation of the H30 guard, test fixtures excluded) is `called`, `in_room` or `presenting` in another room; an evaluation blocks moves, any of them blocks calls to any other room (#931). Completed and disqualified rows never carry it. `eligible` is false when the project is excluded from judging (H38): it can be reordered but never called. A native projects import is excluded only by an explicit organizer override (H21).",
       },
     },
     async (req) => repoChallenges(req.params.repoId),
@@ -174,6 +176,21 @@ export function registerReadsRoutes(app: FastifyInstance): void {
   );
 
   typed.get(
+    "/api/tv/winners",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
+      schema: {
+        summary: "Read published ceremony winners",
+        description:
+          "Public TV uses the centralized gallery audience and published timestamp policy; no winner property is returned before reveal (H60).",
+      },
+    },
+    async (q) => {
+      const winners = await sharedVisibleWinnerRows(pool, q.userId);
+      return winners.length ? { winners } : {};
+    },
+  );
+  typed.get(
     "/api/tv/rooms",
     {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
@@ -183,7 +200,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public TV projection containing only room, challenge and visible team-status fields. It intentionally omits team members, account identifiers, project links and operational cross-room diagnostics.",
       },
     },
-    async () => publicRoomViews(),
+    () => sharedCache("tv", "rooms", 2, publicRoomViews),
   );
 
   // Raw queue events contain operational room and team data. Public walls use
@@ -288,7 +305,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public feed for the TV wall. Returns the mode selected manually by an operator, or the default rooms view when there is no selection.",
       },
     },
-    async () => resolveTvState(),
+    () => sharedCache("tv", "mode", 2, resolveTvState),
   );
 
   typed.patch(
@@ -329,7 +346,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           "Public TV companion feed for venue Wi-Fi details and the operator-chosen display language printed/rendered on the wall. It is intentionally separate from the public event site projection.",
       },
     },
-    async () => tvVenueConfig(),
+    () => sharedCache("tv", "config", 15, tvVenueConfig),
   );
 
   typed.patch(

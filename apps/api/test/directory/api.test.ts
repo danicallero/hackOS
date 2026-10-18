@@ -76,7 +76,7 @@ function card(id: number, as = reader) {
 }
 
 async function publishChallenge(title: string) {
-  const id = await createChallenge(title, []);
+  const id = await createChallenge(title);
   await pool.query(`UPDATE challenges SET visibility = 'visible' WHERE id = $1`, [id]);
   return id;
 }
@@ -100,6 +100,60 @@ async function activeRepo(name: string, members: number[], challengeIds: number[
 }
 
 describe("public profile owner routes (#934)", () => {
+  it("records an explicit opt-out without sharing or claiming consent, once across concurrent requests", async () => {
+    const me = await person("Private", "Person");
+    const body = { ...VISIBLE, directoryVisible: false, completeOnboarding: true };
+    const results = await Promise.all([putProfile(me, body), putProfile(me, body)]);
+    for (const result of results) {
+      expect(result.statusCode).toBe(200);
+      expect(result.json()).toMatchObject({ directoryVisible: false, consentedAt: null });
+      expect(result.json().onboardingCompletedAt).toEqual(expect.any(String));
+    }
+    expect(results[0].json().onboardingCompletedAt).toBe(results[1].json().onboardingCompletedAt);
+    const { rows } = await pool.query(
+      `SELECT * FROM audit_log WHERE entity_type = 'user_public_profile' AND entity_id = $1`,
+      [me],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].after).toMatchObject({ onboardingCompleted: true, directoryVisible: false });
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/me/public-profile",
+      headers: asUser(me),
+    });
+    expect(read.json().onboardingCompletedAt).toBe(results[0].json().onboardingCompletedAt);
+  });
+
+  it("completes onboarding with an explicitly shared profile", async () => {
+    const me = await person("Public", "Person");
+    const response = await putProfile(me, {
+      ...VISIBLE,
+      headline: "Builder",
+      completeOnboarding: true,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      directoryVisible: true,
+      headline: "Builder",
+      onboardingCompletedAt: expect.any(String),
+      consentedAt: expect.any(String),
+    });
+  });
+
+  it("does not complete onboarding for a non-attendee", async () => {
+    const me = await createUser();
+    const response = await putProfile(me, {
+      ...VISIBLE,
+      directoryVisible: false,
+      completeOnboarding: true,
+    });
+    expect(response.statusCode).toBe(403);
+    const { rows } = await pool.query(`SELECT 1 FROM user_public_profiles WHERE user_id = $1`, [
+      me,
+    ]);
+    expect(rows).toHaveLength(0);
+  });
+
   it("defaults to hidden and previews the card", async () => {
     const me = await person("José", "García");
     const res = await app.inject({
@@ -256,7 +310,7 @@ describe("public profile owner routes (#934)", () => {
 describe("saved profile reads (#934, #935)", () => {
   it("shows a saved person's card with project and published challenges, without private fields", async () => {
     const challenge = await publishChallenge("Green AI");
-    const hidden = await createChallenge("Draft challenge", []);
+    const hidden = await createChallenge("Draft challenge");
     const jose = await person("José", "Álvarez");
     const teammate = await person("Hidden", "Mate");
     await activeRepo("Neural Beans", [jose, teammate], [challenge, hidden]);
@@ -317,24 +371,24 @@ describe("saved profile reads (#934, #935)", () => {
     const repoA = await activeRepo("Alpha", [me], [first]);
     const repoB = await activeRepo("Beta", [me], [second]);
     const { rows } = await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Side quest', $1) RETURNING id`,
+      `INSERT INTO repos (name,created_by,submission_status) VALUES ('Side quest',$1,'draft') RETURNING id`,
       [me],
     );
     await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
+      `INSERT INTO submissions (repo_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
       [rows[0].id, me],
     );
-    await pool.query(
-      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
-      [rows[0].id, planned],
-    );
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      planned,
+    ]);
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
     expect(entry.projects).toEqual([
       { kind: "project", id: repoA, name: "Alpha" },
       { kind: "project", id: repoB, name: "Beta" },
-      { kind: "workGroup", id: Number(rows[0].id), name: "Side quest" },
+      { kind: "project", id: Number(rows[0].id), name: "Side quest" },
     ]);
     expect(entry.project).toEqual({ kind: "project", id: repoA, name: "Alpha" });
     expect(entry.challenges).toEqual([
@@ -348,23 +402,21 @@ describe("saved profile reads (#934, #935)", () => {
     const challenge = await publishChallenge("Planned");
     const me = await person("Lúa", "Souto");
     const { rows } = await pool.query(
-      `INSERT INTO planned_work_groups (name, created_by) VALUES ('Planners', $1) RETURNING id`,
+      `INSERT INTO repos (name,created_by,submission_status) VALUES ('Planners',$1,'draft') RETURNING id`,
       [me],
     );
     await pool.query(
-      `INSERT INTO planned_work_group_members (group_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
+      `INSERT INTO submissions (repo_id, user_id, status, responded_at) VALUES ($1, $2, 'active', now())`,
       [rows[0].id, me],
     );
-    await pool.query(
-      `INSERT INTO planned_work_group_challenges (group_id, challenge_id) VALUES ($1, $2)`,
-      [rows[0].id, challenge],
-    );
+    await pool.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+      rows[0].id,
+      challenge,
+    ]);
     await putProfile(me, VISIBLE);
     await save(me);
     const entry = (await card(me)).json();
-    expect(entry.projects).toEqual([
-      { kind: "workGroup", id: Number(rows[0].id), name: "Planners" },
-    ]);
+    expect(entry.projects).toEqual([{ kind: "project", id: Number(rows[0].id), name: "Planners" }]);
     expect(entry.challenges).toEqual([{ id: challenge, name: "Planned" }]);
 
     await putProfile(me, { ...VISIBLE, showProject: false });

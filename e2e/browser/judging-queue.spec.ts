@@ -65,6 +65,9 @@ test("propagates an external judging transition without a page reload", async ({
   });
 
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const url = new URL(route.request().url());
     if (url.pathname === "/api/me") {
       return route.fulfill({
@@ -99,7 +102,6 @@ test("propagates an external judging transition without a page reload", async ({
               room_id: 7,
               is_paused: false,
               max_in_waiting_area: 3,
-              desired_minutes_per_team: 5,
             },
             challenge: {
               id: 41,

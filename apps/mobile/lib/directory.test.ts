@@ -1,5 +1,11 @@
 import type { DiaryEntry } from "./diary";
-import { cvFileName, filterDiaryEntries, foldSearchText, loadApiImage } from "./directory";
+import {
+  apiImageSource,
+  cvFileName,
+  filterDiaryEntries,
+  foldSearchText,
+  loadApiImage,
+} from "./directory";
 
 jest.mock("./api", () => ({ getCurrentSessionCookie: () => "session=1" }));
 jest.mock("./env", () => ({ API_URL: "https://api.test/" }));
@@ -56,6 +62,20 @@ describe("directory helpers (#935)", () => {
   it("keeps only favourites when asked", () => {
     const entries = [entry(1), entry(2, { starred: true })];
     expect(filterDiaryEntries(entries, { query: "", favouritesOnly: true })).toEqual([entries[1]]);
+  });
+
+  it("builds a session expo-image source for API photos and passes public logos through", () => {
+    const source = apiImageSource("/api/users/1/photo?v=a");
+    expect(source).toEqual({
+      uri: "https://api.test/api/users/1/photo?v=a",
+      headers: { Cookie: "session=1" },
+      cacheKey: expect.stringMatching(/:https:\/\/api\.test\/api\/users\/1\/photo\?v=a$/),
+    });
+    expect(source.cacheKey).not.toContain("session=1");
+    expect(apiImageSource("/api/users/1/photo?v=a").cacheKey).toBe(source.cacheKey);
+    expect(apiImageSource("https://cdn.test/logo.png")).toEqual({
+      uri: "https://cdn.test/logo.png",
+    });
   });
 
   it("fetches authenticated photos once per session and passes public logos through", async () => {

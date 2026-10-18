@@ -9,6 +9,7 @@ import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
+import { sharedCache } from "../../lib/shared-cache.js";
 import { putObject } from "../../lib/storage.js";
 import {
   enterpriseAccessFor,
@@ -26,6 +27,8 @@ import {
   judgeParams,
   memberParams,
   OWNER_EDITABLE_KEYS,
+  publicSponsorsQuery,
+  reorderEnterprisesBody,
   sponsorFaqBody,
   standScannableBody,
   standTagBody,
@@ -48,6 +51,7 @@ import {
   myEnterprise,
   removeEnterpriseJudge,
   removeEnterpriseMember,
+  reorderEnterprises,
   setEnterpriseLogo,
   setEnterprisesVisibility,
   updateEnterprise,
@@ -89,11 +93,17 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     {
       ...access({ kind: "public", anonymousCategory: "public-content" }),
       schema: {
+        querystring: publicSponsorsQuery,
         summary: "List public sponsors",
-        description: "Returns visible sponsor enterprises for the public event site (H45).",
+        description:
+          "Returns every visible enterprise for the public event site, ordered by priority (1 first); enterprises sharing a priority keep their manual order, then creation order. `kind=sponsor` or `kind=collaborator` filters to one group (H45).",
       },
     },
-    async () => ({ items: await listPublicSponsors() }),
+    async (req) => ({
+      items: await sharedCache("public-content", `sponsors:${req.query.kind ?? "all"}`, 15, () =>
+        listPublicSponsors(req.query.kind),
+      ),
+    }),
   );
 
   r.get(
@@ -146,6 +156,22 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => setEnterprisesVisibility(req.body.ids, req.body.visible, req.userId),
+  );
+
+  // Manual order inside one (kind, priority) group (H45).
+  r.post(
+    "/api/enterprises/reorder",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, idempotencyGuard],
+      schema: {
+        body: reorderEnterprisesBody,
+        summary: "Reorder enterprises within a group",
+        description:
+          "Sets the display order of enterprises that share the same priority; ids from different priorities are rejected unless a target `priority` is given, which moves them into that tier (H45).",
+      },
+    },
+    async (req) => reorderEnterprises(req.body.ids, req.body.priority, req.userId),
   );
 
   // Sponsor rep's own enterprise (H44).

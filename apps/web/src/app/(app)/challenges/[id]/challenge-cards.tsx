@@ -10,9 +10,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
-import { DevpostTagsField } from "@/components/common/devpost-tags-field";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PublicationControls } from "@/components/common/publication-controls";
 import {
   JudgingPanelBuilder,
@@ -38,13 +38,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -61,6 +54,7 @@ import {
   textForDisplay,
 } from "../shared";
 import { VersionHistory } from "./version-history";
+import { WinnerPublication } from "./winner-publication";
 
 const optionalPositiveInt = z
   .string()
@@ -96,25 +90,13 @@ function asQuestions(value: Question[] | null): Question[] {
   return Array.isArray(value) ? value : [];
 }
 
-type DevpostPrize = {
-  name: string;
-  lastBatch: string | null;
-  repoCount: number;
-  mappedChallengeId: number | null;
-  mappedChallengeTitle: string | null;
-};
-
 export function EditCard({
   challenge,
   canAdmin,
-  canMapPrizes,
-  devpostPrizes,
   onSaved,
 }: {
   challenge: Challenge;
   canAdmin: boolean;
-  canMapPrizes: boolean;
-  devpostPrizes: DevpostPrize[];
   onSaved: () => Promise<void>;
 }) {
   const { t } = useLocale();
@@ -137,10 +119,9 @@ export function EditCard({
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(
     asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
   );
-  const [devpostTags, setDevpostTags] = useState<string[]>(
-    Array.isArray(challenge.devpost_tags) ? challenge.devpost_tags : [],
-  );
   const form = useForm<EditValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(challenge),
   });
@@ -168,7 +149,6 @@ export function EditCard({
     setCriteriaI18n(
       asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
     );
-    setDevpostTags(Array.isArray(challenge.devpost_tags) ? challenge.devpost_tags : []);
   }, [challenge, reset]);
 
   async function onSubmit(values: EditValues) {
@@ -194,7 +174,6 @@ export function EditCard({
               criteria: criteriaEn || null,
               criteriaI18n: criteriaEn ? i18nWithEnglishFallback(criteriaI18n) : null,
               prizes: normalizePrizes(prizes),
-              ...(canMapPrizes ? { devpostTags } : {}),
             }
           : {}),
         // Only send judgingPanelCriteria when it actually changed — the API
@@ -241,8 +220,7 @@ export function EditCard({
         asI18n(challenge.criteria_i18n ?? challenge.criteria, textForDisplay(challenge.criteria)),
       ) ||
     JSON.stringify(prizes) !== JSON.stringify(asPrizes(challenge.prizes)) ||
-    JSON.stringify(questions) !== JSON.stringify(asQuestions(challenge.judging_panel_criteria)) ||
-    JSON.stringify(devpostTags) !== JSON.stringify(challenge.devpost_tags ?? []);
+    JSON.stringify(questions) !== JSON.stringify(asQuestions(challenge.judging_panel_criteria));
 
   return (
     <Form {...form}>
@@ -307,55 +285,6 @@ export function EditCard({
                 <PrizeBuilder value={prizes} onChange={setPrizes} />
               </fieldset>
             </SectionCard>
-            {canMapPrizes && (
-              <SectionCard variant="plain" title={t("devpostTagsLabel")}>
-                <DevpostTagsField
-                  value={devpostTags}
-                  onChange={setDevpostTags}
-                  options={devpostPrizes.map((prize) => ({
-                    value: prize.name,
-                    label: prize.name,
-                    description:
-                      prize.repoCount === 1
-                        ? t("projectCountOne", { count: prize.repoCount })
-                        : t("projectCountOther", { count: prize.repoCount }),
-                  }))}
-                  emptyText={t("noImportedPrizes")}
-                />
-              </SectionCard>
-            )}
-            {canMapPrizes && (
-              <SectionCard variant="plain" title={t("importedDevpostPrizesTitle")}>
-                <div className="space-y-2">
-                  {devpostPrizes.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">{t("noImportedPrizes")}</p>
-                  ) : (
-                    devpostPrizes.map((prize) => (
-                      <div
-                        key={prize.name}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-medium">{prize.name}</p>
-                          <p className="text-muted-foreground text-xs">
-                            {prize.repoCount === 1
-                              ? t("projectCountOne", { count: prize.repoCount })
-                              : t("projectCountOther", { count: prize.repoCount })}
-                          </p>
-                        </div>
-                        {prize.mappedChallengeId ? (
-                          <StatusBadge tone="success">
-                            {t("mappedToInline", { title: prize.mappedChallengeTitle ?? "" })}
-                          </StatusBadge>
-                        ) : (
-                          <StatusBadge tone="neutral">{t("unmappedBadge")}</StatusBadge>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </SectionCard>
-            )}
           </TabsContent>
 
           <TabsContent value="judging" className="space-y-6 pt-4">
@@ -401,6 +330,7 @@ export function EditCard({
 
           <TabsContent value="winners" className="space-y-6 pt-4">
             <WinnersCard challengeId={challenge.id} />
+            <WinnerPublication challengeId={challenge.id} />
           </TabsContent>
 
           <TabsContent value="publish" className="space-y-6 pt-4">
@@ -618,9 +548,7 @@ async function loadEligibleRepos(challengeId: number): Promise<EligibleRepo[]> {
       challenges: Array<{ id: number; status: string | null }>;
     }>;
   }>("/api/repos");
-  // H46: a repo is eligible whether it arrived via the queue or only via
-  // devpost prize-tag mapping (sponsors may opt out of the queue system
-  // entirely) — any association with this challenge counts.
+  // H60: only projects entered into this challenge are candidates.
   return repos
     .filter((repo) => repo.challenges.some((c) => c.id === challengeId))
     .map((repo) => ({ id: repo.id, name: repo.name }));
@@ -735,27 +663,21 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
             <Label htmlFor="winner-project-select" className="sr-only">
               {t("winnerProjectSelectLabel")}
             </Label>
-            <Select
+            <EntityCombobox
+              id="winner-project-select"
               value={newRepoId}
               disabled={busy}
-              onValueChange={(value) => {
+              onChange={(value) => {
                 setNewRepoId(value);
                 void addWinner(Number(value));
               }}
-            >
-              <SelectTrigger id="winner-project-select">
-                <SelectValue placeholder={t("selectProjectPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {eligible
-                  .filter((repo) => !winners.some((winner) => winner.repoId === repo.id))
-                  .map((repo) => (
-                    <SelectItem key={repo.id} value={String(repo.id)}>
-                      {repo.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+              options={eligible.filter(
+                (repo) => !winners.some((winner) => winner.repoId === repo.id),
+              )}
+              getId={(repo) => repo.id}
+              getLabel={(repo) => repo.name}
+              placeholder={t("selectProjectPlaceholder")}
+            />
           </div>
         </div>
       )}

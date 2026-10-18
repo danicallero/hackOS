@@ -941,7 +941,12 @@ export async function moveToTop(
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
-    const position = await placeEntry(client, entry.challenge_id, entryId, "top");
+    // A team leaving the waiting room goes right behind the head of the queue: the head takes
+    // the slot this move frees first, instead of the same team being called straight back in.
+    const position =
+      entry.status === "called"
+        ? await placeEntryAtWaitingRank(client, entry.challenge_id, entryId, 2)
+        : await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -957,7 +962,7 @@ export async function moveToTop(
       newStatus: "waiting",
       action: "move_to_top",
       reason,
-      metadata: { position: "top" },
+      metadata: { position: entry.status === "called" ? "behind_head" : "top" },
     });
     return res.rows[0];
   }).then(broadcastEntry);
@@ -1349,25 +1354,16 @@ async function enqueueQueueRepo(
   return { entry: positioned.rows[0] ?? entry, inserted: true, revived: false };
 }
 
-async function challengePrizeRepoIds(
+async function challengeProjectIds(
   client: pg.PoolClient,
   challengeId: number,
   fixtureMarker = false,
 ): Promise<number[]> {
-  const challenge = await client.query(`SELECT devpost_tags FROM challenges WHERE id = $1`, [
-    challengeId,
-  ]);
-  if (challenge.rowCount === 0) throw new NotFoundError("Challenge not found", { challengeId });
-  const tags: string[] = challenge.rows[0].devpost_tags ?? [];
-  if (tags.length === 0) return [];
   const { rows } = await client.query(
-    `SELECT DISTINCT rdp.repo_id
-       FROM repo_devpost_prizes rdp
-       JOIN repos r ON r.id = rdp.repo_id AND r.is_test_account = $2
-      WHERE rdp.prize = ANY($1)`,
-    [tags, fixtureMarker],
+    `SELECT pc.repo_id FROM project_challenges pc JOIN repos r ON r.id=pc.repo_id WHERE pc.challenge_id=$1 AND r.is_test_account=$2 AND r.submission_status='submitted'`,
+    [challengeId, fixtureMarker],
   );
-  return rows.map((row: { repo_id: number }) => Number(row.repo_id));
+  return rows.map((row) => Number(row.repo_id));
 }
 
 export async function enqueueChallenge(
@@ -1384,7 +1380,7 @@ export async function enqueueChallenge(
     const fixtureMarker = await assertQueueChallengeScope(client, actorId, challengeId);
     let ids = repoIds;
     if (!ids || ids.length === 0) {
-      ids = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
+      ids = await challengeProjectIds(client, challengeId, fixtureMarker);
     }
     for (const repoId of ids) {
       await assertQueueRepoScope(client, actorId, repoId);
@@ -1453,7 +1449,7 @@ export async function enqueueQueueGroup(
     const candidates = new Map<number, number[]>();
     for (const challenge of challenges as Array<{ id: number }>) {
       const challengeId = Number(challenge.id);
-      const repoIds = await challengePrizeRepoIds(client, challengeId, fixtureMarker);
+      const repoIds = await challengeProjectIds(client, challengeId, fixtureMarker);
       for (const repoId of repoIds) {
         const challengeIds = candidates.get(repoId) ?? [];
         challengeIds.push(challengeId);

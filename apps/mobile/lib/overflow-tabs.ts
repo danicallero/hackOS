@@ -10,7 +10,7 @@ export const OVERFLOW_TAB_KEYS = ["queue", "diary", "account", "operations"] as 
 export type OverflowTabKey = (typeof OVERFLOW_TAB_KEYS)[number];
 
 export const OVERFLOW_TAB_ICON: Record<OverflowTabKey, SFSymbol> = {
-  queue: "clock",
+  queue: "hammer",
   diary: "person.2.crop.square.stack",
   account: "person.crop.circle",
   operations: "rectangle.3.group",

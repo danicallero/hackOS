@@ -72,7 +72,7 @@ describe("POST /api/queue/admin/reset", () => {
     expect(invalid.statusCode).toBe(400);
   });
 
-  it("atomically clears the project, import, queue, and judging slice", async () => {
+  it("atomically clears the project, queue, and judging slice", async () => {
     const superAdmin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
     const member = await createUser();
     const judge = await createUser();
@@ -84,44 +84,28 @@ describe("POST /api/queue/admin/reset", () => {
     if (challengeOneId === undefined || challengeIds[1] === undefined) {
       throw new Error("Expected two challenge fixtures");
     }
-    await pool.query(`UPDATE challenges SET devpost_tags = $2::jsonb WHERE id = $1`, [
-      challengeOneId,
-      JSON.stringify(["best-ai"]),
-    ]);
-
     const roomId = await createRoom({
       status: "active",
       isPaused: false,
       maxInWaitingArea: 5,
-      desiredMinutesPerTeam: 15,
     });
     await assignChallengeToRoom(roomId, challengeOneId);
     await addChallengeJudge(challengeOneId, judge);
 
-    const { repoId } = await createRepoWithTeam([member], "Imported project");
-    await pool.query(`UPDATE repos SET devpost_url = $2 WHERE id = $1`, [
+    const { repoId } = await createRepoWithTeam([member], "Native project");
+    await pool.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
       repoId,
-      "https://devpost.test/projects/imported-project",
+      challengeOneId,
     ]);
-    await pool.query(`INSERT INTO devpost_prizes (name, last_batch) VALUES ('Best AI', 'batch-1')`);
-    await pool.query(`INSERT INTO repo_devpost_prizes (repo_id, prize) VALUES ($1, 'Best AI')`, [
-      repoId,
-    ]);
-    await pool.query(
-      `INSERT INTO devpost_participants (repo_id, email, name, import_batch, user_id, merge_status)
-       VALUES ($1, 'member@devpost.test', 'Member', 'batch-1', $2, 'auto_matched')`,
-      [repoId, member],
-    );
-
     const claimToken = "claim-token-for-reset-test";
     await pool.query(
       `INSERT INTO email_verification_tokens (token, type, email, user_id, expires_at)
-       VALUES ($1, 'account_claim', 'claim@devpost.test', $2, now() + interval '1 hour')`,
+       VALUES ($1, 'account_claim', 'claim@staff.test', $2, now() + interval '1 hour')`,
       [claimToken, member],
     );
     await pool.query(
       `INSERT INTO notification_outbox (user_id, category, channel, payload)
-       VALUES ($1, 'devpost', 'email', $2::jsonb),
+       VALUES ($1, 'auth', 'email', $2::jsonb),
               ($1, 'project', 'in_app', '{}'::jsonb),
               ($1, 'queue', 'in_app', '{}'::jsonb),
               ($1, 'queue.staff', 'in_app', '{}'::jsonb),
@@ -195,9 +179,6 @@ describe("POST /api/queue/admin/reset", () => {
     expect(first.json().counts).toMatchObject({
       projects: 1,
       projectMembers: 1,
-      importedParticipants: 1,
-      importedPrizes: 1,
-      projectPrizeLinks: 1,
       queueEntries: 1,
       queueHistory: 1,
       reviews: 1,
@@ -212,11 +193,8 @@ describe("POST /api/queue/admin/reset", () => {
       roomEnterpriseAssignments: 1,
       queueNotifications: 2,
       projectNotifications: 1,
-      devpostClaimNotifications: 1,
       queuePreferences: 2,
       queueIdempotencyKeys: 1,
-      devpostClaimTokens: 1,
-      challengeMappingsReset: 1,
     });
 
     const replay = await app.inject({
@@ -232,9 +210,6 @@ describe("POST /api/queue/admin/reset", () => {
     const emptyTables = [
       "repos",
       "submissions",
-      "devpost_participants",
-      "devpost_prizes",
-      "repo_devpost_prizes",
       "queue_entries",
       "queue_history",
       "attempt_review",
@@ -251,16 +226,15 @@ describe("POST /api/queue/admin/reset", () => {
     }
 
     const { rows: challenges } = await pool.query(
-      `SELECT c.id, c.title, c.devpost_tags, count(qgc.challenge_id)::int AS group_members
+      `SELECT c.id, c.title, count(qgc.challenge_id)::int AS group_members
          FROM challenges c
          LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = c.id
-        GROUP BY c.id, c.title, c.devpost_tags
+        GROUP BY c.id, c.title
         ORDER BY c.id`,
     );
     expect(challenges).toHaveLength(2);
     expect(challenges[0].title).toMatch(/^Challenge 1 /);
     expect(challenges[1].title).toMatch(/^Challenge 2 /);
-    expect(challenges.every((row) => row.devpost_tags.length === 0)).toBe(true);
     expect(challenges.every((row) => row.group_members === 1)).toBe(true);
 
     const room = (await pool.query(`SELECT status FROM rooms WHERE id = $1`, [roomId])).rows[0];
@@ -271,7 +245,6 @@ describe("POST /api/queue/admin/reset", () => {
     expect(roomState).toMatchObject({
       is_paused: true,
       max_in_waiting_area: 2,
-      desired_minutes_per_team: 8,
       started_at: null,
     });
     const settings = (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
@@ -291,10 +264,11 @@ describe("POST /api/queue/admin/reset", () => {
         )
       ).rows[0].count,
     ).toBe(1);
+    // Account invitations are identity data, not part of the judging slice.
     expect(
       (await pool.query(`SELECT count(*)::int AS count FROM email_verification_tokens`)).rows[0]
         .count,
-    ).toBe(0);
+    ).toBe(1);
     expect(
       (
         await pool.query(

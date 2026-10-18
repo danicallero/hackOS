@@ -14,7 +14,7 @@ import {
 
 describe("TV control modes", () => {
   it("contains exactly the current runtime modes", () => {
-    expect(TV_CONTROL_MODES).toEqual(["live", "rooms", "schedule", "sponsors", "wifi"]);
+    expect(TV_CONTROL_MODES).toEqual(["live", "rooms", "schedule", "sponsors", "wifi", "github"]);
   });
 });
 

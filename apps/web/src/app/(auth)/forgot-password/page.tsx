@@ -35,6 +35,8 @@ function ForgotPasswordForm() {
   const [sent, setSent] = useState(false);
   const schema = useMemo(() => forgotPasswordSchema(t), [t]);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     // QoL: prefill with the email carried over from the sign-in screen.
     defaultValues: { email: params.get("email") ?? "" },

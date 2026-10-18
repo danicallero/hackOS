@@ -1,284 +1,134 @@
 "use client";
 
-// Projects list (H20 read-only view). Repos imported from Devpost with team
-// size, mapped challenges / prizes and a matched-vs-unmatched indicator.
-
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
-import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
-import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
+import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
-import { IconButton } from "@/components/common/icon-button";
-import { PageHeader } from "@/components/common/page-header";
+import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageLayout } from "@/components/common/page-layout";
-import { QueueStatusBadge } from "@/components/common/queue-status-badge";
-import { StaleDataNotice } from "@/components/common/stale-data-notice";
-import { StatusBadge } from "@/components/common/status-badge";
+import { ProjectsSectionHeader } from "@/components/common/section-navigation";
+import { CreateProjectPanel } from "@/components/projects/create-project-panel";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useServerResource } from "@/hooks/use-server-resource";
+import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { type Translate, useLocale } from "@/lib/i18n";
-import { listRepos } from "@/lib/projects";
+import { API_URL } from "@/lib/env";
+import { useLocale } from "@/lib/i18n";
+import type { NativeProject } from "@/lib/native-projects";
 import { useSessionContext } from "@/lib/session";
-import { ProjectFormDialog } from "./project-form-dialog";
-import { type ProjectRepo, toProjectRepo } from "./shared";
 
-function unmatchedCount(repo: ProjectRepo): number {
-  return repo.members.filter((m) => m.userId === null).length;
-}
-
-function buildColumns(t: Translate): Column<ProjectRepo>[] {
-  return [
+export default function ProjectsPage() {
+  const { t } = useLocale();
+  const router = useRouter();
+  const { can, canAny, me } = useSessionContext();
+  const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
+  const allowed =
+    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_EDIT) ||
+    Boolean(me?.isEnterpriseJudge || me?.isSponsorRep);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const resource = useServerResource(
+    ["projects", "management"],
+    (signal) => api.get<{ repos: NativeProject[] }>("/api/repos", { signal }),
+    { enabled: allowed },
+  );
+  const activity = useServerResource(
+    ["projects", "github-activity"],
+    (signal) =>
+      api.get<{
+        teams: { repoId: number; commits: number; pullRequests: number }[];
+      }>("/api/projects/github-activity", { signal }),
+    { enabled: can(CAPABILITIES.PROJECTS_READ) },
+  );
+  const activityOf = new Map((activity.data?.teams ?? []).map((team) => [team.repoId, team]));
+  const projects = resource.data?.repos ?? [];
+  const columns: Column<NativeProject>[] = [
     {
       id: "name",
-      header: t("colProject"),
-      sortValue: (r) => r.name.toLowerCase(),
-      cell: (r) => <span className="font-medium">{r.name}</span>,
-    },
-    {
-      id: "team",
-      header: t("colTeam"),
-      align: "center",
-      sortValue: (r) => r.members.length,
-      cell: (r) => (
-        <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
-          <UsersIcon aria-hidden="true" className="size-3.5" />
-          {r.members.length}
-        </span>
+      header: t("projectNameLabel"),
+      cell: (project) => (
+        <Link href={`/projects/${project.id}`} className="font-medium">
+          {project.name}
+        </Link>
       ),
     },
     {
-      id: "challenges",
-      header: t("challenges"),
-      sortValue: (r) => r.challenges.length,
-      cell: (r) =>
-        r.challenges.length === 0 ? (
-          <span className="text-muted-foreground text-sm">—</span>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {r.challenges.map((challenge) => (
-              <li key={challenge.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="wrap-break-word">{challenge.title}</span>
-                {challenge.status && <QueueStatusBadge status={challenge.status} />}
-              </li>
-            ))}
-          </ul>
-        ),
+      id: "members",
+      header: t("surfaceTeam"),
+      cell: (project) =>
+        project.members
+          ?.filter((member) => member.status === "active")
+          .map((member) => member.name)
+          .join(", "),
     },
     {
-      id: "prizes",
-      header: t("colPrizes"),
-      sortValue: (r) => r.prizes.length,
-      cell: (r) =>
-        r.prizes.length === 0 ? (
-          <span className="text-muted-foreground text-sm">—</span>
-        ) : (
-          <span className="text-muted-foreground text-sm">
-            {r.prizes.length === 1
-              ? t("prizeCountOne", { count: r.prizes.length })
-              : t("prizeCountOther", { count: r.prizes.length })}
-          </span>
-        ),
+      id: "status",
+      header: t("inviteStatus"),
+      cell: (project) =>
+        t(project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft"),
     },
-    {
-      // Whether imported Devpost members resolved to hackOS accounts — not the
-      // team size next to it, which is why it needs its own header (#299).
-      id: "matched",
-      header: t("colLinking"),
-      align: "center",
-      sortValue: (r) => unmatchedCount(r),
-      cell: (r) => {
-        const unmatched = unmatchedCount(r);
-        if (r.members.length === 0)
-          return <span className="text-muted-foreground text-sm">{t("noMembers")}</span>;
-        return unmatched === 0 ? (
-          <StatusBadge tone="success">{t("allLinked")}</StatusBadge>
-        ) : (
-          <StatusBadge tone="warning">{t("unmatchedCount", { count: unmatched })}</StatusBadge>
-        );
-      },
-    },
+    ...(activity.data
+      ? [
+          {
+            id: "commits",
+            header: t("githubCommits"),
+            align: "right" as const,
+            sortValue: (project: NativeProject) => activityOf.get(project.id)?.commits ?? -1,
+            cell: (project: NativeProject) => activityOf.get(project.id)?.commits ?? "–",
+          },
+          {
+            id: "pullRequests",
+            header: t("githubPullRequests"),
+            align: "right" as const,
+            sortValue: (project: NativeProject) => activityOf.get(project.id)?.pullRequests ?? -1,
+            cell: (project: NativeProject) => activityOf.get(project.id)?.pullRequests ?? "–",
+          },
+        ]
+      : []),
   ];
-}
-
-export default function ProjectsPage() {
-  const router = useRouter();
-  const { t } = useLocale();
-  const { can, canAny, me } = useSessionContext();
-  const canImport = can(CAPABILITIES.PROJECTS_IMPORT);
-  const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
-  const columns = useMemo(() => buildColumns(t), [t]);
-  // H8/H40/H46/H55: judges + sponsor reps get a scoped list from the backend
-  // (GET /api/repos, association-aware via enterprise_judges/sponsors — see
-  // resolveRepoScope), independent of capabilities; full access via
-  // projects:read / projects:import. isEnterpriseJudge/isSponsorRep (not the
-  // single-priority `role`, which collapses a sponsor-rep-who-also-judges to
-  // "judge") are what those associations actually are.
-  const canView =
-    canAny(CAPABILITIES.PROJECTS_READ, CAPABILITIES.PROJECTS_IMPORT, CAPABILITIES.JUDGE_PANEL) ||
-    Boolean(me?.isEnterpriseJudge) ||
-    Boolean(me?.isSponsorRep);
-  const [repos, setRepos] = useState<ProjectRepo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!canView) {
-      setLoading(false);
-      return;
-    }
-    if (!hasLoaded()) setLoading(true);
-    try {
-      const res = await listRepos();
-      succeeded();
-      setLoadError(null);
-      setRepos(res.repos.map(toProjectRepo));
-    } catch (err) {
-      // A failed background refresh keeps the list (#1012).
-      if (!failed(err)) return;
-      setRepos([]);
-      setLoadError(apiErrorText(err, t, t("couldNotLoadProjects")));
-    } finally {
-      setLoading(false);
-    }
-  }, [canView, t, succeeded, failed, hasLoaded]);
-
-  // Soft, in-place refresh instead of a hard reload when a project changes
-  // elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.PROJECTS), [EVENTS.DOMAIN_CHANGED]);
-  const challengeRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [
-    EVENTS.DOMAIN_CHANGED,
-  ]);
-  const queueRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_TV, [EVENTS.DATA_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching from API is a legitimate external-system sync
-    void load();
-  }, [load, liveRefresh, queueRefresh, challengeRefresh, retryNonce]);
-
-  if (!canView) {
-    return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
-  }
-
+  if (!allowed) return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
-      <PageHeader
-        className="flex-row items-center justify-between gap-2 md:items-center [&>[data-slot=action-group]]:shrink-0 [&>[data-slot=action-group]]:flex-nowrap"
-        title={t("projects")}
+      <ProjectsSectionHeader
+        management
         secondaryActions={
-          canImport || canEdit ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label={t("moreActions")} variant="outline">
-                  <DotsThreeIcon aria-hidden="true" />
-                </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {canEdit && (
-                  <DropdownMenuItem asChild>
-                    <Link href="/projects/reconciliation">{t("projectReconciliation")}</Link>
-                  </DropdownMenuItem>
-                )}
-                {canImport && (
-                  <DropdownMenuItem asChild>
-                    <Link href="/projects/import">
-                      <UploadSimpleIcon aria-hidden="true" />
-                      {t("importFromDevpost")}
-                    </Link>
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+          can(CAPABILITIES.EXPORTS_RUN) ? (
+            <Button asChild variant="outline">
+              <a href={`${API_URL}/api/exports/projects.csv`}>{t("exportCsv")}</a>
+            </Button>
           ) : undefined
         }
         primaryAction={
-          canEdit ? (
-            <ProjectFormDialog
-              mode={{ kind: "create" }}
-              onSaved={(repoId) => router.push(`/projects/${repoId}`)}
-            />
-          ) : undefined
+          canEdit && <Button onClick={() => setCreateOpen(true)}>{t("staffCreateProject")}</Button>
         }
       />
-
-      <DataTable
-        columns={columns}
-        data={repos}
-        getRowId={(r) => String(r.id)}
-        loading={loading && !hasLoaded()}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
-        getRowHref={(r) => `/projects/${r.id}`}
-        getRowLabel={(r) => r.name}
-        searchable={(r) =>
-          `${r.name} ${r.prizes.join(" ")} ${r.challenges.map((c) => c.title).join(" ")} ${r.members
-            .map((m) => `${m.name ?? ""} ${m.surname ?? ""} ${m.email ?? ""}`)
-            .join(" ")}`
-        }
-        searchPlaceholder={t("searchProjectsPlaceholder")}
-        stateKey="projects-list"
-        pageSize={15}
-        renderMobileRow={(repo) => (
-          <Link
-            href={`/projects/${repo.id}`}
-            aria-label={repo.name}
-            className="button-interaction flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          >
-            <div className="min-w-0 flex-1 space-y-2">
-              <p className="font-medium wrap-break-word">{repo.name}</p>
-              <div className="flex flex-wrap items-center gap-3">
-                <p className="text-sm text-muted-foreground">
-                  {t("workGroupMembers", { count: repo.members.length })}
-                </p>
-                {unmatchedCount(repo) > 0 && (
-                  <StatusBadge tone="warning">
-                    {t("unmatchedCount", { count: unmatchedCount(repo) })}
-                  </StatusBadge>
-                )}
-              </div>
-              <div className="space-y-2">
-                {repo.challenges.map((challenge) => (
-                  <div key={challenge.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <p className="text-sm wrap-break-word">{challenge.title}</p>
-                    {challenge.status && <QueueStatusBadge status={challenge.status} />}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <CaretRightIcon
-              aria-hidden="true"
-              className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-            />
-          </Link>
-        )}
-        empty={{
-          icon: FolderSimpleIcon,
-          title: t("noProjectsYet"),
-          description: canImport ? t("importDevpostToStart") : t("projectsAppearAfterImport"),
-          action: canImport ? (
-            <Button type="button" onClick={() => router.push("/projects/import")}>
-              <UploadSimpleIcon aria-hidden="true" />
-              {t("importFromDevpost")}
-            </Button>
-          ) : undefined,
+      <ListToolbar
+        search={{
+          value: search,
+          onValueChange: setSearch,
+          label: t("search"),
+          placeholder: t("projectNameLabel"),
         }}
       />
+      {Boolean(resource.error) && (
+        <ContextualError
+          message={apiErrorText(resource.error, t, t("couldNotLoadProjects"))}
+          onRetry={resource.reload}
+        />
+      )}
+      <DataTable
+        columns={columns}
+        data={projects.filter((project) =>
+          project.name.toLowerCase().includes(search.toLowerCase()),
+        )}
+        getRowId={(project) => String(project.id)}
+        loading={resource.loading}
+        onRowClick={(project) => router.push(`/projects/${project.id}`)}
+      />
+      <CreateProjectPanel open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
   );
 }

@@ -9,8 +9,6 @@ export interface Me {
   dni: string | null;
   badgeId: string | null;
   language: string;
-  secondaryEmail: string | null;
-  secondaryEmailVerified: boolean;
   foodIntolerances: number[];
   foodIntoleranceNotes: string | null;
   shirtSize: string | null;

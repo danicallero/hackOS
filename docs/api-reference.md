@@ -27,7 +27,7 @@ If this page disagrees with either, they win.
 | "What does module X own, module by module?" | this page, § Modules |
 | "Which capability guards which route?" | [`access-control-route-ledger.md`](./access-control-route-ledger.md) (generated) |
 | "How does background work / retries / the outbox work?" | [`background-workers.md`](./background-workers.md) |
-| "What changed recently, and why — a specific bug fix's rationale?" | [`audits/implementation-notes.md`](./audits/implementation-notes.md) (historical), [`challenges-devpost.md`](./challenges-devpost.md) |
+| "What changed recently, and why — a specific bug fix's rationale?" | [`audits/implementation-notes.md`](./audits/implementation-notes.md) (historical), [`projects.md`](./projects.md) |
 
 ## Shape of the system
 
@@ -50,6 +50,7 @@ registerModules(app)
 ├─ challenges     (WS-G  · H44)
 ├─ event          (WS-G  · H45, H47)
 ├─ exports        (WS-F  · H54, H56)
+├─ form-libraries (H11/H16 question-owned catalogues)
 ├─ identity       (WS-A1 · H1-H10)
 ├─ live-activities (#966 · H38, H25, H26, H59, H19, H22)
 ├─ logistics      (WS-C  · H22-H27)
@@ -69,8 +70,8 @@ other module's exported function instead), and, if it does background work, a
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), authenticated password change (`POST /api/auth/change-password`),
-staff user management, secondary-email verification (H6),
-invitations including reusable enterprise and account links (H9/H10/H43).
+staff user management, and invitations including reusable enterprise and
+account links (H9/H10/H43).
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email
@@ -191,13 +192,17 @@ update validate the complete resulting template against the sections, and the
 anchor is preserved in the immutable form-version JSON alongside the other
 field definitions. No database migration is needed for this layout metadata.
 
-The form catalogue also supports curated university-degree IDs and public city
-suggestions (Photon/OpenStreetMap). The city picker uses `en` for English and
-`default` for Spanish/Galician, since the public server rejects `es`/`gl`.
-It exposes loading, empty and failure states, limits searches to eight seconds,
-cancels stale requests, supports
-keyboard selection, and allows manual city/province/country entry when suggestions
-are unavailable or incomplete (H12). City labels are stored as text while degree
+The form catalogue also supports curated university-degree IDs and city
+suggestions. The city picker (`apps/web/src/lib/city-search.ts`) answers from a
+bundled offline index of Spanish cities first (~1,200, GeoNames, CC BY 4.0; rebuild with
+`apps/web/scripts/build-city-data.mjs`), and only when that has no match asks
+Photon/OpenStreetMap (`en` for English, `default` for Spanish/Galician, since
+the public server rejects `es`/`gl`), then Open-Meteo geocoding if Photon fails
+or is empty. Each live service gets five seconds; stale requests are cancelled.
+It exposes loading, empty and failure states and supports keyboard selection.
+Leaving the field never discards the text: a pending search is awaited, an
+exact city match is selected, and otherwise the text is kept in the manual
+city/province/country fields (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
 catalogue's authenticated-proposal and staff-curation boundary.
 Universities linked to user profiles cannot be deleted: the route returns 409
@@ -211,12 +216,12 @@ result reports the number of updated answers (#846).
 
 ### projects (H16–H17, H21)
 A "project" is a `repos` row; "team" is the set of `submissions (repo_id,
-user_id)` rows — there is no `teams` table. The Devpost CSV import pipeline
-stages rows in `devpost_participants` (`unmatched` / `auto_matched` /
-`manually_linked`) and reconciles them against primary/verified-secondary
-emails without ever silently merging identities. Challenge↔project linkage is
-indirect, through `repo_devpost_prizes.prize` matching a challenge's
-`devpost_tags`. Full detail: [`challenges-devpost.md`](./challenges-devpost.md).
+user_id)` rows (`invited`/`active`/`declined`) — there is no `teams` table.
+Challenge intent is stored in `project_challenges`; submitted answers are
+immutable snapshots tied to a `project_form_versions` row. Public gallery,
+uploads and winner publication are under `/api/public/projects` and
+`/api/challenges/:id/winners/*`. Full
+detail: [`projects.md`](./projects.md).
 
 ### diary (#935)
 The caller's private event diary under `/api/me/diary`: people saved by
@@ -381,7 +386,7 @@ no BullMQ-native retry queue: its durable row state owns retry and parking;
 other event-driven workers are listed separately in `background-workers.md`.
 
 ### sponsors (H43–H45, H58)
-Enterprises (each with its own optional public-logo priority), sponsor (rep) membership on an enterprise, and the
+Enterprises (each with an optional public-logo `priority` — the only tier key, 1 first, e.g. 1 root / 2 admin / 3 user / 4 collaborators — and a `position` manual order inside one priority, set with `POST /api/enterprises/reorder`, which rejects ids of different priorities unless a target `priority` is sent, which moves them into that tier (drag and drop); ties keep that order, then creation order; `kind` (`sponsor`/`collaborator`) is only a label: `GET /api/public/sponsors` returns everything and `?kind=` filters; challenges are not tied to the kind), sponsor (rep) membership on an enterprise, and the
 enterprise-invite-link flow that lets an org self-serve rep accounts without
 staff creating each one by hand. Also owns the sponsor-only FAQ singleton
 (`GET/PUT /api/sponsor-faq`, H58) — an ordered `items` array, each item either
@@ -690,6 +695,32 @@ Personal panel visibility, order, size, chart type, and layout preferences are
 stored through `/api/me/ui-prefs` and therefore follow the account across
 devices. The server treats those preferences as presentation only; scope and
 panel authorization is never delegated to them.
+
+### Shared read cache (H18, H45, H47)
+
+`src/lib/shared-cache.ts` is a Valkey read-through cache with single-flight:
+concurrent misses for the same key compute once (in-process promise plus a
+Valkey lock) and the rest read the stored result; Valkey being down only skips
+the cache. `invalidateSharedCache(namespace)` bumps a version so the whole
+namespace becomes unreachable; every key also has a short TTL as a backstop for
+clock boundaries that emit no event. `broadcast()` invalidates namespaces by
+topic (`CACHE_NAMESPACES_BY_TOPIC` in `lib/sse.ts`), so an SSE signal that makes
+clients refetch finds the cache already empty and the first refetch repopulates it.
+
+| Namespace | Endpoints | Invalidated by topics | TTL |
+|---|---|---|---|
+| `gallery` | `GET /api/public/projects` (the viewer's own projects are read live) | `projects`, `directory`, `public-content` | 30 s |
+| `content` | `GET /api/public/activities` (keyed by audience set), `/api/announcements/public`, `/api/public/event` | `content` | 15 s |
+| `public-content` | `GET /api/public/sponsors`, `/api/public/challenges`, `/api/tv/winners` (published winners, after the per-viewer gallery check) | `sponsors`, `public-content`, `public-tv` | 15 s |
+| `tv` | `GET /api/tv/rooms`, `/api/tv/mode` (2 s), `/api/tv/config` (15 s) | `queue`, `tv`, `public-tv`, `content` | 2–15 s |
+
+The live queue is never delayed by the cache: every queue event invalidates `tv`
+immediately (the TTL is only a backstop), per-user queue reads (`/api/queue/me`)
+are not cached, and queue-driven refetches have no jitter (wall displays spread by at most 250 ms).
+
+Only cache responses that are identical for every viewer in the key. Tests that
+change these tables with direct SQL call `invalidateSharedCache`; `truncateAll`
+already does.
 
 ## Exploring the live API
 

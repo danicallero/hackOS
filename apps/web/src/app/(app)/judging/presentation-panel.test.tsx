@@ -7,6 +7,7 @@ import { PresentationPanel } from "./presentation-panel";
 
 const t = (key: string) => key;
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t }) }));
+vi.mock("@/lib/session", () => ({ useSessionContext: () => ({ can: () => false }) }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -40,6 +41,8 @@ function render(entry: Partial<QueueEntry>, onEntryAction = vi.fn()) {
         canJudge
         canOperate={false}
         busy={null}
+        presentationSeconds={null}
+        preparationSeconds={120}
         onEntryAction={onEntryAction}
       />,
     ),

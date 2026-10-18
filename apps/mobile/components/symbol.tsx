@@ -58,7 +58,9 @@ const ANDROID_SYMBOL_NAMES = {
   "clock.badge.questionmark": "more_time",
   "clock.fill": "schedule",
   doc: "description",
+  "books.vertical": "library_books",
   "doc.text": "article",
+  "hand.raised": "back_hand",
   gearshape: "settings",
   "door.left.hand.closed": "door_front",
   "door.left.hand.open": "meeting_room",
@@ -143,6 +145,8 @@ const ANDROID_SYMBOL_NAMES = {
   xmark: "close",
   "xmark.circle.fill": "cancel",
   "building.2": "business",
+  "doc.fill": "description",
+  photo: "image",
 } as const satisfies Record<string, string> & Record<ActivityKindSymbolName, string>;
 
 /** Return the Material Symbol alias used by Android/web, when one exists. */

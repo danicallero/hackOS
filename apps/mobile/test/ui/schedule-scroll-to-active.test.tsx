@@ -59,7 +59,7 @@ jest.mock("react-native", () => {
 
 jest.mock("expo-router", () => ({
   // Focus is always on in these tests, so run the effect on mount.
-  useFocusEffect: (callback: () => void | (() => void)) => {
+  useFocusEffect: (callback: () => undefined | (() => void)) => {
     const { useEffect } = jest.requireActual("react");
     useEffect(callback, [callback]);
   },

@@ -16,6 +16,7 @@ const session = vi.hoisted(() => ({
   refresh: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("./github-row", () => ({ GithubRow: () => null }));
 vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
@@ -65,7 +66,11 @@ vi.mock("@/components/common/page-layout", () => ({
 }));
 vi.mock("@/components/common/page-header", () => ({ PageHeader: () => null }));
 vi.mock("@/components/common/form-actions", () => ({
-  FormActions: () => <button type="submit">save</button>,
+  FormActions: ({ form }: { form?: string }) => (
+    <button type="submit" form={form}>
+      save
+    </button>
+  ),
 }));
 vi.mock("@/components/common/section-card", () => ({
   SectionCard: ({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) => (
@@ -76,8 +81,8 @@ vi.mock("@/components/common/section-card", () => ({
   ),
 }));
 vi.mock("./danger-zone", () => ({ DangerZoneCard: () => null }));
-vi.mock("./email-card", () => ({ EmailCard: () => null }));
-vi.mock("./password-card", () => ({ PasswordCard: () => null }));
+vi.mock("./email-card", () => ({ EmailRow: () => null }));
+vi.mock("./password-card", () => ({ PasswordRow: () => null }));
 vi.mock("./meals-section", () => ({ MealsSection: () => null }));
 
 import { api } from "@/lib/api";
@@ -147,8 +152,8 @@ describe("My profile dietary answer (#933)", () => {
     const user = userEvent.setup();
     await render();
     await user.click(noneBox());
-    expect(picker().dataset.value).toBe("");
-    expect(notes().value).toBe("");
+    expect(picker()).toBeNull();
+    expect(notes()).toBeNull();
 
     await user.click(noneBox());
     expect(picker().dataset.value).toBe("3");

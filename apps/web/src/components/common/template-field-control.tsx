@@ -7,17 +7,24 @@
 // city/province/country object for city, string[] for
 // multiselect, boolean for checkbox.
 
+import { useRef } from "react";
 import { CityPicker } from "@/components/common/city-picker";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { DegreePicker } from "@/components/common/degree-picker";
 import { FileLink } from "@/components/common/file-link";
 import { FileUploadField } from "@/components/common/file-upload-field";
+import { LibraryPicker } from "@/components/common/library-picker";
 import { LinkifiedText } from "@/components/common/linkified-text";
 import { MultiSelect } from "@/components/common/multi-select";
+import {
+  type ProjectImageFile,
+  ProjectImagesField,
+} from "@/components/common/project-images-field";
 import { UniversityPicker } from "@/components/common/university-picker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   Select,
   SelectContent,
@@ -26,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { externalUrlHref } from "@/lib/external-url";
 import type { I18nText } from "@/lib/i18n";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
@@ -45,6 +53,7 @@ export interface TemplateFieldLike {
   label: I18nText;
   kind: string;
   required: boolean;
+  library_id?: string;
   options?: { value: string; label: I18nText }[];
   allowed_file_types?: string[];
   max_file_size_mb?: number;
@@ -66,21 +75,6 @@ export interface TemplateFieldLike {
 const NONE = "__none__";
 const MAXIMUM_BIRTH_AGE = 120;
 
-/**
- * Template URL validation accepts a hostname without a protocol. Browsers,
- * however, interpret that form as an internal relative path, so add HTTPS
- * before rendering a submitted answer as a link.
- */
-export function externalUrlHref(value: string): string | null {
-  const candidate = /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
-  try {
-    const url = new URL(candidate);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Stable ids let labels, validation messages, and focus recovery share one contract. */
 export function templateFieldId(fieldKey: string, applicationId?: number): string {
   const scope = applicationId == null ? "staff" : `application-${applicationId}`;
@@ -91,26 +85,31 @@ export function templateFieldId(fieldKey: string, applicationId?: number): strin
 export function TemplateFieldControl({
   field,
   value,
-  onChange,
+  onChange: onValueChange = () => {},
   disabled,
   lang,
   error,
   applicationId,
+  uploadPath,
+  downloadUrl,
   responseId,
   inDialog = false,
   sharedWithSponsors,
   onSharedWithSponsorsChange,
   onExternalLinkClick,
-  onBlur,
+  onBlur: onFieldBlur,
+  files = [],
 }: {
   field: TemplateFieldLike;
   value: FieldValue;
-  onChange: (value: FieldValue) => void;
+  onChange?: (value: FieldValue) => void;
   disabled?: boolean;
   lang: Language;
   error?: string;
   /** Enables file upload for an applicant response or staff correction. */
   applicationId?: number;
+  uploadPath?: string;
+  downloadUrl?: string;
   /** Existing response being corrected by staff. */
   responseId?: number;
   inDialog?: boolean;
@@ -122,10 +121,19 @@ export function TemplateFieldControl({
    */
   sharedWithSponsors?: boolean;
   onSharedWithSponsorsChange?: (value: boolean) => void;
+  /** H16: uploaded project files, so photo answers can show their previews. */
+  files?: ProjectImageFile[];
   /** Called when a read-only URL answer is opened in a new tab. */
   onExternalLinkClick?: () => void;
-  onBlur?: () => void;
+  onBlur?: (value: FieldValue) => void;
 }) {
+  const latestValue = useRef(value);
+  latestValue.current = value;
+  const onChange = (next: FieldValue) => {
+    latestValue.current = next;
+    onValueChange(next);
+  };
+  const onBlur = () => onFieldBlur?.(latestValue.current);
   const { t } = useLocale();
   const label = pickText(field.label, lang);
   const options = (field.options ?? []).map((o) => ({
@@ -151,6 +159,22 @@ export function TemplateFieldControl({
 
   let control: React.ReactNode;
   switch (field.kind) {
+    case "library":
+      control = (
+        <LibraryPicker
+          onBlur={onBlur}
+          libraryId={field.library_id}
+          value={Array.isArray(value) ? value : []}
+          onChange={onChange}
+          disabled={disabled}
+          id={id}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          inDialog={inDialog}
+        />
+      );
+      break;
     case "textarea":
       control = isReadOnlyUrl ? (
         <a
@@ -189,6 +213,9 @@ export function TemplateFieldControl({
           disabled={disabled}
         >
           <SelectTrigger
+            onBlur={(event) => {
+              if (event.currentTarget.getAttribute("aria-expanded") !== "true") onBlur();
+            }}
             id={id}
             className="w-full"
             aria-labelledby={labelId}
@@ -278,6 +305,23 @@ export function TemplateFieldControl({
         />
       );
       break;
+    case "phone":
+      control = (
+        <PhoneInput
+          id={id}
+          name={field.key}
+          placeholder={customPlaceholder || undefined}
+          value={typeof value === "string" ? value : ""}
+          onChange={onChange}
+          onBlur={onBlur}
+          disabled={disabled}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+          aria-invalid={hasError || undefined}
+          aria-required={field.required || undefined}
+        />
+      );
+      break;
     case "birth_year":
       control = (
         <Input
@@ -324,9 +368,12 @@ export function TemplateFieldControl({
       const shareId = `${id}-shared-with-sponsors`;
       control = (
         <div className="space-y-2">
-          {applicationId != null ? (
+          {applicationId != null || uploadPath ? (
             <FileUploadField
               applicationId={applicationId}
+              uploadPath={uploadPath}
+              downloadUrl={downloadUrl}
+              fileName={files.find((file) => file.objectKey === value)?.fileName}
               responseId={responseId}
               fieldKey={field.key}
               value={typeof value === "string" ? value : ""}
@@ -342,7 +389,7 @@ export function TemplateFieldControl({
               aria-invalid={hasError || undefined}
             />
           ) : value ? (
-            <FileLink value={String(value)} />
+            <FileLink value={downloadUrl ?? String(value)} />
           ) : (
             <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
           )}
@@ -370,6 +417,24 @@ export function TemplateFieldControl({
       );
       break;
     }
+    case "images":
+      control = (
+        <ProjectImagesField
+          id={id}
+          uploadPath={uploadPath}
+          value={Array.isArray(value) ? value : []}
+          files={files}
+          onChange={(keys) => {
+            onChange(keys);
+            onBlur?.();
+          }}
+          disabled={disabled}
+          maxSizeMb={field.max_file_size_mb}
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
+        />
+      );
+      break;
     case "degree":
       control = (
         <DegreePicker
@@ -414,6 +479,7 @@ export function TemplateFieldControl({
       // in string ids — convert on the way in and out.
       control = (
         <UniversityPicker
+          onBlur={onBlur}
           value={value != null && value !== "" ? String(value) : ""}
           onChange={(v) => onChange(v ? Number(v) : null)}
           disabled={disabled}

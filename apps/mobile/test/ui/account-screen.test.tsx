@@ -29,8 +29,6 @@ const mockMeContext = {
     dni: null,
     badgeId: null,
     language: "en",
-    secondaryEmail: null,
-    secondaryEmailVerified: false,
     foodIntolerances: [],
     foodIntoleranceNotes: null,
     shirtSize: null,
@@ -219,7 +217,6 @@ jest.mock("@/lib/i18n", () => {
       accountApp: "App",
       accountAccount: "Account",
       statisticsStaffOnly: "Statistics are available to staff accounts only.",
-      accountSecondaryEmail: "Secondary email",
       accountFoodIntolerances: "Food intolerances",
       accountNetworkingProfile: "Edit networking profile",
       accountLegalTitle: "Legal",
@@ -395,7 +392,6 @@ describe("account removal UI flow", () => {
     expect(screen.getByText("Account")).toBeTruthy();
     expect(screen.getByText("Legal")).toBeTruthy();
     expect(screen.getByText("Shirt size")).toBeTruthy();
-    expect(screen.getByText("Secondary email")).toBeTruthy();
     expect(screen.queryByText("Staff")).toBeNull();
     expect(screen.getByRole("button", { name: "Storage" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Delete account" })).toBeTruthy();

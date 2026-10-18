@@ -199,6 +199,12 @@ below.
   storing it) — a transient server failure retries and can actually
   succeed on the next attempt, rather than replaying the same 500
   forever (issue #534).
+- Queued scans stop replaying after `SCANNER_REPLAY_MAX_AGE_DAYS` (6 days,
+  `@hackos/shared/idempotency`), one day inside the server's 7-day
+  `idempotency_keys` retention (#994). An older scan could re-execute once its
+  key is purged, so `replayPendingScans()` fails it locally with
+  `scan_replay_expired` without sending it; it stays in the sync queue for the
+  operator to log manually or discard.
 
 ## Navigation & tabs
 
@@ -255,15 +261,15 @@ distributed to other Expo Router apps without importing hackOS code.
   multipart `file` to `POST /api/me/photo` (removal is `DELETE`), each attempt
   under its own `Idempotency-Key`. The avatar shows a spinner meanwhile and
   `/api/me` is refetched afterwards: the API answers a new `?v=` route, which is
-  also the `loadApiImage` cache key, so every avatar reloads. Failures show a
+  also part of the image cache key, so every avatar reloads. Failures show a
   localized alert (denied camera access, rejected image, account being removed
   = 409, generic); the API has no other profile lock. `expo-image-picker`
   (config plugin in `app.json`, iOS usage strings; Android needs no extra
   permission) and `expo-image-manipulator` provide the native pieces.
-  `components/user-avatar.tsx` fetches the private `/api/users/:id/photo` route
-  with the session (`loadApiImage`, shown from memory: Android's image pipeline
-  drops a `Cookie` header on an `Image` source) and keeps the initials until it
-  arrives or if it cannot load. The items inside the native `Others` dropdown
+  `components/user-avatar.tsx` loads the private `/api/users/:id/photo` route
+  with `expo-image` and the session cookie as a request header (`useApiImage`;
+  React Native's own `Image` drops that header on Android, `expo-image` sends
+  it) and keeps the initials until it has drawn or if it cannot load. The items inside the native `Others` dropdown
   keep SF Symbols: UIMenu/Android menu items accept symbol names, not an
   authenticated remote image.
   `app/(tabs)/_layout.tsx` — reads capabilities from a shared `/api/me` fetch
@@ -396,6 +402,103 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
 
 ## Participant screens
 
+### My Projects (H16–H20, H38, H60; #1011)
+
+The existing personal `queue` tab and overflow route now open **My Projects**,
+a native stack (`app/(tabs)/queue/`): the list with a native large title, **New
+project** (`/queue/new`, a modal sheet with Cancel / Create in the header, the
+name field focused, Create disabled until valid or when the server's
+`canCreate` is false; successful creation atomically replaces the sheet with
+the project editor, avoiding a native dismissal/push race) and the **Invitations** inbox (`/queue/invites`: inviter
+and project per row, Decline / Accept glass buttons, the row leaves at once and
+returns with the server's reason on failure). The list shows every project as a
+grouped row with its draft/submitted state and a queue brief per challenge
+(position, wait, called, presenting) from `/api/queue/me`; an Invitations glass
+button appears above it only while invitations are pending. The live queue
+view is retained at `/projects/queue`, with its tutorial, pre-call
+notifications, SSE updates and polling. `/projects/:id` is the submission
+screen: the name field (its footer shows the save state and, when the server
+provides `submissionsCloseAt`, the deadline), grouped form sections, challenge
+rows, team with an Invite row, and a floating Submit / Resubmit glass button. A frozen submitted project (`canWithdraw`, inside the submission window) shows a **Withdraw submission** glass button instead, with a confirmation, which calls `POST /api/me/projects/:id/withdraw-submission`; the project becomes a draft again and leaves the gallery and queue until it is submitted again (H20, H21). Staff return and manual repositories stay web-only.
+Queue context lives on My Projects and the queue screen, not in the editor. Leaving a team uses the authenticated
+`DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
+external submission path remains in the native client.
+
+The reusable `DynamicForm` consumes `TemplateField` and `FormSection` from
+`@hackos/shared/forms`, the application/project schema. File fields use the
+system document picker; a file answer is one attachment row (thumbnail or
+document icon, name, type and size) that opens the in-app viewer
+(`components/file-viewer.tsx`: photos with pinch zoom, PDFs via
+`react-native-pdf`, Share in the header). Photo fields (`images`, project form
+only, up to `MAX_IMAGES_PER_FIELD`) open the system photo picker with
+multi-select; each photo is re-encoded on device as a JPEG of at most 2048 px
+(HEIC never reaches the API) and uploaded one by one with its own
+Idempotency-Key. The answer is a horizontal carousel of 4:3 tiles with a corner
+remove button and an Add photos tile; a tap opens `components/photo-carousel.tsx`
+(full screen, swipe between photos, pinch zoom, "2 / 5"). Uploads use
+project-scoped multipart requests with Expo `File` parts (Expo fetch does not
+serialize legacy React Native URI-only parts). Required answers are validated
+by the server on submission, without blocking drafts.
+`ProjectDraftWriter` serializes autosaves with optimistic revisions; newer
+edits survive an older save completing. A failed save retains answers for retry,
+and a conflict requires explicitly reloading the project. Writers live per
+project for the app session (`projectDraftWriter` in `lib/projects.ts`), not
+per screen: leaving the editor (back button or swipe) never blocks, saves and
+running uploads finish in the background (`trackProjectTask`), an upload that
+completes after the editor closed still saves its answer, and reopening the
+project or My Projects waits for them (`settleProjectDrafts`); answers that
+could not be saved are resumed by the next editor instead of dropped.
+
+Activity reminders are scheduled on the device (`lib/local-reminders.ts`,
+`lib/use-local-reminders.ts`, mounted as `LocalReminders` in `app/_layout.tsx`);
+see [notifications.md](./notifications.md#device-local-activity-reminders-h51-h59)
+for the sync triggers, the 50-reminder budget and the server fallback.
+
+Gallery list/detail (`/projects/gallery`, `/projects/:id?gallery=1`) use the
+server's phase/audience projection, never a persisted mobile gallery cache. The last result per account and
+filter is kept in memory only: returning from a project shows it untouched and
+refetches quietly only after 30 s, and the list never blanks while refreshing.
+Before the gallery opens (`project_gallery_opens_at`, unset = closed) the API
+answers 403 with `details.reason` `gallery_closed` (and `opensAt`) or
+`gallery_audience`; the gallery shows "The gallery opens …" / "The gallery
+isn't open yet" instead of a permission error. Project staff (PROJECTS_READ)
+browse it at any time. Search and challenge filters are paginated; outdated responses cannot replace
+a newer filter result. The gallery listens to the `domain:projects`, `domain:directory` and
+`public-content` streams: any signal schedules one quiet refresh after a random
+0–3 s delay (re-reading the pages already shown), and a 60 s poll runs only while one of
+those streams is disconnected (`useStreamRefresh`, also used by the schedule, reminders
+and challenge brief screens). A refresh merges by project id, so unchanged rows are not repainted. Only returned member photos and published winner fields
+are rendered. The gallery photo follows the networking-profile photo toggle,
+which is the only photo control; My Projects has none. Members appear by name
+per H18. Challenge rows on the project page and editor open the challenge brief
+(`/projects/challenge?challengeId=`, `components/challenge-detail.tsx`): the
+company (logo, name, website), description, public evaluation criteria and
+prizes from `GET /api/public/challenges`, plus a Projects row to the filtered
+gallery only once the gallery answers with projects for it (it is 403 before
+publication). A company's challenges in the diary open the same brief as a
+sheet stacked over the company sheet. Each project on a profile opens its page;
+the server decides who may read it. The challenge filter is the native filter menu (multi-select, kept open while choosing; the glass toolbar button is the only filter control) so it scales past a dozen challenges.
+
+Several projects list as one grouped row section (name, draft/submitted,
+chevron); the editor lists the chosen challenges (mandatory ones with a lock) and an
+Add challenge row that opens a picker sheet (`/projects/challenges?id=`,
+presented modally like Invite teammate, with a confirm circle): mandatory
+challenges pinned and locked under "Required", every other challenge below with
+checkmarks and native search, so any number of challenges stays usable; changes
+apply at once and revert with the server's reason, and everything is read-only
+when the server closes editing. A 403 from the project or gallery reads shows
+the permission message without a retry action (retrying cannot change the
+audience), 404/403 on gallery detail likewise. A failed invitation read does not
+hide the participant's projects, and a failed accept/decline refreshes the
+invitation list. The Invite teammate sheet suggests the participant's diary
+contacts (people whose badge they scanned, minus current members), filtered
+by what is typed; a contact is invited by account (`{ userId }`, accepted by
+the API only for the inviter's own diary contacts), anyone else by email. Uploads surface server rejections (413 uses the too-large copy).
+
+Native UI fixtures exercise the screen contract and autosave concurrency;
+they are not device screenshots or proof of native toolbar behavior.
+
+
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
   `others/account.tsx`, and `components/wallet-screen.tsx` (an overlay of
   Account, or `others/wallet` for deep links) — the five participant screens. API-backed screens expose
@@ -473,7 +576,15 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
   Statistics opens `app/(tabs)/others/statistics.tsx`, with personal scan
   counts and a link to scan history; Legal opens
   `app/(tabs)/others/legal.tsx`, which keeps the privacy policy and terms links
-  together. Sign out is the final action on the main account screen. Its Delete
+  together with Open-source licenses (`app/(tabs)/others/licenses/`,
+  `components/licenses-screen.tsx`): every npm package in the shipped
+  JavaScript bundle with its notice truncated to four lines and a link to its
+  source repository (from the manifest's `repository`, else `homepage`), under
+  a compact transparent header; a package opens its full notice. The list is `assets/licenses.json`, generated from the iOS and Android
+  export source maps by `pnpm --filter @hackos/mobile generate:licenses`
+  (`scripts/generate-licenses.mjs`); rerun it and commit the result whenever a
+  dependency is added, removed or upgraded. Third-party native libraries
+  vendored by those packages (CocoaPods, Gradle) are not listed yet. Sign out is the final action on the main account screen. Its Delete
   account row opens a
   dedicated page that reads `GET /api/me/removal-eligibility`: the page has a
   consequence screen and an inline verification screen, with no progress
@@ -741,8 +852,10 @@ Mobile filter triggers draw one background: standalone `FilterMenu` owns its cir
   connection message only when the request never got a response) in a banner
   at the top of the form, scrolled into view. The schedule has no mobile push
   channel (`content.schedule.changed` rides the public content topic), so the
-  list and detail screens refetch on focus and foreground and poll every
-  `SCHEDULE_POLL_MS` (60 s) while focused; both support pull-to-refresh. On Android, manager schedules also mount one
+  list and detail screens refetch on focus and foreground and on every
+  `public-content` signal (`useStreamRefresh`, random 0–3 s delay; the
+  `SCHEDULE_POLL_MS` (60 s) poll runs only while focused and that stream is
+  disconnected); both support pull-to-refresh. On Android, manager schedules also mount one
   native gesture on the `SectionList`; each row waits for that vertical gesture
   to fail before its horizontal swipe can activate, keeping diagonal/vertical
   drags in the list (issue #626). The row's `hitSlop` additionally excludes its
@@ -839,7 +952,7 @@ person's full profile from `GET /api/directory/:userId` (the only directory
 route left; there is no list and no Save, since only a scan adds someone):
 large photo or initials, name, headline, Favourite / Note / CV tiles (the Note
 tile reads "Edit note" once a note exists, and the note section appears only
-then), bio, links, location (a `mappin`), project or work group, challenges and
+then), bio, links, location (a `mappin`), project, challenges and
 "Remove from diary", which then returns to the diary. iOS uses the transparent native detail
 header (`transparentDetailHeaderOptions`, as the scanner's person detail), so
 no bar covers the centred avatar; Android floats its own glass back button.
@@ -1030,7 +1143,8 @@ the emulator reports the hole to apps but does not paint it black), and with Rem
 neck). On a device without a cutout the plain collapse must be unchanged.
 The CV route needs the session, so it is
 downloaded with the session cookie (`expo-file-system`) into the cache and shown
-in the in-app viewer (`components/cv-viewer.tsx`): a page-sheet modal titled
+in the in-app viewer (`components/cv-viewer.tsx`, a CV-worded wrapper of the
+shared `components/file-viewer.tsx`): a page-sheet modal titled
 with the person's name, a circular close button, and pages that scroll with
 pinch and double-tap zoom, rendered by the native `react-native-pdf` (with its
 peer `react-native-blob-util`). Share stays in the viewer header for anyone who
@@ -1043,8 +1157,15 @@ client and store builds must be rebuilt; Jest mocks it in `jest.setup.js`. The
 app does not show the user's own
 CV anywhere yet, so the viewer has one caller. A hidden profile and a person the reader may not open both answer 404
 and show one "Profile not available" state. Photos are authenticated API
-routes: `lib/directory.ts` fetches them with the session and shows them from
-memory (Android's image pipeline drops a `Cookie` header), never from disk.
+routes: `useApiImage` (`components/person-avatar.tsx`) hands `expo-image` the
+`apiImageSource` from `lib/directory.ts` — the session cookie as a header and a
+cache key tagged with the session — and every caller keeps
+`cachePolicy="memory"`, so a photo is never written to disk and one hidden later
+is gone after the next launch. The fallback (initials or symbol) stays until the
+photo has drawn. Public sponsor logos use `expo-image`'s default disk cache.
+Skia, which decodes bytes itself, still reads photos through `loadApiImage`
+(an in-memory data URI cache). **Native dependency:** `expo-image` needs a
+rebuilt development client and store build.
 
 **Companies** is a sticker album (`components/company-album.tsx`) from
 `GET /api/me/diary/sponsors`: a progress ring with collected / total, then a
@@ -1252,18 +1373,12 @@ rooms as chips, the same way the participant's My Queue card does. Tapping a res
 shown on a room card — pushes `components/team-operations-screen.tsx`
 (`/(tabs)/others/team/[entryId]`), a detail view built on the same layout as
 the participant's own queue card but with the extra context only an
-operator needs: full member emails, their membership origin (automatic
-primary-email match, verified secondary-email match, staff link, unmatched,
-or staff-added), repo/Devpost/demo links, and the entry's `queue_history`
-timeline. A caller with `projects:edit` (or `*`) can search the
-project-edit candidate directory (live typeahead), add a selected account,
-and remove a member after native confirmation. Team rows now also support
-swipe-to-reveal destructive actions (notification center style): "Remove
-member" for manual links and "Unlink secondary account" when the match came
-from a verified secondary email. Queue access alone never exposes those
-controls. Imported Devpost participants are removed through the Devpost
-participant endpoint; staff-added members use the repository-member
-endpoint, so a correction preserves the imported-record audit trail.
+operator needs: full member emails, repository/demo links and the entry's
+`queue_history` timeline. A caller with `projects:edit` (or `*`) can search
+the project-edit candidate directory, add a selected account, and remove a
+member after native confirmation. Team rows support swipe-to-reveal removal
+through the single repository-member endpoint. Queue access alone never
+exposes those controls.
 Re-notification uses the existing
 idempotent `notify-enter` transition with a React Native-safe generated
 key. On top of the existing 10s poll, the screen opens
@@ -2264,3 +2379,11 @@ progress parsing are shared too. Native rendering, ISO date inputs and
 SecureStore access stay in this app. See
 [shared client models](./notifications.md#shared-client-models-1001) for the
 trimming/null decisions and the unchanged announcement fallback policy.
+
+### Question-owned library fields
+
+Dynamic forms render `library` fields with a searchable native checklist and an
+inline proposal action. Selections and new proposals have no count limit. The
+catalogue belongs to its question; curation remains in the web form editor.
+Read-only projects display the saved names, including historical answers after
+catalogue deletion. See [question-owned libraries](./form-libraries.md).

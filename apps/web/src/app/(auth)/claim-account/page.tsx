@@ -34,9 +34,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { ApiError, api } from "@/lib/api";
+import { signIn } from "@/lib/auth-client";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
+import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
 import { withReturnPath } from "@/lib/return-path";
+import { useSessionContext } from "@/lib/session";
 import type { InviteLookup, Language } from "@/lib/types";
 
 function claimSchema(t: Translate) {
@@ -90,12 +93,15 @@ function ClaimInner() {
   const schema = useMemo(() => claimSchema(t), [t]);
   const token = useSearchParams().get("token");
   const router = useRouter();
+  const { refresh } = useSessionContext();
   const [lookup, setLookup] = useState<InviteLookup | null | "error">(null);
   const [done, setDone] = useState(false);
   const { sizes: shirtSizes, error: shirtSizesError, reload: reloadShirtSizes } = useShirtSizes();
   const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
 
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       email: "",
@@ -142,7 +148,7 @@ function ClaimInner() {
       return;
     }
     try {
-      await api.post("/api/invites/accept", {
+      const account = await api.post<{ email: string }>("/api/invites/accept", {
         token,
         ...(lookup !== null && lookup !== "error" && lookup.reusable
           ? { email: values.email?.trim().toLowerCase() }
@@ -157,6 +163,20 @@ function ClaimInner() {
           ? { foodIntoleranceNotes: values.foodIntoleranceNotes.trim() }
           : {}),
       });
+      // H10: the new account enters its profile step in the same flow.
+      try {
+        const result = await signIn.email({ email: account.email, password: values.password });
+        if (!result.error) {
+          resetNetworkingOnboardingDeferrals();
+          await refresh();
+          router.push(
+            destinationForKind(lookup && lookup !== "error" ? lookup.kind : "participant"),
+          );
+          return;
+        }
+      } catch {
+        /* Account creation succeeded; offer sign-in recovery below. */
+      }
       setDone(true);
     } catch (err) {
       form.setError("root", {

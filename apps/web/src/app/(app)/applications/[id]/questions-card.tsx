@@ -35,10 +35,12 @@ import { DotsThreeVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsThreeV
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
 import { HashIcon } from "@phosphor-icons/react/dist/csr/Hash";
+import { ImagesIcon } from "@phosphor-icons/react/dist/csr/Images";
 import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { PaperclipIcon } from "@phosphor-icons/react/dist/csr/Paperclip";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
+import { PhoneIcon } from "@phosphor-icons/react/dist/csr/Phone";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { RadioButtonIcon } from "@phosphor-icons/react/dist/csr/RadioButton";
 import { TextAlignLeftIcon } from "@phosphor-icons/react/dist/csr/TextAlignLeft";
@@ -51,6 +53,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { dragOverlayDropAnimation, useReducedDragMotion } from "@/components/common/drag-handle";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
+import { LibraryManager } from "@/components/common/library-manager";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -93,6 +96,7 @@ import {
   type FieldValidation,
   type FormSection,
   OPTION_KINDS,
+  PROJECT_BUILDER_FIELD_KINDS,
   type TemplateField,
 } from "../lib";
 import { generatedFieldKey } from "../workflow";
@@ -199,8 +203,17 @@ export function QuestionsCard({
   form,
   onSaved,
   onDirtyChange,
+  saveDefinition,
 }: {
-  form: ApplicationForm;
+  form: Pick<ApplicationForm, "id" | "name" | "template" | "sections"> &
+    Partial<Pick<ApplicationForm, "ask_shirt_size" | "ask_food_intolerances">>;
+  /** H16: projects persist the same form schema through their own endpoint. */
+  saveDefinition?: (definition: {
+    template: TemplateField[];
+    sections: FormSection[];
+    field_renames: { from: string; to: string }[];
+    library_deletions: string[];
+  }) => Promise<unknown>;
   onSaved: () => Promise<void>;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
@@ -220,6 +233,18 @@ export function QuestionsCard({
   );
   const dragging = dragActive !== null;
   const [saving, setSaving] = useState(false);
+  const [libraryDirty, setLibraryDirty] = useState(false);
+  const [discardLibraryEdits, setDiscardLibraryEdits] = useState<(() => void) | null>(null);
+  const requestLibraryAction = (action: () => void) => {
+    if (libraryDirty) setDiscardLibraryEdits(() => action);
+    else action();
+  };
+  const requestFieldChange = (next: string | null) =>
+    requestLibraryAction(() => setActiveFieldId(next));
+  const [libraryDeletions, setLibraryDeletions] = useState<string[]>([]);
+  const [libraryRemoval, setLibraryRemoval] = useState<{ id: string; kind?: FieldKind } | null>(
+    null,
+  );
   const [preview, setPreview] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [missingReservedKeys, setMissingReservedKeys] = useState<string[] | null>(null);
@@ -243,8 +268,8 @@ export function QuestionsCard({
   }, [form.template, form.sections, saveState]);
 
   useEffect(() => {
-    onDirtyChange?.(saveState !== "saved");
-  }, [saveState, onDirtyChange]);
+    onDirtyChange?.(saveState !== "saved" || libraryDirty);
+  }, [saveState, onDirtyChange, libraryDirty]);
 
   // What the applicant actually sees: custom questions plus whatever
   // shirt-size/dietary fields Form settings' logistics toggles add at submit
@@ -252,12 +277,12 @@ export function QuestionsCard({
   // would silently hide the very fields those toggles turn on. Those synthetic
   // fields are tagged with the reserved Logistics section, so they group under
   // their own header instead of dangling as ungrouped fields.
-  const hasLogisticsFields = form.ask_shirt_size || form.ask_food_intolerances;
+  const hasLogisticsFields = Boolean(form.ask_shirt_size || form.ask_food_intolerances);
   const previewFields = [
     ...fields,
     ...logisticsPreviewFields(
-      form.ask_shirt_size,
-      form.ask_food_intolerances,
+      form.ask_shirt_size ?? false,
+      form.ask_food_intolerances ?? false,
       intolerances,
       shirtSizes,
     ),
@@ -267,15 +292,20 @@ export function QuestionsCard({
   const blocks = buildBlocks(fields, sections);
   const ungroupedBlock = blocks[0];
 
-  // #935: a form has at most one profile CV field, so choosing one clears the rest.
+  // #935/H16: a form has at most one profile CV field and one project
+  // description field, so choosing one clears the rest.
   const update = (id: string, patch: Partial<TemplateField>) =>
     setFields((prev) =>
       prev.map((f) =>
         f._id === id
           ? { ...f, ...patch }
-          : patch.profile_cv && f.profile_cv
-            ? { ...f, profile_cv: false }
-            : f,
+          : {
+              ...f,
+              ...(patch.profile_cv && f.profile_cv ? { profile_cv: false } : {}),
+              ...(patch.project_description && f.project_description
+                ? { project_description: false }
+                : {}),
+            },
       ),
     );
 
@@ -304,12 +334,20 @@ export function QuestionsCard({
       return next;
     });
 
-  const remove = (id: string) => {
+  const applyRemove = (id: string) => {
     setSaveState("unsaved");
     setFields((prev) => prev.filter((f) => f._id !== id));
     setActiveFieldId((prev) => (prev === id ? null : prev));
   };
 
+  const remove = (id: string) => {
+    const field = fields.find((item) => item._id === id);
+    if (field?.library_id) {
+      setLibraryRemoval({ id });
+      return;
+    }
+    applyRemove(id);
+  };
   const add = (kind: FieldKind = "text") => {
     setSaveState("unsaved");
     const field = newField(fields.length, kind);
@@ -332,6 +370,7 @@ export function QuestionsCard({
       const original = prev[i];
       const copy: EditableField = {
         ...original,
+        library_id: undefined,
         _id: mkId(),
         retention_mode: "none",
         anonymous_audit_dimension: undefined,
@@ -522,7 +561,7 @@ export function QuestionsCard({
     // with the applicant's profile, so this is skippable.
     const presentKeys = new Set(fields.map((f) => f.key.trim().toLowerCase()));
     const missing = RESERVED_FIELD_KEYS.map((r) => r.key).filter((k) => !presentKeys.has(k));
-    if (missing.length > 0) {
+    if (!saveDefinition && missing.length > 0) {
       setMissingReservedKeys(missing);
       return;
     }
@@ -537,8 +576,9 @@ export function QuestionsCard({
       // PATCH /api/applications/:id { template, sections } (APPLICATIONS_MANAGE).
       // The server re-validates with templateSchema/sectionsSchema (unique
       // keys, option kinds, every field.section_key resolves to a section).
-      await api.patch<ApplicationForm>(`/api/applications/${form.id}`, {
+      const definition = {
         template: fields.map(serializeApplicationField),
+        library_deletions: libraryDeletions,
         field_renames: fields.flatMap((field) => {
           const previous = originalFieldsRef.current.get(field._id);
           return previous && previous.key !== field.key && previous.kind === field.kind
@@ -550,9 +590,12 @@ export function QuestionsCard({
           title: s.title,
           ...(hasI18nText(s.description) ? { description: s.description } : {}),
         })),
-      });
+      };
+      if (saveDefinition) await saveDefinition(definition);
+      else await api.patch<ApplicationForm>(`/api/applications/${form.id}`, definition);
       await onSaved();
       setSaveState("saved");
+      setLibraryDeletions([]);
       toast.success(t("questionsSaved"), { compactTitle: t("saveQuestions") });
     } catch (e) {
       setSaveState("error");
@@ -572,6 +615,7 @@ export function QuestionsCard({
           <SortableField key={field._id} id={field._id}>
             {(drag) => (
               <FieldEditor
+                fieldId={field._id}
                 field={field}
                 availableSections={sections}
                 index={i}
@@ -579,13 +623,22 @@ export function QuestionsCard({
                 primaryLocale={language}
                 existingKeys={fields.filter((f) => f._id !== field._id).map((f) => f.key)}
                 dragHandle={<DragHandle {...drag} label={t("dragToReorder")} />}
+                projectMode={Boolean(saveDefinition)}
+                formId={form.id}
+                onLibraryDirtyChange={setLibraryDirty}
                 active={activeFieldId === field._id}
-                onActivate={() => setActiveFieldId(field._id)}
-                onDeactivate={() => setActiveFieldId(null)}
+                onActivate={() => requestFieldChange(field._id)}
+                onDeactivate={() => requestFieldChange(null)}
                 onChange={(patch) => updateUnsaved(field._id, patch)}
-                onKind={(k) => setKind(field._id, k)}
+                onKind={(k) => {
+                  if (field.library_id && k !== "library") {
+                    setLibraryRemoval({ id: field._id, kind: k });
+                    return;
+                  }
+                  setKind(field._id, k);
+                }}
                 onMove={(dir) => moveWithinBlock(field._id, dir)}
-                onDuplicate={() => duplicateField(field._id)}
+                onDuplicate={() => requestLibraryAction(() => duplicateField(field._id))}
                 onRemove={() => remove(field._id)}
               />
             )}
@@ -598,6 +651,7 @@ export function QuestionsCard({
   return (
     <SectionCard
       variant="plain"
+      stickyFooter
       title={t("formFields")}
       action={
         <div className="flex flex-wrap gap-2">
@@ -611,11 +665,20 @@ export function QuestionsCard({
             <EyeIcon aria-hidden="true" />
             {t("preview")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={addSection}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => requestLibraryAction(addSection)}
+          >
             <PlusIcon aria-hidden="true" />
             {t("addSection")}
           </Button>
-          <AddFieldMenu onSelect={add} size="sm" />
+          <AddFieldMenu
+            projectMode={Boolean(saveDefinition)}
+            onSelect={(kind) => requestLibraryAction(() => add(kind))}
+            size="sm"
+          />
           <FormPreviewModal
             open={preview}
             onOpenChange={setPreview}
@@ -632,31 +695,71 @@ export function QuestionsCard({
             showIcon={!saving}
             className="mr-auto"
           />
-          <SubmitButton type="button" pending={saving} onClick={save}>
+          {libraryDirty && (
+            <span className="text-sm text-muted-foreground">{t("saveLibraryBeforeForm")}</span>
+          )}
+          <SubmitButton type="button" pending={saving} disabled={libraryDirty} onClick={save}>
             {t("saveQuestions")}
           </SubmitButton>
         </>
       }
     >
-      <Collapsible>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-            <CaretDownIcon aria-hidden="true" className="size-4" />
-            {t("reservedKeysToggle")}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="text-muted-foreground space-y-2 pt-2 pb-2 text-sm text-pretty">
-          <p>{t("reservedKeysDesc")}</p>
-          <ul className="list-disc space-y-1 pl-5">
-            {RESERVED_FIELD_KEYS.map((r) => (
-              <li key={r.key}>
-                <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>{" "}
-                {t(RESERVED_KEY_DESC[r.key])}
-              </li>
-            ))}
-          </ul>
-        </CollapsibleContent>
-      </Collapsible>
+      <AlertModal
+        open={discardLibraryEdits !== null}
+        onOpenChange={(open) => !open && setDiscardLibraryEdits(null)}
+        title={t("unsavedChanges")}
+        description={t("unsavedChangesConfirm")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("discardLibraryChanges")}
+        destructive
+        onConfirm={() => {
+          const element = document.querySelector(`[data-field-id="${activeFieldId}"]`);
+          const top = element?.getBoundingClientRect().top;
+          flushSync(() => discardLibraryEdits?.());
+          if (top !== undefined && element?.isConnected)
+            window.scrollBy({ top: element.getBoundingClientRect().top - top });
+          setDiscardLibraryEdits(null);
+        }}
+      />
+      <AlertModal
+        open={libraryRemoval !== null}
+        onOpenChange={(open) => !open && setLibraryRemoval(null)}
+        title={t("deleteFieldLibraryTitle")}
+        description={t("deleteFieldLibraryDescription")}
+        confirmLabel={t("remove")}
+        cancelLabel={t("cancel")}
+        destructive
+        onConfirm={() => {
+          if (!libraryRemoval) return;
+          const field = fields.find((item) => item._id === libraryRemoval.id);
+          if (field?.library_id)
+            setLibraryDeletions((ids) => [...new Set([...ids, field.library_id!])]);
+          if (libraryRemoval.kind) setKind(libraryRemoval.id, libraryRemoval.kind);
+          else applyRemove(libraryRemoval.id);
+          setLibraryRemoval(null);
+        }}
+      />
+      {!saveDefinition && (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
+              <CaretDownIcon aria-hidden="true" className="size-4" />
+              {t("reservedKeysToggle")}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="text-muted-foreground space-y-2 pt-2 pb-2 text-sm text-pretty">
+            <p>{t("reservedKeysDesc")}</p>
+            <ul className="list-disc space-y-1 pl-5">
+              {RESERVED_FIELD_KEYS.map((r) => (
+                <li key={r.key}>
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>{" "}
+                  {t(RESERVED_KEY_DESC[r.key])}
+                </li>
+              ))}
+            </ul>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
       <AlertModal
         open={missingReservedKeys !== null}
         onOpenChange={(open) => !open && setMissingReservedKeys(null)}
@@ -673,7 +776,13 @@ export function QuestionsCard({
           icon={ListChecksIcon}
           title={t("noQuestionsYet")}
           description={t("noQuestionsYetDesc")}
-          action={<AddFieldMenu onSelect={add} size="sm" />}
+          action={
+            <AddFieldMenu
+              projectMode={Boolean(saveDefinition)}
+              onSelect={(kind) => requestLibraryAction(() => add(kind))}
+              size="sm"
+            />
+          }
         />
       ) : (
         <DndContext
@@ -689,25 +798,25 @@ export function QuestionsCard({
             <div
               className="@container space-y-4"
               onClick={(e) => {
-                if (e.target === e.currentTarget) setActiveFieldId(null);
+                if (e.target === e.currentTarget) requestFieldChange(null);
               }}
             >
-              <div className="space-y-4">
-                {sections.length > 0 && (
-                  <p className="text-muted-foreground text-xs font-medium uppercase">
-                    {t("noSection")}
-                  </p>
-                )}
-                {renderFields(ungroupedBlock)}
-                <DroppableBlock
-                  id="ungrouped"
-                  className={dragging ? "min-h-6 rounded-lg" : undefined}
-                >
-                  {((sections.length > 0 && ungroupedBlock.fields.length === 0) || dragging) && (
-                    <EmptyBlockHint />
+              {(ungroupedBlock.fields.length > 0 || dragging) && (
+                <div className="space-y-4">
+                  {sections.length > 0 && ungroupedBlock.fields.length > 0 && (
+                    <p className="text-muted-foreground text-xs font-medium uppercase">
+                      {t("noSection")}
+                    </p>
                   )}
-                </DroppableBlock>
-              </div>
+                  {renderFields(ungroupedBlock)}
+                  <DroppableBlock
+                    id="ungrouped"
+                    className={dragging ? "min-h-6 rounded-lg" : undefined}
+                  >
+                    {dragging && <EmptyBlockHint />}
+                  </DroppableBlock>
+                </div>
+              )}
 
               <SortableContext
                 items={sections.map((s) => s._id)}
@@ -722,7 +831,10 @@ export function QuestionsCard({
                         <div className="space-y-4">
                           <section
                             aria-label={section.title[language] || section.key}
-                            className="space-y-4 rounded-lg border border-dashed bg-muted/20 p-3 sm:p-4"
+                            className={cn(
+                              "space-y-4",
+                              sectionIdx > 0 && "border-t border-border/60 pt-6",
+                            )}
                           >
                             <SectionEditor
                               section={section}
@@ -747,7 +859,10 @@ export function QuestionsCard({
                               {(blockFields.length === 0 || dragging) && <EmptyBlockHint />}
                             </DroppableBlock>
                             <AddFieldMenu
-                              onSelect={(kind) => addToSection(section.key, kind)}
+                              projectMode={Boolean(saveDefinition)}
+                              onSelect={(kind) =>
+                                requestLibraryAction(() => addToSection(section.key, kind))
+                              }
                               size="sm"
                               variant="ghost"
                               className="text-muted-foreground"
@@ -779,8 +894,17 @@ export function QuestionsCard({
               )}
 
               <div className="flex flex-wrap gap-2">
-                <AddFieldMenu onSelect={add} className="flex-1" />
-                <Button type="button" variant="outline" onClick={addSection} className="flex-1">
+                <AddFieldMenu
+                  projectMode={Boolean(saveDefinition)}
+                  onSelect={(kind) => requestLibraryAction(() => add(kind))}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => requestLibraryAction(addSection)}
+                  className="flex-1"
+                >
                   <PlusIcon aria-hidden="true" />
                   {t("addSection")}
                 </Button>
@@ -822,6 +946,7 @@ export function QuestionsCard({
 
 export function fieldKindLabel(kind: FieldKind, t: Translate): string {
   const map: Record<FieldKind, string> = {
+    library: t("fieldKindLibrary"),
     text: t("fieldKindText"),
     textarea: t("fieldKindTextarea"),
     select: t("fieldKindSelect"),
@@ -830,15 +955,18 @@ export function fieldKindLabel(kind: FieldKind, t: Translate): string {
     birth_year: t("fieldKindBirthYear"),
     date: t("fieldKindDate"),
     number: t("fieldKindNumber"),
+    phone: t("fieldKindPhone"),
     file: t("fieldKindFile"),
     university: t("fieldKindUniversity"),
     degree: t("fieldKindDegree"),
     city: t("fieldKindCity"),
+    images: t("fieldKindImages"),
   };
   return map[kind];
 }
 
 const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
+  library: ListChecksIcon,
   text: TextTIcon,
   textarea: TextAlignLeftIcon,
   select: RadioButtonIcon,
@@ -847,7 +975,9 @@ const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
   birth_year: CalendarIcon,
   date: CalendarIcon,
   number: HashIcon,
+  phone: PhoneIcon,
   file: PaperclipIcon,
+  images: ImagesIcon,
   university: GraduationCapIcon,
   degree: GraduationCapIcon,
   city: MapPinIcon,
@@ -866,6 +996,7 @@ function hasI18nText(v: I18nText | undefined): v is I18nText {
 export function serializeApplicationField(field: TemplateField): TemplateField {
   return {
     key: field.key.trim(),
+    ...(field.kind === "library" && field.library_id ? { library_id: field.library_id } : {}),
     label: field.label,
     kind: field.kind,
     required: field.required,
@@ -880,6 +1011,11 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
           ...(field.profile_cv ? { profile_cv: true } : {}),
         }
       : {}),
+    ...(field.project_description && (field.kind === "text" || field.kind === "textarea")
+      ? { project_description: true }
+      : {}),
+    ...(field.project_video && field.kind === "text" ? { project_video: true } : {}),
+    ...(field.judging_link && field.kind === "text" ? { judging_link: true } : {}),
     ...(field.section_key ? { section_key: field.section_key } : {}),
     ...(field.after_section_key ? { after_section_key: field.after_section_key } : {}),
     ...(hasI18nText(field.help_text) ? { help_text: field.help_text } : {}),
@@ -897,7 +1033,7 @@ export function serializeApplicationField(field: TemplateField): TemplateField {
 
 /** Kinds where the applicant types free text, so a custom placeholder is
  *  meaningful (choice/date/file/university kinds have their own UI instead). */
-const TYPED_KINDS = new Set<FieldKind>(["text", "textarea", "number"]);
+const TYPED_KINDS = new Set<FieldKind>(["text", "textarea", "number", "phone"]);
 
 function FieldKindIcon({ kind, className }: { kind: FieldKind; className?: string }) {
   const Icon = FIELD_KIND_ICON[kind];
@@ -907,11 +1043,14 @@ function FieldKindIcon({ kind, className }: { kind: FieldKind; className?: strin
 /** Choosing the answer format before creating the field avoids a blank,
  * generic question card and makes the next configuration step self-evident. */
 function AddFieldMenu({
+  projectMode = false,
   onSelect,
   size = "default",
   variant = "default",
   className,
 }: {
+  /** The project form also offers photo lists (H16). */
+  projectMode?: boolean;
   onSelect: (kind: FieldKind) => void;
   size?: "sm" | "default";
   variant?: "default" | "outline" | "ghost";
@@ -928,7 +1067,7 @@ function AddFieldMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {BUILDER_FIELD_KINDS.map((kind) => (
+        {(projectMode ? PROJECT_BUILDER_FIELD_KINDS : BUILDER_FIELD_KINDS).map((kind) => (
           <DropdownMenuItem key={kind} onSelect={() => onSelect(kind)}>
             <FieldKindIcon kind={kind} className="text-muted-foreground size-4" />
             {fieldKindLabel(kind, t)}
@@ -940,6 +1079,9 @@ function AddFieldMenu({
 }
 
 export function FieldEditor({
+  fieldId,
+  formId,
+  onLibraryDirtyChange,
   field,
   availableSections = [],
   index,
@@ -947,6 +1089,7 @@ export function FieldEditor({
   primaryLocale,
   existingKeys,
   dragHandle,
+  projectMode = false,
   active,
   onActivate,
   onDeactivate,
@@ -956,13 +1099,18 @@ export function FieldEditor({
   onDuplicate,
   onRemove,
 }: {
+  fieldId?: string;
   field: TemplateField;
   availableSections?: FormSection[];
   index: number;
   count: number;
+  formId?: number;
+  onLibraryDirtyChange?: (dirty: boolean) => void;
   primaryLocale: Language;
   existingKeys: string[];
   dragHandle?: React.ReactNode;
+  /** H16: project forms reuse this engine without application-only controls (retention, statistics, CV, sponsor sharing). */
+  projectMode?: boolean;
   active: boolean;
   onActivate: () => void;
   onDeactivate: () => void;
@@ -990,8 +1138,8 @@ export function FieldEditor({
     <div
       ref={active ? expandedHeaderRef : undefined}
       className={cn(
-        "bg-muted/30 flex items-center gap-1 rounded-control border px-1 py-1",
-        active && "bg-card sticky top-2 z-10",
+        "flex items-center gap-1 rounded-control py-1",
+        active && "bg-card sticky top-2 z-10 border-b border-border/60",
       )}
     >
       {dragHandle}
@@ -1057,8 +1205,9 @@ export function FieldEditor({
     return (
       <Surface
         ref={cardRef}
+        data-field-id={fieldId}
         padding="compact"
-        className="hover:border-primary/40 cursor-pointer space-y-3"
+        className="hover:border-primary/40 cursor-pointer space-y-1"
         onClick={(event) => {
           if (
             (event.target as HTMLElement).closest(
@@ -1073,6 +1222,11 @@ export function FieldEditor({
         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>{fieldKindLabel(field.kind, t)}</span>
           {field.required && <span>{t("required")}</span>}
+          {projectMode && field.project_description && (
+            <span>{t("projectDescriptionFieldLabel")}</span>
+          )}
+          {projectMode && field.project_video && <span>{t("projectVideoField")}</span>}
+          {projectMode && field.judging_link && <span>{t("projectJudgingLinkField")}</span>}
         </p>
       </Surface>
     );
@@ -1102,18 +1256,21 @@ export function FieldEditor({
   return (
     <Surface
       ref={cardRef}
+      data-field-id={fieldId}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
       className="border-l-primary scroll-mt-20 space-y-4 border-l-4"
     >
       {topRow}
 
-      <div className="grid gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem_9rem]">
+      <div className="grid items-start gap-3 @lg:grid-cols-[minmax(0,1fr)_12rem_9rem]">
         <div className="space-y-1.5">
-          <Label htmlFor={`field-label-${uid}`}>{t("primaryApplicantLabel")}</Label>
+          <Label htmlFor={`field-label-${uid}`}>
+            {t(projectMode ? "projectQuestionLabel" : "primaryApplicantLabel")}
+          </Label>
           <Input
             id={`field-label-${uid}`}
-            placeholder={t("primaryApplicantLabel")}
+            placeholder={t(projectMode ? "projectQuestionLabel" : "primaryApplicantLabel")}
             value={field.label[primaryLocale]}
             onChange={(e) => setLabel(primaryLocale, e.target.value)}
             className="text-base font-medium"
@@ -1126,7 +1283,7 @@ export function FieldEditor({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {FIELD_KINDS.map((k) => (
+              {FIELD_KINDS.filter((k) => projectMode || k !== "images").map((k) => (
                 <SelectItem key={k} value={k}>
                   <span className="flex items-center gap-2">
                     <FieldKindIcon kind={k} className="text-muted-foreground size-4 shrink-0" />
@@ -1202,6 +1359,17 @@ export function FieldEditor({
         />
       )}
 
+      {field.kind === "library" && (
+        <LibraryManager
+          libraryId={field.library_id}
+          onDirtyChange={onLibraryDirtyChange}
+          managePath={
+            projectMode
+              ? `/api/projects/form/libraries/${field.library_id}/manage`
+              : `/api/applications/${formId}/libraries/${field.library_id}/manage`
+          }
+        />
+      )}
       {field.help_text !== undefined && (
         <Input
           aria-label={t("descriptionLabel")}
@@ -1229,7 +1397,8 @@ export function FieldEditor({
             {LOCALES.filter((loc) => loc !== primaryLocale).map((loc) => (
               <div key={loc} className="space-y-1.5">
                 <Label htmlFor={`question-${uid}-${loc}`}>
-                  {t("primaryApplicantLabel")} ({loc.toUpperCase()})
+                  {t(projectMode ? "projectQuestionLabel" : "primaryApplicantLabel")} (
+                  {loc.toUpperCase()})
                 </Label>
                 <Input
                   id={`question-${uid}-${loc}`}
@@ -1292,173 +1461,181 @@ export function FieldEditor({
               onChange={setValidation}
             />
           )}
-          <div className="space-y-1.5">
-            <Label htmlFor={`retention-mode-${uid}`}>{t("anonymousAuditRetentionLabel")}</Label>
-            <Select
-              value={field.retention_mode ?? "none"}
-              onValueChange={(value) =>
-                onChange({
-                  retention_mode: value as "none" | "anonymous_audit",
-                  ...(value === "none" ? { anonymous_audit_dimension: undefined } : {}),
-                })
-              }
-            >
-              <SelectTrigger id={`retention-mode-${uid}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("anonymousAuditRetentionOff")}</SelectItem>
-                <SelectItem value="anonymous_audit">{t("anonymousAuditRetentionOn")}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-muted-foreground text-xs">{t("anonymousAuditRetentionHint")}</p>
-          </div>
-          {field.retention_mode === "anonymous_audit" && (
+          {!projectMode && (
             <>
-              <p role="alert" className="text-destructive text-pretty text-sm">
-                {t("anonymousAuditRetentionWarning")}
-              </p>
               <div className="space-y-1.5">
-                <Label htmlFor={`audit-dimension-${uid}`}>
-                  {t("anonymousAuditDimensionLabel")}
-                </Label>
-                <Input
-                  id={`audit-dimension-${uid}`}
-                  value={field.anonymous_audit_dimension ?? ""}
-                  onChange={(e) => onChange({ anonymous_audit_dimension: e.target.value || null })}
-                  placeholder={t("anonymousAuditDimensionPlaceholder")}
-                  aria-describedby={`audit-dimension-hint-${uid}`}
-                />
-                <p id={`audit-dimension-hint-${uid}`} className="text-muted-foreground text-xs">
-                  {t("anonymousAuditDimensionHint")}
-                </p>
-              </div>
-            </>
-          )}
-          <div className="flex items-center justify-between gap-3 border-t pt-4">
-            <Label htmlFor={`statistics-enabled-${uid}`} className="text-sm">
-              {t("includeInStatistics")}
-            </Label>
-            <Switch
-              id={`statistics-enabled-${uid}`}
-              checked={statisticsEnabled}
-              onCheckedChange={(enabled) =>
-                onChange({
-                  statistics: {
-                    ...(field.statistics ?? {}),
-                    enabled,
-                  },
-                })
-              }
-            />
-          </div>
-          {statisticsEnabled && (
-            <div className="grid gap-3 border-t pt-4 @md:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label htmlFor={`statistics-visualization-${uid}`}>
-                  {t("statisticsVisualizationLabel")}
-                </Label>
+                <Label htmlFor={`retention-mode-${uid}`}>{t("anonymousAuditRetentionLabel")}</Label>
                 <Select
-                  value={field.statistics?.visualization ?? "bar"}
-                  onValueChange={(visualization) =>
+                  value={field.retention_mode ?? "none"}
+                  onValueChange={(value) =>
                     onChange({
-                      statistics: {
-                        ...(field.statistics ?? { enabled: true }),
-                        enabled: true,
-                        visualization: visualization as "bar" | "pie" | "line",
-                      },
+                      retention_mode: value as "none" | "anonymous_audit",
+                      ...(value === "none" ? { anonymous_audit_dimension: undefined } : {}),
                     })
                   }
                 >
-                  <SelectTrigger id={`statistics-visualization-${uid}`}>
+                  <SelectTrigger id={`retention-mode-${uid}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bar">{t("chartTypeBar")}</SelectItem>
-                    <SelectItem value="pie">{t("chartTypePie")}</SelectItem>
-                    <SelectItem value="line">{t("chartTypeLine")}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`statistics-transformation-${uid}`}>
-                  {t("statisticsTransformationLabel")}
-                </Label>
-                <Select
-                  value={field.statistics?.transformation ?? "none"}
-                  onValueChange={(transformation) =>
-                    onChange({
-                      statistics: {
-                        ...(field.statistics ?? { enabled: true }),
-                        enabled: true,
-                        transformation: transformation as "none" | "age" | "study_level",
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger id={`statistics-transformation-${uid}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t("statisticsTransformationNone")}</SelectItem>
-                    <SelectItem value="age">{t("statisticsTransformationAge")}</SelectItem>
-                    <SelectItem value="study_level">
-                      {t("statisticsTransformationStudyLevel")}
+                    <SelectItem value="none">{t("anonymousAuditRetentionOff")}</SelectItem>
+                    <SelectItem value="anonymous_audit">
+                      {t("anonymousAuditRetentionOn")}
                     </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-muted-foreground text-xs">{t("anonymousAuditRetentionHint")}</p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor={`statistics-aggregation-${uid}`}>
-                  {t("statisticsAggregationLabel")}
+              {field.retention_mode === "anonymous_audit" && (
+                <>
+                  <p role="alert" className="text-destructive text-pretty text-sm">
+                    {t("anonymousAuditRetentionWarning")}
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`audit-dimension-${uid}`}>
+                      {t("anonymousAuditDimensionLabel")}
+                    </Label>
+                    <Input
+                      id={`audit-dimension-${uid}`}
+                      value={field.anonymous_audit_dimension ?? ""}
+                      onChange={(e) =>
+                        onChange({ anonymous_audit_dimension: e.target.value || null })
+                      }
+                      placeholder={t("anonymousAuditDimensionPlaceholder")}
+                      aria-describedby={`audit-dimension-hint-${uid}`}
+                    />
+                    <p id={`audit-dimension-hint-${uid}`} className="text-muted-foreground text-xs">
+                      {t("anonymousAuditDimensionHint")}
+                    </p>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center justify-between gap-3 border-t pt-4">
+                <Label htmlFor={`statistics-enabled-${uid}`} className="text-sm">
+                  {t("includeInStatistics")}
                 </Label>
-                <Select
-                  value={field.statistics?.aggregation ?? "count"}
-                  onValueChange={(aggregation) =>
+                <Switch
+                  id={`statistics-enabled-${uid}`}
+                  checked={statisticsEnabled}
+                  onCheckedChange={(enabled) =>
                     onChange({
                       statistics: {
-                        ...(field.statistics ?? { enabled: true }),
-                        enabled: true,
-                        aggregation: aggregation as "count" | "sum" | "average",
+                        ...(field.statistics ?? {}),
+                        enabled,
                       },
                     })
                   }
-                >
-                  <SelectTrigger id={`statistics-aggregation-${uid}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="count">{t("statisticsAggregationCount")}</SelectItem>
-                    <SelectItem value="sum">{t("statisticsAggregationSum")}</SelectItem>
-                    <SelectItem value="average">{t("statisticsAggregationAverage")}</SelectItem>
-                  </SelectContent>
-                </Select>
+                />
               </div>
-              {field.statistics?.transformation === "study_level" && (
-                <div className="space-y-1.5 @md:col-span-3">
-                  <Label htmlFor={`statistics-program-years-${uid}`}>
-                    {t("statisticsProgramYearsLabel")}
-                  </Label>
-                  <Input
-                    id={`statistics-program-years-${uid}`}
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={field.statistics.program_years ?? 4}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      onChange({
-                        statistics: {
-                          ...(field.statistics ?? { enabled: true }),
-                          enabled: true,
-                          program_years: value === "" ? undefined : Number(value),
-                        },
-                      });
-                    }}
-                  />
+              {statisticsEnabled && (
+                <div className="grid gap-3 border-t pt-4 @md:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`statistics-visualization-${uid}`}>
+                      {t("statisticsVisualizationLabel")}
+                    </Label>
+                    <Select
+                      value={field.statistics?.visualization ?? "bar"}
+                      onValueChange={(visualization) =>
+                        onChange({
+                          statistics: {
+                            ...(field.statistics ?? { enabled: true }),
+                            enabled: true,
+                            visualization: visualization as "bar" | "pie" | "line",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id={`statistics-visualization-${uid}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bar">{t("chartTypeBar")}</SelectItem>
+                        <SelectItem value="pie">{t("chartTypePie")}</SelectItem>
+                        <SelectItem value="line">{t("chartTypeLine")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`statistics-transformation-${uid}`}>
+                      {t("statisticsTransformationLabel")}
+                    </Label>
+                    <Select
+                      value={field.statistics?.transformation ?? "none"}
+                      onValueChange={(transformation) =>
+                        onChange({
+                          statistics: {
+                            ...(field.statistics ?? { enabled: true }),
+                            enabled: true,
+                            transformation: transformation as "none" | "age" | "study_level",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id={`statistics-transformation-${uid}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">{t("statisticsTransformationNone")}</SelectItem>
+                        <SelectItem value="age">{t("statisticsTransformationAge")}</SelectItem>
+                        <SelectItem value="study_level">
+                          {t("statisticsTransformationStudyLevel")}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`statistics-aggregation-${uid}`}>
+                      {t("statisticsAggregationLabel")}
+                    </Label>
+                    <Select
+                      value={field.statistics?.aggregation ?? "count"}
+                      onValueChange={(aggregation) =>
+                        onChange({
+                          statistics: {
+                            ...(field.statistics ?? { enabled: true }),
+                            enabled: true,
+                            aggregation: aggregation as "count" | "sum" | "average",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger id={`statistics-aggregation-${uid}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="count">{t("statisticsAggregationCount")}</SelectItem>
+                        <SelectItem value="sum">{t("statisticsAggregationSum")}</SelectItem>
+                        <SelectItem value="average">{t("statisticsAggregationAverage")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {field.statistics?.transformation === "study_level" && (
+                    <div className="space-y-1.5 @md:col-span-3">
+                      <Label htmlFor={`statistics-program-years-${uid}`}>
+                        {t("statisticsProgramYearsLabel")}
+                      </Label>
+                      <Input
+                        id={`statistics-program-years-${uid}`}
+                        type="number"
+                        min={1}
+                        max={12}
+                        value={field.statistics.program_years ?? 4}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          onChange({
+                            statistics: {
+                              ...(field.statistics ?? { enabled: true }),
+                              enabled: true,
+                              program_years: value === "" ? undefined : Number(value),
+                            },
+                          });
+                        }}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
 
@@ -1466,7 +1643,7 @@ export function FieldEditor({
           <div className="border-t pt-4">
             <p className="text-sm font-medium">{t("fileRestrictions")}</p>
             <div className="mt-3">
-              <FileRestrictionsEditor field={field} onChange={onChange} />
+              <FileRestrictionsEditor field={field} onChange={onChange} projectMode={projectMode} />
             </div>
           </div>
         )}
@@ -1531,6 +1708,30 @@ export function FieldEditor({
                 onCheckedChange={(checked) => onChange({ validation: checked ? {} : undefined })}
               >
                 {t("responseValidation")}
+              </DropdownMenuCheckboxItem>
+            )}
+            {projectMode && field.kind === "text" && (
+              <DropdownMenuCheckboxItem
+                checked={field.project_video ?? false}
+                onCheckedChange={(checked) => onChange({ project_video: checked })}
+              >
+                {t("projectVideoField")}
+              </DropdownMenuCheckboxItem>
+            )}
+            {projectMode && field.kind === "text" && (
+              <DropdownMenuCheckboxItem
+                checked={field.judging_link ?? false}
+                onCheckedChange={(checked) => onChange({ judging_link: checked })}
+              >
+                {t("projectJudgingLinkField")}
+              </DropdownMenuCheckboxItem>
+            )}
+            {projectMode && (field.kind === "text" || field.kind === "textarea") && (
+              <DropdownMenuCheckboxItem
+                checked={field.project_description ?? false}
+                onCheckedChange={(checked) => onChange({ project_description: checked })}
+              >
+                {t("projectDescriptionFieldLabel")}
               </DropdownMenuCheckboxItem>
             )}
           </DropdownMenuContent>
@@ -2018,11 +2219,13 @@ export function OptionsEditor({
 
 /** Upload restrictions for a "file" field: allowed extensions + size cap (H12). */
 export function FileRestrictionsEditor({
+  projectMode = false,
   field,
   onChange,
 }: {
   field: TemplateField;
   onChange: (patch: Partial<TemplateField>) => void;
+  projectMode?: boolean;
 }) {
   const { t } = useLocale();
   const restrictTypes = field.allowed_file_types !== undefined;
@@ -2075,28 +2278,32 @@ export function FileRestrictionsEditor({
         />
         <p className="text-muted-foreground text-xs">{t("blankMax10MbDesc")}</p>
       </div>
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={field.shareable_with_sponsors ?? false}
-          onCheckedChange={(v) => onChange({ shareable_with_sponsors: v })}
-          id="shareable-with-sponsors"
-        />
-        <Label htmlFor="shareable-with-sponsors" className="text-sm">
-          {t("shareableWithSponsorsLabel")}
-        </Label>
-      </div>
-      <p className="text-muted-foreground text-xs">{t("shareableWithSponsorsDesc")}</p>
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={field.profile_cv ?? false}
-          onCheckedChange={(v) => onChange({ profile_cv: v })}
-          id="profile-cv"
-        />
-        <Label htmlFor="profile-cv" className="text-sm">
-          {t("profileCvFieldLabel")}
-        </Label>
-      </div>
-      <p className="text-muted-foreground text-xs">{t("profileCvFieldDesc")}</p>
+      {!projectMode && (
+        <>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={field.shareable_with_sponsors ?? false}
+              onCheckedChange={(v) => onChange({ shareable_with_sponsors: v })}
+              id="shareable-with-sponsors"
+            />
+            <Label htmlFor="shareable-with-sponsors" className="text-sm">
+              {t("shareableWithSponsorsLabel")}
+            </Label>
+          </div>
+          <p className="text-muted-foreground text-xs">{t("shareableWithSponsorsDesc")}</p>
+          <div className="flex items-center gap-2">
+            <Switch
+              checked={field.profile_cv ?? false}
+              onCheckedChange={(v) => onChange({ profile_cv: v })}
+              id="profile-cv"
+            />
+            <Label htmlFor="profile-cv" className="text-sm">
+              {t("profileCvFieldLabel")}
+            </Label>
+          </div>
+          <p className="text-muted-foreground text-xs">{t("profileCvFieldDesc")}</p>
+        </>
+      )}
     </div>
   );
 }

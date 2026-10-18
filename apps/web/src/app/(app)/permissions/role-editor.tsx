@@ -134,6 +134,8 @@ export function RoleEditor({
 
   const schema = detailsSchema(t);
   const form = useForm<DetailsValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       name: role.name,

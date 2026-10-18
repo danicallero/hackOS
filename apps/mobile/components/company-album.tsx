@@ -1,8 +1,8 @@
-import { type ReactNode, useEffect, useRef } from "react";
+import { Image } from "expo-image";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
-  Image,
   Linking,
   Modal,
   Pressable,
@@ -13,9 +13,11 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { ChallengeSheet } from "@/components/challenge-detail";
 import { FavouriteStar } from "@/components/favourite-star";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
-import { DetailRow, NoteRow, QuickAction } from "@/components/profile-parts";
+import { NoteRow, QuickAction } from "@/components/profile-parts";
+import { NavRow } from "@/components/project-ui";
 import { SymbolView } from "@/components/symbol";
 import {
   collectionProgress,
@@ -177,7 +179,7 @@ function Medallion({
           <Image
             accessible={false}
             source={{ uri: logo }}
-            resizeMode="contain"
+            contentFit="contain"
             // Uncollected logos render as a flat silhouette of their shape.
             tintColor={collected ? undefined : (colors.tertiaryLabel as string)}
             style={{
@@ -354,6 +356,8 @@ export function CompanySheet({
   const { t, language } = useLocale();
   const insets = useSafeAreaInsets();
   const entry = item?.entry ?? null;
+  // H45: a challenge's brief stacks over this sheet (see `children`).
+  const [challengeId, setChallengeId] = useState<number | null>(null);
   const collectedOn = entry
     ? new Date(entry.createdAt).toLocaleDateString(language, { day: "numeric", month: "long" })
     : null;
@@ -455,7 +459,11 @@ export function CompanySheet({
                 {item.challenges.map((challenge, index) => (
                   <View key={challenge.id}>
                     {index > 0 ? <Separator inset={ROW_ICON_INSET} /> : null}
-                    <DetailRow icon="trophy" value={challenge.name} />
+                    <NavRow
+                      icon="trophy"
+                      title={challenge.name}
+                      onPress={() => setChallengeId(challenge.id)}
+                    />
                   </View>
                 ))}
               </Section>
@@ -489,6 +497,9 @@ export function CompanySheet({
             onPress={onClose}
           />
           {children}
+          {challengeId !== null ? (
+            <ChallengeSheet challengeId={challengeId} onClose={() => setChallengeId(null)} />
+          ) : null}
         </View>
       ) : null}
     </Modal>

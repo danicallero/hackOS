@@ -1,6 +1,6 @@
 "use client";
 
-import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { useCallback, useEffect } from "react";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -22,8 +22,10 @@ export function useScheduleLoader({
   setSelectedIds: React.Dispatch<React.SetStateAction<Set<number>>>;
   setEditingItem: React.Dispatch<React.SetStateAction<PublicScheduleItem | null>>;
 }) {
-  const liveRefresh = useAutoRefresh(canRead ? domainScope(SSE_TOPICS.CONTENT) : "", [
-    EVENTS.CONTENT_SCHEDULE_CHANGED,
+  // Schedule edits reach the browser as the payload-free public invalidation;
+  // the `content` topic itself carries staff notes and is not a subscribable scope.
+  const liveRefresh = useAutoRefresh(canRead ? REALTIME_SCOPES.PUBLIC_CONTENT : "", [
+    EVENTS.DATA_CHANGED,
   ]);
 
   const load = useCallback(

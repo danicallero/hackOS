@@ -12,8 +12,6 @@ export interface Me {
   dni: string | null;
   badgeId: string | null;
   language: string;
-  secondaryEmail: string | null;
-  secondaryEmailVerified: boolean;
   foodIntolerances: number[];
   foodIntoleranceNotes: string | null;
   shirtSize: string | null;
@@ -46,7 +44,7 @@ export interface Me {
   isSponsorRep: boolean;
   /** Current role-derived event entitlement — drives ticket/wallet exposure and participant-only nav. */
   hasEventAccess: boolean;
-  /** Has a project of their own (submission or Devpost participant) — drives My project nav visibility (issue #424). */
+  /** Has a project of their own — drives My project nav visibility (issue #424). */
   hasProject: boolean;
   /** Has at least one active queue entry — drives My queue nav visibility (issue #424). */
   hasQueueItems: boolean;
@@ -193,10 +191,14 @@ export interface EventConfig {
   hackingStartsAt: string | null;
   hackingEndsAt: string | null;
   showStartCountdown: boolean;
-  /** H19: participants may create their own project while enabled. */
-  participantsCanCreateProjects: boolean;
-  participantSelfServiceStartsAt: string | null;
-  participantSelfServiceEndsAt: string | null;
+  /** H17: event-time project phases, saved with the event category. */
+  projectDraftsOpenAt: string | null;
+  projectSubmissionsCloseAt: string | null;
+  projectDraftVisibility: "team_only" | "attendees" | "public";
+  projectGalleryOpensAt: string | null;
+  projectGalleryAudience: "staff" | "attendees" | "public";
+  projectMaxTeamSize: number | null;
+  projectGithubRequired: boolean;
   /** Optional common entry instant used for people accredited earlier. */
   presenceAutoEntryAt: string | null;
   /** Maximum time without an exit or activity signal before provisional time is invalidated. */

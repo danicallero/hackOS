@@ -3,37 +3,55 @@
 // The room's right column (H36-H39): who is presenting, their project, and
 // the presentation clock.
 
+import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { GitCommitIcon } from "@phosphor-icons/react/dist/csr/GitCommit";
+import { GitPullRequestIcon } from "@phosphor-icons/react/dist/csr/GitPullRequest";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
-import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { ContextualError } from "@/components/common/contextual-error";
+import { QueueStatusDot } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
+import { useProjectGithubActivity } from "@/components/projects/github-activity";
+import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
+import { useServerResource } from "@/hooks/use-server-resource";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
+import { API_URL } from "@/lib/env";
+import { externalUrlHref } from "@/lib/external-url";
 import { useLocale } from "@/lib/i18n";
 import {
   canTransition,
   preparationElapsedSeconds,
   presentationTimerState,
 } from "@/lib/judging-workspace";
-import {
-  collapseRepoQueueMemberships,
-  getRepoChallenges,
-  type QueueEntry,
-  type RepoChallenge,
-} from "@/lib/queue";
+import type { NativeProject } from "@/lib/native-projects";
+import { getRepoChallenges, type QueueEntry } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
+
+/** Opens the link in a new tab, then lets the evaluation window follow so it ends up in front. */
+function openProjectLink(
+  event: React.MouseEvent<HTMLAnchorElement>,
+  href: string,
+  onExternalOpen?: () => void,
+) {
+  if (!onExternalOpen) return;
+  event.preventDefault();
+  window.open(href, "_blank", "noopener,noreferrer");
+  onExternalOpen();
+}
 
 export function PresentationPanel({
   entry,
@@ -43,6 +61,10 @@ export function PresentationPanel({
   canJudge,
   canOperate,
   busy,
+  preparationSeconds,
+  presentationSeconds,
+  detailsOpen,
+  onExternalOpen,
   onEntryAction,
 }: {
   entry: QueueEntry | null;
@@ -53,6 +75,13 @@ export function PresentationPanel({
   canJudge: boolean;
   canOperate: boolean;
   busy: string | null;
+  /** Track's configured preparation allowance; null until loaded. */
+  preparationSeconds: number | null;
+  /** Track's maximum presentation time; null until loaded. */
+  presentationSeconds: number | null;
+  detailsOpen?: boolean;
+  /** Fired when a link leaves for another tab, so the evaluation can follow in its own window. */
+  onExternalOpen?: () => void;
   onEntryAction: (
     entry: QueueEntry,
     action:
@@ -84,31 +113,122 @@ export function PresentationPanel({
   return (
     <Surface
       padding="none"
-      className={cn("overflow-hidden", entry && "border-primary/30 bg-primary/5")}
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden xl:h-full",
+        entry && "border-primary/30",
+      )}
     >
-      <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
-        <div className="min-w-0">
-          <h2 className="truncate text-xl font-semibold text-balance">
-            {entry ? entryLabel(entry, t) : t("waitingForNextTeam")}
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            {entry
-              ? isPresenting
-                ? t("presentationInProgress")
-                : isReady
-                  ? t("readyToStart")
-                  : t("teamInRoom")
-              : t("bringTeamPrompt")}
-          </p>
+      {entry ? (
+        <div className="shrink-0 space-y-3 border-b px-4 py-4">
+          <div className="flex min-h-8 items-center justify-between gap-3">
+            <h2 className="type-section-title truncate">{entryLabel(entry, t)}</h2>
+            <Button variant="outline" size="xs" asChild>
+              <a
+                href={`/projects/${entry.repo_id}`}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) =>
+                  openProjectLink(event, `/projects/${entry.repo_id}`, onExternalOpen)
+                }
+              >
+                <ArrowSquareOutIcon aria-hidden="true" />
+                {t("openProject")}
+              </a>
+            </Button>
+          </div>
+          <div className="space-y-1">
+            {(isReady || isPresenting) && (
+              <PreparationTimer
+                enteredAt={entry.room_entered_at ?? null}
+                startedAt={entry.presentation_started_at}
+                scheduledSeconds={preparationSeconds}
+              />
+            )}
+
+            {isReady && presentationSeconds != null && (
+              <PresentationTimer startedAt={null} totalMinutes={presentationSeconds / 60} />
+            )}
+
+            {isPresenting && (
+              <PresentationTimer
+                startedAt={entry.presentation_started_at}
+                totalMinutes={
+                  entry.presentation_total_seconds != null
+                    ? entry.presentation_total_seconds / 60
+                    : null
+                }
+                pausedAt={entry.presentation_paused_at ?? null}
+                pausedSeconds={entry.presentation_paused_seconds ?? 0}
+              />
+            )}
+          </div>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-2">
+            {timerAction ? (
+              <Button
+                variant="outline"
+                disabled={!canJudge || busy != null}
+                loading={busy === `${timerAction}-${entry.id}`}
+                onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
+              >
+                {timerAction === "resume-timer" ? (
+                  <PlayIcon aria-hidden="true" className="size-4" />
+                ) : (
+                  <PauseIcon aria-hidden="true" className="size-4" />
+                )}
+                {t(timerLabel)}
+              </Button>
+            ) : (
+              <Button
+                disabled={!canJudge || !isReady || busy != null}
+                loading={busy === `start-${entry.id}`}
+                onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
+              >
+                <PlayIcon aria-hidden="true" className="size-4" />
+                {t("start")}
+              </Button>
+            )}
+            {canSendBack && (
+              <AlertModal
+                title={t("confirmSendBackTitle")}
+                description={t("confirmSendBackDescription")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("requeueWaitingRoom")}
+                autoClose
+                onConfirm={() =>
+                  onEntryAction(
+                    entry,
+                    "send-back",
+                    { reason: "Re-queued to waiting room" },
+                    t("teamSentBackWaiting"),
+                  )
+                }
+                trigger={
+                  <Button
+                    variant="outline"
+                    disabled={!canJudge || busy != null}
+                    loading={busy === `send-back-${entry.id}`}
+                  >
+                    <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
+                    {t("requeueWaitingRoom")}
+                  </Button>
+                }
+              />
+            )}
+          </div>
         </div>
-        {entry ? (
-          <QueueStatusBadge status={entry.status} />
-        ) : (
-          <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
-        )}
-      </div>
-      <Separator />
-      <div className="space-y-4 p-5">
+      ) : (
+        <>
+          <div className="flex min-h-14 shrink-0 items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="type-section-title truncate">{t("waitingForNextTeam")}</h2>
+              <p className="text-muted-foreground text-sm">{t("bringTeamPrompt")}</p>
+            </div>
+            <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
+          </div>
+          <Separator />
+        </>
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {!entry ? (
           <JudgingEmptyState
             icon={DoorOpenIcon}
@@ -157,83 +277,12 @@ export function PresentationPanel({
             }
           />
         ) : (
-          <>
-            <ProjectInfo entry={entry} challenge={challenge} />
-
-            {(isReady || isPresenting) && (
-              <PreparationTimer
-                enteredAt={entry.room_entered_at ?? null}
-                startedAt={entry.presentation_started_at}
-              />
-            )}
-
-            {isPresenting && (
-              <PresentationTimer
-                startedAt={entry.presentation_started_at}
-                totalMinutes={
-                  entry.presentation_total_seconds != null
-                    ? entry.presentation_total_seconds / 60
-                    : null
-                }
-                pausedAt={entry.presentation_paused_at ?? null}
-                pausedSeconds={entry.presentation_paused_seconds ?? 0}
-              />
-            )}
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              {timerAction ? (
-                <Button
-                  variant="outline"
-                  disabled={!canJudge || busy != null}
-                  loading={busy === `${timerAction}-${entry.id}`}
-                  onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
-                >
-                  {timerAction === "resume-timer" ? (
-                    <PlayIcon aria-hidden="true" className="size-4" />
-                  ) : (
-                    <PauseIcon aria-hidden="true" className="size-4" />
-                  )}
-                  {t(timerLabel)}
-                </Button>
-              ) : (
-                <Button
-                  disabled={!canJudge || !isReady || busy != null}
-                  loading={busy === `start-${entry.id}`}
-                  onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
-                >
-                  <PlayIcon aria-hidden="true" className="size-4" />
-                  {t("start")}
-                </Button>
-              )}
-              {canSendBack && (
-                <AlertModal
-                  title={t("confirmSendBackTitle")}
-                  description={t("confirmSendBackDescription")}
-                  cancelLabel={t("cancel")}
-                  confirmLabel={t("requeueWaitingRoom")}
-                  autoClose
-                  onConfirm={() =>
-                    onEntryAction(
-                      entry,
-                      "send-back",
-                      { reason: "Re-queued to waiting room" },
-                      t("teamSentBackWaiting"),
-                    )
-                  }
-                  trigger={
-                    <Button
-                      variant="outline"
-                      disabled={!canJudge || busy != null}
-                      loading={busy === `send-back-${entry.id}`}
-                    >
-                      <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
-                      {t("requeueWaitingRoom")}
-                    </Button>
-                  }
-                />
-              )}
-            </div>
-          </>
+          <ProjectInfo
+            entry={entry}
+            challenge={challenge}
+            detailsOpen={detailsOpen}
+            onExternalOpen={onExternalOpen}
+          />
         )}
       </div>
     </Surface>
@@ -243,111 +292,211 @@ export function PresentationPanel({
 export function ProjectInfo({
   entry,
   challenge,
+  detailsOpen = false,
+  onExternalOpen,
 }: {
   entry: QueueEntry;
   challenge: Challenge | null;
+  /** View project shows the project details unfolded. */
+  detailsOpen?: boolean;
+  onExternalOpen?: () => void;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const members = entry.repo_members ?? [];
-  // GitHub first — it's the artifact judges actually need to open.
+  const resource = useServerResource(
+    ["judging-project", entry.repo_id],
+    async (signal) => {
+      const [project, challenges] = await Promise.all([
+        api.get<NativeProject>(`/api/repos/${entry.repo_id}`, { signal }),
+        getRepoChallenges(entry.repo_id),
+      ]);
+      return { project, challenges };
+    },
+    { enabled: Boolean(entry.repo_id) },
+  );
+  const repoChallenges = resource.data?.challenges ?? [];
+  const project = resource.data?.project;
+  // Every URL answer (judging links, URL-validated text) joins one row of links and
+  // leaves the details, so each link appears exactly once. A YouTube video is already
+  // embedded in the details, so it is never a link.
+  const urlFields = (project?.template ?? []).flatMap((field) => {
+    const isUrlField =
+      !field.project_video && (field.judging_link || field.validation?.text_condition === "url");
+    const href = isUrlField ? externalUrlHref(String(project?.responses[field.key] ?? "")) : null;
+    return href && !youtubeEmbedUrl(href)
+      ? [{ key: field.key, label: field.label[language ?? "en"] || field.label.en, href }]
+      : [];
+  });
   const links = [
-    { label: "GitHub", href: entry.repo_github_url },
-    { label: "Devpost", href: entry.repo_devpost_url },
-    { label: "Demo", href: entry.repo_demo_url },
-  ].filter((link): link is { label: string; href: string } => Boolean(link.href));
+    { label: "GitHub", href: project?.githubUrl ?? entry.repo_github_url },
+    { label: t("projectDemoLink"), href: project?.demoUrl ?? entry.repo_demo_url },
+  ]
+    .filter(
+      (link): link is { label: string; href: string } =>
+        Boolean(link.href) && !youtubeEmbedUrl(link.href ?? ""),
+    )
+    .concat(urlFields)
+    .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
+  const projectAnswers = project && (
+    <ProjectAnswers
+      project={project}
+      language={language ?? "en"}
+      omitFieldKeys={urlFields.map((field) => field.key)}
+      assetUrl={(path) => new URL(path, API_URL).toString()}
+    />
+  );
+  const activity = useProjectGithubActivity(entry.repo_id)?.totals;
 
-  const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    getRepoChallenges(entry.repo_id)
-      .then((rows) => {
-        if (!cancelled) setRepoChallenges(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setRepoChallenges([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [entry.repo_id]);
+  // Every challenge the project is queued in, shared queues included. All the ones that
+  // share the room's queue are being judged now, so each reads Now.
+  const nowGroup = repoChallenges.find((row) => row.id === entry.challenge_id)?.queue_group_id;
+  const isNow = (row: { id: number; queue_group_id?: number | null }) =>
+    row.id === entry.challenge_id || (nowGroup != null && row.queue_group_id === nowGroup);
+  const queues =
+    repoChallenges.length > 0
+      ? repoChallenges
+      : challenge
+        ? [
+            {
+              id: entry.challenge_id,
+              title: challengeName(t, challenge, entry.challenge_id),
+              queue_group_id: null,
+              status: entry.status,
+              room_id: null,
+              room_name: null,
+            },
+          ]
+        : [];
 
   return (
-    <div className="space-y-2">
-      <div className="grid gap-x-4 gap-y-2 rounded-md border bg-background p-3 sm:grid-cols-2">
-        <div className="flex min-w-0 items-start gap-2">
-          <UsersIcon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
-            <p className="text-sm font-medium text-pretty">
-              {members.length > 0
-                ? members
-                    .map(
-                      (member) =>
-                        `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
-                    )
-                    .join(" · ")
-                : "—"}
-            </p>
+    <div className="space-y-5">
+      {Boolean(resource.error) && (
+        <ContextualError
+          message={apiErrorText(resource.error, t, t("couldNotLoadProject"))}
+          onRetry={resource.reload}
+        />
+      )}
+      <div className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
+        <Fact quiet label={t("membersLabel")}>
+          {members.length > 0 ? (
+            <ul>
+              {members.map((member, index) => (
+                <li key={member.email ?? index}>
+                  {`${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            "—"
+          )}
+        </Fact>
+        {queues.length > 0 && (
+          // A project can be in several challenges, in the same shared queue or not.
+          // The ones being judged now lead.
+          <Fact label={t("presentingFor")} className="sm:col-span-2">
+            <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              {[...queues]
+                .sort((a, b) => Number(isNow(b)) - Number(isNow(a)))
+                .map((queue) => (
+                  <li key={queue.id} className="flex min-w-0 items-baseline justify-between gap-3">
+                    <span
+                      className={cn(
+                        "min-w-0 truncate",
+                        isNow(queue) ? "font-semibold" : "text-muted-foreground font-normal",
+                      )}
+                    >
+                      {queue.title}
+                    </span>
+                    {isNow(queue) ? (
+                      <QueueStatusDot label={t("now")} tone="success" />
+                    ) : (
+                      <QueueStatusDot status={queue.status} />
+                    )}
+                  </li>
+                ))}
+            </ul>
+          </Fact>
+        )}
+        {(links.length > 0 || activity) && (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:col-span-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {links.map((link) => (
+                <Button key={link.href} variant="outline" size="sm" asChild>
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
+                  >
+                    <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
+                    {link.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
+            {activity && (
+              <div className="text-muted-foreground ml-auto flex items-center gap-4 text-sm tabular-nums">
+                <span
+                  className="inline-flex items-center gap-1.5"
+                  title={t("githubCommits")}
+                  role="img"
+                  aria-label={`${t("githubCommits")}: ${activity.commits}`}
+                >
+                  <GitCommitIcon aria-hidden="true" className="size-4" />
+                  {activity.commits}
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5"
+                  title={t("githubPullRequests")}
+                  role="img"
+                  aria-label={`${t("githubPullRequests")}: ${activity.pullRequests}`}
+                >
+                  <GitPullRequestIcon aria-hidden="true" className="size-4" />
+                  {activity.pullRequests}
+                  {activity.merged > 0 && (
+                    <span className="text-xs">
+                      ({activity.merged} {t("githubMerged")})
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
-        </div>
-        <div className="min-w-0">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("projectLabel")}</p>
-          <p className="truncate text-sm font-medium">{entryLabel(entry, t)}</p>
-        </div>
+        )}
       </div>
 
-      {links.length > 0 && (
-        <div className="grid gap-2 sm:grid-cols-3">
-          {links.map((link, i) => (
-            <Button key={link.label} variant={i === 0 ? "default" : "outline"} size="sm" asChild>
-              <a href={link.href} target="_blank" rel="noreferrer">
-                <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
-                {link.label}
-              </a>
-            </Button>
-          ))}
-        </div>
-      )}
-
-      {/* A project can be in more than one queue. Shared queue siblings collapse
-          to one row and are named by the queue group. */}
-      {(repoChallenges.length > 0 || challenge) && (
-        <div className="rounded-md border bg-background p-3">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("queueName")}</p>
-          <ul className="space-y-1.5">
-            {(repoChallenges.length > 0
-              ? collapseRepoQueueMemberships(repoChallenges)
-              : challenge
-                ? [
-                    {
-                      id: entry.challenge_id,
-                      title: challengeName(t, challenge, entry.challenge_id),
-                      queue_name: null,
-                      status: entry.status,
-                      room_id: null,
-                      room_name: null,
-                    },
-                  ]
-                : []
-            ).map((rc) => (
-              <li key={rc.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium">{rc.queue_name ?? rc.title}</span>
-                <div className="flex items-center gap-2">
-                  {rc.room_name && (
-                    <span className="text-muted-foreground text-xs">{rc.room_name}</span>
-                  )}
-                  {rc.id === entry.challenge_id ? (
-                    <StatusBadge tone="success">{t("now")}</StatusBadge>
-                  ) : (
-                    <QueueStatusBadge status={rc.status} />
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {/* The project's own information only shows in View project; the card stays about the team. */}
+      {detailsOpen && project && (
+        <div className="space-y-4 border-t border-border/60 pt-4">{projectAnswers}</div>
       )}
     </div>
+  );
+}
+
+function Fact({
+  label,
+  quiet = false,
+  className,
+  children,
+}: {
+  label: string;
+  /** Context a judge rarely needs: regular weight, softer colour. */
+  quiet?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <dl className={cn("min-w-0", className)}>
+      <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
+      <dd
+        className={cn(
+          "text-sm leading-6 tabular-nums text-pretty",
+          quiet ? "text-muted-foreground font-normal" : "font-medium",
+        )}
+      >
+        {children}
+      </dd>
+    </dl>
   );
 }
 
@@ -373,13 +522,14 @@ export function PresentationTimer({
     progressValue,
     tone: timerTone,
   } = presentationTimerState(startedAt, totalMinutes, now, pausedAt, pausedSeconds);
+  // On time is the normal state and stays unspoken; only exceptions get words.
   const cueText = pausedAt
     ? t("presentationTimerPaused")
     : timerTone === "danger"
       ? t("timeLimitExceeded")
       : timerTone === "warning"
         ? t("wrapUp")
-        : t("onTime");
+        : null;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -387,10 +537,10 @@ export function PresentationTimer({
   }, []);
 
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
+    <div className="flex flex-col items-center gap-1.5">
       <span
         className={cn(
-          "font-mono text-sm font-semibold tabular-nums whitespace-nowrap",
+          "font-mono text-xs font-semibold tabular-nums whitespace-nowrap",
           timerTone === "warning" && "text-warning",
           timerTone === "danger" && "text-destructive",
         )}
@@ -399,25 +549,16 @@ export function PresentationTimer({
         {totalSeconds != null && (
           <span className="text-muted-foreground font-normal"> / {secondsLabel(totalSeconds)}</span>
         )}
+        {cueText && <span className="font-sans font-medium"> · {cueText}</span>}
       </span>
       <Progress
         value={progressValue}
         className={cn(
-          "h-1.5 flex-1",
+          "h-1",
           timerTone === "warning" && "**:data-[slot=progress-indicator]:bg-warning",
           timerTone === "danger" && "**:data-[slot=progress-indicator]:bg-destructive",
         )}
       />
-      <span
-        className={cn(
-          "shrink-0 text-xs font-medium whitespace-nowrap",
-          timerTone === "warning" && "text-warning",
-          timerTone === "danger" && "text-destructive",
-          timerTone === "default" && "text-muted-foreground",
-        )}
-      >
-        {cueText}
-      </span>
     </div>
   );
 }
@@ -425,9 +566,11 @@ export function PresentationTimer({
 function PreparationTimer({
   enteredAt,
   startedAt,
+  scheduledSeconds,
 }: {
   enteredAt: string | null;
   startedAt: string | null;
+  scheduledSeconds: number | null;
 }) {
   const { t } = useLocale();
   const [now, setNow] = useState(() => Date.now());
@@ -441,7 +584,17 @@ function PreparationTimer({
   return (
     <p className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
       <span>{t("presentationPreparationTime")}</span>
-      <span className="font-mono tabular-nums">{secondsLabel(seconds)}</span>
+      <span
+        className={cn(
+          "font-mono tabular-nums",
+          scheduledSeconds != null && seconds > scheduledSeconds && "text-destructive",
+        )}
+      >
+        {secondsLabel(seconds)}
+        {scheduledSeconds != null && (
+          <span className="text-muted-foreground"> / {secondsLabel(scheduledSeconds)}</span>
+        )}
+      </span>
     </p>
   );
 }

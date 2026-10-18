@@ -2,9 +2,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
+import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
+import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -14,7 +17,7 @@ import { FormActions } from "@/components/common/form-actions";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { SectionCard } from "@/components/common/section-card";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -46,11 +49,17 @@ import type { Language, Me } from "@/lib/types";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { capabilitiesByDomain, prettifyCapability } from "../../permissions/helpers";
 import { DangerZoneCard } from "./danger-zone";
-import { EmailCard } from "./email-card";
+import { EmailRow } from "./email-card";
+import { GithubRow } from "./github-row";
 import { MealsSection } from "./meals-section";
-import { PasswordCard } from "./password-card";
+import { PasswordRow } from "./password-card";
 import { ProfilePhoto } from "./profile-photo";
-import { PublicProfileCard } from "./public-profile-card";
+import {
+  DirectoryCard,
+  type DirectoryEntry,
+  PublicProfileCard,
+  type PublicProfileSaveControl,
+} from "./public-profile-card";
 
 const LANGS: Language[] = ["es", "gl", "en"];
 
@@ -144,6 +153,8 @@ function ProfileForm({ me }: { me: Me }) {
   const shirtSizes = shirtSizeList.sizes;
 
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: valuesFromMe(me),
   });
@@ -151,6 +162,7 @@ function ProfileForm({ me }: { me: Me }) {
   // an application is accepted — staff can still fix them via the user detail page.
   const locked = me.profileLocked;
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [publicProfile, setPublicProfile] = useState<PublicProfileSaveControl | null>(null);
   const [mealsDirty, setMealsDirty] = useState(false);
   const onMealsDirtyChange = useCallback((dirty: boolean) => setMealsDirty(dirty), []);
   useUnsavedChangesGuard(form.formState.isDirty || mealsDirty);
@@ -160,6 +172,10 @@ function ProfileForm({ me }: { me: Me }) {
 
   async function onSubmit(values: Values) {
     setSaveError(null);
+    if (!form.formState.isDirty) {
+      await publicProfile?.save();
+      return;
+    }
     const dirty = form.formState.dirtyFields;
     // Sending dietary fields records an answer (#933), so only send them when edited.
     const dietaryEdited = Boolean(
@@ -189,6 +205,7 @@ function ProfileForm({ me }: { me: Me }) {
       form.reset(values);
       await refresh();
       toast.success(t("profileUpdated"), { compactTitle: t("toastSaveProfile") });
+      if (publicProfile?.dirty) await publicProfile.save();
     } catch (err) {
       setSaveError(apiErrorText(err, t, t("couldNotSaveProfile")));
       toast.error(apiErrorText(err, t, t("couldNotSaveProfile")), t("toastSaveProfile"));
@@ -204,202 +221,238 @@ function ProfileForm({ me }: { me: Me }) {
   return (
     <PageLayout width="content">
       <PageHeader title={t("myProfile")} />
-      <div className="grid items-start gap-(--space-between-sections) xl:grid-cols-2">
-        <Form {...form}>
-          <form className="min-w-0" onSubmit={form.handleSubmit(onSubmit)}>
-            <SectionCard
-              footerClassName="justify-start"
-              icon={UserIcon}
-              title={t("personalDetails")}
-              description={locked ? t("profileLockedNotice") : undefined}
-              stickyFooter
-              footer={
-                <FormActions
-                  pending={form.formState.isSubmitting}
-                  state={saveError ? "error" : form.formState.isDirty ? "unsaved" : "saved"}
-                />
-              }
-            >
-              {saveError && <ContextualError message={saveError} />}
-              <ProfilePhoto />
-              <div className="grid items-start gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("firstName")}</FormLabel>
-                      <FormControl>
-                        <Input autoComplete="given-name" disabled={locked} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="surname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("lastName")}</FormLabel>
-                      <FormControl>
-                        <Input autoComplete="family-name" disabled={locked} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="language"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("language")}</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {LANGS.map((language) => (
-                            <SelectItem key={language} value={language}>
-                              {languageName(language)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="shirtSize"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("shirtSize")}</FormLabel>
-                      {shirtSizeList.error ? (
-                        <ContextualError
-                          message={t("couldNotLoadDictionary")}
-                          onRetry={shirtSizeList.reload}
-                        />
-                      ) : null}
-                      <Select onValueChange={field.onChange} value={field.value} disabled={locked}>
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder={t("notSet")} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                          {shirtSizes.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormField
-                control={form.control}
-                name="foodIntolerances"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("foodIntolerances")}</FormLabel>
-                    {dictionary.error ? (
-                      <ContextualError
-                        message={t("couldNotLoadDictionary")}
-                        onRetry={dictionary.reload}
-                      />
-                    ) : null}
-                    <FormControl>
-                      <MultiSelect
-                        options={intoleranceOptions}
-                        value={field.value}
-                        onChange={field.onChange}
-                        placeholder={t("selectIntolerances")}
-                        searchPlaceholder={t("searchIntolerances")}
-                        emptyText={t("noIntolerances")}
-                        disabled={locked || noRestrictions}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="foodIntoleranceNotes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("otherDietaryNotes")}</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        rows={3}
-                        placeholder={t("cateringNotes")}
-                        disabled={locked || noRestrictions}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="noRestrictions"
-                render={({ field }) => (
-                  <FormItem className="flex flex-wrap items-center gap-2">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        disabled={locked}
-                        onCheckedChange={(checked) => {
-                          const none = checked === true;
-                          field.onChange(none);
-                          form.clearErrors("noRestrictions");
-                          const opts = { shouldDirty: true };
-                          if (none) {
-                            dietaryBeforeNone.current = {
-                              foodIntolerances: form.getValues("foodIntolerances"),
-                              foodIntoleranceNotes: form.getValues("foodIntoleranceNotes"),
-                            };
-                            form.setValue("foodIntolerances", [], opts);
-                            form.setValue("foodIntoleranceNotes", "", opts);
-                          } else {
-                            const before = dietaryBeforeNone.current;
-                            form.setValue("foodIntolerances", before.foodIntolerances, opts);
-                            form.setValue(
-                              "foodIntoleranceNotes",
-                              before.foodIntoleranceNotes,
-                              opts,
-                            );
-                          }
-                        }}
-                      />
-                    </FormControl>
-                    <FormLabel className="font-normal">{t("noRestrictions")}</FormLabel>
-                    <FormMessage className="basis-full" />
-                  </FormItem>
-                )}
-              />
-            </SectionCard>
-          </form>
-        </Form>
+      {me.isSponsorRep && <MealsSection userId={me.id} onDirtyChange={onMealsDirtyChange} />}
+      <div className="grid items-start gap-(--space-between-sections) lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="min-w-0 space-y-(--space-between-sections)">
-          {me.isSponsorRep && <MealsSection userId={me.id} onDirtyChange={onMealsDirtyChange} />}
-          <EmailCard />
-          <PasswordCard />
+          <Form {...form}>
+            <form id="profile-form" className={CARD} onSubmit={form.handleSubmit(onSubmit)}>
+              <RowHeading
+                icon={UserIcon}
+                title={t("personalDetails")}
+                description={locked ? t("profileLockedNotice") : undefined}
+              />
+              <div className="min-w-0 space-y-6">
+                {saveError && <ContextualError message={saveError} />}
+                <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
+                  <div className="grid min-w-0 flex-1 items-start gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("firstName")}</FormLabel>
+                          <FormControl>
+                            <Input autoComplete="given-name" disabled={locked} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="surname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("lastName")}</FormLabel>
+                          <FormControl>
+                            <Input autoComplete="family-name" disabled={locked} {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="language"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("language")}</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {LANGS.map((language) => (
+                                <SelectItem key={language} value={language}>
+                                  {languageName(language)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="shirtSize"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("shirtSize")}</FormLabel>
+                          {shirtSizeList.error ? (
+                            <ContextualError
+                              message={t("couldNotLoadDictionary")}
+                              onRetry={shirtSizeList.reload}
+                            />
+                          ) : null}
+                          <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={locked}
+                          >
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder={t("notSet")} />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value={NONE}>{t("notSet")}</SelectItem>
+                              {shirtSizes.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+                <section className="space-y-4 border-t border-border/60 pt-6">
+                  <h3 className="text-sm font-medium">{t("dietaryRestrictions")}</h3>
+                  <FormField
+                    control={form.control}
+                    name="noRestrictions"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-wrap items-center gap-2">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            disabled={locked}
+                            onCheckedChange={(checked) => {
+                              const none = checked === true;
+                              field.onChange(none);
+                              form.clearErrors("noRestrictions");
+                              const opts = { shouldDirty: true };
+                              if (none) {
+                                dietaryBeforeNone.current = {
+                                  foodIntolerances: form.getValues("foodIntolerances"),
+                                  foodIntoleranceNotes: form.getValues("foodIntoleranceNotes"),
+                                };
+                                form.setValue("foodIntolerances", [], opts);
+                                form.setValue("foodIntoleranceNotes", "", opts);
+                              } else {
+                                const before = dietaryBeforeNone.current;
+                                form.setValue("foodIntolerances", before.foodIntolerances, opts);
+                                form.setValue(
+                                  "foodIntoleranceNotes",
+                                  before.foodIntoleranceNotes,
+                                  opts,
+                                );
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormLabel className="font-normal">{t("noRestrictions")}</FormLabel>
+                        <FormMessage className="basis-full" />
+                      </FormItem>
+                    )}
+                  />
+                  {!noRestrictions && (
+                    <div className="grid items-start gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="foodIntolerances"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("foodIntolerances")}</FormLabel>
+                            {dictionary.error ? (
+                              <ContextualError
+                                message={t("couldNotLoadDictionary")}
+                                onRetry={dictionary.reload}
+                              />
+                            ) : null}
+                            <FormControl>
+                              <MultiSelect
+                                options={intoleranceOptions}
+                                value={field.value}
+                                onChange={field.onChange}
+                                placeholder={t("selectIntolerances")}
+                                searchPlaceholder={t("searchIntolerances")}
+                                emptyText={t("noIntolerances")}
+                                disabled={locked || noRestrictions}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="foodIntoleranceNotes"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t("otherDietaryNotes")}</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                rows={3}
+                                placeholder={t("cateringNotes")}
+                                disabled={locked || noRestrictions}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </section>
+              </div>
+            </form>
+          </Form>
+          <div className={publicProfile ? CARD : "hidden"}>
+            <RowHeading icon={AddressBookIcon} title={t("publicProfileTitle")} />
+            <div className="min-w-0">
+              <PublicProfileCard onSaveControl={setPublicProfile} />
+            </div>
+          </div>
+          <div className={CARD}>
+            <RowHeading icon={ShieldIcon} title={t("profileAccountSecurity")} />
+            <ul className="min-w-0 divide-y divide-border/60 rounded-surface border border-border/60">
+              <EmailRow />
+              <PasswordRow />
+              <GithubRow />
+            </ul>
+          </div>
+          {me.roles.length > 0 && <ProfileRoles me={me} />}
+          <div className={CARD}>
+            <RowHeading icon={WarningIcon} title={t("dangerZone")} />
+            <div className="min-w-0">
+              <DangerZoneCard embedded />
+            </div>
+          </div>
+          <div data-surface="plain" className="form-action-footer">
+            <FormActions
+              form="profile-form"
+              pending={form.formState.isSubmitting || Boolean(publicProfile?.pending)}
+              disabled={!form.formState.isDirty && !publicProfile?.dirty}
+              state={
+                saveError || publicProfile?.error
+                  ? "error"
+                  : form.formState.isDirty || publicProfile?.dirty
+                    ? "unsaved"
+                    : "saved"
+              }
+            />
+          </div>
         </div>
+        <ProfileIdentity me={me} preview={publicProfile?.preview ?? null} />
       </div>
-      <PublicProfileCard />
-      {me.roles.length > 0 && <ProfileRoles me={me} />}
-      <DangerZoneCard />
       <nav
         aria-label={t("legalLinksLabel")}
         className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-sm"
@@ -412,6 +465,62 @@ function ProfileForm({ me }: { me: Me }) {
         </Link>
       </nav>
     </PageLayout>
+  );
+}
+
+const CARD = "grid gap-5 rounded-surface border bg-card p-5 sm:p-6";
+
+function RowHeading({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: PhosphorIcon;
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <h2 className="type-section-title flex items-center gap-2">
+        <Icon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
+        {title}
+      </h2>
+      {description && <p className="text-muted-foreground text-pretty text-sm">{description}</p>}
+    </div>
+  );
+}
+
+function ProfileIdentity({ me, preview }: { me: Me; preview: DirectoryEntry | null }) {
+  const { t } = useLocale();
+  return (
+    <aside className="order-first rounded-surface border bg-card space-y-4 p-5 lg:sticky lg:top-4 lg:order-none lg:p-6">
+      <div className="flex items-center gap-4 lg:flex-col lg:text-center">
+        <ProfilePhoto size="lg" />
+        <div className="flex min-w-0 flex-col items-start gap-2 lg:items-center">
+          <p className="type-section-title wrap-break-word">
+            {[me.name, me.surname].filter(Boolean).join(" ")}
+          </p>
+          <p className="text-muted-foreground break-all text-sm">{me.email}</p>
+          {me.emailVerified ? (
+            <StatusBadge tone="success">{t("verified")}</StatusBadge>
+          ) : (
+            <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
+          )}
+        </div>
+      </div>
+      {me.visibleRoleName && (
+        <p className="text-muted-foreground border-border/60 border-t pt-4 text-sm lg:text-center">
+          {t("visibleRole")}:{" "}
+          <span className="text-foreground font-medium">{me.visibleRoleName}</span>
+        </p>
+      )}
+      {preview && (
+        <section className="border-border/60 w-full space-y-2 border-t pt-4 text-left">
+          <h3 className="type-label text-muted-foreground">{t("publicProfilePreview")}</h3>
+          <DirectoryCard entry={preview} />
+        </section>
+      )}
+    </aside>
   );
 }
 

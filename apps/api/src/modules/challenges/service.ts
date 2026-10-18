@@ -37,7 +37,6 @@ function snapshotOf(row: Record<string, unknown>) {
     criteria: row.criteria,
     criteria_i18n: row.criteria_i18n,
     prizes: row.prizes,
-    devpost_tags: row.devpost_tags,
     judging_panel_criteria: row.judging_panel_criteria,
     max_presentation_seconds: row.max_presentation_seconds,
     max_in_waiting_area: row.max_in_waiting_area,
@@ -48,16 +47,16 @@ function snapshotOf(row: Record<string, unknown>) {
 }
 
 const EDITABLE_COLUMNS = `id, title, title_i18n, description, description_i18n, criteria,
-  criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
+  criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds,
   max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
 const EDITABLE_COLUMNS_FROM_CHALLENGE = `c.id, c.title, c.title_i18n, c.description,
-  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.devpost_tags, c.judging_panel_criteria,
+  c.description_i18n, c.criteria, c.criteria_i18n, c.prizes, c.judging_panel_criteria,
   c.max_presentation_seconds, c.max_in_waiting_area, c.mandatory, c.visibility, c.available_from,
   c.created_at, c.updated_at`;
 
 const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, description_i18n,
-  criteria, criteria_i18n, prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds,
+  criteria, criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds,
   max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
 function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
@@ -137,10 +136,7 @@ async function alertRecipients(
              JOIN submissions m ON m.repo_id = qe.repo_id AND m.status = 'active'
             WHERE qe.challenge_id = $2
            UNION
-           SELECT m.user_id
-             FROM planned_work_group_challenges gc
-             JOIN planned_work_group_members m ON m.group_id = gc.group_id AND m.status = 'active'
-            WHERE gc.challenge_id = $2
+           SELECT m.user_id FROM project_challenges pc JOIN submissions m ON m.repo_id=pc.repo_id AND m.status='active' WHERE pc.challenge_id=$2
          )
          SELECT u.id, u.language
            FROM users u JOIN recipients r ON r.user_id = u.id
@@ -199,37 +195,6 @@ export async function sendChallengeAlert(
   });
 }
 
-export async function listDevpostPrizes(fixtureMarker = false) {
-  const { rows } = await pool.query(
-    `SELECT dp.name, dp.last_batch, COUNT(DISTINCT r.id)::int AS repo_count,
-            MIN(c.id) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_id,
-            MIN(c.title) FILTER (WHERE c.id IS NOT NULL) AS mapped_challenge_title
-       FROM devpost_prizes dp
-       LEFT JOIN repo_devpost_prizes rdp ON rdp.prize = dp.name
-       LEFT JOIN repos r ON r.id = rdp.repo_id AND r.is_test_account = $1
-       LEFT JOIN challenges c ON c.devpost_tags ? dp.name AND c.is_test_account = $1
-      GROUP BY dp.name, dp.last_batch
-      ORDER BY dp.name ASC`,
-    [fixtureMarker],
-  );
-  return rows.map(
-    (row: {
-      name: string;
-      last_batch: string | null;
-      repo_count: string | number;
-      mapped_challenge_id: number | null;
-      mapped_challenge_title: string | null;
-    }) => ({
-      name: row.name,
-      lastBatch: row.last_batch,
-      repoCount: Number(row.repo_count ?? 0),
-      mappedChallengeId: row.mapped_challenge_id ? Number(row.mapped_challenge_id) : null,
-      mappedChallengeTitle: row.mapped_challenge_title ?? null,
-    }),
-  );
-}
-
-/** Challenges owned by the enterprise `userId` is a sponsor of (H44/H46). */
 export async function listOwnedChallenges(userId: number) {
   const fixtureMarker = await isSyntheticOperator(pool, userId);
   const { rows } = await pool.query(
@@ -313,10 +278,10 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
     const { rows } = await client.query(
       `INSERT INTO challenges
          (author, title, title_i18n, description, description_i18n, criteria, criteria_i18n,
-          prizes, devpost_tags, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
+          prizes, judging_panel_criteria, max_presentation_seconds, max_in_waiting_area,
           mandatory, visibility, available_from, is_test_account)
-       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12,
-               $13, 'hidden', $14, $15)
+       VALUES ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7::jsonb, $8::jsonb, $9::jsonb, $10, $11,
+               $12, 'hidden', $13, $14)
        RETURNING ${CREATE_RETURNING_COLUMNS}`,
       [
         authorId,
@@ -327,7 +292,6 @@ export async function createChallenge(input: CreateChallengeBody, actorId: numbe
         criteria,
         input.criteriaI18n ? JSON.stringify(input.criteriaI18n) : null,
         input.prizes === undefined ? null : JSON.stringify(input.prizes),
-        input.devpostTags === undefined ? JSON.stringify([]) : JSON.stringify(input.devpostTags),
         input.judgingPanelCriteria === undefined
           ? null
           : JSON.stringify(input.judgingPanelCriteria),
@@ -594,12 +558,6 @@ export async function updateChallenge(
     }
     if (patch.prizes !== undefined)
       put("prizes", patch.prizes === null ? null : JSON.stringify(patch.prizes), "::jsonb");
-    if (patch.devpostTags !== undefined)
-      put(
-        "devpost_tags",
-        patch.devpostTags === null ? "[]" : JSON.stringify(patch.devpostTags),
-        "::jsonb",
-      );
     if (patch.judgingPanelCriteria !== undefined)
       put("judging_panel_criteria", JSON.stringify(patch.judgingPanelCriteria), "::jsonb");
     if (patch.maxPresentationSeconds !== undefined)

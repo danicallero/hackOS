@@ -3,15 +3,17 @@
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
+import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
 import { LanguageSelect } from "@/components/common/language-select";
+import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { ThemeToggle } from "@/components/common/theme-toggle";
+import { HomeOverview } from "@/components/public/home-overview";
 import type {
   PublicAnnouncement,
   PublicApplicationForm,
@@ -20,6 +22,7 @@ import type {
   PublicSponsor,
 } from "@/components/public/public-types";
 import { displayText } from "@/components/public/public-types";
+import { SponsorGrid } from "@/components/public/sponsor-grid";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -32,6 +35,7 @@ type Content = {
   event: PublicEvent;
   schedule: PublicScheduleItem[];
   sponsors: PublicSponsor[];
+  collaborators: PublicSponsor[];
   challenges: PublicChallenge[];
   screenAnnouncements: PublicAnnouncement[];
   openApplications: PublicApplicationForm[];
@@ -53,14 +57,14 @@ function grantedRoleNameLabel(roleName: string | null, t: Translate): string {
   return roleName ?? t("roleUnassigned");
 }
 
-export function PublicPage() {
+export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   const { language, t } = useLocale();
   // The landing page is worth visiting whether or not you're signed in
   // already (schedule, challenges, sponsors), so its entry point should never
   // read "Log in" to someone who already has a session — send them straight
   // into the app instead of back through the sign-in form.
   const { status } = useSessionContext();
-  const appHref = status === "authenticated" ? "/timetable" : "/login";
+  const appHref = status === "authenticated" ? "/event" : "/login";
   const appLabel = status === "authenticated" ? t("goToApp") : t("logIn");
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,16 +85,19 @@ export function PublicPage() {
         applicationResult,
       ] = await Promise.all([
         api.get<PublicEvent>("/api/public/event"),
-        logisticsApi.publicSchedule(),
+        embedded ? Promise.resolve({ items: [] }) : logisticsApi.publicSchedule(),
         api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
         api.get<{ items: PublicChallenge[] }>("/api/public/challenges"),
         api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
-        api.get<{ applications: PublicApplicationForm[] }>("/api/public/applications"),
+        embedded
+          ? Promise.resolve({ applications: [] })
+          : api.get<{ applications: PublicApplicationForm[] }>("/api/public/applications"),
       ]);
       setContent({
         event,
         schedule: schedule.items,
-        sponsors: sponsorResult.items,
+        sponsors: sponsorResult.items.filter((item) => item.kind !== "collaborator"),
+        collaborators: sponsorResult.items.filter((item) => item.kind === "collaborator"),
         challenges: challengeResult.items,
         // Only announcements actually being shown on a venue screen right now
         // (H50/H41-H42) belong on the public site — everything else on this
@@ -104,7 +111,7 @@ export function PublicPage() {
     } catch {
       setError(t("publicEventUnavailable"));
     }
-  }, [t]);
+  }, [embedded, t]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
@@ -116,20 +123,22 @@ export function PublicPage() {
   }, [content]);
   return (
     <div className="relative overflow-x-clip">
-      <div className="mx-auto max-w-6xl px-5 sm:px-8">
-        <header className="flex items-center justify-between gap-2 py-5 sm:py-6">
-          <Brand />
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <LanguageSelect />
-            <ThemeToggle />
-            <Button size="sm" asChild className="hidden sm:inline-flex">
-              <Link href={appHref}>
-                {appLabel}
-                <ArrowRightIcon aria-hidden="true" className="size-4" />
-              </Link>
-            </Button>
-          </div>
-        </header>
+      <div className={embedded ? "" : "mx-auto max-w-6xl px-5 sm:px-8"}>
+        {!embedded && (
+          <header className="flex items-center justify-between gap-2 py-5 sm:py-6">
+            <Brand />
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <LanguageSelect />
+              <ThemeToggle />
+              <Button size="sm" asChild className="hidden sm:inline-flex">
+                <Link href={appHref}>
+                  {appLabel}
+                  <ArrowRightIcon aria-hidden="true" className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          </header>
+        )}
 
         {!content && !error && (
           <div className="grid py-24" role="status" aria-busy="true">
@@ -153,30 +162,35 @@ export function PublicPage() {
           </div>
         )}
 
-        {content && (
-          <PublicPageContent
-            content={content}
-            language={language}
-            t={t}
-            appHref={appHref}
-            appLabel={appLabel}
-            now={now}
-          />
-        )}
+        {content &&
+          (embedded ? (
+            <HomeOverview {...content} />
+          ) : (
+            <PublicPageContent
+              content={content}
+              language={language}
+              t={t}
+              appHref={appHref}
+              appLabel={appLabel}
+              now={now}
+            />
+          ))}
 
-        <footer className="text-muted-foreground border-t py-8 text-center text-xs">
-          <nav
-            aria-label={t("legalLinksLabel")}
-            className="flex flex-wrap justify-center gap-x-4 gap-y-2"
-          >
-            <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
-              {t("termsAndConditions")}
-            </Link>
-            <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
-              {t("privacyPolicy")}
-            </Link>
-          </nav>
-        </footer>
+        {!embedded && (
+          <footer className="text-muted-foreground border-t py-8 text-center text-xs">
+            <nav
+              aria-label={t("legalLinksLabel")}
+              className="flex flex-wrap justify-center gap-x-4 gap-y-2"
+            >
+              <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
+                {t("termsAndConditions")}
+              </Link>
+              <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
+                {t("privacyPolicy")}
+              </Link>
+            </nav>
+          </footer>
+        )}
       </div>
     </div>
   );
@@ -197,7 +211,15 @@ function PublicPageContent({
   appLabel: string;
   now: number;
 }) {
-  const { event, schedule, sponsors, challenges, screenAnnouncements, openApplications } = content;
+  const {
+    event,
+    schedule,
+    sponsors,
+    collaborators,
+    challenges,
+    screenAnnouncements,
+    openApplications,
+  } = content;
   const upcomingSchedule = schedule.filter((item) => Date.parse(item.endsAt) >= now).slice(0, 4);
   const eventPhase = useEventPhase(event);
   return (
@@ -334,24 +356,34 @@ function PublicPageContent({
           {t("challengesAndPrizes")}
         </SectionHeading>
         {challenges.length ? (
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
+          <div className="mt-6 grid auto-rows-fr gap-4 md:grid-cols-2">
             {challenges.map((challenge) => (
-              <Link
+              <SectionCard
                 key={challenge.id}
-                href={`/challenge/${challenge.id}`}
-                className="hover:border-primary/30 block rounded-surface border p-5 transition-colors"
+                className="flex h-full flex-col"
+                bodyClassName="flex-1"
+                icon={TrophyIcon}
+                title={displayText(challenge.title, language)}
+                footer={
+                  <Button asChild variant="outline" size="sm">
+                    <Link
+                      href={`/challenge/${challenge.id}`}
+                      aria-label={`${t("viewChallenge")}: ${displayText(challenge.title, language)}`}
+                    >
+                      {t("viewChallenge")}
+                      <ArrowRightIcon aria-hidden="true" />
+                    </Link>
+                  </Button>
+                }
               >
                 <p className="text-muted-foreground text-sm">{challenge.enterprise.name}</p>
-                <h3 className="mt-1 text-lg font-medium">
-                  {displayText(challenge.title, language)}
-                </h3>
                 <p className="text-muted-foreground text-pretty mt-2 line-clamp-3 text-sm">
                   {displayText(challenge.description, language)}
                 </p>
                 {Array.isArray(challenge.prizes) && challenge.prizes.length > 0 && (
                   <p className="text-primary mt-3 text-sm font-medium">{t("prizesAvailable")}</p>
                 )}
-              </Link>
+              </SectionCard>
             ))}
           </div>
         ) : (
@@ -359,34 +391,37 @@ function PublicPageContent({
         )}
       </section>
 
+      <section aria-labelledby="gallery-title" className="border-t py-12">
+        <SectionHeading icon={FolderSimpleIcon} id="gallery-title">
+          {t("projectGallery")}
+        </SectionHeading>
+        <Button asChild variant="outline" className="mt-6">
+          <Link href="/gallery">
+            {t("projectGallery")}
+            <ArrowRightIcon aria-hidden="true" className="size-4" />
+          </Link>
+        </Button>
+      </section>
+
       <section aria-labelledby="sponsors-title" className="border-t py-12">
         <h2 id="sponsors-title" className="text-balance font-display text-2xl font-normal">
           {t("sponsors")}
         </h2>
         {sponsors.length ? (
-          <ul className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {sponsors.map((sponsor) => (
-              <li
-                key={sponsor.enterpriseId}
-                className="hover:border-primary/30 flex min-h-28 items-center justify-center rounded-surface border p-5 text-center transition-colors"
-              >
-                {sponsor.logoUrl ? (
-                  <SponsorLogo
-                    logoUrl={sponsor.logoUrl}
-                    logoNegativeUrl={sponsor.logoNegativeUrl}
-                    alt={sponsor.name}
-                    className="max-h-16 max-w-full object-contain"
-                  />
-                ) : (
-                  <span className="font-medium">{sponsor.name}</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          <SponsorGrid sponsors={sponsors} className="mt-6" />
         ) : (
           <EmptyNotice>{t("sponsorsPending")}</EmptyNotice>
         )}
       </section>
+
+      {collaborators.length > 0 && (
+        <section aria-labelledby="collaborators-title" className="border-t py-12">
+          <h2 id="collaborators-title" className="text-balance font-display text-2xl font-normal">
+            {t("collaborators")}
+          </h2>
+          <SponsorGrid sponsors={collaborators} className="mt-6" />
+        </section>
+      )}
     </>
   );
 }

@@ -33,6 +33,7 @@
     "expo-font": "~57.0.4",
     "expo-glass-effect": "~57.0.3",
     "expo-haptics": "~57.0.3",
+    "expo-image": "~57.0.5",
     "expo-image-manipulator": "~57.0.21",
     "expo-image-picker": "~57.0.20",
     "expo-linking": "~57.0.10",
@@ -86,7 +87,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
-    "test:ui": "jest --runInBand test/ui"
+    "test:ui": "jest --runInBand test/ui",
+    "generate:licenses": "node scripts/generate-licenses.mjs"
   },
   "jest": {
     "preset": "jest-expo",

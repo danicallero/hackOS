@@ -33,6 +33,7 @@ import { registerForPushNotifications } from "@/lib/push";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
+import { useLocalReminders } from "@/lib/use-local-reminders";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
 
@@ -101,6 +102,7 @@ function RootLayoutSessionContents() {
     <View style={{ flex: 1 }}>
       <LanguageSync />
       <PushRegistration authenticated={authenticated} />
+      <LocalReminders authenticated={authenticated} />
       <LiveActivities authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
       <NotificationListeners />
@@ -201,6 +203,13 @@ function LanguageSync() {
   useEffect(() => {
     if (me && isSupportedLanguage(me.language)) setLanguage(me.language);
   }, [me, setLanguage]);
+  return null;
+}
+
+/** Device-local activity reminders for an eligible signed-in user (H51, H59). */
+function LocalReminders({ authenticated }: { authenticated: boolean }) {
+  const { me } = useMeContext();
+  useLocalReminders({ userId: me?.id ?? null, enabled: authenticated && !!me?.hasEventAccess });
   return null;
 }
 
@@ -435,6 +444,7 @@ function RootLayoutNav({
         <Stack.Protected guard={canEnterApp}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="projects" options={{ headerShown: false }} />
           <Stack.Screen
             name="schedule/[id]"
             options={{

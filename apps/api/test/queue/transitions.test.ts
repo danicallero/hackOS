@@ -257,7 +257,7 @@ describe("call_next (H29, H30)", () => {
     expect(third.json().entry.id).toBe(entryB);
   });
 
-  it("H30: treats linked Devpost participants as members even when submissions is missing", async () => {
+  it("H30: serializes native memberships shared by different projects", async () => {
     const { challengeId: ch1, roomId: room1 } = await setup();
     const ch2 = await createChallenge();
     const room2 = await createRoom();
@@ -266,18 +266,16 @@ describe("call_next (H29, H30)", () => {
     const sharedMember = await createUser({ email: "linked-member@test.local" });
     const { pool } = await import("../../src/db/pool.js");
     const activeRepo = (
-      await pool.query(`INSERT INTO repos (name) VALUES ('Devpost active') RETURNING id`)
+      await pool.query(`INSERT INTO repos (name) VALUES ('Native active') RETURNING id`)
     ).rows[0].id;
     const waitingRepo = (
-      await pool.query(`INSERT INTO repos (name) VALUES ('Devpost waiting') RETURNING id`)
+      await pool.query(`INSERT INTO repos (name) VALUES ('Native waiting') RETURNING id`)
     ).rows[0].id;
     for (const repoId of [activeRepo, waitingRepo]) {
-      await pool.query(
-        `INSERT INTO devpost_participants
-           (repo_id, email, user_id, import_batch, merge_status)
-         VALUES ($1, 'linked-member@test.local', $2, 'test-import', 'manually_linked')`,
-        [repoId, sharedMember],
-      );
+      await pool.query(`INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active')`, [
+        repoId,
+        sharedMember,
+      ]);
     }
 
     const activeEntry = await enqueueRepo(ch1, activeRepo, 1);
@@ -1247,6 +1245,39 @@ describe("move_to_top (H37, H58)", () => {
     expect(entry.status).toBe("called");
     expect(entry.assigned_room_id).toBe(roomId);
     expect(await historyRows(entryId, "move_to_top")).toHaveLength(1);
+  });
+
+  it("sends a called team behind the head of the queue so the head enters the waiting room first", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const { repoId: r3 } = await createRepoWithTeam();
+    const e1 = await enqueueRepo(challengeId, r1, 1);
+    const e2 = await enqueueRepo(challengeId, r2, 2);
+    const e3 = await enqueueRepo(challengeId, r3, 3);
+    for (let i = 0; i < 2; i++)
+      await app.inject({
+        method: "POST",
+        url: `/api/queue/rooms/${roomId}/call-next`,
+        headers: asUser(operatorId),
+        payload: {},
+      });
+    expect((await getEntry(e1)).status).toBe("called");
+    expect((await getEntry(e2)).status).toBe("called");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e2}/move-top`,
+      headers: asUser(judgeId),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+
+    // The slot e2 frees goes to the team that was first in line; e2 waits right behind it.
+    expect((await getEntry(e3)).status).toBe("called");
+    const moved = await getEntry(e2);
+    expect(moved.status).toBe("waiting");
+    expect(await historyRows(e2, "move_to_top")).toHaveLength(1);
   });
 
   it("lets a judge move a called waiting-room team to an explicit position", async () => {

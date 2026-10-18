@@ -15,11 +15,15 @@ import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
 export function FileUploadField({
   applicationId,
+  uploadPath,
+  downloadUrl,
+  fileName: knownFileName,
   responseId,
   fieldKey,
   value,
@@ -35,7 +39,12 @@ export function FileUploadField({
   "aria-invalid": ariaInvalid,
 }: {
   /** Owning application; the upload route stores the file under this id. */
-  applicationId: number;
+  applicationId?: number;
+  /** H16: projects share the upload control with their own scoped route. */
+  uploadPath?: string;
+  downloadUrl?: string;
+  /** The uploaded file's original name, when the caller knows it (project files, H16). */
+  fileName?: string;
   /** Existing response being corrected by staff; absent for applicant-owned uploads. */
   responseId?: number;
   /** Template field key the upload is attached to, used in the upload route path. */
@@ -57,6 +66,8 @@ export function FileUploadField({
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const { t } = useLocale();
@@ -84,10 +95,11 @@ export function FileUploadField({
       const body = new FormData();
       body.append("file", file);
       const payload = await toast.promise(
-        apiUpload<{ key: string }>(
-          `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}${
-            responseId === undefined ? "" : `?responseId=${responseId}`
-          }`,
+        apiUpload<{ key?: string; objectKey?: string; url?: string }>(
+          uploadPath ??
+            `/api/applications/${applicationId}/upload/${encodeURIComponent(fieldKey)}${
+              responseId === undefined ? "" : `?responseId=${responseId}`
+            }`,
           body,
         ),
         {
@@ -100,7 +112,11 @@ export function FileUploadField({
         },
       );
       // Store the private object key; reads resolve to a presigned URL on demand.
-      onChange(payload.key);
+      const key = payload.objectKey ?? payload.key;
+      if (!key) throw new Error(t("uploadFailed"));
+      setUploadedUrl(payload.url ? new URL(payload.url, API_URL).toString() : null);
+      setUploadedName(file.name);
+      onChange(key);
       onBlur?.();
       setUploadError(null);
     } catch (error) {
@@ -112,7 +128,9 @@ export function FileUploadField({
     }
   }
 
-  const fileName = value ? decodeURIComponent(value.split("/").pop() ?? value) : null;
+  const fileName = value
+    ? (uploadedName ?? knownFileName ?? decodeURIComponent(value.split("/").pop() ?? value))
+    : null;
   const uploadErrorId = `${id ?? inputId}-upload-error`;
   const describedBy = [ariaDescribedBy, uploadError ? uploadErrorId : null]
     .filter(Boolean)
@@ -140,7 +158,7 @@ export function FileUploadField({
       {value ? (
         <div className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
           <FileIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-          <FileLink value={value} className="min-w-0 flex-1 truncate">
+          <FileLink value={uploadedUrl ?? downloadUrl ?? value} className="min-w-0 flex-1 truncate">
             <span className="truncate">{fileName}</span>
           </FileLink>
           {!disabled && (

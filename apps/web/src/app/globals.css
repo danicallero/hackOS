@@ -37,6 +37,13 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-schedule-activity: var(--schedule-activity);
+  --color-schedule-meal: var(--schedule-meal);
+  --color-schedule-workshop: var(--schedule-workshop);
+  --color-schedule-talk: var(--schedule-talk);
+  --color-schedule-ceremony: var(--schedule-ceremony);
+  --color-schedule-deadline: var(--schedule-deadline);
+  --color-schedule-other: var(--schedule-other);
   --color-info: var(--info);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
@@ -175,6 +182,11 @@
 
   .heading-row > div > .type-meta {
     display: block;
+  }
+
+  /* Grouped app routes keep their horizontal geometry when content starts scrolling. */
+  html:has([data-slot="sidebar-wrapper"]) {
+    scrollbar-gutter: stable;
   }
 
   /* A restrained, themed scrollbar keeps long editor panels from introducing

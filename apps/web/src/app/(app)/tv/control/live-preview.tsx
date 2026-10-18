@@ -36,7 +36,7 @@ export function LiveModePreview({ config }: { config: LiveScreenConfig }) {
         const [event, schedule, sponsorResult, venue] = await Promise.all([
           api.get<PublicEvent>("/api/public/event"),
           logisticsApi.publicSchedule(),
-          api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
+          api.get<{ items: PublicSponsor[] }>("/api/public/sponsors?kind=sponsor"),
           getTvVenueConfig(),
         ]);
         if (cancelled) return;

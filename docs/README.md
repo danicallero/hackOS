@@ -56,15 +56,16 @@ Architecture & modules:
 - [Mutation idempotency matrix](./idempotency-matrix.md) — the retry
   classification for every state-changing API route, including durable
   outbox/object-storage and SSE boundaries.
-- [Challenges & Devpost projects](./challenges-devpost.md) — the `challenges`
-  and `projects` modules and the Devpost intake pipeline.
+- [Question-owned libraries](./form-libraries.md) — dynamic library fields, unlimited
+  participant proposals, inline bulk curation and confirmed cascading deletion.
+- [Native projects](./projects.md) — drafts, autosave, form snapshots,
+  phases, gallery/consent, uploads, invitations, queue eligibility and winner
+  publication.
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and
   account-removal coverage.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
   NFC/QR scan, privacy rules, stand tags and account-removal coverage.
-- [Planned work groups](./work-groups.md) — pre-event participant groups,
-  explicit invitations, intended challenges, and staff/sponsor estimates.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping
   layer between challenges and the rooms/queues that judge them: why
   `queue_entries.challenge_id` stays untouched, the two database-enforced
@@ -93,6 +94,8 @@ Architecture & modules:
   one, and the four guardrails (typed label keys, the web icon map, the mobile
   Android-symbol map, `pnpm check:copy`) that keep the API, web and mobile from
   drifting apart.
+- [GitHub activity](./github-activity.md) — linking a project to a GitHub repo
+  (private included) through a GitHub App, commit/PR tracking and the TV ranking.
 - [TV screens](./tv-screens.md) — what the venue's screens show and why: the
   manual-selection / default precedence, the combined live screen and its
   payload, venue Wi-Fi, and how each mode adapts to any screen size or aspect
@@ -176,4 +179,4 @@ conventions and the component library, and
 [`deploy/README.md`](../deploy/README.md) for the full deployment story
 (networking, secrets, Caddy and rollout order).
 
-- [Project lifecycle audit and timing clarifications](./project-lifecycle-audit.md) — existing architecture, gaps, submission/reconciliation adaptation and track timing requirements.
+- [Judging timing](./project-lifecycle-audit.md) — track targets, preparation allowances and timing clarifications.

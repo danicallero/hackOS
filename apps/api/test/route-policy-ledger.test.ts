@@ -14,12 +14,12 @@ describe("final route-policy ledger", () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
     expect(rows).toHaveLength(463);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(21);
-    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(12);
-    // #992: match the current inventory enforced by scripts/route-policy-audit.ts.
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(98);
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(252);
-    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(80);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(28);
+    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(13);
+    // #992 and #1016: match the current inventory enforced by scripts/route-policy-audit.ts.
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(96);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(242);
+    expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(84);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
     ]);
@@ -35,15 +35,22 @@ describe("final route-policy ledger", () => {
       "GET /api/public/applications",
       "GET /api/public/applications/:id",
       "GET /api/public/challenges",
+      "GET /api/public/challenges/:id/winners",
       "GET /api/public/degrees",
       "GET /api/public/event",
       "GET /api/public/food-intolerances",
+      "GET /api/public/projects",
+      "GET /api/public/projects/:id",
+      "GET /api/public/projects/:id/files",
+      "GET /api/public/projects/:id/members/:userId/photo",
       "GET /api/public/sponsors",
       "GET /api/public/universities",
       "GET /api/tv/config",
+      "GET /api/tv/github",
       "GET /api/tv/mode",
       "GET /api/tv/rooms",
       "GET /api/tv/stream",
+      "GET /api/tv/winners",
       "GET /api/wallet/artwork/:id/:scale.png",
       "GET /api/wallet/artwork/default/:slot/:scale.png",
       "GET /healthz",
@@ -66,6 +73,7 @@ describe("final route-policy ledger", () => {
       "POST /api/applications/confirm",
       "POST /api/applications/decline",
       "POST /api/auth/resend-verification",
+      "POST /api/github/webhook",
       "POST /api/invites/accept",
       "POST /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
       "POST /api/wallet/apple/v1/log",

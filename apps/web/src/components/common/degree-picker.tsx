@@ -116,6 +116,9 @@ export function DegreePicker({
           type="button"
           variant="outline"
           disabled={disabled}
+          onBlur={() => {
+            if (!open) onBlur?.();
+          }}
           role="combobox"
           aria-controls={listboxId}
           aria-expanded={open}

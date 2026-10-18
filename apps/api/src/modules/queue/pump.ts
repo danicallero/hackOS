@@ -244,28 +244,14 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
     const canonical = canonicalRows[0];
     if (!canonical) return null;
 
-    // Pace is a property of the shared queue, not an individual challenge.
-    // Read it through the locked transaction client so rank and ETA use one
-    // coherent snapshot of the queue's current serving-room graph.
+    // Pace is a property of the shared queue, not an individual challenge
+    // (#997: queue_group_pace). Read it through the locked transaction client
+    // so rank and ETA use one coherent snapshot of the serving-room graph.
     const { rows: paceRows } = await client.query(
-      `SELECT COALESCE(AVG(rqs.desired_minutes_per_team), 8) AS avg,
-              COUNT(*)::int AS rooms
-         FROM room_queue_groups rqg
-         JOIN room_queue_state rqs
-           ON rqs.room_id = rqg.room_id
-          AND rqs.is_paused = false
-        WHERE rqg.queue_group_id = $1`,
+      `SELECT minutes_per_slot FROM queue_group_pace($1)`,
       [queueGroupId],
     );
-    const timing = await client.query(
-      `SELECT estimated_cycle_minutes FROM queue_group_timing($1)`,
-      [queueGroupId],
-    );
-    const averageMinutes = Number(
-      timing.rows[0]?.estimated_cycle_minutes ?? paceRows[0]?.avg ?? 10,
-    );
-    const roomCount = Math.max(1, Number(paceRows[0]?.rooms ?? 0));
-    const etaMinutes = canonical.rank * (averageMinutes / roomCount);
+    const etaMinutes = canonical.rank * Number(paceRows[0].minutes_per_slot);
     const threshold = Number(settings.pre_call_notification_eta_minutes ?? 10);
     if (etaMinutes > threshold) return null;
 

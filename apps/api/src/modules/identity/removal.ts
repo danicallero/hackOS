@@ -70,7 +70,6 @@ interface UserRemovalRow {
   id: number;
   email: string;
   email_verified: boolean;
-  secondary_email: string | null;
   name: string | null;
   surname: string | null;
   dni: string | null;
@@ -311,7 +310,7 @@ export async function getAccountRemovalEligibility(
 
 async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promise<UserRemovalRow> {
   const { rows } = await client.query<UserRemovalRow>(
-    `SELECT id, email, email_verified, secondary_email, name, surname, dni, is_test_account,
+    `SELECT id, email, email_verified, name, surname, dni, is_test_account,
             badge_id, badge_id_history,
             university_id, account_state, removal_action,
             removal_requires_exit, removal_expires_at, removal_idempotency_key
@@ -568,7 +567,9 @@ async function collectStorageKeys(client: pg.PoolClient, userId: number): Promis
   const { rows } = await client.query<{ storage_key: string }>(
     `SELECT storage_key
        FROM data_subject_requests
-      WHERE subject_user_id = $1 AND storage_key IS NOT NULL`,
+      WHERE subject_user_id = $1 AND storage_key IS NOT NULL
+ UNION SELECT object_key FROM project_files WHERE uploaded_by=$1
+ UNION SELECT thumbnail_key FROM project_files WHERE uploaded_by=$1 AND thumbnail_key IS NOT NULL`,
     [userId],
   );
   return [...new Set(rows.map((row) => row.storage_key).filter(Boolean))];
@@ -974,19 +975,14 @@ function escapeRegExp(value: string): string {
 function safeDemographicText(
   value: unknown,
   maxLength: number,
-  user: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+  user: Pick<UserRemovalRow, "email" | "name" | "surname" | "dni"> & {
     historicalEmails?: readonly string[];
   },
 ): string | null {
   const text = textValue(value, maxLength);
   if (!text) return null;
   const folded = text.normalize("NFKC").toLocaleLowerCase();
-  const directTokens = [
-    user.email,
-    user.secondary_email,
-    user.dni,
-    ...(user.historicalEmails ?? []),
-  ]
+  const directTokens = [user.email, user.dni, ...(user.historicalEmails ?? [])]
     .filter((token): token is string => typeof token === "string" && token.trim().length >= 3)
     .map((token) => token.normalize("NFKC").toLocaleLowerCase());
   if (directTokens.some((token) => folded.includes(token))) return null;
@@ -1042,7 +1038,7 @@ function ageFromBirthYear(value: unknown, asOf: Date): number | null {
 async function applicationUniversityValue(
   client: pg.PoolClient,
   value: unknown,
-  identity: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+  identity: Pick<UserRemovalRow, "email" | "name" | "surname" | "dni"> & {
     historicalEmails?: readonly string[];
   },
   cachedNames: Map<number, string | null>,
@@ -1078,7 +1074,7 @@ async function sanitizeAnonymousAuditValue(
   client: pg.PoolClient,
   field: TemplateField,
   value: unknown,
-  identity: Pick<UserRemovalRow, "email" | "secondary_email" | "name" | "surname" | "dni"> & {
+  identity: Pick<UserRemovalRow, "email" | "name" | "surname" | "dni"> & {
     historicalEmails?: readonly string[];
   },
   universityNames: Map<number, string | null>,
@@ -1086,7 +1082,7 @@ async function sanitizeAnonymousAuditValue(
 ): Promise<AnonymousAuditValue | null> {
   // Personal files are never copied into the permanent anonymous dataset,
   // even if a future admin accidentally enables retention on a file field.
-  if (field.kind === "file") return null;
+  if (field.kind === "file" || field.kind === "images") return null;
 
   const dimension = field.anonymous_audit_dimension ?? null;
   if (field.kind === "university") {
@@ -1296,10 +1292,6 @@ async function deleteOrphanedProjects(
     await client.query(`DELETE FROM queue_entries WHERE id = ANY($1::int[])`, [queueIds]);
   }
   await client.query(`DELETE FROM challenge_winners WHERE repo_id = ANY($1::int[])`, [orphanIds]);
-  await client.query(`DELETE FROM repo_devpost_prizes WHERE repo_id = ANY($1::int[])`, [orphanIds]);
-  await client.query(`DELETE FROM devpost_participants WHERE repo_id = ANY($1::int[])`, [
-    orphanIds,
-  ]);
   await client.query(`DELETE FROM submissions WHERE repo_id = ANY($1::int[])`, [orphanIds]);
   await client.query(`DELETE FROM repos WHERE id = ANY($1::int[])`, [orphanIds]);
   return deletedQueueEntries;
@@ -1360,7 +1352,7 @@ async function scrubRelationships(
   );
   const emails = [
     ...new Set(
-      [user.email, user.secondary_email, ...historicalEmailRows.map((row) => row.email)].filter(
+      [user.email, ...historicalEmailRows.map((row) => row.email)].filter(
         (value): value is string => Boolean(value),
       ),
     ),
@@ -1398,15 +1390,12 @@ async function scrubRelationships(
   }
 
   // No project membership is an audit requirement. Capture every repository
-  // linked to the subject before removing either the submission or Devpost
-  // participant row; a matched Devpost member may have no submission yet.
+  // linked to the subject before removing the submission row.
   const { rows: membershipRows } = await client.query<{ repo_id: number }>(
     `SELECT repo_id FROM submissions WHERE user_id = $1
-     UNION
-     SELECT repo_id FROM devpost_participants
-      WHERE user_id = $1 OR lower(email) = ANY($2::text[])
+
      ORDER BY repo_id`,
-    [userId, emails.map((email) => email.toLowerCase())],
+    [userId],
   );
   const repoIds = membershipRows.map((row) => row.repo_id);
   const submissionAuditEntityIds = repoIds.map((repoId) => `${repoId}:${userId}`);
@@ -1425,13 +1414,12 @@ async function scrubRelationships(
   await client.query(`DELETE FROM diary_entries WHERE owner_id = $1 OR target_user_id = $1`, [
     userId,
   ]);
-  await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM project_files WHERE uploaded_by=$1`, [userId]);
   await client.query(
-    `DELETE FROM devpost_participants
-      WHERE user_id = $1
-         OR lower(email) = ANY($2::text[])`,
-    [userId, emails.map((email) => email.toLowerCase())],
+    `UPDATE users SET gallery_show_photo=false,gallery_show_name=false,gallery_consented_at=NULL WHERE id=$1`,
+    [userId],
   );
+  await client.query(`DELETE FROM submissions WHERE user_id = $1`, [userId]);
   // Invite redemption rows carry personal details outside the audit set. Delete
   // them by their live user FK before deleting the user, since the FK becomes
   // NULL on deletion and would otherwise leave the denormalized details behind.
@@ -1496,9 +1484,6 @@ async function scrubRelationships(
     userId,
   ]);
   await client.query(`UPDATE judging_session SET judge_id = NULL WHERE judge_id = $1`, [userId]);
-  await client.query(`UPDATE devpost_participants SET linked_by = NULL WHERE linked_by = $1`, [
-    userId,
-  ]);
   await client.query(`UPDATE food_intolerances SET proposed_by = NULL WHERE proposed_by = $1`, [
     userId,
   ]);
@@ -1835,8 +1820,6 @@ export async function resetReviewFixtureAccount(
             university_id = NULL,
             shirt_size = NULL,
             language = 'en',
-            secondary_email = NULL,
-            secondary_email_verified_at = NULL,
             notes = NULL,
             ui_prefs = '{}'::jsonb,
             account_state = 'active',

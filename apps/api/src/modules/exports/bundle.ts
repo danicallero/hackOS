@@ -62,8 +62,8 @@ export async function buildExportBundle(
   ).rows;
   const submissions = (
     await db.query(
-      `SELECT r.id AS repo_id, r.name, r.description, r.github_url, r.devpost_url, r.demo_url,
-              s.imported_from, s.created_at
+      `SELECT r.id AS repo_id, r.name, r.description, r.github_url, r.demo_url,
+              s.status, s.created_at
          FROM submissions s
          JOIN repos r ON r.id = s.repo_id
         WHERE s.user_id = $1
@@ -71,13 +71,7 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
-  const devpostParticipant = (
-    await db.query(
-      `SELECT repo_id, email, name, surname, devpost_username, merge_status, linked_at
-         FROM devpost_participants WHERE user_id = $1 ORDER BY repo_id`,
-      [subjectUserId],
-    )
-  ).rows;
+
   const judgingParticipation = (
     await db.query(
       `SELECT qe.id AS queue_entry_id, qe.challenge_id, c.title AS challenge_title,
@@ -231,14 +225,12 @@ export async function buildExportBundle(
       universityId: user.university_id,
       shirtSize: user.shirt_size,
       language: user.language,
-      secondaryEmail: user.secondary_email,
-      secondaryEmailVerified: user.secondary_email_verified_at !== null,
       notes: user.notes,
       createdAt: user.created_at,
     },
     permissions: { roles, effectiveCapabilities: capabilities },
     applications,
-    projects: { submissions, devpostParticipant },
+    projects: { submissions },
     publicProfile,
     diary,
     judgingParticipation,

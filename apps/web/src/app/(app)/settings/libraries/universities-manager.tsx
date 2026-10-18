@@ -69,7 +69,12 @@ export function UniversitiesManager() {
   const [normalizing, setNormalizing] = useState(false);
   const [normalizationError, setNormalizationError] = useState<string | null>(null);
 
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { name: "" } });
+  const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
+    resolver: zodResolver(schema),
+    defaultValues: { name: "" },
+  });
   const { reset } = form;
 
   const load = useCallback(async () => {

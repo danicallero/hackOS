@@ -23,8 +23,16 @@ export const ERROR_REASONS = {
   SCHEDULE_ENDS_BEFORE_STARTS: "schedule_ends_before_starts",
   /** 400: a scan-required schedule item is not visible to participants. */
   SCHEDULE_SCAN_NEEDS_PARTICIPANTS: "schedule_scan_needs_participants",
+  /** 409: the GitHub repository is already linked to another project. */
+  GITHUB_REPO_ALREADY_LINKED: "github_repo_already_linked",
+  /** 404: the repository is not among the member's GitHub App installations. */
+  GITHUB_REPO_NOT_AVAILABLE: "github_repo_not_available",
   /** 404: the schedule item does not exist. */
   SCHEDULE_ITEM_NOT_FOUND: "schedule_item_not_found",
+  /** 409: a submitted project is frozen; the team withdraws the submission to edit. */
+  PROJECT_FROZEN: "project_frozen",
+  /** 400: the event requires a linked GitHub repository to submit. */
+  PROJECT_GITHUB_REQUIRED: "project_github_required",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];
@@ -39,6 +47,7 @@ export const FIELD_ERROR_REASONS = {
   INVALID_OPTION: "invalid_option",
   MUST_BE_NUMBER: "must_be_number",
   MUST_BE_BIRTH_YEAR: "must_be_birth_year",
+  MUST_BE_PHONE: "must_be_phone",
   MUST_BE_BOOLEAN: "must_be_boolean",
   MUST_BE_ARRAY: "must_be_array",
   MUST_BE_STRING: "must_be_string",

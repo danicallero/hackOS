@@ -1,3 +1,4 @@
+import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,14 +59,18 @@ async function seedRepo(name: string, memberUserIds: number[]): Promise<number> 
     payload: { name, memberUserIds },
   });
   expect(res.statusCode).toBe(200);
-  return res.json().repo.id as number;
+  const id = res.json().id as number;
+  // Participants edit drafts only; a submitted project is frozen (H20, H21).
+  await pool.query(`UPDATE repos SET submission_status='draft', submitted_at=NULL WHERE id=$1`, [
+    id,
+  ]);
+  return id;
 }
 
-async function addDevpostMember(repoId: number, userId: number, email: string): Promise<void> {
+async function addNativeMember(repoId: number, userId: number, _email: string) {
   await pool.query(
-    `INSERT INTO devpost_participants (repo_id, email, user_id, import_batch, merge_status)
-     VALUES ($1, $2, $3, 'test', 'auto_matched')`,
-    [repoId, email, userId],
+    `INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active') ON CONFLICT DO NOTHING`,
+    [repoId, userId],
   );
 }
 
@@ -86,17 +91,17 @@ describe("PATCH /api/me/projects/:id (H19/H20 self-edit)", () => {
     expect(res.json()).toMatchObject({ name: "After", description: "Updated by participant" });
 
     const audit = await pool.query(
-      `SELECT source FROM audit_log WHERE entity_type = 'repo' AND entity_id = $1 AND action = 'update'`,
+      `SELECT source FROM audit_log WHERE entity_type = 'project' AND entity_id = $1 AND action = 'update'`,
       [String(repoId)],
     );
     expect(audit.rows).toEqual([{ source: "participant" }]);
   });
 
-  it("lets a Devpost-matched member edit too", async () => {
+  it("lets a native-matched member edit too", async () => {
     const server = await getApp();
     const owner = await createUser();
-    const repoId = await seedRepo("Devpost Team", []);
-    await addDevpostMember(repoId, owner, "owner@devpost.test");
+    const repoId = await seedRepo("native Team", []);
+    await addNativeMember(repoId, owner, "owner@native.test");
     await setHackingWindow(true);
 
     const res = await server.inject({
@@ -183,7 +188,23 @@ describe("POST /api/me/projects/:id/invites (H19/H20)", () => {
       url: "/api/me/projects/invites",
       headers: asUser(invitee),
     });
-    expect(pending.json().invites).toEqual([expect.objectContaining({ repoId, repoName: "Team" })]);
+    expect(pending.json().invites).toEqual([
+      expect.objectContaining({ projectId: repoId, name: "Team", invitedBy: "Test User" }),
+    ]);
+    await pool.query(`UPDATE users SET surname='Organizer' WHERE id=$1`, [owner]);
+    const named = await server.inject({
+      method: "GET",
+      url: "/api/me/projects/invites",
+      headers: asUser(invitee),
+    });
+    expect(named.json().invites[0].invitedBy).toBe("Test User Organizer");
+    await pool.query(`UPDATE users SET anonymized_at=now() WHERE id=$1`, [owner]);
+    const removed = await server.inject({
+      method: "GET",
+      url: "/api/me/projects/invites",
+      headers: asUser(invitee),
+    });
+    expect(removed.json().invites[0].invitedBy).toBeNull();
   });
 
   it("403s when the inviter isn't an active member", async () => {
@@ -329,7 +350,7 @@ describe("POST /api/me/projects/invites/:id/accept|decline (H19/H20)", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: `/api/me/projects/invites/${repoId}/accept`,
+      url: `/api/me/projects/${repoId}/invites/accept`,
       headers: asUser(invitee),
     });
     expect(res.statusCode).toBe(200);
@@ -355,32 +376,32 @@ describe("POST /api/me/projects/invites/:id/accept|decline (H19/H20)", () => {
 
     const acceptAsOwner = await server.inject({
       method: "POST",
-      url: `/api/me/projects/invites/${repoId}/accept`,
+      url: `/api/me/projects/${repoId}/invites/accept`,
       headers: asUser(owner),
     });
     expect(acceptAsOwner.statusCode).toBe(404);
 
     const declineAsOwner = await server.inject({
       method: "POST",
-      url: `/api/me/projects/invites/${repoId}/decline`,
+      url: `/api/me/projects/${repoId}/invites/decline`,
       headers: asUser(owner),
     });
     expect(declineAsOwner.statusCode).toBe(404);
   });
 
-  it("lets the invited user decline, removing the invite entirely", async () => {
+  it("lets the invited user decline, retaining the explicit declined membership state", async () => {
     const server = await getApp();
     const { repoId, invitee } = await invite();
 
     const res = await server.inject({
       method: "POST",
-      url: `/api/me/projects/invites/${repoId}/decline`,
+      url: `/api/me/projects/${repoId}/invites/decline`,
       headers: asUser(invitee),
     });
     expect(res.statusCode).toBe(200);
 
     const { rowCount } = await pool.query(
-      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
+      `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2 AND status='invited'`,
       [repoId, invitee],
     );
     expect(rowCount).toBe(0);
@@ -393,7 +414,7 @@ describe("POST /api/me/projects/invites/:id/accept|decline (H19/H20)", () => {
 
     const res = await server.inject({
       method: "POST",
-      url: `/api/me/projects/invites/${repoId}/accept`,
+      url: `/api/me/projects/${repoId}/invites/accept`,
       headers: asUser(invitee),
     });
     expect(res.statusCode).toBe(403);
@@ -484,7 +505,7 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const server = await getApp();
     const owner = await createUser();
     const repoId = await seedRepo("Solo in queue", [owner]);
-    const challengeId = await createChallenge("Queue challenge", []);
+    const challengeId = await createChallenge("Queue challenge");
     const { rows: groupRows } = await pool.query(
       `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
       [challengeId],
@@ -538,7 +559,7 @@ describe("DELETE /api/me/projects/:id (H19/H20 sole-member delete)", () => {
     const server = await getApp();
     const owner = await createUser();
     const repoId = await seedRepo("Mixed marker project", [owner]);
-    const challengeId = await createChallenge("Synthetic queue challenge", []);
+    const challengeId = await createChallenge("Synthetic queue challenge");
     await pool.query(`UPDATE challenges SET is_test_account = true WHERE id = $1`, [challengeId]);
     const { rows: entryRows } = await pool.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status, position)

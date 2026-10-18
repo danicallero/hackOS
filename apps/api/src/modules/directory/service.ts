@@ -37,7 +37,7 @@ export interface DirectoryEntry {
 }
 
 export interface DirectoryProject {
-  kind: "project" | "workGroup";
+  kind: "project";
   id: number;
   name: string;
 }
@@ -72,31 +72,10 @@ const SHOWN_REPOS_SQL = `
      AND s.status = 'active'
      AND r.is_test_account = false`;
 
-const SHOWN_GROUPS_SQL = `
-  SELECT g.id, g.name
-    FROM planned_work_group_members m
-    JOIN planned_work_groups g ON g.id = m.group_id
-   WHERE p.show_project
-     AND m.user_id = u.id
-     AND m.status = 'active'
-     AND g.linked_repo_id IS NULL`;
-
-/** `c` is a published challenge one of the shown repos or groups takes part in. */
-const CHALLENGE_OF_PROJECTS = `c.visibility = 'visible'
-    AND c.is_test_account = false
-    AND (
-      EXISTS (
-        SELECT 1 FROM queue_entries qe
-         WHERE qe.challenge_id = c.id
-           AND qe.repo_id IN (SELECT id FROM (${SHOWN_REPOS_SQL}) sr)
-           AND qe.status NOT IN ('cancelled', 'disqualified')
-      )
-      OR EXISTS (
-        SELECT 1 FROM planned_work_group_challenges gc
-         WHERE gc.challenge_id = c.id
-           AND gc.group_id IN (SELECT id FROM (${SHOWN_GROUPS_SQL}) sg)
-      )
-    )`;
+const CHALLENGE_OF_PROJECTS = `c.visibility='visible' AND c.is_test_account=false
+ AND EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.challenge_id=c.id
+ AND pc.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr))
+ OR (c.visibility='visible' AND c.is_test_account=false AND EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.challenge_id=c.id AND qe.status NOT IN('cancelled','disqualified') AND qe.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr)))`;
 
 /**
  * Labels or keys that name a CV in the three event languages (#935): "cv",
@@ -186,8 +165,6 @@ function entrySql(profiles: string): string {
            SELECT jsonb_agg(jsonb_build_object('kind', x.kind, 'id', x.id, 'name', x.name) ORDER BY x.ord, x.id)
              FROM (
                SELECT 'project' AS kind, 0 AS ord, id, name FROM (${SHOWN_REPOS_SQL}) sr
-               UNION ALL
-               SELECT 'workGroup', 1, id, name FROM (${SHOWN_GROUPS_SQL}) sg
              ) x
          ), '[]'::jsonb) AS projects,
          COALESCE((
@@ -337,6 +314,7 @@ interface ProfileRow {
   cv_filename: string | null;
   cv_uploaded_at: Date | null;
   consented_at: Date | null;
+  onboarding_completed_at: Date | null;
 }
 
 const DEFAULT_PROFILE: ProfileRow = {
@@ -353,6 +331,7 @@ const DEFAULT_PROFILE: ProfileRow = {
   cv_filename: null,
   cv_uploaded_at: null,
   consented_at: null,
+  onboarding_completed_at: null,
 };
 
 const OWN_CV_PATH = "/api/me/public-profile/cv";
@@ -421,13 +400,14 @@ async function presentProfile(
             source: "upload" as const,
           }
         : null,
+    onboardingCompletedAt: profile.onboarding_completed_at?.toISOString() ?? null,
     consentedAt: profile.consented_at ? profile.consented_at.toISOString() : null,
     preview: await preview(db, userId, profile, cvPath),
   };
 }
 
 const PROFILE_COLUMNS = `directory_visible, show_surname, show_photo, show_project, headline, bio,
-  location_note, socials, share_cv, cv_key, cv_filename, cv_uploaded_at, consented_at`;
+  location_note, socials, share_cv, cv_key, cv_filename, cv_uploaded_at, consented_at, onboarding_completed_at`;
 
 async function readProfile(db: Queryable, userId: number, lock = false): Promise<ProfileRow> {
   const { rows } = await db.query<ProfileRow>(
@@ -529,14 +509,18 @@ async function lockFor(db: Queryable, userId: number, actor: ProfileActor): Prom
 }
 
 /** `changed` is false when the request repeats the stored state (#934). */
-export async function updateMyPublicProfile(userId: number, input: PublicProfileInput) {
-  return updatePublicProfile(userId, input, ownActor(userId));
+export async function updateMyPublicProfile(
+  userId: number,
+  input: PublicProfileInput & { completeOnboarding?: boolean },
+) {
+  return updatePublicProfile(userId, input, ownActor(userId), input.completeOnboarding === true);
 }
 
 export async function updatePublicProfile(
   userId: number,
   input: PublicProfileInput,
   actor: ProfileActor,
+  completeOnboarding = false,
 ) {
   return withTransaction(async (db) => {
     await lockFor(db, userId, actor);
@@ -548,7 +532,11 @@ export async function updatePublicProfile(
         input[field] === undefined ? before[FIELD_COLUMNS[field]] : input[field],
       ]),
     ) as ProfileSettings;
-    if (SETTINGS_FIELDS.every((field) => sameValue(before[FIELD_COLUMNS[field]], next[field]))) {
+    const finishOnboarding = completeOnboarding && !before.onboarding_completed_at;
+    if (
+      !finishOnboarding &&
+      SETTINGS_FIELDS.every((field) => sameValue(before[FIELD_COLUMNS[field]], next[field]))
+    ) {
       return {
         changed: false,
         profile: await presentProfile(db, userId, before, cvPathFor(userId, actor)),
@@ -567,8 +555,8 @@ export async function updatePublicProfile(
     const { rows } = await db.query<ProfileRow>(
       `INSERT INTO user_public_profiles
          (user_id, directory_visible, show_surname, show_photo, show_project, headline,
-          location_note, bio, socials, share_cv, consented_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, CASE WHEN $2 THEN now() END)
+          location_note, bio, socials, share_cv, consented_at, onboarding_completed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, CASE WHEN $2 THEN now() END, CASE WHEN $11 THEN now() END)
        ON CONFLICT (user_id) DO UPDATE SET
          directory_visible = EXCLUDED.directory_visible,
          show_surname = EXCLUDED.show_surname,
@@ -579,6 +567,7 @@ export async function updatePublicProfile(
          bio = EXCLUDED.bio,
          socials = EXCLUDED.socials,
          share_cv = EXCLUDED.share_cv,
+         onboarding_completed_at = COALESCE(user_public_profiles.onboarding_completed_at, EXCLUDED.onboarding_completed_at),
          consented_at = CASE
            WHEN EXCLUDED.directory_visible AND NOT user_public_profiles.directory_visible THEN now()
            ELSE user_public_profiles.consented_at
@@ -595,6 +584,7 @@ export async function updatePublicProfile(
         next.bio,
         JSON.stringify(next.socials),
         next.shareCv,
+        completeOnboarding,
       ],
     );
     const after = rows[0] as ProfileRow;
@@ -608,7 +598,11 @@ export async function updatePublicProfile(
       entityId: userId,
       action: "public_profile.updated",
       before: { directoryVisible: before.directory_visible },
-      after: { directoryVisible: after.directory_visible, changedFields },
+      after: {
+        directoryVisible: after.directory_visible,
+        changedFields,
+        ...(finishOnboarding ? { onboardingCompleted: true } : {}),
+      },
       source: actor.source,
     });
     return {

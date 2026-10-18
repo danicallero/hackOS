@@ -76,7 +76,6 @@ export function useApplicationDraft({
       hasLocalEdits.current = false;
       setValues(saved.responses ?? {});
       setSaveState("saved");
-      toast.success(t("draftSaved"), { compactTitle: t("saveDraft") });
     } catch (error) {
       if (latestAnswerRevision.current !== savedRevision) {
         setSaveState("unsaved");

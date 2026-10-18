@@ -5,6 +5,9 @@ import { expect, shellUser, test } from "./fixtures";
 for (const tab of ["universities", "degrees", "intolerances"] as const) {
   test(`library ${tab} keeps search and add together`, async ({ page }) => {
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const url = new URL(route.request().url());
       let body: unknown = { items: [], total: 0 };
       if (url.pathname === "/api/me")

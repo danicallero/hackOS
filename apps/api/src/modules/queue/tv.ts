@@ -10,7 +10,7 @@ import { valkey } from "../../lib/valkey.js";
  */
 const TV_MODE_KEY = "tv:mode";
 
-export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live";
+export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live" | "github";
 
 /** One operator-selected display mode. */
 export interface TvMode {
@@ -25,7 +25,14 @@ export interface TvState extends TvMode {
   source: "manual" | "default";
 }
 
-const TV_MODE_NAMES: readonly TvModeName[] = ["rooms", "schedule", "sponsors", "wifi", "live"];
+const TV_MODE_NAMES: readonly TvModeName[] = [
+  "rooms",
+  "schedule",
+  "sponsors",
+  "wifi",
+  "live",
+  "github",
+];
 
 function isTvModeName(value: unknown): value is TvModeName {
   return TV_MODE_NAMES.includes(value as TvModeName);

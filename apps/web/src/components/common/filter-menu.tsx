@@ -28,6 +28,8 @@ import { cn } from "@/lib/utils";
 export interface FilterOption {
   value: string;
   label: string;
+  /** Optional semantic CSS color for categorical identity. */
+  color?: string;
 }
 
 export type FilterDefinition = {
@@ -244,6 +246,13 @@ function FilterOptions({ filter }: { filter: FilterDefinition }) {
       <DropdownMenuRadioGroup value={filter.value} onValueChange={filter.onChange}>
         {filter.options.map((option) => (
           <DropdownMenuRadioItem key={option.value} value={option.value}>
+            {option.color && (
+              <span
+                aria-hidden="true"
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: option.color }}
+              />
+            )}
             <span className="wrap-break-word">{option.label}</span>
           </DropdownMenuRadioItem>
         ))}
@@ -263,6 +272,13 @@ function FilterOptions({ filter }: { filter: FilterDefinition }) {
         )
       }
     >
+      {option.color && (
+        <span
+          aria-hidden="true"
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: option.color }}
+        />
+      )}
       <span className="wrap-break-word">{option.label}</span>
     </DropdownMenuCheckboxItem>
   ));

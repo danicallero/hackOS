@@ -35,6 +35,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
@@ -66,6 +73,7 @@ const editSchema = z.object({
   logoNegativeUrl: optionalUrl,
   description: z.string().max(2000),
   priority: optionalPositiveInt,
+  kind: z.enum(["sponsor", "collaborator"]),
   visibility: z.enum(["visible", "hidden"]),
   availableFrom: z.string(),
 });
@@ -79,6 +87,7 @@ function toFormValues(e: Enterprise): EditValues {
     logoNegativeUrl: e.logo_negative_url === e.logo_url ? "" : (e.logo_negative_url ?? ""),
     description: e.description ?? "",
     priority: e.priority != null ? String(e.priority) : "",
+    kind: e.kind,
     visibility: e.visibility,
     availableFrom: toDatetimeLocal(e.available_from),
   };
@@ -449,6 +458,8 @@ export function EditCard({
 }) {
   const { t } = useLocale();
   const form = useForm<EditValues>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(editSchema),
     defaultValues: toFormValues(enterprise),
   });
@@ -481,6 +492,7 @@ export function EditCard({
               ...ownerPatch,
               name: values.name,
               priority: values.priority ? Number(values.priority) : null,
+              kind: values.kind,
               visibility: values.visibility,
               availableFrom: fromDatetimeLocal(values.availableFrom),
             }
@@ -552,7 +564,30 @@ export function EditCard({
                 )}
               />
               {canManage && (
-                <div className="grid gap-5 sm:grid-cols-2">
+                <div className="grid items-start gap-5 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="kind"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t("enterpriseKindLabel")}</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="sponsor">{t("enterpriseKindSponsor")}</SelectItem>
+                            <SelectItem value="collaborator">
+                              {t("enterpriseKindCollaborator")}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <FormField
                     control={form.control}
                     name="priority"

@@ -1,4 +1,4 @@
-import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -90,8 +90,8 @@ describe("schedule live loader", () => {
       .mockResolvedValueOnce({ items: [item("Updated title")] });
 
     await act(async () => root.render(<Harness />));
-    expect(liveRefresh.stream).toBe(domainScope(SSE_TOPICS.CONTENT));
-    expect(liveRefresh.events).toContain(EVENTS.CONTENT_SCHEDULE_CHANGED);
+    expect(liveRefresh.stream).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
+    expect(liveRefresh.events).toContain(EVENTS.DATA_CHANGED);
     await act(async () => {
       container.querySelector("button")?.click();
     });

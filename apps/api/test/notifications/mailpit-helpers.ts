@@ -1,5 +1,5 @@
-/** Thin wrapper over Mailpit's REST API (docker compose infra, localhost:8025) for asserting a real SMTP send arrived (H52). */
-const MAILPIT_BASE = "http://localhost:8025";
+/** Mailpit REST assertions use the same isolated inbox as the SMTP target (H52). */
+export const MAILPIT_BASE = process.env.TEST_MAILPIT_URL ?? "http://localhost:8025";
 
 export interface MailpitMessageSummary {
   ID: string;

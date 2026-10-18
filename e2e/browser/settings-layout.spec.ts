@@ -5,6 +5,9 @@ import { expect, shellUser, test } from "./fixtures";
 // H3/H51: focused password editing and per-category delivery preferences.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const path = new URL(route.request().url()).pathname;
     let body: unknown = { items: [], total: 0 };
     if (path === "/api/me")
@@ -156,7 +159,15 @@ test("event settings fit the viewport", async ({ page }) => {
 });
 
 // H19/H24/H28/H42: every settings category, including the expanded Wallet editor.
-for (const tab of ["venue", "wallet", "presence", "invites", "danger"] as const) {
+for (const tab of [
+  "schedule",
+  "projects",
+  "venue",
+  "wallet",
+  "presence",
+  "invites",
+  "danger",
+] as const) {
   test(`event settings ${tab} fits the viewport`, async ({ page }) => {
     await page.goto(`/settings/event?tab=${tab}`);
     const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');

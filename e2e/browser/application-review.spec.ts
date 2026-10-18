@@ -67,6 +67,9 @@ test("staff can upload a CV while editing an application response", async ({ pag
   let uploadUrl = "";
 
   await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+      return route.fallback();
+    }
     const request = route.request();
     const url = new URL(request.url());
     if (url.pathname === "/api/me") {

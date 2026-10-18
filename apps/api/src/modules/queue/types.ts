@@ -34,7 +34,6 @@ export interface RoomQueueStateRow {
   room_id: number;
   is_paused: boolean;
   max_in_waiting_area: number;
-  desired_minutes_per_team: number;
   started_at: string | null;
   updated_at: string;
 }

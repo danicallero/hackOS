@@ -6,6 +6,9 @@ for (const width of [1536, 1920]) {
   test(`the application file viewer previews docking at ${width}px`, async ({ page }, info) => {
     test.skip(!["chromium", "webkit"].includes(info.project.name), "Desktop docking regression");
     await page.route("**/api/**", async (route) => {
+      if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
+        return route.fallback();
+      }
       const path = new URL(route.request().url()).pathname;
       const data =
         path === "/api/me"
@@ -100,7 +103,9 @@ for (const width of [1536, 1920]) {
     expect(await viewer.evaluate((element) => getComputedStyle(element).opacity)).toBe("0");
     const slot = page.locator("[data-file-viewer-preview-slot]");
     await expect(slot).toHaveCount(1);
-    const rightX = width - sourceBounds!.x - sourceBounds!.width;
+    // The docks sit 13.5rem either side of the viewport centre, so the right slot starts a
+    // fixed 27rem after the left viewer's start plus its width, whatever the scrollbar gutter.
+    const rightX = sourceBounds!.x + sourceBounds!.width + 27 * 16;
     const pointerY = box!.y + box!.height / 2;
     await page.mouse.move(width * 0.6, pointerY, { steps: 10 });
     await expect(slot).toHaveAttribute("data-file-viewer-preview-slot", "right");
@@ -143,6 +148,11 @@ for (const width of [1536, 1920]) {
     await viewer.getByRole("button", { name: "Move the file viewer to the left" }).focus();
     await page.keyboard.press("Space");
     await expect(viewer).toHaveAttribute("data-file-viewer-dragging", "true");
+    // H12: wait until the keyboard sensor has measured its initial destination.
+    await expect(page.locator('div[data-file-viewer-dropzone="right"]')).toHaveAttribute(
+      "data-drop-active",
+      "true",
+    );
     await page.keyboard.press("ArrowLeft");
     await expect(slot).toHaveAttribute("data-file-viewer-preview-slot", "left");
     await expect(slot).toHaveCount(1);
@@ -159,6 +169,10 @@ for (const width of [1536, 1920]) {
     await viewer.getByRole("button", { name: "Move the file viewer to the right" }).focus();
     await page.keyboard.press("Space");
     await expect(viewer).toHaveAttribute("data-file-viewer-dragging", "true");
+    await expect(page.locator('div[data-file-viewer-dropzone="left"]')).toHaveAttribute(
+      "data-drop-active",
+      "true",
+    );
     await page.keyboard.press("ArrowRight");
     await expect(page.locator('div[data-file-viewer-dropzone="right"]')).toHaveAttribute(
       "data-drop-active",

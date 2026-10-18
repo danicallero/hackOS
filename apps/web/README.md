@@ -222,7 +222,7 @@ src/
       claim-account, applications (public application form)
     (app)/             authenticated shell — sidebar + workspace bar, AuthGuard
       personal area (my-applications, my-project, my-queue, wallet, inbox,
-      schedule, settings/profile — no dashboard/home page, schedule is the
+      schedule, settings/profile — Home is the event overview and sign-in
       landing destination) · staff workspaces (applications, projects,
       challenges, enterprises, queue, judging, logistics, announcements,
       timetable, tv, users, permissions, audit, settings/event) — one
@@ -231,7 +231,7 @@ src/
       Picture-in-Picture out of the app shell (review-popup) — AuthGuard, but
       no sidebar/top bar; the window itself is the whole surface
     layout.tsx         root: fonts + <Providers>
-    page.tsx           routes to /timetable or /login by session
+    page.tsx           public landing; signed-in app entry opens /event
   components/
     ui/                shadcn primitives — generated structure + shared tokens
     common/            reusable app widgets (the shared library, below)
@@ -598,13 +598,32 @@ siblings shift (issue #849). Use `useReducedDragMotion` to disable overlay drop
 animations, and `motion-reduce:transition-none!` on sortable wrappers. Keyboard
 sensors retain pickup, arrow movement, drop, and Escape cancellation.
 
-Project submission controls reuse `SectionCard`, `SidePanelEditor` and `AlertModal`; the latter accepts `confirmDisabled` for required decision reasons without displaying a pending spinner. See the [project lifecycle audit](../../docs/project-lifecycle-audit.md) for submission, reconciliation and track timing behavior.
+## Native projects (H16–H21, H60)
 
-The project reconciliation workspace follows Users/Responses: `ListToolbar` + `FilterMenu` + `DataTable`, with mobile drill-down rows and one review overlay per project. Submission actions use `SectionCard.action`; do not place a SidePanelEditor trigger wrapper inside reading content, where its automatic right alignment creates a detached action.
+Projects have one draft-to-submitted lifecycle and one team roster. Participant
+routes are `/my-project` and `/my-project/:id`; the common single-project case
+opens its editor directly, with the list available through the back link.
+Draft responses autosave with optimistic server revisions. In-flight responses
+never overwrite newer edits; conflicts retain local answers and stop autosave.
+Required fields block submission, not draft persistence. Submitted projects
+remain editable until the server closes editing; resubmission snapshots answers.
 
-Controlled list review dialogs can pass `Modal.onCloseAutoFocus` to restore their opening row or search field. Keep persistent review utilities in `Modal.footer`, outside the scrolling body.
+The project form editor (`/settings/event?tab=projectForm`; `/projects/form` redirects there) reuses the applications `QuestionsCard`, `TemplateField` and
+section model. `saveDefinition` supplies the project persistence endpoint and
+skips application-specific reserved-key nudges. `TemplateFieldControl` and
+`FileUploadField` accept the project-scoped upload path. Staff and participants
+share `ProjectEditor`, with server authorization retained for every mutation.
 
-Participant project detail pages use the content canvas with a direct back arrow and compact edit controls inline with the title. Desktop places project details and team in the main column and challenges/judging in the adjacent column; narrow screens stack the sections. Participant and staff details reuse ProjectDescriptionLinks for Devpost, demo and repository links. Project details, team, challenges/judging preference and a final submission section use separate SectionCard surfaces in that order; the submission section leads with Devpost (code and link status) and offers "Submit without Devpost" as a secondary action below an "or" divider; team/challenge members stay plain rows inside their section. Both planning and reconciled projects use the same Add challenge editor instead of separate inline selection controls. Ordinary event rule settings record audit metadata automatically without asking for a justification; explicit project exceptions retain their reason.
+Project phase controls belong to the Event category's common form, save footer
+and dirty guard. Dates use the event time zone. Gallery routes `/gallery` and
+`/gallery/:id` render on the server with metadata, forward the audience session
+and use no-store reads; authenticated content and unrevealed results must never
+enter a shared rendering cache. Published winners are read independently of the
+private challenge editor: the gallery, public challenge details and the live TV
+mode consume the published projection only. Live TV switches to a paged winner
+wall once results are visible, retaining fullscreen announcement priority. Member photos use separate public-gallery
+consent, independent of scan-profile sharing. Only API-authorized image URLs
+reach gallery content or social metadata.
 
 ## Invitation onboarding (H7/H9/H10)
 
@@ -613,6 +632,13 @@ restriction options and selected labels. Changing either the web language
 switcher or the form language selector updates both and saves that language
 as the new account preference. Dietary restrictions are submitted as dictionary
 IDs, so changing language preserves the selection and other entered data.
+
+The next step after an invited account is created (automatic sign-in), or a spot
+is confirmed (H15), is the networking profile. `NetworkingOnboarding` runs at the
+authenticated boundary once event access exists, before other pending profile
+tasks. It reuses `PublicProfileCard` and the photo editor. The server records
+completion separately from visibility; deferral lasts until the next sign-in.
+Public email confirmation only shows the editor for the token owner's session.
 
 ## Personal profile layout (H6/H7/H8)
 
@@ -630,3 +656,93 @@ math, role/category labels, timezone-store behavior and account-removal progress
 parsing live in `packages/shared` (#1001). Keep web rendering, storage and
 `datetime-local` conversion here. See [shared client models](../../docs/notifications.md#shared-client-models-1001)
 for drift decisions and fallback orders.
+
+Home opens `/event`, leading with the active hacking/judging countdown, and
+groups the schedule and inbox; Projects groups `/my-project`
+and `/gallery`. These retain their stable URLs with shared internal navigation.
+The `/event` page reuses the public landing content inside the shared
+application shell, limited to event information, announcements, challenges and
+sponsors; schedule, applications and gallery remain in their own destinations.
+Challenge records also retain the authenticated Home shell and navigation. `/gallery` and its records choose the same shell for signed-in viewers
+and public chrome for anonymous visitors.
+
+Home sponsors use the shared `SponsorGrid`: ascending enterprise priority, theme-aware
+logos and external website links in new tabs. The calendar toolbar combines search,
+categorical FilterMenu, previous/next date arrows and day/week controls in one desktop
+row. Its internal viewport fills the remaining window height; all timed activities
+(including long sessions) retain their real duration and category metadata.
+
+At narrow widths the Day view presents a chronological agenda with readable event
+metadata; desktop Day and Week keep the hour grid. Overlapping grid events expand
+into available lanes. Audience filtering offers only caller-visible audience tags,
+even when the feed currently contains a single audience.
+
+Gallery has a route-level loading boundary with skeleton cards. Gallery/challenge
+URLs live in the same app route group as My projects; the shared shell persists across
+sibling navigation while still exposing anonymous record views. My projects loads
+initial records on the server and keeps client reads for invitation mutation refreshes.
+The web audience filter mirrors mobile: empty audiences mean staff-only, and a staff
+projection keeps that filter available even before staff-only activities are scheduled.
+
+Schedule filters retain the unfiltered day/hour grid and only remove event blocks.
+Short blocks use compact padding and line heights so title, category and time fit
+inside their actual duration; filtering does not collapse the calendar to a single hour.
+
+The calendar retains a full 00:00–24:00 axis. The current event-local time appears
+as a red time label in the gutter, a dot and line across today, and a quiet guide
+across other visible dates. It updates every 30 seconds; Today scrolls to it.
+
+Calendar Day/Week reuses the standard content-width TabBar; Today is a secondary
+outlined action beside date navigation, rather than a third view toggle.
+
+Day navigation arrows sit at the left/right ends of the calendar day header, including
+the narrow agenda; its full date is centered. The top toolbar keeps search, filters,
+Today and the Day/Week view selector without repeating that date.
+
+Gallery records give the project name page-title emphasis with a contextual back-to-
+gallery action. The sidebar leads with team avatars, then challenge links as aligned
+rows; external project fields use their human label rather than a raw URL as the CTA.
+
+Challenge records put the challenge title and sponsor identity before all content,
+with a header back action. Description/criteria occupy the main column; published
+winners and prizes occupy the supporting column. Winners use ranked status and the
+shared project action, never a raw list above the challenge identity.
+
+Question-owned catalogue controls (`LibraryPicker` and `LibraryManager`) reuse the
+shared MultiSelect and destructive AlertModal. Catalogue management is embedded in
+the question editor, never the general Libraries settings. See
+[question-owned libraries](../../docs/form-libraries.md). Project reading,
+reading routes reuse `ProjectOverview` (answers, team, challenges and queue state);
+judging embeds its `ProjectAnswers` content. Staff inspection opens in reading
+mode; new empty participant drafts begin editing. `CreateProjectPanel` collects
+a team and dynamic answers for administrative creation, independently of personal
+project creation. See [project access and lifecycle](../../docs/projects.md#unified-inspection-and-administration-h18h21).
+
+Form validation runs on blur: React Hook Form uses `mode: "onBlur"` and
+`reValidateMode: "onBlur"`; `FormControl` also validates custom controls when
+focus leaves their boundary. Compound controls may report completion with an
+eventless blur callback; the shared control handles both that callback and DOM
+focus events. Dynamic application/project fields use
+`validateFieldOnBlur`, including phones, required consent, choices and configured
+rules. Compound pickers validate on close or departure, using the latest changed
+value. Submit retains full validation and first-error focus as a safeguard.
+
+## Joint event and platform legal documents
+
+The public `/terms` and `/privacy` documents in `src/components/legal/` cover
+HackUDC participation and the hackOS instance operated by GPUL as one service.
+They mirror the Spanish, Galician and English documents in the HackUDC website
+repository (`src/pages/{terms,privacy}.md` and their locale variants). Update both
+sets together when the joint policy changes, including the revision date. These
+terms do not govern hackOS instances operated by third parties.
+
+The signup notice accepts the joint terms and acknowledges reading the privacy
+policy. It does not request blanket consent for data processing. Optional
+permissions, including CV sharing and marketing, remain separate from that
+notice and must not be inferred from account creation.
+
+The event image clause mirrors the HackUDC website: it states that physical
+attendance signifies consent to capture and use images by organisers, sponsor
+representatives, other participants and participating entities for promotional,
+social-media, commercial or other purposes. Keep this wording consistent in the
+terms and privacy policy in all three languages.

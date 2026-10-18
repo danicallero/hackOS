@@ -95,6 +95,16 @@ x-live-activity-env: &live-activity-env
   LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES: "${LIVE_ACTIVITY_ACCREDITATION_LEAD_MINUTES:-60}"
   LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES: "${LIVE_ACTIVITY_ACCREDITATION_TAIL_MINUTES:-60}"
 
+# GitHub App (project repo linking and activity ranking). All optional; the
+# API only serves the webhook and the install flow, so the worker gets none.
+x-github-env: &github-env
+  GITHUB_APP_ID: "${GITHUB_APP_ID:-}"
+  GITHUB_APP_SLUG: "${GITHUB_APP_SLUG:-}"
+  GITHUB_APP_CLIENT_ID: "${GITHUB_APP_CLIENT_ID:-}"
+  GITHUB_APP_CLIENT_SECRET: "${GITHUB_APP_CLIENT_SECRET:-}"
+  GITHUB_APP_PRIVATE_KEY_PEM: "${GITHUB_APP_PRIVATE_KEY_PEM:-}"
+  GITHUB_WEBHOOK_SECRET: "${GITHUB_WEBHOOK_SECRET:-}"
+
 x-mail-env: &mail-env
   MAIL_PROVIDER: "${MAIL_PROVIDER:-smtp}"
   MAIL_FROM_ADDRESS: "${MAIL_FROM_ADDRESS}"
@@ -108,7 +118,7 @@ x-mail-env: &mail-env
   SMTP_REQUIRE_TLS: "${SMTP_REQUIRE_TLS:-true}"
 
 x-api-env: &api-env
-  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env, *live-activity-env]
+  <<: [*database-env, *valkey-env, *auth-env, *storage-env, *wallet-env, *live-activity-env, *github-env]
   NODE_ENV: production
   WORKERS_INLINE: "false"
   CORS_ORIGINS: "${CORS_ORIGINS}"

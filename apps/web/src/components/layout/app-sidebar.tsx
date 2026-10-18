@@ -92,7 +92,11 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const { t } = useLocale();
-  const active = isActive ?? matchesPath(pathname, item.href);
+  const active =
+    isActive ??
+    (matchesPath(pathname, item.href) ||
+      item.activePaths?.some((path) => matchesPath(pathname, path)) ||
+      false);
   const Icon = item.icon;
 
   if (item.soon) {
@@ -119,7 +123,11 @@ function NavLink({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)} className={className}>
-        <Link href={item.href} className="flex h-full w-full items-center gap-2">
+        <Link
+          href={item.href}
+          aria-current={active ? "page" : undefined}
+          className="flex h-full w-full items-center gap-2"
+        >
           <span className="relative shrink-0 [&>svg]:size-4">
             <Icon />
             {showUnreadDot && <UnreadIconDot />}
@@ -270,7 +278,7 @@ export function AppSidebar() {
               tooltip="hackOS"
               className="flex-1 gap-2.5 px-1 hover:bg-transparent"
             >
-              <Link href="/timetable">
+              <Link href="/event">
                 <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
                 <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
                   hackOS
@@ -294,7 +302,7 @@ export function AppSidebar() {
               <NavLink
                 key={item.href}
                 item={item}
-                showUnreadDot={item.href === "/inbox" && unreadCount > 0}
+                showUnreadDot={item.href === "/event" && unreadCount > 0}
               />
             ))}
           </SidebarMenu>

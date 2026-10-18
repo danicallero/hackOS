@@ -115,3 +115,9 @@ jest.mock("expo-widgets", () => ({
   after: (date) => ({ after: date }),
   widgetsDirectory: "",
 }));
+
+// Screen tests do not open SSE streams; they would pull the auth client into every render.
+jest.mock("@/lib/use-stream-refresh", () => ({
+  STREAM_REFRESH_JITTER_MS: 0,
+  useStreamRefresh: () => () => true,
+}));

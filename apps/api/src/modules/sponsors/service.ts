@@ -14,10 +14,15 @@ import {
 } from "../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
-import type { CreateEnterpriseBody, FaqItem, UpdateEnterpriseBody } from "./schemas.js";
+import type {
+  CreateEnterpriseBody,
+  EnterpriseKind,
+  FaqItem,
+  UpdateEnterpriseBody,
+} from "./schemas.js";
 
 const COLUMNS = `id, name, website, logo_url,
-  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, priority,
+  COALESCE(logo_negative_url, logo_url) AS logo_negative_url, description, priority, kind, position,
   visibility, available_from, director_id, stand_scannable, created_at`;
 
 const COLUMN_FOR: Record<string, string> = {
@@ -27,6 +32,7 @@ const COLUMN_FOR: Record<string, string> = {
   logoNegativeUrl: "logo_negative_url",
   description: "description",
   priority: "priority",
+  kind: "kind",
   visibility: "visibility",
   availableFrom: "available_from",
 };
@@ -129,8 +135,8 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
         `INSERT INTO enterprises
-           (name, website, logo_url, logo_negative_url, description, priority, visibility, available_from)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (name, website, logo_url, logo_negative_url, description, priority, kind, visibility, available_from)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING ${COLUMNS}`,
         [
           input.name,
@@ -139,6 +145,7 @@ export async function createEnterprise(input: CreateEnterpriseBody, actorId: num
           input.logoNegativeUrl ?? null,
           input.description ?? null,
           input.priority ?? null,
+          input.kind,
           input.visibility,
           input.availableFrom ?? null,
         ],
@@ -235,6 +242,45 @@ export async function setEnterprisesVisibility(
       });
     }
     return { updated: rows.map((r) => Number(r.id)) };
+  });
+}
+
+/**
+ * H45: manual order inside one priority tier. Without `priority` every id must
+ * share the same priority, so reordering one tier can never shift another.
+ * With `priority` the ids are that tier's final order and enterprises from
+ * other tiers are moved into it.
+ */
+export async function reorderEnterprises(
+  ids: number[],
+  priority: number | undefined,
+  actorId: number | null,
+) {
+  return withTransaction(async (client) => {
+    const { rows } = await client.query<{ id: number; priority: number | null }>(
+      `SELECT id, priority FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+      [ids],
+    );
+    if (rows.length !== new Set(ids).size) throw new NotFoundError("Enterprise not found", { ids });
+    const [first] = rows;
+    if (!first) throw new NotFoundError("Enterprise not found", { ids });
+    if (priority === undefined && rows.some((r) => r.priority !== first.priority))
+      throw new ConflictError("Only enterprises with the same priority can be reordered");
+    for (const row of rows) await assertEnterpriseScope(client, actorId, Number(row.id));
+    await client.query(
+      `UPDATE enterprises e SET position = o.pos, priority = COALESCE($2::int, e.priority)
+         FROM unnest($1::int[]) WITH ORDINALITY AS o(id, pos)
+        WHERE e.id = o.id`,
+      [ids, priority ?? null],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "enterprise",
+      entityId: first.id,
+      action: "reordered",
+      after: { ids, priority: priority ?? null },
+    });
+    return { ids };
   });
 }
 
@@ -628,22 +674,30 @@ export interface PublicSponsor {
   logoUrl: string | null;
   logoNegativeUrl: string | null;
   priority: number;
+  kind: EnterpriseKind;
 }
 
 /**
  * Publicly-revealed sponsors for the website / TV logo grid (H45). Driven by
  * the enterprise's own visibility; scheduled reveal is handled by the background
- * trigger. Ordered by each enterprise's priority (1 = primary / biggest).
+ * trigger. All kinds by default, or one with `kind`. Priority is the only
+ * grouping key (1 = first tier); within one priority the manual position
+ * decides, then creation order, so ties keep a stable order.
  */
-export async function listPublicSponsors(client: Queryable = pool): Promise<PublicSponsor[]> {
+export async function listPublicSponsors(
+  kind?: EnterpriseKind,
+  client: Queryable = pool,
+): Promise<PublicSponsor[]> {
   const { rows } = await client.query(
     `SELECT e.id AS enterprise_id, e.name, e.website, e.logo_url,
             COALESCE(e.logo_negative_url, e.logo_url) AS logo_negative_url,
-            COALESCE(e.priority, 9999) AS priority
+            COALESCE(e.priority, 9999) AS priority, e.kind
       FROM enterprises e
       WHERE e.visibility = 'visible'
+        AND ($1::text IS NULL OR e.kind = $1)
         AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
-      ORDER BY priority ASC, e.name ASC`,
+      ORDER BY priority ASC, e.position ASC NULLS LAST, e.id ASC`,
+    [kind ?? null],
   );
   return rows.map((r: Record<string, unknown>) => ({
     enterpriseId: Number(r.enterprise_id),
@@ -652,6 +706,7 @@ export async function listPublicSponsors(client: Queryable = pool): Promise<Publ
     logoUrl: (r.logo_url as string | null) ?? null,
     logoNegativeUrl: (r.logo_negative_url as string | null) ?? null,
     priority: Number(r.priority),
+    kind: r.kind as EnterpriseKind,
   }));
 }
 

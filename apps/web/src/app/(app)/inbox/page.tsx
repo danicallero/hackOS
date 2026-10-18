@@ -1,7 +1,7 @@
 "use client";
 
-import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { HomeSectionHeader } from "@/components/common/section-navigation";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
@@ -15,8 +15,8 @@ export default function InboxPage() {
     defaultValue: "messages",
   });
   return (
-    <PageLayout width="reading">
-      <PageHeader title={t("inbox")} />
+    <PageLayout>
+      <HomeSectionHeader />
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar>
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>

@@ -19,21 +19,18 @@ export function registerOperationsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Generate queue entries for all eligible challenges",
         description:
-          "Administrative, idempotent queue generation for every challenge with Devpost tags. Existing queue entries are preserved and reported rather than duplicated.",
+          "Administrative, idempotent queue generation for every challenge with native submitted project intent. Existing queue entries are preserved and reported rather than duplicated.",
       },
     },
     async (req) => {
       const actorId = actor(req.userId);
 
       const { rows: challenges } = await pool.query(
-        `SELECT id, devpost_tags FROM challenges
+        `SELECT id FROM challenges
           WHERE is_test_account = false
           ORDER BY id`,
       );
-      const eligible = challenges.filter(
-        (challenge: { id: number; devpost_tags?: string[] | null }) =>
-          (challenge.devpost_tags?.length ?? 0) > 0,
-      );
+      const eligible = challenges;
 
       const perChallenge: Array<{
         challengeId: number;

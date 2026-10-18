@@ -94,6 +94,12 @@ interface DataTableProps<T> {
    *  order — lets a caller page through rows in the order actually on
    *  screen, e.g. prev/next inside a detail modal. */
   onVisibleRowsChange?: (rows: T[]) => void;
+  /** Replaces the row element, e.g. with a sortable row; it must render `key={getRowId(row)}`. */
+  renderRow?: (
+    row: T,
+    props: { className?: string; onClick?: () => void },
+    cells: React.ReactNode,
+  ) => React.ReactNode;
 }
 
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -133,6 +139,7 @@ export function DataTable<T>({
   onSelectionChange,
   stateKey,
   onVisibleRowsChange,
+  renderRow,
 }: DataTableProps<T>) {
   const { t } = useLocale();
   const [query, setQuery] = usePersistedState(stateKey ? `${stateKey}:query` : null, "");
@@ -381,16 +388,14 @@ export function DataTable<T>({
                     const checked = selectable && selectedIds?.has(rowId);
                     const rowHref = getRowHref?.(row) ?? null;
                     const interactive = rowInteractionCol > 0 && (rowHref !== null || !getRowHref);
-                    return (
-                      <TableRow
-                        key={rowId}
-                        className={interactive ? "cursor-pointer" : undefined}
-                        onClick={
-                          interactive
-                            ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
-                            : undefined
-                        }
-                      >
+                    const rowProps = {
+                      className: interactive ? "cursor-pointer" : undefined,
+                      onClick: interactive
+                        ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
+                        : undefined,
+                    };
+                    const cells = (
+                      <>
                         {selectable && (
                           <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
                             <Checkbox
@@ -441,6 +446,13 @@ export function DataTable<T>({
                             {rowActions(row)}
                           </TableCell>
                         )}
+                      </>
+                    );
+                    return renderRow ? (
+                      renderRow(row, rowProps, cells)
+                    ) : (
+                      <TableRow key={rowId} {...rowProps}>
+                        {cells}
                       </TableRow>
                     );
                   })

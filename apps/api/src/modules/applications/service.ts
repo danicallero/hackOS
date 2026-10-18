@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
+import { normalizePhone } from "@hackos/shared/phone";
 import type pg from "pg";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
@@ -12,6 +14,7 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from ".
 import { translateEmail } from "../../lib/i18n.js";
 import { broadcast } from "../../lib/sse.js";
 import { getEventName, getEventTimezone } from "../event/service.js";
+import { activeLibraryFields, validateLibraryAnswers } from "../form-libraries/service.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
@@ -210,6 +213,7 @@ const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
   "invalid option": FIELD_ERROR_REASONS.INVALID_OPTION,
   "must be a number": FIELD_ERROR_REASONS.MUST_BE_NUMBER,
   "must be a birth year": FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR,
+  "must be a phone number": FIELD_ERROR_REASONS.MUST_BE_PHONE,
   "must be a boolean": FIELD_ERROR_REASONS.MUST_BE_BOOLEAN,
   "must be an array": FIELD_ERROR_REASONS.MUST_BE_ARRAY,
   "must be a string": FIELD_ERROR_REASONS.MUST_BE_STRING,
@@ -276,6 +280,11 @@ export function validateResponses(
       case "number":
         if (typeof value !== "number") errors[field.key] = "must be a number";
         break;
+      case "phone":
+        if (typeof value !== "string" || normalizePhone(value) === null) {
+          errors[field.key] = "must be a phone number";
+        }
+        break;
       case "birth_year":
         if (
           typeof value !== "number" ||
@@ -289,6 +298,13 @@ export function validateResponses(
       case "checkbox":
         if (typeof value !== "boolean") errors[field.key] = "must be a boolean";
         else if (field.required && value !== true) errors[field.key] = "required";
+        break;
+      case "library":
+        if (
+          !Array.isArray(value) ||
+          value.some((item) => typeof item !== "string" || !item.trim() || item.length > 200)
+        )
+          errors[field.key] = "must be an array";
         break;
       case "multiselect": {
         if (!Array.isArray(value)) {
@@ -306,6 +322,11 @@ export function validateResponses(
       }
       case "file":
         if (typeof value !== "string") errors[field.key] = "must be a string";
+        break;
+      case "images":
+        if (!Array.isArray(value) || value.some((key) => typeof key !== "string"))
+          errors[field.key] = "must be a list of images";
+        else if (value.length > MAX_IMAGES_PER_FIELD) errors[field.key] = "too many images";
         break;
       case "university":
         // The value is a shared-library university id. The picker sends a
@@ -696,8 +717,12 @@ export async function submitResponse(
     // typo for DNI). Only non-empty string answers overwrite an existing value.
     const dni = extractDni(merged);
 
-    const enrichedTemplate = await enrichTemplate(app, formVersion.template);
+    const enrichedTemplate = await enrichTemplate(
+      app,
+      await activeLibraryFields(client, formVersion.template),
+    );
     validateResponses(enrichedTemplate, merged);
+    await validateLibraryAnswers(client, enrichedTemplate, merged, userId);
     const storedResponses = stripDietaryResponses(merged);
 
     // Sensitive/logistics data lives on the user row, not the response (H12).

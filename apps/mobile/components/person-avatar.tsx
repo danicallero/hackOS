@@ -1,34 +1,46 @@
-import { useEffect, useState } from "react";
-import { Image, Text, View } from "react-native";
+import { Image, type ImageProps } from "expo-image";
+import { useMemo, useState } from "react";
+import { Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 import { diaryInitials } from "@/lib/diary";
-import { loadApiImage } from "@/lib/directory";
+import { apiImageSource } from "@/lib/directory";
 import { colors } from "@/theme/colors";
 
+export interface ApiImage {
+  /** True once the photo has drawn; callers show their fallback until then. */
+  loaded: boolean;
+  /** Props for an `expo-image` `Image`, or null without a photo or after it failed. */
+  props: Pick<ImageProps, "source" | "cachePolicy" | "onLoad" | "onError"> | null;
+}
+
 /**
- * An authenticated API image (`/api/users/:id/photo`, #934) loaded with the
- * session and shown from memory (`loadApiImage`), or null until it arrives or
- * when it cannot load. Android's image pipeline drops a `Cookie` header on an
- * `Image` source, so private photos never go through `source.headers`.
+ * Keeps a photo that is still loading laid out but invisible, so its fallback
+ * stays in place until `loaded` (#934).
  */
-export function useApiImage(uri: string | null | undefined): string | null {
-  const [loaded, setLoaded] = useState<{ uri: string; source: string } | null>(null);
-  useEffect(() => {
-    if (!uri) return;
-    let active = true;
-    loadApiImage(uri).then(
-      (source) => {
-        if (active) setLoaded({ uri, source });
-      },
-      () => {
-        // A missing or hidden photo keeps the fallback.
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [uri]);
-  return uri && loaded && loaded.uri === uri ? loaded.source : null;
+export const loadingImageStyle = { position: "absolute", opacity: 0 } as const;
+
+/**
+ * An authenticated API image (`/api/users/:id/photo`, #934) for `expo-image`:
+ * render `<Image {...props} />` while `props` is set, hidden with
+ * `loadingImageStyle` until `loaded`, and the fallback until then. A missing
+ * or hidden photo (an error) drops `props` and keeps the fallback.
+ */
+export function useApiImage(uri: string | null | undefined): ApiImage {
+  const [status, setStatus] = useState<{ uri: string; loaded: boolean } | null>(null);
+  // Switching account goes through sign-in, which remounts every avatar, so
+  // the session in the cache key is read once per photo.
+  const source = useMemo(() => (uri ? apiImageSource(uri) : null), [uri]);
+  const current = uri && status?.uri === uri ? status : null;
+  if (!uri || !source || (current && !current.loaded)) return { loaded: false, props: null };
+  return {
+    loaded: current?.loaded ?? false,
+    props: {
+      source,
+      cachePolicy: "memory",
+      onLoad: () => setStatus({ uri, loaded: true }),
+      onError: () => setStatus({ uri, loaded: false }),
+    },
+  };
 }
 
 /**
@@ -47,7 +59,7 @@ export function PersonAvatar({
   uri: string | null;
   kind?: "person" | "sponsor";
 }) {
-  const source = useApiImage(uri);
+  const photo = useApiImage(uri);
   const frame = {
     alignItems: "center" as const,
     backgroundColor: colors.elevatedSurface,
@@ -57,39 +69,39 @@ export function PersonAvatar({
     overflow: "hidden" as const,
     width: size,
   };
-  if (source) {
-    return (
-      <View style={frame}>
-        <Image
-          accessible={false}
-          source={{ uri: source }}
-          resizeMode={kind === "person" ? "cover" : "contain"}
-          style={{ height: size, width: size }}
-        />
-      </View>
-    );
-  }
-  if (name) {
-    return (
-      // Tinted like the account avatar, so it reads on grouped and plain grounds.
-      <View style={[frame, { backgroundColor: colors.accentSurface }]}>
+  const image = photo.props ? (
+    <Image
+      {...photo.props}
+      accessible={false}
+      contentFit={kind === "person" ? "cover" : "contain"}
+      style={[{ height: size, width: size }, !photo.loaded && loadingImageStyle]}
+    />
+  ) : null;
+  // One tree for every state, so the image is not remounted when it loads.
+  return (
+    <View
+      style={[
+        frame,
+        // Tinted like the account avatar, so it reads on grouped and plain grounds.
+        name && !photo.loaded ? { backgroundColor: colors.accentSurface } : null,
+      ]}
+    >
+      {photo.loaded ? null : name ? (
         <Text
           accessible={false}
           style={{ color: colors.onAccentSurface, fontSize: size * 0.36, fontWeight: "600" }}
         >
           {diaryInitials(name)}
         </Text>
-      </View>
-    );
-  }
-  return (
-    <View style={frame}>
-      <SymbolView
-        accessible={false}
-        name={kind === "person" ? "person.fill" : "building.2"}
-        size={size * 0.45}
-        tintColor={colors.secondaryLabel}
-      />
+      ) : (
+        <SymbolView
+          accessible={false}
+          name={kind === "person" ? "person.fill" : "building.2"}
+          size={size * 0.45}
+          tintColor={colors.secondaryLabel}
+        />
+      )}
+      {image}
     </View>
   );
 }

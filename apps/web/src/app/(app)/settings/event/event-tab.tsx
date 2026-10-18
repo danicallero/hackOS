@@ -13,13 +13,12 @@
 
 import { isValidTimeZone, wallClockToInstant } from "@hackos/shared/event-time";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
-import { TabBar } from "@/components/common/tab-bar";
 import { TimezonePicker } from "@/components/common/timezone-picker";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import {
@@ -32,8 +31,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
@@ -51,9 +56,20 @@ const createSchema = (t: Translate) =>
       name: z.string().max(200, t("tooLong")),
       tagline: z.string().max(500, t("tooLong")),
       timezone: z.string().min(1, t("required")).max(100, t("tooLong")),
-      participantsCanCreateProjects: z.boolean(),
-      participantSelfServiceStartsAt: z.string(),
-      participantSelfServiceEndsAt: z.string(),
+      projectDraftsOpenAt: z.string(),
+      projectSubmissionsCloseAt: z.string(),
+      projectDraftVisibility: z.enum(["team_only", "attendees", "public"]),
+      projectGalleryOpensAt: z.string(),
+      projectGalleryAudience: z.enum(["staff", "attendees", "public"]),
+      projectMaxTeamSize: z
+        .string()
+        .refine(
+          (value) =>
+            !value ||
+            (Number.isInteger(Number(value)) && Number(value) > 0 && Number(value) <= 100),
+          t("fieldMustBeNumber"),
+        ),
+      projectGithubRequired: z.boolean(),
       eventStartsAt: z.string(),
       eventEndsAt: z.string(),
       hackingStartsAt: z.string(),
@@ -92,6 +108,11 @@ const EQUAL_SPLIT = "pr-9";
 
 type Values = z.infer<ReturnType<typeof createSchema>>;
 
+/** A stored value outside the select's options would render blank and mark the form dirty on load. */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
 function fromConfig(cfg: EventConfig): Values {
   const zone = cfg.timezone || "Europe/Madrid";
   return {
@@ -102,14 +123,26 @@ function fromConfig(cfg: EventConfig): Values {
     name: cfg.name ?? "",
     tagline: cfg.tagline ?? "",
     timezone: cfg.timezone || "Europe/Madrid",
-    participantsCanCreateProjects: cfg.participantsCanCreateProjects,
-    participantSelfServiceStartsAt: toLocalInputValue(cfg.participantSelfServiceStartsAt, zone),
-    participantSelfServiceEndsAt: toLocalInputValue(cfg.participantSelfServiceEndsAt, zone),
+    projectDraftsOpenAt: toLocalInputValue(cfg.projectDraftsOpenAt, zone),
+    projectSubmissionsCloseAt: toLocalInputValue(cfg.projectSubmissionsCloseAt, zone),
+    projectDraftVisibility: oneOf(
+      cfg.projectDraftVisibility,
+      ["team_only", "attendees", "public"],
+      "team_only",
+    ),
+    projectGalleryOpensAt: toLocalInputValue(cfg.projectGalleryOpensAt, zone),
+    projectGalleryAudience: oneOf(
+      cfg.projectGalleryAudience,
+      ["staff", "attendees", "public"],
+      "staff",
+    ),
+    projectMaxTeamSize: cfg.projectMaxTeamSize == null ? "" : String(cfg.projectMaxTeamSize),
     eventStartsAt: toLocalInputValue(cfg.eventStartsAt, zone),
     eventEndsAt: toLocalInputValue(cfg.eventEndsAt, zone),
     hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt, zone),
     hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt, zone),
     showStartCountdown: cfg.showStartCountdown,
+    projectGithubRequired: cfg.projectGithubRequired === true,
   };
 }
 
@@ -145,21 +178,34 @@ function CountdownPreview({
   );
 }
 
-export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
+export type EventTabView = "general" | "schedule" | "participants";
+
+export function EventTab({
+  view,
+  onDirtyChange,
+}: {
+  view: EventTabView;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const { t } = useLocale();
   const reminderLabelId = useId();
-  const [view, setView] = useState("general");
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(createSchema(t)),
     defaultValues: {
       eventReminderScheduledAt: "",
       name: "",
       tagline: "",
       timezone: "Europe/Madrid",
-      participantsCanCreateProjects: false,
-      participantSelfServiceStartsAt: "",
-      participantSelfServiceEndsAt: "",
+      projectDraftsOpenAt: "",
+      projectSubmissionsCloseAt: "",
+      projectDraftVisibility: "team_only",
+      projectGalleryOpensAt: "",
+      projectGalleryAudience: "staff",
+      projectMaxTeamSize: "",
+      projectGithubRequired: false,
       eventStartsAt: "",
       eventEndsAt: "",
       hackingStartsAt: "",
@@ -193,15 +239,13 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
         name: values.name.trim() || null,
         tagline: values.tagline.trim() || null,
         timezone: values.timezone.trim(),
-        participantsCanCreateProjects: values.participantsCanCreateProjects,
-        participantSelfServiceStartsAt: fromLocalInputValue(
-          values.participantSelfServiceStartsAt,
-          zone,
-        ),
-        participantSelfServiceEndsAt: fromLocalInputValue(
-          values.participantSelfServiceEndsAt,
-          zone,
-        ),
+        projectDraftsOpenAt: fromLocalInputValue(values.projectDraftsOpenAt, zone),
+        projectSubmissionsCloseAt: fromLocalInputValue(values.projectSubmissionsCloseAt, zone),
+        projectDraftVisibility: values.projectDraftVisibility,
+        projectGalleryOpensAt: fromLocalInputValue(values.projectGalleryOpensAt, zone),
+        projectGalleryAudience: values.projectGalleryAudience,
+        projectMaxTeamSize: values.projectMaxTeamSize ? Number(values.projectMaxTeamSize) : null,
+        projectGithubRequired: values.projectGithubRequired,
         eventStartsAt: fromLocalInputValue(values.eventStartsAt, zone),
         eventEndsAt: fromLocalInputValue(values.eventEndsAt, zone),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt, zone),
@@ -218,14 +262,6 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
     }
   }
 
-  // A validation error on a hidden tab would otherwise block Save silently.
-  function revealInvalidTab(errors: Record<string, unknown>) {
-    const names = Object.keys(errors);
-    if (names.some((n) => ["name", "tagline", "timezone"].includes(n))) setView("general");
-    else if (names.some((n) => n.startsWith("participantSelfService"))) setView("participants");
-    else if (names.length > 0) setView("schedule");
-  }
-
   if (!config || status === "error") {
     return <EventConfigLoadState />;
   }
@@ -235,25 +271,15 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit, revealInvalidTab)}>
-        <Tabs value={view} onValueChange={setView}>
-          <TabBar className="[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] sm:[mask-image:none] flex-row! h-(--control-height-default)! [&_[data-slot=tabs-trigger]]:w-auto! [&_[data-slot=tabs-trigger]]:justify-center!">
-            <TabsTrigger value="general">{t("eventGeneralTab")}</TabsTrigger>
-            <TabsTrigger value="schedule">{t("scheduleSectionTitle")}</TabsTrigger>
-            <TabsTrigger value="participants">{t("eventParticipantsTab")}</TabsTrigger>
-          </TabBar>
-          <SectionCard
-            variant="plain"
-            footerClassName="justify-start"
-            stickyFooter
-            footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
-          >
-            <TabsContent
-              value="general"
-              forceMount
-              hidden={view !== "general"}
-              className="space-y-(--space-within-section)"
-            >
+      <form onSubmit={form.handleSubmit(onSubmit)}>
+        <SectionCard
+          variant="plain"
+          footerClassName="justify-start"
+          stickyFooter
+          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
+        >
+          {view === "general" && (
+            <div className="space-y-(--space-within-section)">
               <div className="grid items-start gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
@@ -295,13 +321,10 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                   )}
                 />
               </div>
-            </TabsContent>
-            <TabsContent
-              value="schedule"
-              forceMount
-              hidden={view !== "schedule"}
-              className="space-y-(--space-within-section)"
-            >
+            </div>
+          )}
+          {view === "schedule" && (
+            <div className="space-y-(--space-within-section)">
               <div className="grid items-start gap-4 sm:grid-cols-2">
                 {(
                   [
@@ -428,52 +451,89 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                   <p className="text-sm">{t("eventReminderExpired")}</p>
                 )}
               </div>
-            </TabsContent>
-            <TabsContent
-              value="participants"
-              forceMount
-              hidden={view !== "participants"}
-              className="space-y-(--space-within-section)"
-            >
-              <FormField
-                control={form.control}
-                name="participantsCanCreateProjects"
-                render={({ field }) => (
-                  <FormItem>
-                    <div className="flex items-center justify-between gap-4 py-3">
-                      <FormLabel className="font-normal">
-                        {t("participantsCanCreateProjectsLabel")}
-                      </FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div>
-                <h3 className="text-balance text-sm font-semibold">
-                  {t("participantSelfServiceTitle")}
-                </h3>
-                <p className="text-muted-foreground mt-1 text-sm">
-                  {t("participantSelfServiceDesc")}
-                </p>
-              </div>
+            </div>
+          )}
+          {view === "participants" && (
+            <div className="space-y-(--space-within-section)">
               <div className="grid items-start gap-4 sm:grid-cols-2">
+                {(
+                  [
+                    ["projectDraftsOpenAt", "projectDraftsOpenAtLabel"],
+                    ["projectSubmissionsCloseAt", "projectSubmissionsCloseAtLabel"],
+                    ["projectGalleryOpensAt", "projectGalleryOpensAtLabel"],
+                  ] as const
+                ).map(([name, label]) => (
+                  <FormField
+                    key={name}
+                    control={form.control}
+                    name={name}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t(label)}</FormLabel>
+                        <FormControl>
+                          <DateTimeInput
+                            value={field.value}
+                            onChange={field.onChange}
+                            className={EQUAL_SPLIT}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
                 <FormField
                   control={form.control}
-                  name="participantSelfServiceStartsAt"
+                  name="projectDraftVisibility"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("participantSelfServiceStartsLabel")}</FormLabel>
+                      <FormLabel>{t("projectDraftVisibilityLabel")}</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="team_only">{t("projectAudienceTeam")}</SelectItem>
+                          <SelectItem value="attendees">{t("projectAudienceAttendees")}</SelectItem>
+                          <SelectItem value="public">{t("projectAudiencePublic")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="projectGalleryAudience"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("projectGalleryAudienceLabel")}</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="staff">{t("projectAudienceStaff")}</SelectItem>
+                          <SelectItem value="attendees">{t("projectAudienceAttendees")}</SelectItem>
+                          <SelectItem value="public">{t("projectAudiencePublic")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="projectMaxTeamSize"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("projectMaxTeamSize")}</FormLabel>
                       <FormControl>
-                        <DateTimeInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          className={EQUAL_SPLIT}
-                        />
+                        <Input type="number" min={1} max={100} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -481,25 +541,22 @@ export function EventTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
                 />
                 <FormField
                   control={form.control}
-                  name="participantSelfServiceEndsAt"
+                  name="projectGithubRequired"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t("participantSelfServiceEndsLabel")}</FormLabel>
-                      <FormControl>
-                        <DateTimeInput
-                          value={field.value}
-                          onChange={field.onChange}
-                          className={EQUAL_SPLIT}
-                        />
-                      </FormControl>
-                      <FormMessage />
+                      <div className="flex items-center justify-between gap-4 py-3">
+                        <FormLabel className="font-normal">{t("projectGithubRequired")}</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </div>
                     </FormItem>
                   )}
                 />
               </div>
-            </TabsContent>
-          </SectionCard>
-        </Tabs>
+            </div>
+          )}
+        </SectionCard>
       </form>
     </Form>
   );

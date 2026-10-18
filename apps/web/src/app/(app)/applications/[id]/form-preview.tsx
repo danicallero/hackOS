@@ -1,5 +1,7 @@
 "use client";
 
+import { MultiSelect } from "@/components/common/multi-select";
+
 // Read-only preview of the form as an applicant sees it (H11).
 
 import { useState } from "react";
@@ -121,6 +123,8 @@ export function AnswerPreviewControl({
   const opts = f.options ?? [];
   const fieldId = `preview-${f.key}`;
   const customPlaceholder = f.placeholder ? pickText(f.placeholder, locale) : "";
+  if (f.kind === "library")
+    return <MultiSelect id={fieldId} options={[]} value={[]} onChange={() => {}} disabled />;
   if (f.kind === "textarea") {
     return <Textarea id={fieldId} disabled rows={2} placeholder={customPlaceholder || undefined} />;
   }
@@ -159,7 +163,9 @@ export function AnswerPreviewControl({
           ? "number"
           : f.kind === "date"
             ? "date"
-            : "text"
+            : f.kind === "phone"
+              ? "tel"
+              : "text"
       }
       placeholder={
         customPlaceholder ||

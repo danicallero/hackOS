@@ -99,6 +99,8 @@ function SignUpInner() {
   );
   const schema = useMemo(() => signupSchema(t), [t]);
   const form = useForm<Values>({
+    mode: "onBlur",
+    reValidateMode: "onBlur",
     resolver: zodResolver(schema),
     defaultValues: {
       name: "",
@@ -112,7 +114,7 @@ function SignUpInner() {
 
   // Already signed in: no reason to show the sign-up form again.
   useEffect(() => {
-    if (status === "authenticated") router.replace(next || "/timetable");
+    if (status === "authenticated") router.replace(next || "/event");
   }, [status, router, next]);
 
   if (status === "loading" || status === "authenticated") {

@@ -172,11 +172,11 @@ min/max across every challenge in the group. Callers still pass a
 from it. For a 1:1 group the bounds select exactly the rows the per-challenge
 bounds did, so ordering is unchanged.
 
-Participant and pre-call ETA use the same live throughput boundary: they
-average `desired_minutes_per_team` and divide by the number of serving rooms
-whose queue state is not paused. A paused room contributes neither its pace nor
-capacity; when no serving room is active, the conservative eight-minute default
-is used.
+Participant and pre-call ETA use the same live throughput boundary,
+`queue_group_pace()`: the group's learned cycle divided by the number of
+serving rooms whose queue state is not paused. A paused room contributes no
+capacity; when no serving room is active, one slot takes the full cycle (see
+[background workers](./background-workers.md#shared-track-timing-and-eta-h32h38h39)).
 
 ### Call once
 
@@ -245,7 +245,7 @@ backs both the room-assignment picker and the all-queues management view: a
 sponsor representative only their own enterprises', anyone else none.
 
 Queue generation is deliberately incremental. It resolves each member
-challenge's Devpost prize tags, appends only projects without an active entry,
+challenge's submitted projects (via `project_challenges`), appends only projects without an active entry,
 and uses the queue ordering service for every insertion, so regenerating never
 renumbers a team that is already waiting, called, or evaluated. Clearing a
 queue cancels only waiting/called entries and records the clear action; a later

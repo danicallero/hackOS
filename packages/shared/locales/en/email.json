@@ -18,10 +18,6 @@
         "subject": "Verify your hackOS email",
         "body": "Hi {{name}},\n\nWelcome to hackOS! Confirm your email address to continue with your application:\n\n[Verify email]({{verifyUrl}})\n\nIf you didn't request this, ignore this message."
       },
-      "verifySecondaryEmail": {
-        "subject": "Confirm your secondary email for hackOS",
-        "body": "Hi {{name}},\n\nYour hackOS account ({{primaryEmail}}) asked to add {{secondaryEmail}} as a secondary address, so we can match your Devpost projects to your account:\n\n[Confirm {{secondaryEmail}}]({{verifyUrl}})\n\nIf you didn't request this, ignore this message — your account won't change."
-      },
       "reset": {
         "subject": "Reset your hackOS password",
         "body": "Hi {{name}},\n\nYou can choose a new password here:\n\n[Reset password]({{resetUrl}})\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed."

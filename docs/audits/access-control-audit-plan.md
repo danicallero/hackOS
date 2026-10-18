@@ -1,5 +1,9 @@
 # Access-control audit and consolidation plan
 
+> Historical audit: project-import capability references below describe the retired
+> integration. Current native projects use only `projects:read` and `projects:edit`
+> (#1005); see [native projects](../projects.md).
+
 Status: **implemented and independently release-gate verified (2026-07-31);
 superseded by the H8 role-hierarchy rewrite below (2026-08-31)**.
 Historical migration references whose files are absent from

@@ -37,25 +37,27 @@ is no role switcher.
 effective capability set precisely so navigation can check association and
 permission facts independently — the single `role` field collapses a sponsor
 rep who also judges to `"judge"`, which would hide their sponsor workspace if
-nav gated on `role` instead. The mobile personal Queue tab uses the stable
-`queue:status` capability for the pre-enrollment empty state, or
-`hasQueueItems` when the account already has an active personal queue entry;
-neither path depends on a role name.
+nav gated on `role` instead. The mobile My Projects tab needs only event access (`canSeeMyQueue` in
+`apps/mobile/lib/tabs.ts`), no capability or role name.
 
 ## Web: personal area + workspaces
 
 ### Stable personal area (`PERSONAL_NAV`)
 
-Visible to any authenticated account, no capability required: Schedule, My
-applications, My projects, Wallet, Inbox, My profile — except for a
-**pure applicant**: an account with no role-derived event access (`GET
-/api/me`'s `hasEventAccess`, `apps/api/src/modules/identity/role.ts#hasEventAccess`),
-no operational capability, and no room-judge/sponsor-rep association
-(`isPureApplicant` in `apps/web/src/lib/session.tsx`). That account has
-nothing to do yet on My projects, Wallet, or Inbox, so those three
-hide (`NavItem.hideForPureApplicant` in `nav.ts`) — Schedule, My applications,
-and My profile stay, since applying (or checking an application's status) is
-exactly what they still need.
+The personal sidebar exposes **Home**, **My applications**, **Projects**,
+**Wallet**, **Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+and Inbox (`/inbox`) in a shared internal navigation row.
+Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
+keeps the parent selected on every grouped route, including records, and Home
+retains the unread indicator. Existing URLs and bookmarks remain valid. Sibling views share the same
+PageLayout content width and parent header/navigation tracks, including loading
+states. Record titles and route-specific controls sit below those tracks.
+
+A **pure applicant** has no role-derived event access, operational capability,
+or room-judge/sponsor-rep association (`isPureApplicant` in `session.tsx`). Wallet
+and Contacts hide; Home omits Inbox and Projects opens the gallery instead of
+requesting a private team list. API audience and capability checks still govern
+every destination.
 
 **Agenda** (es "Agenda", gl "Axenda", en "Contacts"; `/people`, #935,
 address-book icon) is the attendee's event diary:
@@ -65,16 +67,24 @@ like Wallet and Inbox, and no capability. It sits just above My profile,
 where each person decides whether to share a public profile with the people
 who scan their badge. See [`diary.md`](./diary.md).
 
-There is deliberately no dashboard/home page: `/timetable` (Schedule) is the
-landing destination after sign-in and email verification
-(`apps/web/src/lib/invite-destination.ts`, `apps/web/src/lib/return-path.ts`),
-and every other destination a dashboard would have surfaced (applications,
-project, wallet) already has its own stable nav entry above.
+`/event` is the default landing destination after sign-in and verification.
+It leads with the current event-phase countdown, then public announcements,
+challenges and sponsors. Schedule remains in `/timetable` without repeating
+its contents in the overview. Explicit return paths still win.
 
-My projects stays visible to every admitted participant because work groups
-can be planned before an operational project exists. Live queue status appears
+My projects stays visible to every admitted participant. Projects have one
+draft-to-submitted lifecycle and one team roster (H19/H20). Live queue status appears
 inside the relevant project record, rather than as a separate destination.
-`/my-queue` remains a compatibility redirect for saved links.
+`/my-queue` remains a compatibility redirect for saved links. Participant project
+details use `/my-project/:id` for drafts, submitted content, the team and queues.
+The server-rendered `/gallery` and `/gallery/:id` use the API’s event phase and
+audience policy; navigation does not grant gallery access. Both gallery routes
+retain the application shell when signed in and public navigation otherwise.
+The public landing also exposes a gallery section. The Home `/event` view
+shows event information, public announcements, challenges and sponsors without
+repeating Schedule, Applications or Gallery. Challenge records retain the same
+Home navigation for signed-in viewers and return to `/event`; anonymous visitors
+return to the public landing.
 
 ### Work workspaces (`WORKSPACES`)
 
@@ -85,12 +95,12 @@ workspace never over-grants access.
 | Workspace | Items | Visible when |
 | --- | --- | --- |
 | Applications | Applications | `applications:review`, `applications:decide`, or `applications:manage` |
-| Projects and imports | Projects, Resolve import | `projects:read`, `projects:import`, `judge:panel`, or an assigned-judge/sponsor-rep association |
+| Projects | Projects, Project form | Projects: `projects:read`, `projects:edit`, or an assigned-judge/sponsor-rep association; Project form: `projects:edit` |
 | Live judging | Queue operations (tabs: All rooms overview · Judging queues · Room configuration), Judging, Reviews | `queue:operate`, `queue:admin`, `judge:panel`, an assigned-judge association (Judging); The Room configuration tab is `queue:admin` only — a sponsor rep routes their queues to their pooled rooms from Queue operations' Queues tab, not from room administration |
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
-| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours) (each tab within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours), `projects:edit` (project form) (each section within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
 | Access and audit | Users, Permissions, Audit log | `users:read`, `permissions:manage`, `audit:read` |
 
 The web navigation uses Phosphor concept icons: `Package` for the Logistics
@@ -133,15 +143,14 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 - `/timetable` and the public `/horario` (both rendered by
   `PublicScheduleView`) get a client-side audience filter (H59 follow-up,
   `components/public/schedule-audience-filter.tsx`) whenever the caller's own
-  feed from `/api/public/activities` actually spans more than one segment —
+  feed from `/api/public/activities` contains audience tags —
   the API projects each item's tags to that caller's accessible segments, and
   its options are derived from those distinct `audiences` tags (plus a
-  `staff` pseudo-segment for empty-audience items), never a separate role or
+  `staff` pseudo-segment for empty-audience items, kept available when the API returns staff-only projection metadata), never a separate role or
   capability lookup, so it can only ever offer segments the viewer already has
-  access to. A pure participant (whose feed is 100% `participant`-tagged) gets
-  no filter at all. A second,
+  access to. A pure participant sees only the participant option. A second,
   independent filter by activity kind (`components/public/schedule-kind-filter.tsx`)
-  appears alongside it whenever the feed spans more than one `ACTIVITY_KINDS`
+  is grouped in the same FilterMenu whenever the feed spans more than one `ACTIVITY_KINDS`
   value, mirroring the mobile app's kind filter (open to everyone there too —
   `docs/mobile.md`'s Schedule/Horario section). The Manage Schedule table
   (`app/(app)/schedule/schedule-dialogs.tsx`'s `useScheduleFilters`) offers the
@@ -171,10 +180,11 @@ hidden destinations stay routable:
   [`diary.md`](./diary.md); People and Companies segments only, with no
   directory to browse, opened directly with `?view=companies`; the direct tab is
   `app/(tabs)/diary/`, its own Stack for the native header and search) and
-  **Account** are direct, with My queue added when eligible (five fit
-  directly). **My queue** is visible to participants even before their first
-  queue entry so they can see the empty state and tutorial; mentors, sponsors,
-  and other accounts only see it once they have an actual queue entry. Wallet
+  **Account** are direct, with **My Projects** (tab key `queue`, labelled
+  **Projects** in the tab bar so it fits, H19/H20) always
+  added: every account in the event-access shell can open it before any queue
+  entry, and the live queue status appears inside each project record, so five fit
+  directly. Wallet
   is not a tab: every account opens it from the wallet button in Account's
   top-left corner, as an overlay whose close button is that same button (H28);
   `others/wallet` stays routable for deep links. Alerts are not a tab either: the Schedule header bell (with an unread
@@ -187,7 +197,7 @@ hidden destinations stay routable:
   **Scanner** (NFC waves icon, with explicit camera fallback), Activities (`activity:scan` holders only) —
   scanning must never sit behind an ellipsis. The separate
   **"Others" overflow selector** (only when more than five destinations)
-  holds eligible personal Queue, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
+  holds My Projects, Diary, Account, and any queue operations destination as pseudo-tabs. Account's
   Statistics destination is the staff operations hub for the person finder,
   scan history, and sync reconciliation. Holders of `sponsors:manage` (with or
   without a scanner capability) also get Account → Staff → Company tags, to
@@ -195,7 +205,7 @@ hidden destinations stay routable:
   tab. Company-tag links `/s/<code>` (`app/s/[code].tsx`) open outside the
   session guard and resume after sign-in.
 - **Queue-only operator** (`queue:operate`, `queue:admin`, or `*`, without a
-  scanner capability): Queue operations is a direct tab alongside Schedule; an eligible personal Queue, Diary and Account move to Others when the set
+  scanner capability): Queue operations is a direct tab alongside Schedule; My Projects, Diary and Account move to Others when the set
   exceeds five. If
   the person also has a scanner capability, Queue operations joins Others so
   Scanner stays directly reachable.
@@ -354,7 +364,9 @@ despite a working API.
   `sponsors:manage` and only their own enterprises' for a sponsor rep.
 
 Event settings (`/settings/event`) is a list of the sections the caller's
-capabilities allow, never a second sidebar (#932): `?tab=event|venue|wallet|presence|invites|judging|liveActivities|danger`
+capabilities allow, grouped as General (event, venue), Dates and deadlines
+(event and hacking dates, project deadlines and visibility, judging window,
+presence), Forms (project form), Access (invites, wallet) and Notifications, never a second sidebar (#932): `?tab=event|venue|schedule|projects|judging|presence|projectForm|invites|wallet|notifications|liveActivities|danger`
 opens one section with a back link (page header context slot) to the list. A
 lone visible section opens directly only when no `?tab=` is requested; a
 `?tab=` the caller cannot manage shows the list. The URL is the only state, so
@@ -369,3 +381,26 @@ Judging hours are in Event settings (`/settings/event?tab=judging`) and retain
 the `queue:admin` gate. `/queue/settings` preserves saved links by directing
 them there. `/queue/rooms` remains available as the room configuration page;
 it is embedded in Queue operations' Room configuration tab and has no sidebar entry of its own.
+
+The Home overview keeps the active countdown without a separate milestones list.
+Public and authenticated event views share a sponsor logo grid, sorted by ascending
+enterprise priority (1 first); sponsor websites open in a new tab. Home sibling
+pages keep a consistent content width. Schedule search and categorical filters share
+the standard ListToolbar/FilterMenu; long activities remain in the hourly grid,
+with category metadata and an internal daytime scroll position.
+
+The programme requests the audience-aware feed with session credentials from the
+configured app origin; CORS reflects only trusted app origins for this endpoint.
+Anonymous public/TV consumers keep the credential-free feed. Project creation is
+the primary action of the Projects page header.
+
+Gallery and challenge records share the persistent app route layout with the personal
+pages. That layout chooses public chrome only for anonymous record visitors, so
+switching My projects/Gallery preserves the sidebar instance. The page header reserves
+the default control height even while an asynchronous primary action is loading.
+
+Gallery navigation streams six skeleton cards while the API read is pending. Cards
+reserve two summary lines and group challenge previews with their disclosure count;
+team avatars and the project action share the footer. My projects loads its private list in
+the browser: the session cookie belongs to the API origin, so a Next server render cannot
+authenticate it and would bounce signed-in people through `/login` in a loop.
