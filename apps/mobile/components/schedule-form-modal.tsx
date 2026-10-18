@@ -16,6 +16,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { DateTimeField } from "@/components/date-time-field";
 import { FloatingGlassButton, Section, ToggleRow } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -255,7 +256,7 @@ export function ScheduleFormModal({
       presentationStyle="pageSheet"
       visible={visible}
     >
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <AdaptiveFrame>
         <ScrollView
           alwaysBounceVertical
           ref={scrollRef}
@@ -694,7 +695,7 @@ export function ScheduleFormModal({
           disabled={pending}
           onPress={() => void save()}
         />
-      </View>
+      </AdaptiveFrame>
     </Modal>
   );
 }

@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { UpgradeRequiredScreen } from "@/components/upgrade-required-screen";
@@ -30,6 +31,7 @@ import {
   shouldPresentProfileTasks,
 } from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
+import { useOrientationPolicy } from "@/lib/screen-orientation";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
@@ -94,6 +96,7 @@ function RootLayoutSessionContents() {
   const { mode } = useApiMode();
   const initialSessionPending = useInitialSessionPending(loading);
   const upgradeRequired = useUpgradeRequired();
+  useOrientationPolicy();
 
   // The API refuses every request from this build (#999); nothing else can work.
   if (upgradeRequired) return <UpgradeRequiredScreen />;
@@ -110,15 +113,17 @@ function RootLayoutSessionContents() {
       <PersonalEventStream authenticated={authenticated} />
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <PendingCompanyTagResume authenticated={authenticated} />
-      <RootLayoutNav
-        authenticated={authenticated}
-        pending={initialSessionPending}
-        me={me}
-        loading={loading}
-        error={error}
-        offlineEntryAvailable={offlineEntryAvailable}
-        enterOffline={enterOffline}
-      />
+      <AdaptiveFrame>
+        <RootLayoutNav
+          authenticated={authenticated}
+          pending={initialSessionPending}
+          me={me}
+          loading={loading}
+          error={error}
+          offlineEntryAvailable={offlineEntryAvailable}
+          enterOffline={enterOffline}
+        />
+      </AdaptiveFrame>
       {mode === "development" ? <DevelopmentIndicator /> : null}
     </View>
   );

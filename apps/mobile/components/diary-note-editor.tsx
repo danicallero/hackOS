@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Modal, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { FloatingGlassButton } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
@@ -44,7 +45,7 @@ export function DiaryNoteEditor({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <AdaptiveFrame>
         <View
           style={{
             alignItems: "center",
@@ -105,7 +106,7 @@ export function DiaryNoteEditor({
           accessibilityLabel={t("save")}
           onPress={() => onSave(note)}
         />
-      </View>
+      </AdaptiveFrame>
     </Modal>
   );
 }

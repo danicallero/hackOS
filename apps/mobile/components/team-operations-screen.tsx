@@ -16,6 +16,7 @@ import {
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import {
   EmptyState,
   FloatingGlassButton,
@@ -800,7 +801,7 @@ export function TeamOperationsScreen() {
           onRequestClose={closeAddChallenge}
           presentationStyle="pageSheet"
         >
-          <View style={{ backgroundColor: colors.background, flex: 1 }}>
+          <AdaptiveFrame>
             <ScrollView
               alwaysBounceVertical
               contentInsetAdjustmentBehavior="automatic"
@@ -904,7 +905,7 @@ export function TeamOperationsScreen() {
               accessibilityLabel={t("cancel")}
               onPress={closeAddChallenge}
             />
-          </View>
+          </AdaptiveFrame>
         </Modal>
       ) : null}
     </ScrollView>

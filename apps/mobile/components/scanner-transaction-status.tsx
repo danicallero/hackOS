@@ -5,6 +5,7 @@ import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { GlassView } from "@/components/glass-view";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
@@ -706,7 +707,7 @@ export function ScannerQueueStatus({
         presentationStyle="pageSheet"
         visible={open}
       >
-        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+        <AdaptiveFrame>
           <ScrollView
             alwaysBounceVertical
             contentInsetAdjustmentBehavior="automatic"
@@ -925,7 +926,7 @@ export function ScannerQueueStatus({
               (hasAttention ? onRetry : onSync)();
             }}
           />
-        </View>
+        </AdaptiveFrame>
       </Modal>
     </>
   );

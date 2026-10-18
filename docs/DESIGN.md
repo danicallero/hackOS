@@ -1148,6 +1148,12 @@ the rules that bind UI work:
 Wallet button, native confirmations — plus offline-first scanner UX. Full
 architecture: [`mobile.md`](./mobile.md).**
 
+- **Design for width, not for a device.** Layouts answer to the window the app has
+  now (compact < 600 dp, medium < 840 dp, expanded from 840 dp), never to a
+  manufacturer, model or fold posture. Content stops growing at 720 dp and is
+  centred (`AdaptiveFrame`, also inside every `Modal` sheet); nothing may remount
+  or reset on a resize, because foldables resize mid-task. Details in
+  [`mobile.md`](./mobile.md#foldables-and-large-screens).
 - **Tab budget is hard.** Every platform uses the custom Expo Router shell in
   `components/router-tabs.tsx`: iOS 26+ renders Liquid Glass surfaces, while
   earlier iOS and Android use the same geometry with solid surfaces. Five total

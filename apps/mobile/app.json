@@ -4,7 +4,7 @@
     "slug": "hackos",
     "description": "The HackUDC participant and event operations app.",
     "version": "1.0.4",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "hackos",
     "userInterfaceStyle": "automatic",
@@ -21,6 +21,15 @@
       "entitlements": {
         "com.apple.developer.pass-type-identifiers": ["$(TeamIdentifierPrefix)*"],
         "com.apple.developer.usernotifications.time-sensitive": true
+      },
+      "infoPlist": {
+        "UISupportedInterfaceOrientations": ["UIInterfaceOrientationPortrait"],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       }
     },
     "android": {

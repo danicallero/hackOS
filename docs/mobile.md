@@ -325,6 +325,40 @@ distributed to other Expo Router apps without importing hackOS code.
   y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
   fails when a screen with the automatic inset calls `useScrollToTop` directly.
 
+## Foldables and large screens
+
+One app that resizes, not a layout per device: nothing branches on a device model
+or a fold posture, only on the window the app has right now (`lib/window-size.ts`).
+
+- **Size classes.** `windowSizeClass(width)`: compact < 600 dp (phones, a folded
+  cover display), medium < 840 dp (a Galaxy Z Fold inner display in portrait),
+  expanded from 840 dp (Pixel Fold inner, tablets). `useWindowSizeClass()`
+  re-renders on every resize and keeps nothing between renders.
+- **Orientation.** `app.json` no longer locks portrait: the lock made Android
+  12L+ letterbox the app on an unfolded display and Android 16 ignores it there.
+  `lib/screen-orientation.ts` (`expo-screen-orientation`) locks portrait while the
+  *physical display's* smallest side is under 600 dp and unlocks it from 600 dp, and
+  re-evaluates when the display changes (fold, unfold). It is decided on the
+  display, not the window, so split-screen cannot flip it. iPhone keeps its portrait-only
+  `Info.plist`; iPad lists all four orientations (`ios.infoPlist`). The module is a
+  native dependency: a development client built without it applies no lock until it
+  is rebuilt (the lookup fails soft).
+- **Readable column.** `components/adaptive-frame.tsx` wraps the navigator in
+  `app/_layout.tsx` and every `Modal` sheet, capping content at 720 dp and centring
+  it on wider windows (the floating tab bar sits inside the column). The tree is
+  identical at every width, so fold, unfold and window resizing never remount the
+  navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
+- **System behaviour kept.** `MainActivity` already declares
+  `configChanges="...|screenSize|screenLayout|smallestScreenSize|orientation"`, so
+  resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
+  Insets come from `react-native-safe-area-context`, per edge.
+
+Not built: a hinge or fold-posture API (React Native exposes none; it would need a
+native module over Jetpack WindowManager `FoldingFeature`), two-pane list/detail
+layouts for expanded windows, and dual-screen devices that span a hinge (Surface Duo).
+The iPhone Duo guidance in the third-party skills is iOS 27.1-specific and was used
+only for its framework-neutral principles.
+
 ## Auth flow
 
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
