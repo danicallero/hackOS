@@ -4,7 +4,6 @@
 // the presentation clock.
 
 import { projectDescriptionField } from "@hackos/shared/forms";
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
@@ -12,7 +11,6 @@ import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -160,7 +158,90 @@ export function PresentationPanel({
         </div>
       </div>
       <Separator />
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
+      {entry && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-5 py-3">
+          <div className="min-w-60 flex-1 space-y-1.5">
+            {(isReady || isPresenting) && (
+              <PreparationTimer
+                enteredAt={entry.room_entered_at ?? null}
+                startedAt={entry.presentation_started_at}
+                scheduledSeconds={preparationSeconds}
+              />
+            )}
+
+            {isReady && presentationSeconds != null && (
+              <PresentationTimer startedAt={null} totalMinutes={presentationSeconds / 60} />
+            )}
+
+            {isPresenting && (
+              <PresentationTimer
+                startedAt={entry.presentation_started_at}
+                totalMinutes={
+                  entry.presentation_total_seconds != null
+                    ? entry.presentation_total_seconds / 60
+                    : null
+                }
+                pausedAt={entry.presentation_paused_at ?? null}
+                pausedSeconds={entry.presentation_paused_seconds ?? 0}
+              />
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {timerAction ? (
+              <Button
+                variant="outline"
+                disabled={!canJudge || busy != null}
+                loading={busy === `${timerAction}-${entry.id}`}
+                onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
+              >
+                {timerAction === "resume-timer" ? (
+                  <PlayIcon aria-hidden="true" className="size-4" />
+                ) : (
+                  <PauseIcon aria-hidden="true" className="size-4" />
+                )}
+                {t(timerLabel)}
+              </Button>
+            ) : (
+              <Button
+                disabled={!canJudge || !isReady || busy != null}
+                loading={busy === `start-${entry.id}`}
+                onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
+              >
+                <PlayIcon aria-hidden="true" className="size-4" />
+                {t("start")}
+              </Button>
+            )}
+            {canSendBack && (
+              <AlertModal
+                title={t("confirmSendBackTitle")}
+                description={t("confirmSendBackDescription")}
+                cancelLabel={t("cancel")}
+                confirmLabel={t("requeueWaitingRoom")}
+                autoClose
+                onConfirm={() =>
+                  onEntryAction(
+                    entry,
+                    "send-back",
+                    { reason: "Re-queued to waiting room" },
+                    t("teamSentBackWaiting"),
+                  )
+                }
+                trigger={
+                  <Button
+                    variant="outline"
+                    disabled={!canJudge || busy != null}
+                    loading={busy === `send-back-${entry.id}`}
+                  >
+                    <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
+                    {t("requeueWaitingRoom")}
+                  </Button>
+                }
+              />
+            )}
+          </div>
+        </div>
+      )}
+      <div className="min-h-0 flex-1 overflow-y-auto p-5">
         {!entry ? (
           <JudgingEmptyState
             icon={DoorOpenIcon}
@@ -215,92 +296,6 @@ export function PresentationPanel({
             detailsOpen={detailsOpen}
             onExternalOpen={onExternalOpen}
           />
-        )}
-        {entry && (
-          <div className="pointer-events-none sticky bottom-0 z-10 -mx-5 -mb-5 mt-auto bg-linear-to-t from-card from-55% to-transparent px-5 pt-10 pb-5">
-            <div className="pointer-events-auto space-y-3">
-              {(isReady || isPresenting) && (
-                <PreparationTimer
-                  enteredAt={entry.room_entered_at ?? null}
-                  startedAt={entry.presentation_started_at}
-                  scheduledSeconds={preparationSeconds}
-                />
-              )}
-
-              {isReady && presentationSeconds != null && (
-                <PresentationTimer startedAt={null} totalMinutes={presentationSeconds / 60} />
-              )}
-
-              {isPresenting && (
-                <PresentationTimer
-                  startedAt={entry.presentation_started_at}
-                  totalMinutes={
-                    entry.presentation_total_seconds != null
-                      ? entry.presentation_total_seconds / 60
-                      : null
-                  }
-                  pausedAt={entry.presentation_paused_at ?? null}
-                  pausedSeconds={entry.presentation_paused_seconds ?? 0}
-                />
-              )}
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                {timerAction ? (
-                  <Button
-                    variant="outline"
-                    disabled={!canJudge || busy != null}
-                    loading={busy === `${timerAction}-${entry.id}`}
-                    onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
-                  >
-                    {timerAction === "resume-timer" ? (
-                      <PlayIcon aria-hidden="true" className="size-4" />
-                    ) : (
-                      <PauseIcon aria-hidden="true" className="size-4" />
-                    )}
-                    {t(timerLabel)}
-                  </Button>
-                ) : (
-                  <Button
-                    disabled={!canJudge || !isReady || busy != null}
-                    loading={busy === `start-${entry.id}`}
-                    onClick={() =>
-                      onEntryAction(entry, "start", undefined, t("presentationStarted"))
-                    }
-                  >
-                    <PlayIcon aria-hidden="true" className="size-4" />
-                    {t("start")}
-                  </Button>
-                )}
-                {canSendBack && (
-                  <AlertModal
-                    title={t("confirmSendBackTitle")}
-                    description={t("confirmSendBackDescription")}
-                    cancelLabel={t("cancel")}
-                    confirmLabel={t("requeueWaitingRoom")}
-                    autoClose
-                    onConfirm={() =>
-                      onEntryAction(
-                        entry,
-                        "send-back",
-                        { reason: "Re-queued to waiting room" },
-                        t("teamSentBackWaiting"),
-                      )
-                    }
-                    trigger={
-                      <Button
-                        variant="outline"
-                        disabled={!canJudge || busy != null}
-                        loading={busy === `send-back-${entry.id}`}
-                      >
-                        <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
-                        {t("requeueWaitingRoom")}
-                      </Button>
-                    }
-                  />
-                )}
-              </div>
-            </div>
-          </div>
         )}
       </div>
     </Surface>
@@ -374,8 +369,24 @@ export function ProjectInfo({
   );
   const activity = useProjectGithubActivity(entry.repo_id)?.totals;
 
+  const queues =
+    repoChallenges.length > 0
+      ? collapseRepoQueueMemberships(repoChallenges)
+      : challenge
+        ? [
+            {
+              id: entry.challenge_id,
+              title: challengeName(t, challenge, entry.challenge_id),
+              queue_name: null,
+              status: entry.status,
+              room_id: null,
+              room_name: null,
+            },
+          ]
+        : [];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {Boolean(resource.error) && (
         <ContextualError
           message={apiErrorText(resource.error, t, t("couldNotLoadProject"))}
@@ -383,30 +394,12 @@ export function ProjectInfo({
         />
       )}
       {!detailsOpen && project?.description && (
-        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+        <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground text-pretty">
           {projectSummary(project.description, project.name)}
         </p>
       )}
-      {links.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {links.map((link) => (
-            <Button key={link.href} variant="outline" size="sm" asChild>
-              <a
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
-              >
-                <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
-                {link.label}
-              </a>
-            </Button>
-          ))}
-        </div>
-      )}
-
-      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-        <Fact label={t("membersLabel")} icon={UsersIcon}>
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+        <Fact label={t("membersLabel")}>
           {members.length > 0
             ? members
                 .map(
@@ -420,32 +413,77 @@ export function ProjectInfo({
             {(project?.responses[libraryField.key] as string[]).join(" · ")}
           </Fact>
         )}
-      </dl>
-      {activity && (
-        <dl className="grid grid-cols-3 gap-x-6">
-          <Fact label={t("githubCommits")}>{activity.commits}</Fact>
-          <Fact label={t("githubPullRequests")}>
-            {activity.pullRequests}
-            {activity.merged > 0 && (
-              <span className="text-muted-foreground font-normal">
-                {" "}
-                · {activity.merged} {t("githubMerged")}
-              </span>
-            )}
+        {queues.length > 0 && (
+          // A project can be in more than one queue; shared queue siblings collapse
+          // to one row and are named by the queue group.
+          <Fact label={t("queueName")}>
+            <ul className="space-y-1">
+              {queues.map((queue) => (
+                <li key={queue.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span>{queue.queue_name ?? queue.title}</span>
+                  {queue.room_name && (
+                    <span className="text-muted-foreground text-xs font-normal">
+                      {queue.room_name}
+                    </span>
+                  )}
+                  {queue.id === entry.challenge_id ? (
+                    <StatusBadge tone="success">{t("now")}</StatusBadge>
+                  ) : (
+                    <QueueStatusBadge status={queue.status} />
+                  )}
+                </li>
+              ))}
+            </ul>
           </Fact>
-          {activity.lastCommitAt && (
-            <Fact label={t("githubLastCommit")}>
-              {relativeTime(activity.lastCommitAt, language ?? "en")}
-            </Fact>
+        )}
+      </dl>
+
+      {(links.length > 0 || activity) && (
+        <div className="space-y-3 border-t border-border/60 pt-4">
+          {links.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {links.map((link) => (
+                <Button key={link.href} variant="outline" size="sm" asChild>
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
+                  >
+                    <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
+                    {link.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
           )}
-        </dl>
+          {activity && (
+            <dl className="grid grid-cols-3 gap-x-6">
+              <Fact label={t("githubCommits")}>{activity.commits}</Fact>
+              <Fact label={t("githubPullRequests")}>
+                {activity.pullRequests}
+                {activity.merged > 0 && (
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    · {activity.merged} {t("githubMerged")}
+                  </span>
+                )}
+              </Fact>
+              {activity.lastCommitAt && (
+                <Fact label={t("githubLastCommit")}>
+                  {relativeTime(activity.lastCommitAt, language ?? "en")}
+                </Fact>
+              )}
+            </dl>
+          )}
+        </div>
       )}
 
       {project &&
         (detailsOpen ? (
-          <div className="border-y border-border/60 py-4">{projectAnswers}</div>
+          <div className="border-t border-border/60 pt-4">{projectAnswers}</div>
         ) : (
-          <Collapsible className="border-y border-border/60 py-3">
+          <Collapsible className="border-t border-border/60 pt-3">
             <CollapsibleTrigger asChild>
               <Button variant="ghost" size="sm" className="w-full justify-between">
                 {t("judgingProjectDetails")}
@@ -455,64 +493,15 @@ export function ProjectInfo({
             <CollapsibleContent className="pt-4">{projectAnswers}</CollapsibleContent>
           </Collapsible>
         ))}
-      {/* A project can be in more than one queue. Shared queue siblings collapse
-          to one row and are named by the queue group. */}
-      {(repoChallenges.length > 0 || challenge) && (
-        <div className="border-t border-border/60 pt-4">
-          <p className="mb-1 text-xs font-semibold uppercase">{t("queueName")}</p>
-          <ul className="space-y-1.5">
-            {(repoChallenges.length > 0
-              ? collapseRepoQueueMemberships(repoChallenges)
-              : challenge
-                ? [
-                    {
-                      id: entry.challenge_id,
-                      title: challengeName(t, challenge, entry.challenge_id),
-                      queue_name: null,
-                      status: entry.status,
-                      room_id: null,
-                      room_name: null,
-                    },
-                  ]
-                : []
-            ).map((rc) => (
-              <li key={rc.id} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium">{rc.queue_name ?? rc.title}</span>
-                <div className="flex items-center gap-2">
-                  {rc.room_name && (
-                    <span className="text-muted-foreground text-xs">{rc.room_name}</span>
-                  )}
-                  {rc.id === entry.challenge_id ? (
-                    <StatusBadge tone="success">{t("now")}</StatusBadge>
-                  ) : (
-                    <QueueStatusBadge status={rc.status} />
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
 
-function Fact({
-  label,
-  icon: Icon,
-  children,
-}: {
-  label: string;
-  icon?: PhosphorIcon;
-  children: React.ReactNode;
-}) {
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-w-0 items-start gap-2">
-      {Icon && <Icon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />}
-      <div className="min-w-0">
-        <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
-        <dd className="text-sm font-medium tabular-nums text-pretty">{children}</dd>
-      </div>
+    <div className="min-w-0">
+      <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
+      <dd className="text-sm font-medium tabular-nums text-pretty">{children}</dd>
     </div>
   );
 }

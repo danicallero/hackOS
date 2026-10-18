@@ -421,7 +421,7 @@ export function ReviewForm({
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3">
         <CheckCircleIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
         <h2 className="type-section-title mr-auto truncate">
-          {fill || column ? entryLabel(entry, t) : t("scoring")}
+          {fill ? entryLabel(entry, t) : t("scoring")}
         </h2>
         <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
           {syncState === "offline" && (

@@ -622,7 +622,7 @@ export default function QueuePage() {
             {focusMode || !showForm || !formEntry ? (
               <div className="h-full min-h-0">{projectPanel}</div>
             ) : (
-              <div className="grid min-h-0 gap-5 xl:h-full xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+              <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] gap-5 xl:h-full xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div className="min-h-0">{projectPanel}</div>
                 <div className="min-h-96 xl:min-h-0">{renderForm(formEntry)}</div>
               </div>
