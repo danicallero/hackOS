@@ -96,11 +96,11 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         querystring: publicSponsorsQuery,
         summary: "List public sponsors",
         description:
-          "Returns visible enterprises of one `kind` (`sponsor` by default, or `collaborator`) for the public event site, ordered by priority within that kind (H45).",
+          "Returns every visible enterprise for the public event site, sponsors before collaborators, then by priority and manual order. `kind=sponsor` or `kind=collaborator` filters to one group (H45).",
       },
     },
     async (req) => ({
-      items: await sharedCache("public-content", `sponsors:${req.query.kind}`, 15, () =>
+      items: await sharedCache("public-content", `sponsors:${req.query.kind ?? "all"}`, 15, () =>
         listPublicSponsors(req.query.kind),
       ),
     }),

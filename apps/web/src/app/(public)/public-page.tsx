@@ -80,7 +80,6 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         event,
         schedule,
         sponsorResult,
-        collaboratorResult,
         challengeResult,
         announcementResult,
         applicationResult,
@@ -88,7 +87,6 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         api.get<PublicEvent>("/api/public/event"),
         embedded ? Promise.resolve({ items: [] }) : logisticsApi.publicSchedule(),
         api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
-        api.get<{ items: PublicSponsor[] }>("/api/public/sponsors?kind=collaborator"),
         api.get<{ items: PublicChallenge[] }>("/api/public/challenges"),
         api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
         embedded
@@ -98,8 +96,8 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
       setContent({
         event,
         schedule: schedule.items,
-        sponsors: sponsorResult.items,
-        collaborators: collaboratorResult.items,
+        sponsors: sponsorResult.items.filter((item) => item.kind !== "collaborator"),
+        collaborators: sponsorResult.items.filter((item) => item.kind === "collaborator"),
         challenges: challengeResult.items,
         // Only announcements actually being shown on a venue screen right now
         // (H50/H41-H42) belong on the public site — everything else on this

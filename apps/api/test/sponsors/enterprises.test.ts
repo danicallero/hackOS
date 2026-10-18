@@ -213,7 +213,7 @@ describe("enterprise management (H43-H45)", () => {
     ]);
   });
 
-  it("public list serves sponsors and collaborators as separate groups", async () => {
+  it("public list returns everything and filters by kind", async () => {
     const a = await getApp();
     const admin = await createUserWithCapabilities([CAPABILITIES.SPONSORS_MANAGE]);
     const mk = async (name: string, priority: number, kind?: string) =>
@@ -231,7 +231,8 @@ describe("enterprise management (H43-H45)", () => {
 
     const names = async (url: string) =>
       (await a.inject({ method: "GET", url })).json().items.map((s: { name: string }) => s.name);
-    expect(await names("/api/public/sponsors")).toEqual(["Main", "Minor"]);
+    expect(await names("/api/public/sponsors")).toEqual(["Main", "Minor", "Entity B", "Entity A"]);
+    expect(await names("/api/public/sponsors?kind=sponsor")).toEqual(["Main", "Minor"]);
     expect(await names("/api/public/sponsors?kind=collaborator")).toEqual(["Entity B", "Entity A"]);
 
     const bad = await a.inject({ method: "GET", url: "/api/public/sponsors?kind=other" });

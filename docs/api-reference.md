@@ -386,7 +386,7 @@ no BullMQ-native retry queue: its durable row state owns retry and parking;
 other event-driven workers are listed separately in `background-workers.md`.
 
 ### sponsors (H43–H45, H58)
-Enterprises (each with a `kind` — `sponsor` or `collaborator` — and an optional public-logo `priority` that orders only within its kind, so tiers such as 1 = main sponsor, 2 = sponsors never interleave with collaborators; `position` is the manual order inside one (kind, priority) group, set with `POST /api/enterprises/reorder`, which rejects ids from different groups; `GET /api/public/sponsors?kind=` serves one group, `sponsor` by default; challenges are not tied to the kind), sponsor (rep) membership on an enterprise, and the
+Enterprises (each with a `kind` — `sponsor` or `collaborator` — and an optional public-logo `priority` that orders only within its kind, so tiers such as 1 = main sponsor, 2 = sponsors never interleave with collaborators; `position` is the manual order inside one (kind, priority) group, set with `POST /api/enterprises/reorder`, which rejects ids from different groups; `GET /api/public/sponsors` returns everything and `?kind=` filters to one group; challenges are not tied to the kind), sponsor (rep) membership on an enterprise, and the
 enterprise-invite-link flow that lets an org self-serve rep accounts without
 staff creating each one by hand. Also owns the sponsor-only FAQ singleton
 (`GET/PUT /api/sponsor-faq`, H58) — an ordered `items` array, each item either

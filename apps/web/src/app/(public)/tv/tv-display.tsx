@@ -933,7 +933,7 @@ export function TvDisplay() {
           api.get<PublicEvent>("/api/public/event"),
           getAllRoomViews(),
           logisticsApi.publicSchedule(),
-          api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
+          api.get<{ items: PublicSponsor[] }>("/api/public/sponsors?kind=sponsor"),
           api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
           getTvVenueConfig(),
         ]);

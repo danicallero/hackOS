@@ -9,7 +9,7 @@ export const visibilityEnum = z.enum(["visible", "hidden"]);
 /** H45: public group; `priority` orders only within one kind. */
 export const enterpriseKindEnum = z.enum(["sponsor", "collaborator"]);
 
-export const publicSponsorsQuery = z.object({ kind: enterpriseKindEnum.default("sponsor") });
+export const publicSponsorsQuery = z.object({ kind: enterpriseKindEnum.optional() });
 
 export const createEnterpriseBody = z
   .object({

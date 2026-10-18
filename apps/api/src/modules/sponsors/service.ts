@@ -673,11 +673,11 @@ export interface PublicSponsor {
 /**
  * Publicly-revealed sponsors for the website / TV logo grid (H45). Driven by
  * the enterprise's own visibility; scheduled reveal is handled by the background
- * trigger. Only one `kind` per call, so sponsors and collaborators never mix;
- * ordered by priority within it (1 = primary / biggest).
+ * trigger. All kinds by default, or one with `kind`; sponsors come before
+ * collaborators, then priority (1 = primary / biggest) and manual position.
  */
 export async function listPublicSponsors(
-  kind: EnterpriseKind = "sponsor",
+  kind?: EnterpriseKind,
   client: Queryable = pool,
 ): Promise<PublicSponsor[]> {
   const { rows } = await client.query(
@@ -686,10 +686,10 @@ export async function listPublicSponsors(
             COALESCE(e.priority, 9999) AS priority, e.kind
       FROM enterprises e
       WHERE e.visibility = 'visible'
-        AND e.kind = $1
+        AND ($1::text IS NULL OR e.kind = $1)
         AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
-      ORDER BY priority ASC, e.position ASC NULLS LAST, e.name ASC`,
-    [kind],
+      ORDER BY (e.kind = 'collaborator') ASC, priority ASC, e.position ASC NULLS LAST, e.name ASC`,
+    [kind ?? null],
   );
   return rows.map((r: Record<string, unknown>) => ({
     enterpriseId: Number(r.enterprise_id),
