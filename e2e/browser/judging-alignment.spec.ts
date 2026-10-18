@@ -253,6 +253,8 @@ for (const layout of ["on", "off"]) {
     });
     // Challenges that share the room's queue are all being judged now (H29).
     await expect(page.getByText("Now", { exact: true })).toHaveCount(3);
+    // The challenges are named, never the shared queue that groups them.
+    await expect(page.getByText("Open", { exact: true })).toHaveCount(0);
     await expect(page.getByText("FOSS")).toBeVisible();
     await expect(page.getByText("Best use of AI")).toBeVisible();
     const lefts = [
