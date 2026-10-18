@@ -190,7 +190,7 @@ By default the right column stacks the project (top) and the evaluation form
 team is in the room, the queue hides, the sidebar collapses, the project fills the
 left with its details unfolded and the evaluation form sits on the right; when the
 team leaves, for example after the evaluation is submitted, the queue view returns
-with a short transition, and expanded judging comes back with the next team. A
+with a short transition, and View project comes back with the next team. A
 project link opens the project in a new tab first and the evaluation follows in its
 own small window (`/judging-popup/:entryId`, Document Picture-in-Picture where
 available); it closes when you return to the judging tab.
