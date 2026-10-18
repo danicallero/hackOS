@@ -228,3 +228,52 @@ test("submitted participants are frozen until they withdraw, then edit and submi
     page.getByRole("button", { name: "Withdraw submission to edit", exact: true }),
   ).toBeVisible();
 });
+
+test("a complete draft offers Submit project beside Edit project in reading mode (H20)", async ({
+  page,
+}, info) => {
+  let submissions = 0;
+  await page.addInitScript(() => {
+    localStorage.setItem("hackos-language", "en");
+    localStorage.setItem("hackos.cookie-notice.dismissed", "true");
+  });
+  await page.route("**/api/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me/public-profile") return route.fallback();
+    if (path === "/api/me")
+      return route.fulfill({ json: { ...shellUser, capabilities: [], hasProject: true } });
+    if (path === "/api/me/projects/10")
+      return route.fulfill({
+        json: {
+          ...base,
+          isMember: true,
+          submissionStatus: submissions ? "submitted" : "draft",
+          canEdit: !submissions,
+          canSubmit: !submissions,
+        },
+      });
+    if (path.endsWith("/draft"))
+      return route.fulfill({ json: { responses: base.responses, revision: 1 } });
+    if (path.endsWith("/submit")) {
+      submissions++;
+      return route.fulfill({ json: { submissionStatus: "submitted" } });
+    }
+    return route.fulfill({ json: { items: [], unreadCount: 0 } });
+  });
+  await page.goto("/my-project/10");
+  const submit = page.getByRole("button", { name: "Submit project", exact: true });
+  const edit = page.getByRole("button", { name: "Edit project", exact: true });
+  await expect(submit).toBeVisible();
+  await expect(edit).toBeVisible();
+  const [submitBox, editBox] = [await submit.boundingBox(), await edit.boundingBox()];
+  expect(submitBox?.x).toBeLessThan(editBox?.x ?? 0);
+  await mkdir("artifacts/project-workspace", { recursive: true });
+  await page.screenshot({
+    path: `artifacts/project-workspace/draft-actions-${info.project.name}.png`,
+    fullPage: true,
+    animations: "disabled",
+  });
+  await submit.click();
+  await expect.poll(() => submissions).toBe(1);
+  await expect(submit).toHaveCount(0);
+});
