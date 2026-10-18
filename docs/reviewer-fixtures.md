@@ -8,7 +8,7 @@ GPUL-operated hackOS service and do not mention a particular review channel.
 ## Scope and safety boundary
 
 An administrator with `ADMIN_ALL` can use **Users → Regenerate review accounts**.
-The API resets the four marked synthetic accounts to their default scenarios,
+The API resets the five marked synthetic accounts to their default scenarios,
 revoking their sessions and replacing their credentials while keeping each
 login email address unchanged. The reset also removes push tokens, scanner
 data, project graph, queue graph and synthetic anonymous rows. The generation
@@ -51,8 +51,9 @@ explicit release/security approval for the reset operation.
 | `participant-anonymize-outside` | Participant | Canonically accredited, with a closed door interval; exercises irreversible anonymization outside the venue. It owns the synthetic participant-facing judging queue. |
 | `participant-anonymize-inside` | Participant | Canonically accredited, with an open door interval; exercises accepted anonymization with a pending exit. |
 | `staff-exit-operator` | Staff | Synthetic operator with accreditation, presence and activity scan capabilities; can act only on marked synthetic subjects. |
+| `participant-explorer` | Participant | Non-destructive demo account, accredited and outside the venue. Owns three projects (*Aurora Rover*, submitted with a repository and a waiting queue entry; *Pixel Garden*, submitted and already scored; *Draft Notes*, a draft) and sees two other teams' submitted projects (*Lumen Labs*, *Orbit Kit*) in the Gallery. |
 
-All four generated accounts hold an event-bearing role and receive a durable
+All five generated accounts hold an event-bearing role and receive a durable
 entrance ticket. This includes `staff-exit-operator`: its scan capabilities
 still restrict what it can do operationally, but it also retains the
 participant-facing app entry point and ticket flow used by the published mobile
@@ -95,10 +96,12 @@ deployment URL go in the private handoff, never in this repository.
 > **Review access.** Enable Development Mode by tapping the app version seven
 > times on Sign In or in Account; a red DEV badge appears. Sign in with
 > `app-review-<scenario>@hackos.test` and the shared password from the private
-> handoff. Accounts: `participant-anonymize-outside` (primary participant),
-> `participant-delete` (full deletion), `participant-anonymize-inside`
-> (anonymisation with a pending exit) and `staff-exit-operator`. All are
-> synthetic, hold an event ticket and see only fixture data.
+> handoff. Accounts: `participant-explorer` (walks the app: three projects, a
+> queue entry, the gallery and reporting), `participant-anonymize-outside`
+> (anonymisation outside the venue), `participant-delete` (full deletion),
+> `participant-anonymize-inside` (anonymisation with a pending exit) and
+> `staff-exit-operator`. All are synthetic, hold an event ticket and see only
+> fixture data.
 >
 > **Account deletion and anonymisation.** Account → Delete account, confirmation
 > code in the handoff. Full deletion: `participant-delete`. Anonymisation
@@ -133,26 +136,37 @@ state both, plus NFC and the GitHub App sign-in.
 
 What each account can and cannot show a reviewer today:
 
-- The **Gallery** lists only fixture projects. The generated graph has one
-  project and it is a draft, so the Gallery is empty for these accounts unless
-  the event's draft visibility makes drafts visible. Gallery, GitHub linking,
-  shared queues and every queue stage other than "waiting" are not
-  demonstrable with the current fixtures.
+- The **Gallery** shows fixture projects only, and a synthetic attendee can
+  browse it whatever the real event's gallery phase is (project content only;
+  published winners are real data and never take this bypass). It lists the
+  five fixture projects: the explorer's two submitted projects, the two other
+  teams' and the older queue project. Other teams' projects can be reported.
+- **My projects** and **My queue** show the explorer's projects, one waiting
+  entry and one scored entry. Editing and submitting still follow the real
+  event's project phase, so a draft can be edited only while that phase is
+  open. Linking a repository needs the GitHub App and is not demonstrable.
 - The staff account has no queue, judging, project or schedule management
   capability, so the queue manager, judging screens and organiser tools are not
   reachable by review accounts.
 - Anything that needs real event data (directory, sponsors, statistics,
   exports) is intentionally excluded from the fixture scope.
 
-Gaps to close before a review that must cover those screens, each needing its
-own marked graph and cleanup pointers (the registry holds one project,
-challenge and entry per fixture key, so multi-project data needs a schema
-change):
+Registry: `review_fixture_queues` holds one pointer row per project slot
+(`fixture_key`, `slot`; migration `0311`); an account's slots share one
+enterprise and sponsor and are purged together, after every pointer is checked.
 
-1. A project-owning participant with a submitted project, a draft, a shared
-   queue challenge, an entry in each queue stage and a linked repository row.
-2. A queue/judge operator limited to fixture rooms and projects.
-3. Fixture gallery projects so the Gallery is not empty.
+Still not covered, each needing more than a marked graph:
+
+1. **Queue stages that need a room** (called, inside, presenting). Rooms carry
+   no marker of their own: a room's scope is inferred from the queue groups
+   attached to it, but several room lists (the full-access room list, the TV
+   snapshot, the pump) would show a fixture room to real operators, so a room
+   needs an explicit marker and a filter on each of those reads first.
+2. **Shared queues** (several challenges in one queue group): the purge treats
+   a merged group as an integrity failure.
+3. **A queue/judge operator** limited to fixture rooms and projects; granting
+   queue capabilities to a synthetic account needs every queue read and write
+   audited for the marker boundary.
 4. Optionally a scoped organiser and a sponsor representative.
 
 ## Checking whether credentials were used
@@ -178,7 +192,7 @@ controlled by the deployment.
 
 ## Operational rules
 
-- Keep the four credentials and the deployment URL together in the private
+- Keep the five credentials and the deployment URL together in the private
   review/QA handoff, never in the repository or a public API response.
 - Regeneration revokes previous sessions and resets all synthetic state. Login
   email addresses remain stable; the shared deployment password and reviewer

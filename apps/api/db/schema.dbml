@@ -957,13 +957,18 @@ Table review_fixture_accounts {
 Table review_fixture_queues {
   challenge_id integer [unique]
   created_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
-  enterprise_id integer [unique]
-  fixture_key text [pk, not null]
+  enterprise_id integer
+  fixture_key text [not null]
   generation integer [not null]
   queue_entry_id integer [unique]
   repo_id integer [unique]
+  slot text [not null, default: `'main'::text`, note: 'H18: which of the account\'s synthetic projects the pointers describe; \'main\' is the original single-project graph.']
   sponsor_id integer [unique]
   updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  indexes {
+  (fixture_key, slot) [pk]
+  }
 
   Note: 'Current synthetic queue/project pointers; never use as a participant-to-anonymous mapping.'
 }

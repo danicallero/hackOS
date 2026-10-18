@@ -89,7 +89,99 @@ function sessionCookie(response: { headers: Record<string, unknown> }): string {
 }
 
 describe("review fixture regeneration", () => {
-  it("requires admin capability and preserves app/ticket access for all four reviewer accounts", async () => {
+  it("builds the explorer's demo graph, resets it and purges it completely (H18)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { pool } = await import("../../src/db/pool.js");
+    const first = await regenerate(a, admin);
+    const explorerEmail = first.accounts.find(
+      (account) => account.fixtureKey === "participant-explorer",
+    )?.email as string;
+    const explorerId = await fixtureUserId(explorerEmail);
+
+    const projects = await a.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(explorerId),
+    });
+    expect(projects.statusCode).toBe(200);
+    const mine = projects.json().projects as Array<{ name: string; submissionStatus: string }>;
+    expect(mine.map((project) => [project.name, project.submissionStatus]).sort()).toEqual([
+      ["Aurora Rover", "submitted"],
+      ["Draft Notes", "draft"],
+      ["Pixel Garden", "submitted"],
+    ]);
+
+    const queue = await a.inject({
+      method: "GET",
+      url: "/api/queue/me",
+      headers: asUser(explorerId),
+    });
+    expect(queue.statusCode).toBe(200);
+    expect(
+      (queue.json() as Array<{ repoName: string; status: string }>)
+        .map((entry) => [entry.repoName, entry.status])
+        .sort(),
+    ).toEqual([
+      ["Aurora Rover", "waiting"],
+      ["Pixel Garden", "completed"],
+    ]);
+
+    // The gallery is fixture-scoped: only synthetic projects, every one of which opens.
+    // The real event's gallery is still closed: synthetic attendees browse their own fixtures anyway.
+    await pool.query(
+      `INSERT INTO event_config (id, project_gallery_audience) VALUES (1, 'staff')
+       ON CONFLICT (id) DO UPDATE SET project_gallery_opens_at = NULL,
+         project_gallery_audience = 'staff'`,
+    );
+    const gallery = await a.inject({
+      method: "GET",
+      url: "/api/public/projects",
+      headers: asUser(explorerId),
+    });
+    expect(gallery.statusCode).toBe(200);
+    expect(
+      (gallery.json().items as Array<{ name: string }>).map((item) => item.name).sort(),
+    ).toEqual([
+      "Aurora Rover",
+      "Lumen Labs",
+      "Orbit Kit",
+      "Pixel Garden",
+      "Synthetic participant project",
+    ]);
+
+    const { rows: slots } = await pool.query(
+      `SELECT slot FROM review_fixture_queues WHERE fixture_key = 'participant-explorer'
+        ORDER BY slot`,
+    );
+    expect(slots.map((row) => row.slot)).toEqual([
+      "draft",
+      "main",
+      "scored",
+      "team-one",
+      "team-two",
+    ]);
+
+    // Regeneration replaces the whole graph: no leftover rows from generation 1.
+    await regenerate(a, admin);
+    const { rows: repos } = await pool.query(
+      `SELECT name FROM repos WHERE is_test_account = true ORDER BY name`,
+    );
+    expect(repos.map((row) => row.name)).toEqual([
+      "Aurora Rover",
+      "Draft Notes",
+      "Lumen Labs",
+      "Orbit Kit",
+      "Pixel Garden",
+      "Synthetic participant project",
+    ]);
+    const { rows: enterprises } = await pool.query(
+      `SELECT count(*)::int AS count FROM enterprises WHERE name LIKE 'Review %'`,
+    );
+    expect(enterprises[0].count).toBe(2);
+  });
+
+  it("requires admin capability and preserves app/ticket access for all five reviewer accounts", async () => {
     const a = await getApp();
     const ordinary = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const denied = await a.inject({
@@ -108,6 +200,7 @@ describe("review fixture regeneration", () => {
       "participant-anonymize-outside",
       "participant-anonymize-inside",
       "staff-exit-operator",
+      "participant-explorer",
     ]);
 
     const { pool } = await import("../../src/db/pool.js");
@@ -121,7 +214,7 @@ describe("review fixture regeneration", () => {
         WHERE email LIKE 'app-review-%@hackos.test'
         ORDER BY email`,
     );
-    expect(users).toHaveLength(4);
+    expect(users).toHaveLength(5);
     expect(users.every((user) => user.is_test_account)).toBe(true);
     const { rows: registry } = await pool.query(
       `SELECT fixture_key, user_id, generation
@@ -129,13 +222,13 @@ describe("review fixture regeneration", () => {
         WHERE user_id IS NOT NULL
         ORDER BY fixture_key`,
     );
-    expect(registry).toHaveLength(4);
+    expect(registry).toHaveLength(5);
     expect(registry.every((row) => row.generation === 1)).toBe(true);
 
     // Every App Store reviewer account must retain the participant-facing app
     // entry point after event access became role-derived. The operator is
     // still a participant for this purpose: their operational capabilities do
-    // not replace the entrance entitlement, and all four accounts need a
+    // not replace the entrance entitlement, and all five accounts need a
     // ticket so the published mobile build can exercise the same entry flow.
     for (const account of result.accounts) {
       const accountId = await fixtureUserId(account.email);
@@ -217,7 +310,7 @@ describe("review fixture regeneration", () => {
       headers: asUser(staffId),
     });
     expect(snapshot.statusCode).toBe(200);
-    expect(snapshot.json().people).toHaveLength(3);
+    expect(snapshot.json().people).toHaveLength(4);
     expect(
       snapshot
         .json()
@@ -291,7 +384,7 @@ describe("review fixture regeneration", () => {
         ORDER BY email`,
       [[...firstEmails.values()]],
     );
-    expect(current.rows).toHaveLength(4);
+    expect(current.rows).toHaveLength(5);
     expect(current.rows.every((row) => row.account_state === "active")).toBe(true);
     expect(current.rows.every((row) => row.email_verified && row.is_test_account)).toBe(true);
     const resetOutside = current.rows.find((row) => row.email === outsideEmail);
@@ -338,7 +431,7 @@ describe("review fixture regeneration", () => {
         ORDER BY u.email`,
       [[...firstEmails.values()]],
     );
-    expect(tickets.rows).toHaveLength(4);
+    expect(tickets.rows).toHaveLength(5);
     expect(tickets.rows.every((row) => row.token.length > 0)).toBe(true);
 
     const info = vi.spyOn(a.log, "info");

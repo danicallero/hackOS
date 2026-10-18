@@ -43,6 +43,12 @@ const FIXTURE_DEFINITIONS = [
     surname: "Anonymize Inside",
   },
   { key: "staff-exit-operator", kind: "staff" as const, name: "App Review", surname: "Exit Staff" },
+  {
+    key: "participant-explorer",
+    kind: "participant" as const,
+    name: "App Review",
+    surname: "Explorer",
+  },
 ] as const;
 
 const FIXTURE_KEYS = FIXTURE_DEFINITIONS.map((fixture) => fixture.key);
@@ -189,7 +195,7 @@ async function configureFixtureParticipant(
     [userId, badgeId, staffId],
   );
 
-  if (fixtureKey === "participant-anonymize-outside") {
+  if (fixtureKey === "participant-anonymize-outside" || fixtureKey === "participant-explorer") {
     await client.query(
       `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by)
        VALUES
@@ -265,6 +271,149 @@ async function configureFixtureQueue(
      VALUES ('participant-anonymize-outside', $1, $2, $3, $4, $5, $6)`,
     [enterpriseId, sponsorId, challengeId, repoId, queueEntryId, generation],
   );
+}
+
+/**
+ * The demo graph of `participant-explorer`, a non-destructive account for
+ * walking the app: three projects of its own (submitted with a repository and
+ * a waiting queue entry, submitted and already scored, and a draft) plus two
+ * submitted projects of other teams, so the gallery, My projects, My queue and
+ * reporting all have content. Rooms are deliberately absent: the room
+ * operations (called, inside, presenting) need a marked room first.
+ */
+async function configureFixtureExplorer(
+  client: import("pg").PoolClient,
+  userId: number,
+  generation: number,
+): Promise<void> {
+  const key = "participant-explorer";
+  const enterprise = await client.query<{ id: number }>(
+    `INSERT INTO enterprises (name) VALUES ($1) RETURNING id`,
+    [`Review explorer ${generation}`],
+  );
+  const enterpriseId = enterprise.rows[0]?.id;
+  if (!enterpriseId) throw new Error("Review explorer enterprise was not created");
+  const sponsor = await client.query<{ id: number }>(
+    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, NULL) RETURNING id`,
+    [enterpriseId],
+  );
+  const sponsorId = sponsor.rows[0]?.id;
+  if (!sponsorId) throw new Error("Review explorer sponsor was not created");
+  const challenge = await client.query<{ id: number }>(
+    `INSERT INTO challenges (author, title, description, is_test_account, visibility)
+     VALUES ($1, $2, $3, true, 'visible')
+     RETURNING id`,
+    [sponsorId, "Open challenge (review)", "A synthetic challenge for reviewing the app."],
+  );
+  const challengeId = challenge.rows[0]?.id;
+  if (!challengeId) throw new Error("Review explorer challenge was not created");
+
+  const project = async (
+    name: string,
+    description: string,
+    status: "submitted" | "draft",
+    options: { githubUrl?: string; member: boolean; challenge: boolean },
+  ): Promise<number> => {
+    const { rows } = await client.query<{ id: number }>(
+      `INSERT INTO repos
+         (name, description, github_url, created_by, is_test_account, submission_status,
+          submitted_at)
+       VALUES ($1, $2, $3, $4, true, $5, CASE WHEN $5 = 'submitted' THEN now() END)
+       RETURNING id`,
+      [name, description, options.githubUrl ?? null, options.member ? userId : null, status],
+    );
+    const repoId = rows[0]?.id;
+    if (!repoId) throw new Error(`Review explorer project ${name} was not created`);
+    if (options.member) {
+      await client.query(
+        `INSERT INTO submissions (repo_id, user_id, status) VALUES ($1, $2, 'active')`,
+        [repoId, userId],
+      );
+    }
+    if (options.challenge) {
+      await client.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+        repoId,
+        challengeId,
+      ]);
+    }
+    return repoId;
+  };
+  const waitingRepo = await project(
+    "Aurora Rover",
+    "A solar rover that maps a campus. Waiting for its turn in the queue.",
+    "submitted",
+    { githubUrl: "https://github.com/hackos-review/aurora-rover", member: true, challenge: true },
+  );
+  const scoredRepo = await project(
+    "Pixel Garden",
+    "A plant-care game. Already presented and scored.",
+    "submitted",
+    { member: true, challenge: true },
+  );
+  const draftRepo = await project(
+    "Draft Notes",
+    "A project still being written; not submitted.",
+    "draft",
+    { member: true, challenge: false },
+  );
+  const teamOne = await project(
+    "Lumen Labs",
+    "Another team's submitted project, visible in the gallery.",
+    "submitted",
+    { member: false, challenge: false },
+  );
+  const teamTwo = await project(
+    "Orbit Kit",
+    "Another team's submitted project, visible in the gallery.",
+    "submitted",
+    { member: false, challenge: false },
+  );
+
+  const waiting = await client.query<{ id: number }>(
+    `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+     VALUES ($1, $2, 'waiting', 1) RETURNING id`,
+    [challengeId, waitingRepo],
+  );
+  const scored = await client.query<{ id: number }>(
+    `INSERT INTO queue_entries (challenge_id, repo_id, status, completed_at)
+     VALUES ($1, $2, 'completed', clock_timestamp() - interval '30 minutes') RETURNING id`,
+    [challengeId, scoredRepo],
+  );
+  const waitingEntryId = waiting.rows[0]?.id;
+  const scoredEntryId = scored.rows[0]?.id;
+  if (!waitingEntryId || !scoredEntryId) throw new Error("Review explorer queue was not created");
+
+  const pointers: Array<{
+    slot: string;
+    shared: boolean;
+    repoId: number;
+    entryId: number | null;
+    challenge: boolean;
+  }> = [
+    { slot: "main", shared: true, repoId: waitingRepo, entryId: waitingEntryId, challenge: true },
+    { slot: "scored", shared: false, repoId: scoredRepo, entryId: scoredEntryId, challenge: false },
+    { slot: "draft", shared: false, repoId: draftRepo, entryId: null, challenge: false },
+    { slot: "team-one", shared: false, repoId: teamOne, entryId: null, challenge: false },
+    { slot: "team-two", shared: false, repoId: teamTwo, entryId: null, challenge: false },
+  ];
+  for (const pointer of pointers) {
+    await client.query(
+      `INSERT INTO review_fixture_queues
+         (fixture_key, slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id,
+          generation)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        key,
+        pointer.slot,
+        pointer.shared ? enterpriseId : null,
+        pointer.shared ? sponsorId : null,
+        pointer.challenge ? challengeId : null,
+        pointer.repoId,
+        pointer.entryId,
+        generation,
+      ],
+    );
+  }
 }
 
 async function cleanupFailedFixtureUsers(userIds: number[]): Promise<void> {
@@ -484,6 +633,10 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
             generation,
             req.userId as number,
           );
+
+          const explorer = created.get("participant-explorer");
+          if (!explorer) throw new Error("Review explorer is missing");
+          await configureFixtureExplorer(client, explorer.id, generation);
 
           for (const fixture of FIXTURE_DEFINITIONS) {
             const account = created.get(fixture.key);
