@@ -6,6 +6,11 @@ export const enterpriseIdParam = z.object({ id: z.coerce.number().int().positive
 
 export const visibilityEnum = z.enum(["visible", "hidden"]);
 
+/** H45: public group; `priority` orders only within one kind. */
+export const enterpriseKindEnum = z.enum(["sponsor", "collaborator"]);
+
+export const publicSponsorsQuery = z.object({ kind: enterpriseKindEnum.optional() });
+
 export const createEnterpriseBody = z
   .object({
     name: z.string().min(1),
@@ -14,6 +19,7 @@ export const createEnterpriseBody = z
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
     priority: z.number().int().positive().nullish(),
+    kind: enterpriseKindEnum.default("sponsor"),
     visibility: visibilityEnum.default("hidden"),
     availableFrom: z.coerce.date().nullish(),
   })
@@ -32,6 +38,7 @@ export const updateEnterpriseBody = z
     logoNegativeUrl: z.string().url().nullish(),
     description: z.string().nullish(),
     priority: z.number().int().positive().nullish(),
+    kind: enterpriseKindEnum.optional(),
     visibility: visibilityEnum.optional(),
     availableFrom: z.coerce.date().nullish(),
   })
@@ -54,6 +61,11 @@ export const bulkVisibilityBody = z
   .strict();
 
 export type BulkVisibilityBody = z.infer<typeof bulkVisibilityBody>;
+
+/** H45: manual order of one priority tier, first id shown first. */
+export const reorderEnterprisesBody = z
+  .object({ ids: z.array(z.number().int().positive()).min(2).max(200) })
+  .strict();
 
 /** M4: affiliate a user with an enterprise. */
 export const addMemberBody = z.object({ userId: z.number().int().positive() }).strict();
@@ -87,6 +99,7 @@ export const CONTENT_TYPE_EXT: Record<(typeof LOGO_CONTENT_TYPES)[number], strin
   "image/gif": "gif",
 };
 
+export type EnterpriseKind = z.infer<typeof enterpriseKindEnum>;
 export type CreateEnterpriseBody = z.infer<typeof createEnterpriseBody>;
 export type UpdateEnterpriseBody = z.infer<typeof updateEnterpriseBody>;
 

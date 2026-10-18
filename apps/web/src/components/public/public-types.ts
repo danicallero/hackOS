@@ -19,6 +19,7 @@ export interface PublicSponsor {
   logoNegativeUrl: string | null;
   website: string | null;
   priority?: number;
+  kind?: "sponsor" | "collaborator";
 }
 
 export interface PublicChallenge {

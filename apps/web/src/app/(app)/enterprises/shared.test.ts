@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { resolveUrlTab } from "@/lib/url-tab";
-import { ENTERPRISE_TAB_ALIASES, enterpriseTabs } from "./shared";
+import {
+  ENTERPRISE_TAB_ALIASES,
+  type Enterprise,
+  enterpriseTabs,
+  groupEnterprises,
+} from "./shared";
 
 describe("enterpriseTabs (#928, #929)", () => {
   it("shows every tab to managers", () => {
@@ -38,5 +43,31 @@ describe("enterpriseTabs (#928, #929)", () => {
     expect(resolveUrlTab("overview", options)).toBe("profile");
     expect(resolveUrlTab("invitations", options)).toBe("profile");
     expect(resolveUrlTab("members", options)).toBe("members");
+  });
+});
+
+describe("groupEnterprises (H45)", () => {
+  const e = (
+    id: number,
+    name: string,
+    kind: Enterprise["kind"],
+    priority: number | null,
+    position: number | null = null,
+  ) => ({ id, name, kind, priority, position }) as Enterprise;
+
+  it("groups by priority only and honours manual position", () => {
+    const groups = groupEnterprises([
+      e(1, "Zed", "sponsor", 2),
+      e(2, "Entity", "collaborator", 1),
+      e(3, "Alpha", "sponsor", 2, 2),
+      e(4, "Beta", "collaborator", 2, 1),
+      e(5, "Main", "sponsor", 1),
+      e(6, "Loose", "sponsor", null),
+    ]);
+    expect(groups.map((g) => [g.priority, g.items.map((i) => i.name)])).toEqual([
+      [1, ["Entity", "Main"]],
+      [2, ["Beta", "Alpha", "Zed"]],
+      [null, ["Loose"]],
+    ]);
   });
 });
