@@ -407,3 +407,31 @@ export async function personActivity(repoId: number): Promise<PersonActivity[]> 
   );
   return rows;
 }
+
+export interface ProjectActivityTotals {
+  commits: number;
+  pullRequests: number;
+  merged: number;
+  lastCommitAt: string | null;
+}
+
+/** One project's commit and pull-request totals inside the activity window, with its latest commit (H18). */
+export async function projectActivityTotals(repoId: number): Promise<ProjectActivityTotals> {
+  const { from, to } = await activityWindow();
+  const { rows } = await pool.query(
+    `SELECT (SELECT count(*)::int FROM github_commits c
+              WHERE c.repo_id = $1 AND ${windowFilter("c.committed_at", 2, 3)}) AS commits,
+            (SELECT max(c.committed_at) FROM github_commits c
+              WHERE c.repo_id = $1 AND ${windowFilter("c.committed_at", 2, 3)}) AS "lastCommitAt",
+            (SELECT count(*)::int FROM github_pull_requests p
+              WHERE p.repo_id = $1 AND ${windowFilter("p.opened_at", 2, 3)}) AS "pullRequests",
+            (SELECT count(p.merged_at)::int FROM github_pull_requests p
+              WHERE p.repo_id = $1 AND ${windowFilter("p.opened_at", 2, 3)}) AS merged`,
+    [repoId, from, to],
+  );
+  const row = rows[0];
+  return {
+    ...row,
+    lastCommitAt: row.lastCommitAt ? new Date(row.lastCommitAt).toISOString() : null,
+  };
+}

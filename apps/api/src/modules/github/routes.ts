@@ -25,6 +25,7 @@ import {
   linkRepo,
   linkStatus,
   personActivity,
+  projectActivityTotals,
   recordCommits,
   recordPull,
   removeInstallation,
@@ -304,10 +305,13 @@ export function registerGithubRoutes(app: FastifyInstance) {
         params,
         summary: "Read a team's GitHub activity per person",
         description:
-          "Commits, pull requests and merged pull requests inside the activity window for each GitHub author of the project; authors with a linked hackOS account show their member name.",
+          "Commits, pull requests and merged pull requests inside the activity window for each GitHub author of the project, plus the project totals and its latest commit; authors with a linked hackOS account show their member name.",
       },
     },
-    async (q) => ({ people: await personActivity(q.params.id) }),
+    async (q) => ({
+      people: await personActivity(q.params.id),
+      totals: await projectActivityTotals(q.params.id),
+    }),
   );
 
   r.get(

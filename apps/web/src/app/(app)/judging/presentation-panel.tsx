@@ -3,6 +3,8 @@
 // The room's right column (H36-H39): who is presenting, their project, and
 // the presentation clock.
 
+import { projectDescriptionField } from "@hackos/shared/forms";
+import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
@@ -16,6 +18,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
+import { relativeTime, useProjectGithubActivity } from "@/components/projects/github-activity";
 import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -40,6 +43,18 @@ import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
+
+/** Opens the link in a new tab, then lets the evaluation window follow so it ends up in front. */
+function openProjectLink(
+  event: React.MouseEvent<HTMLAnchorElement>,
+  href: string,
+  onExternalOpen?: () => void,
+) {
+  if (!onExternalOpen) return;
+  event.preventDefault();
+  window.open(href, "_blank", "noopener,noreferrer");
+  onExternalOpen();
+}
 
 export function PresentationPanel({
   entry,
@@ -128,7 +143,9 @@ export function PresentationPanel({
                 href={`/projects/${entry.repo_id}`}
                 target="_blank"
                 rel="noreferrer"
-                onClick={onExternalOpen}
+                onClick={(event) =>
+                  openProjectLink(event, `/projects/${entry.repo_id}`, onExternalOpen)
+                }
               >
                 <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
                 {t("openProject")}
@@ -143,7 +160,7 @@ export function PresentationPanel({
         </div>
       </div>
       <Separator />
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-5">
         {!entry ? (
           <JudgingEmptyState
             icon={DoorOpenIcon}
@@ -199,89 +216,93 @@ export function PresentationPanel({
             onExternalOpen={onExternalOpen}
           />
         )}
-      </div>
-      {entry && (
-        <div className="bg-card shrink-0 space-y-3 border-t p-4 sm:px-5">
-          {(isReady || isPresenting) && (
-            <PreparationTimer
-              enteredAt={entry.room_entered_at ?? null}
-              startedAt={entry.presentation_started_at}
-              scheduledSeconds={preparationSeconds}
-            />
-          )}
+        {entry && (
+          <div className="pointer-events-none sticky bottom-0 z-10 -mx-5 -mb-5 mt-auto bg-linear-to-t from-card from-55% to-transparent px-5 pt-10 pb-5">
+            <div className="pointer-events-auto space-y-3">
+              {(isReady || isPresenting) && (
+                <PreparationTimer
+                  enteredAt={entry.room_entered_at ?? null}
+                  startedAt={entry.presentation_started_at}
+                  scheduledSeconds={preparationSeconds}
+                />
+              )}
 
-          {isReady && presentationSeconds != null && (
-            <PresentationTimer startedAt={null} totalMinutes={presentationSeconds / 60} />
-          )}
+              {isReady && presentationSeconds != null && (
+                <PresentationTimer startedAt={null} totalMinutes={presentationSeconds / 60} />
+              )}
 
-          {isPresenting && (
-            <PresentationTimer
-              startedAt={entry.presentation_started_at}
-              totalMinutes={
-                entry.presentation_total_seconds != null
-                  ? entry.presentation_total_seconds / 60
-                  : null
-              }
-              pausedAt={entry.presentation_paused_at ?? null}
-              pausedSeconds={entry.presentation_paused_seconds ?? 0}
-            />
-          )}
+              {isPresenting && (
+                <PresentationTimer
+                  startedAt={entry.presentation_started_at}
+                  totalMinutes={
+                    entry.presentation_total_seconds != null
+                      ? entry.presentation_total_seconds / 60
+                      : null
+                  }
+                  pausedAt={entry.presentation_paused_at ?? null}
+                  pausedSeconds={entry.presentation_paused_seconds ?? 0}
+                />
+              )}
 
-          <div className="grid gap-2 sm:grid-cols-2">
-            {timerAction ? (
-              <Button
-                variant="outline"
-                disabled={!canJudge || busy != null}
-                loading={busy === `${timerAction}-${entry.id}`}
-                onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
-              >
-                {timerAction === "resume-timer" ? (
-                  <PlayIcon aria-hidden="true" className="size-4" />
-                ) : (
-                  <PauseIcon aria-hidden="true" className="size-4" />
-                )}
-                {t(timerLabel)}
-              </Button>
-            ) : (
-              <Button
-                disabled={!canJudge || !isReady || busy != null}
-                loading={busy === `start-${entry.id}`}
-                onClick={() => onEntryAction(entry, "start", undefined, t("presentationStarted"))}
-              >
-                <PlayIcon aria-hidden="true" className="size-4" />
-                {t("start")}
-              </Button>
-            )}
-            {canSendBack && (
-              <AlertModal
-                title={t("confirmSendBackTitle")}
-                description={t("confirmSendBackDescription")}
-                cancelLabel={t("cancel")}
-                confirmLabel={t("requeueWaitingRoom")}
-                autoClose
-                onConfirm={() =>
-                  onEntryAction(
-                    entry,
-                    "send-back",
-                    { reason: "Re-queued to waiting room" },
-                    t("teamSentBackWaiting"),
-                  )
-                }
-                trigger={
+              <div className="grid gap-2 sm:grid-cols-2">
+                {timerAction ? (
                   <Button
                     variant="outline"
                     disabled={!canJudge || busy != null}
-                    loading={busy === `send-back-${entry.id}`}
+                    loading={busy === `${timerAction}-${entry.id}`}
+                    onClick={() => onEntryAction(entry, timerAction, undefined, t(timerLabel))}
                   >
-                    <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
-                    {t("requeueWaitingRoom")}
+                    {timerAction === "resume-timer" ? (
+                      <PlayIcon aria-hidden="true" className="size-4" />
+                    ) : (
+                      <PauseIcon aria-hidden="true" className="size-4" />
+                    )}
+                    {t(timerLabel)}
                   </Button>
-                }
-              />
-            )}
+                ) : (
+                  <Button
+                    disabled={!canJudge || !isReady || busy != null}
+                    loading={busy === `start-${entry.id}`}
+                    onClick={() =>
+                      onEntryAction(entry, "start", undefined, t("presentationStarted"))
+                    }
+                  >
+                    <PlayIcon aria-hidden="true" className="size-4" />
+                    {t("start")}
+                  </Button>
+                )}
+                {canSendBack && (
+                  <AlertModal
+                    title={t("confirmSendBackTitle")}
+                    description={t("confirmSendBackDescription")}
+                    cancelLabel={t("cancel")}
+                    confirmLabel={t("requeueWaitingRoom")}
+                    autoClose
+                    onConfirm={() =>
+                      onEntryAction(
+                        entry,
+                        "send-back",
+                        { reason: "Re-queued to waiting room" },
+                        t("teamSentBackWaiting"),
+                      )
+                    }
+                    trigger={
+                      <Button
+                        variant="outline"
+                        disabled={!canJudge || busy != null}
+                        loading={busy === `send-back-${entry.id}`}
+                      >
+                        <ArrowCounterClockwiseIcon aria-hidden="true" className="size-4" />
+                        {t("requeueWaitingRoom")}
+                      </Button>
+                    }
+                  />
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </Surface>
   );
 }
@@ -319,26 +340,39 @@ export function ProjectInfo({
       Array.isArray(project.responses[field.key]) &&
       (project.responses[field.key] as unknown[]).length > 0,
   );
-  const fieldLinks = (project?.template ?? []).flatMap((field) => {
-    const href = field.judging_link
-      ? externalUrlHref(String(project?.responses[field.key] ?? ""))
-      : null;
-    return href ? [{ label: field.label[language ?? "en"] || field.label.en, href }] : [];
+  // Every URL answer (judging links, URL-validated text, demo video) joins one row of
+  // links and leaves the details, so each link appears exactly once.
+  const urlFields = (project?.template ?? []).flatMap((field) => {
+    const isUrlField =
+      field.judging_link || field.project_video || field.validation?.text_condition === "url";
+    const href = isUrlField ? externalUrlHref(String(project?.responses[field.key] ?? "")) : null;
+    return href
+      ? [{ key: field.key, label: field.label[language ?? "en"] || field.label.en, href }]
+      : [];
   });
   const links = [
     { label: "GitHub", href: project?.githubUrl ?? entry.repo_github_url },
     { label: t("projectDemoLink"), href: project?.demoUrl ?? entry.repo_demo_url },
   ]
     .filter((link): link is { label: string; href: string } => Boolean(link.href))
-    .concat(fieldLinks)
+    .concat(urlFields)
     .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
+  // The glance above the details already shows the summary and technologies, so
+  // collapsed details leave them out; unfolded details are the one place for them.
+  const glanceKeys = [
+    project && projectDescriptionField(project.template)?.key,
+    libraryField?.key,
+  ].filter((key): key is string => Boolean(key));
   const projectAnswers = project && (
     <ProjectAnswers
       project={project}
       language={language ?? "en"}
+      omitFieldKeys={[...urlFields.map((field) => field.key), ...(detailsOpen ? [] : glanceKeys)]}
+      omitDescription={!detailsOpen}
       assetUrl={(path) => new URL(path, API_URL).toString()}
     />
   );
+  const activity = useProjectGithubActivity(entry.repo_id)?.totals;
 
   return (
     <div className="space-y-4">
@@ -348,51 +382,63 @@ export function ProjectInfo({
           onRetry={resource.reload}
         />
       )}
-      {project?.description && (
+      {!detailsOpen && project?.description && (
         <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
           {projectSummary(project.description, project.name)}
         </p>
       )}
-      <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
-        <div className="flex min-w-0 items-start gap-2">
-          <UsersIcon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase">{t("membersLabel")}</p>
-            <p className="text-sm font-medium text-pretty">
-              {members.length > 0
-                ? members
-                    .map(
-                      (member) =>
-                        `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
-                    )
-                    .join(" · ")
-                : "—"}
-            </p>
-          </div>
-        </div>
-        {libraryField && (
-          <div className="min-w-0">
-            <p className="mb-1 text-xs font-medium text-muted-foreground">
-              {libraryField.label[language ?? "en"] || libraryField.label.en}
-            </p>
-            <p className="text-sm text-pretty">
-              {(project!.responses[libraryField.key] as string[]).join(" · ")}
-            </p>
-          </div>
-        )}
-      </div>
-
       {links.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {links.map((link, i) => (
-            <Button key={link.label} variant={i === 0 ? "default" : "outline"} size="sm" asChild>
-              <a href={link.href} target="_blank" rel="noreferrer" onClick={onExternalOpen}>
+          {links.map((link) => (
+            <Button key={link.href} variant="outline" size="sm" asChild>
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
+              >
                 <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
                 {link.label}
               </a>
             </Button>
           ))}
         </div>
+      )}
+
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <Fact label={t("membersLabel")} icon={UsersIcon}>
+          {members.length > 0
+            ? members
+                .map(
+                  (member) => `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
+                )
+                .join(" · ")
+            : "—"}
+        </Fact>
+        {!detailsOpen && libraryField && (
+          <Fact label={libraryField.label[language ?? "en"] || libraryField.label.en}>
+            {(project?.responses[libraryField.key] as string[]).join(" · ")}
+          </Fact>
+        )}
+      </dl>
+      {activity && (
+        <dl className="grid grid-cols-3 gap-x-6">
+          <Fact label={t("githubCommits")}>{activity.commits}</Fact>
+          <Fact label={t("githubPullRequests")}>
+            {activity.pullRequests}
+            {activity.merged > 0 && (
+              <span className="text-muted-foreground font-normal">
+                {" "}
+                · {activity.merged} {t("githubMerged")}
+              </span>
+            )}
+          </Fact>
+          {activity.lastCommitAt && (
+            <Fact label={t("githubLastCommit")}>
+              {relativeTime(activity.lastCommitAt, language ?? "en")}
+            </Fact>
+          )}
+        </dl>
       )}
 
       {project &&
@@ -447,6 +493,26 @@ export function ProjectInfo({
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+function Fact({
+  label,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  icon?: PhosphorIcon;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      {Icon && <Icon aria-hidden="true" className="text-muted-foreground mt-0.5 size-4 shrink-0" />}
+      <div className="min-w-0">
+        <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
+        <dd className="text-sm font-medium tabular-nums text-pretty">{children}</dd>
+      </div>
     </div>
   );
 }

@@ -19,15 +19,22 @@ export function ProjectAnswers({
   project,
   language,
   fallbackTitle,
+  omitFieldKeys = [],
+  omitDescription = false,
   assetUrl,
 }: {
   project: NativeProject;
   language: Language;
   fallbackTitle?: string;
+  /** Answers the surrounding view already shows, so they are not repeated. */
+  omitFieldKeys?: string[];
+  /** Also hides the plain description shown when the form has no description question. */
+  omitDescription?: boolean;
   assetUrl: (path: string) => string;
 }) {
   const description = projectDescriptionField(project.template);
   const visible = project.template.filter((field) => {
+    if (omitFieldKeys.includes(field.key)) return false;
     const value = project.responses[field.key];
     return (
       (value !== undefined &&
@@ -39,7 +46,7 @@ export function ProjectAnswers({
   });
   return (
     <div className="min-w-0 space-y-8">
-      {!description && project.description && (
+      {!description && !omitDescription && project.description && (
         <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap text-pretty">
           {project.description}
         </p>

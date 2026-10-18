@@ -38,13 +38,21 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
     const request = route.request();
     const path = new URL(request.url()).pathname;
     let body: unknown = [];
-    if (path === "/api/me") body = { ...shellUser, capabilities: ["judge:panel"] };
+    if (path === "/api/me") body = { ...shellUser, capabilities: ["judge:panel", "projects:read"] };
     if (path === "/api/repos/91")
       body = {
         id: 91,
         name: "Deterministic Team",
         description: "A project with real-time collaboration.",
+        githubUrl: "https://github.com/team/repo",
         template: [
+          {
+            key: "video",
+            kind: "text",
+            label: { en: "Demo video", es: "Vídeo", gl: "Vídeo" },
+            project_video: true,
+            required: false,
+          },
           {
             key: "stack",
             kind: "library",
@@ -53,10 +61,20 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
           },
         ],
         sections: [],
-        responses: { stack: ["TypeScript", "PostgreSQL"] },
+        responses: { stack: ["TypeScript", "PostgreSQL"], video: "https://youtu.be/abcdefghijk" },
         members: [],
         challenges: [],
         files: [],
+      };
+    if (path === "/api/projects/91/github-activity")
+      body = {
+        people: [],
+        totals: {
+          commits: 42,
+          pullRequests: 7,
+          merged: 5,
+          lastCommitAt: new Date(Date.now() - 12 * 60000).toISOString(),
+        },
       };
     if (path === "/api/challenges") body = { challenges: [challenge] };
     if (path === "/api/queue/rooms") body = [room];
@@ -134,8 +152,16 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   });
   await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
   await page.goto("/judging");
+  // Links share one row and the totals show during the hacking window.
+  await expect(page.getByRole("link", { name: "GitHub", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Demo video", exact: true })).toHaveCount(1);
+  await expect(page.getByText("42", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "artifacts/judging-view.png", fullPage: true });
+  // The glance shows the technologies once; unfolding the details does not repeat them.
+  await expect(page.getByText("TypeScript · PostgreSQL", { exact: true })).toHaveCount(1);
   await page.getByRole("button", { name: "Project details", exact: true }).click();
-  await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toBeVisible();
+  await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("TypeScript · PostgreSQL", { exact: true })).toHaveCount(1);
   await page.screenshot({ path: "artifacts/judging-project-details.png", fullPage: true });
   await page.getByRole("button", { name: "Project details", exact: true }).click();
   await page.getByRole("button", { name: "6", exact: true }).click();
