@@ -55,6 +55,7 @@ const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   projectGalleryOpensAt: CAPABILITIES.EVENT_MANAGE,
   projectGalleryAudience: CAPABILITIES.EVENT_MANAGE,
   projectMaxTeamSize: CAPABILITIES.EVENT_MANAGE,
+  projectGithubRequired: CAPABILITIES.EVENT_MANAGE,
 
   eventReminderScheduledAt: CAPABILITIES.EVENT_MANAGE,
   tagline: CAPABILITIES.EVENT_MANAGE,
@@ -146,6 +147,7 @@ const eventConfigBody = z
     projectGalleryOpensAt: z.coerce.date().nullable().optional(),
     projectGalleryAudience: z.enum(["staff", "attendees", "public"]).optional(),
     projectMaxTeamSize: z.number().int().positive().max(100).nullable().optional(),
+    projectGithubRequired: z.boolean().optional(),
 
     presenceAutoEntryAt: z.coerce.date().nullable().optional(),
     presenceCertaintyWindowMinutes: z.number().int().min(15).max(10080).optional(),
@@ -211,6 +213,7 @@ const DEFAULTS = {
   project_gallery_opens_at: null,
   project_gallery_audience: "staff",
   project_max_team_size: null,
+  project_github_required: false,
 } as const;
 
 interface EventConfigRow {
@@ -220,6 +223,7 @@ interface EventConfigRow {
   project_gallery_opens_at: string | null;
   project_gallery_audience: string;
   project_max_team_size: number | null;
+  project_github_required: boolean;
 
   name: string | null;
   tagline: string | null;
@@ -259,7 +263,7 @@ async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
             pass_back_fields, pass_field_labels, pass_field_visibility,
             require_sponsor_shirt_size, require_sponsor_dietary,
             require_staff_shirt_size, require_staff_dietary, shirt_sizes,
-            meal_plan_cutoff_hours, project_drafts_open_at,project_submissions_close_at,project_draft_visibility,project_gallery_opens_at,project_gallery_audience,project_max_team_size
+            meal_plan_cutoff_hours, project_drafts_open_at,project_submissions_close_at,project_draft_visibility,project_gallery_opens_at,project_gallery_audience,project_max_team_size,project_github_required
        FROM event_config WHERE id = 1`,
   );
   return rows[0] ?? DEFAULTS;
@@ -304,6 +308,7 @@ function toPublic(
     projectGalleryOpensAt: row.project_gallery_opens_at,
     projectGalleryAudience: row.project_gallery_audience,
     projectMaxTeamSize: row.project_max_team_size,
+    projectGithubRequired: row.project_github_required,
 
     presenceAutoEntryAt: row.presence_auto_entry_at,
     presenceCertaintyWindowMinutes: row.presence_certainty_window_minutes,
@@ -605,6 +610,10 @@ export function registerEventRoutes(app: FastifyInstance): void {
         if (b.projectMaxTeamSize !== undefined)
           await client.query("UPDATE event_config SET project_max_team_size=$1 WHERE id=1", [
             b.projectMaxTeamSize,
+          ]);
+        if (b.projectGithubRequired !== undefined)
+          await client.query("UPDATE event_config SET project_github_required=$1 WHERE id=1", [
+            b.projectGithubRequired,
           ]);
         const phaseCheck = await client.query(
           `SELECT COALESCE(project_submissions_close_at,hacking_ends_at) < COALESCE(project_drafts_open_at,hacking_starts_at) AS invalid FROM event_config WHERE id=1`,

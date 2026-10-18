@@ -726,3 +726,23 @@ focus events. Dynamic application/project fields use
 `validateFieldOnBlur`, including phones, required consent, choices and configured
 rules. Compound pickers validate on close or departure, using the latest changed
 value. Submit retains full validation and first-error focus as a safeguard.
+
+## Joint event and platform legal documents
+
+The public `/terms` and `/privacy` documents in `src/components/legal/` cover
+HackUDC participation and the hackOS instance operated by GPUL as one service.
+They mirror the Spanish, Galician and English documents in the HackUDC website
+repository (`src/pages/{terms,privacy}.md` and their locale variants). Update both
+sets together when the joint policy changes, including the revision date. These
+terms do not govern hackOS instances operated by third parties.
+
+The signup notice accepts the joint terms and acknowledges reading the privacy
+policy. It does not request blanket consent for data processing. Optional
+permissions, including CV sharing and marketing, remain separate from that
+notice and must not be inferred from account creation.
+
+The event image clause mirrors the HackUDC website: it states that physical
+attendance signifies consent to capture and use images by organisers, sponsor
+representatives, other participants and participating entities for promotional,
+social-media, commercial or other purposes. Keep this wording consistent in the
+terms and privacy policy in all three languages.

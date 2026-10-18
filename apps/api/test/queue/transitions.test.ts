@@ -1247,6 +1247,39 @@ describe("move_to_top (H37, H58)", () => {
     expect(await historyRows(entryId, "move_to_top")).toHaveLength(1);
   });
 
+  it("sends a called team behind the head of the queue so the head enters the waiting room first", async () => {
+    const { challengeId, roomId } = await setup();
+    const { repoId: r1 } = await createRepoWithTeam();
+    const { repoId: r2 } = await createRepoWithTeam();
+    const { repoId: r3 } = await createRepoWithTeam();
+    const e1 = await enqueueRepo(challengeId, r1, 1);
+    const e2 = await enqueueRepo(challengeId, r2, 2);
+    const e3 = await enqueueRepo(challengeId, r3, 3);
+    for (let i = 0; i < 2; i++)
+      await app.inject({
+        method: "POST",
+        url: `/api/queue/rooms/${roomId}/call-next`,
+        headers: asUser(operatorId),
+        payload: {},
+      });
+    expect((await getEntry(e1)).status).toBe("called");
+    expect((await getEntry(e2)).status).toBe("called");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e2}/move-top`,
+      headers: asUser(judgeId),
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+
+    // The slot e2 frees goes to the team that was first in line; e2 waits right behind it.
+    expect((await getEntry(e3)).status).toBe("called");
+    const moved = await getEntry(e2);
+    expect(moved.status).toBe("waiting");
+    expect(await historyRows(e2, "move_to_top")).toHaveLength(1);
+  });
+
   it("lets a judge move a called waiting-room team to an explicit position", async () => {
     const { challengeId, roomId } = await setup();
     const { repoId: r1 } = await createRepoWithTeam();

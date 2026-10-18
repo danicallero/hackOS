@@ -1,6 +1,6 @@
 "use client";
 
-import { projectSubmissionKey } from "@hackos/shared/project-submission";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useProjectDraft } from "@/app/(app)/my-project/[id]/use-project-draft";
@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
@@ -36,20 +37,28 @@ import { validateFieldOnBlur } from "@/lib/application-validation";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { invalidateProjectReads, type NativeProject, nativeProjects } from "@/lib/native-projects";
+import { useSessionContext } from "@/lib/session";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
+import { GithubActivity } from "./github-activity";
 import { GithubLink } from "./github-link";
 import { ProjectChallenges } from "./project-challenges";
 import { ProjectOverview } from "./project-overview";
 import { ProjectVideo } from "./project-video";
 
 export function ProjectEditor({
-  project,
+  project: initialProject,
   staff = false,
 }: {
   project: NativeProject;
   staff?: boolean;
 }) {
   const { t, language } = useLocale();
+  const { can } = useSessionContext();
+  const [project, setProject] = useState(initialProject);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState("");
+  const [repoUrl, setRepoUrl] = useState(initialProject.githubUrl ?? "");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [editing, setEditing] = useState(
@@ -70,9 +79,6 @@ export function ProjectEditor({
   useUnsavedChangesGuard(draft.state !== "saved" || name.trim() !== savedName);
   const [timing, setTiming] = useState(project.presentationTimingPreference);
   const [status, setStatus] = useState(project.submissionStatus);
-  const [lastSubmitted, setLastSubmitted] = useState(
-    project.hasUnsubmittedChanges ? null : projectSubmissionKey(project.name, project.responses),
-  );
   const [email, setEmail] = useState("");
   const [members, setMembers] = useState(project.members);
   const [challenges, setChallenges] = useState(project.challenges);
@@ -88,7 +94,10 @@ export function ProjectEditor({
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
-      document.getElementById(templateFieldId(Object.keys(errors)[0]))?.focus();
+      // The fields only render while editing: open them so the errors are visible.
+      setEditing(true);
+      const first = templateFieldId(Object.keys(errors)[0]);
+      setTimeout(() => document.getElementById(first)?.focus());
       return;
     }
     setBusy(true);
@@ -96,11 +105,68 @@ export function ProjectEditor({
     try {
       if (!(await draft.save())) return;
       const saved = await nativeProjects.submit(project.id);
-      invalidateProjectReads(project.id);
-      setStatus(saved.submissionStatus);
-      setLastSubmitted(projectSubmissionKey(name, draft.values));
+      await reloadAfterTransition(saved.submissionStatus, false);
     } catch (cause) {
       setError(apiErrorText(cause, t, t("couldNotSaveDraft")));
+    } finally {
+      setBusy(false);
+    }
+  }
+  /** Submission flags (edit, withdraw) flip server-side, so the working copy is read again. */
+  async function reloadAfterTransition(
+    nextStatus: NativeProject["submissionStatus"],
+    nextEditing: boolean,
+  ) {
+    invalidateProjectReads(project.id);
+    setStatus(nextStatus);
+    setEditing(nextEditing);
+    setProject(await api.get<NativeProject>(`/api/me/projects/${project.id}`));
+  }
+  async function withdraw() {
+    setBusy(true);
+    setError(null);
+    try {
+      await nativeProjects.withdrawSubmission(project.id);
+      await reloadAfterTransition("draft", true);
+      setWithdrawOpen(false);
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveDraft")));
+      setWithdrawOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function returnToTeam() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/projects/${project.id}/unlock`, {
+        reason: returnReason.trim(),
+        decision: "unlock",
+      });
+      invalidateProjectReads(project.id);
+      const fresh = await api.get<NativeProject>(`/api/repos/${project.id}`);
+      setProject(fresh);
+      setStatus(fresh.submissionStatus);
+      setReturnReason("");
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveProject")));
+    } finally {
+      setReturnOpen(false);
+      setBusy(false);
+    }
+  }
+  async function saveRepoUrl() {
+    const next = repoUrl.trim();
+    if (next === (project.githubUrl ?? "")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/api/repos/${project.id}`, { githubUrl: next || null });
+      invalidateProjectReads(project.id);
+      setProject({ ...project, githubUrl: next || null });
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveProject")));
     } finally {
       setBusy(false);
     }
@@ -191,14 +257,22 @@ export function ProjectEditor({
       setBusy(false);
     }
   }
-  const unsubmitted =
-    !staff && status === "submitted" && lastSubmitted !== projectSubmissionKey(name, draft.values);
   const incomplete = project.template.filter((field) =>
     validateFieldOnBlur(field, draft.values[field.key], t, language),
   );
+  const submitAction =
+    !staff && !editing && project.canSubmit && status !== "submitted" ? (
+      <Button
+        loading={busy}
+        disabled={busy || draft.state === "saving"}
+        onClick={() => void submit()}
+      >
+        {t("projectSubmitCta")}
+      </Button>
+    ) : undefined;
   const editAction = project.canEdit ? (
     <Button
-      variant={editing ? "outline" : "default"}
+      variant={editing || submitAction ? "outline" : "default"}
       disabled={busy || draft.state === "saving"}
       onClick={async () => {
         if (editing && !(await draft.save())) return;
@@ -207,9 +281,41 @@ export function ProjectEditor({
     >
       {t(editing ? "viewProject" : "editProjectDetails")}
     </Button>
+  ) : project.canWithdraw ? (
+    <Button variant="outline" disabled={busy} onClick={() => setWithdrawOpen(true)}>
+      {t("projectWithdrawCta")}
+    </Button>
   ) : undefined;
   return (
     <PageLayout>
+      <AlertModal
+        open={returnOpen}
+        onOpenChange={setReturnOpen}
+        title={t("projectReturnTitle")}
+        description={t("projectReturnDesc")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("projectReturnCta")}
+        confirmDisabled={!returnReason.trim()}
+        pending={busy}
+        onConfirm={() => void returnToTeam()}
+      >
+        <Textarea
+          aria-label={t("projectReturnReason")}
+          value={returnReason}
+          maxLength={1000}
+          onChange={(event) => setReturnReason(event.target.value)}
+        />
+      </AlertModal>
+      <AlertModal
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        title={t("projectWithdrawTitle")}
+        description={t("projectWithdrawDesc")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("projectWithdrawCta")}
+        pending={busy}
+        onConfirm={() => void withdraw()}
+      />
       <AlertModal
         open={leaveOpen}
         onOpenChange={setLeaveOpen}
@@ -234,18 +340,23 @@ export function ProjectEditor({
       <ProjectsSectionHeader
         management={staff}
         recordName={name || project.name}
-        recordAction={editAction}
+        recordAction={
+          <>
+            {submitAction}
+            {editAction}
+            {staff && status === "submitted" && can(CAPABILITIES.PROJECTS_EDIT) && (
+              <Button variant="outline" disabled={busy} onClick={() => setReturnOpen(true)}>
+                {t("projectReturnCta")}
+              </Button>
+            )}
+          </>
+        }
         recordState={
           <StatusBadge tone={status === "submitted" ? "success" : "neutral"} dot={false}>
             {t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
           </StatusBadge>
         }
       />
-      {unsubmitted && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t("projectUnsubmittedChanges")}
-        </p>
-      )}
       {editing ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="space-y-6">
@@ -274,7 +385,7 @@ export function ProjectEditor({
                       }
                       onClick={() => void submit()}
                     >
-                      {t(status === "submitted" ? "projectResubmitCta" : "projectSubmitCta")}
+                      {t("projectSubmitCta")}
                     </Button>
                   )}
                 </>
@@ -461,7 +572,22 @@ export function ProjectEditor({
                 </form>
               )}
             </SectionCard>
-            {!staff && project.isMember && <GithubLink projectId={project.id} />}
+            {staff && project.canEdit && (
+              <div className="space-y-2">
+                <Label htmlFor="staff-project-repo">{t("projectGithubUrlField")}</Label>
+                <Input
+                  id="staff-project-repo"
+                  type="url"
+                  value={repoUrl}
+                  disabled={busy}
+                  onChange={(event) => setRepoUrl(event.target.value)}
+                  onBlur={() => void saveRepoUrl()}
+                />
+              </div>
+            )}
+            {!staff && project.isMember && (
+              <GithubLink projectId={project.id} locked={status === "submitted"} />
+            )}
             <ProjectChallenges
               project={{ ...project, challenges, canEdit: project.canEdit && editing }}
               onChange={setChallenges}
@@ -493,54 +619,54 @@ export function ProjectEditor({
           </div>
         </div>
       ) : (
-        <>
-          <ProjectOverview
-            showQueue
-            review={
-              staff && (incomplete.length > 0 || status === "draft") ? (
-                <SectionCard title={t("projectReviewTitle")} variant="plain">
-                  {status === "draft" && (
-                    <p className="mb-3 text-sm text-muted-foreground">{t("projectIneligible")}</p>
-                  )}
-                  <ul className="space-y-2">
-                    {incomplete.map((field) => (
-                      <li key={field.key} className="flex flex-wrap justify-between gap-2 text-sm">
-                        <span>{pickText(field.label, language)}</span>
-                        <span className="text-muted-foreground">
-                          {validateFieldOnBlur(field, draft.values[field.key], t, language)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </SectionCard>
-              ) : undefined
-            }
-            project={{
-              ...project,
-              name,
-              submissionStatus: status,
-              responses: draft.values,
-              members,
-              challenges,
-            }}
-            language={language}
-            labels={{
-              team: t("surfaceTeam"),
-              challenges: t("challenges"),
-              details: t("projectDetailsTitle"),
-              pending: t("pendingInvitesTitle"),
-              rank: t("rankLabel"),
-              noMembers: t("noMembers"),
-              noChallenges: t("noChallenges"),
-            }}
-            assetUrl={(path) => new URL(path, API_URL).toString()}
-          />
-          {!staff && project.isMember && (
-            <div className="mt-8 max-w-xl">
-              <GithubLink projectId={project.id} />
-            </div>
-          )}
-        </>
+        <ProjectOverview
+          showQueue
+          asideExtra={
+            !staff && project.isMember ? (
+              <GithubLink projectId={project.id} variant="plain" locked={status === "submitted"} />
+            ) : staff && can(CAPABILITIES.PROJECTS_READ) ? (
+              <GithubActivity projectId={project.id} />
+            ) : undefined
+          }
+          review={
+            staff && (incomplete.length > 0 || status === "draft") ? (
+              <SectionCard title={t("projectReviewTitle")} variant="plain">
+                {status === "draft" && (
+                  <p className="mb-3 text-sm text-muted-foreground">{t("projectIneligible")}</p>
+                )}
+                <ul className="space-y-2">
+                  {incomplete.map((field) => (
+                    <li key={field.key} className="flex flex-wrap justify-between gap-2 text-sm">
+                      <span>{pickText(field.label, language)}</span>
+                      <span className="text-muted-foreground">
+                        {validateFieldOnBlur(field, draft.values[field.key], t, language)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </SectionCard>
+            ) : undefined
+          }
+          project={{
+            ...project,
+            name,
+            submissionStatus: status,
+            responses: draft.values,
+            members,
+            challenges,
+          }}
+          language={language}
+          labels={{
+            team: t("surfaceTeam"),
+            challenges: t("challenges"),
+            details: t("projectDetailsTitle"),
+            pending: t("pendingInvitesTitle"),
+            rank: t("rankLabel"),
+            noMembers: t("noMembers"),
+            noChallenges: t("noChallenges"),
+          }}
+          assetUrl={(path) => new URL(path, API_URL).toString()}
+        />
       )}
     </PageLayout>
   );

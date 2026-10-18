@@ -23,6 +23,7 @@ import {
   saveNativeDraft,
   saveNativeForm,
   submitNativeProject,
+  withdrawNativeSubmission,
 } from "./native.js";
 import { assertGalleryVisible, projectPhase, projectViewer } from "./policy.js";
 import { addMyProjectChallenge } from "./service.js";
@@ -181,6 +182,19 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
       },
     },
     (q) => submitNativeProject(q.userId as number, q.params.id),
+  );
+  r.post(
+    "/api/me/projects/:id/withdraw-submission",
+    {
+      ...auth,
+      schema: {
+        params,
+        summary: "Withdraw project submission",
+        description:
+          "While submissions are open, an active member takes a submitted project back to draft so it can be edited and submitted again. A submitted project cannot otherwise be edited by participants; staff correct it through the staff routes. Refused after the submission close and while organizer-locked (H20,H21).",
+      },
+    },
+    (q) => withdrawNativeSubmission(q.userId as number, q.params.id),
   );
   r.get(
     "/api/me/projects/:id",

@@ -198,6 +198,7 @@ export interface EventConfig {
   projectGalleryOpensAt: string | null;
   projectGalleryAudience: "staff" | "attendees" | "public";
   projectMaxTeamSize: number | null;
+  projectGithubRequired: boolean;
   /** Optional common entry instant used for people accredited earlier. */
   presenceAutoEntryAt: string | null;
   /** Maximum time without an exit or activity signal before provisional time is invalidated. */

@@ -29,6 +29,10 @@ export const ERROR_REASONS = {
   GITHUB_REPO_NOT_AVAILABLE: "github_repo_not_available",
   /** 404: the schedule item does not exist. */
   SCHEDULE_ITEM_NOT_FOUND: "schedule_item_not_found",
+  /** 409: a submitted project is frozen; the team withdraws the submission to edit. */
+  PROJECT_FROZEN: "project_frozen",
+  /** 400: the event requires a linked GitHub repository to submit. */
+  PROJECT_GITHUB_REQUIRED: "project_github_required",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

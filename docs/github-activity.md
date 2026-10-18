@@ -39,7 +39,14 @@ Without them the "Link GitHub repo" button is hidden.
    when empty, is audited, and backfills up to 300 commits and 300 pull requests.
 4. **Unlink** (`DELETE .../github`) removes the link and tracked activity.
 
-Only active team members can manage the link. Uninstalling the App from GitHub
+Only active team members can manage the link, and not while the project is
+submitted (it is frozen until withdrawn or returned by staff, see
+[projects](./projects.md)). Staff can type a repository URL in the staff project
+view (`PATCH /api/repos/:id`); a URL different from the linked repository drops
+the App link and its tracked activity. Opening the link flow without a repository
+list uses account authorization, which always returns to the callback (GitHub
+shows no redirect for an already-installed App). Enable **Redirect on update** in
+the App so saving its settings also returns to hackOS. Uninstalling the App from GitHub
 (`installation` → `deleted`) removes its links.
 
 ## Linking your account
@@ -52,6 +59,18 @@ shows the member's hackOS name for commits and pull requests authored by that
 login, and the bare GitHub login for anyone who has not linked. This also works
 for teammates who never link a repository. Add the callback URL to the App's
 redirect URIs; it is the same one used for repository linking.
+
+## Staff view
+
+Project staff (`projects:read`) see commits and pull requests per team as columns
+of **Manage projects** (`GET /api/projects/github-activity`) and per person in
+the staff project view (`GET /api/projects/:id/github-activity`), inside the same
+activity window as the ranking, with a totals row. Authors with a linked hackOS
+account show their name, others their GitHub login. The Judging view shows the
+project's commits and pull requests to readers with `projects:read`
+(`totals` in the same response). It lists every URL answer (GitHub, demo, URL
+validated and video fields) once in a single row of links, and unfolded details
+omit what the glance above already shows.
 
 ## Tracking
 

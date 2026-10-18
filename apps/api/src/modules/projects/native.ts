@@ -1,5 +1,5 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { projectDescriptionField } from "@hackos/shared/forms";
-import { projectSubmissionKey } from "@hackos/shared/project-submission";
 import type { ProjectForm } from "@hackos/shared/projects";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import type { Queryable } from "../../db/pool.js";
@@ -26,7 +26,12 @@ export async function nativeMember(db: Queryable, userId: number, id: number) {
   );
   if (!result.rowCount) throw new ForbiddenError("Not an active project member");
 }
-export async function nativeEditable(db: Queryable, userId: number, id: number) {
+export async function nativeEditable(
+  db: Queryable,
+  userId: number,
+  id: number,
+  { allowSubmitted = false }: { allowSubmitted?: boolean } = {},
+) {
   const result = await db.query(`SELECT * FROM repos WHERE id=$1 FOR UPDATE`, [id]);
   const project = result.rows[0];
   if (!project) throw new NotFoundError("Project not found");
@@ -35,6 +40,11 @@ export async function nativeEditable(db: Queryable, userId: number, id: number) 
     throw new ConflictError("Project is locked; request edits");
   if (!(project.submitted_at && project.submission_status === "draft"))
     await assertProjectWindow(db);
+  // H20/H21: a submitted project is the presented project; participants withdraw it to edit.
+  if (project.submission_status === "submitted" && !allowSubmitted)
+    throw new ConflictError("Withdraw the submission to edit the project", {
+      code: ERROR_REASONS.PROJECT_FROZEN,
+    });
   return project;
 }
 export async function nativeForm(db: Queryable = pool) {
@@ -171,7 +181,7 @@ export async function createNativeDraft(
 }
 export async function submitNativeProject(userId: number, id: number) {
   return withTransaction(async (db) => {
-    const project = await nativeEditable(db, userId, id);
+    const project = await nativeEditable(db, userId, id, { allowSubmitted: true });
     if (
       !(project.submitted_at && project.submission_status === "draft") &&
       !(await projectPhase(db)).submitting
@@ -180,6 +190,15 @@ export async function submitNativeProject(userId: number, id: number) {
     const form = await nativeForm(db);
     validateResponses(form.template, project.responses);
     await validateLibraryAnswers(db, form.template, project.responses, userId);
+    const github = await db.query(
+      `SELECT (SELECT project_github_required FROM event_config WHERE id=1) AS required,
+              (EXISTS (SELECT 1 FROM github_repo_links WHERE repo_id=$1) OR COALESCE(trim($2),'')<>'') AS linked`,
+      [id, project.github_url],
+    );
+    if (github.rows[0].required && !github.rows[0].linked)
+      throw new BadRequestError("A GitHub repository is required to submit", {
+        code: ERROR_REASONS.PROJECT_GITHUB_REQUIRED,
+      });
     for (const field of form.template) {
       if (
         field.project_video &&
@@ -221,6 +240,30 @@ export async function submitNativeProject(userId: number, id: number) {
     return { id, submissionStatus: "submitted" };
   });
 }
+/** H20/H21: inside the submission window a team takes its project back to draft, edits it and resubmits. */
+export async function withdrawNativeSubmission(userId: number, id: number) {
+  return withTransaction(async (db) => {
+    const project = await nativeEditable(db, userId, id, { allowSubmitted: true });
+    if (project.submission_status !== "submitted")
+      throw new ConflictError("Project is not submitted");
+    if (!(await projectPhase(db)).submitting)
+      throw new ForbiddenError("Project submissions are closed");
+    // A plain draft again: clearing submitted_at keeps the deadline binding (no approved reopening).
+    await db.query(
+      `UPDATE repos SET submission_status='draft',submitted_at=NULL,locked_at=NULL,lock_reason=NULL WHERE id=$1`,
+      [id],
+    );
+    await audit(db, {
+      actorId: userId,
+      entityType: "project",
+      entityId: id,
+      action: "withdraw_submission",
+      source: "participant",
+      before: { submissionStatus: "submitted" },
+    });
+    return { id, submissionStatus: "draft" };
+  });
+}
 export async function nativeProject(
   userId: number | null,
   id: number,
@@ -259,7 +302,7 @@ export async function nativeProjects(
       [ids, userId],
     ),
     pool.query(
-      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,COALESCE(p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL,false) AS "photoShared",u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN user_public_profiles p ON p.user_id=u.id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
+      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,COALESCE(p.directory_visible AND p.show_surname AND p.consented_at IS NOT NULL,false) AS "surnameShared",COALESCE(p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL,false) AS "photoShared",u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN user_public_profiles p ON p.user_id=u.id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
       [ids],
     ),
     pool.query(
@@ -289,14 +332,17 @@ export async function nativeProjects(
     const privateView = member && !gallery;
     const reopened = Boolean(project.submittedAt && project.submissionStatus === "draft");
     const participantCanEdit =
-      project.lockReason !== "organizer_lock" && (phase.editing || reopened);
+      project.lockReason !== "organizer_lock" &&
+      project.submissionStatus !== "submitted" &&
+      (phase.editing || reopened);
     const submitted =
       (gallery || !member) && project.submissionStatus === "submitted" && snapshot?.project;
     const content = submitted
       ? {
           name: snapshot.project.name,
           description: snapshot.project.description,
-          githubUrl: snapshot.project.github_url,
+          // The repo link is verified metadata, so one linked after submitting still shows.
+          githubUrl: snapshot.project.github_url ?? project.githubUrl,
           demoUrl: snapshot.project.demo_url,
           responses: snapshot.project.responses,
         }
@@ -335,13 +381,11 @@ export async function nativeProjects(
       canSubmit:
         ownMember && project.lockReason !== "organizer_lock" && (phase.submitting || reopened),
       canInvite: ownMember && participantCanEdit,
-      hasUnsubmittedChanges: Boolean(
-        privateView &&
-          snapshot?.project &&
-          project.submissionStatus === "submitted" &&
-          projectSubmissionKey(project.name, project.responses) !==
-            projectSubmissionKey(snapshot.project.name, snapshot.project.responses ?? {}),
-      ),
+      canWithdraw:
+        ownMember &&
+        project.submissionStatus === "submitted" &&
+        project.lockReason !== "organizer_lock" &&
+        phase.submitting,
       ...(winnerRows.some((w) => w.repoId === id)
         ? {
             winners: winnerRows
@@ -358,7 +402,8 @@ export async function nativeProjects(
         .map((m) => ({
           userId: m.userId,
           name: privateView || m.gallery_show_name ? m.name : null,
-          surname: privateView ? m.surname : null,
+          // H18: the public profile's surname setting applies in the gallery too.
+          surname: privateView || m.surnameShared ? m.surname : null,
           status: m.status,
           photoUrl:
             // H18: a member's photo follows their public profile's photo setting.

@@ -154,6 +154,18 @@ export async function selectableRepos(userId: number) {
   return out;
 }
 
+/** H20/H21: a submitted project is frozen, so its repository changes only after withdrawal or staff return. */
+async function assertNotFrozen(client: PoolClient, repoId: number): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT submission_status FROM repos WHERE id = $1 FOR UPDATE`,
+    [repoId],
+  );
+  if (rows[0]?.submission_status === "submitted")
+    throw new ConflictError("Withdraw the submission to edit the project", {
+      code: ERROR_REASONS.PROJECT_FROZEN,
+    });
+}
+
 export async function linkRepo(userId: number, repoId: number, githubRepoId: number) {
   const choice = (await selectableRepos(userId)).find((repo) => repo.id === githubRepoId);
   if (!choice)
@@ -161,6 +173,7 @@ export async function linkRepo(userId: number, repoId: number, githubRepoId: num
       code: ERROR_REASONS.GITHUB_REPO_NOT_AVAILABLE,
     });
   await withTransaction(async (client) => {
+    await assertNotFrozen(client, repoId);
     const taken = await client.query(
       `SELECT repo_id FROM github_repo_links WHERE github_repo_id = $1 AND repo_id <> $2`,
       [githubRepoId, repoId],
@@ -198,6 +211,7 @@ export async function linkRepo(userId: number, repoId: number, githubRepoId: num
 
 export async function unlinkRepo(userId: number, repoId: number): Promise<void> {
   await withTransaction(async (client) => {
+    await assertNotFrozen(client, repoId);
     const { rows } = await client.query(
       `DELETE FROM github_repo_links WHERE repo_id = $1 RETURNING full_name`,
       [repoId],
@@ -335,4 +349,88 @@ export async function leaderboard() {
       teams: prTeams.rows as LeaderboardRow[],
     },
   };
+}
+
+export interface TeamActivity {
+  repoId: number;
+  commits: number;
+  pullRequests: number;
+  merged: number;
+}
+
+export interface PersonActivity {
+  login: string;
+  name: string | null;
+  commits: number;
+  pullRequests: number;
+  merged: number;
+}
+
+const windowFilter = (column: string, from: number, to: number) =>
+  `($${from}::timestamptz IS NULL OR ${column} >= $${from}) AND ($${to}::timestamptz IS NULL OR ${column} <= $${to})`;
+
+/** Commit and pull-request totals per linked project inside the activity window (H18). */
+export async function teamActivity(): Promise<TeamActivity[]> {
+  const { from, to } = await activityWindow();
+  const { rows } = await pool.query(
+    `SELECT l.repo_id AS "repoId",
+            (SELECT count(*)::int FROM github_commits c
+              WHERE c.repo_id = l.repo_id AND ${windowFilter("c.committed_at", 1, 2)}) AS commits,
+            (SELECT count(*)::int FROM github_pull_requests p
+              WHERE p.repo_id = l.repo_id AND ${windowFilter("p.opened_at", 1, 2)}) AS "pullRequests",
+            (SELECT count(p.merged_at)::int FROM github_pull_requests p
+              WHERE p.repo_id = l.repo_id AND ${windowFilter("p.opened_at", 1, 2)}) AS merged
+       FROM github_repo_links l`,
+    [from, to],
+  );
+  return rows;
+}
+
+/** Commit and pull-request totals per GitHub author of one project; linked accounts show their member name. */
+export async function personActivity(repoId: number): Promise<PersonActivity[]> {
+  const { from, to } = await activityWindow();
+  const { rows } = await pool.query(
+    `WITH activity AS (
+       SELECT lower(c.author_login) AS login, 1 AS commits, 0 AS pulls, 0 AS merged
+         FROM github_commits c
+        WHERE c.repo_id = $1 AND c.author_login IS NOT NULL AND ${windowFilter("c.committed_at", 2, 3)}
+       UNION ALL
+       SELECT lower(p.author_login), 0, 1, (p.merged_at IS NOT NULL)::int
+         FROM github_pull_requests p
+        WHERE p.repo_id = $1 AND p.author_login IS NOT NULL AND ${windowFilter("p.opened_at", 2, 3)}
+     )
+     SELECT a.login,
+            NULLIF(trim(concat_ws(' ', u.name, u.surname)), '') AS name,
+            sum(a.commits)::int AS commits,
+            sum(a.pulls)::int AS "pullRequests",
+            sum(a.merged)::int AS merged
+       FROM activity a
+       LEFT JOIN github_accounts ga ON lower(ga.login) = a.login
+       LEFT JOIN users u ON u.id = ga.user_id
+      GROUP BY a.login, u.name, u.surname
+      ORDER BY sum(a.commits) + sum(a.pulls) DESC, a.login`,
+    [repoId, from, to],
+  );
+  return rows;
+}
+
+export interface ProjectActivityTotals {
+  commits: number;
+  pullRequests: number;
+  merged: number;
+}
+
+/** One project's commit and pull-request totals inside the activity window (H18). */
+export async function projectActivityTotals(repoId: number): Promise<ProjectActivityTotals> {
+  const { from, to } = await activityWindow();
+  const { rows } = await pool.query(
+    `SELECT (SELECT count(*)::int FROM github_commits c
+              WHERE c.repo_id = $1 AND ${windowFilter("c.committed_at", 2, 3)}) AS commits,
+            (SELECT count(*)::int FROM github_pull_requests p
+              WHERE p.repo_id = $1 AND ${windowFilter("p.opened_at", 2, 3)}) AS "pullRequests",
+            (SELECT count(p.merged_at)::int FROM github_pull_requests p
+              WHERE p.repo_id = $1 AND ${windowFilter("p.opened_at", 2, 3)}) AS merged`,
+    [repoId, from, to],
+  );
+  return rows[0];
 }

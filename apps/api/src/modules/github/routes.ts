@@ -1,9 +1,10 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
-import { requireAuth } from "../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { sharedCache } from "../../lib/shared-cache.js";
@@ -23,6 +24,8 @@ import {
   leaderboard,
   linkRepo,
   linkStatus,
+  personActivity,
+  projectActivityTotals,
   recordCommits,
   recordPull,
   removeInstallation,
@@ -31,6 +34,7 @@ import {
   saveInstallations,
   saveUserAuthorization,
   selectableRepos,
+  teamActivity,
   unlinkAccount,
   unlinkRepo,
 } from "./service.js";
@@ -95,16 +99,18 @@ export function registerGithubRoutes(app: FastifyInstance) {
       ...member,
       schema: {
         params,
+        body: z.object({ authorize: z.boolean().optional() }).optional(),
         summary: "Start linking a GitHub repository",
         description:
-          "Returns the GitHub App installation URL, bound by a signed 15-minute state to this member and project. GitHub redirects back to /api/github/callback, which proves the installation belongs to the member's GitHub account.",
+          "Returns the GitHub App installation URL, bound by a signed 15-minute state to this member and project. GitHub redirects back to /api/github/callback, which proves the installation belongs to the member's GitHub account. With authorize=true it returns the account authorization URL instead, which always redirects back and finds installations the App already has, since GitHub shows no redirect when the App is already installed.",
       },
     },
     async (q) => {
       assertGithubConfigured();
       const userId = actor(q.userId);
       await assertActiveMember(userId, q.params.id);
-      return { url: installUrl(signState(userId, q.params.id)) };
+      const state = signState(userId, q.params.id);
+      return { url: q.body?.authorize ? authorizeUrl(state) : installUrl(state) };
     },
   );
 
@@ -112,7 +118,17 @@ export function registerGithubRoutes(app: FastifyInstance) {
     "/api/github/callback",
     {
       config: { routeAccessPolicy: { kind: "authenticated" as const } },
-      preHandler: requireAuth,
+      // Expired session: bounce through login and resume this exact callback (H18).
+      preHandler: [
+        async (req, reply) => {
+          if (req.userId == null) {
+            return reply.redirect(
+              `${config.WEB_URL}/login?next=${encodeURIComponent(req.raw.url ?? "/")}`,
+            );
+          }
+        },
+        requireAuth,
+      ],
       schema: {
         querystring: z.object({
           installation_id: z.coerce.number().int().positive().optional(),
@@ -121,7 +137,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
         }),
         summary: "GitHub App installation callback",
         description:
-          "Verifies the signed state against the signed-in member, exchanges the OAuth code to learn the GitHub account, requires that account to own the installation, then redirects to the project page.",
+          "Verifies the signed state against the signed-in member, exchanges the OAuth code to learn the GitHub account, requires that account to own the installation, then redirects to the project page. Without a session it redirects to the login page, which returns here afterwards.",
       },
     },
     async (q, reply) => {
@@ -135,8 +151,15 @@ export function registerGithubRoutes(app: FastifyInstance) {
         await saveInstallations(userId, account.installationIds);
         return reply.redirect(`${config.WEB_URL}/settings/profile?github=linked`);
       }
-      if (q.query.installation_id == null) throw new BadRequestError("Missing GitHub installation");
       await assertActiveMember(userId, state.repoId);
+      if (q.query.installation_id == null) {
+        // Authorization-only return: reuse installations the App already has, else install it.
+        if (account.installationIds.length === 0)
+          return reply.redirect(installUrl(signState(userId, state.repoId)));
+        await saveAccount(userId, account);
+        await saveInstallations(userId, account.installationIds);
+        return reply.redirect(`${config.WEB_URL}/my-project/${state.repoId}?github=select`);
+      }
       await saveUserAuthorization(userId, account, q.query.installation_id);
       return reply.redirect(`${config.WEB_URL}/my-project/${state.repoId}?github=select`);
     },
@@ -249,6 +272,46 @@ export function registerGithubRoutes(app: FastifyInstance) {
       await unlinkRepo(userId, q.params.id);
       return { ok: true };
     },
+  );
+
+  const projectsRead = {
+    config: {
+      routeAccessPolicy: {
+        kind: "capability" as const,
+        capability: CAPABILITIES.PROJECTS_READ,
+      },
+    },
+    preHandler: requireCapability(CAPABILITIES.PROJECTS_READ),
+  };
+
+  r.get(
+    "/api/projects/github-activity",
+    {
+      ...projectsRead,
+      schema: {
+        summary: "Read every team's GitHub activity",
+        description:
+          "Commits, pull requests and merged pull requests inside the activity window for each project with a linked repository.",
+      },
+    },
+    async () => ({ teams: await teamActivity() }),
+  );
+
+  r.get(
+    "/api/projects/:id/github-activity",
+    {
+      ...projectsRead,
+      schema: {
+        params,
+        summary: "Read a team's GitHub activity per person",
+        description:
+          "Commits, pull requests and merged pull requests inside the activity window for each GitHub author of the project plus the project totals; authors with a linked hackOS account show their member name.",
+      },
+    },
+    async (q) => ({
+      people: await personActivity(q.params.id),
+      totals: await projectActivityTotals(q.params.id),
+    }),
   );
 
   r.get(

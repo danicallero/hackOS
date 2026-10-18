@@ -10,6 +10,7 @@ import type { NativeProject } from "@/lib/native-projects";
 import type { Language } from "@/lib/types";
 import { PresentationStatus } from "./presentation-status";
 import { ProjectAnswers } from "./project-answers";
+import { ProjectDescriptionLinks } from "./project-description-links";
 
 /** H18/H20/H21: one reading presentation for gallery, team and staff inspection. */
 export function ProjectOverview({
@@ -19,6 +20,7 @@ export function ProjectOverview({
   assetUrl,
   review,
   showQueue = false,
+  asideExtra,
 }: {
   project: NativeProject;
   language: Language;
@@ -34,6 +36,8 @@ export function ProjectOverview({
   assetUrl: (path: string) => string;
   review?: React.ReactNode;
   showQueue?: boolean;
+  /** Extra card in the right column, after the team. */
+  asideExtra?: React.ReactNode;
 }) {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -82,6 +86,12 @@ export function ProjectOverview({
                 ))}
             </ul>
           </SectionCard>
+        )}
+        {asideExtra}
+        {((!asideExtra && project.githubUrl) || project.demoUrl) && (
+          <ProjectDescriptionLinks
+            links={{ githubUrl: asideExtra ? null : project.githubUrl, demoUrl: project.demoUrl }}
+          />
         )}
         <SectionCard title={labels.challenges} icon={TrophyIcon} variant="plain">
           {project.challenges.length === 0 && (

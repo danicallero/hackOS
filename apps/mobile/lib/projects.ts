@@ -26,6 +26,8 @@ export interface NativeProject {
   winners?: { challengeId: number; rank: number; challengeTitle?: string }[];
   canEdit?: boolean;
   canSubmit?: boolean;
+  /** Inside the submission window a team withdraws a submitted project to edit it. */
+  canWithdraw?: boolean;
   canInvite?: boolean;
   /** ISO time the phase window closes; shown only when the server provides it. */
   submissionsCloseAt?: string | null;

@@ -104,41 +104,51 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     await pool.query(`UPDATE event_config SET project_gallery_opens_at=NULL`);
     expect((await get("/api/public/projects", staff)).statusCode).toBe(200);
   });
-  it("keeps last submitted answers and template for public while team sees newer working draft", async () => {
-    await app.inject({
-      method: "PUT",
-      url: `/api/me/projects/${id}/draft`,
-      headers: asUser(owner),
-      payload: { responses: { description: "Submitted" }, revision: 0 },
+  it("freezes a submitted project until the team withdraws it inside the window (H20, H21)", async () => {
+    const draft = (description: string, revision: number) =>
+      app.inject({
+        method: "PUT",
+        url: `/api/me/projects/${id}/draft`,
+        headers: asUser(owner),
+        payload: { responses: { description }, revision },
+      });
+    const mine = async () => (await get(`/api/me/projects/${id}`, owner)).json();
+    expect((await draft("Submitted", 0)).statusCode).toBe(200);
+    const submit = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/me/projects/${id}/submit`,
+        headers: asUser(owner),
+      });
+    expect((await submit()).statusCode).toBe(200);
+    expect((await draft("Sneaky", 1)).statusCode).toBe(409);
+    const frozen = await mine();
+    expect(frozen).toMatchObject({ canEdit: false, canWithdraw: true });
+    expect(frozen.responses.description).toBe("Submitted");
+
+    const withdraw = (userId = owner) =>
+      app.inject({
+        method: "POST",
+        url: `/api/me/projects/${id}/withdraw-submission`,
+        headers: asUser(userId),
+      });
+    expect((await withdraw(outsider)).statusCode).toBe(403);
+    expect((await withdraw()).statusCode).toBe(200);
+    expect(await mine()).toMatchObject({
+      submissionStatus: "draft",
+      canEdit: true,
+      canWithdraw: false,
     });
-    await app.inject({
-      method: "POST",
-      url: `/api/me/projects/${id}/submit`,
-      headers: asUser(owner),
-    });
-    await app.inject({
-      method: "PUT",
-      url: `/api/me/projects/${id}/draft`,
-      headers: asUser(owner),
-      payload: { responses: { description: "Working" }, revision: 1 },
-    });
+    expect((await draft("Fixed", 1)).statusCode).toBe(200);
+    expect((await submit()).statusCode).toBe(200);
+    expect((await mine()).responses.description).toBe("Fixed");
+
+    // After the submission close the submitted project stays as it is.
     await pool.query(
-      `INSERT INTO project_form_versions(template) VALUES('[{"key":"new","kind":"text","label":{"en":"New","es":"Nueva","gl":"Nova"}}]')`,
+      `UPDATE event_config SET project_submissions_close_at=now()-interval '1 second'`,
     );
-    await pool.query(
-      `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public'`,
-    );
-    const publicDetail = (await get(`/api/public/projects/${id}`)).json();
-    expect(publicDetail.responses.description).toBe("Submitted");
-    expect((await get(`/api/public/projects/${id}`, owner)).json().responses.description).toBe(
-      "Submitted",
-    );
-    expect(publicDetail.template).toEqual([]);
-    const own = (await get(`/api/me/projects/${id}`, owner)).json();
-    expect(own.responses.description).toBe("Working");
-    expect(own.hasUnsubmittedChanges).toBe(true);
-    expect(publicDetail.hasUnsubmittedChanges).toBe(false);
-    expect(own.template[0].key).toBe("new");
+    expect((await withdraw()).statusCode).toBe(403);
+    expect((await mine()).canWithdraw).toBe(false);
   });
   it("applies current name consent to public list and detail while retaining team names", async () => {
     await app.inject({
@@ -192,6 +202,23 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     expect(await photoUrl()).toBeNull();
     expect((await get(`/api/public/projects/${id}/members/${owner}/photo`)).statusCode).toBe(404);
     expect((await get("/api/me/project-gallery-consent", owner)).statusCode).toBe(404);
+  });
+  it("shows a member's surname exactly when the public profile shares it (H18)", async () => {
+    await pool.query(`UPDATE event_config SET project_draft_visibility='public'`);
+    await pool.query(`UPDATE users SET surname='Lovelace' WHERE id=$1`, [owner]);
+    const surname = async () => (await get(`/api/public/projects/${id}`)).json().members[0].surname;
+    expect(await surname()).toBeNull();
+    await pool.query(
+      `INSERT INTO user_public_profiles(user_id,directory_visible,show_surname,consented_at) VALUES($1,true,false,now())`,
+      [owner],
+    );
+    expect(await surname()).toBeNull();
+    await pool.query(`UPDATE user_public_profiles SET show_surname=true WHERE user_id=$1`, [owner]);
+    expect(await surname()).toBe("Lovelace");
+    await pool.query(`UPDATE user_public_profiles SET directory_visible=false WHERE user_id=$1`, [
+      owner,
+    ]);
+    expect(await surname()).toBeNull();
   });
   it("closes editing and submission together at the submission close", async () => {
     await pool.query(

@@ -6,35 +6,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
-import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
-import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
-import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
-import { TrackTiming } from "@/components/projects/track-timing";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -42,7 +19,6 @@ import { workspaceAccess } from "@/lib/judging-workspace";
 import {
   type ChallengeProgress,
   entryAction,
-  exportUrls,
   getChallengeProgress,
   getRoomPace,
   getRoomView,
@@ -64,7 +40,8 @@ import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 
-import { errorMessage, exportHref, queueErrorToastContent } from "./helpers";
+import { errorMessage, queueErrorToastContent } from "./helpers";
+import { JudgingTopBar } from "./judging-top-bar";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
@@ -307,7 +284,7 @@ export default function QueuePage() {
     t,
   );
 
-  // Expanded judging is a standing preference: the layout appears whenever a team
+  // View project is a standing preference: the layout appears whenever a team
   // is in the room (or a past evaluation is open) and gives way to the queue when
   // nobody is, then comes back with the next team.
   const focusing = focusMode && canJudge && reviewTarget != null && !windowOpen;
@@ -379,108 +356,31 @@ export default function QueuePage() {
       data-wide
       data-judging-page
     >
-      <Surface padding="none" className="p-5">
-        {/* Fluid header (H29, issue #61): the two field columns grow/shrink and
-            the action cluster drops to its own row under tight widths (tiling
-            WMs, tablet/mobile) instead of overflowing the card. No fixed track
-            widths — flex-basis + min-width + flex-wrap handle the reflow. */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-full min-w-36 space-y-2 sm:w-80">
-            <Label htmlFor="queue-room">{t("roomLabel")}</Label>
-            <Select
-              value={activeRoomId ? String(activeRoomId) : ""}
-              onValueChange={(value) => {
-                if (selectReviewEntry(null)) setRoomId(Number(value));
-              }}
-              disabled={roomsLoading || rooms.length === 0}
-            >
-              <SelectTrigger id="queue-room" className="w-full">
-                <SelectValue placeholder={t("selectRoomPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {rooms.map((room) => (
-                  <SelectItem key={room.id} value={String(room.id)}>
-                    {room.queue_name ? `${room.name} - ${room.queue_name}` : room.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-end gap-2 sm:ml-auto sm:justify-end">
-            {canJudge && (
-              <Button
-                variant={focusMode ? "default" : "outline"}
-                aria-pressed={focusMode}
-                onClick={() => changeFocusMode(!focusMode)}
-              >
-                <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
-                {t("judgingExpanded")}
-              </Button>
-            )}
-            {isPaused ? (
-              <Button
-                disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
-                onClick={() =>
-                  activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
-                }
-                loading={busy === "pause"}
-              >
-                <PlayIcon aria-hidden="true" className="size-4" />
-                {t("resume")}
-              </Button>
-            ) : (
-              <AlertModal
-                title={t("pauseRoomTitle")}
-                description={t("pauseRoomDescription")}
-                cancelLabel={t("cancel")}
-                confirmLabel={t("pause")}
-                autoClose
-                onConfirm={() =>
-                  activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
-                }
-                trigger={
-                  <Button
-                    variant="outline"
-                    disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
-                  >
-                    <PauseIcon aria-hidden="true" className="size-4" />
-                    {t("pause")}
-                  </Button>
-                }
-              />
-            )}
-
-            {canExport && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" disabled={!effectiveChallengeId}>
-                    <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                    {t("exportData")}
-                    <CaretDownIcon aria-hidden="true" className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                {effectiveChallengeId && (
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem asChild>
-                      <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
-                        <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                        {t("queueExportLabel")}
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
-                        <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                        {t("evaluationsExport")}
-                      </a>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                )}
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-      </Surface>
+      <JudgingTopBar
+        rooms={rooms}
+        activeRoomId={activeRoomId}
+        roomsLoading={roomsLoading}
+        onSelectRoom={(id) => {
+          if (selectReviewEntry(null)) setRoomId(id);
+        }}
+        progress={progress.data}
+        pace={pace.data}
+        challengeId={effectiveChallengeId}
+        onTimingSaved={() => void refreshLive()}
+        canJudge={canJudge}
+        canOperate={canOperate}
+        canExport={canExport}
+        focusMode={focusMode}
+        onFocusModeChange={changeFocusMode}
+        isPaused={isPaused}
+        busy={busy}
+        onPause={() =>
+          activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
+        }
+        onResume={() =>
+          activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
+        }
+      />
 
       {actionError && (
         <div
@@ -540,16 +440,7 @@ export default function QueuePage() {
               )}
             >
               <QueuePanel
-                timingAction={
-                  effectiveChallengeId && (
-                    <TrackTiming
-                      challengeId={effectiveChallengeId}
-                      onSaved={() => void refreshLive()}
-                    />
-                  )
-                }
                 view={view}
-                progress={progress.data}
                 pace={pace.data}
                 canOperate={canOperate}
                 canJudge={canJudge}
@@ -622,14 +513,14 @@ export default function QueuePage() {
             {focusMode || !showForm || !formEntry ? (
               <div className="h-full min-h-0">{projectPanel}</div>
             ) : (
-              <div className="grid min-h-0 gap-5 xl:h-full xl:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-                <div className="min-h-0">{projectPanel}</div>
+              <div className="grid min-h-0 grid-cols-[minmax(0,1fr)] gap-5 xl:h-full xl:grid-rows-[auto_minmax(0,1fr)]">
+                <div className="min-h-0 xl:max-h-[58vh]">{projectPanel}</div>
                 <div className="min-h-96 xl:min-h-0">{renderForm(formEntry)}</div>
               </div>
             )}
           </div>
 
-          {/* Expanded judging: the form slides in beside the project while a team is
+          {/* View project: the form slides in beside the project while a team is
               in the room and out again once nobody is. */}
           {focusMode && (
             <div className="min-w-0 xl:h-full xl:min-h-0 xl:overflow-hidden">

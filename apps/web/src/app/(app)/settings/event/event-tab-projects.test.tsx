@@ -5,6 +5,11 @@ import type { EventConfig } from "@/lib/types";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
 
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
 const apiMock = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }));
 vi.mock("@/lib/api", () => ({ ApiError: class ApiError extends Error {}, api: apiMock }));
 const labels: Record<string, string> = {
@@ -43,6 +48,7 @@ describe("project deadlines view", () => {
       projectGalleryAudience: "participants",
       projectGalleryOpensAt: null,
       projectMaxTeamSize: null,
+      projectGithubRequired: false,
     } as unknown as EventConfig);
     const onDirtyChange = vi.fn();
     await act(async () =>

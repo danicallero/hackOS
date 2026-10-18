@@ -70,6 +70,8 @@
   "apiError_schedule_ends_before_starts": "El final debe ser posterior al inicio.",
   "apiError_schedule_scan_needs_participants": "Solo los elementos visibles para participantes pueden requerir escaneo.",
   "apiError_schedule_item_not_found": "Este elemento del programa ya no existe.",
+  "apiError_project_frozen": "Retira la entrega para editar el proyecto.",
+  "apiError_project_github_required": "Vincula un repositorio de GitHub para entregar el proyecto.",
   "apiError_not_sponsor": "Solo los representantes de empresas tienen plan de comidas.",
   "apiError_meal_plan_locked": "Los cambios de esta comida están cerrados.",
   "apiError_removal_pin_expired": "Ese PIN de seguridad ha caducado. Solicita uno nuevo.",

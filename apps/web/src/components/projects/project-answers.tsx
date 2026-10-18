@@ -19,15 +19,19 @@ export function ProjectAnswers({
   project,
   language,
   fallbackTitle,
+  omitFieldKeys = [],
   assetUrl,
 }: {
   project: NativeProject;
   language: Language;
   fallbackTitle?: string;
+  /** Answers the surrounding view already shows, so they are not repeated. */
+  omitFieldKeys?: string[];
   assetUrl: (path: string) => string;
 }) {
   const description = projectDescriptionField(project.template);
   const visible = project.template.filter((field) => {
+    if (omitFieldKeys.includes(field.key)) return false;
     const value = project.responses[field.key];
     return (
       (value !== undefined &&
