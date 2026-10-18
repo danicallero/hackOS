@@ -36,7 +36,7 @@ export function useProjectGithubActivity(projectId: number) {
     { enabled: can(CAPABILITIES.PROJECTS_READ) },
   );
   const data = resource.data;
-  return data && data.totals.commits + data.totals.pullRequests > 0 ? data : null;
+  return data?.totals && data.totals.commits + data.totals.pullRequests > 0 ? data : null;
 }
 
 /** "3 min ago" in the reader's language, from an ISO instant. */
@@ -53,7 +53,7 @@ export function GithubActivity({ projectId }: { projectId: number }) {
   const { t } = useLocale();
   const data = useProjectGithubActivity(projectId);
   if (!data) return null;
-  const { people, totals } = data;
+  const { people = [], totals } = data;
   return (
     <SectionCard title="GitHub" icon={GitCommitIcon} variant="plain">
       <table className="w-full text-sm">
