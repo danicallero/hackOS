@@ -5,7 +5,7 @@ export const privacyCopy: Record<Language, LegalDocumentCopy> = {
   es: {
     title: "Política de privacidad",
     description: "Política de privacidad conjunta de HackUDC y su plataforma hackOS.",
-    updatedAt: "17 de octubre de 2026",
+    updatedAt: "18 de octubre de 2026",
     body: `## 1. GPUL: responsable y ámbito
 
 Esta política cubre conjuntamente el tratamiento de datos de la inscripción y participación en HackUDC y el uso de su plataforma oficial hackOS, ambos gestionados por GPUL. Es una única política para el evento y la instancia de hackOS operada por GPUL.
@@ -18,7 +18,7 @@ La Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL*
 
 Para la inscripción y la participación podemos tratar nombre y apellidos, datos de contacto, fecha de nacimiento, ciudad de residencia, centro de estudios, acreditación de estudiante, año de graduación, talla de camiseta, CV y perfiles profesionales que solicite la convocatoria. También tratamos equipos, proyectos, retos, evaluaciones y asistencia. Para patrocinadores y colaboradores se incluyen empresa, cargo y contacto profesional.
 
-Las alergias, intolerancias y otras necesidades alimentarias se recogen voluntariamente, con consentimiento explícito, para adaptar el catering. Las imágenes y vídeos identificables se tratan con el consentimiento expreso correspondiente. Los permisos para compartir CV o enviar comunicaciones opcionales se solicitan por separado.
+Las alergias, intolerancias y otras necesidades alimentarias se recogen voluntariamente, con consentimiento explícito, para adaptar el catering. Los permisos para compartir CV o enviar comunicaciones opcionales se solicitan por separado.
 
 ## 3. hackOS: cuenta, uso y almacenamiento
 
@@ -55,7 +55,7 @@ Los datos proceden de ti, de personas autorizadas de tu equipo o entidad y de la
 - **Gestionar datos de salud:** tu consentimiento explícito. Puedes retirarlo, aunque ello puede limitar la adaptación del catering a tus necesidades.
 - **Proteger hackOS y cumplir obligaciones legales:** interés legítimo de GPUL en mantener la seguridad y cumplimiento de obligaciones legales aplicables.
 - **Enviar información sobre actividades similares:** consentimiento cuando sea exigible o interés legítimo permitido por la normativa. Podrás oponerte en cualquier momento.
-- **Publicar imágenes o vídeos identificables:** tu consentimiento expreso, que se solicitará por separado.
+- **Publicar imágenes o vídeos identificables:** Al asistir presencialmente al evento, declaras que entiendes y consientes que la organización, representantes de patrocinadores, otros participantes y cualquier otra entidad participante tomen fotografías y vídeos en los que puedas aparecer y los utilicen con fines promocionales, en redes sociales, con fines comerciales o para cualquier otro fin.
 - **Atender a patrocinadores y colaboradores:** gestionar la relación contractual o colaborativa y los contactos profesionales necesarios, según corresponda por ejecución contractual o interés legítimo.
 - **Compartir el CV o la candidatura con patrocinadores para oportunidades profesionales:** solo con tu autorización específica y voluntaria.
 
@@ -101,7 +101,7 @@ Para cualquier consulta sobre privacidad, escribe a [hackudc@gpul.org](mailto:ha
   gl: {
     title: "Política de privacidade",
     description: "Política de privacidade conxunta de HackUDC e a súa plataforma hackOS.",
-    updatedAt: "17 de outubro de 2026",
+    updatedAt: "18 de outubro de 2026",
     body: `## 1. GPUL: responsable e ámbito
 
 Esta política cobre conxuntamente o tratamento de datos da inscrición e participación en HackUDC e o uso da súa plataforma oficial hackOS, ambos xestionados por GPUL. É unha única política para o evento e a instancia de hackOS operada por GPUL.
@@ -114,7 +114,7 @@ A Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**
 
 Para a inscrición e a participación podemos tratar nome e apelidos, datos de contacto, data de nacemento, cidade de residencia, centro de estudos, acreditación de estudante, ano de graduación, talla de camiseta, CV e perfís profesionais que solicite a convocatoria. Tamén tratamos equipos, proxectos, retos, avaliacións e asistencia. Para patrocinadores e colaboradores inclúense empresa, cargo e contacto profesional.
 
-As alerxias, intolerancias e outras necesidades alimentarias recóllense voluntariamente, con consentimento explícito, para adaptar o catering. As imaxes e vídeos identificables trátanse co consentimento expreso correspondente. Os permisos para compartir CV ou enviar comunicacións opcionais solicítanse por separado.
+As alerxias, intolerancias e outras necesidades alimentarias recóllense voluntariamente, con consentimento explícito, para adaptar o catering. Os permisos para compartir CV ou enviar comunicacións opcionais solicítanse por separado.
 
 ## 3. hackOS: conta, uso e almacenamento
 
@@ -151,7 +151,7 @@ Os datos proceden de ti, de persoas autorizadas do teu equipo ou entidade e da a
 - **Xestionar datos de saúde:** o teu consentimento explícito. Podes retiralo, aínda que isto pode limitar a adaptación do catering ás túas necesidades.
 - **Protexer hackOS e cumprir obrigas legais:** interese lexítimo de GPUL en manter a seguridade e o cumprimento das obrigas legais aplicables.
 - **Enviar información sobre actividades similares:** consentimento cando sexa esixible ou interese lexítimo permitido pola normativa. Poderás opoñerte en calquera momento.
-- **Publicar imaxes ou vídeos identificables:** o teu consentimento expreso, que se solicitará por separado.
+- **Publicar imaxes ou vídeos identificables:** Ao asistir presencialmente ao evento, declaras que entendes e consentes que a organización, representantes de patrocinadores, outros participantes e calquera outra entidade participante tomen fotografías e vídeos nos que poidas aparecer e os utilicen con fins promocionais, en redes sociais, con fins comerciais ou para calquera outro fin.
 - **Atender patrocinadores e colaboradores:** xestionar a relación contractual ou colaborativa e os contactos profesionais necesarios, segundo corresponda por execución contractual ou interese lexítimo.
 - **Compartir o CV ou a candidatura con patrocinadores para oportunidades profesionais:** só coa túa autorización específica e voluntaria.
 
@@ -197,7 +197,7 @@ Para calquera consulta sobre privacidade, escribe a [hackudc@gpul.org](mailto:ha
   en: {
     title: "Privacy policy",
     description: "Joint privacy policy for HackUDC and its hackOS platform.",
-    updatedAt: "October 17, 2026",
+    updatedAt: "October 18, 2026",
     body: `## 1. GPUL: controller and scope
 
 This policy jointly covers data processing for registration and participation in HackUDC and use of its official hackOS platform, both managed by GPUL. It is one policy for the event and the hackOS instance operated by GPUL.
@@ -210,7 +210,7 @@ Asociación Universitaria Grupo de Programadores y Usuarios de Linux (**GPUL**),
 
 For registration and participation, we may process your name, contact details, date of birth, city of residence, school or university, proof of student status, graduation year, T-shirt size, CV and professional profiles requested by the call. We also process teams, projects, challenges, evaluations and attendance. Sponsor and collaborator details include company, role and professional contact information.
 
-Allergies, intolerances and other dietary needs are collected voluntarily with explicit consent to adjust catering. Identifiable images and videos are processed with the relevant express consent. Permission to share CVs or send optional communications is requested separately.
+Allergies, intolerances and other dietary needs are collected voluntarily with explicit consent to adjust catering. Permission to share CVs or send optional communications is requested separately.
 
 ## 3. hackOS: accounts, use and storage
 
@@ -247,7 +247,7 @@ Data come from you, authorized members of your team or organization, and activit
 - **Managing health data:** your explicit consent. You may withdraw it, although this may limit our ability to adapt catering to your needs.
 - **Protecting hackOS and complying with legal obligations:** GPUL's legitimate interest in maintaining security and compliance with applicable legal obligations.
 - **Sending information about similar activities:** consent where required or legitimate interests where permitted by law. You may object at any time.
-- **Publishing identifiable images or videos:** your express consent, requested separately.
+- **Publishing identifiable images or videos:** By attending the event in person, you declare that you understand and consent to the organisers, sponsor representatives, other participants and any other participating entity taking photos and videos in which you may appear and using them for promotional purposes, on social media, for commercial purposes or for any other purpose.
 - **Supporting sponsors and collaborators:** managing the contractual or collaborative relationship and necessary business contacts, based on contractual performance or legitimate interest as applicable.
 - **Sharing your CV or application with sponsors for career opportunities:** only with your specific, voluntary permission.
 

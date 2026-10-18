@@ -5,7 +5,7 @@ export const termsCopy: Record<Language, LegalDocumentCopy> = {
   es: {
     title: "Términos y condiciones",
     description: "Términos conjuntos de participación en HackUDC y uso de su plataforma hackOS.",
-    updatedAt: "17 de octubre de 2026",
+    updatedAt: "18 de octubre de 2026",
     body: `## 1. GPUL: ámbito y condiciones comunes
 
 GPUL organiza HackUDC y opera la instancia oficial de hackOS. Este documento regula ambas relaciones: el bloque 2 se aplica a la participación en el evento; el bloque 3, al uso de la plataforma; y los bloques 1 y 4, a ambas. Las condiciones relativas a competir y optar a premios solo se aplican a quienes participan en la competición.
@@ -60,6 +60,10 @@ Si detectas un posible incumplimiento de las reglas de competición, comunícalo
 ### 2.6. Cambios y cancelación del evento
 
 La Organización podrá modificar o cancelar el Evento por motivos justificados, avisando a las personas participantes con una antelación razonable.
+
+### 2.7. Fotografías y vídeos
+
+Al asistir presencialmente al evento, declaras que entiendes y consientes que la organización, representantes de patrocinadores, otros participantes y cualquier otra entidad participante tomen fotografías y vídeos en los que puedas aparecer y los utilicen con fines promocionales, en redes sociales, con fines comerciales o para cualquier otro fin. Consulta la [política de privacidad](https://hackudc.com/privacy/).
 
 ## 3. hackOS: uso de la plataforma
 
@@ -163,7 +167,7 @@ Para consultas sobre estos términos, escribe a [hackudc@gpul.org](mailto:hackud
   gl: {
     title: "Termos e condicións",
     description: "Termos conxuntos de participación en HackUDC e uso da súa plataforma hackOS.",
-    updatedAt: "17 de outubro de 2026",
+    updatedAt: "18 de outubro de 2026",
     body: `## 1. GPUL: ámbito e condicións comúns
 
 GPUL organiza HackUDC e opera a instancia oficial de hackOS. Este documento regula ambas as relacións: o bloque 2 aplícase á participación no evento; o bloque 3, ao uso da plataforma; e os bloques 1 e 4, a ambas. As condicións relativas a competir e optar a premios só se aplican a quen participa na competición.
@@ -218,6 +222,10 @@ Se detectas un posible incumprimento das regras de competición, comunícao á O
 ### 2.6. Cambios e cancelación do evento
 
 A Organización poderá modificar ou cancelar o Evento por motivos xustificados, avisando cunha antelación razoable.
+
+### 2.7. Fotografías e vídeos
+
+Ao asistir presencialmente ao evento, declaras que entendes e consentes que a organización, representantes de patrocinadores, outros participantes e calquera outra entidade participante tomen fotografías e vídeos nos que poidas aparecer e os utilicen con fins promocionais, en redes sociais, con fins comerciais ou para calquera outro fin. Consulta a [política de privacidade](https://hackudc.com/gl/privacy/).
 
 ## 3. hackOS: uso da plataforma
 
@@ -321,7 +329,7 @@ Para consultas sobre estes termos, escribe a [hackudc@gpul.org](mailto:hackudc@g
   en: {
     title: "Terms and conditions",
     description: "Joint terms for participation in HackUDC and use of its hackOS platform.",
-    updatedAt: "October 17, 2026",
+    updatedAt: "October 18, 2026",
     body: `## 1. GPUL: scope and common conditions
 
 GPUL organizes HackUDC and operates the official hackOS instance. This document covers both relationships: section 2 applies to event participation; section 3 to platform use; and sections 1 and 4 to both. Competition and prize conditions apply only to those competing.
@@ -376,6 +384,10 @@ Report suspected competition rule violations to the organizers during the event 
 ### 2.6. Event changes and cancellation
 
 The Organizer may modify or cancel the Event for justified reasons, notifying participants with reasonable notice.
+
+### 2.7. Photographs and videos
+
+By attending the event in person, you declare that you understand and consent to the organisers, sponsor representatives, other participants and any other participating entity taking photos and videos in which you may appear and using them for promotional purposes, on social media, for commercial purposes or for any other purpose. See the [privacy policy](https://hackudc.com/en/privacy/).
 
 ## 3. hackOS: platform use
 
