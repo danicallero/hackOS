@@ -5,15 +5,21 @@
 -- entry per fixture key. A row is now identified by (fixture_key, slot); the
 -- existing rows keep slot 'main'. The shared enterprise and sponsor may be
 -- referenced by every slot of one key, so the per-enterprise uniqueness goes;
--- challenge uniqueness stays (a challenge belongs to one slot). The purge
+-- challenge uniqueness stays (a challenge belongs to one slot). A slot can also
+-- point at a synthetic room (`room_id`): a room carries no marker of its own,
+-- its scope is inferred from the queue groups it serves, so the purge checks
+-- that inference before it deletes the room. The purge
 -- (identity/review-fixture-queues.ts) still verifies every pointer before it
 -- deletes anything.
 ALTER TABLE public.review_fixture_queues
   ADD COLUMN slot text NOT NULL DEFAULT 'main',
-  ADD CONSTRAINT review_fixture_queues_slot_check CHECK (btrim(slot) <> '');
+  ADD COLUMN room_id integer REFERENCES public.rooms(id) ON DELETE SET NULL,
+  ADD CONSTRAINT review_fixture_queues_slot_check CHECK (btrim(slot) <> ''),
+  ADD CONSTRAINT review_fixture_queues_room_id_key UNIQUE (room_id);
 ALTER TABLE public.review_fixture_queues DROP CONSTRAINT review_fixture_queues_pkey;
 ALTER TABLE public.review_fixture_queues
   ADD CONSTRAINT review_fixture_queues_pkey PRIMARY KEY (fixture_key, slot);
 ALTER TABLE public.review_fixture_queues DROP CONSTRAINT review_fixture_queues_enterprise_id_key;
 
+COMMENT ON COLUMN public.review_fixture_queues.room_id IS 'H18: synthetic judging room owned by the fixture; deleted only after its inferred scope is verified synthetic-only.';
 COMMENT ON COLUMN public.review_fixture_queues.slot IS 'H18: which of the account''s synthetic projects the pointers describe; ''main'' is the original single-project graph.';

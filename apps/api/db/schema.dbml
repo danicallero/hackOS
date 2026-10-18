@@ -962,6 +962,7 @@ Table review_fixture_queues {
   generation integer [not null]
   queue_entry_id integer [unique]
   repo_id integer [unique]
+  room_id integer [unique, note: 'H18: synthetic judging room owned by the fixture; deleted only after its inferred scope is verified synthetic-only.']
   slot text [not null, default: `'main'::text`, note: 'H18: which of the account\'s synthetic projects the pointers describe; \'main\' is the original single-project graph.']
   sponsor_id integer [unique]
   updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
@@ -1543,6 +1544,7 @@ Ref: review_fixture_queues.enterprise_id > enterprises.id
 Ref: review_fixture_queues.fixture_key > review_fixture_accounts.fixture_key
 Ref: review_fixture_queues.queue_entry_id > queue_entries.id
 Ref: review_fixture_queues.repo_id > repos.id
+Ref: review_fixture_queues.room_id > rooms.id
 Ref: review_fixture_queues.sponsor_id > sponsors.id
 Ref: role_capabilities.role_id > roles.id
 Ref: role_grant_rules.enterprise_id > enterprises.id

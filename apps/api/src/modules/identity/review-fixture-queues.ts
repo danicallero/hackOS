@@ -1,5 +1,6 @@
 import type pg from "pg";
 import { ConflictError } from "../../lib/errors.js";
+import { inspectFixtureRoomScope } from "../logistics/review-fixture-scope.js";
 
 type FixtureQueueRow = {
   fixture_key: string;
@@ -9,6 +10,7 @@ type FixtureQueueRow = {
   challenge_id: number | null;
   repo_id: number | null;
   queue_entry_id: number | null;
+  room_id: number | null;
 };
 
 const unique = (values: Array<number | null>): number[] => [
@@ -28,7 +30,8 @@ export async function purgeReviewFixtureQueue(
   fixtureKey: string,
 ): Promise<void> {
   const { rows: fixtures } = await client.query<FixtureQueueRow>(
-    `SELECT fixture_key, slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id
+    `SELECT fixture_key, slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id,
+            room_id
        FROM review_fixture_queues
       WHERE fixture_key = $1
       ORDER BY slot
@@ -39,6 +42,7 @@ export async function purgeReviewFixtureQueue(
   const repoIds = unique(fixtures.map((fixture) => fixture.repo_id));
   const challengeIds = unique(fixtures.map((fixture) => fixture.challenge_id));
   const entryIds = unique(fixtures.map((fixture) => fixture.queue_entry_id));
+  const roomIds = unique(fixtures.map((fixture) => fixture.room_id));
   const sponsorIds = unique(fixtures.map((fixture) => fixture.sponsor_id));
   const enterpriseIds = unique(fixtures.map((fixture) => fixture.enterprise_id));
   const integrity = (message: string) =>
@@ -55,6 +59,16 @@ export async function purgeReviewFixtureQueue(
     );
     if (nonSyntheticMembers.length > 0) {
       throw integrity("Review fixture project was attached to a real account.");
+    }
+  }
+
+  // A room has no marker column: its scope is inferred from the groups it serves
+  // and the enterprise it is pooled into. Delete only rooms that are
+  // synthetic-only by that inference, never one that real data also reaches.
+  for (const roomId of roomIds) {
+    const room = await inspectFixtureRoomScope(client, roomId);
+    if (room.exists && room.has_graph && (!room.has_synthetic || room.has_real)) {
+      throw integrity("Review fixture room is not synthetic-only.");
     }
   }
 
@@ -88,8 +102,10 @@ export async function purgeReviewFixtureQueue(
       throw integrity("Review fixture challenge was merged with another challenge.");
     }
     const { rows: roomRefs } = await client.query(
-      `SELECT 1 FROM room_queue_groups WHERE queue_group_id = $1 LIMIT 1`,
-      [groupId],
+      `SELECT 1 FROM room_queue_groups
+        WHERE queue_group_id = $1 AND NOT (room_id = ANY($2::int[]))
+        LIMIT 1`,
+      [groupId, roomIds],
     );
     if (roomRefs.length > 0) {
       throw integrity("Review fixture queue group is assigned to a room.");
@@ -116,6 +132,14 @@ export async function purgeReviewFixtureQueue(
     await client.query(`DELETE FROM judging_session WHERE queue_entry_id = $1`, [entryId]);
     await client.query(`DELETE FROM queue_history WHERE queue_entry_id = $1`, [entryId]);
     await client.query(`DELETE FROM queue_entries WHERE id = $1`, [entryId]);
+  }
+
+  for (const roomId of roomIds) {
+    await client.query(`DELETE FROM judging_session WHERE room_id = $1`, [roomId]);
+    await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
+    await client.query(`DELETE FROM room_enterprises WHERE room_id = $1`, [roomId]);
+    await client.query(`DELETE FROM room_queue_state WHERE room_id = $1`, [roomId]);
+    await client.query(`DELETE FROM rooms WHERE id = $1`, [roomId]);
   }
 
   for (const repoId of repoIds) {

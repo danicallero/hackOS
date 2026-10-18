@@ -49,6 +49,12 @@ const FIXTURE_DEFINITIONS = [
     name: "App Review",
     surname: "Explorer",
   },
+  {
+    key: "staff-queue-operator",
+    kind: "staff" as const,
+    name: "App Review",
+    surname: "Queue Staff",
+  },
 ] as const;
 
 const FIXTURE_KEYS = FIXTURE_DEFINITIONS.map((fixture) => fixture.key);
@@ -57,6 +63,30 @@ const STAFF_CAPABILITIES = [
   CAPABILITIES.PRESENCE_SCAN,
   CAPABILITIES.ACTIVITY_SCAN,
 ] as const;
+/**
+ * The queue operator runs the synthetic rooms and judges their projects. Every
+ * queue and project route enforces the synthetic boundary for it (see
+ * queue/fixture-boundary.ts), so these capabilities reach fixture data only.
+ */
+const QUEUE_OPERATOR_CAPABILITIES = [
+  CAPABILITIES.QUEUE_STATUS,
+  CAPABILITIES.QUEUE_OPERATE,
+  CAPABILITIES.JUDGE_PANEL,
+  CAPABILITIES.PROJECTS_READ,
+  CAPABILITIES.PROJECTS_EDIT,
+] as const;
+const FIXTURE_ROLES = {
+  "staff-exit-operator": {
+    name: "App review exit staff",
+    position: -900000,
+    capabilities: STAFF_CAPABILITIES,
+  },
+  "staff-queue-operator": {
+    name: "App review queue staff",
+    position: -900001,
+    capabilities: QUEUE_OPERATOR_CAPABILITIES,
+  },
+} as const;
 
 const fixtureAccountSchema = z.object({
   fixtureKey: z.string(),
@@ -142,21 +172,25 @@ async function createFixtureUser(
   return { id: userId, email };
 }
 
-async function configureFixtureStaffRole(client: import("pg").PoolClient): Promise<number> {
-  // A low, dedicated position: this synthetic fixture role should never be
-  // able to out-rank a real admin/staff role, and nothing else needs to
-  // manage it via requireRoleMutationAuthority (fixtures are seeded by an
-  // already-wildcard-holding reviewer flow, not through the roles API).
+async function configureFixtureRole(
+  client: import("pg").PoolClient,
+  role: { name: string; position: number; capabilities: readonly string[] },
+): Promise<number> {
+  // A low, dedicated position: a synthetic fixture role should never be able to
+  // out-rank a real admin/staff role, and nothing else needs to manage it via
+  // requireRoleMutationAuthority (fixtures are seeded by an already-wildcard-
+  // holding reviewer flow, not through the roles API).
   const { rows } = await client.query<{ id: number }>(
     `INSERT INTO roles (name, position, event_access)
-     VALUES ('App review exit staff', -900000, true)
+     VALUES ($1, $2, true)
      ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position, event_access = true
      RETURNING id`,
+    [role.name, role.position],
   );
   const roleId = rows[0]?.id;
-  if (!roleId) throw new Error("Review fixture staff role was not created");
+  if (!roleId) throw new Error(`Review fixture role ${role.name} was not created`);
   await client.query(`DELETE FROM role_capabilities WHERE role_id = $1`, [roleId]);
-  for (const capability of STAFF_CAPABILITIES) {
+  for (const capability of role.capabilities) {
     await client.query(
       `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
       [roleId, capability],
@@ -273,13 +307,17 @@ async function configureFixtureQueue(
   );
 }
 
+type FixtureStage = "waiting" | "called" | "in_room" | "presenting" | "completed";
+
 /**
  * The demo graph of `participant-explorer`, a non-destructive account for
- * walking the app: three projects of its own (submitted with a repository and
- * a waiting queue entry, submitted and already scored, and a draft) plus two
- * submitted projects of other teams, so the gallery, My projects, My queue and
- * reporting all have content. Rooms are deliberately absent: the room
- * operations (called, inside, presenting) need a marked room first.
+ * walking the app, and of the operator that runs it. One synthetic enterprise
+ * owns three challenges: *Open* and *Design* share one queue (served by
+ * *Review room A*) and *Hardware* has its own (served by *Review room B*).
+ * Eight submitted projects, one draft, and a queue entry in every stage:
+ * waiting (also in the shared queue), called, inside, presenting and scored.
+ * Rooms carry no marker of their own; their scope is inferred from the queue
+ * groups they serve, which are synthetic-only, so no real list shows them.
  */
 async function configureFixtureExplorer(
   client: import("pg").PoolClient,
@@ -287,129 +325,246 @@ async function configureFixtureExplorer(
   generation: number,
 ): Promise<void> {
   const key = "participant-explorer";
-  const enterprise = await client.query<{ id: number }>(
+  const one = async <T extends { id: number }>(sql: string, params: unknown[], what: string) => {
+    const { rows } = await client.query<T>(sql, params);
+    const row = rows[0];
+    if (!row) throw new Error(`Review explorer ${what} was not created`);
+    return row.id;
+  };
+  const enterpriseId = await one(
     `INSERT INTO enterprises (name) VALUES ($1) RETURNING id`,
     [`Review explorer ${generation}`],
+    "enterprise",
   );
-  const enterpriseId = enterprise.rows[0]?.id;
-  if (!enterpriseId) throw new Error("Review explorer enterprise was not created");
-  const sponsor = await client.query<{ id: number }>(
+  const sponsorId = await one(
     `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, NULL) RETURNING id`,
     [enterpriseId],
+    "sponsor",
   );
-  const sponsorId = sponsor.rows[0]?.id;
-  if (!sponsorId) throw new Error("Review explorer sponsor was not created");
-  const challenge = await client.query<{ id: number }>(
-    `INSERT INTO challenges (author, title, description, is_test_account, visibility)
-     VALUES ($1, $2, $3, true, 'visible')
-     RETURNING id`,
-    [sponsorId, "Open challenge (review)", "A synthetic challenge for reviewing the app."],
+  const challenge = (title: string, description: string) =>
+    one(
+      `INSERT INTO challenges (author, title, description, is_test_account, visibility)
+       VALUES ($1, $2, $3, true, 'visible') RETURNING id`,
+      [sponsorId, title, description],
+      `challenge ${title}`,
+    );
+  const openChallenge = await challenge("Open challenge (review)", "A synthetic open challenge.");
+  const designChallenge = await challenge(
+    "Design challenge (review)",
+    "A synthetic challenge that shares its queue with the open challenge.",
   );
-  const challengeId = challenge.rows[0]?.id;
-  if (!challengeId) throw new Error("Review explorer challenge was not created");
+  const hardwareChallenge = await challenge(
+    "Hardware challenge (review)",
+    "A synthetic challenge with its own queue.",
+  );
+
+  // Every challenge starts in its own 1:1 queue group. Open and Design share one.
+  const groupOf = async (challengeId: number) =>
+    one<{ id: number }>(
+      `SELECT queue_group_id AS id FROM queue_group_challenges WHERE challenge_id = $1`,
+      [challengeId],
+      "queue group",
+    );
+  const sharedGroup = await groupOf(openChallenge);
+  const designGroup = await groupOf(designChallenge);
+  const hardwareGroup = await groupOf(hardwareChallenge);
+  await client.query(
+    `UPDATE queue_group_challenges SET queue_group_id = $1 WHERE challenge_id = $2`,
+    [sharedGroup, designChallenge],
+  );
+  await client.query(`DELETE FROM queue_groups WHERE id = $1`, [designGroup]);
+  await client.query(`UPDATE queue_groups SET display_name = $2 WHERE id = $1`, [
+    sharedGroup,
+    "Open and design (shared queue)",
+  ]);
+
+  const room = async (name: string, location: string, groupId: number) => {
+    const roomId = await one(
+      `INSERT INTO rooms (name, location) VALUES ($1, $2) RETURNING id`,
+      [name, location],
+      `room ${name}`,
+    );
+    await client.query(`INSERT INTO room_enterprises (room_id, enterprise_id) VALUES ($1, $2)`, [
+      roomId,
+      enterpriseId,
+    ]);
+    await client.query(`INSERT INTO room_queue_groups (room_id, queue_group_id) VALUES ($1, $2)`, [
+      roomId,
+      groupId,
+    ]);
+    await client.query(
+      `INSERT INTO room_queue_state (room_id, is_paused, started_at)
+       VALUES ($1, false, clock_timestamp() - interval '1 hour')`,
+      [roomId],
+    );
+    return roomId;
+  };
+  const roomA = await room("Review room A", "Ground floor (review)", sharedGroup);
+  const roomB = await room("Review room B", "First floor (review)", hardwareGroup);
 
   const project = async (
     name: string,
     description: string,
     status: "submitted" | "draft",
-    options: { githubUrl?: string; member: boolean; challenge: boolean },
+    options: { githubUrl?: string; member: boolean; challenge?: number },
   ): Promise<number> => {
-    const { rows } = await client.query<{ id: number }>(
+    const repoId = await one(
       `INSERT INTO repos
          (name, description, github_url, created_by, is_test_account, submission_status,
           submitted_at)
        VALUES ($1, $2, $3, $4, true, $5, CASE WHEN $5 = 'submitted' THEN now() END)
        RETURNING id`,
       [name, description, options.githubUrl ?? null, options.member ? userId : null, status],
+      `project ${name}`,
     );
-    const repoId = rows[0]?.id;
-    if (!repoId) throw new Error(`Review explorer project ${name} was not created`);
     if (options.member) {
       await client.query(
         `INSERT INTO submissions (repo_id, user_id, status) VALUES ($1, $2, 'active')`,
         [repoId, userId],
       );
     }
-    if (options.challenge) {
+    if (options.challenge !== undefined) {
       await client.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
         repoId,
-        challengeId,
+        options.challenge,
       ]);
     }
     return repoId;
   };
-  const waitingRepo = await project(
+  const entry = (
+    challengeId: number,
+    repoId: number,
+    stage: FixtureStage,
+    options: { position?: number; roomId?: number } = {},
+  ) =>
+    one(
+      `INSERT INTO queue_entries
+         (challenge_id, repo_id, status, position, assigned_room_id, call_count, called_at,
+          room_entered_at, presentation_started_at, completed_at)
+       VALUES ($1, $2, $3::public.queue_status, $4, $5,
+         CASE WHEN $6::text IN ('called', 'in_room', 'presenting') THEN 1 ELSE 0 END,
+         CASE WHEN $6::text IN ('called', 'in_room', 'presenting')
+              THEN clock_timestamp() - interval '12 minutes' END,
+         CASE WHEN $6::text IN ('in_room', 'presenting')
+              THEN clock_timestamp() - interval '6 minutes' END,
+         CASE WHEN $6::text = 'presenting' THEN clock_timestamp() - interval '2 minutes' END,
+         CASE WHEN $6::text = 'completed' THEN clock_timestamp() - interval '30 minutes' END)
+       RETURNING id`,
+      [challengeId, repoId, stage, options.position ?? null, options.roomId ?? null, stage],
+      `queue entry ${stage}`,
+    );
+
+  const aurora = await project(
     "Aurora Rover",
-    "A solar rover that maps a campus. Waiting for its turn in the queue.",
+    "A solar rover that maps a campus. Waiting, in the shared queue of two challenges.",
     "submitted",
-    { githubUrl: "https://github.com/hackos-review/aurora-rover", member: true, challenge: true },
+    {
+      githubUrl: "https://github.com/hackos-review/aurora-rover",
+      member: true,
+      challenge: openChallenge,
+    },
   );
-  const scoredRepo = await project(
+  await client.query(`INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2)`, [
+    aurora,
+    designChallenge,
+  ]);
+  const pixel = await project(
     "Pixel Garden",
-    "A plant-care game. Already presented and scored.",
+    "A plant-care game. Presented and scored.",
     "submitted",
-    { member: true, challenge: true },
+    {
+      member: true,
+      challenge: openChallenge,
+    },
   );
-  const draftRepo = await project(
-    "Draft Notes",
-    "A project still being written; not submitted.",
-    "draft",
-    { member: true, challenge: false },
-  );
-  const teamOne = await project(
+  const nimbus = await project("Nimbus Notes", "Called: wait at the door of room A.", "submitted", {
+    member: true,
+    challenge: openChallenge,
+  });
+  const tidal = await project("Tidal Lab", "Inside room A, about to present.", "submitted", {
+    member: true,
+    challenge: designChallenge,
+  });
+  const ember = await project("Ember Engine", "Presenting now in room B.", "submitted", {
+    member: true,
+    challenge: hardwareChallenge,
+  });
+  const draft = await project("Draft Notes", "A project still being written.", "draft", {
+    member: true,
+  });
+  const lumen = await project(
     "Lumen Labs",
-    "Another team's submitted project, visible in the gallery.",
+    "Another team, waiting in the shared queue.",
     "submitted",
-    { member: false, challenge: false },
+    {
+      member: false,
+      challenge: openChallenge,
+    },
   );
-  const teamTwo = await project(
+  const orbit = await project(
     "Orbit Kit",
-    "Another team's submitted project, visible in the gallery.",
+    "Another team, waiting in the shared queue.",
     "submitted",
-    { member: false, challenge: false },
+    {
+      member: false,
+      challenge: openChallenge,
+    },
   );
 
-  const waiting = await client.query<{ id: number }>(
-    `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
-     VALUES ($1, $2, 'waiting', 1) RETURNING id`,
-    [challengeId, waitingRepo],
-  );
-  const scored = await client.query<{ id: number }>(
-    `INSERT INTO queue_entries (challenge_id, repo_id, status, completed_at)
-     VALUES ($1, $2, 'completed', clock_timestamp() - interval '30 minutes') RETURNING id`,
-    [challengeId, scoredRepo],
-  );
-  const waitingEntryId = waiting.rows[0]?.id;
-  const scoredEntryId = scored.rows[0]?.id;
-  if (!waitingEntryId || !scoredEntryId) throw new Error("Review explorer queue was not created");
+  const entries = {
+    lumen: await entry(openChallenge, lumen, "waiting", { position: 1 }),
+    orbit: await entry(openChallenge, orbit, "waiting", { position: 2 }),
+    aurora: await entry(openChallenge, aurora, "waiting", { position: 3 }),
+    auroraDesign: await entry(designChallenge, aurora, "waiting", { position: 4 }),
+    pixel: await entry(openChallenge, pixel, "completed"),
+    nimbus: await entry(openChallenge, nimbus, "called", { roomId: roomA }),
+    tidal: await entry(designChallenge, tidal, "in_room", { roomId: roomA }),
+    ember: await entry(hardwareChallenge, ember, "presenting", { roomId: roomB }),
+  };
 
-  const pointers: Array<{
+  type Pointer = {
     slot: string;
-    shared: boolean;
-    repoId: number;
-    entryId: number | null;
-    challenge: boolean;
-  }> = [
-    { slot: "main", shared: true, repoId: waitingRepo, entryId: waitingEntryId, challenge: true },
-    { slot: "scored", shared: false, repoId: scoredRepo, entryId: scoredEntryId, challenge: false },
-    { slot: "draft", shared: false, repoId: draftRepo, entryId: null, challenge: false },
-    { slot: "team-one", shared: false, repoId: teamOne, entryId: null, challenge: false },
-    { slot: "team-two", shared: false, repoId: teamTwo, entryId: null, challenge: false },
+    shared?: boolean;
+    challengeId?: number;
+    repoId?: number;
+    entryId?: number;
+    roomId?: number;
+  };
+  const pointers: Pointer[] = [
+    {
+      slot: "main",
+      shared: true,
+      challengeId: openChallenge,
+      repoId: aurora,
+      entryId: entries.aurora,
+    },
+    { slot: "challenge-design", challengeId: designChallenge, entryId: entries.auroraDesign },
+    { slot: "challenge-hardware", challengeId: hardwareChallenge },
+    { slot: "room-a", roomId: roomA },
+    { slot: "room-b", roomId: roomB },
+    { slot: "pixel", repoId: pixel, entryId: entries.pixel },
+    { slot: "nimbus", repoId: nimbus, entryId: entries.nimbus },
+    { slot: "tidal", repoId: tidal, entryId: entries.tidal },
+    { slot: "ember", repoId: ember, entryId: entries.ember },
+    { slot: "draft", repoId: draft },
+    { slot: "team-lumen", repoId: lumen, entryId: entries.lumen },
+    { slot: "team-orbit", repoId: orbit, entryId: entries.orbit },
   ];
   for (const pointer of pointers) {
     await client.query(
       `INSERT INTO review_fixture_queues
          (fixture_key, slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id,
-          generation)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          room_id, generation)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         key,
         pointer.slot,
         pointer.shared ? enterpriseId : null,
         pointer.shared ? sponsorId : null,
-        pointer.challenge ? challengeId : null,
-        pointer.repoId,
-        pointer.entryId,
+        pointer.challengeId ?? null,
+        pointer.repoId ?? null,
+        pointer.entryId ?? null,
+        pointer.roomId ?? null,
         generation,
       ],
     );
@@ -598,20 +753,27 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           // to carry into the next reviewer generation.
           await client.query(`DELETE FROM anonymous_participants WHERE is_test_account = true`);
 
-          const staffRoleId = await configureFixtureStaffRole(client);
+          const roleIds = new Map<string, number>();
+          for (const [fixtureKey, role] of Object.entries(FIXTURE_ROLES)) {
+            roleIds.set(fixtureKey, await configureFixtureRole(client, role));
+          }
           for (const fixture of FIXTURE_DEFINITIONS) {
             if (created.has(fixture.key)) continue;
             const account = await createFixtureUser(client, fixture, password);
             createdUserIds.push(account.id);
             created.set(fixture.key, account);
           }
+          for (const [fixtureKey, roleId] of roleIds) {
+            const operator = created.get(fixtureKey);
+            if (!operator) throw new Error(`Review fixture ${fixtureKey} is missing`);
+            await client.query(
+              `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)`,
+              [operator.id, roleId, req.userId],
+            );
+            await reconcileTicketAccess(client, operator.id);
+          }
           const staff = created.get("staff-exit-operator");
           if (!staff) throw new Error("Review fixture staff account is missing");
-          await client.query(
-            `INSERT INTO user_roles (user_id, role_id, assigned_by) VALUES ($1, $2, $3)`,
-            [staff.id, staffRoleId, req.userId],
-          );
-          await reconcileTicketAccess(client, staff.id);
           for (const fixture of FIXTURE_DEFINITIONS) {
             if (fixture.kind !== "participant") continue;
             const account = created.get(fixture.key);
