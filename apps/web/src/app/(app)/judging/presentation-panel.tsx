@@ -442,7 +442,12 @@ export function ProjectInfo({
           </Fact>
         )}
         {links.length > 0 && (
-          <div className={cn("flex flex-wrap items-end gap-2", !activity && "sm:col-span-3")}>
+          <div
+            className={cn(
+              "flex flex-wrap items-end justify-end gap-2",
+              !activity && "sm:col-span-3",
+            )}
+          >
             {links.map((link) => (
               <Button key={link.href} variant="outline" size="sm" asChild>
                 <a
