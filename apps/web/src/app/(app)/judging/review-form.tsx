@@ -418,7 +418,7 @@ export function ReviewForm({
         "flex min-h-0 flex-col overflow-hidden",
       )}
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3">
         <CheckCircleIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
         <h2 className="type-section-title mr-auto truncate">
           {fill ? entryLabel(entry, t) : t("scoring")}
@@ -598,7 +598,7 @@ export function ReviewForm({
           </div>
         )}
       </div>
-      <footer className="flex shrink-0 justify-end gap-2 border-t p-3">
+      <footer className="flex shrink-0 justify-end gap-2 border-t px-4 py-3">
         <Button
           variant="outline"
           disabled={!canJudge || !online || saving || loading}

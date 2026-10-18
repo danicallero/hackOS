@@ -119,24 +119,11 @@ export function PresentationPanel({
         entry && "border-primary/30",
       )}
     >
-      <div className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5 pb-4">
-        <div className="min-w-0">
-          <h2 className="truncate text-xl font-semibold text-balance">
-            {entry ? entryLabel(entry, t) : t("waitingForNextTeam")}
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            {entry
-              ? isPresenting
-                ? t("presentationInProgress")
-                : isReady
-                  ? t("readyToStart")
-                  : t("teamInRoom")
-              : t("bringTeamPrompt")}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {entry && (
-            <Button variant="outline" size="sm" asChild>
+      {entry ? (
+        <div className="shrink-0 space-y-3 border-b px-4 py-4">
+          <div className="flex min-h-8 items-center justify-between gap-3">
+            <h2 className="type-section-title truncate">{entryLabel(entry, t)}</h2>
+            <Button variant="outline" size="xs" asChild>
               <a
                 href={`/projects/${entry.repo_id}`}
                 target="_blank"
@@ -145,22 +132,12 @@ export function PresentationPanel({
                   openProjectLink(event, `/projects/${entry.repo_id}`, onExternalOpen)
                 }
               >
-                <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
+                <ArrowSquareOutIcon aria-hidden="true" />
                 {t("openProject")}
               </a>
             </Button>
-          )}
-          {entry ? (
-            <QueueStatusBadge status={entry.status} />
-          ) : (
-            <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
-          )}
-        </div>
-      </div>
-      <Separator />
-      {entry && (
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-3 border-b px-5 py-3">
-          <div className="min-w-60 flex-1 space-y-1.5">
+          </div>
+          <div className="space-y-1">
             {(isReady || isPresenting) && (
               <PreparationTimer
                 enteredAt={entry.room_entered_at ?? null}
@@ -186,7 +163,7 @@ export function PresentationPanel({
               />
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {timerAction ? (
               <Button
                 variant="outline"
@@ -240,8 +217,19 @@ export function PresentationPanel({
             )}
           </div>
         </div>
+      ) : (
+        <>
+          <div className="flex min-h-14 shrink-0 items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="type-section-title truncate">{t("waitingForNextTeam")}</h2>
+              <p className="text-muted-foreground text-sm">{t("bringTeamPrompt")}</p>
+            </div>
+            <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
+          </div>
+          <Separator />
+        </>
       )}
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {!entry ? (
           <JudgingEmptyState
             icon={DoorOpenIcon}
@@ -393,106 +381,111 @@ export function ProjectInfo({
           onRetry={resource.reload}
         />
       )}
-      {!detailsOpen && project?.description && (
-        <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground text-pretty">
-          {projectSummary(project.description, project.name)}
-        </p>
-      )}
-      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-        <Fact label={t("membersLabel")}>
-          {members.length > 0
-            ? members
-                .map(
-                  (member) => `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
-                )
-                .join(" · ")
-            : "—"}
-        </Fact>
-        {!detailsOpen && libraryField && (
-          <Fact label={libraryField.label[language ?? "en"] || libraryField.label.en}>
-            {(project?.responses[libraryField.key] as string[]).join(" · ")}
+      <div className="space-y-4">
+        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
+          <Fact label={t("membersLabel")}>
+            {members.length > 0
+              ? members
+                  .map(
+                    (member) =>
+                      `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
+                  )
+                  .join(" · ")
+              : "—"}
           </Fact>
-        )}
-        {queues.length > 0 && (
-          // A project can be in more than one queue; shared queue siblings collapse
-          // to one row and are named by the queue group.
-          <Fact label={t("queueName")}>
-            <ul className="space-y-1">
-              {queues.map((queue) => (
-                <li key={queue.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span>{queue.queue_name ?? queue.title}</span>
-                  {queue.room_name && (
-                    <span className="text-muted-foreground text-xs font-normal">
-                      {queue.room_name}
-                    </span>
-                  )}
-                  {queue.id === entry.challenge_id ? (
-                    <StatusBadge tone="success">{t("now")}</StatusBadge>
-                  ) : (
-                    <QueueStatusBadge status={queue.status} />
-                  )}
-                </li>
-              ))}
-            </ul>
-          </Fact>
-        )}
-      </dl>
-
-      {(links.length > 0 || activity) && (
-        <div className="space-y-3 border-t border-border/60 pt-4">
-          {links.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {links.map((link) => (
-                <Button key={link.href} variant="outline" size="sm" asChild>
-                  <a
-                    href={link.href}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
-                  >
-                    <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
-                    {link.label}
-                  </a>
-                </Button>
-              ))}
-            </div>
+          {queues.length > 0 && (
+            // A project can be in more than one queue; shared queue siblings collapse
+            // to one row and are named by the queue group.
+            <Fact label={t("presentingFor")}>
+              <ul className="space-y-1">
+                {queues.map((queue) => (
+                  <li key={queue.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span>{queue.queue_name ?? queue.title}</span>
+                    {queue.room_name && (
+                      <span className="text-muted-foreground text-xs font-normal">
+                        {queue.room_name}
+                      </span>
+                    )}
+                    {queue.id === entry.challenge_id ? (
+                      <StatusBadge tone="success">{t("now")}</StatusBadge>
+                    ) : (
+                      <QueueStatusBadge status={queue.status} />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Fact>
           )}
-          {activity && (
-            <dl className="grid grid-cols-3 gap-x-6">
-              <Fact label={t("githubCommits")}>{activity.commits}</Fact>
-              <Fact label={t("githubPullRequests")}>
-                {activity.pullRequests}
-                {activity.merged > 0 && (
-                  <span className="text-muted-foreground font-normal">
-                    {" "}
-                    · {activity.merged} {t("githubMerged")}
-                  </span>
-                )}
-              </Fact>
-              {activity.lastCommitAt && (
-                <Fact label={t("githubLastCommit")}>
-                  {relativeTime(activity.lastCommitAt, language ?? "en")}
-                </Fact>
+          {!detailsOpen && libraryField && (
+            <Fact label={libraryField.label[language ?? "en"] || libraryField.label.en}>
+              {(project?.responses[libraryField.key] as string[]).join(" · ")}
+            </Fact>
+          )}
+        </dl>
+        {activity && (
+          <dl className="grid gap-x-6 sm:grid-cols-3">
+            <Fact label={t("githubCommits")}>{activity.commits}</Fact>
+            <Fact label={t("githubPullRequests")}>
+              {activity.pullRequests}
+              {activity.merged > 0 && (
+                <span className="text-muted-foreground font-normal">
+                  {" "}
+                  · {activity.merged} {t("githubMerged")}
+                </span>
               )}
-            </dl>
+            </Fact>
+            {activity.lastCommitAt && (
+              <Fact label={t("githubLastCommit")}>
+                {relativeTime(activity.lastCommitAt, language ?? "en")}
+              </Fact>
+            )}
+          </dl>
+        )}
+        {links.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {links.map((link) => (
+              <Button key={link.href} variant="outline" size="sm" asChild>
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
+                >
+                  <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
+                  {link.label}
+                </a>
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {project && (
+        <div className="space-y-4 border-t border-border/60 pt-4">
+          {!detailsOpen && project.description && (
+            <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground text-pretty">
+              {projectSummary(project.description, project.name)}
+            </p>
+          )}
+          {detailsOpen ? (
+            projectAnswers
+          ) : (
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-between px-0 has-[>svg:first-child]:pl-0"
+                >
+                  {t("judgingProjectDetails")}
+                  <CaretDownIcon aria-hidden="true" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-4">{projectAnswers}</CollapsibleContent>
+            </Collapsible>
           )}
         </div>
       )}
-
-      {project &&
-        (detailsOpen ? (
-          <div className="border-t border-border/60 pt-4">{projectAnswers}</div>
-        ) : (
-          <Collapsible className="border-t border-border/60 pt-3">
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="w-full justify-between">
-                {t("judgingProjectDetails")}
-                <CaretDownIcon aria-hidden="true" />
-              </Button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-4">{projectAnswers}</CollapsibleContent>
-          </Collapsible>
-        ))}
     </div>
   );
 }
@@ -501,7 +494,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   return (
     <div className="min-w-0">
       <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
-      <dd className="text-sm font-medium tabular-nums text-pretty">{children}</dd>
+      <dd className="text-sm leading-6 font-medium tabular-nums text-pretty">{children}</dd>
     </div>
   );
 }
@@ -528,13 +521,14 @@ export function PresentationTimer({
     progressValue,
     tone: timerTone,
   } = presentationTimerState(startedAt, totalMinutes, now, pausedAt, pausedSeconds);
+  // On time is the normal state and stays unspoken; only exceptions get words.
   const cueText = pausedAt
     ? t("presentationTimerPaused")
     : timerTone === "danger"
       ? t("timeLimitExceeded")
       : timerTone === "warning"
         ? t("wrapUp")
-        : t("onTime");
+        : null;
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -542,10 +536,18 @@ export function PresentationTimer({
   }, []);
 
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-background px-3 py-1.5">
+    <div className="relative flex h-6 items-center">
+      <Progress
+        value={progressValue}
+        className={cn(
+          "h-1",
+          timerTone === "warning" && "**:data-[slot=progress-indicator]:bg-warning",
+          timerTone === "danger" && "**:data-[slot=progress-indicator]:bg-destructive",
+        )}
+      />
       <span
         className={cn(
-          "font-mono text-sm font-semibold tabular-nums whitespace-nowrap",
+          "absolute left-1/2 -translate-x-1/2 bg-card px-2.5 font-mono text-xs font-semibold tabular-nums whitespace-nowrap",
           timerTone === "warning" && "text-warning",
           timerTone === "danger" && "text-destructive",
         )}
@@ -554,24 +556,7 @@ export function PresentationTimer({
         {totalSeconds != null && (
           <span className="text-muted-foreground font-normal"> / {secondsLabel(totalSeconds)}</span>
         )}
-      </span>
-      <Progress
-        value={progressValue}
-        className={cn(
-          "h-1.5 flex-1",
-          timerTone === "warning" && "**:data-[slot=progress-indicator]:bg-warning",
-          timerTone === "danger" && "**:data-[slot=progress-indicator]:bg-destructive",
-        )}
-      />
-      <span
-        className={cn(
-          "shrink-0 text-xs font-medium whitespace-nowrap",
-          timerTone === "warning" && "text-warning",
-          timerTone === "danger" && "text-destructive",
-          timerTone === "default" && "text-muted-foreground",
-        )}
-      >
-        {cueText}
+        {cueText && <span className="font-sans font-medium"> · {cueText}</span>}
       </span>
     </div>
   );
