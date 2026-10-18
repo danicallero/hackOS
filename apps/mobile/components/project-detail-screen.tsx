@@ -25,6 +25,7 @@ import {
   settleProjectDrafts,
   trackProjectTask,
 } from "@/lib/projects";
+import { reportContent } from "@/lib/reports";
 import { useProjectDraft } from "@/lib/use-project-draft";
 import { colors } from "@/theme/colors";
 
@@ -169,6 +170,16 @@ export function ProjectReadView({
           ))}
         </Section>
       ) : null}
+      {project.isMember ? null : (
+        <Section>
+          <ActionButton
+            label={t("reportContent")}
+            icon="flag"
+            destructive
+            onPress={() => reportContent({ projectId: project.id }, t)}
+          />
+        </Section>
+      )}
     </ScrollView>
   );
 }

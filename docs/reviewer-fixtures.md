@@ -117,9 +117,13 @@ deployment URL go in the private handoff, never in this repository.
 > **User-generated content.** Attendees' project pages (name, description,
 > images, team members) and optional networking profiles (headline, bio, links,
 > photo) are visible to other signed-in attendees; showing a name or photo
-> requires the person's consent. Organisers can edit a project and can
-> hide a profile or remove its photo. Content can be reported to the organisers
-> at hackudc@gpul.org, the address in the Privacy Policy.
+> requires the person's consent, and a profile is visible only to attendees who
+> scanned that person. There is no direct messaging, chat or comment feature between
+> users; team invitations carry no free text. Any attendee can report a project (Gallery →
+> project → Report) or a saved person's profile (Report on their card) with a
+> reason; reports go to a moderation inbox that organisers review, and
+> organisers can edit a project or hide a profile or its photo. Other concerns
+> can be sent to hackudc@gpul.org, the address in the Privacy Policy.
 
 Statements from the earlier notes that were removed because they stopped being
 true: "no user-generated content visible to other users" (the gallery and

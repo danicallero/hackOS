@@ -30,6 +30,7 @@ import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
+import { reportContent } from "@/lib/reports";
 import { colors } from "@/theme/colors";
 
 type State =
@@ -314,6 +315,25 @@ export function PersonProfileScreen() {
                 >
                   <Text style={{ color: colors.destructive, fontSize: 16 }}>
                     {t("diaryRemoveFromDiary")}
+                  </Text>
+                </Pressable>
+              </Section>
+            ) : null}
+            {entry ? (
+              <Section>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => reportContent({ userId }, t)}
+                  style={({ pressed }) => ({
+                    alignItems: "center",
+                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
+                    minHeight: 50,
+                    justifyContent: "center",
+                    paddingHorizontal: 16,
+                  })}
+                >
+                  <Text style={{ color: colors.destructive, fontSize: 16 }}>
+                    {t("reportContent")}
                   </Text>
                 </Pressable>
               </Section>

@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, View } from "react-native";
+import { ActionSheetIOS, Alert, View } from "react-native";
 
 let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
@@ -281,6 +281,32 @@ it("does not infer member photos or unpublished winners from directory data (H18
   expect(screen.getByText("Ana")).toBeTruthy();
   expect(screen.queryByRole("image")).toBeNull();
   expect(screen.queryByText(/projectWinner/)).toBeNull();
+});
+it("reports a gallery project from a native sheet, never the team's own (H18)", async () => {
+  const sheet = jest
+    .spyOn(ActionSheetIOS, "showActionSheetWithOptions")
+    .mockImplementation((_options, done) => done(1));
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  mockApi.mockResolvedValue({ id: 1, status: "open" });
+  await renderMobile(<ProjectReadView project={project} />);
+  await fireEvent.press(screen.getByRole("button", { name: "reportContent" }));
+  expect(sheet).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/reports",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ projectId: 5, reason: "harassment" }),
+      }),
+    ),
+  );
+  await waitFor(() => expect(alert).toHaveBeenCalledWith("reportSent", "reportSentBody"));
+  sheet.mockRestore();
+  alert.mockRestore();
+});
+it("offers no report on the team's own project (H18)", async () => {
+  await renderMobile(<ProjectReadView project={{ ...project, isMember: true }} />);
+  expect(screen.queryByRole("button", { name: "reportContent" })).toBeNull();
 });
 it("renders published winners only from the approved projection (H60)", async () => {
   await renderMobile(

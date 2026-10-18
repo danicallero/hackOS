@@ -971,5 +971,15 @@
   "githubChooseRepo": "Escolle un repositorio",
   "githubShareMoreRepos": "Compartir máis repositorios",
   "githubNoRepos": "Non hai repositorios compartidos coa app.",
-  "githubSearchRepos": "Buscar repositorios"
+  "githubSearchRepos": "Buscar repositorios",
+  "reportContent": "Denunciar",
+  "reportTitle": "Denunciar este contido",
+  "reportReasonInappropriate": "Inapropiado",
+  "reportReasonHarassment": "Acoso",
+  "reportReasonSpam": "Spam",
+  "reportReasonOther": "Outro motivo",
+  "reportSent": "Denuncia enviada",
+  "reportSentBody": "A organización revisarana.",
+  "reportFailed": "Non se puido enviar a denuncia",
+  "reportTooMany": "Tes demasiadas denuncias abertas"
 }

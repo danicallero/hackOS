@@ -971,5 +971,15 @@
   "githubChooseRepo": "Choose a repository",
   "githubShareMoreRepos": "Share more repositories",
   "githubNoRepos": "No repositories shared with the app.",
-  "githubSearchRepos": "Search repositories"
+  "githubSearchRepos": "Search repositories",
+  "reportContent": "Report",
+  "reportTitle": "Report this content",
+  "reportReasonInappropriate": "Inappropriate",
+  "reportReasonHarassment": "Harassment",
+  "reportReasonSpam": "Spam",
+  "reportReasonOther": "Something else",
+  "reportSent": "Report sent",
+  "reportSentBody": "The organisers will review it.",
+  "reportFailed": "Could not send the report",
+  "reportTooMany": "You have too many open reports"
 }

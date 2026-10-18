@@ -355,6 +355,22 @@ Table check_in_logs {
   user_id integer
 }
 
+Table content_reports {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  details text [note: 'H18: optional free text from the reporter, at most 500 characters; visible to moderating staff only.']
+  id integer [pk, increment, not null]
+  reason text [not null]
+  repo_id integer
+  reporter_id integer [not null]
+  resolved_at "timestamp with time zone"
+  resolved_by integer
+  status text [not null, default: `'open'::text`]
+  target_user_id integer
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'H18 attendee reports of a project or public profile for organiser review; content is read live, never copied.'
+}
+
 Table data_subject_requests {
   completed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -1446,6 +1462,10 @@ Ref: challenge_winners.set_by > users.id
 Ref: challenges.author > sponsors.id
 Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
+Ref: content_reports.repo_id > repos.id
+Ref: content_reports.reporter_id > users.id
+Ref: content_reports.resolved_by > users.id
+Ref: content_reports.target_user_id > users.id
 Ref: data_subject_requests.requested_by > users.id
 Ref: data_subject_requests.subject_user_id > users.id
 Ref: diary_entries.enterprise_id > enterprises.id
