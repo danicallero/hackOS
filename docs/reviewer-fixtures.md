@@ -117,7 +117,7 @@ deployment URL go in the private handoff, never in this repository.
 > **User-generated content.** Attendees' project pages (name, description,
 > images, team members) and optional networking profiles (headline, bio, links,
 > photo) are visible to other signed-in attendees; showing a name or photo
-> requires the person's consent. Organisers can edit or remove a project and can
+> requires the person's consent. Organisers can edit a project and can
 > hide a profile or remove its photo. Content can be reported to the organisers
 > at hackudc@gpul.org, the address in the Privacy Policy.
 
