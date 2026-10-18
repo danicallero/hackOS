@@ -91,11 +91,19 @@ describe("project GitHub link", () => {
       method: "POST",
       url: `/api/me/projects/${repoId}/github/install`,
       headers: { ...asUser(member), "idempotency-key": crypto.randomUUID() },
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().url).toContain(
       "https://github.com/apps/hackos-test/installations/new?state=",
     );
+    const authorize = await server.inject({
+      method: "POST",
+      url: `/api/me/projects/${repoId}/github/install`,
+      headers: { ...asUser(member), "idempotency-key": crypto.randomUUID() },
+      payload: { authorize: true },
+    });
+    expect(authorize.json().url).toContain("https://github.com/login/oauth/authorize?");
   });
 
   it("rejects a callback whose state belongs to another user", async () => {

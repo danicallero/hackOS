@@ -95,16 +95,18 @@ export function registerGithubRoutes(app: FastifyInstance) {
       ...member,
       schema: {
         params,
+        body: z.object({ authorize: z.boolean().optional() }).optional(),
         summary: "Start linking a GitHub repository",
         description:
-          "Returns the GitHub App installation URL, bound by a signed 15-minute state to this member and project. GitHub redirects back to /api/github/callback, which proves the installation belongs to the member's GitHub account.",
+          "Returns the GitHub App installation URL, bound by a signed 15-minute state to this member and project. GitHub redirects back to /api/github/callback, which proves the installation belongs to the member's GitHub account. With authorize=true it returns the account authorization URL instead, which always redirects back and finds installations the App already has, since GitHub shows no redirect when the App is already installed.",
       },
     },
     async (q) => {
       assertGithubConfigured();
       const userId = actor(q.userId);
       await assertActiveMember(userId, q.params.id);
-      return { url: installUrl(signState(userId, q.params.id)) };
+      const state = signState(userId, q.params.id);
+      return { url: q.body?.authorize ? authorizeUrl(state) : installUrl(state) };
     },
   );
 
@@ -145,8 +147,15 @@ export function registerGithubRoutes(app: FastifyInstance) {
         await saveInstallations(userId, account.installationIds);
         return reply.redirect(`${config.WEB_URL}/settings/profile?github=linked`);
       }
-      if (q.query.installation_id == null) throw new BadRequestError("Missing GitHub installation");
       await assertActiveMember(userId, state.repoId);
+      if (q.query.installation_id == null) {
+        // Authorization-only return: reuse installations the App already has, else install it.
+        if (account.installationIds.length === 0)
+          return reply.redirect(installUrl(signState(userId, state.repoId)));
+        await saveAccount(userId, account);
+        await saveInstallations(userId, account.installationIds);
+        return reply.redirect(`${config.WEB_URL}/my-project/${state.repoId}?github=select`);
+      }
       await saveUserAuthorization(userId, account, q.query.installation_id);
       return reply.redirect(`${config.WEB_URL}/my-project/${state.repoId}?github=select`);
     },

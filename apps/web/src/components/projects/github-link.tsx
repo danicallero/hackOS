@@ -56,9 +56,12 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
     }
   }
 
-  const install = () =>
+  const install = (authorize = false) =>
     run(async () => {
-      const { url } = await api.post<{ url: string }>(`${base}/install`, {});
+      const { url } = await api.post<{ url: string }>(
+        `${base}/install`,
+        authorize ? { authorize } : {},
+      );
       window.location.assign(url);
     });
 
@@ -117,12 +120,12 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
               {t("githubConfirmLink")}
             </Button>
           </div>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={install}>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => install()}>
             {t("githubShareMoreRepos")}
           </Button>
         </div>
       ) : (
-        <Button variant="outline" disabled={busy || repos.loading} onClick={install}>
+        <Button variant="outline" disabled={busy || repos.loading} onClick={() => install(true)}>
           <GithubLogoIcon aria-hidden="true" className="size-4" />
           {t("githubLinkRepo")}
         </Button>
