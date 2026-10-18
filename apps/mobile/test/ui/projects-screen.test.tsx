@@ -339,6 +339,24 @@ it("labels a submitted project's action Resubmit and shows the server deadline (
   expect(screen.getByText(/projectSaved · projectDeadline: /)).toBeTruthy();
 });
 
+it("offers to withdraw a frozen submitted project instead of resubmitting (H20)", async () => {
+  mockApi.mockResolvedValue([]);
+  await renderMobile(
+    <ProjectEditor
+      reload={async () => {}}
+      project={{
+        ...project,
+        canEdit: false,
+        canSubmit: false,
+        canWithdraw: true,
+        submissionStatus: "submitted",
+      }}
+    />,
+  );
+  expect(await screen.findByRole("button", { name: "projectWithdraw" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "projectResubmit" })).toBeNull();
+});
+
 const settle = (overrides: Record<string, unknown>) =>
   mockApi.mockImplementation((path: string) => {
     if (path in overrides) {
