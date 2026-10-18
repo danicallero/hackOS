@@ -168,14 +168,20 @@ async function assertNotFrozen(client: PoolClient, repoId: number): Promise<void
 
 export async function linkRepo(userId: number, repoId: number, githubRepoId: number) {
   const choice = (await selectableRepos(userId)).find((repo) => repo.id === githubRepoId);
-  if (!choice) throw new NotFoundError("Repository not available in your GitHub installations");
+  if (!choice)
+    throw new NotFoundError("Repository not available in your GitHub installations", {
+      code: ERROR_REASONS.GITHUB_REPO_NOT_AVAILABLE,
+    });
   await withTransaction(async (client) => {
     await assertNotFrozen(client, repoId);
     const taken = await client.query(
       `SELECT repo_id FROM github_repo_links WHERE github_repo_id = $1 AND repo_id <> $2`,
       [githubRepoId, repoId],
     );
-    if (taken.rowCount) throw new ConflictError("This repository is already linked to a project");
+    if (taken.rowCount)
+      throw new ConflictError("This repository is already linked to a project", {
+        code: ERROR_REASONS.GITHUB_REPO_ALREADY_LINKED,
+      });
     await client.query(
       `INSERT INTO github_repo_links (repo_id, installation_id, github_repo_id, full_name, is_private, linked_by)
        VALUES ($1, $2, $3, $4, $5, $6)

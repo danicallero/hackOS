@@ -23,6 +23,10 @@ export const ERROR_REASONS = {
   SCHEDULE_ENDS_BEFORE_STARTS: "schedule_ends_before_starts",
   /** 400: a scan-required schedule item is not visible to participants. */
   SCHEDULE_SCAN_NEEDS_PARTICIPANTS: "schedule_scan_needs_participants",
+  /** 409: the GitHub repository is already linked to another project. */
+  GITHUB_REPO_ALREADY_LINKED: "github_repo_already_linked",
+  /** 404: the repository is not among the member's GitHub App installations. */
+  GITHUB_REPO_NOT_AVAILABLE: "github_repo_not_available",
   /** 404: the schedule item does not exist. */
   SCHEDULE_ITEM_NOT_FOUND: "schedule_item_not_found",
   /** 409: a submitted project is frozen; the team withdraws the submission to edit. */
