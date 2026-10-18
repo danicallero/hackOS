@@ -398,7 +398,7 @@ function SpringStage({
       )}
       <Animated.View style={[{ position: "absolute" }, stage.left]}>
         <Ringed>
-          <UserAvatar name={self.name} image={self.image} size={AVATAR} />
+          <UserAvatar name={self.name} image={self.image} size={AVATAR} persist />
         </Ringed>
       </Animated.View>
       <Animated.View style={[{ position: "absolute" }, stage.right]}>

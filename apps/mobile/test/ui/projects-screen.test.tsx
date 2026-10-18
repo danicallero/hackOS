@@ -43,6 +43,9 @@ jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => false,
   GlassView: ({ children }: { children?: unknown }) => children ?? null,
 }));
+jest.mock("expo-network", () => ({
+  addNetworkStateListener: () => ({ remove: jest.fn() }),
+}));
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
 jest.mock("expo-image-picker", () => ({ launchImageLibraryAsync: jest.fn() }));
 jest.mock("expo-image-manipulator", () => ({

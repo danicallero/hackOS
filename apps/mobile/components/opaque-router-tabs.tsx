@@ -145,6 +145,7 @@ export interface OpaqueRouterTabsProps {
 /** Matches the 22pt tab symbols; the ring adds a 1pt gap and a 2pt stroke. */
 const TAB_AVATAR_SIZE = 22;
 const TAB_AVATAR_FRAME = TAB_AVATAR_SIZE + 6;
+const OVERFLOW_AVATAR_INSET = 6;
 
 /** The account photo as a tab icon; the selected tab adds a ring in the tab tint. */
 function AccountTabAvatar({
@@ -168,8 +169,29 @@ function AccountTabAvatar({
         width: TAB_AVATAR_FRAME,
       }}
     >
-      <UserAvatar testID="account-tab-avatar" name={name} image={image} size={TAB_AVATAR_SIZE} />
+      <UserAvatar
+        testID="account-tab-avatar"
+        name={name}
+        image={image}
+        size={TAB_AVATAR_SIZE}
+        persist
+      />
     </View>
+  );
+}
+
+/** The account photo filling the separated overflow circle, with no selection ring. */
+function OverflowAccountAvatar({
+  name,
+  image,
+  size,
+}: {
+  name: string;
+  image: string;
+  size: number;
+}) {
+  return (
+    <UserAvatar testID="account-overflow-avatar" name={name} image={image} size={size} persist />
   );
 }
 
@@ -346,16 +368,24 @@ function OverflowTriggerIcon({
   account,
   activeIconColor,
   activeOverflowId,
+  circleSize,
   iconColor,
 }: {
   account: OpaqueOverflowMenuProps["account"];
   activeIconColor: string;
   activeOverflowId: OverflowTabKey | null;
+  circleSize: number;
   iconColor: string;
 }) {
   if (activeOverflowId === "account" && account?.image) {
+    // The circle is large, so the photo fills it instead of shrinking to a
+    // tab-icon size inside a selection ring.
     return (
-      <AccountTabAvatar name={account.name} image={account.image} ringColor={activeIconColor} />
+      <OverflowAccountAvatar
+        name={account.name}
+        image={account.image}
+        size={Math.round(circleSize - OVERFLOW_AVATAR_INSET * 2)}
+      />
     );
   }
   return (
@@ -451,6 +481,7 @@ function NativeOverflowMenu({
           account={account}
           activeIconColor={activeIconColor}
           activeOverflowId={activeOverflowId}
+          circleSize={tabBarHeight}
           iconColor={iconColor}
         />
       </View>
@@ -528,6 +559,7 @@ function AndroidOverflowMenu({
           account={account}
           activeIconColor={activeIconColor}
           activeOverflowId={activeOverflowId}
+          circleSize={tabBarHeight}
           iconColor={iconColor}
         />
       </Pressable>

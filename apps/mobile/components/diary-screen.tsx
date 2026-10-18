@@ -34,6 +34,12 @@ import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { type DiaryEntry, diaryScanErrorKey, upsertDiaryEntry } from "@/lib/diary";
 import {
+  enqueuePendingScan,
+  flushPendingScans,
+  isOfflineError,
+  readPendingScans,
+} from "@/lib/diary-pending";
+import {
   type SponsorCollection,
   type SponsorCollectionItem,
   withCompanyEntry,
@@ -44,6 +50,7 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
+import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
@@ -120,6 +127,7 @@ export function DiaryScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [collectionError, setCollectionError] = useState<Error | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [input, setInput] = useState<ScanInput | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -140,6 +148,8 @@ export function DiaryScreen() {
     people: t("diaryPeopleTab"),
     companies: t("diaryCompaniesTab"),
   };
+
+  const userId = me?.id ?? null;
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -168,6 +178,38 @@ export function DiaryScreen() {
       setCollectionError(error instanceof Error ? error : new Error(String(error)));
     }
   }, []);
+
+  // Badges scanned without a connection become contacts once the server answers.
+  const flushing = useRef(false);
+  const flushPending = useCallback(async () => {
+    if (userId === null || flushing.current) return;
+    flushing.current = true;
+    try {
+      const { sent, remaining } = await flushPendingScans(userId, (code) =>
+        apiFetch<DiaryEntry>("/api/me/diary/scan", {
+          method: "POST",
+          headers: JSON_HEADERS(),
+          body: JSON.stringify({ code }),
+        }),
+      );
+      setPendingCount(remaining.length);
+      if (sent > 0) {
+        void haptic("success");
+        await Promise.all([load(), loadCollection()]);
+      }
+    } finally {
+      flushing.current = false;
+    }
+  }, [userId, load, loadCollection]);
+
+  useEffect(() => {
+    if (userId === null) return;
+    void readPendingScans(userId).then((queue) => {
+      setPendingCount(queue.length);
+      if (queue.length > 0) void flushPending();
+    });
+  }, [userId, flushPending]);
+  useRetryOnReconnect(pendingCount > 0, () => void flushPending());
 
   // Also refreshes after returning from a profile, where the entry may change.
   useFocusEffect(
@@ -285,6 +327,13 @@ export function DiaryScreen() {
       }
     } catch (error) {
       if (fromQr) setInput(null);
+      if (userId !== null && isOfflineError(error)) {
+        const queue = await enqueuePendingScan(userId, value);
+        setPendingCount(queue.length);
+        void haptic("warning");
+        Alert.alert(t("tabDiary"), t("diaryScanQueued"));
+        return;
+      }
       void haptic("error");
       Alert.alert(t("tabDiary"), t(diaryScanErrorKey(error)));
     } finally {
@@ -533,6 +582,11 @@ export function DiaryScreen() {
       }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
+      {pendingCount > 0 ? (
+        <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+          {t("diaryPendingScans", { count: String(pendingCount) })}
+        </Text>
+      ) : null}
       <BadgeLinkActions
         testID="diary-scan"
         labels={SCAN_LABELS}

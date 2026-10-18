@@ -6,9 +6,11 @@ import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
 import {
   formatEtaMinutes,
@@ -19,6 +21,7 @@ import {
   settleProjectDrafts,
 } from "@/lib/projects";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
@@ -39,32 +42,40 @@ export function MyProjectsScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const trueTop = useTrueTopScroll(scrollRef);
   const bottomInset = useRouterTabBarScrollBottomInset();
-  const [projects, setProjects] = useState<NativeProject[] | null>(null);
-  const [invites, setInvites] = useState<ProjectInvite[]>([]);
-  const [queue, setQueue] = useState<ProjectQueueEntry[]>([]);
-  const [canCreate, setCanCreate] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const load = useCallback(async () => {
+  const { me } = useMeContext();
+  const cachePrefix = `user:${me?.id ?? "unknown"}`;
+  const fetchProjects = useCallback(async () => {
     // H20: an editor closed a moment ago may still be saving its draft or name.
     await settleProjectDrafts();
-    const [mine, invitations, entries] = await Promise.allSettled([
-      apiFetch<{ projects: NativeProject[]; canCreate: boolean }>("/api/me/projects"),
-      apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites"),
-      apiFetch<ProjectQueueEntry[]>("/api/queue/me"),
-    ]);
-    // A failed secondary read must not hide the participant's own projects.
-    setInvites(invitations.status === "fulfilled" ? invitations.value.invites : []);
-    setQueue(entries.status === "fulfilled" && Array.isArray(entries.value) ? entries.value : []);
-    if (mine.status === "fulfilled") {
-      setProjects(mine.value.projects);
-      setCanCreate(mine.value.canCreate);
-      setError(invitations.status === "rejected" ? (invitations.reason as Error) : null);
-    } else {
-      setProjects((current) => current ?? []);
-      setCanCreate(false);
-      setError(mine.reason as Error);
-    }
+    return apiFetch<{ projects: NativeProject[]; canCreate: boolean }>("/api/me/projects");
   }, []);
+  const fetchInvites = useCallback(
+    () => apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites"),
+    [],
+  );
+  // Same cache entry as My queue, so either screen warms the other offline.
+  const fetchQueue = useCallback(async () => {
+    const entries = await apiFetch<ProjectQueueEntry[]>("/api/queue/me");
+    return Array.isArray(entries) ? entries : [];
+  }, []);
+  const options = { enabled: me !== null, backgroundRevalidationMs: 0, cacheFirst: true };
+  const mine = useCachedApi(`${cachePrefix}:projects`, fetchProjects, options);
+  const invitations = useCachedApi(`${cachePrefix}:project-invites`, fetchInvites, options);
+  const entries = useCachedApi(`${cachePrefix}:queue`, fetchQueue, options);
+  const loadMine = mine.load;
+  const loadInvites = invitations.load;
+  const loadQueue = entries.load;
+  const load = useCallback(
+    () => Promise.all([loadMine(), loadInvites(), loadQueue()]).then(() => undefined),
+    [loadMine, loadInvites, loadQueue],
+  );
+  const projects = mine.data?.projects ?? null;
+  const canCreate = mine.data?.canCreate ?? false;
+  const invites = invitations.data?.invites ?? [];
+  const queue = entries.data ?? [];
+  // A failed secondary read must not hide the participant's own projects.
+  const error = mine.error ?? (projects ? invitations.error : null);
+  const staleSince = mine.staleSince;
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -137,6 +148,7 @@ export function MyProjectsScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: bottomInset + 24 }}
       >
+        <StaleDataBanner updatedAt={staleSince} />
         {error ? (
           <RequestFeedback
             error={error}
@@ -157,7 +169,7 @@ export function MyProjectsScreen() {
           ) : null}
           <GlassPill icon="photo.on.rectangle" label={t("gallery")} onPress={openGallery} />
         </View>
-        {projects === null && !error ? <RequestFeedback loading /> : null}
+        {projects === null && !error ? <RequestFeedback loading={mine.loading} /> : null}
         {projects?.length === 0 && !error ? (
           <EmptyState
             icon="hammer"

@@ -568,6 +568,7 @@ export default function AccountScreen() {
       <ProfileAvatarCollapse
         controller={avatarCollapse}
         image={me.image}
+        persist
         name={fullName}
         size={96}
         variant="account"

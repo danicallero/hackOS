@@ -99,9 +99,14 @@ export default function OthersLayout() {
         }}
       />
       <Stack.Screen name="scan-log" />
+      {/* Compact title over the scrolling queue, like Open-source licenses; iPad keeps its large title. */}
       <Stack.Screen
         name="queue"
-        options={{ headerShown, headerLargeTitle: true, title: t("tabQueue") }}
+        options={
+          headerShown
+            ? { headerShown, headerLargeTitle: true, title: t("tabQueue") }
+            : { ...compactHeaderOptions, title: t("tabQueue") }
+        }
       />
       <Stack.Screen
         name="wallet"

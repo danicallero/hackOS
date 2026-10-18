@@ -495,10 +495,13 @@ export function ProfileAvatarCollapse({
   size,
   variant,
   collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  persist = false,
   children,
 }: {
   controller: ProfileAvatarCollapseController;
   image: string | null | undefined;
+  /** The signed-in person's own photo: kept on disk to show offline. */
+  persist?: boolean;
   name: string;
   size: number;
   variant: AvatarVariant;
@@ -506,7 +509,7 @@ export function ProfileAvatarCollapse({
   /** Optional live avatar content (video, rings or overlays), inside the same mask. */
   children?: ReactNode;
 }) {
-  const photo = useApiImage(image);
+  const photo = useApiImage(image, persist);
   // The photo layers render once it has loaded (then from the memory cache);
   // until then a hidden loader fetches it and the initials stay (#934).
   const source = photo.loaded ? (photo.props?.source ?? null) : null;
@@ -672,7 +675,7 @@ export function ProfileAvatarCollapse({
                 <Image
                   accessible={false}
                   source={source}
-                  cachePolicy="memory"
+                  cachePolicy={persist ? "disk" : "memory"}
                   contentFit="cover"
                   style={{ height: size, width: size, borderRadius: size / 2 }}
                 />
@@ -726,7 +729,7 @@ export function ProfileAvatarCollapse({
                 <Image
                   accessible={false}
                   source={source}
-                  cachePolicy="memory"
+                  cachePolicy={persist ? "disk" : "memory"}
                   contentFit="cover"
                   style={{ height: "100%", width: "100%" }}
                 />
@@ -735,7 +738,7 @@ export function ProfileAvatarCollapse({
                     accessible={false}
                     blurRadius={6}
                     source={source}
-                    cachePolicy="memory"
+                    cachePolicy={persist ? "disk" : "memory"}
                     contentFit="cover"
                     style={absoluteFill}
                   />
@@ -745,7 +748,7 @@ export function ProfileAvatarCollapse({
                     accessible={false}
                     blurRadius={18}
                     source={source}
-                    cachePolicy="memory"
+                    cachePolicy={persist ? "disk" : "memory"}
                     contentFit="cover"
                     style={absoluteFill}
                   />

@@ -67,7 +67,7 @@ export function ProfilePhotoMenu({
         accessibilityState={{ busy, disabled: busy }}
         style={{ height: size, width: size }}
       >
-        <UserAvatar testID={testID} name={name} image={image} size={size} />
+        <UserAvatar testID={testID} name={name} image={image} size={size} persist />
         {busy ? (
           <View
             testID="profile-photo-pending"
