@@ -363,7 +363,7 @@ export function CalledEntryActions({
   const validPosition = Number.isInteger(requestedPosition) && requestedPosition >= 1;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full items-center gap-2">
       <Button
         size="sm"
         variant="outline"

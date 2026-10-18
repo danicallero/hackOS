@@ -7,6 +7,8 @@ import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
+import { GitCommitIcon } from "@phosphor-icons/react/dist/csr/GitCommit";
+import { GitPullRequestIcon } from "@phosphor-icons/react/dist/csr/GitPullRequest";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
@@ -415,42 +417,50 @@ export function ProjectInfo({
             </ul>
           </Fact>
         )}
-        {activity && (
-          <Fact quiet label={t("githubCommits")}>
-            {activity.commits}
-          </Fact>
-        )}
-        {activity && (
-          <Fact quiet label={t("githubPullRequests")}>
-            {activity.pullRequests}
-            {activity.merged > 0 && (
-              <span>
-                {" "}
-                · {activity.merged} {t("githubMerged")}
-              </span>
-            )}
-          </Fact>
-        )}
-        {links.length > 0 && (
-          <div
-            className={cn(
-              "flex flex-wrap items-end justify-end gap-2",
-              !activity && "sm:col-span-3",
-            )}
-          >
-            {links.map((link) => (
-              <Button key={link.href} variant="outline" size="sm" asChild>
-                <a
-                  href={link.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
+        {(links.length > 0 || activity) && (
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 sm:col-span-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {links.map((link) => (
+                <Button key={link.href} variant="outline" size="sm" asChild>
+                  <a
+                    href={link.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => openProjectLink(event, link.href, onExternalOpen)}
+                  >
+                    <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
+                    {link.label}
+                  </a>
+                </Button>
+              ))}
+            </div>
+            {activity && (
+              <div className="text-muted-foreground ml-auto flex items-center gap-4 text-sm tabular-nums">
+                <span
+                  className="inline-flex items-center gap-1.5"
+                  title={t("githubCommits")}
+                  role="img"
+                  aria-label={`${t("githubCommits")}: ${activity.commits}`}
                 >
-                  <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
-                  {link.label}
-                </a>
-              </Button>
-            ))}
+                  <GitCommitIcon aria-hidden="true" className="size-4" />
+                  {activity.commits}
+                </span>
+                <span
+                  className="inline-flex items-center gap-1.5"
+                  title={t("githubPullRequests")}
+                  role="img"
+                  aria-label={`${t("githubPullRequests")}: ${activity.pullRequests}`}
+                >
+                  <GitPullRequestIcon aria-hidden="true" className="size-4" />
+                  {activity.pullRequests}
+                  {activity.merged > 0 && (
+                    <span className="text-xs">
+                      ({activity.merged} {t("githubMerged")})
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
