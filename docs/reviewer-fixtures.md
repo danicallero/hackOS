@@ -75,26 +75,57 @@ exports and are not permanent anonymous audit data.
 
 ## App Store review notes
 
-Text for the **Notes for Review** field. Credentials and the deployment URL go
-in the private handoff, never in the field's public text or the repository.
+Text for the **Notes for Review** field, based on the submitted notes and
+corrected for features added since. Passwords, the deletion code and the
+deployment URL go in the private handoff, never in this repository.
 
-> hackOS is the companion app for a university hackathon run by GPUL. The four
-> review accounts below are synthetic and live in an isolated fixture scope:
-> they see only fixture data, and real participants never see theirs. Sign in
-> with email and the password from the private handoff (email addresses are
-> `app-review-<scenario>@hackos.test`). Each account already holds an event
-> ticket and event access, so no application is needed.
+> **What is this app?** hackOS is the official mobile app for HackUDC, a public
+> student hackathon organised by GPUL in A Coruña, Spain. Anyone eligible can
+> apply through the public event website; accepted attendees receive mobile
+> access. No paid content, subscriptions or in-app purchases.
 >
-> - `participant-delete` — a participant without accreditation. Use Account →
->   Delete account; the deletion PIN is in the handoff.
-> - `participant-anonymize-outside` — accredited and outside the venue. Account
->   → Delete account offers irreversible anonymisation. It also owns one
->   synthetic project with a waiting queue entry.
-> - `participant-anonymize-inside` — accredited and inside the venue. Requesting
->   anonymisation starts a pending exit that the staff account records.
-> - `staff-exit-operator` — staff with accreditation, presence and activity
->   scanning. It can record the pending exit of the inside participant and scan
->   within the fixture scope only.
+> **Core features.** Attendees view the schedule and set activity reminders,
+> open wallet passes, receive announcements and notifications, follow their
+> presentation queue position and estimated time, create and edit their team's
+> project (including linking its GitHub repository through the GitHub App and
+> submitting it), browse the project gallery once it opens, and edit an optional
+> networking profile. Staff scan entrance tickets and badges and record
+> presence, meals and activities.
+>
+> **Review access.** Enable Development Mode by tapping the app version seven
+> times on Sign In or in Account; a red DEV badge appears. Sign in with
+> `app-review-<scenario>@hackos.test` and the shared password from the private
+> handoff. Accounts: `participant-anonymize-outside` (primary participant),
+> `participant-delete` (full deletion), `participant-anonymize-inside`
+> (anonymisation with a pending exit) and `staff-exit-operator`. All are
+> synthetic, hold an event ticket and see only fixture data.
+>
+> **Account deletion and anonymisation.** Account → Delete account, confirmation
+> code in the handoff. Full deletion: `participant-delete`. Anonymisation
+> outside the venue: the primary participant. Checked-in attendees may keep
+> anonymous audit data for public-funding audits; an attendee inside the venue
+> is retained until an exit operator records their departure or 12 hours pass,
+> for venue insurance headcounts.
+>
+> **Privacy and permissions.** Camera: scanning QR codes only; the app does not
+> take photos. Photo library: attendees may pick a profile photo and project
+> images to upload. NFC: staff read badge serial numbers, and attendees can tap
+> company tags. Notifications: event announcements and queue updates. The app
+> does not sell personal data. Privacy Policy and Terms: `/privacy`, `/terms`
+> on the event site.
+
+Before sending, these statements in the previous notes no longer hold and need
+a decision rather than a rewording:
+
+- "No user-generated content visible to other users" is wrong once the gallery
+  exists: project names, descriptions, images and (with consent) member names
+  and photos, plus networking profiles, are visible to other attendees. Apple's
+  guideline 1.2 expects filtering, a way to report content and block users, and
+  contact details; the code has no report or block control, so either add one
+  or describe the organiser moderation path accurately.
+- "Does not take, store or upload photos" is wrong: the photo picker uploads
+  profile photos and project images, and a project's files are stored.
+- NFC and the GitHub App browser sign-in were not mentioned.
 
 What each account can and cannot show a reviewer today:
 
