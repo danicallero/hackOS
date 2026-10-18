@@ -44,7 +44,8 @@ import { entryLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 import { TeamSearch } from "./team-search";
 
-export function QueueStatsCard({
+/** Room and queue numbers for the judging top bar: always visible, even in Expanded judging. */
+export function JudgingStats({
   progress,
   pace,
   timingAction,
@@ -79,77 +80,63 @@ export function QueueStatsCard({
         )
       : "—";
   return (
-    <div className="space-y-4 px-5 pt-5 pb-4">
-      <dl className="grid grid-cols-2 gap-4">
-        <div>
-          <dt className="type-meta">{t("queueStatsEvaluated")}</dt>
-          <dd className="mt-1 text-lg font-semibold tabular-nums">
-            {progress ? `${progress.evaluated} / ${total}` : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="type-meta">{t("queueStatsAvgTime")}</dt>
-          <dd className="mt-1 text-lg font-semibold tabular-nums">
-            {progress?.avgEvaluationMinutes != null
-              ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
-              : "—"}
-          </dd>
-        </div>
-      </dl>
-      <div className="space-y-3 border-t border-border pt-4">
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dt className="type-meta">{t("queueStatsEstFinish")}</dt>
-            <dd
-              className={cn(
-                "mt-1 text-lg font-semibold tabular-nums",
-                pace?.exceedsJudgingClose && "text-destructive",
-              )}
-            >
-              {estFinishLabel}
-            </dd>
-          </div>
-          <div>
-            <dt className="type-meta">{t("judgingCloseLabel")}</dt>
-            <dd className="mt-1 text-lg font-semibold tabular-nums">
-              {pace?.judgingClosesAt ? formatEventClock(pace.judgingClosesAt) : "—"}
-            </dd>
-          </div>
-        </dl>
+    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+      <Stat label={t("queueStatsEvaluated")}>
+        {progress ? `${progress.evaluated} / ${total}` : "—"}
+      </Stat>
+      <Stat label={t("queueStatsAvgTime")}>
+        {progress?.avgEvaluationMinutes != null
+          ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
+          : "—"}
+      </Stat>
+      <Stat
+        label={t("queueStatsEstFinish")}
+        className={pace?.exceedsJudgingClose ? "text-destructive" : undefined}
+        title={pace?.exceedsJudgingClose ? t("judgingEstimatedOverrun") : undefined}
+      >
         {pace?.exceedsJudgingClose && (
-          <p className="flex items-start gap-2 text-xs text-destructive">
-            <WarningIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            {t("judgingEstimatedOverrun")}
-          </p>
+          <WarningIcon aria-hidden="true" className="mr-1 inline size-4 align-text-bottom" />
         )}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <div>
-          <p className="type-meta">{t("queueStatsPacingTarget")}</p>
-          <p
-            className={cn(
-              "mt-1 text-lg font-semibold tabular-nums",
-              pace?.autoAdjusted && "text-warning",
-            )}
-          >
-            {pace
-              ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) })
-              : "—"}
-          </p>
-          {pace?.autoAdjusted && (
-            <p className="text-warning text-xs">{t("queueStatsAdjustedHint")}</p>
-          )}
-        </div>
-        {timingAction}
-      </div>
+        {estFinishLabel}
+      </Stat>
+      <Stat label={t("judgingCloseLabel")}>
+        {pace?.judgingClosesAt ? formatEventClock(pace.judgingClosesAt) : "—"}
+      </Stat>
+      <Stat
+        label={t("queueStatsPacingTarget")}
+        className={pace?.autoAdjusted ? "text-warning" : undefined}
+        title={pace?.autoAdjusted ? t("queueStatsAdjustedHint") : undefined}
+      >
+        {pace ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) }) : "—"}
+      </Stat>
+      {timingAction && <div className="flex min-h-9 items-center">{timingAction}</div>}
     </div>
   );
 }
 
+function Stat({
+  label,
+  className,
+  title,
+  children,
+}: {
+  label: string;
+  className?: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <dl title={title} className="space-y-1.5">
+      <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
+      <dd className={cn("flex min-h-9 items-center text-sm font-semibold tabular-nums", className)}>
+        <span>{children}</span>
+      </dd>
+    </dl>
+  );
+}
+
 export function QueuePanel({
-  timingAction,
   view,
-  progress,
   pace,
   canOperate,
   canJudge,
@@ -168,9 +155,7 @@ export function QueuePanel({
   onReEnter,
   onOpenReview,
 }: {
-  timingAction?: ReactNode;
   view: RoomView;
-  progress: ChallengeProgress | null;
   pace: RoomPace | null;
   canOperate: boolean;
   canJudge: boolean;
@@ -203,8 +188,6 @@ export function QueuePanel({
 
   return (
     <Surface padding="none" className="flex h-full min-h-0 flex-col overflow-hidden">
-      <QueueStatsCard progress={progress} pace={pace} timingAction={timingAction} />
-      <Separator />
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <QueueList
           title={t("waitingRoomCount", { count: calledEntries.length })}

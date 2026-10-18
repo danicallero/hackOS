@@ -6,6 +6,7 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
 import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
@@ -17,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { TrackTiming } from "@/components/projects/track-timing";
 import { Button } from "@/components/ui/button";
@@ -66,7 +68,7 @@ import type { Challenge } from "../challenges/shared";
 
 import { errorMessage, exportHref, queueErrorToastContent } from "./helpers";
 import { PresentationPanel } from "./presentation-panel";
-import { QueuePanel } from "./queue-panel";
+import { JudgingStats, QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
 import { useExpandedTransition, useFocusPreference, useReviewWindow } from "./use-judging-layout";
 
@@ -379,13 +381,12 @@ export default function QueuePage() {
       data-wide
       data-judging-page
     >
-      <Surface padding="none" className="p-5">
-        {/* Fluid header (H29, issue #61): the two field columns grow/shrink and
-            the action cluster drops to its own row under tight widths (tiling
-            WMs, tablet/mobile) instead of overflowing the card. No fixed track
-            widths — flex-basis + min-width + flex-wrap handle the reflow. */}
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="w-full min-w-36 space-y-2 sm:w-80">
+      <Surface padding="none" className="px-4 py-3">
+        {/* Fluid header (H29, issue #61): room, live numbers and actions share one row and
+            wrap under tight widths (tiling WMs, tablet/mobile) instead of overflowing the card.
+            The numbers live here so they stay visible in Expanded judging. */}
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+          <div className="w-full min-w-36 space-y-1.5 sm:w-64">
             <Label htmlFor="queue-room">{t("roomLabel")}</Label>
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
@@ -407,19 +408,39 @@ export default function QueuePage() {
             </Select>
           </div>
 
+          <JudgingStats
+            progress={progress.data}
+            pace={pace.data}
+            timingAction={
+              effectiveChallengeId && (
+                <TrackTiming
+                  challengeId={effectiveChallengeId}
+                  onSaved={() => void refreshLive()}
+                />
+              )
+            }
+          />
+
           <div className="flex shrink-0 flex-wrap items-end gap-2 sm:ml-auto sm:justify-end">
             {canJudge && (
-              <Button
+              <IconButton
+                label={t("judgingExpanded")}
+                title={t("judgingExpanded")}
                 variant={focusMode ? "default" : "outline"}
                 aria-pressed={focusMode}
                 onClick={() => changeFocusMode(!focusMode)}
               >
-                <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
-                {t("judgingExpanded")}
-              </Button>
+                {focusMode ? (
+                  <ArrowsInSimpleIcon aria-hidden="true" className="size-4" />
+                ) : (
+                  <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
+                )}
+              </IconButton>
             )}
             {isPaused ? (
-              <Button
+              <IconButton
+                label={t("resume")}
+                title={t("resume")}
                 disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
                 onClick={() =>
                   activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
@@ -427,8 +448,7 @@ export default function QueuePage() {
                 loading={busy === "pause"}
               >
                 <PlayIcon aria-hidden="true" className="size-4" />
-                {t("resume")}
-              </Button>
+              </IconButton>
             ) : (
               <AlertModal
                 title={t("pauseRoomTitle")}
@@ -440,13 +460,14 @@ export default function QueuePage() {
                   activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
                 }
                 trigger={
-                  <Button
+                  <IconButton
+                    label={t("pause")}
+                    title={t("pause")}
                     variant="outline"
                     disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
                   >
                     <PauseIcon aria-hidden="true" className="size-4" />
-                    {t("pause")}
-                  </Button>
+                  </IconButton>
                 }
               />
             )}
@@ -540,16 +561,7 @@ export default function QueuePage() {
               )}
             >
               <QueuePanel
-                timingAction={
-                  effectiveChallengeId && (
-                    <TrackTiming
-                      challengeId={effectiveChallengeId}
-                      onSaved={() => void refreshLive()}
-                    />
-                  )
-                }
                 view={view}
-                progress={progress.data}
                 pace={pace.data}
                 canOperate={canOperate}
                 canJudge={canJudge}

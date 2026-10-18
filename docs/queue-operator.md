@@ -167,19 +167,30 @@ database connection and should be run during a quiet operational window.
 
 ## Judging panel layout and evaluation
 
-The right column of `/judging` is the team in the room: project summary and
-links (repository, demo and any project question marked **Judging panel link**),
-preparation time as `elapsed / scheduled`, and pinned Start and Re-queue
-actions. The project body scrolls inside its own container.
+The top bar of `/judging` holds the room selector, the live numbers (scored,
+average time per team, estimated finish, judging close, pacing target and **Track
+timing**) and two icon actions: the layout toggle (Expanded judging) and
+pause/resume. It stays visible in both layouts.
+
+The right column is the team in the room. Its header carries the team name and a
+small **Open project** link, then the preparation time as text, one thin
+presentation bar with `elapsed / target` above it and its alerts (Wrap up, Time
+limit exceeded, Timer paused) beside the time, and the Start/Pause and Re-queue
+actions aligned to the bar. Below: members (one per line), *Presenting for*
+(every challenge the project is queued in, the one in the room first, each with its
+state as a dot and label), commits and pull requests during the hacking window
+(`projects:read`) beside the links (repository and any URL-validated or **Judging
+panel link** question, never a YouTube video, which stays embedded in the details),
+and last the summary and the collapsible project details, where library answers
+such as technologies live. The project body scrolls inside its own container.
 
 By default the right column stacks the project (top) and the evaluation form
-(bottom), each scrolling inside its own container, with the queue and room
-statistics on the left. **Expanded judging** is a standing preference
-(remembered per browser): while a team is in the room, the queue hides, the
-sidebar collapses, the project (with its Start and Re-queue controls) fills the
-left and the evaluation form sits on the right; when the team leaves, for
-example after the evaluation is submitted, the queue view returns with a short
-transition, and expanded judging comes back with the next team. A project link
-that leaves for another tab opens the evaluation in its own small window
-(`/judging-popup/:entryId`, Document Picture-in-Picture where available) and
-closes it when you return.
+(bottom), each scrolling inside its own container, with the queues on the left.
+**Expanded judging** is a standing preference (remembered per browser): while a
+team is in the room, the queue hides, the sidebar collapses, the project fills the
+left with its details unfolded and the evaluation form sits on the right; when the
+team leaves, for example after the evaluation is submitted, the queue view returns
+with a short transition, and expanded judging comes back with the next team. A
+project link opens the project in a new tab first and the evaluation follows in its
+own small window (`/judging-popup/:entryId`, Document Picture-in-Picture where
+available); it closes when you return to the judging tab.
