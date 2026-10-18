@@ -142,7 +142,7 @@ function fromConfig(cfg: EventConfig): Values {
     hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt, zone),
     hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt, zone),
     showStartCountdown: cfg.showStartCountdown,
-    projectGithubRequired: cfg.projectGithubRequired,
+    projectGithubRequired: cfg.projectGithubRequired === true,
   };
 }
 

@@ -101,8 +101,8 @@ export function ProjectEditor({
     setError(null);
     try {
       if (!(await draft.save())) return;
-      await nativeProjects.submit(project.id);
-      await reloadAfterTransition(false);
+      const saved = await nativeProjects.submit(project.id);
+      await reloadAfterTransition(saved.submissionStatus, false);
     } catch (cause) {
       setError(apiErrorText(cause, t, t("couldNotSaveDraft")));
     } finally {
@@ -110,19 +110,21 @@ export function ProjectEditor({
     }
   }
   /** Submission flags (edit, withdraw) flip server-side, so the working copy is read again. */
-  async function reloadAfterTransition(nextEditing: boolean) {
+  async function reloadAfterTransition(
+    nextStatus: NativeProject["submissionStatus"],
+    nextEditing: boolean,
+  ) {
     invalidateProjectReads(project.id);
-    const fresh = await api.get<NativeProject>(`/api/me/projects/${project.id}`);
-    setProject(fresh);
-    setStatus(fresh.submissionStatus);
+    setStatus(nextStatus);
     setEditing(nextEditing);
+    setProject(await api.get<NativeProject>(`/api/me/projects/${project.id}`));
   }
   async function withdraw() {
     setBusy(true);
     setError(null);
     try {
       await nativeProjects.withdrawSubmission(project.id);
-      await reloadAfterTransition(true);
+      await reloadAfterTransition("draft", true);
       setWithdrawOpen(false);
     } catch (cause) {
       setError(apiErrorText(cause, t, t("couldNotSaveDraft")));

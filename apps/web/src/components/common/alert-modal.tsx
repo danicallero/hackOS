@@ -98,7 +98,7 @@ export function AlertModal({
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {reverseActions && confirmButton}
             <AlertDialog.Cancel asChild>
-              <Button variant="outline" disabled={pending || confirmDisabled}>
+              <Button variant="outline" disabled={pending}>
                 {cancelLabel}
               </Button>
             </AlertDialog.Cancel>

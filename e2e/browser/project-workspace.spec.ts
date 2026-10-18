@@ -159,11 +159,12 @@ for (const editable of [true, false]) {
   });
 }
 
-test("submitted participants read first and explicitly update a changed submission", async ({
+test("submitted participants are frozen until they withdraw, then edit and submit again (H20, H21)", async ({
   page,
 }, info) => {
   let responses = { ...base.responses };
   let revision = 0;
+  let status = "submitted";
   let submissions = 0;
   await page.addInitScript(() => {
     localStorage.setItem("hackos-language", "en");
@@ -176,45 +177,54 @@ test("submitted participants read first and explicitly update a changed submissi
       return route.fulfill({ json: { ...shellUser, capabilities: [], hasProject: true } });
     if (path === "/api/me/projects/10")
       return route.fulfill({
-        json: { ...base, isMember: true, canSubmit: true, responses, revision },
+        json: {
+          ...base,
+          isMember: true,
+          submissionStatus: status,
+          canEdit: status === "draft",
+          canSubmit: status === "draft",
+          canWithdraw: status === "submitted",
+          responses,
+          revision,
+        },
       });
     if (path.endsWith("/draft")) {
       responses = route.request().postDataJSON().responses;
       return route.fulfill({ json: { responses, revision: ++revision } });
     }
+    if (path.endsWith("/withdraw-submission")) {
+      status = "draft";
+      return route.fulfill({ json: { submissionStatus: "draft" } });
+    }
     if (path.endsWith("/submit")) {
       submissions++;
+      status = "submitted";
       return route.fulfill({ json: { submissionStatus: "submitted" } });
     }
     return route.fulfill({ json: { items: [], unreadCount: 0 } });
   });
   await page.goto("/my-project/10");
   await expect(page.getByRole("textbox", { name: "What did you build?" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit project", exact: true })).toHaveCount(0);
   await mkdir("artifacts/project-workspace", { recursive: true });
   await page.screenshot({
     path: `artifacts/project-workspace/submitted-${info.project.name}.png`,
     fullPage: true,
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "Edit project", exact: true }).click();
+  await page.getByRole("button", { name: "Withdraw submission to edit", exact: true }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Withdraw submission to edit", exact: true })
+    .click();
+  await expect(page.getByRole("textbox", { name: "What did you build?" })).toBeVisible();
   await page
     .getByRole("textbox", { name: "What did you build?" })
-    .fill("Changes after submission.");
-  await expect.poll(() => responses.name).toBe("Changes after submission.");
-  await page.getByRole("button", { name: "View project", exact: true }).click();
-  await expect(page.getByText("Changes after submission.", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("status").filter({ hasText: "not in the submitted version" }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: `artifacts/project-workspace/unsubmitted-${info.project.name}.png`,
-    fullPage: true,
-    animations: "disabled",
-  });
-  await page.getByRole("button", { name: "Edit project", exact: true }).click();
-  await page.getByRole("button", { name: "Update submission", exact: true }).click();
+    .fill("Changes after withdrawing.");
+  await expect.poll(() => responses.name).toBe("Changes after withdrawing.");
+  await page.getByRole("button", { name: "Submit project", exact: true }).click();
   await expect.poll(() => submissions).toBe(1);
   await expect(
-    page.getByRole("status").filter({ hasText: "not in the submitted version" }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Withdraw submission to edit", exact: true }),
+  ).toBeVisible();
 });
