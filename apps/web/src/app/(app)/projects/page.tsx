@@ -43,7 +43,7 @@ export default function ProjectsPage() {
       }>("/api/projects/github-activity", { signal }),
     { enabled: can(CAPABILITIES.PROJECTS_READ) },
   );
-  const activityOf = new Map(activity.data?.teams.map((team) => [team.repoId, team]));
+  const activityOf = new Map((activity.data?.teams ?? []).map((team) => [team.repoId, team]));
   const projects = resource.data?.repos ?? [];
   const columns: Column<NativeProject>[] = [
     {

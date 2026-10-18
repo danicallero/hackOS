@@ -470,6 +470,7 @@ Table event_config {
   project_drafts_open_at "timestamp with time zone"
   project_gallery_audience text [not null, default: `'staff'::text`]
   project_gallery_opens_at "timestamp with time zone"
+  project_github_required boolean [not null, default: `false`]
   project_max_team_size integer
   project_submissions_close_at "timestamp with time zone"
   require_sponsor_dietary boolean [not null, default: `false`]
