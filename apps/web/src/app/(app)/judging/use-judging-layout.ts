@@ -1,6 +1,6 @@
 "use client";
 
-// Layout behaviour of the judging page (H29, H36): the standing Expanded judging
+// Layout behaviour of the judging page (H29, H36): the standing View project
 // preference, its sidebar/form transitions, and the evaluation popup window.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,6 +11,7 @@ import { openReviewWindow } from "./open-review-window";
 
 const FOCUS_MODE_KEY = "hackos.judging.focus-layout";
 const TRANSITION_MS = 500;
+const REVIEW_RETURN_GRACE_MS = 1500;
 
 // Per viewer: while a team is in the room, the queue hides, the sidebar
 // collapses and the project sits beside the form. Off keeps them stacked.
@@ -60,8 +61,8 @@ export function useExpandedTransition(focusing: boolean) {
   return formMounted;
 }
 
-// A project link is about to open another tab: the evaluation follows in its
-// own small window, which closes when this tab regains focus.
+// A project link opens another tab first, then the evaluation follows in its own
+// small window so it is the frontmost one; it closes when this tab regains focus.
 export function useReviewWindow(
   reviewable: boolean,
   reviewTargetId: number | null,
@@ -69,6 +70,7 @@ export function useReviewWindow(
   t: Translate,
 ) {
   const reviewWindowRef = useRef<Window | null>(null);
+  const openedAtRef = useRef(0);
   const [windowOpen, setWindowOpen] = useState(false);
 
   const closeReviewWindow = useCallback(() => {
@@ -92,12 +94,15 @@ export function useReviewWindow(
       return;
     }
     reviewWindowRef.current = opened;
+    openedAtRef.current = Date.now();
     setWindowOpen(true);
     opened.addEventListener("pagehide", closeReviewWindow);
   }, [reviewable, reviewTargetId, activeRoomId, closeReviewWindow, t]);
 
   useEffect(() => {
     const onReturn = () => {
+      // Opening windows shuffles focus: only a later return to this tab closes the evaluation.
+      if (Date.now() - openedAtRef.current < REVIEW_RETURN_GRACE_MS) return;
       if (document.visibilityState === "visible") closeReviewWindow();
     };
     window.addEventListener("focus", onReturn);

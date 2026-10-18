@@ -45,7 +45,7 @@ which only blocks calling the team, and “Being judged in {room}” when a memb
 is in a room or presenting, which also blocks moves. Occupancy is resolved
 through the same shared-member relation as the H30 guard, so a member shared
 with another team counts, and it clears as soon as that entry leaves
-`called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
+`called`/`in_room`/`presenting`. `move-top` on a team in the waiting room sends it right behind the head of the queue, so the head takes the freed slot first instead of the same team being called straight back in; on a queued team it goes to the top. Reordering (`move-top`, `move-to`, `skip`,
 `requeue`) never calls a team, so project eligibility does not block it; an
 ineligible project is still never called (a submitted project is ineligible only
 by explicit organizer override or a team-size violation, H21): the row says “Not eligible for
@@ -167,19 +167,30 @@ database connection and should be run during a quiet operational window.
 
 ## Judging panel layout and evaluation
 
-The right column of `/judging` is the team in the room: project summary and
-links (repository, demo and any project question marked **Judging panel link**),
-preparation time as `elapsed / scheduled`, and pinned Start and Re-queue
-actions. The project body scrolls inside its own container.
+The top bar of `/judging` holds the room selector, the live numbers (scored,
+average time per team, estimated finish, judging close, pacing target and **Track
+timing**) and two icon actions: the layout toggle (View project) and
+pause/resume. It stays visible in both layouts.
+
+The right column is the team in the room. Its header carries the team name and a
+small **Open project** link, then the preparation time as text, one thin
+presentation bar with `elapsed / target` above it and its alerts (Wrap up, Time
+limit exceeded, Timer paused) beside the time, and the Start/Pause and Re-queue
+actions aligned to the bar. Below: members (one per line), *Presenting for*
+(every challenge the project is queued in, the one in the room first, each with its
+state as a dot and label), commits and pull requests during the hacking window
+(`projects:read`) beside the links (repository and any URL-validated or **Judging
+panel link** question, never a YouTube video, which stays embedded in the project
+information). The card never shows project information: the summary, answers,
+technologies and demo video appear only in **View project**. The card scrolls inside its own container.
 
 By default the right column stacks the project (top) and the evaluation form
-(bottom), each scrolling inside its own container, with the queue and room
-statistics on the left. **Expanded judging** is a standing preference
-(remembered per browser): while a team is in the room, the queue hides, the
-sidebar collapses, the project (with its Start and Re-queue controls) fills the
-left and the evaluation form sits on the right; when the team leaves, for
-example after the evaluation is submitted, the queue view returns with a short
-transition, and expanded judging comes back with the next team. A project link
-that leaves for another tab opens the evaluation in its own small window
-(`/judging-popup/:entryId`, Document Picture-in-Picture where available) and
-closes it when you return.
+(bottom), each scrolling inside its own container, with the queues on the left.
+**View project** is a standing preference (remembered per browser): while a
+team is in the room, the queue hides, the sidebar collapses, the project fills the
+left with its details unfolded and the evaluation form sits on the right; when the
+team leaves, for example after the evaluation is submitted, the queue view returns
+with a short transition, and View project comes back with the next team. A
+project link opens the project in a new tab first and the evaluation follows in its
+own small window (`/judging-popup/:entryId`, Document Picture-in-Picture where
+available); it closes when you return to the judging tab.

@@ -1,10 +1,12 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { GitCommitIcon } from "@phosphor-icons/react/dist/csr/GitCommit";
 import { SectionCard } from "@/components/common/section-card";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { useSessionContext } from "@/lib/session";
 
 interface Person {
   login: string;
@@ -14,14 +16,34 @@ interface Person {
   merged: number;
 }
 
+export interface GithubTotals {
+  commits: number;
+  pullRequests: number;
+  merged: number;
+}
+
+/** Commits and pull requests inside the hacking window; null for readers without project access (H18). */
+export function useProjectGithubActivity(projectId: number) {
+  const { can } = useSessionContext();
+  const resource = useServerResource(
+    ["project-github-activity", projectId],
+    (signal) =>
+      api.get<{ people: Person[]; totals: GithubTotals }>(
+        `/api/projects/${projectId}/github-activity`,
+        { signal },
+      ),
+    { enabled: can(CAPABILITIES.PROJECTS_READ) },
+  );
+  const data = resource.data;
+  return data?.totals && data.totals.commits + data.totals.pullRequests > 0 ? data : null;
+}
+
 /** Commits and pull requests of each author of a project, for project staff (H18). */
 export function GithubActivity({ projectId }: { projectId: number }) {
   const { t } = useLocale();
-  const resource = useServerResource(["project-github-activity", projectId], (signal) =>
-    api.get<{ people: Person[] }>(`/api/projects/${projectId}/github-activity`, { signal }),
-  );
-  const people = resource.data?.people ?? [];
-  if (people.length === 0) return null;
+  const data = useProjectGithubActivity(projectId);
+  if (!data) return null;
+  const { people = [], totals } = data;
   return (
     <SectionCard title="GitHub" icon={GitCommitIcon} variant="plain">
       <table className="w-full text-sm">
@@ -39,18 +61,25 @@ export function GithubActivity({ projectId }: { projectId: number }) {
                 {person.name ?? person.login}
               </td>
               <td className="py-2 text-right tabular-nums">{person.commits}</td>
-              <td className="py-2 text-right tabular-nums">
-                {person.pullRequests}
-                {person.merged > 0 && (
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {person.merged} {t("githubMerged")}
-                  </span>
-                )}
-              </td>
+              <td className="py-2 text-right tabular-nums">{person.pullRequests}</td>
             </tr>
           ))}
         </tbody>
+        <tfoot className="border-t border-border font-medium">
+          <tr>
+            <td className="py-2 pr-3" />
+            <td className="py-2 text-right tabular-nums">{totals.commits}</td>
+            <td className="py-2 text-right tabular-nums">
+              {totals.pullRequests}
+              {totals.merged > 0 && (
+                <span className="text-muted-foreground font-normal">
+                  {" "}
+                  · {totals.merged} {t("githubMerged")}
+                </span>
+              )}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </SectionCard>
   );

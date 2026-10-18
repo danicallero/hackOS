@@ -415,13 +415,14 @@ export function ReviewForm({
             : column
               ? "h-full rounded-surface border border-border/60 bg-card"
               : "rounded-surface border border-border/60",
+        !floating && "relative",
         "flex min-h-0 flex-col overflow-hidden",
       )}
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3">
+      <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3">
         <CheckCircleIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
         <h2 className="type-section-title mr-auto truncate">
-          {fill || column ? entryLabel(entry, t) : t("scoring")}
+          {fill ? entryLabel(entry, t) : t("scoring")}
         </h2>
         <span role="status" aria-live="polite" className="text-muted-foreground text-sm">
           {syncState === "offline" && (
@@ -429,7 +430,7 @@ export function ReviewForm({
           )}
           {syncLabel}
         </span>
-        <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
+        <ReviewStatusBadge quiet status={status === "submitted" ? "submitted" : "draft"} />
         {column && onClose && (
           <button
             type="button"
@@ -444,7 +445,7 @@ export function ReviewForm({
       </header>
       <div
         className={cn(
-          "p-4",
+          "p-4 pb-20",
           (floating || fill || column) && "min-h-0 flex-1 overflow-y-auto overscroll-contain",
         )}
       >
@@ -598,7 +599,7 @@ export function ReviewForm({
           </div>
         )}
       </div>
-      <footer className="flex shrink-0 justify-end gap-2 border-t p-3">
+      <footer className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-end gap-2 px-4 pb-3 [&>*]:pointer-events-auto">
         <Button
           variant="outline"
           disabled={!canJudge || !online || saving || loading}

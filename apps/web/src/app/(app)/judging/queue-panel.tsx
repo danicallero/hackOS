@@ -16,6 +16,7 @@ import { SkipForwardIcon } from "@phosphor-icons/react/dist/csr/SkipForward";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { type ReactNode, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +45,8 @@ import { entryLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 import { TeamSearch } from "./team-search";
 
-export function QueueStatsCard({
+/** Room and queue numbers for the judging top bar: always visible, even in View project. */
+export function JudgingStats({
   progress,
   pace,
   timingAction,
@@ -79,77 +81,79 @@ export function QueueStatsCard({
         )
       : "—";
   return (
-    <div className="space-y-4 px-5 pt-5 pb-4">
-      <dl className="grid grid-cols-2 gap-4">
-        <div>
-          <dt className="type-meta">{t("queueStatsEvaluated")}</dt>
-          <dd className="mt-1 text-lg font-semibold tabular-nums">
-            {progress ? `${progress.evaluated} / ${total}` : "—"}
-          </dd>
-        </div>
-        <div>
-          <dt className="type-meta">{t("queueStatsAvgTime")}</dt>
-          <dd className="mt-1 text-lg font-semibold tabular-nums">
-            {progress?.avgEvaluationMinutes != null
-              ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
-              : "—"}
-          </dd>
-        </div>
-      </dl>
-      <div className="space-y-3 border-t border-border pt-4">
-        <dl className="grid grid-cols-2 gap-4">
-          <div>
-            <dt className="type-meta">{t("queueStatsEstFinish")}</dt>
-            <dd
-              className={cn(
-                "mt-1 text-lg font-semibold tabular-nums",
-                pace?.exceedsJudgingClose && "text-destructive",
-              )}
-            >
-              {estFinishLabel}
-            </dd>
-          </div>
-          <div>
-            <dt className="type-meta">{t("judgingCloseLabel")}</dt>
-            <dd className="mt-1 text-lg font-semibold tabular-nums">
-              {pace?.judgingClosesAt ? formatEventClock(pace.judgingClosesAt) : "—"}
-            </dd>
-          </div>
-        </dl>
+    <div className="order-3 col-span-2 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-x-4 gap-y-3 xl:order-none xl:col-span-1">
+      <Stat primary label={t("queueStatsEvaluated")}>
+        {progress ? `${progress.evaluated} / ${total}` : "—"}
+      </Stat>
+      <Stat label={t("queueStatsAvgTime")}>
+        {progress?.avgEvaluationMinutes != null
+          ? t("queueStatsMinutes", { count: Math.round(progress.avgEvaluationMinutes) })
+          : "—"}
+      </Stat>
+      <Stat
+        primary
+        label={t("queueStatsEstFinish")}
+        className={pace?.exceedsJudgingClose ? "text-destructive" : undefined}
+        title={pace?.exceedsJudgingClose ? t("judgingEstimatedOverrun") : undefined}
+      >
         {pace?.exceedsJudgingClose && (
-          <p className="flex items-start gap-2 text-xs text-destructive">
-            <WarningIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            {t("judgingEstimatedOverrun")}
-          </p>
+          <WarningIcon aria-hidden="true" className="mr-1.5 inline size-5 align-text-bottom" />
         )}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <div>
-          <p className="type-meta">{t("queueStatsPacingTarget")}</p>
-          <p
-            className={cn(
-              "mt-1 text-lg font-semibold tabular-nums",
-              pace?.autoAdjusted && "text-warning",
-            )}
-          >
-            {pace
-              ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) })
-              : "—"}
-          </p>
-          {pace?.autoAdjusted && (
-            <p className="text-warning text-xs">{t("queueStatsAdjustedHint")}</p>
-          )}
-        </div>
-        {timingAction}
-      </div>
+        {estFinishLabel}
+      </Stat>
+      <Stat label={t("judgingCloseLabel")}>
+        {pace?.judgingClosesAt ? formatEventClock(pace.judgingClosesAt) : "—"}
+      </Stat>
+      <Stat
+        label={t("queueStatsPacingTarget")}
+        className={pace?.autoAdjusted ? "text-warning" : undefined}
+        title={pace?.autoAdjusted ? t("queueStatsAdjustedHint") : undefined}
+        action={timingAction}
+      >
+        {pace ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) }) : "—"}
+      </Stat>
     </div>
   );
 }
 
+function Stat({
+  label,
+  primary = false,
+  className,
+  title,
+  action,
+  children,
+}: {
+  label: string;
+  /** The numbers a judge watches; the rest sit quietly beside them. */
+  primary?: boolean;
+  className?: string;
+  title?: string;
+  /** A control for the value itself, such as an edit pencil. */
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <dl title={title}>
+      <dt className="text-muted-foreground text-xs font-medium whitespace-nowrap">{label}</dt>
+      <dd className="flex items-center gap-1">
+        <span
+          className={cn(
+            "tabular-nums whitespace-nowrap",
+            primary ? "text-lg font-semibold" : "text-muted-foreground text-sm font-medium",
+            className,
+          )}
+        >
+          {children}
+        </span>
+        {action}
+      </dd>
+    </dl>
+  );
+}
+
 export function QueuePanel({
-  timingAction,
   view,
-  progress,
   pace,
   canOperate,
   canJudge,
@@ -168,9 +172,7 @@ export function QueuePanel({
   onReEnter,
   onOpenReview,
 }: {
-  timingAction?: ReactNode;
   view: RoomView;
-  progress: ChallengeProgress | null;
   pace: RoomPace | null;
   canOperate: boolean;
   canJudge: boolean;
@@ -203,8 +205,6 @@ export function QueuePanel({
 
   return (
     <Surface padding="none" className="flex h-full min-h-0 flex-col overflow-hidden">
-      <QueueStatsCard progress={progress} pace={pace} timingAction={timingAction} />
-      <Separator />
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 scrollbar-none [&::-webkit-scrollbar]:hidden">
         <QueueList
           title={t("waitingRoomCount", { count: calledEntries.length })}
@@ -329,10 +329,8 @@ export function QueuePanel({
 }
 
 /**
- * Actions for a team at the door: Call in / Bring in / a "More" menu for the
- * rarer moves (requeue, no-show, disqualify). The three buttons flex-wrap so
- * "More actions" sits next to Bring in when the column is wide enough, and
- * drops to its own row when it isn't, instead of five separate buttons.
+ * Actions for a team at the door: Notify / Bring in / a round "More" menu for the
+ * rarer moves (requeue, no-show, disqualify), all in one row of buttons.
  */
 export function CalledEntryActions({
   entry,
@@ -365,11 +363,11 @@ export function CalledEntryActions({
   const validPosition = Number.isInteger(requestedPosition) && requestedPosition >= 1;
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex w-full items-center gap-2">
       <Button
         size="sm"
         variant="outline"
-        className="min-w-28 flex-1"
+        className="min-w-0 flex-1"
         disabled={busy != null || canModerate}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
         loading={busy === `notify-enter-${entry.id}`}
@@ -379,7 +377,7 @@ export function CalledEntryActions({
       </Button>
       <Button
         size="sm"
-        className="min-w-28 flex-1"
+        className="min-w-0 flex-1"
         disabled={busy != null || !canJudge}
         onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
         loading={busy === `bring-in-${entry.id}`}
@@ -389,15 +387,16 @@ export function CalledEntryActions({
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
+          <IconButton
+            label={t("moreActions")}
+            title={t("moreActions")}
+            size="icon-sm"
             variant="outline"
-            className="min-w-28 flex-1"
+            className="shrink-0 rounded-full"
             disabled={busy != null || canModerate}
           >
             <DotsThreeIcon aria-hidden="true" className="size-4" />
-            {t("moreActions")}
-          </Button>
+          </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
@@ -567,11 +566,6 @@ export function QueueList({
                     {entry.call_count > 0 && (
                       <span className="text-muted-foreground text-xs tabular-nums">
                         {t("pastCalls")} {entry.call_count}
-                      </span>
-                    )}
-                    {entry.position != null && (
-                      <span className="text-muted-foreground text-xs tabular-nums">
-                        {t("positionHash", { position: entry.position })}
                       </span>
                     )}
                     {entry.called_at && (

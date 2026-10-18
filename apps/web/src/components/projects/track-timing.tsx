@@ -1,6 +1,8 @@
 "use client";
+import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
@@ -21,9 +23,12 @@ type Timing = {
 export function TrackTiming({
   challengeId,
   onSaved,
+  iconOnly = false,
 }: {
   challengeId: number;
   onSaved?: () => void;
+  /** A pencil beside the value it edits instead of a labelled button. */
+  iconOnly?: boolean;
 }) {
   const { t } = useLocale();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -51,9 +56,22 @@ export function TrackTiming({
   }, [load, open]);
   return (
     <>
-      <Button ref={triggerRef} variant="outline" size="sm" onClick={() => setOpen(true)}>
-        {t("judgingTrackTiming")}
-      </Button>
+      {iconOnly ? (
+        <IconButton
+          ref={triggerRef}
+          label={t("judgingTrackTiming")}
+          title={t("judgingTrackTiming")}
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => setOpen(true)}
+        >
+          <PencilSimpleIcon aria-hidden="true" className="size-4" />
+        </IconButton>
+      ) : (
+        <Button ref={triggerRef} variant="outline" size="sm" onClick={() => setOpen(true)}>
+          {t("judgingTrackTiming")}
+        </Button>
+      )}
       <SidePanelEditor
         open={open}
         onOpenChange={setOpen}

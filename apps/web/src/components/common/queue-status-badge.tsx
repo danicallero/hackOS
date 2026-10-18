@@ -1,4 +1,5 @@
 import { StatusBadge } from "@/components/common/status-badge";
+import { StatusDot } from "@/components/common/status-dot";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { QueueStatus } from "@/lib/queue";
 import type { Tone } from "@/lib/tones";
@@ -35,5 +36,30 @@ export function QueueStatusBadge({
     <StatusBadge tone={cfg.tone} className={className}>
       {cfg.label}
     </StatusBadge>
+  );
+}
+
+/** Quiet stage marker for dense lists: the badge's tone as a dot beside its label, no pill. */
+export function QueueStatusDot({
+  status,
+  label,
+  tone,
+  className,
+}: {
+  status?: QueueStatus | string;
+  /** Overrides the stage label (for example "Now"). */
+  label?: string;
+  tone?: Tone;
+  className?: string;
+}) {
+  const { t } = useLocale();
+  const cfg = (status ? buildConfig(t)[status as QueueStatus] : undefined) ?? {
+    label: status ?? "",
+    tone: "neutral" as Tone,
+  };
+  return (
+    <StatusDot tone={tone ?? cfg.tone} className={className}>
+      {label ?? cfg.label}
+    </StatusDot>
   );
 }
