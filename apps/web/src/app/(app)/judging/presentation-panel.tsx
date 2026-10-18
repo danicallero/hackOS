@@ -3,11 +3,9 @@
 // The room's right column (H36-H39): who is presenting, their project, and
 // the presentation clock.
 
-import { projectDescriptionField } from "@hackos/shared/forms";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
-import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
@@ -20,7 +18,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { useProjectGithubActivity } from "@/components/projects/github-activity";
 import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
@@ -36,7 +33,6 @@ import {
   presentationTimerState,
 } from "@/lib/judging-workspace";
 import type { NativeProject } from "@/lib/native-projects";
-import { projectSummary } from "@/lib/project-text";
 import { getRepoChallenges, type QueueEntry } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
@@ -299,7 +295,7 @@ export function ProjectInfo({
 }: {
   entry: QueueEntry;
   challenge: Challenge | null;
-  /** Project view shows the project details unfolded. */
+  /** View project shows the project details unfolded. */
   detailsOpen?: boolean;
   onExternalOpen?: () => void;
 }) {
@@ -339,18 +335,11 @@ export function ProjectInfo({
     )
     .concat(urlFields)
     .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
-  // The summary shows above the details, so collapsed details leave it out; unfolded
-  // details are the one place for it. Library answers such as technologies live in the details.
-  const descriptionKey = project && projectDescriptionField(project.template)?.key;
   const projectAnswers = project && (
     <ProjectAnswers
       project={project}
       language={language ?? "en"}
-      omitFieldKeys={[
-        ...urlFields.map((field) => field.key),
-        ...(detailsOpen || !descriptionKey ? [] : [descriptionKey]),
-      ]}
-      omitDescription={!detailsOpen}
+      omitFieldKeys={urlFields.map((field) => field.key)}
       assetUrl={(path) => new URL(path, API_URL).toString()}
     />
   );
@@ -466,31 +455,9 @@ export function ProjectInfo({
         )}
       </div>
 
-      {project && (
-        <div className="space-y-4 border-t border-border/60 pt-4">
-          {!detailsOpen && project.description && (
-            <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground text-pretty">
-              {projectSummary(project.description, project.name)}
-            </p>
-          )}
-          {detailsOpen ? (
-            projectAnswers
-          ) : (
-            <Collapsible>
-              <CollapsibleTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-between px-0 has-[>svg:first-child]:pl-0"
-                >
-                  {t("judgingProjectDetails")}
-                  <CaretDownIcon aria-hidden="true" />
-                </Button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-4">{projectAnswers}</CollapsibleContent>
-            </Collapsible>
-          )}
-        </div>
+      {/* The project's own information only shows in View project; the card stays about the team. */}
+      {detailsOpen && project && (
+        <div className="space-y-4 border-t border-border/60 pt-4">{projectAnswers}</div>
       )}
     </div>
   );

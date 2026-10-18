@@ -169,12 +169,13 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   await expect(page.getByRole("link", { name: "Demo video", exact: true })).toHaveCount(0);
   await expect(page.getByText("42", { exact: true })).toBeVisible();
   await page.screenshot({ path: "artifacts/judging-view.png", fullPage: true });
-  // Technologies belong to the details, not the glance.
+  // The card never shows project information; View project does.
   await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toBeHidden();
-  await page.getByRole("button", { name: "Project details", exact: true }).click();
+  await expect(page.getByText("A project with real-time collaboration.")).toBeHidden();
+  await page.getByRole("button", { name: "View project", exact: true }).click();
   await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toBeVisible();
   await page.screenshot({ path: "artifacts/judging-project-details.png", fullPage: true });
-  await page.getByRole("button", { name: "Project details", exact: true }).click();
+  await page.getByRole("button", { name: "View project", exact: true }).click();
   await page.getByRole("button", { name: "6", exact: true }).click();
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0]).toEqual({ scores: { score: 6 }, submit: false });

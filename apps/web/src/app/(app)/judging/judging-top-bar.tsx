@@ -1,7 +1,7 @@
 "use client";
 
 // The judging top bar (H29): room, live numbers and the room actions. It stays visible in
-// Project view, so the numbers never leave the screen.
+// View project, so the numbers never leave the screen.
 
 import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
 import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
@@ -73,7 +73,7 @@ export function JudgingTopBar({
     <Surface padding="none" className="px-5 py-3">
       {/* Fluid header (H29, issue #61): room, live numbers and actions share one row and
           wrap under tight widths (tiling WMs, tablet/mobile) instead of overflowing the card.
-          The numbers live here so they stay visible in Project view. */}
+          The numbers live here so they stay visible in View project. */}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-3 xl:grid-cols-[14rem_minmax(0,1fr)_auto] xl:gap-x-8">
         <div className="min-w-0 sm:max-w-64 xl:max-w-none">
           <Select

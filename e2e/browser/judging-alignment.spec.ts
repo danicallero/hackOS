@@ -244,9 +244,6 @@ for (const layout of ["on", "off"]) {
         prep: rect(text(card, "Preparation time"))?.left,
         fact: rect(text(card, "Members"))?.left,
         link: rect(card.querySelector("a[href='https://github.com/team/repo']"))?.left,
-        details: rect(
-          [...card.querySelectorAll("button")].find((b) => b.textContent === "Project details"),
-        )?.left,
         reviewFooterRight: rect(review.querySelector("footer button:last-child"))?.right,
         reviewHeaderRight: rect(review.querySelector("header [role='status'] ~ *"))?.right,
       };
@@ -257,12 +254,7 @@ for (const layout of ["on", "off"]) {
     await expect(page.getByText("Open", { exact: true })).toHaveCount(0);
     await expect(page.getByText("FOSS")).toBeVisible();
     await expect(page.getByText("Best use of AI")).toBeVisible();
-    const lefts = [
-      edges.title,
-      edges.prep,
-      edges.fact,
-      ...(layout === "off" ? [edges.details] : []),
-    ] as number[];
+    const lefts = [edges.title, edges.prep, edges.fact] as number[];
     expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThanOrEqual(1);
     expect(
       Math.abs((edges.reviewFooterRight ?? 0) - (edges.reviewHeaderRight ?? 0)),

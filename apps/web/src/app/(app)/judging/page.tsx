@@ -284,7 +284,7 @@ export default function QueuePage() {
     t,
   );
 
-  // Project view is a standing preference: the layout appears whenever a team
+  // View project is a standing preference: the layout appears whenever a team
   // is in the room (or a past evaluation is open) and gives way to the queue when
   // nobody is, then comes back with the next team.
   const focusing = focusMode && canJudge && reviewTarget != null && !windowOpen;
@@ -520,7 +520,7 @@ export default function QueuePage() {
             )}
           </div>
 
-          {/* Project view: the form slides in beside the project while a team is
+          {/* View project: the form slides in beside the project while a team is
               in the room and out again once nobody is. */}
           {focusMode && (
             <div className="min-w-0 xl:h-full xl:min-h-0 xl:overflow-hidden">

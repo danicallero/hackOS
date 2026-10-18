@@ -1,6 +1,6 @@
 "use client";
 
-// Layout behaviour of the judging page (H29, H36): the standing Project view
+// Layout behaviour of the judging page (H29, H36): the standing View project
 // preference, its sidebar/form transitions, and the evaluation popup window.
 
 import { useCallback, useEffect, useRef, useState } from "react";

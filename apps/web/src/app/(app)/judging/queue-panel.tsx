@@ -16,6 +16,7 @@ import { SkipForwardIcon } from "@phosphor-icons/react/dist/csr/SkipForward";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { type ReactNode, useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +45,7 @@ import { entryLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 import { TeamSearch } from "./team-search";
 
-/** Room and queue numbers for the judging top bar: always visible, even in Project view. */
+/** Room and queue numbers for the judging top bar: always visible, even in View project. */
 export function JudgingStats({
   progress,
   pace,
@@ -328,10 +329,8 @@ export function QueuePanel({
 }
 
 /**
- * Actions for a team at the door: Notify / Bring in / a "More" menu for the
- * rarer moves (requeue, no-show, disqualify). The three buttons flex-wrap so
- * "More actions" sits next to Bring in when the column is wide enough, and
- * drops to its own row when it isn't, instead of five separate buttons.
+ * Actions for a team at the door: Notify / Bring in / a round "More" menu for the
+ * rarer moves (requeue, no-show, disqualify), all in one row of buttons.
  */
 export function CalledEntryActions({
   entry,
@@ -364,11 +363,11 @@ export function CalledEntryActions({
   const validPosition = Number.isInteger(requestedPosition) && requestedPosition >= 1;
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex items-center gap-2">
       <Button
         size="sm"
         variant="outline"
-        className="min-w-28 flex-1"
+        className="min-w-0 flex-1"
         disabled={busy != null || canModerate}
         onClick={() => onEntryAction(entry, "notify-enter", undefined, t("entranceNoticeSent"))}
         loading={busy === `notify-enter-${entry.id}`}
@@ -378,7 +377,7 @@ export function CalledEntryActions({
       </Button>
       <Button
         size="sm"
-        className="min-w-28 flex-1"
+        className="min-w-0 flex-1"
         disabled={busy != null || !canJudge}
         onClick={() => onEntryAction(entry, "bring-in", undefined, t("teamBroughtInShort"))}
         loading={busy === `bring-in-${entry.id}`}
@@ -388,15 +387,16 @@ export function CalledEntryActions({
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button
-            size="sm"
+          <IconButton
+            label={t("moreActions")}
+            title={t("moreActions")}
+            size="icon-sm"
             variant="outline"
-            className="min-w-28 flex-1"
+            className="shrink-0 rounded-full"
             disabled={busy != null || canModerate}
           >
             <DotsThreeIcon aria-hidden="true" className="size-4" />
-            {t("moreActions")}
-          </Button>
+          </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
