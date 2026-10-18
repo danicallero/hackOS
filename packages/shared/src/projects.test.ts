@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { projectSubmissionKey } from "./project-submission.js";
 import { projectFormSchema } from "./projects.js";
 import { youtubeEmbedUrl } from "./youtube.js";
 
@@ -40,16 +39,4 @@ describe("dynamic project forms (H16)", () => {
     ])
       expect(youtubeEmbedUrl(url)).toBeNull();
   });
-});
-
-it("compares submitted answers independently of JSONB object key order (H20)", () => {
-  expect(
-    projectSubmissionKey("Project", { z: "last", city: { country: "ES", city: "A Coruña" } }),
-  ).toBe(projectSubmissionKey("Project", { city: { city: "A Coruña", country: "ES" }, z: "last" }));
-  expect(projectSubmissionKey("Renamed", { answer: "same" })).not.toBe(
-    projectSubmissionKey("Project", { answer: "same" }),
-  );
-  expect(projectSubmissionKey("Project", { answer: "changed" })).not.toBe(
-    projectSubmissionKey("Project", { answer: "same" }),
-  );
 });

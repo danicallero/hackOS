@@ -3521,6 +3521,9 @@
   "projectAudienceAttendees": "Asistentes",
   "projectAudiencePublic": "Todo o mundo",
   "projectAudienceStaff": "Persoal de proxectos",
+  "projectWithdrawCta": "Retirar entrega para editar",
+  "projectWithdrawTitle": "Retirar esta entrega?",
+  "projectWithdrawDesc": "O proxecto deixa de estar entregado e sae da galería ata que o entregues de novo antes do prazo.",
   "projectSubmitCta": "Entregar proxecto",
   "projectGalleryPhotoNotice": "A galería pode ser pública. O teu nome no equipo seguirá visible sen foto.",
   "projectDraftConflict": "Alguén do equipo gardou cambios. Copia as túas respostas sen gardar antes de recargar o proxecto.",
@@ -3594,7 +3597,5 @@
   "staffCreateProjectNotice": "Crea un proxecto presentado en nome dun equipo. Os retos seleccionados engádeno ás súas colas.",
   "projectTeamRequired": "Selecciona polo menos unha persoa do equipo.",
   "projectFilesAfterCreation": "Engade ficheiros e imaxes despois de crear o proxecto.",
-  "projectReviewTitle": "Revisión da entrega",
-  "projectResubmitCta": "Actualizar entrega",
-  "projectUnsubmittedChanges": "Tes cambios que non están na versión presentada. Volve enviar para actualizala."
+  "projectReviewTitle": "Revisión da entrega"
 }

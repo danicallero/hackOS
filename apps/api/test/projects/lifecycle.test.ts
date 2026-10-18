@@ -95,7 +95,7 @@ describe("Native lifecycle (#1006,#1007,H20)", () => {
         .draft_revision,
     ).toBe(1);
   });
-  it("allows working edits after submit while retaining last submission", async () => {
+  it("rejects participant edits after submit while retaining the submission", async () => {
     const id = await create();
     await app.inject({
       method: "PUT",
@@ -112,9 +112,9 @@ describe("Native lifecycle (#1006,#1007,H20)", () => {
       method: "PUT",
       url: `/api/me/projects/${id}/draft`,
       headers: asUser(owner),
-      payload: { responses: { description: "Working draft" }, revision: 1 },
+      payload: { responses: { description: "Too late" }, revision: 1 },
     });
-    expect(edit.statusCode, edit.body).toBe(200);
+    expect(edit.statusCode, edit.body).toBe(409);
     expect(
       (await pool.query(`SELECT snapshot FROM project_submission_versions WHERE repo_id=$1`, [id]))
         .rows[0].snapshot.project.responses.description,

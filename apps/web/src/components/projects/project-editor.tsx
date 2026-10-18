@@ -1,7 +1,6 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { projectSubmissionKey } from "@hackos/shared/project-submission";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useProjectDraft } from "@/app/(app)/my-project/[id]/use-project-draft";
@@ -46,7 +45,7 @@ import { ProjectOverview } from "./project-overview";
 import { ProjectVideo } from "./project-video";
 
 export function ProjectEditor({
-  project,
+  project: initialProject,
   staff = false,
 }: {
   project: NativeProject;
@@ -54,6 +53,8 @@ export function ProjectEditor({
 }) {
   const { t, language } = useLocale();
   const { can } = useSessionContext();
+  const [project, setProject] = useState(initialProject);
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const [editing, setEditing] = useState(
@@ -74,9 +75,6 @@ export function ProjectEditor({
   useUnsavedChangesGuard(draft.state !== "saved" || name.trim() !== savedName);
   const [timing, setTiming] = useState(project.presentationTimingPreference);
   const [status, setStatus] = useState(project.submissionStatus);
-  const [lastSubmitted, setLastSubmitted] = useState(
-    project.hasUnsubmittedChanges ? null : projectSubmissionKey(project.name, project.responses),
-  );
   const [email, setEmail] = useState("");
   const [members, setMembers] = useState(project.members);
   const [challenges, setChallenges] = useState(project.challenges);
@@ -99,12 +97,32 @@ export function ProjectEditor({
     setError(null);
     try {
       if (!(await draft.save())) return;
-      const saved = await nativeProjects.submit(project.id);
-      invalidateProjectReads(project.id);
-      setStatus(saved.submissionStatus);
-      setLastSubmitted(projectSubmissionKey(name, draft.values));
+      await nativeProjects.submit(project.id);
+      await reloadAfterTransition(false);
     } catch (cause) {
       setError(apiErrorText(cause, t, t("couldNotSaveDraft")));
+    } finally {
+      setBusy(false);
+    }
+  }
+  /** Submission flags (edit, withdraw) flip server-side, so the working copy is read again. */
+  async function reloadAfterTransition(nextEditing: boolean) {
+    invalidateProjectReads(project.id);
+    const fresh = await api.get<NativeProject>(`/api/me/projects/${project.id}`);
+    setProject(fresh);
+    setStatus(fresh.submissionStatus);
+    setEditing(nextEditing);
+  }
+  async function withdraw() {
+    setBusy(true);
+    setError(null);
+    try {
+      await nativeProjects.withdrawSubmission(project.id);
+      await reloadAfterTransition(true);
+      setWithdrawOpen(false);
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveDraft")));
+      setWithdrawOpen(false);
     } finally {
       setBusy(false);
     }
@@ -195,8 +213,6 @@ export function ProjectEditor({
       setBusy(false);
     }
   }
-  const unsubmitted =
-    !staff && status === "submitted" && lastSubmitted !== projectSubmissionKey(name, draft.values);
   const incomplete = project.template.filter((field) =>
     validateFieldOnBlur(field, draft.values[field.key], t, language),
   );
@@ -211,9 +227,23 @@ export function ProjectEditor({
     >
       {t(editing ? "viewProject" : "editProjectDetails")}
     </Button>
+  ) : project.canWithdraw ? (
+    <Button variant="outline" disabled={busy} onClick={() => setWithdrawOpen(true)}>
+      {t("projectWithdrawCta")}
+    </Button>
   ) : undefined;
   return (
     <PageLayout>
+      <AlertModal
+        open={withdrawOpen}
+        onOpenChange={setWithdrawOpen}
+        title={t("projectWithdrawTitle")}
+        description={t("projectWithdrawDesc")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("projectWithdrawCta")}
+        pending={busy}
+        onConfirm={() => void withdraw()}
+      />
       <AlertModal
         open={leaveOpen}
         onOpenChange={setLeaveOpen}
@@ -245,11 +275,6 @@ export function ProjectEditor({
           </StatusBadge>
         }
       />
-      {unsubmitted && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t("projectUnsubmittedChanges")}
-        </p>
-      )}
       {editing ? (
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="space-y-6">
@@ -278,7 +303,7 @@ export function ProjectEditor({
                       }
                       onClick={() => void submit()}
                     >
-                      {t(status === "submitted" ? "projectResubmitCta" : "projectSubmitCta")}
+                      {t("projectSubmitCta")}
                     </Button>
                   )}
                 </>

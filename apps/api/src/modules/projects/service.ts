@@ -567,7 +567,7 @@ export async function declineProjectInvite(userId: number, id: number) {
 }
 export async function leaveMyProject(userId: number, id: number) {
   return withTransaction(async (db) => {
-    await nativeEditable(db, userId, id);
+    await nativeEditable(db, userId, id, { allowSubmitted: true });
     if ((await activeProjectMemberCount(db, id)) <= 1)
       throw new ConflictError("Last member must delete the project");
     await db.query(`DELETE FROM submissions WHERE repo_id=$1 AND user_id=$2`, [id, userId]);
@@ -639,7 +639,7 @@ export async function removeRepoChallenge(
   participant = false,
 ) {
   const entry = await withTransaction(async (db) => {
-    if (participant) await nativeEditable(db, actorId, id);
+    if (participant) await nativeEditable(db, actorId, id, { allowSubmitted: true });
     else await db.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [id]);
     await assertQueueRepoScope(db, actorId, id);
     await assertQueueChallengeScope(db, actorId, challengeId);
@@ -822,7 +822,7 @@ export async function createRepoNative(
 export async function deleteRepo(actorId: number, id: number, participant = false) {
   const deleted = await withTransaction(async (db) => {
     if (participant) {
-      await nativeEditable(db, actorId, id);
+      await nativeEditable(db, actorId, id, { allowSubmitted: true });
       if ((await activeProjectMemberCount(db, id)) > 1)
         throw new ConflictError("Only sole member may delete a project");
     } else await db.query(`SELECT id FROM repos WHERE id=$1 FOR UPDATE`, [id]);

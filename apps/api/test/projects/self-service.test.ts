@@ -59,7 +59,12 @@ async function seedRepo(name: string, memberUserIds: number[]): Promise<number> 
     payload: { name, memberUserIds },
   });
   expect(res.statusCode).toBe(200);
-  return res.json().id as number;
+  const id = res.json().id as number;
+  // Participants edit drafts only; a submitted project is frozen (H20, H21).
+  await pool.query(`UPDATE repos SET submission_status='draft', submitted_at=NULL WHERE id=$1`, [
+    id,
+  ]);
+  return id;
 }
 
 async function addNativeMember(repoId: number, userId: number, _email: string) {

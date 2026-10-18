@@ -3521,6 +3521,9 @@
   "projectAudienceAttendees": "Attendees",
   "projectAudiencePublic": "Everyone",
   "projectAudienceStaff": "Project staff",
+  "projectWithdrawCta": "Withdraw submission to edit",
+  "projectWithdrawTitle": "Withdraw this submission?",
+  "projectWithdrawDesc": "The project stops being submitted and leaves the gallery until you submit it again before the deadline.",
   "projectSubmitCta": "Submit project",
   "projectGalleryPhotoNotice": "The gallery may be public. Your team name remains visible without a photo.",
   "projectDraftConflict": "A teammate saved changes. Copy your unsaved answers before reloading this project.",
@@ -3594,7 +3597,5 @@
   "staffCreateProjectNotice": "Create a submitted project on behalf of a team. Selected challenges add it to their queues.",
   "projectTeamRequired": "Choose at least one team member.",
   "projectFilesAfterCreation": "Add files and images after creating the project.",
-  "projectReviewTitle": "Submission review",
-  "projectResubmitCta": "Update submission",
-  "projectUnsubmittedChanges": "You have changes that are not in the submitted version. Submit again to update it."
+  "projectReviewTitle": "Submission review"
 }

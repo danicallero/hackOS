@@ -8,8 +8,8 @@ export interface NativeProject {
   canEdit: boolean;
   isMember?: boolean;
   canInspect?: boolean;
-  hasUnsubmittedChanges?: boolean;
   canSubmit?: boolean;
+  canWithdraw?: boolean;
   canInvite?: boolean;
   name: string;
   description: string | null;
@@ -67,6 +67,8 @@ export const nativeProjects = {
     },
   ) => api.patch<NativeProject>(`/api/me/projects/${id}`, body),
   submit: (id: number) => api.post<NativeProject>(`/api/me/projects/${id}/submit`, {}),
+  withdrawSubmission: (id: number) =>
+    api.post<NativeProject>(`/api/me/projects/${id}/withdraw-submission`, {}),
   invite: (id: number, email: string) => api.post(`/api/me/projects/${id}/invites`, { email }),
   respond: (id: number, action: "accept" | "decline") =>
     api.post(`/api/me/projects/${id}/invites/${action}`, {}),

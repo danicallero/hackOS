@@ -1,5 +1,4 @@
 import { projectDescriptionField } from "@hackos/shared/forms";
-import { projectSubmissionKey } from "@hackos/shared/project-submission";
 import type { ProjectForm } from "@hackos/shared/projects";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import type { Queryable } from "../../db/pool.js";
@@ -26,7 +25,12 @@ export async function nativeMember(db: Queryable, userId: number, id: number) {
   );
   if (!result.rowCount) throw new ForbiddenError("Not an active project member");
 }
-export async function nativeEditable(db: Queryable, userId: number, id: number) {
+export async function nativeEditable(
+  db: Queryable,
+  userId: number,
+  id: number,
+  { allowSubmitted = false }: { allowSubmitted?: boolean } = {},
+) {
   const result = await db.query(`SELECT * FROM repos WHERE id=$1 FOR UPDATE`, [id]);
   const project = result.rows[0];
   if (!project) throw new NotFoundError("Project not found");
@@ -35,6 +39,9 @@ export async function nativeEditable(db: Queryable, userId: number, id: number) 
     throw new ConflictError("Project is locked; request edits");
   if (!(project.submitted_at && project.submission_status === "draft"))
     await assertProjectWindow(db);
+  // H20/H21: a submitted project is the presented project; participants withdraw it to edit.
+  if (project.submission_status === "submitted" && !allowSubmitted)
+    throw new ConflictError("Withdraw the submission to edit the project");
   return project;
 }
 export async function nativeForm(db: Queryable = pool) {
@@ -171,7 +178,7 @@ export async function createNativeDraft(
 }
 export async function submitNativeProject(userId: number, id: number) {
   return withTransaction(async (db) => {
-    const project = await nativeEditable(db, userId, id);
+    const project = await nativeEditable(db, userId, id, { allowSubmitted: true });
     if (
       !(project.submitted_at && project.submission_status === "draft") &&
       !(await projectPhase(db)).submitting
@@ -219,6 +226,30 @@ export async function submitNativeProject(userId: number, id: number) {
       after: { formVersion: form.version },
     });
     return { id, submissionStatus: "submitted" };
+  });
+}
+/** H20/H21: inside the submission window a team takes its project back to draft, edits it and resubmits. */
+export async function withdrawNativeSubmission(userId: number, id: number) {
+  return withTransaction(async (db) => {
+    const project = await nativeEditable(db, userId, id, { allowSubmitted: true });
+    if (project.submission_status !== "submitted")
+      throw new ConflictError("Project is not submitted");
+    if (!(await projectPhase(db)).submitting)
+      throw new ForbiddenError("Project submissions are closed");
+    // A plain draft again: clearing submitted_at keeps the deadline binding (no approved reopening).
+    await db.query(
+      `UPDATE repos SET submission_status='draft',submitted_at=NULL,locked_at=NULL,lock_reason=NULL WHERE id=$1`,
+      [id],
+    );
+    await audit(db, {
+      actorId: userId,
+      entityType: "project",
+      entityId: id,
+      action: "withdraw_submission",
+      source: "participant",
+      before: { submissionStatus: "submitted" },
+    });
+    return { id, submissionStatus: "draft" };
   });
 }
 export async function nativeProject(
@@ -289,7 +320,9 @@ export async function nativeProjects(
     const privateView = member && !gallery;
     const reopened = Boolean(project.submittedAt && project.submissionStatus === "draft");
     const participantCanEdit =
-      project.lockReason !== "organizer_lock" && (phase.editing || reopened);
+      project.lockReason !== "organizer_lock" &&
+      project.submissionStatus !== "submitted" &&
+      (phase.editing || reopened);
     const submitted =
       (gallery || !member) && project.submissionStatus === "submitted" && snapshot?.project;
     const content = submitted
@@ -336,13 +369,11 @@ export async function nativeProjects(
       canSubmit:
         ownMember && project.lockReason !== "organizer_lock" && (phase.submitting || reopened),
       canInvite: ownMember && participantCanEdit,
-      hasUnsubmittedChanges: Boolean(
-        privateView &&
-          snapshot?.project &&
-          project.submissionStatus === "submitted" &&
-          projectSubmissionKey(project.name, project.responses) !==
-            projectSubmissionKey(snapshot.project.name, snapshot.project.responses ?? {}),
-      ),
+      canWithdraw:
+        ownMember &&
+        project.submissionStatus === "submitted" &&
+        project.lockReason !== "organizer_lock" &&
+        phase.submitting,
       ...(winnerRows.some((w) => w.repoId === id)
         ? {
             winners: winnerRows
