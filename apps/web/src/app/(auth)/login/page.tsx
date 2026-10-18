@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
+import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
 import {
@@ -78,8 +79,8 @@ function LoginInner() {
   // the form again — /login isn't admin-only, any signed-in user lands here.
   useEffect(() => {
     if (status !== "authenticated") return;
-    // API paths (the GitHub callback) are not app routes: navigate with a full load.
-    if (next.startsWith("/api/")) window.location.assign(next);
+    // API paths (the GitHub callback) live on the API origin: navigate there with a full load.
+    if (next.startsWith("/api/")) window.location.assign(`${API_URL}${next}`);
     else router.replace(next);
   }, [status, next, router]);
 

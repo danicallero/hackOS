@@ -82,7 +82,13 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
           <Button
             variant="outline"
             disabled={busy}
-            onClick={() => run(() => api.delete(base), t("githubRepoUnlinked"))}
+            onClick={() =>
+              run(async () => {
+                await api.delete(base);
+                // The App stays installed: re-read what it can access instead of reusing a stale list.
+                repos.reload();
+              }, t("githubRepoUnlinked"))
+            }
           >
             {t("githubUnlinkRepo")}
           </Button>
@@ -116,7 +122,7 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
           </Button>
         </div>
       ) : (
-        <Button variant="outline" disabled={busy} onClick={install}>
+        <Button variant="outline" disabled={busy || repos.loading} onClick={install}>
           <GithubLogoIcon aria-hidden="true" className="size-4" />
           {t("githubLinkRepo")}
         </Button>
