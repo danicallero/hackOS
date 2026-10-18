@@ -259,7 +259,7 @@ export async function nativeProjects(
       [ids, userId],
     ),
     pool.query(
-      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,COALESCE(p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL,false) AS "photoShared",u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN user_public_profiles p ON p.user_id=u.id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
+      `SELECT s.repo_id,s.user_id AS "userId",u.name,u.surname,s.status,u.gallery_show_name,COALESCE(p.directory_visible AND p.show_surname AND p.consented_at IS NOT NULL,false) AS "surnameShared",COALESCE(p.directory_visible AND p.show_photo AND p.consented_at IS NOT NULL,false) AS "photoShared",u.photo_key FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN user_public_profiles p ON p.user_id=u.id WHERE s.repo_id=ANY($1::int[]) AND u.account_state='active' AND u.anonymized_at IS NULL ORDER BY s.created_at`,
       [ids],
     ),
     pool.query(
@@ -296,7 +296,8 @@ export async function nativeProjects(
       ? {
           name: snapshot.project.name,
           description: snapshot.project.description,
-          githubUrl: snapshot.project.github_url,
+          // The repo link is verified metadata, so one linked after submitting still shows.
+          githubUrl: snapshot.project.github_url ?? project.githubUrl,
           demoUrl: snapshot.project.demo_url,
           responses: snapshot.project.responses,
         }
@@ -358,7 +359,8 @@ export async function nativeProjects(
         .map((m) => ({
           userId: m.userId,
           name: privateView || m.gallery_show_name ? m.name : null,
-          surname: privateView ? m.surname : null,
+          // H18: the public profile's surname setting applies in the gallery too.
+          surname: privateView || m.surnameShared ? m.surname : null,
           status: m.status,
           photoUrl:
             // H18: a member's photo follows their public profile's photo setting.

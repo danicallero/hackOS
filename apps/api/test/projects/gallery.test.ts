@@ -193,6 +193,23 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     expect((await get(`/api/public/projects/${id}/members/${owner}/photo`)).statusCode).toBe(404);
     expect((await get("/api/me/project-gallery-consent", owner)).statusCode).toBe(404);
   });
+  it("shows a member's surname exactly when the public profile shares it (H18)", async () => {
+    await pool.query(`UPDATE event_config SET project_draft_visibility='public'`);
+    await pool.query(`UPDATE users SET surname='Lovelace' WHERE id=$1`, [owner]);
+    const surname = async () => (await get(`/api/public/projects/${id}`)).json().members[0].surname;
+    expect(await surname()).toBeNull();
+    await pool.query(
+      `INSERT INTO user_public_profiles(user_id,directory_visible,show_surname,consented_at) VALUES($1,true,false,now())`,
+      [owner],
+    );
+    expect(await surname()).toBeNull();
+    await pool.query(`UPDATE user_public_profiles SET show_surname=true WHERE user_id=$1`, [owner]);
+    expect(await surname()).toBe("Lovelace");
+    await pool.query(`UPDATE user_public_profiles SET directory_visible=false WHERE user_id=$1`, [
+      owner,
+    ]);
+    expect(await surname()).toBeNull();
+  });
   it("closes editing and submission together at the submission close", async () => {
     await pool.query(
       `UPDATE event_config SET project_submissions_close_at=now()-interval '1 second'`,
