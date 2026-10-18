@@ -408,15 +408,7 @@ export function ProjectInfo({
                 .sort((a, b) => Number(isNow(b)) - Number(isNow(a)))
                 .map((queue) => (
                   <li key={queue.id} className="flex min-w-0 items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate">
-                      {queue.title}
-                      {queue.room_name && (
-                        <span className="text-muted-foreground text-xs font-normal whitespace-nowrap">
-                          {" "}
-                          · {queue.room_name}
-                        </span>
-                      )}
-                    </span>
+                    <span className="min-w-0 truncate">{queue.title}</span>
                     {isNow(queue) ? (
                       <QueueStatusDot label={t("now")} tone="success" />
                     ) : (

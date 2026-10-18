@@ -45,7 +45,7 @@ which only blocks calling the team, and “Being judged in {room}” when a memb
 is in a room or presenting, which also blocks moves. Occupancy is resolved
 through the same shared-member relation as the H30 guard, so a member shared
 with another team counts, and it clears as soon as that entry leaves
-`called`/`in_room`/`presenting`. Reordering (`move-top`, `move-to`, `skip`,
+`called`/`in_room`/`presenting`. `move-top` on a team in the waiting room sends it right behind the head of the queue, so the head takes the freed slot first instead of the same team being called straight back in; on a queued team it goes to the top. Reordering (`move-top`, `move-to`, `skip`,
 `requeue`) never calls a team, so project eligibility does not block it; an
 ineligible project is still never called (a submitted project is ineligible only
 by explicit organizer override or a team-size violation, H21): the row says “Not eligible for

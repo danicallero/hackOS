@@ -318,7 +318,7 @@ export function QueuePanel({
 }
 
 /**
- * Actions for a team at the door: Call in / Bring in / a "More" menu for the
+ * Actions for a team at the door: Notify / Bring in / a "More" menu for the
  * rarer moves (requeue, no-show, disqualify). The three buttons flex-wrap so
  * "More actions" sits next to Bring in when the column is wide enough, and
  * drops to its own row when it isn't, instead of five separate buttons.

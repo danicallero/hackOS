@@ -941,7 +941,12 @@ export async function moveToTop(
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, MOVE_TOP_FROM, "move_to_top");
-    const position = await placeEntry(client, entry.challenge_id, entryId, "top");
+    // A team leaving the waiting room goes right behind the head of the queue: the head takes
+    // the slot this move frees first, instead of the same team being called straight back in.
+    const position =
+      entry.status === "called"
+        ? await placeEntryAtWaitingRank(client, entry.challenge_id, entryId, 2)
+        : await placeEntry(client, entry.challenge_id, entryId, "top");
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
@@ -957,7 +962,7 @@ export async function moveToTop(
       newStatus: "waiting",
       action: "move_to_top",
       reason,
-      metadata: { position: "top" },
+      metadata: { position: entry.status === "called" ? "behind_head" : "top" },
     });
     return res.rows[0];
   }).then(broadcastEntry);
