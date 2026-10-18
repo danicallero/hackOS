@@ -94,7 +94,10 @@ export function ProjectEditor({
     }
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
-      document.getElementById(templateFieldId(Object.keys(errors)[0]))?.focus();
+      // The fields only render while editing: open them so the errors are visible.
+      setEditing(true);
+      const first = templateFieldId(Object.keys(errors)[0]);
+      setTimeout(() => document.getElementById(first)?.focus());
       return;
     }
     setBusy(true);
@@ -257,9 +260,19 @@ export function ProjectEditor({
   const incomplete = project.template.filter((field) =>
     validateFieldOnBlur(field, draft.values[field.key], t, language),
   );
+  const submitAction =
+    !staff && !editing && project.canSubmit && status !== "submitted" ? (
+      <Button
+        loading={busy}
+        disabled={busy || draft.state === "saving"}
+        onClick={() => void submit()}
+      >
+        {t("projectSubmitCta")}
+      </Button>
+    ) : undefined;
   const editAction = project.canEdit ? (
     <Button
-      variant={editing ? "outline" : "default"}
+      variant={editing || submitAction ? "outline" : "default"}
       disabled={busy || draft.state === "saving"}
       onClick={async () => {
         if (editing && !(await draft.save())) return;
@@ -329,6 +342,7 @@ export function ProjectEditor({
         recordName={name || project.name}
         recordAction={
           <>
+            {submitAction}
             {editAction}
             {staff && status === "submitted" && can(CAPABILITIES.PROJECTS_EDIT) && (
               <Button variant="outline" disabled={busy} onClick={() => setReturnOpen(true)}>
