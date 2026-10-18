@@ -8,7 +8,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
 import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
-import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
@@ -420,21 +419,38 @@ export default function QueuePage() {
             }
           />
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             {canJudge && (
-              <IconButton
-                label={t("judgingExpanded")}
-                title={t("judgingExpanded")}
-                variant={focusMode ? "default" : "outline"}
-                aria-pressed={focusMode}
-                onClick={() => changeFocusMode(!focusMode)}
-              >
-                {focusMode ? (
-                  <ArrowsInSimpleIcon aria-hidden="true" className="size-4" />
-                ) : (
-                  <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
-                )}
-              </IconButton>
+              <>
+                {/* The label shows whenever there is room for it; the icon alone below sm. */}
+                <Button
+                  className="hidden sm:inline-flex"
+                  variant={focusMode ? "default" : "outline"}
+                  aria-pressed={focusMode}
+                  onClick={() => changeFocusMode(!focusMode)}
+                >
+                  {focusMode ? (
+                    <ArrowsInSimpleIcon aria-hidden="true" className="size-4" />
+                  ) : (
+                    <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
+                  )}
+                  {t("judgingExpanded")}
+                </Button>
+                <IconButton
+                  className="sm:hidden"
+                  label={t("judgingExpanded")}
+                  title={t("judgingExpanded")}
+                  variant={focusMode ? "default" : "outline"}
+                  aria-pressed={focusMode}
+                  onClick={() => changeFocusMode(!focusMode)}
+                >
+                  {focusMode ? (
+                    <ArrowsInSimpleIcon aria-hidden="true" className="size-4" />
+                  ) : (
+                    <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
+                  )}
+                </IconButton>
+              </>
             )}
             {isPaused ? (
               <IconButton
@@ -474,11 +490,14 @@ export default function QueuePage() {
             {canExport && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline" disabled={!effectiveChallengeId}>
+                  <IconButton
+                    label={t("exportData")}
+                    title={t("exportData")}
+                    variant="outline"
+                    disabled={!effectiveChallengeId}
+                  >
                     <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                    {t("exportData")}
-                    <CaretDownIcon aria-hidden="true" className="size-4" />
-                  </Button>
+                  </IconButton>
                 </DropdownMenuTrigger>
                 {effectiveChallengeId && (
                   <DropdownMenuContent align="end" className="w-44">
