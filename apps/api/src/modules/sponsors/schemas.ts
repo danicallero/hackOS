@@ -62,10 +62,20 @@ export const bulkVisibilityBody = z
 
 export type BulkVisibilityBody = z.infer<typeof bulkVisibilityBody>;
 
-/** H45: manual order of one priority tier, first id shown first. */
+/**
+ * H45: manual order of one priority tier, first id shown first. With `priority`
+ * the ids are the target tier's final order and any enterprise from another
+ * tier is moved into it (drag and drop between tiers).
+ */
 export const reorderEnterprisesBody = z
-  .object({ ids: z.array(z.number().int().positive()).min(2).max(200) })
-  .strict();
+  .object({
+    ids: z.array(z.number().int().positive()).min(1).max(200),
+    priority: z.number().int().positive().optional(),
+  })
+  .strict()
+  .refine((b) => b.priority !== undefined || b.ids.length >= 2, {
+    message: "ids needs at least two entries without a target priority",
+  });
 
 /** M4: affiliate a user with an enterprise. */
 export const addMemberBody = z.object({ userId: z.number().int().positive() }).strict();

@@ -168,10 +168,10 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         body: reorderEnterprisesBody,
         summary: "Reorder enterprises within a group",
         description:
-          "Sets the display order of enterprises that share the same priority; ids from different priorities are rejected (H45).",
+          "Sets the display order of enterprises that share the same priority; ids from different priorities are rejected unless a target `priority` is given, which moves them into that tier (H45).",
       },
     },
-    async (req) => reorderEnterprises(req.body.ids, req.userId),
+    async (req) => reorderEnterprises(req.body.ids, req.body.priority, req.userId),
   );
 
   // Sponsor rep's own enterprise (H44).

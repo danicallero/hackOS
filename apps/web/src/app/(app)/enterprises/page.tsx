@@ -5,127 +5,31 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
+import { ListNumbersIcon } from "@phosphor-icons/react/dist/csr/ListNumbers";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { type Column, DataTable } from "@/components/common/data-table";
+import { DataTable } from "@/components/common/data-table";
+import { FilterMenu } from "@/components/common/filter-menu";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
-import { StatusBadge } from "@/components/common/status-badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
-import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
+import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { CreateEnterpriseModal } from "./create-enterprise-modal";
+import { buildEnterpriseColumns } from "./enterprise-columns";
 import { GroupedEnterprises } from "./grouped-enterprises";
-import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
+import type { Enterprise } from "./shared";
 
-function buildColumns(t: Translate, locale: string): Column<Enterprise>[] {
-  return [
-    {
-      id: "name",
-      header: t("enterprises"),
-      sortValue: (e) => e.name.toLowerCase(),
-      cell: (e) => (
-        <div className="flex items-center gap-3">
-          <Avatar size="sm">
-            {e.logo_url ? (
-              <SponsorLogo
-                logoUrl={e.logo_url}
-                logoNegativeUrl={e.logo_negative_url}
-                alt={e.name}
-                className="size-full object-contain"
-              />
-            ) : (
-              <AvatarFallback>{initials(e.name)}</AvatarFallback>
-            )}
-          </Avatar>
-          <span className="font-medium">{e.name}</span>
-        </div>
-      ),
-    },
-    {
-      id: "website",
-      header: t("colWebsite"),
-      cell: (e) =>
-        e.website ? (
-          <span className="text-muted-foreground text-sm">
-            {e.website.replace(/^https?:\/\//, "")}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-    {
-      id: "visibility",
-      header: t("colVisibility"),
-      sortValue: (e) => e.visibility,
-      cell: (e) => (
-        <StatusBadge tone={visibilityTone(e.visibility)} className="capitalize">
-          {e.visibility}
-        </StatusBadge>
-      ),
-    },
-    {
-      id: "reveal",
-      header: t("colReveal"),
-      sortValue: (e) => e.available_from ?? "",
-      cell: (e) => {
-        if (isScheduled(e.available_from)) {
-          return (
-            <div className="flex items-center gap-2">
-              <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
-              <span className="text-muted-foreground text-sm">
-                {formatScheduledDateTime(e.available_from as string, locale)}
-              </span>
-            </div>
-          );
-        }
-        if (e.visibility === "visible") {
-          return (
-            <span className="text-muted-foreground text-sm">
-              {e.available_from
-                ? formatScheduledDateTime(e.available_from, locale)
-                : t("immediate")}
-            </span>
-          );
-        }
-        return <span className="text-muted-foreground">—</span>;
-      },
-    },
-    {
-      id: "kind",
-      header: t("enterpriseKindLabel"),
-      sortValue: (e) => e.kind,
-      cell: (e) => (
-        <span className="text-sm">
-          {e.kind === "collaborator" ? t("enterpriseKindCollaborator") : t("enterpriseKindSponsor")}
-        </span>
-      ),
-    },
-    {
-      id: "priority",
-      header: t("priorityLabel"),
-      align: "right",
-      sortValue: (e) => e.priority ?? Number.POSITIVE_INFINITY,
-      cell: (e) =>
-        e.priority != null ? (
-          <span className="text-sm">{e.priority}</span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        ),
-    },
-  ];
-}
+const ALL = "all";
+const NONE = "none";
 
 export default function EnterprisesPage() {
   const { t, language } = useLocale();
@@ -141,9 +45,9 @@ export default function EnterprisesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [grouped, setGrouped] = useState(false);
+  const [kindFilter, setKindFilter] = useState(ALL);
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [reordering, setReordering] = useState(false);
-
-  const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
 
   const load = useCallback(async () => {
     if (!hasLoaded()) setLoading(true);
@@ -168,11 +72,50 @@ export default function EnterprisesPage() {
     }
   }, [t, succeeded, failed, hasLoaded]);
 
+  const changeKind = useCallback(
+    async (enterprise: Enterprise, kind: Enterprise["kind"]) => {
+      if (kind === enterprise.kind) return;
+      try {
+        await api.patch(`/api/enterprises/${enterprise.id}`, { kind });
+        await load();
+      } catch (err) {
+        toast.error(apiErrorText(err, t, t("couldNotUpdateEnterprise")), t("toastCompanyOrder"));
+      }
+    },
+    [load, t],
+  );
+
+  const columns = useMemo(
+    () => buildEnterpriseColumns(t, LOCALE_CODES[language], changeKind),
+    [t, language, changeKind],
+  );
+
+  const priorityOptions = useMemo(
+    () =>
+      [...new Set(enterprises.map((e) => e.priority))]
+        .sort((a, b) => (a ?? Number.POSITIVE_INFINITY) - (b ?? Number.POSITIVE_INFINITY))
+        .map((priority) => ({
+          value: priority == null ? NONE : String(priority),
+          label: priority == null ? t("noPriority") : t("priorityGroupLabel", { priority }),
+        })),
+    [enterprises, t],
+  );
+  const visible = useMemo(
+    () =>
+      enterprises.filter(
+        (e) =>
+          (kindFilter === ALL || e.kind === kindFilter) &&
+          (priorityFilter.length === 0 ||
+            priorityFilter.includes(e.priority == null ? NONE : String(e.priority))),
+      ),
+    [enterprises, kindFilter, priorityFilter],
+  );
+
   const reorder = useCallback(
-    async (ids: number[]) => {
+    async (ids: number[], priority: number) => {
       setReordering(true);
       try {
-        await api.post("/api/enterprises/reorder", { ids });
+        await api.post("/api/enterprises/reorder", { ids, priority });
         await load();
       } catch (err) {
         toast.error(apiErrorText(err, t, t("couldNotReorder")), t("toastCompanyOrder"));
@@ -323,14 +266,46 @@ export default function EnterprisesPage() {
         >
           {t("viewByPriority")}
         </Button>
+        <FilterMenu
+          filters={[
+            {
+              id: "kind",
+              label: t("enterpriseKindLabel"),
+              icon: BuildingsIcon,
+              type: "single",
+              value: kindFilter,
+              resetValue: ALL,
+              onChange: setKindFilter,
+              options: [
+                { value: ALL, label: t("allGroups") },
+                { value: "sponsor", label: t("enterpriseKindSponsor") },
+                { value: "collaborator", label: t("enterpriseKindCollaborator") },
+              ],
+            },
+            {
+              id: "priority",
+              label: t("priorityLabel"),
+              icon: ListNumbersIcon,
+              type: "multiple",
+              value: priorityFilter,
+              onChange: setPriorityFilter,
+              options: priorityOptions,
+            },
+          ]}
+        />
       </div>
 
       {grouped ? (
-        <GroupedEnterprises enterprises={enterprises} busy={reordering} onReorder={reorder} />
+        <GroupedEnterprises
+          enterprises={visible}
+          columns={columns}
+          busy={reordering}
+          onMove={reorder}
+        />
       ) : (
         <DataTable
           columns={columns}
-          data={enterprises}
+          data={visible}
           getRowId={(e) => String(e.id)}
           stateKey="enterprises-list"
           getRowHref={(e) => `/enterprises/${e.id}`}

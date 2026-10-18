@@ -246,10 +246,16 @@ export async function setEnterprisesVisibility(
 }
 
 /**
- * H45: manual order inside one priority tier. Every id must share the same
- * priority, so reordering one tier can never shift another.
+ * H45: manual order inside one priority tier. Without `priority` every id must
+ * share the same priority, so reordering one tier can never shift another.
+ * With `priority` the ids are that tier's final order and enterprises from
+ * other tiers are moved into it.
  */
-export async function reorderEnterprises(ids: number[], actorId: number | null) {
+export async function reorderEnterprises(
+  ids: number[],
+  priority: number | undefined,
+  actorId: number | null,
+) {
   return withTransaction(async (client) => {
     const { rows } = await client.query<{ id: number; priority: number | null }>(
       `SELECT id, priority FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
@@ -257,21 +263,22 @@ export async function reorderEnterprises(ids: number[], actorId: number | null) 
     );
     if (rows.length !== new Set(ids).size) throw new NotFoundError("Enterprise not found", { ids });
     const [first] = rows;
-    if (!first || rows.some((r) => r.priority !== first.priority))
+    if (!first) throw new NotFoundError("Enterprise not found", { ids });
+    if (priority === undefined && rows.some((r) => r.priority !== first.priority))
       throw new ConflictError("Only enterprises with the same priority can be reordered");
     for (const row of rows) await assertEnterpriseScope(client, actorId, Number(row.id));
     await client.query(
-      `UPDATE enterprises e SET position = o.pos
+      `UPDATE enterprises e SET position = o.pos, priority = COALESCE($2::int, e.priority)
          FROM unnest($1::int[]) WITH ORDINALITY AS o(id, pos)
         WHERE e.id = o.id`,
-      [ids],
+      [ids, priority ?? null],
     );
     await audit(client, {
       actorId,
       entityType: "enterprise",
       entityId: first.id,
       action: "reordered",
-      after: { ids },
+      after: { ids, priority: priority ?? null },
     });
     return { ids };
   });

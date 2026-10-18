@@ -268,6 +268,23 @@ describe("enterprise management (H43-H45)", () => {
 
     const pub = await a.inject({ method: "GET", url: "/api/public/sponsors" });
     expect(pub.json().items.map((s: { name: string }) => s.name)).toEqual(["Top", "Beta", "Alpha"]);
+
+    // Dropping Top into tier 2 between Beta and Alpha moves it there.
+    const moved = await a.inject({
+      method: "POST",
+      url: "/api/enterprises/reorder",
+      headers: { ...asUser(admin), "idempotency-key": "reorder-move" },
+      payload: { ids: [beta, top, alpha], priority: 2 },
+    });
+    expect(moved.statusCode).toBe(200);
+    const after = await a.inject({ method: "GET", url: "/api/public/sponsors" });
+    expect(
+      after.json().items.map((s: { name: string; priority: number }) => [s.name, s.priority]),
+    ).toEqual([
+      ["Beta", 2],
+      ["Top", 2],
+      ["Alpha", 2],
+    ]);
   });
 
   it("scheduled visibility worker flips due hidden enterprises and leaves future triggers hidden", async () => {
