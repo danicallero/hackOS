@@ -6,35 +6,12 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
-import { ArrowsInSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsInSimple";
-import { ArrowsOutSimpleIcon } from "@phosphor-icons/react/dist/csr/ArrowsOutSimple";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
-import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
-import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
-import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
-import { TrackTiming } from "@/components/projects/track-timing";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Surface } from "@/components/ui/surface";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -42,7 +19,6 @@ import { workspaceAccess } from "@/lib/judging-workspace";
 import {
   type ChallengeProgress,
   entryAction,
-  exportUrls,
   getChallengeProgress,
   getRoomPace,
   getRoomView,
@@ -64,9 +40,10 @@ import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 
-import { errorMessage, exportHref, queueErrorToastContent } from "./helpers";
+import { errorMessage, queueErrorToastContent } from "./helpers";
+import { JudgingTopBar } from "./judging-top-bar";
 import { PresentationPanel } from "./presentation-panel";
-import { JudgingStats, QueuePanel } from "./queue-panel";
+import { QueuePanel } from "./queue-panel";
 import { ReviewForm } from "./review-form";
 import { useExpandedTransition, useFocusPreference, useReviewWindow } from "./use-judging-layout";
 
@@ -379,147 +356,31 @@ export default function QueuePage() {
       data-wide
       data-judging-page
     >
-      <Surface padding="none" className="px-5 py-3">
-        {/* Fluid header (H29, issue #61): room, live numbers and actions share one row and
-            wrap under tight widths (tiling WMs, tablet/mobile) instead of overflowing the card.
-            The numbers live here so they stay visible in Project view. */}
-        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-3 xl:grid-cols-[14rem_minmax(0,1fr)_auto] xl:gap-x-8">
-          <div className="min-w-0 sm:max-w-64 xl:max-w-none">
-            <Select
-              value={activeRoomId ? String(activeRoomId) : ""}
-              onValueChange={(value) => {
-                if (selectReviewEntry(null)) setRoomId(Number(value));
-              }}
-              disabled={roomsLoading || rooms.length === 0}
-            >
-              <SelectTrigger id="queue-room" aria-label={t("roomLabel")} className="w-full">
-                <SelectValue placeholder={t("selectRoomPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {rooms.map((room) => (
-                  <SelectItem key={room.id} value={String(room.id)}>
-                    {room.queue_name ? `${room.name} - ${room.queue_name}` : room.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <JudgingStats
-            progress={progress.data}
-            pace={pace.data}
-            timingAction={
-              effectiveChallengeId && (
-                <TrackTiming
-                  iconOnly
-                  challengeId={effectiveChallengeId}
-                  onSaved={() => void refreshLive()}
-                />
-              )
-            }
-          />
-
-          <div className="flex shrink-0 items-center gap-1.5">
-            {canJudge && (
-              <>
-                {/* The label shows whenever there is room for it; the icon alone below sm. */}
-                <Button
-                  className="hidden sm:inline-flex"
-                  variant={focusMode ? "default" : "outline"}
-                  aria-pressed={focusMode}
-                  onClick={() => changeFocusMode(!focusMode)}
-                >
-                  {focusMode ? (
-                    <ArrowsInSimpleIcon aria-hidden="true" className="size-4" />
-                  ) : (
-                    <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
-                  )}
-                  {t("judgingExpanded")}
-                </Button>
-                <IconButton
-                  className="sm:hidden"
-                  label={t("judgingExpanded")}
-                  title={t("judgingExpanded")}
-                  variant={focusMode ? "default" : "outline"}
-                  aria-pressed={focusMode}
-                  onClick={() => changeFocusMode(!focusMode)}
-                >
-                  {focusMode ? (
-                    <ArrowsInSimpleIcon aria-hidden="true" className="size-4" />
-                  ) : (
-                    <ArrowsOutSimpleIcon aria-hidden="true" className="size-4" />
-                  )}
-                </IconButton>
-              </>
-            )}
-            {isPaused ? (
-              <IconButton
-                label={t("resume")}
-                title={t("resume")}
-                disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
-                onClick={() =>
-                  activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
-                }
-                loading={busy === "pause"}
-              >
-                <PlayIcon aria-hidden="true" className="size-4" />
-              </IconButton>
-            ) : (
-              <AlertModal
-                title={t("pauseRoomTitle")}
-                description={t("pauseRoomDescription")}
-                cancelLabel={t("cancel")}
-                confirmLabel={t("pause")}
-                autoClose
-                onConfirm={() =>
-                  activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
-                }
-                trigger={
-                  <IconButton
-                    label={t("pause")}
-                    title={t("pause")}
-                    variant="outline"
-                    disabled={!activeRoomId || busy === "pause" || (!canOperate && !canJudge)}
-                  >
-                    <PauseIcon aria-hidden="true" className="size-4" />
-                  </IconButton>
-                }
-              />
-            )}
-
-            {canExport && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton
-                    label={t("exportData")}
-                    title={t("exportData")}
-                    variant="outline"
-                    disabled={!effectiveChallengeId}
-                  >
-                    <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                {effectiveChallengeId && (
-                  <DropdownMenuContent align="end" className="w-44">
-                    <DropdownMenuItem asChild>
-                      <a href={exportHref(exportUrls(effectiveChallengeId).queue)}>
-                        <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                        {t("queueExportLabel")}
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href={exportHref(exportUrls(effectiveChallengeId).evaluations)}>
-                        <DownloadSimpleIcon aria-hidden="true" className="size-4" />
-                        {t("evaluationsExport")}
-                      </a>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                )}
-              </DropdownMenu>
-            )}
-          </div>
-        </div>
-      </Surface>
+      <JudgingTopBar
+        rooms={rooms}
+        activeRoomId={activeRoomId}
+        roomsLoading={roomsLoading}
+        onSelectRoom={(id) => {
+          if (selectReviewEntry(null)) setRoomId(id);
+        }}
+        progress={progress.data}
+        pace={pace.data}
+        challengeId={effectiveChallengeId}
+        onTimingSaved={() => void refreshLive()}
+        canJudge={canJudge}
+        canOperate={canOperate}
+        canExport={canExport}
+        focusMode={focusMode}
+        onFocusModeChange={changeFocusMode}
+        isPaused={isPaused}
+        busy={busy}
+        onPause={() =>
+          activeRoomId && mutate("pause", () => pauseRoom(activeRoomId), t("roomPaused"))
+        }
+        onResume={() =>
+          activeRoomId && mutate("pause", () => resumeRoom(activeRoomId), t("roomResumed"))
+        }
+      />
 
       {actionError && (
         <div
