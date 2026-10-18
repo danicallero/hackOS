@@ -340,10 +340,7 @@ export function ProjectInfo({
     .concat(urlFields)
     .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
   // The summary shows above the details, so collapsed details leave it out; unfolded
-  // details are the one place for it. Technologies are not a judging concern.
-  const libraryKeys = (project?.template ?? [])
-    .filter((field) => field.kind === "library")
-    .map((field) => field.key);
+  // details are the one place for it. Library answers such as technologies live in the details.
   const descriptionKey = project && projectDescriptionField(project.template)?.key;
   const projectAnswers = project && (
     <ProjectAnswers
@@ -351,7 +348,6 @@ export function ProjectInfo({
       language={language ?? "en"}
       omitFieldKeys={[
         ...urlFields.map((field) => field.key),
-        ...libraryKeys,
         ...(detailsOpen || !descriptionKey ? [] : [descriptionKey]),
       ]}
       omitDescription={!detailsOpen}

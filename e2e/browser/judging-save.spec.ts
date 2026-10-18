@@ -169,10 +169,10 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   await expect(page.getByRole("link", { name: "Demo video", exact: true })).toHaveCount(0);
   await expect(page.getByText("42", { exact: true })).toBeVisible();
   await page.screenshot({ path: "artifacts/judging-view.png", fullPage: true });
-  // Technologies are not a judging concern: they appear neither in the glance nor in the details.
-  await expect(page.getByText("TypeScript")).toHaveCount(0);
+  // Technologies belong to the details, not the glance.
+  await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: "Project details", exact: true }).click();
-  await expect(page.getByText("TypeScript")).toHaveCount(0);
+  await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toBeVisible();
   await page.screenshot({ path: "artifacts/judging-project-details.png", fullPage: true });
   await page.getByRole("button", { name: "Project details", exact: true }).click();
   await page.getByRole("button", { name: "6", exact: true }).click();
