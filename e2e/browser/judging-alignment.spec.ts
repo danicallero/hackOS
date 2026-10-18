@@ -78,7 +78,6 @@ for (const layout of ["on", "off"]) {
             commits: 42,
             pullRequests: 7,
             merged: 5,
-            lastCommitAt: new Date(Date.now() - 12 * 60000).toISOString(),
           },
         };
       if (path === "/api/challenges") body = { challenges: [challenge] };
@@ -193,7 +192,6 @@ for (const layout of ["on", "off"]) {
       edges.title,
       edges.prep,
       edges.fact,
-      edges.link,
       ...(layout === "off" ? [edges.details] : []),
     ] as number[];
     expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThanOrEqual(1);

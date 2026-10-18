@@ -329,12 +329,7 @@ describe("GitHub activity for project staff (H18)", () => {
       { login: "ada", name: "Ada Lovelace", commits: 2, pullRequests: 1, merged: 1 },
       { login: "grace", name: null, commits: 1, pullRequests: 1, merged: 0 },
     ]);
-    expect(people.json().totals).toEqual({
-      commits: 3,
-      pullRequests: 2,
-      merged: 1,
-      lastCommitAt: expect.any(String),
-    });
+    expect(people.json().totals).toEqual({ commits: 3, pullRequests: 2, merged: 1 });
     const denied = await server.inject({
       method: "GET",
       url: "/api/projects/github-activity",

@@ -67,7 +67,7 @@ of **Manage projects** (`GET /api/projects/github-activity`) and per person in
 the staff project view (`GET /api/projects/:id/github-activity`), inside the same
 activity window as the ranking, with a totals row. Authors with a linked hackOS
 account show their name, others their GitHub login. The Judging view shows the
-project's commits, pull requests and last commit to readers with `projects:read`
+project's commits and pull requests to readers with `projects:read`
 (`totals` in the same response). It lists every URL answer (GitHub, demo, URL
 validated and video fields) once in a single row of links, and unfolded details
 omit what the glance above already shows.

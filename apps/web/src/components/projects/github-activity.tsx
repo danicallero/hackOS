@@ -20,7 +20,6 @@ export interface GithubTotals {
   commits: number;
   pullRequests: number;
   merged: number;
-  lastCommitAt: string | null;
 }
 
 /** Commits and pull requests inside the hacking window; null for readers without project access (H18). */
@@ -37,15 +36,6 @@ export function useProjectGithubActivity(projectId: number) {
   );
   const data = resource.data;
   return data?.totals && data.totals.commits + data.totals.pullRequests > 0 ? data : null;
-}
-
-/** "3 min ago" in the reader's language, from an ISO instant. */
-export function relativeTime(iso: string, language: string, now = Date.now()): string {
-  const minutes = Math.round((new Date(iso).getTime() - now) / 60000);
-  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
-  if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
-  if (Math.abs(minutes) < 60 * 24) return format.format(Math.round(minutes / 60), "hour");
-  return format.format(Math.round(minutes / (60 * 24)), "day");
 }
 
 /** Commits and pull requests of each author of a project, for project staff (H18). */

@@ -4,6 +4,7 @@
 // the presentation clock.
 
 import { projectDescriptionField } from "@hackos/shared/forms";
+import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowCounterClockwise";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
@@ -16,7 +17,7 @@ import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { QueueStatusDot } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
-import { relativeTime, useProjectGithubActivity } from "@/components/projects/github-activity";
+import { useProjectGithubActivity } from "@/components/projects/github-activity";
 import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -163,7 +164,7 @@ export function PresentationPanel({
               />
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(15rem,1fr))] gap-2">
             {timerAction ? (
               <Button
                 variant="outline"
@@ -317,19 +318,14 @@ export function ProjectInfo({
   );
   const repoChallenges = resource.data?.challenges ?? [];
   const project = resource.data?.project;
-  const libraryField = project?.template.find(
-    (field) =>
-      field.kind === "library" &&
-      Array.isArray(project.responses[field.key]) &&
-      (project.responses[field.key] as unknown[]).length > 0,
-  );
-  // Every URL answer (judging links, URL-validated text, demo video) joins one row of
-  // links and leaves the details, so each link appears exactly once.
+  // Every URL answer (judging links, URL-validated text) joins one row of links and
+  // leaves the details, so each link appears exactly once. A YouTube video is already
+  // embedded in the details, so it is never a link.
   const urlFields = (project?.template ?? []).flatMap((field) => {
     const isUrlField =
-      field.judging_link || field.project_video || field.validation?.text_condition === "url";
+      !field.project_video && (field.judging_link || field.validation?.text_condition === "url");
     const href = isUrlField ? externalUrlHref(String(project?.responses[field.key] ?? "")) : null;
-    return href
+    return href && !youtubeEmbedUrl(href)
       ? [{ key: field.key, label: field.label[language ?? "en"] || field.label.en, href }]
       : [];
   });
@@ -337,20 +333,27 @@ export function ProjectInfo({
     { label: "GitHub", href: project?.githubUrl ?? entry.repo_github_url },
     { label: t("projectDemoLink"), href: project?.demoUrl ?? entry.repo_demo_url },
   ]
-    .filter((link): link is { label: string; href: string } => Boolean(link.href))
+    .filter(
+      (link): link is { label: string; href: string } =>
+        Boolean(link.href) && !youtubeEmbedUrl(link.href ?? ""),
+    )
     .concat(urlFields)
     .filter((link, i, all) => all.findIndex((other) => other.href === link.href) === i);
-  // The glance above the details already shows the summary and technologies, so
-  // collapsed details leave them out; unfolded details are the one place for them.
-  const glanceKeys = [
-    project && projectDescriptionField(project.template)?.key,
-    libraryField?.key,
-  ].filter((key): key is string => Boolean(key));
+  // The summary shows above the details, so collapsed details leave it out; unfolded
+  // details are the one place for it. Technologies are not a judging concern.
+  const libraryKeys = (project?.template ?? [])
+    .filter((field) => field.kind === "library")
+    .map((field) => field.key);
+  const descriptionKey = project && projectDescriptionField(project.template)?.key;
   const projectAnswers = project && (
     <ProjectAnswers
       project={project}
       language={language ?? "en"}
-      omitFieldKeys={[...urlFields.map((field) => field.key), ...(detailsOpen ? [] : glanceKeys)]}
+      omitFieldKeys={[
+        ...urlFields.map((field) => field.key),
+        ...libraryKeys,
+        ...(detailsOpen || !descriptionKey ? [] : [descriptionKey]),
+      ]}
       omitDescription={!detailsOpen}
       assetUrl={(path) => new URL(path, API_URL).toString()}
     />
@@ -381,88 +384,65 @@ export function ProjectInfo({
           onRetry={resource.reload}
         />
       )}
-      <div className="space-y-4">
-        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
-          <Fact label={t("membersLabel")}>
-            {members.length > 0 ? (
-              <ul>
-                {members.map((member, index) => (
-                  <li key={member.email ?? index}>
-                    {`${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email}
+      <div className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
+        <Fact label={t("membersLabel")}>
+          {members.length > 0 ? (
+            <ul>
+              {members.map((member, index) => (
+                <li key={member.email ?? index}>
+                  {`${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            "—"
+          )}
+        </Fact>
+        {queues.length > 0 && (
+          // A project can be in more than one queue; shared queue siblings collapse
+          // to one row and are named by the queue group. The one in the room leads.
+          <Fact label={t("presentingFor")} className="sm:col-span-2">
+            <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              {[...queues]
+                .sort(
+                  (a, b) =>
+                    Number(b.id === entry.challenge_id) - Number(a.id === entry.challenge_id),
+                )
+                .map((queue) => (
+                  <li key={queue.id} className="flex min-w-0 items-baseline justify-between gap-3">
+                    <span className="min-w-0 truncate">
+                      {queue.queue_name ?? queue.title}
+                      {queue.room_name && (
+                        <span className="text-muted-foreground text-xs font-normal whitespace-nowrap">
+                          {" "}
+                          · {queue.room_name}
+                        </span>
+                      )}
+                    </span>
+                    {queue.id === entry.challenge_id ? (
+                      <QueueStatusDot label={t("now")} tone="success" />
+                    ) : (
+                      <QueueStatusDot status={queue.status} />
+                    )}
                   </li>
                 ))}
-              </ul>
-            ) : (
-              "—"
+            </ul>
+          </Fact>
+        )}
+        {activity && <Fact label={t("githubCommits")}>{activity.commits}</Fact>}
+        {activity && (
+          <Fact label={t("githubPullRequests")}>
+            {activity.pullRequests}
+            {activity.merged > 0 && (
+              <span className="text-muted-foreground font-normal">
+                {" "}
+                · {activity.merged} {t("githubMerged")}
+              </span>
             )}
           </Fact>
-          {queues.length > 0 && (
-            // A project can be in more than one queue; shared queue siblings collapse
-            // to one row and are named by the queue group. The one in the room leads.
-            <Fact label={t("presentingFor")}>
-              <ul className="space-y-1">
-                {[...queues]
-                  .sort(
-                    (a, b) =>
-                      Number(b.id === entry.challenge_id) - Number(a.id === entry.challenge_id),
-                  )
-                  .map((queue) => (
-                    <li
-                      key={queue.id}
-                      className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-baseline gap-3"
-                    >
-                      <span className="min-w-0">
-                        {queue.queue_name ?? queue.title}
-                        {queue.room_name && (
-                          <span className="text-muted-foreground text-xs font-normal whitespace-nowrap">
-                            {" "}
-                            · {queue.room_name}
-                          </span>
-                        )}
-                      </span>
-                      {queue.id === entry.challenge_id ? (
-                        <QueueStatusDot label={t("now")} tone="success" />
-                      ) : (
-                        <QueueStatusDot status={queue.status} />
-                      )}
-                    </li>
-                  ))}
-              </ul>
-            </Fact>
-          )}
-          {!detailsOpen && libraryField && (
-            <Fact label={libraryField.label[language ?? "en"] || libraryField.label.en}>
-              <span className="flex flex-wrap gap-x-3">
-                {(project?.responses[libraryField.key] as string[]).map((item) => (
-                  <span key={item} className="whitespace-nowrap">
-                    {item}
-                  </span>
-                ))}
-              </span>
-            </Fact>
-          )}
-        </dl>
-        {activity && (
-          <dl className="grid gap-x-6 sm:grid-cols-3">
-            <Fact label={t("githubCommits")}>{activity.commits}</Fact>
-            <Fact label={t("githubPullRequests")}>
-              {activity.pullRequests}
-              {activity.merged > 0 && (
-                <span className="text-muted-foreground font-normal">
-                  {" "}
-                  · {activity.merged} {t("githubMerged")}
-                </span>
-              )}
-            </Fact>
-            {activity.lastCommitAt && (
-              <Fact label={t("githubLastCommit")}>
-                {relativeTime(activity.lastCommitAt, language ?? "en")}
-              </Fact>
-            )}
-          </dl>
         )}
         {links.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className={cn("flex flex-wrap items-end gap-2", !activity && "sm:col-span-3")}>
             {links.map((link) => (
               <Button key={link.href} variant="outline" size="sm" asChild>
                 <a
@@ -510,12 +490,20 @@ export function ProjectInfo({
   );
 }
 
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+function Fact({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="min-w-0">
+    <dl className={cn("min-w-0", className)}>
       <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
       <dd className="text-sm leading-6 font-medium tabular-nums text-pretty">{children}</dd>
-    </div>
+    </dl>
   );
 }
 

@@ -47,6 +47,13 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
         githubUrl: "https://github.com/team/repo",
         template: [
           {
+            key: "deck",
+            kind: "text",
+            label: { en: "Pitch deck", es: "Presentación", gl: "Presentación" },
+            validation: { text_condition: "url" },
+            required: false,
+          },
+          {
             key: "video",
             kind: "text",
             label: { en: "Demo video", es: "Vídeo", gl: "Vídeo" },
@@ -61,7 +68,11 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
           },
         ],
         sections: [],
-        responses: { stack: ["TypeScript", "PostgreSQL"], video: "https://youtu.be/abcdefghijk" },
+        responses: {
+          stack: ["TypeScript", "PostgreSQL"],
+          video: "https://youtu.be/abcdefghijk",
+          deck: "https://slides.example.test/deck",
+        },
         members: [],
         challenges: [],
         files: [],
@@ -73,7 +84,6 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
           commits: 42,
           pullRequests: 7,
           merged: 5,
-          lastCommitAt: new Date(Date.now() - 12 * 60000).toISOString(),
         },
       };
     if (path === "/api/challenges") body = { challenges: [challenge] };
@@ -154,14 +164,15 @@ test("saves judging edits and displays save failures once", async ({ page }) => 
   await page.goto("/judging");
   // Links share one row and the totals show during the hacking window.
   await expect(page.getByRole("link", { name: "GitHub", exact: true })).toHaveCount(1);
-  await expect(page.getByRole("link", { name: "Demo video", exact: true })).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Pitch deck", exact: true })).toHaveCount(1);
+  // A YouTube video is embedded in the details, so it is never a link.
+  await expect(page.getByRole("link", { name: "Demo video", exact: true })).toHaveCount(0);
   await expect(page.getByText("42", { exact: true })).toBeVisible();
   await page.screenshot({ path: "artifacts/judging-view.png", fullPage: true });
-  // The glance shows the technologies once; unfolding the details does not repeat them.
-  await expect(page.getByText("TypeScript · PostgreSQL", { exact: true })).toHaveCount(1);
+  // Technologies are not a judging concern: they appear neither in the glance nor in the details.
+  await expect(page.getByText("TypeScript")).toHaveCount(0);
   await page.getByRole("button", { name: "Project details", exact: true }).click();
-  await expect(page.getByText("TypeScript, PostgreSQL", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("TypeScript · PostgreSQL", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("TypeScript")).toHaveCount(0);
   await page.screenshot({ path: "artifacts/judging-project-details.png", fullPage: true });
   await page.getByRole("button", { name: "Project details", exact: true }).click();
   await page.getByRole("button", { name: "6", exact: true }).click();
