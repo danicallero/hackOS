@@ -319,25 +319,23 @@ export function PersonProfileScreen() {
                 </Pressable>
               </Section>
             ) : null}
-            {entry ? (
-              <Section>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => reportContent({ userId }, t)}
-                  style={({ pressed }) => ({
-                    alignItems: "center",
-                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
-                    minHeight: 50,
-                    justifyContent: "center",
-                    paddingHorizontal: 16,
-                  })}
-                >
-                  <Text style={{ color: colors.destructive, fontSize: 16 }}>
-                    {t("reportContent")}
-                  </Text>
-                </Pressable>
-              </Section>
-            ) : null}
+            <Section>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => reportContent({ userId }, t)}
+                style={({ pressed }) => ({
+                  alignItems: "center",
+                  backgroundColor: pressed ? colors.elevatedSurface : undefined,
+                  minHeight: 50,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
+                })}
+              >
+                <Text style={{ color: colors.destructive, fontSize: 16 }}>
+                  {t("reportContent")}
+                </Text>
+              </Pressable>
+            </Section>
           </>
         )}
       </Animated.ScrollView>

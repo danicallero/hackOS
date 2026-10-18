@@ -132,6 +132,21 @@ it("shows the whole profile with the saved note", async () => {
   expect(open).toHaveBeenCalledWith("https://github.com/ana");
 });
 
+it("offers Report on another person's profile (H18)", async () => {
+  await renderMobile(<PersonProfileScreen />);
+  expect(await screen.findByRole("button", { name: "reportContent" })).toBeTruthy();
+});
+
+it("keeps Report available when the diary read fails (H18)", async () => {
+  jest.mocked(apiFetch).mockImplementation(async (path: string) => {
+    if (path === "/api/directory/101") return personResult;
+    throw new Error("offline diary");
+  });
+  await renderMobile(<PersonProfileScreen />);
+  expect(await screen.findByRole("button", { name: "reportContent" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /diaryRemoveFromDiary/ })).toBeNull();
+});
+
 async function layoutProfile(insets?: { top: number }) {
   await renderMobile(<PersonProfileScreen />, { insets });
   await screen.findByText("Ana Souto");
