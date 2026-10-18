@@ -1,5 +1,6 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { projectSubmissionKey } from "@hackos/shared/project-submission";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -36,7 +37,9 @@ import { validateFieldOnBlur } from "@/lib/application-validation";
 import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { invalidateProjectReads, type NativeProject, nativeProjects } from "@/lib/native-projects";
+import { useSessionContext } from "@/lib/session";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
+import { GithubActivity } from "./github-activity";
 import { GithubLink } from "./github-link";
 import { ProjectChallenges } from "./project-challenges";
 import { ProjectOverview } from "./project-overview";
@@ -50,6 +53,7 @@ export function ProjectEditor({
   staff?: boolean;
 }) {
   const { t, language } = useLocale();
+  const { can } = useSessionContext();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [editing, setEditing] = useState(
@@ -498,6 +502,8 @@ export function ProjectEditor({
           asideExtra={
             !staff && project.isMember ? (
               <GithubLink projectId={project.id} variant="plain" />
+            ) : staff && can(CAPABILITIES.PROJECTS_READ) ? (
+              <GithubActivity projectId={project.id} />
             ) : undefined
           }
           review={

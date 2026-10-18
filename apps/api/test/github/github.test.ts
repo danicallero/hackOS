@@ -3,7 +3,13 @@ import { createHmac } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import { asUser, buildTestApp, createUser, truncateAll } from "../helpers.js";
+import {
+  asUser,
+  buildTestApp,
+  createUser,
+  createUserWithCapabilities,
+  truncateAll,
+} from "../helpers.js";
 
 /** GitHub App repo linking and the activity ranking. */
 
@@ -279,5 +285,52 @@ describe("account link", () => {
       "Ada Lovelace",
       "grace",
     ]);
+  });
+});
+
+describe("GitHub activity for project staff (H18)", () => {
+  it("counts commits and pull requests per team and per person, only for project readers", async () => {
+    const server = await getApp();
+    const reader = await createUserWithCapabilities(["projects:read"]);
+    const member = await createUser();
+    const repoId = await project("Team", member);
+    await link(repoId, 1);
+    await pool.query(`UPDATE users SET name='Ada', surname='Lovelace' WHERE id=$1`, [member]);
+    await pool.query(
+      `INSERT INTO github_accounts (user_id, github_id, login) VALUES ($1, 7, 'Ada')`,
+      [member],
+    );
+    await pool.query(
+      `INSERT INTO github_commits (repo_id, sha, author_login, committed_at) VALUES
+         ($1, 'a', 'ada', now()), ($1, 'b', 'ada', now()), ($1, 'c', 'grace', now())`,
+      [repoId],
+    );
+    await pool.query(
+      `INSERT INTO github_pull_requests (repo_id, number, author_login, state, merged_at, opened_at)
+       VALUES ($1, 1, 'ada', 'closed', now(), now()), ($1, 2, 'grace', 'open', NULL, now())`,
+      [repoId],
+    );
+    const teams = await server.inject({
+      method: "GET",
+      url: "/api/projects/github-activity",
+      headers: asUser(reader),
+    });
+    expect(teams.json().teams).toEqual([{ repoId, commits: 3, pullRequests: 2, merged: 1 }]);
+    const people = await server.inject({
+      method: "GET",
+      url: `/api/projects/${repoId}/github-activity`,
+      headers: asUser(reader),
+    });
+    expect(people.statusCode, people.body).toBe(200);
+    expect(people.json().people).toEqual([
+      { login: "ada", name: "Ada Lovelace", commits: 2, pullRequests: 1, merged: 1 },
+      { login: "grace", name: null, commits: 1, pullRequests: 1, merged: 0 },
+    ]);
+    const denied = await server.inject({
+      method: "GET",
+      url: "/api/projects/github-activity",
+      headers: asUser(member),
+    });
+    expect(denied.statusCode).toBe(403);
   });
 });

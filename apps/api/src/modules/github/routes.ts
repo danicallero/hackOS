@@ -1,9 +1,10 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../config.js";
 import { pool } from "../../db/pool.js";
-import { requireAuth } from "../../lib/capabilities.js";
+import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { sharedCache } from "../../lib/shared-cache.js";
@@ -23,6 +24,7 @@ import {
   leaderboard,
   linkRepo,
   linkStatus,
+  personActivity,
   recordCommits,
   recordPull,
   removeInstallation,
@@ -31,6 +33,7 @@ import {
   saveInstallations,
   saveUserAuthorization,
   selectableRepos,
+  teamActivity,
   unlinkAccount,
   unlinkRepo,
 } from "./service.js";
@@ -268,6 +271,43 @@ export function registerGithubRoutes(app: FastifyInstance) {
       await unlinkRepo(userId, q.params.id);
       return { ok: true };
     },
+  );
+
+  const projectsRead = {
+    config: {
+      routeAccessPolicy: {
+        kind: "capability" as const,
+        capability: CAPABILITIES.PROJECTS_READ,
+      },
+    },
+    preHandler: requireCapability(CAPABILITIES.PROJECTS_READ),
+  };
+
+  r.get(
+    "/api/projects/github-activity",
+    {
+      ...projectsRead,
+      schema: {
+        summary: "Read every team's GitHub activity",
+        description:
+          "Commits, pull requests and merged pull requests inside the activity window for each project with a linked repository.",
+      },
+    },
+    async () => ({ teams: await teamActivity() }),
+  );
+
+  r.get(
+    "/api/projects/:id/github-activity",
+    {
+      ...projectsRead,
+      schema: {
+        params,
+        summary: "Read a team's GitHub activity per person",
+        description:
+          "Commits, pull requests and merged pull requests inside the activity window for each GitHub author of the project; authors with a linked hackOS account show their member name.",
+      },
+    },
+    async (q) => ({ people: await personActivity(q.params.id) }),
   );
 
   r.get(

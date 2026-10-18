@@ -35,6 +35,15 @@ export default function ProjectsPage() {
     (signal) => api.get<{ repos: NativeProject[] }>("/api/repos", { signal }),
     { enabled: allowed },
   );
+  const activity = useServerResource(
+    ["projects", "github-activity"],
+    (signal) =>
+      api.get<{
+        teams: { repoId: number; commits: number; pullRequests: number }[];
+      }>("/api/projects/github-activity", { signal }),
+    { enabled: can(CAPABILITIES.PROJECTS_READ) },
+  );
+  const activityOf = new Map(activity.data?.teams.map((team) => [team.repoId, team]));
   const projects = resource.data?.repos ?? [];
   const columns: Column<NativeProject>[] = [
     {
@@ -61,6 +70,24 @@ export default function ProjectsPage() {
       cell: (project) =>
         t(project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft"),
     },
+    ...(activity.data
+      ? [
+          {
+            id: "commits",
+            header: t("githubCommits"),
+            align: "right" as const,
+            sortValue: (project: NativeProject) => activityOf.get(project.id)?.commits ?? -1,
+            cell: (project: NativeProject) => activityOf.get(project.id)?.commits ?? "–",
+          },
+          {
+            id: "pullRequests",
+            header: t("githubPullRequests"),
+            align: "right" as const,
+            sortValue: (project: NativeProject) => activityOf.get(project.id)?.pullRequests ?? -1,
+            cell: (project: NativeProject) => activityOf.get(project.id)?.pullRequests ?? "–",
+          },
+        ]
+      : []),
   ];
   if (!allowed) return <AccessDenied ask={t("projectAccessDeniedDesc")} />;
   return (
