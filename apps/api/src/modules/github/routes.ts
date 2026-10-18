@@ -112,7 +112,17 @@ export function registerGithubRoutes(app: FastifyInstance) {
     "/api/github/callback",
     {
       config: { routeAccessPolicy: { kind: "authenticated" as const } },
-      preHandler: requireAuth,
+      // Expired session: bounce through login and resume this exact callback (H18).
+      preHandler: [
+        async (req, reply) => {
+          if (req.userId == null) {
+            return reply.redirect(
+              `${config.WEB_URL}/login?next=${encodeURIComponent(req.raw.url ?? "/")}`,
+            );
+          }
+        },
+        requireAuth,
+      ],
       schema: {
         querystring: z.object({
           installation_id: z.coerce.number().int().positive().optional(),
@@ -121,7 +131,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
         }),
         summary: "GitHub App installation callback",
         description:
-          "Verifies the signed state against the signed-in member, exchanges the OAuth code to learn the GitHub account, requires that account to own the installation, then redirects to the project page.",
+          "Verifies the signed state against the signed-in member, exchanges the OAuth code to learn the GitHub account, requires that account to own the installation, then redirects to the project page. Without a session it redirects to the login page, which returns here afterwards.",
       },
     },
     async (q, reply) => {

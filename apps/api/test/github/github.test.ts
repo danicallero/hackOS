@@ -112,6 +112,14 @@ describe("project GitHub link", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("sends an expired session through login and back to the callback (H18)", async () => {
+    const server = await getApp();
+    const path = "/api/github/callback?installation_id=1&code=c&state=s";
+    const res = await server.inject({ method: "GET", url: path });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toContain(`/login?next=${encodeURIComponent(path)}`);
+  });
+
   it("reports an invalid app private key as a clear error, not a 500", async () => {
     const { installationToken } = await import("../../src/modules/github/client.js");
     await expect(installationToken(123)).rejects.toThrow(/private key is invalid/);

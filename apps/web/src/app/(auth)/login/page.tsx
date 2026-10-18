@@ -77,7 +77,10 @@ function LoginInner() {
   // Already signed in: bounce straight to the destination instead of showing
   // the form again — /login isn't admin-only, any signed-in user lands here.
   useEffect(() => {
-    if (status === "authenticated") router.replace(next);
+    if (status !== "authenticated") return;
+    // API paths (the GitHub callback) are not app routes: navigate with a full load.
+    if (next.startsWith("/api/")) window.location.assign(next);
+    else router.replace(next);
   }, [status, next, router]);
 
   useEffect(() => {

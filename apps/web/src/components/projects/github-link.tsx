@@ -3,15 +3,9 @@
 import { GithubLogoIcon } from "@phosphor-icons/react/dist/csr/GithubLogo";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -96,18 +90,15 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
       ) : repos.data && repos.data.repos.length > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Select value={choice} onValueChange={setChoice}>
-              <SelectTrigger className="min-w-0 flex-1" aria-label={t("githubChooseRepo")}>
-                <SelectValue placeholder={t("githubChooseRepo")} />
-              </SelectTrigger>
-              <SelectContent>
-                {repos.data.repos.map((repo) => (
-                  <SelectItem key={`${repo.installationId}-${repo.id}`} value={String(repo.id)}>
-                    {repo.fullName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <EntityCombobox
+              className="min-w-0 flex-1"
+              options={repos.data.repos}
+              value={choice}
+              onChange={setChoice}
+              getId={(repo) => repo.id}
+              getLabel={(repo) => repo.fullName}
+              placeholder={t("githubChooseRepo")}
+            />
             <Button
               disabled={busy || !choice}
               onClick={() =>

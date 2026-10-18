@@ -88,9 +88,9 @@ export function ProjectOverview({
           </SectionCard>
         )}
         {asideExtra}
-        {(project.githubUrl || project.demoUrl) && (
+        {((!asideExtra && project.githubUrl) || project.demoUrl) && (
           <ProjectDescriptionLinks
-            links={{ githubUrl: project.githubUrl, demoUrl: project.demoUrl }}
+            links={{ githubUrl: asideExtra ? null : project.githubUrl, demoUrl: project.demoUrl }}
           />
         )}
         <SectionCard title={labels.challenges} icon={TrophyIcon} variant="plain">
