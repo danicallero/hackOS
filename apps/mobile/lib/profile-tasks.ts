@@ -36,9 +36,9 @@ export function isScannerPath(pathname: string): boolean {
 
 export const PROFILE_TASKS_PATH = "/profile-tasks";
 
-/** H7: a locked profile cannot change dietary data, so it is never asked for it. */
+/** H7: locked dietary data is only changed by staff, so it is never asked for. */
 export function promptableProfileTasks(me: Me): ProfileTask[] {
-  return (me.pendingProfileTasks ?? []).filter((task) => task !== "dietary" || !me.profileLocked);
+  return (me.pendingProfileTasks ?? []).filter((task) => task !== "dietary" || !me.dietaryLocked);
 }
 
 export function shouldPresentProfileTasks({

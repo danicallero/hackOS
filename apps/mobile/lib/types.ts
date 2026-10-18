@@ -47,6 +47,8 @@ export interface Me {
   dietaryConfirmedAt?: string | null;
   /** H7: dietary fields are no longer self-editable after an accepted application. */
   profileLocked?: boolean;
+  /** H7: dietary data stays editable after acceptance only until a first answer exists. */
+  dietaryLocked?: boolean;
   isSponsorRep?: boolean;
   /** #933: profile data to ask for on next entry. */
   pendingProfileTasks?: ProfileTask[];

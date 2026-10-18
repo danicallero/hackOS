@@ -40,8 +40,8 @@ export default function ProfileTasksScreen() {
   // Opened from Account to edit one answer rather than as the next-entry prompt.
   const editing = params.edit === "1";
   const { me, refetch } = useMeContext();
-  // H7: a locked profile's dietary data is not self-editable; skip the step.
-  const showDietary = tasks.includes("dietary") && !me?.profileLocked;
+  // H7: locked dietary data is not self-editable; skip the step.
+  const showDietary = tasks.includes("dietary") && !me?.dietaryLocked;
   const wantsMeals = tasks.includes("meal_plan");
   const { intolerances } = useFoodIntolerances(showDietary);
   const mealPlan = useCachedApi<MealPlan>(
@@ -116,6 +116,7 @@ export default function ProfileTasksScreen() {
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <ScrollView
+        alwaysBounceVertical
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="interactive"

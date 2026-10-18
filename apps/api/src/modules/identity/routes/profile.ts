@@ -505,6 +505,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // fields are no longer self-editable — the web/mobile settings
             // form greys them out and points the participant at staff.
             profileLocked: z.boolean(),
+            // H7: dietary data stays editable after acceptance only until the
+            // first answer is ever written; from then on only staff change it.
+            dietaryLocked: z.boolean(),
             hasStatisticsPanels: z.boolean(),
             // #933: profile data the client should ask for on next entry.
             pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
@@ -569,8 +572,12 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           getEventTimezone(client),
         ]);
         const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
-        // H7: a locked profile cannot change its dietary data, so don't ask for it.
-        if (eventAccess && !profileLocked && row.dietary_confirmed_at === null) {
+        // H7: after acceptance dietary data may be written once; any recorded answer
+        // locks it, so a locked profile is never asked and only staff change it.
+        const dietaryLocked =
+          profileLocked &&
+          (row.dietary_confirmed_at !== null || row.dietary_data_state === "present");
+        if (eventAccess && !dietaryLocked && row.dietary_confirmed_at === null) {
           pendingProfileTasks.push("dietary");
         }
         if (membership.isSponsorRep && (await hasPendingMealPlan(client, userId))) {
@@ -587,6 +594,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           hasQueueItems,
           canCreateProject,
           profileLocked,
+          dietaryLocked,
           hasStatisticsPanels,
           pendingProfileTasks,
           eventTimezone,
@@ -608,7 +616,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         description:
           "Self-service profile edit. H7: once an application has been accepted, changing name, " +
           "surname, shirt size or dietary data is 409 `profile_locked` (resubmitting unchanged " +
-          "values is allowed). Sending `foodIntolerances` or `foodIntoleranceNotes` records an " +
+          "values is allowed); dietary data is the exception until a first answer is recorded, which then locks it. Sending `foodIntolerances` or `foodIntoleranceNotes` records an " +
           "explicit dietary answer (#933) — an empty list counts — and clears the `dietary` " +
           "pending profile task.",
         body: selfPatchSchema,
@@ -631,7 +639,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         req.body.foodIntoleranceNotes !== undefined;
       if (wantsIdentityChange || wantsLogisticsChange) {
         const { rows: cur } = await pool.query(
-          `SELECT name, surname, shirt_size, food_intolerances, food_intolerance_notes
+          `SELECT name, surname, shirt_size, food_intolerances, food_intolerance_notes,
+                  dietary_confirmed_at, dietary_data_state
              FROM users WHERE id = $1`,
           [userId],
         );
@@ -647,12 +656,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         const changingNotes =
           req.body.foodIntoleranceNotes !== undefined &&
           req.body.foodIntoleranceNotes !== cur[0]?.food_intolerance_notes;
+        // Dietary data may be written once after acceptance, while no answer
+        // exists; any recorded answer (even an empty one) locks it for good.
+        const dietaryLocked =
+          cur[0]?.dietary_confirmed_at != null || cur[0]?.dietary_data_state === "present";
         if (
           changingName ||
           changingSurname ||
           changingShirtSize ||
-          changingIntolerances ||
-          changingNotes
+          ((changingIntolerances || changingNotes) && dietaryLocked)
         ) {
           if (await hasAcceptedApplication(pool, userId)) {
             throw new ConflictError(

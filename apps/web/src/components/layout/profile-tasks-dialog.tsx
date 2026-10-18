@@ -36,9 +36,9 @@ export function ProfileTasksDialog() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
 
   const userId = me?.id;
-  // H7: a locked profile can't change its dietary data (the API also omits the task).
+  // H7: once dietary data is locked only staff change it (the API also omits the task).
   const pending = (me?.pendingProfileTasks ?? []).filter(
-    (task) => task !== "dietary" || !me?.profileLocked,
+    (task) => task !== "dietary" || !me?.dietaryLocked,
   );
   const hasPending = pending.length > 0;
   useEffect(() => {

@@ -161,6 +161,8 @@ function ProfileForm({ me }: { me: Me }) {
   // H7: name and logistics data (shirt size, dietary info) are locked once
   // an application is accepted — staff can still fix them via the user detail page.
   const locked = me.profileLocked;
+  // Dietary data takes one late write, then only staff change it.
+  const dietaryLocked = me.dietaryLocked;
   const [saveError, setSaveError] = useState<string | null>(null);
   const [publicProfile, setPublicProfile] = useState<PublicProfileSaveControl | null>(null);
   const [mealsDirty, setMealsDirty] = useState(false);
@@ -332,7 +334,7 @@ function ProfileForm({ me }: { me: Me }) {
                         <FormControl>
                           <Checkbox
                             checked={field.value}
-                            disabled={locked}
+                            disabled={dietaryLocked}
                             onCheckedChange={(checked) => {
                               const none = checked === true;
                               field.onChange(none);
@@ -384,7 +386,7 @@ function ProfileForm({ me }: { me: Me }) {
                                 placeholder={t("selectIntolerances")}
                                 searchPlaceholder={t("searchIntolerances")}
                                 emptyText={t("noIntolerances")}
-                                disabled={locked || noRestrictions}
+                                disabled={dietaryLocked || noRestrictions}
                               />
                             </FormControl>
                             <FormMessage />
@@ -401,7 +403,7 @@ function ProfileForm({ me }: { me: Me }) {
                               <Textarea
                                 rows={3}
                                 placeholder={t("cateringNotes")}
-                                disabled={locked || noRestrictions}
+                                disabled={dietaryLocked || noRestrictions}
                                 {...field}
                               />
                             </FormControl>
