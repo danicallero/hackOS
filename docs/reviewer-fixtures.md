@@ -73,6 +73,53 @@ synthetic enterprises. A guessed private-upload key or personal export bundle
 cannot cross that boundary. Synthetic rows are excluded from statistics and
 exports and are not permanent anonymous audit data.
 
+## App Store review notes
+
+Text for the **Notes for Review** field. Credentials and the deployment URL go
+in the private handoff, never in the field's public text or the repository.
+
+> hackOS is the companion app for a university hackathon run by GPUL. The four
+> review accounts below are synthetic and live in an isolated fixture scope:
+> they see only fixture data, and real participants never see theirs. Sign in
+> with email and the password from the private handoff (email addresses are
+> `app-review-<scenario>@hackos.test`). Each account already holds an event
+> ticket and event access, so no application is needed.
+>
+> - `participant-delete` — a participant without accreditation. Use Account →
+>   Delete account; the deletion PIN is in the handoff.
+> - `participant-anonymize-outside` — accredited and outside the venue. Account
+>   → Delete account offers irreversible anonymisation. It also owns one
+>   synthetic project with a waiting queue entry.
+> - `participant-anonymize-inside` — accredited and inside the venue. Requesting
+>   anonymisation starts a pending exit that the staff account records.
+> - `staff-exit-operator` — staff with accreditation, presence and activity
+>   scanning. It can record the pending exit of the inside participant and scan
+>   within the fixture scope only.
+
+What each account can and cannot show a reviewer today:
+
+- The **Gallery** lists only fixture projects. The generated graph has one
+  project and it is a draft, so the Gallery is empty for these accounts unless
+  the event's draft visibility makes drafts visible. Gallery, GitHub linking,
+  shared queues and every queue stage other than "waiting" are not
+  demonstrable with the current fixtures.
+- The staff account has no queue, judging, project or schedule management
+  capability, so the queue manager, judging screens and organiser tools are not
+  reachable by review accounts.
+- Anything that needs real event data (directory, sponsors, statistics,
+  exports) is intentionally excluded from the fixture scope.
+
+Gaps to close before a review that must cover those screens, each needing its
+own marked graph and cleanup pointers (the registry holds one project,
+challenge and entry per fixture key, so multi-project data needs a schema
+change):
+
+1. A project-owning participant with a submitted project, a draft, a shared
+   queue challenge, an entry in each queue stage and a linked repository row.
+2. A queue/judge operator limited to fixture rooms and projects.
+3. Fixture gallery projects so the Gallery is not empty.
+4. Optionally a scoped organiser and a sponsor representative.
+
 ## Checking whether credentials were used
 
 The admin dialog reads `GET /api/admin/review-fixtures` and displays the
