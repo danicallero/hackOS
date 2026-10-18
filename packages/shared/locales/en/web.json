@@ -1687,7 +1687,7 @@
   "websiteLabel": "Website",
   "logoUrlLabel": "Logo URL",
   "darkBackgroundLogoUrlLabel": "Dark logo URL",
-  "lowerShowsFirstDesc": "Lowest first within its group.",
+  "lowerShowsFirstDesc": "Lowest first.",
   "revealFromLabel": "Reveal from",
   "enterpriseNotFoundTitle": "Enterprise not found",
   "enterpriseNotLoadedDesc": "This enterprise could not be loaded.",

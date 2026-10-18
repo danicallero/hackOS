@@ -246,19 +246,19 @@ export async function setEnterprisesVisibility(
 }
 
 /**
- * H45: manual order inside one (kind, priority) group. Every id must belong to
- * the same group, so reordering one tier can never shift another.
+ * H45: manual order inside one priority tier. Every id must share the same
+ * priority, so reordering one tier can never shift another.
  */
 export async function reorderEnterprises(ids: number[], actorId: number | null) {
   return withTransaction(async (client) => {
-    const { rows } = await client.query<{ id: number; kind: string; priority: number | null }>(
-      `SELECT id, kind, priority FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
+    const { rows } = await client.query<{ id: number; priority: number | null }>(
+      `SELECT id, priority FROM enterprises WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE`,
       [ids],
     );
     if (rows.length !== new Set(ids).size) throw new NotFoundError("Enterprise not found", { ids });
     const [first] = rows;
-    if (!first || rows.some((r) => r.kind !== first.kind || r.priority !== first.priority))
-      throw new ConflictError("Only enterprises in the same group and priority can be reordered");
+    if (!first || rows.some((r) => r.priority !== first.priority))
+      throw new ConflictError("Only enterprises with the same priority can be reordered");
     for (const row of rows) await assertEnterpriseScope(client, actorId, Number(row.id));
     await client.query(
       `UPDATE enterprises e SET position = o.pos
@@ -673,8 +673,9 @@ export interface PublicSponsor {
 /**
  * Publicly-revealed sponsors for the website / TV logo grid (H45). Driven by
  * the enterprise's own visibility; scheduled reveal is handled by the background
- * trigger. All kinds by default, or one with `kind`; sponsors come before
- * collaborators, then priority (1 = primary / biggest) and manual position.
+ * trigger. All kinds by default, or one with `kind`. Priority is the only
+ * grouping key (1 = first tier); within one priority the manual position
+ * decides, then creation order, so ties keep a stable order.
  */
 export async function listPublicSponsors(
   kind?: EnterpriseKind,
@@ -688,7 +689,7 @@ export async function listPublicSponsors(
       WHERE e.visibility = 'visible'
         AND ($1::text IS NULL OR e.kind = $1)
         AND NOT ${ENTERPRISE_HAS_SYNTHETIC}
-      ORDER BY (e.kind = 'collaborator') ASC, priority ASC, e.position ASC NULLS LAST, e.name ASC`,
+      ORDER BY priority ASC, e.position ASC NULLS LAST, e.id ASC`,
     [kind ?? null],
   );
   return rows.map((r: Record<string, unknown>) => ({

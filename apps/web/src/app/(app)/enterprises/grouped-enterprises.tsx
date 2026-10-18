@@ -31,12 +31,8 @@ export function GroupedEnterprises({
           onReorder(next);
         };
         return (
-          <section key={`${group.kind}:${group.priority ?? ""}`} className="space-y-2">
+          <section key={group.priority ?? "none"} className="space-y-2">
             <h2 className="font-medium text-sm">
-              {group.kind === "collaborator"
-                ? t("enterpriseKindCollaborator")
-                : t("enterpriseKindSponsor")}
-              {" · "}
               {group.priority != null
                 ? t("priorityGroupLabel", { priority: group.priority })
                 : t("noPriority")}

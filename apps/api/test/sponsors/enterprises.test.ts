@@ -207,8 +207,8 @@ describe("enterprise management (H43-H45)", () => {
     expect(pub.statusCode).toBe(200);
     // Visible rows are public immediately; reveal time is only a trigger.
     expect(pub.json().items.map((s: { name: string }) => s.name)).toEqual([
-      "Future",
       "Zeta Primary",
+      "Future",
       "Alpha Second",
     ]);
   });
@@ -231,7 +231,8 @@ describe("enterprise management (H43-H45)", () => {
 
     const names = async (url: string) =>
       (await a.inject({ method: "GET", url })).json().items.map((s: { name: string }) => s.name);
-    expect(await names("/api/public/sponsors")).toEqual(["Main", "Minor", "Entity B", "Entity A"]);
+    // Priority is the only tier key; ties keep creation order.
+    expect(await names("/api/public/sponsors")).toEqual(["Main", "Entity B", "Minor", "Entity A"]);
     expect(await names("/api/public/sponsors?kind=sponsor")).toEqual(["Main", "Minor"]);
     expect(await names("/api/public/sponsors?kind=collaborator")).toEqual(["Entity B", "Entity A"]);
 

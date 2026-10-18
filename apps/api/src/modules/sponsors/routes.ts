@@ -96,7 +96,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         querystring: publicSponsorsQuery,
         summary: "List public sponsors",
         description:
-          "Returns every visible enterprise for the public event site, sponsors before collaborators, then by priority and manual order. `kind=sponsor` or `kind=collaborator` filters to one group (H45).",
+          "Returns every visible enterprise for the public event site, ordered by priority (1 first); enterprises sharing a priority keep their manual order, then creation order. `kind=sponsor` or `kind=collaborator` filters to one group (H45).",
       },
     },
     async (req) => ({
@@ -168,7 +168,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         body: reorderEnterprisesBody,
         summary: "Reorder enterprises within a group",
         description:
-          "Sets the display order of enterprises that share the same kind and priority; ids from different groups are rejected (H45).",
+          "Sets the display order of enterprises that share the same priority; ids from different priorities are rejected (H45).",
       },
     },
     async (req) => reorderEnterprises(req.body.ids, req.userId),

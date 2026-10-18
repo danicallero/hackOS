@@ -62,7 +62,7 @@ export const bulkVisibilityBody = z
 
 export type BulkVisibilityBody = z.infer<typeof bulkVisibilityBody>;
 
-/** H45: manual order of one (kind, priority) group, first id shown first. */
+/** H45: manual order of one priority tier, first id shown first. */
 export const reorderEnterprisesBody = z
   .object({ ids: z.array(z.number().int().positive()).min(2).max(200) })
   .strict();

@@ -80,27 +80,21 @@ export function enterpriseTabs({
 }
 
 export interface EnterpriseGroup {
-  kind: Enterprise["kind"];
   priority: number | null;
   items: Enterprise[];
 }
 
-/** H45: one group per (kind, priority); sponsors first, lowest priority first, manual order inside. */
+/** H45: one group per priority, lowest first (unset last); manual order, then creation order, inside. */
 export function groupEnterprises(enterprises: Enterprise[]): EnterpriseGroup[] {
-  const groups = new Map<string, EnterpriseGroup>();
+  const groups = new Map<number | null, EnterpriseGroup>();
   for (const e of enterprises) {
-    const key = `${e.kind}:${e.priority ?? ""}`;
-    const group = groups.get(key) ?? { kind: e.kind, priority: e.priority, items: [] };
+    const group = groups.get(e.priority) ?? { priority: e.priority, items: [] };
     group.items.push(e);
-    groups.set(key, group);
+    groups.set(e.priority, group);
   }
   const rank = (n: number | null) => n ?? Number.POSITIVE_INFINITY;
   for (const group of groups.values()) {
-    group.items.sort((a, b) => rank(a.position) - rank(b.position) || a.name.localeCompare(b.name));
+    group.items.sort((a, b) => rank(a.position) - rank(b.position) || a.id - b.id);
   }
-  return [...groups.values()].sort(
-    (a, b) =>
-      (a.kind === b.kind ? 0 : a.kind === "sponsor" ? -1 : 1) ||
-      rank(a.priority) - rank(b.priority),
-  );
+  return [...groups.values()].sort((a, b) => rank(a.priority) - rank(b.priority));
 }

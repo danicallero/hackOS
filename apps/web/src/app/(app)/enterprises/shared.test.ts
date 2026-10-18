@@ -55,20 +55,19 @@ describe("groupEnterprises (H45)", () => {
     position: number | null = null,
   ) => ({ id, name, kind, priority, position }) as Enterprise;
 
-  it("keeps kinds apart, orders priorities and honours manual position", () => {
+  it("groups by priority only and honours manual position", () => {
     const groups = groupEnterprises([
       e(1, "Zed", "sponsor", 2),
       e(2, "Entity", "collaborator", 1),
       e(3, "Alpha", "sponsor", 2, 2),
-      e(4, "Beta", "sponsor", 2, 1),
+      e(4, "Beta", "collaborator", 2, 1),
       e(5, "Main", "sponsor", 1),
       e(6, "Loose", "sponsor", null),
     ]);
-    expect(groups.map((g) => [g.kind, g.priority, g.items.map((i) => i.name)])).toEqual([
-      ["sponsor", 1, ["Main"]],
-      ["sponsor", 2, ["Beta", "Alpha", "Zed"]],
-      ["sponsor", null, ["Loose"]],
-      ["collaborator", 1, ["Entity"]],
+    expect(groups.map((g) => [g.priority, g.items.map((i) => i.name)])).toEqual([
+      [1, ["Entity", "Main"]],
+      [2, ["Beta", "Alpha", "Zed"]],
+      [null, ["Loose"]],
     ]);
   });
 });

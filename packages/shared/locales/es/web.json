@@ -1687,7 +1687,7 @@
   "websiteLabel": "Sitio web",
   "logoUrlLabel": "URL del logo",
   "darkBackgroundLogoUrlLabel": "URL del logotipo oscuro",
-  "lowerShowsFirstDesc": "El más bajo va primero dentro de su grupo.",
+  "lowerShowsFirstDesc": "El más bajo va primero.",
   "revealFromLabel": "Se revela desde",
   "enterpriseNotFoundTitle": "Empresa no encontrada",
   "enterpriseNotLoadedDesc": "Esta empresa no se ha podido cargar.",
