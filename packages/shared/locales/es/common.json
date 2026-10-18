@@ -55,6 +55,7 @@
   "queueStatusWaiting": "En cola",
   "queueStatusCalled": "Esperando en la puerta",
   "queueStatusPresenting": "Presentando",
+  "queueBeInRoom": "Estate en la sala",
   "queueStatusCompleted": "Evaluado",
   "queueStatusDisqualified": "Descalificado",
   "apiError_idempotency_in_flight": "Esta solicitud ya se está procesando. Inténtalo de nuevo en unos instantes.",

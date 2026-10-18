@@ -965,5 +965,11 @@
   "galleryOpensOn": "The gallery opens {date}",
   "fieldLibrarySearch": "Search values",
   "fieldLibraryAdd": "Add “{name}”",
-  "fieldLibraryRetry": "Could not load the library. Retry"
+  "fieldLibraryRetry": "Could not load the library. Retry",
+  "githubLinkRepo": "Link GitHub repo",
+  "githubUnlinkRepo": "Unlink",
+  "githubChooseRepo": "Choose a repository",
+  "githubShareMoreRepos": "Share more repositories",
+  "githubNoRepos": "No repositories shared with the app.",
+  "githubSearchRepos": "Search repositories"
 }

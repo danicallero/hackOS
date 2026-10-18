@@ -838,6 +838,7 @@ function ActivityPicker({
       >
         <View style={{ backgroundColor: colors.background, flex: 1 }}>
           <ScrollView
+            alwaysBounceVertical
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
@@ -997,6 +998,7 @@ function SignalEditor({
     <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <ScrollView
+          alwaysBounceVertical
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{

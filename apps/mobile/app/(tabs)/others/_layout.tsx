@@ -91,12 +91,7 @@ export default function OthersLayout() {
       <Stack.Screen name="person/presence/[id]" options={transparentDetailHeaderOptions} />
       <Stack.Screen
         name="delete-account"
-        options={{
-          headerLargeTitle: false,
-          headerShadowVisible: false,
-          headerShown: true,
-          title: t("accountDeleteSection"),
-        }}
+        options={{ ...compactHeaderOptions, title: t("accountDeleteSection") }}
       />
       <Stack.Screen name="scan-log" />
       {/* Compact title over the scrolling queue, like Open-source licenses; iPad keeps its large title. */}

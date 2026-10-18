@@ -1,24 +1,35 @@
 import { useEffect, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { FloatingGlassButton, Separator } from "@/components/native-ui";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
 import { RowButton } from "./project-ui";
 import { SymbolView } from "./symbol";
 
-/** H11/H16: one question catalogue, unlimited proposals and selections. */
+/**
+ * H11/H16: one question catalogue, unlimited proposals and selections. The
+ * field shows its selection as one row; choosing opens a sheet with search, so
+ * a long catalogue never stretches the form.
+ */
 export function FieldLibraryPicker({
   libraryId,
+  title,
   value,
   onChange,
   disabled,
 }: {
   libraryId?: string;
+  title?: string;
   value: string[];
   onChange: (value: string[]) => void;
   disabled?: boolean;
 }) {
   const { t } = useLocale();
+  const insets = useSafeAreaInsets();
+  const [open, setOpen] = useState(false);
+  const top = Platform.OS === "android" ? insets.top : 0;
   const [items, setItems] = useState<{ id: number; name: string }[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -66,56 +77,161 @@ export function FieldLibraryPicker({
       setBusy(false);
     }
   }
+  const heading = title ?? t("fieldLibrarySearch");
   return (
-    <View style={{ gap: 8 }}>
-      <TextInput
-        accessibilityLabel={t("fieldLibrarySearch")}
-        placeholder={t("fieldLibrarySearch")}
-        placeholderTextColor={colors.tertiaryLabel}
-        value={query}
-        onChangeText={setQuery}
-        editable={!disabled && !busy}
-        style={{ color: colors.label, fontSize: 17, minHeight: 44, padding: 0 }}
-      />
-      {names.map((name) => (
-        <Pressable
-          key={name}
-          accessibilityRole="checkbox"
-          accessibilityLabel={name}
-          accessibilityState={{ checked: value.includes(name), disabled: disabled || busy }}
-          disabled={disabled || busy}
-          onPress={() =>
-            onChange(
-              value.includes(name) ? value.filter((entry) => entry !== name) : [...value, name],
-            )
-          }
-          style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 12 }}
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={heading}
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          flexDirection: "row",
+          gap: 12,
+          minHeight: 28,
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <Text
+          numberOfLines={2}
+          style={{
+            color: value.length ? colors.label : colors.tertiaryLabel,
+            flex: 1,
+            fontSize: 17,
+          }}
         >
-          <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{name}</Text>
-          {value.includes(name) && (
-            <SymbolView name="checkmark" tintColor={colors.accent} size={18} accessible={false} />
-          )}
-        </Pressable>
-      ))}
-      {query.trim() &&
-        !items.some(
-          (item) => item.name.toLocaleLowerCase() === query.trim().toLocaleLowerCase(),
-        ) && (
-          <RowButton
-            label={t("fieldLibraryAdd", { name: query.trim() })}
-            disabled={disabled || busy}
-            onPress={() => void propose()}
+          {value.length ? value.join(", ") : t("fieldLibrarySearch")}
+        </Text>
+        {disabled ? null : (
+          <SymbolView
+            name="chevron.right"
+            tintColor={colors.tertiaryLabel}
+            size={12}
+            weight="semibold"
+            accessible={false}
           />
         )}
-      {error && (
-        <RowButton
-          label={t("fieldLibraryRetry")}
-          onPress={() => {
-            setError(false);
-            setRetry((value) => value + 1);
-          }}
-        />
-      )}
-    </View>
+      </Pressable>
+      <Modal
+        visible={open}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setOpen(false)}
+      >
+        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+          <ScrollView
+            alwaysBounceVertical
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              gap: 16,
+              padding: 16,
+              paddingBottom: 32,
+              paddingTop: 76 + top,
+            }}
+          >
+            <Text
+              accessibilityRole="header"
+              style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+            >
+              {heading}
+            </Text>
+            <TextInput
+              accessibilityLabel={t("fieldLibrarySearch")}
+              placeholder={t("fieldLibrarySearch")}
+              placeholderTextColor={colors.tertiaryLabel}
+              value={query}
+              onChangeText={setQuery}
+              editable={!disabled && !busy}
+              autoCapitalize="none"
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 14,
+                color: colors.label,
+                fontSize: 17,
+                minHeight: 44,
+                paddingHorizontal: 16,
+              }}
+            />
+            {names.length > 0 ? (
+              <View
+                style={{
+                  backgroundColor: colors.surface,
+                  borderCurve: "continuous",
+                  borderRadius: 14,
+                  overflow: "hidden",
+                }}
+              >
+                {names.map((name, index) => (
+                  <View key={name}>
+                    {index > 0 ? <Separator /> : null}
+                    <Pressable
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={name}
+                      accessibilityState={{
+                        checked: value.includes(name),
+                        disabled: disabled || busy,
+                      }}
+                      disabled={disabled || busy}
+                      onPress={() =>
+                        onChange(
+                          value.includes(name)
+                            ? value.filter((entry) => entry !== name)
+                            : [...value, name],
+                        )
+                      }
+                      style={{
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 12,
+                        minHeight: 50,
+                        paddingHorizontal: 16,
+                      }}
+                    >
+                      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{name}</Text>
+                      {value.includes(name) && (
+                        <SymbolView
+                          name="checkmark"
+                          tintColor={colors.accent}
+                          size={18}
+                          accessible={false}
+                        />
+                      )}
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+            {query.trim() &&
+              !items.some(
+                (item) => item.name.toLocaleLowerCase() === query.trim().toLocaleLowerCase(),
+              ) && (
+                <RowButton
+                  label={t("fieldLibraryAdd", { name: query.trim() })}
+                  disabled={disabled || busy}
+                  onPress={() => void propose()}
+                />
+              )}
+            {error && (
+              <RowButton
+                label={t("fieldLibraryRetry")}
+                onPress={() => {
+                  setError(false);
+                  setRetry((value) => value + 1);
+                }}
+              />
+            )}
+          </ScrollView>
+          <FloatingGlassButton
+            top={16 + top}
+            side="right"
+            icon="checkmark"
+            accessibilityLabel={t("close")}
+            onPress={() => setOpen(false)}
+          />
+        </View>
+      </Modal>
+    </>
   );
 }

@@ -898,6 +898,7 @@ export function PersonOperationsScreen() {
         style={{ backgroundColor: colors.background, flex: 1 }}
       >
         <ScrollView
+          alwaysBounceVertical
           ref={scrollRef}
           {...trueTop.scrollProps}
           contentInsetAdjustmentBehavior="automatic"

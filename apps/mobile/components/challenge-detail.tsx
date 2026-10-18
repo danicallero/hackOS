@@ -220,6 +220,7 @@ export function ChallengeSheet({
           <EmptyState icon="trophy" title={t("challengeNotFound")} />
         ) : (
           <ScrollView
+            alwaysBounceVertical
             contentContainerStyle={{
               gap: 24,
               padding: 16,

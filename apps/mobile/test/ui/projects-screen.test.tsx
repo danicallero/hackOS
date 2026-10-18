@@ -312,16 +312,14 @@ it("edits shared organizer-defined questions without enforcing required fields o
   expect(change).toHaveBeenCalledWith("story", "Built a rover");
 });
 
-it("disables participant edits and submission when the server closes editing (H17/H20)", async () => {
+it("locks participant edits and offers no submission when the server closes editing (H17/H20)", async () => {
   mockApi.mockResolvedValue([]);
   await renderMobile(
     <ProjectEditor reload={async () => {}} project={{ ...project, canEdit: false }} />,
   );
   expect(await screen.findByText("projectLocked")).toBeTruthy();
   expect(screen.getByLabelText("projectName").props.editable).toBe(false);
-  expect(
-    screen.getByRole("button", { name: "projectSubmit" }).props.accessibilityState.disabled,
-  ).toBe(true);
+  expect(screen.queryByRole("button", { name: "projectSubmit" })).toBeNull();
 });
 
 it("labels a submitted project's action Resubmit and shows the server deadline (H20)", async () => {
@@ -881,6 +879,7 @@ it("selects catalogue values and proposes several values as arrays (H16)", async
       onChange={changed}
     />,
   );
+  await fireEvent.press(screen.getByRole("button", { name: "Technologies" }));
   await waitFor(() => expect(screen.getByText("TypeScript")).toBeTruthy());
   await fireEvent.press(screen.getByRole("checkbox", { name: "TypeScript" }));
   expect(changed).toHaveBeenLastCalledWith("tech", ["React", "TypeScript"]);

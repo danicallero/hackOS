@@ -5,11 +5,12 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
 import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
@@ -42,22 +43,26 @@ export function ProjectDetailScreen() {
         headerShadowVisible: false,
       });
   }, [navigation, project]);
+  // Quiet reload for pull-to-refresh and after actions: the screen keeps showing the project.
+  const refresh = useCallback(async () => {
+    // H20: saves and uploads from a previous visit land before the reload.
+    if (!gallery) await settleProjectDrafts(Number(id));
+    setProject(
+      await apiFetch<NativeProject>(
+        `${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`,
+      ),
+    );
+    setEpoch((current) => current + 1);
+  }, [id, gallery]);
   const load = useCallback(async () => {
     setProject(null);
     setError(null);
     try {
-      // H20: saves and uploads from a previous visit land before the reload.
-      if (!gallery) await settleProjectDrafts(Number(id));
-      setProject(
-        await apiFetch<NativeProject>(
-          `${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`,
-        ),
-      );
-      setEpoch((current) => current + 1);
+      await refresh();
     } catch (cause) {
       setError(cause as Error);
     }
-  }, [id, gallery]);
+  }, [refresh]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -85,18 +90,38 @@ export function ProjectDetailScreen() {
   }
   if (!project) return <RequestFeedback loading />;
   return gallery ? (
-    <ProjectReadView project={project} />
+    <ProjectReadView project={project} onRefresh={refresh} />
   ) : (
-    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={load} />
+    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} />
   );
 }
 
 /** H18/H60: display only server-approved photos and published winner fields. */
-export function ProjectReadView({ project }: { project: NativeProject }) {
+export function ProjectReadView({
+  project,
+  onRefresh,
+}: {
+  project: NativeProject;
+  onRefresh?: () => Promise<void>;
+}) {
   const { t } = useLocale();
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
   return (
     <ScrollView
+      refreshControl={
+        onRefresh ? (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void onRefresh()
+                .catch(() => {})
+                .finally(() => setRefreshing(false));
+            }}
+          />
+        ) : undefined
+      }
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
       style={{ backgroundColor: colors.background }}
@@ -122,6 +147,7 @@ export function ProjectReadView({ project }: { project: NativeProject }) {
         readOnly
         files={project.files}
       />
+      {project.githubUrl ? <ProjectRepoRow url={project.githubUrl} /> : null}
       <Section title={t("projectTeam")}>
         <ProjectMembers project={project} />
       </Section>
@@ -294,6 +320,8 @@ export function ProjectEditor({
   const canEdit = project.canEdit === true;
   const blocked = busy || !canEdit || draft.state === "conflict";
   const submitted = project.submissionStatus === "submitted";
+  // A project that cannot be (re)submitted shows no action instead of a dead one.
+  const showSubmit = Boolean(project.canWithdraw) || (canEdit && project.canSubmit !== false);
   // The challenge and invite sheets change the project: refresh when returning.
   const refreshTeam = useCallback(() => {
     void apiFetch<NativeProject>(`/api/me/projects/${project.id}`)
@@ -316,6 +344,21 @@ export function ProjectEditor({
       setError(cause as Error);
     } finally {
       setBusy(false);
+    }
+  }
+  const [refreshing, setRefreshing] = useState(false);
+  async function pullRefresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      // Pending edits land first, so the reload cannot discard them.
+      await draft.flush();
+      await saveName(name);
+      await reload();
+    } catch (cause) {
+      setError(cause as Error);
+    } finally {
+      setRefreshing(false);
     }
   }
   async function upload(field: TemplateField) {
@@ -389,7 +432,14 @@ export function ProjectEditor({
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 96 + insets.bottom }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} />
+        }
+        contentContainerStyle={{
+          gap: 24,
+          padding: 16,
+          paddingBottom: showSubmit ? 96 + insets.bottom : Math.max(32, insets.bottom + 16),
+        }}
       >
         <Section
           footer={deadline ? `${saveCaption} · ${t("projectDeadline")}: ${deadline}` : saveCaption}
@@ -415,6 +465,11 @@ export function ProjectEditor({
           uploading={uploading}
           onChange={draft.change}
           onUpload={(field) => void upload(field)}
+        />
+        <ProjectGithubLink
+          projectId={project.id}
+          repoUrl={project.githubUrl}
+          locked={submitted || !canEdit}
         />
         <Section title={t("projectChallenges")}>
           {chosen.map((challenge) => (
@@ -486,46 +541,53 @@ export function ProjectEditor({
           />
         </Section>
       </ScrollView>
-      <View
-        pointerEvents="box-none"
-        style={{
-          bottom: Math.max(insets.bottom, 12),
-          left: 16,
-          position: "absolute",
-          right: 16,
-        }}
-      >
-        {project.canWithdraw ? (
-          <GlassButton
-            label={t("projectWithdraw")}
-            prominent
-            disabled={busy}
-            busy={busy}
-            onPress={() =>
-              Alert.alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
-                { text: t("cancel"), style: "cancel" },
-                {
-                  text: t("projectWithdraw"),
-                  onPress: () =>
-                    void run(() =>
-                      projectMutation(`/api/me/projects/${project.id}/withdraw-submission`, "POST"),
-                    ),
-                },
-              ])
-            }
-          />
-        ) : (
-          <GlassButton
-            label={t(submitted ? "projectResubmit" : "projectSubmit")}
-            prominent
-            disabled={blocked || uploading !== null || !name.trim() || project.canSubmit === false}
-            busy={busy}
-            onPress={() =>
-              void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
-            }
-          />
-        )}
-      </View>
+      {showSubmit ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            bottom: Math.max(insets.bottom, 12),
+            left: 16,
+            position: "absolute",
+            right: 16,
+          }}
+        >
+          {project.canWithdraw ? (
+            <GlassButton
+              label={t("projectWithdraw")}
+              prominent
+              disabled={busy}
+              busy={busy}
+              onPress={() =>
+                Alert.alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
+                  { text: t("cancel"), style: "cancel" },
+                  {
+                    text: t("projectWithdraw"),
+                    onPress: () =>
+                      void run(() =>
+                        projectMutation(
+                          `/api/me/projects/${project.id}/withdraw-submission`,
+                          "POST",
+                        ),
+                      ),
+                  },
+                ])
+              }
+            />
+          ) : (
+            <GlassButton
+              label={t(submitted ? "projectResubmit" : "projectSubmit")}
+              prominent
+              disabled={
+                blocked || uploading !== null || !name.trim() || project.canSubmit === false
+              }
+              busy={busy}
+              onPress={() =>
+                void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
+              }
+            />
+          )}
+        </View>
+      ) : null}
     </>
   );
 }

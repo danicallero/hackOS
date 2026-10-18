@@ -82,6 +82,7 @@ const ANDROID_SYMBOL_NAMES = {
   "flashlight.on.fill": "flashlight_on",
   "fork.knife": "restaurant",
   globe: "public",
+  "arrow.up.right.square": "open_in_new",
   hammer: "construction",
   hourglass: "hourglass_empty",
   "internaldrive.fill": "save",

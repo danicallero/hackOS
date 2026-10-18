@@ -341,8 +341,9 @@ export async function nativeProjects(
       ? {
           name: snapshot.project.name,
           description: snapshot.project.description,
-          // The repo link is verified metadata, so one linked after submitting still shows.
-          githubUrl: snapshot.project.github_url ?? project.githubUrl,
+          // The repo link is verified metadata, so the live value wins over the snapshot's:
+          // a repository changed after submitting (or after judging) shows right away.
+          githubUrl: project.githubUrl ?? snapshot.project.github_url,
           demoUrl: snapshot.project.demo_url,
           responses: snapshot.project.responses,
         }

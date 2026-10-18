@@ -166,6 +166,7 @@ export function InviteTeammatesScreen() {
         </>
       ) : null}
       <ScrollView
+        alwaysBounceVertical
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 24 }}

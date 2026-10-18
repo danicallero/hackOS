@@ -9,6 +9,9 @@ import { liveActivityRedirectPath } from "@/lib/live-activities/model";
  */
 const SCREENLESS_LINKS: [RegExp, string][] = [
   [/^(?:hackos:)?\/*project\/?(?:[?#].*)?$/i, "/queue"],
+  // The GitHub link return (H18): the in-app browser session consumes it on iOS;
+  // elsewhere it must not land on an unknown route.
+  [/^(?:hackos:)?\/*github-callback\/?(?:[?#].*)?$/i, "/queue"],
 ];
 
 /**

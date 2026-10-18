@@ -280,6 +280,7 @@ export function AnnouncementFormModal({
     >
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <ScrollView
+          alwaysBounceVertical
           automaticallyAdjustKeyboardInsets
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"

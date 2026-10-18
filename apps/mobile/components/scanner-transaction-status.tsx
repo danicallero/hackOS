@@ -708,6 +708,7 @@ export function ScannerQueueStatus({
       >
         <View style={{ backgroundColor: colors.background, flex: 1 }}>
           <ScrollView
+            alwaysBounceVertical
             contentInsetAdjustmentBehavior="automatic"
             contentContainerStyle={{
               gap: 22,

@@ -965,5 +965,11 @@
   "galleryOpensOn": "A galería abre o {date}",
   "fieldLibrarySearch": "Buscar valores",
   "fieldLibraryAdd": "Engadir «{name}»",
-  "fieldLibraryRetry": "Non se puido cargar a biblioteca. Reintentar"
+  "fieldLibraryRetry": "Non se puido cargar a biblioteca. Reintentar",
+  "githubLinkRepo": "Vincular repo de GitHub",
+  "githubUnlinkRepo": "Desvincular",
+  "githubChooseRepo": "Escolle un repositorio",
+  "githubShareMoreRepos": "Compartir máis repositorios",
+  "githubNoRepos": "Non hai repositorios compartidos coa app.",
+  "githubSearchRepos": "Buscar repositorios"
 }

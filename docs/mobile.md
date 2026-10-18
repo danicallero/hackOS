@@ -423,6 +423,7 @@ notifications, SSE updates and polling. `/projects/:id` is the submission
 screen: the name field (its footer shows the save state and, when the server
 provides `submissionsCloseAt`, the deadline), grouped form sections, challenge
 rows, team with an Invite row, and a floating Submit / Resubmit glass button. A frozen submitted project (`canWithdraw`, inside the submission window) shows a **Withdraw submission** glass button instead, with a confirmation, which calls `POST /api/me/projects/:id/withdraw-submission`; the project becomes a draft again and leaves the gallery and queue until it is submitted again (H20, H21). Staff return and manual repositories stay web-only.
+A **GitHub** section links the project to a repository through the GitHub App (the system browser returns via `hackos://github-callback`, see [github-activity](./github-activity.md)), unlinks it, and the read view shows the repository link; commit and pull-request counts stay web-only (H18).
 Queue context lives on My Projects and the queue screen, not in the editor. Leaving a team uses the authenticated
 `DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
@@ -516,8 +517,9 @@ they are not device screenshots or proof of native toolbar behavior.
   device's top camera cutout.
   Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
-  records as a confirmed empty answer; the row is read-only offline or once the
-  H7 profile lock applies (the next-entry prompt then skips the dietary step).
+  records as a confirmed empty answer; the row is read-only offline or once
+  `dietaryLocked` (H7: after an accepted application the first answer is allowed,
+  then only staff change it; the next-entry prompt then skips the dietary step).
   The screen follows the other form modals: grouped sections (No restrictions,
   intolerances, a dedicated Dietary notes section matching the web
   `foodIntoleranceNotes` field, read-only while No restrictions is on), a

@@ -92,6 +92,7 @@ export function NewProjectScreen() {
   });
   return (
     <ScrollView
+      alwaysBounceVertical
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ gap: 16, padding: 16 }}
       style={{ backgroundColor: colors.background }}

@@ -1,7 +1,7 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { GlassButton, NavRow } from "@/components/project-ui";
@@ -69,6 +69,15 @@ export function MyProjectsScreen() {
     () => Promise.all([loadMine(), loadInvites(), loadQueue()]).then(() => undefined),
     [loadMine, loadInvites, loadQueue],
   );
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
   const projects = mine.data?.projects ?? null;
   const canCreate = mine.data?.canCreate ?? false;
   const invites = invitations.data?.invites ?? [];
@@ -116,7 +125,9 @@ export function MyProjectsScreen() {
         const status =
           entry.status === "waiting" && entry.position != null
             ? t("queuePosition", { n: String(entry.position) })
-            : t(STATUS_KEY[entry.status] ?? "queueStatusWaiting");
+            : entry.status === "presenting" || entry.status === "in_room"
+              ? t("queueBeInRoom")
+              : t(STATUS_KEY[entry.status] ?? "queueStatusWaiting");
         const eta = entry.status === "waiting" ? formatEtaMinutes(entry.etaMinutes, t) : null;
         return [entry.challengeTitle, status, eta].filter(Boolean).join(" · ");
       });
@@ -146,6 +157,9 @@ export function MyProjectsScreen() {
         {...trueTop.scrollProps}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+        }
         contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: bottomInset + 24 }}
       >
         <StaleDataBanner updatedAt={staleSince} />

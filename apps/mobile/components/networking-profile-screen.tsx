@@ -369,6 +369,7 @@ export default function NetworkingProfileScreen() {
         />
       ) : null}
       <ScrollView
+        alwaysBounceVertical
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{

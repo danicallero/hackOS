@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import Stack from "expo-router/stack";
+import { Platform } from "react-native";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
 import { nativeStackScreenOptions } from "@/lib/navigation";
@@ -41,6 +42,17 @@ export default function ProjectsLayout() {
         }}
       />
       <Stack.Screen
+        name="github"
+        options={{
+          headerBlurEffect: "none",
+          headerShadowVisible: false,
+          // Same surface as the challenges sheet.
+          headerStyle: { backgroundColor: colors.background },
+          presentation: "modal",
+          title: t("githubChooseRepo"),
+        }}
+      />
+      <Stack.Screen
         name="invite"
         options={{
           contentStyle: { backgroundColor: colors.surface },
@@ -51,8 +63,25 @@ export default function ProjectsLayout() {
           title: t("projectInvite"),
         }}
       />
-      <Stack.Screen name="gallery" options={{ title: t("gallery") }} />
-      <Stack.Screen name="queue" options={{ title: t("projectQueue") }} />
+      <Stack.Screen
+        name="gallery"
+        options={{
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerTransparent: Platform.OS === "ios",
+          title: t("gallery"),
+        }}
+      />
+      {/* Compact title over the scrolling queue, like Open-source licenses: iOS blurs the scroll edge. */}
+      <Stack.Screen
+        name="queue"
+        options={{
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerTransparent: Platform.OS === "ios",
+          title: t("projectQueue"),
+        }}
+      />
     </Stack>
   );
 }

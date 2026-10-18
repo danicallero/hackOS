@@ -187,13 +187,17 @@ export function verifyWebhookSignature(raw: Buffer, header: string | undefined):
 }
 
 /** Signed, expiring state binding the install redirect to one user and project. */
-export function signState(userId: number, repoId: number | null): string {
-  const body = b64url(JSON.stringify({ userId, repoId, exp: Date.now() + STATE_TTL_MS }));
+export function signState(userId: number, repoId: number | null, app = false): string {
+  const body = b64url(JSON.stringify({ userId, repoId, app, exp: Date.now() + STATE_TTL_MS }));
   const mac = createHmac("sha256", config.BETTER_AUTH_SECRET).update(body).digest("base64url");
   return `${body}.${mac}`;
 }
 
-export function verifyState(state: string): { userId: number; repoId: number | null } {
+export function verifyState(state: string): {
+  userId: number;
+  repoId: number | null;
+  app: boolean;
+} {
   const [body = "", mac = ""] = state.split(".");
   const expected = createHmac("sha256", config.BETTER_AUTH_SECRET).update(body).digest("base64url");
   const a = Buffer.from(mac);
@@ -203,11 +207,15 @@ export function verifyState(state: string): { userId: number; repoId: number | n
   const parsed = JSON.parse(Buffer.from(body, "base64url").toString()) as {
     userId: number;
     repoId: number | null;
+    app?: boolean;
     exp: number;
   };
   if (parsed.exp < Date.now()) throw new BadRequestError("GitHub link state expired");
-  return { userId: parsed.userId, repoId: parsed.repoId };
+  return { userId: parsed.userId, repoId: parsed.repoId, app: parsed.app === true };
 }
+
+/** Where the callback sends a flow started in the mobile app (its URL scheme, see app.json). */
+export const APP_CALLBACK_URL = "hackos://github-callback";
 
 export function installUrl(state: string): string {
   return `https://github.com/apps/${config.GITHUB_APP_SLUG}/installations/new?state=${encodeURIComponent(state)}`;

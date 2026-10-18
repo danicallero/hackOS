@@ -166,6 +166,7 @@ export function ProjectChallengesScreen() {
         </Stack.Toolbar>
       ) : null}
       <ScrollView
+        alwaysBounceVertical
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"

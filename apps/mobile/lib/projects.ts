@@ -24,6 +24,7 @@ export interface NativeProject {
     position?: number | null;
   }[];
   winners?: { challengeId: number; rank: number; challengeTitle?: string }[];
+  githubUrl?: string | null;
   canEdit?: boolean;
   canSubmit?: boolean;
   /** Inside the submission window a team withdraws a submitted project to edit it. */

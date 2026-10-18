@@ -257,6 +257,7 @@ export function ScheduleFormModal({
     >
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <ScrollView
+          alwaysBounceVertical
           ref={scrollRef}
           automaticallyAdjustKeyboardInsets
           contentInsetAdjustmentBehavior="automatic"

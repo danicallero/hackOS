@@ -9,6 +9,7 @@ import { BadRequestError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import {
+  APP_CALLBACK_URL,
   assertGithubConfigured,
   authorizeUrl,
   exchangeUserCode,
@@ -99,20 +100,51 @@ export function registerGithubRoutes(app: FastifyInstance) {
       ...member,
       schema: {
         params,
-        body: z.object({ authorize: z.boolean().optional() }).optional(),
+        body: z
+          .object({ authorize: z.boolean().optional(), app: z.boolean().optional() })
+          .optional(),
         summary: "Start linking a GitHub repository",
         description:
-          "Returns the GitHub App installation URL, bound by a signed 15-minute state to this member and project. GitHub redirects back to /api/github/callback, which proves the installation belongs to the member's GitHub account. With authorize=true it returns the account authorization URL instead, which always redirects back and finds installations the App already has, since GitHub shows no redirect when the App is already installed.",
+          "Returns the GitHub App installation URL, bound by a signed 15-minute state to this member and project. GitHub redirects back to /api/github/callback, which proves the installation belongs to the member's GitHub account. With authorize=true it returns the account authorization URL instead, which always redirects back and finds installations the App already has, since GitHub shows no redirect when the App is already installed. With app=true the callback hands the result to the mobile app (POST /api/me/github/complete) instead of finishing in the browser.",
       },
     },
     async (q) => {
       assertGithubConfigured();
       const userId = actor(q.userId);
       await assertActiveMember(userId, q.params.id);
-      const state = signState(userId, q.params.id);
+      const state = signState(userId, q.params.id, q.body?.app);
       return { url: q.body?.authorize ? authorizeUrl(state) : installUrl(state) };
     },
   );
+
+  /** Finishes a link from the OAuth result, for the browser callback and the mobile app alike. */
+  async function completeLink(
+    userId: number,
+    query: { code: string; state: string; installation_id?: number },
+  ): Promise<
+    { kind: "install"; url: string } | { kind: "profile" } | { kind: "select"; repoId: number }
+  > {
+    assertGithubConfigured();
+    const state = verifyState(query.state);
+    if (state.userId !== userId) throw new BadRequestError("Invalid GitHub link state");
+    const account = await exchangeUserCode(query.code);
+    if (state.repoId == null) {
+      await saveAccount(userId, account);
+      await saveInstallations(userId, account.installationIds);
+      return { kind: "profile" };
+    }
+    await assertActiveMember(userId, state.repoId);
+    if (query.installation_id == null) {
+      // Authorization-only return: reuse installations the App already has, else install it.
+      if (account.installationIds.length === 0)
+        return { kind: "install", url: installUrl(signState(userId, state.repoId, state.app)) };
+      await saveAccount(userId, account);
+      await saveInstallations(userId, account.installationIds);
+      return { kind: "select", repoId: state.repoId };
+    }
+    await saveUserAuthorization(userId, account, query.installation_id);
+    return { kind: "select", repoId: state.repoId };
+  }
 
   r.get(
     "/api/github/callback",
@@ -121,6 +153,17 @@ export function registerGithubRoutes(app: FastifyInstance) {
       // Expired session: bounce through login and resume this exact callback (H18).
       preHandler: [
         async (req, reply) => {
+          // A flow started in the mobile app has no browser session: hand the result back
+          // to the app, which finishes it under its own session (POST /api/me/github/complete).
+          try {
+            const { state } = req.query as { state?: string };
+            if (state && verifyState(state).app) {
+              const search = (req.raw.url ?? "").split("?")[1] ?? "";
+              return reply.redirect(`${APP_CALLBACK_URL}?${search}`);
+            }
+          } catch {
+            // Invalid or expired state: the regular flow below reports it.
+          }
           if (req.userId == null) {
             return reply.redirect(
               `${config.WEB_URL}/login?next=${encodeURIComponent(req.raw.url ?? "/")}`,
@@ -137,31 +180,40 @@ export function registerGithubRoutes(app: FastifyInstance) {
         }),
         summary: "GitHub App installation callback",
         description:
-          "Verifies the signed state against the signed-in member, exchanges the OAuth code to learn the GitHub account, requires that account to own the installation, then redirects to the project page. Without a session it redirects to the login page, which returns here afterwards.",
+          "Verifies the signed state against the signed-in member, exchanges the OAuth code to learn the GitHub account, requires that account to own the installation, then redirects to the project page. Without a session it redirects to the login page, which returns here afterwards. A flow started in the mobile app redirects to the app's URL scheme instead, untouched.",
       },
     },
     async (q, reply) => {
-      assertGithubConfigured();
-      const userId = actor(q.userId);
-      const state = verifyState(q.query.state);
-      if (state.userId !== userId) throw new BadRequestError("Invalid GitHub link state");
-      const account = await exchangeUserCode(q.query.code);
-      if (state.repoId == null) {
-        await saveAccount(userId, account);
-        await saveInstallations(userId, account.installationIds);
+      const outcome = await completeLink(actor(q.userId), q.query);
+      if (outcome.kind === "install") return reply.redirect(outcome.url);
+      if (outcome.kind === "profile")
         return reply.redirect(`${config.WEB_URL}/settings/profile?github=linked`);
-      }
-      await assertActiveMember(userId, state.repoId);
-      if (q.query.installation_id == null) {
-        // Authorization-only return: reuse installations the App already has, else install it.
-        if (account.installationIds.length === 0)
-          return reply.redirect(installUrl(signState(userId, state.repoId)));
-        await saveAccount(userId, account);
-        await saveInstallations(userId, account.installationIds);
-        return reply.redirect(`${config.WEB_URL}/my-project/${state.repoId}?github=select`);
-      }
-      await saveUserAuthorization(userId, account, q.query.installation_id);
-      return reply.redirect(`${config.WEB_URL}/my-project/${state.repoId}?github=select`);
+      return reply.redirect(`${config.WEB_URL}/my-project/${outcome.repoId}?github=select`);
+    },
+  );
+
+  r.post(
+    "/api/me/github/complete",
+    {
+      ...member,
+      schema: {
+        body: z.object({
+          code: z.string().min(1),
+          state: z.string().min(1),
+          installationId: z.number().int().positive().optional(),
+        }),
+        summary: "Finish a GitHub link started in the mobile app",
+        description:
+          "Takes the code, state and installation id GitHub returned to the app and completes the link for the signed-in member; the signed state must belong to them. Returns kind `select` with the project id once its repositories can be chosen, `profile` for an account-only link, or `install` with a GitHub URL to open when the App still has to be installed.",
+      },
+    },
+    async (q) => {
+      const outcome = await completeLink(actor(q.userId), {
+        code: q.body.code,
+        state: q.body.state,
+        installation_id: q.body.installationId,
+      });
+      return outcome;
     },
   );
 
@@ -187,6 +239,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
     {
       ...member,
       schema: {
+        body: z.object({ app: z.boolean().optional() }).optional(),
         summary: "Start linking my GitHub account",
         description:
           "Returns the GitHub authorization URL, bound by a signed 15-minute state to the member. The callback stores the GitHub login so commits and pull requests are ranked under the member's name.",
@@ -194,7 +247,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
     },
     async (q) => {
       assertGithubConfigured();
-      return { url: authorizeUrl(signState(actor(q.userId), null)) };
+      return { url: authorizeUrl(signState(actor(q.userId), null, q.body?.app)) };
     },
   );
 
