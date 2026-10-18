@@ -113,19 +113,19 @@ deployment URL go in the private handoff, never in this repository.
 > company tags. Notifications: event announcements and queue updates. The app
 > does not sell personal data. Privacy Policy and Terms: `/privacy`, `/terms`
 > on the event site.
+>
+> **User-generated content.** Attendees' project pages (name, description,
+> images, team members) and optional networking profiles (headline, bio, links,
+> photo) are visible to other signed-in attendees; showing a name or photo
+> requires the person's consent. Organisers can edit or remove a project and can
+> hide a profile or remove its photo. Content can be reported to the organisers
+> at hackudc@gpul.org, the address in the Privacy Policy.
 
-Before sending, these statements in the previous notes no longer hold and need
-a decision rather than a rewording:
-
-- "No user-generated content visible to other users" is wrong once the gallery
-  exists: project names, descriptions, images and (with consent) member names
-  and photos, plus networking profiles, are visible to other attendees. Apple's
-  guideline 1.2 expects filtering, a way to report content and block users, and
-  contact details; the code has no report or block control, so either add one
-  or describe the organiser moderation path accurately.
-- "Does not take, store or upload photos" is wrong: the photo picker uploads
-  profile photos and project images, and a project's files are stored.
-- NFC and the GitHub App browser sign-in were not mentioned.
+Statements from the earlier notes that were removed because they stopped being
+true: "no user-generated content visible to other users" (the gallery and
+networking profiles show attendee content) and "does not take, store or upload
+photos" (photo pickers upload profile photos and project images). The notes now
+state both, plus NFC and the GitHub App sign-in.
 
 What each account can and cannot show a reviewer today:
 
