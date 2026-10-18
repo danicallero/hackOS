@@ -495,15 +495,36 @@ export function ProjectEditor({
           right: 16,
         }}
       >
-        <GlassButton
-          label={t(submitted ? "projectResubmit" : "projectSubmit")}
-          prominent
-          disabled={blocked || uploading !== null || !name.trim() || project.canSubmit === false}
-          busy={busy}
-          onPress={() =>
-            void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
-          }
-        />
+        {project.canWithdraw ? (
+          <GlassButton
+            label={t("projectWithdraw")}
+            prominent
+            disabled={busy}
+            busy={busy}
+            onPress={() =>
+              Alert.alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
+                { text: t("cancel"), style: "cancel" },
+                {
+                  text: t("projectWithdraw"),
+                  onPress: () =>
+                    void run(() =>
+                      projectMutation(`/api/me/projects/${project.id}/withdraw-submission`, "POST"),
+                    ),
+                },
+              ])
+            }
+          />
+        ) : (
+          <GlassButton
+            label={t(submitted ? "projectResubmit" : "projectSubmit")}
+            prominent
+            disabled={blocked || uploading !== null || !name.trim() || project.canSubmit === false}
+            busy={busy}
+            onPress={() =>
+              void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
+            }
+          />
+        )}
       </View>
     </>
   );

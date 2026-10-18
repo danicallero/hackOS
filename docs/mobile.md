@@ -419,7 +419,7 @@ view is retained at `/projects/queue`, with its tutorial, pre-call
 notifications, SSE updates and polling. `/projects/:id` is the submission
 screen: the name field (its footer shows the save state and, when the server
 provides `submissionsCloseAt`, the deadline), grouped form sections, challenge
-rows, team with an Invite row, and a floating Submit / Resubmit glass button.
+rows, team with an Invite row, and a floating Submit / Resubmit glass button. A frozen submitted project (`canWithdraw`, inside the submission window) shows a **Withdraw submission** glass button instead, with a confirmation, which calls `POST /api/me/projects/:id/withdraw-submission`; the project becomes a draft again and leaves the gallery and queue until it is submitted again (H20, H21). Staff return and manual repositories stay web-only.
 Queue context lives on My Projects and the queue screen, not in the editor. Leaving a team uses the authenticated
 `DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
