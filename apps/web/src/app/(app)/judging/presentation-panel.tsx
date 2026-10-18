@@ -14,7 +14,7 @@ import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
-import { QueueStatusBadge } from "@/components/common/queue-status-badge";
+import { QueueStatusDot } from "@/components/common/queue-status-badge";
 import { StatusBadge } from "@/components/common/status-badge";
 import { relativeTime, useProjectGithubActivity } from "@/components/projects/github-activity";
 import { ProjectAnswers } from "@/components/projects/project-answers";
@@ -384,41 +384,61 @@ export function ProjectInfo({
       <div className="space-y-4">
         <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-3">
           <Fact label={t("membersLabel")}>
-            {members.length > 0
-              ? members
-                  .map(
-                    (member) =>
-                      `${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email,
-                  )
-                  .join(" · ")
-              : "—"}
+            {members.length > 0 ? (
+              <ul>
+                {members.map((member, index) => (
+                  <li key={member.email ?? index}>
+                    {`${member.name ?? ""} ${member.surname ?? ""}`.trim() || member.email}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              "—"
+            )}
           </Fact>
           {queues.length > 0 && (
             // A project can be in more than one queue; shared queue siblings collapse
-            // to one row and are named by the queue group.
+            // to one row and are named by the queue group. The one in the room leads.
             <Fact label={t("presentingFor")}>
               <ul className="space-y-1">
-                {queues.map((queue) => (
-                  <li key={queue.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span>{queue.queue_name ?? queue.title}</span>
-                    {queue.room_name && (
-                      <span className="text-muted-foreground text-xs font-normal">
-                        {queue.room_name}
+                {[...queues]
+                  .sort(
+                    (a, b) =>
+                      Number(b.id === entry.challenge_id) - Number(a.id === entry.challenge_id),
+                  )
+                  .map((queue) => (
+                    <li
+                      key={queue.id}
+                      className="grid grid-cols-[minmax(0,1fr)_7.5rem] items-baseline gap-3"
+                    >
+                      <span className="min-w-0">
+                        {queue.queue_name ?? queue.title}
+                        {queue.room_name && (
+                          <span className="text-muted-foreground text-xs font-normal whitespace-nowrap">
+                            {" "}
+                            · {queue.room_name}
+                          </span>
+                        )}
                       </span>
-                    )}
-                    {queue.id === entry.challenge_id ? (
-                      <StatusBadge tone="success">{t("now")}</StatusBadge>
-                    ) : (
-                      <QueueStatusBadge status={queue.status} />
-                    )}
-                  </li>
-                ))}
+                      {queue.id === entry.challenge_id ? (
+                        <QueueStatusDot label={t("now")} tone="success" />
+                      ) : (
+                        <QueueStatusDot status={queue.status} />
+                      )}
+                    </li>
+                  ))}
               </ul>
             </Fact>
           )}
           {!detailsOpen && libraryField && (
             <Fact label={libraryField.label[language ?? "en"] || libraryField.label.en}>
-              {(project?.responses[libraryField.key] as string[]).join(" · ")}
+              <span className="flex flex-wrap gap-x-3">
+                {(project?.responses[libraryField.key] as string[]).map((item) => (
+                  <span key={item} className="whitespace-nowrap">
+                    {item}
+                  </span>
+                ))}
+              </span>
             </Fact>
           )}
         </dl>
@@ -536,18 +556,10 @@ export function PresentationTimer({
   }, []);
 
   return (
-    <div className="relative flex h-6 items-center">
-      <Progress
-        value={progressValue}
-        className={cn(
-          "h-1",
-          timerTone === "warning" && "**:data-[slot=progress-indicator]:bg-warning",
-          timerTone === "danger" && "**:data-[slot=progress-indicator]:bg-destructive",
-        )}
-      />
+    <div className="flex flex-col items-center gap-1.5">
       <span
         className={cn(
-          "absolute left-1/2 -translate-x-1/2 bg-card px-2.5 font-mono text-xs font-semibold tabular-nums whitespace-nowrap",
+          "font-mono text-xs font-semibold tabular-nums whitespace-nowrap",
           timerTone === "warning" && "text-warning",
           timerTone === "danger" && "text-destructive",
         )}
@@ -558,6 +570,14 @@ export function PresentationTimer({
         )}
         {cueText && <span className="font-sans font-medium"> · {cueText}</span>}
       </span>
+      <Progress
+        value={progressValue}
+        className={cn(
+          "h-1",
+          timerTone === "warning" && "**:data-[slot=progress-indicator]:bg-warning",
+          timerTone === "danger" && "**:data-[slot=progress-indicator]:bg-destructive",
+        )}
+      />
     </div>
   );
 }
