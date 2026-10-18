@@ -386,7 +386,7 @@ export function ProjectInfo({
         />
       )}
       <div className="grid gap-x-6 gap-y-4 sm:grid-cols-3">
-        <Fact label={t("membersLabel")}>
+        <Fact quiet label={t("membersLabel")}>
           {members.length > 0 ? (
             <ul>
               {members.map((member, index) => (
@@ -408,7 +408,7 @@ export function ProjectInfo({
                 .sort((a, b) => Number(isNow(b)) - Number(isNow(a)))
                 .map((queue) => (
                   <li key={queue.id} className="flex min-w-0 items-baseline justify-between gap-3">
-                    <span className="min-w-0 truncate">{queue.title}</span>
+                    <span className="min-w-0 truncate font-semibold">{queue.title}</span>
                     {isNow(queue) ? (
                       <QueueStatusDot label={t("now")} tone="success" />
                     ) : (
@@ -419,12 +419,16 @@ export function ProjectInfo({
             </ul>
           </Fact>
         )}
-        {activity && <Fact label={t("githubCommits")}>{activity.commits}</Fact>}
         {activity && (
-          <Fact label={t("githubPullRequests")}>
+          <Fact quiet label={t("githubCommits")}>
+            {activity.commits}
+          </Fact>
+        )}
+        {activity && (
+          <Fact quiet label={t("githubPullRequests")}>
             {activity.pullRequests}
             {activity.merged > 0 && (
-              <span className="text-muted-foreground font-normal">
+              <span>
                 {" "}
                 · {activity.merged} {t("githubMerged")}
               </span>
@@ -487,17 +491,27 @@ export function ProjectInfo({
 
 function Fact({
   label,
+  quiet = false,
   className,
   children,
 }: {
   label: string;
+  /** Context a judge rarely needs: regular weight, softer colour. */
+  quiet?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <dl className={cn("min-w-0", className)}>
       <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
-      <dd className="text-sm leading-6 font-medium tabular-nums text-pretty">{children}</dd>
+      <dd
+        className={cn(
+          "text-sm leading-6 tabular-nums text-pretty",
+          quiet ? "text-muted-foreground font-normal" : "font-medium",
+        )}
+      >
+        {children}
+      </dd>
     </dl>
   );
 }

@@ -81,7 +81,7 @@ export function JudgingStats({
       : "—";
   return (
     <div className="order-3 col-span-2 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-x-4 gap-y-3 xl:order-none xl:col-span-1">
-      <Stat label={t("queueStatsEvaluated")}>
+      <Stat primary label={t("queueStatsEvaluated")}>
         {progress ? `${progress.evaluated} / ${total}` : "—"}
       </Stat>
       <Stat label={t("queueStatsAvgTime")}>
@@ -90,6 +90,7 @@ export function JudgingStats({
           : "—"}
       </Stat>
       <Stat
+        primary
         label={t("queueStatsEstFinish")}
         className={pace?.exceedsJudgingClose ? "text-destructive" : undefined}
         title={pace?.exceedsJudgingClose ? t("judgingEstimatedOverrun") : undefined}
@@ -116,12 +117,15 @@ export function JudgingStats({
 
 function Stat({
   label,
+  primary = false,
   className,
   title,
   action,
   children,
 }: {
   label: string;
+  /** The numbers a judge watches; the rest sit quietly beside them. */
+  primary?: boolean;
   className?: string;
   title?: string;
   /** A control for the value itself, such as an edit pencil. */
@@ -132,7 +136,13 @@ function Stat({
     <dl title={title}>
       <dt className="text-muted-foreground text-xs font-medium whitespace-nowrap">{label}</dt>
       <dd className="flex items-center gap-1">
-        <span className={cn("text-lg font-semibold tabular-nums whitespace-nowrap", className)}>
+        <span
+          className={cn(
+            "tabular-nums whitespace-nowrap",
+            primary ? "text-lg font-semibold" : "text-muted-foreground text-sm font-medium",
+            className,
+          )}
+        >
           {children}
         </span>
         {action}
@@ -556,11 +566,6 @@ export function QueueList({
                     {entry.call_count > 0 && (
                       <span className="text-muted-foreground text-xs tabular-nums">
                         {t("pastCalls")} {entry.call_count}
-                      </span>
-                    )}
-                    {entry.position != null && (
-                      <span className="text-muted-foreground text-xs tabular-nums">
-                        {t("positionHash", { position: entry.position })}
                       </span>
                     )}
                     {entry.called_at && (
