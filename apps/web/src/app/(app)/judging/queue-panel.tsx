@@ -44,7 +44,7 @@ import { entryLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 import { TeamSearch } from "./team-search";
 
-/** Room and queue numbers for the judging top bar: always visible, even in Expanded judging. */
+/** Room and queue numbers for the judging top bar: always visible, even in Project view. */
 export function JudgingStats({
   progress,
   pace,
@@ -80,7 +80,7 @@ export function JudgingStats({
         )
       : "—";
   return (
-    <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+    <div className="order-3 col-span-2 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-x-4 gap-y-3 xl:order-none xl:col-span-1">
       <Stat label={t("queueStatsEvaluated")}>
         {progress ? `${progress.evaluated} / ${total}` : "—"}
       </Stat>
@@ -95,7 +95,7 @@ export function JudgingStats({
         title={pace?.exceedsJudgingClose ? t("judgingEstimatedOverrun") : undefined}
       >
         {pace?.exceedsJudgingClose && (
-          <WarningIcon aria-hidden="true" className="mr-1 inline size-4 align-text-bottom" />
+          <WarningIcon aria-hidden="true" className="mr-1.5 inline size-5 align-text-bottom" />
         )}
         {estFinishLabel}
       </Stat>
@@ -106,10 +106,10 @@ export function JudgingStats({
         label={t("queueStatsPacingTarget")}
         className={pace?.autoAdjusted ? "text-warning" : undefined}
         title={pace?.autoAdjusted ? t("queueStatsAdjustedHint") : undefined}
+        action={timingAction}
       >
         {pace ? t("queueStatsMinutes", { count: Math.round(pace.effectiveMinutesPerTeam) }) : "—"}
       </Stat>
-      {timingAction && <div className="flex min-h-9 items-center">{timingAction}</div>}
     </div>
   );
 }
@@ -118,18 +118,24 @@ function Stat({
   label,
   className,
   title,
+  action,
   children,
 }: {
   label: string;
   className?: string;
   title?: string;
+  /** A control for the value itself, such as an edit pencil. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <dl title={title} className="space-y-1.5">
-      <dt className="text-muted-foreground text-xs font-medium">{label}</dt>
-      <dd className={cn("flex min-h-9 items-center text-sm font-semibold tabular-nums", className)}>
-        <span>{children}</span>
+    <dl title={title}>
+      <dt className="text-muted-foreground text-xs font-medium whitespace-nowrap">{label}</dt>
+      <dd className="flex items-center gap-1">
+        <span className={cn("text-lg font-semibold tabular-nums whitespace-nowrap", className)}>
+          {children}
+        </span>
+        {action}
       </dd>
     </dl>
   );

@@ -169,7 +169,7 @@ database connection and should be run during a quiet operational window.
 
 The top bar of `/judging` holds the room selector, the live numbers (scored,
 average time per team, estimated finish, judging close, pacing target and **Track
-timing**) and two icon actions: the layout toggle (Expanded judging) and
+timing**) and two icon actions: the layout toggle (Project view) and
 pause/resume. It stays visible in both layouts.
 
 The right column is the team in the room. Its header carries the team name and a
@@ -186,7 +186,7 @@ such as technologies live. The project body scrolls inside its own container.
 
 By default the right column stacks the project (top) and the evaluation form
 (bottom), each scrolling inside its own container, with the queues on the left.
-**Expanded judging** is a standing preference (remembered per browser): while a
+**Project view** is a standing preference (remembered per browser): while a
 team is in the room, the queue hides, the sidebar collapses, the project fills the
 left with its details unfolded and the evaluation form sits on the right; when the
 team leaves, for example after the evaluation is submitted, the queue view returns

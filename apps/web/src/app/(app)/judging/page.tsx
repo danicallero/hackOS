@@ -28,7 +28,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -309,7 +308,7 @@ export default function QueuePage() {
     t,
   );
 
-  // Expanded judging is a standing preference: the layout appears whenever a team
+  // Project view is a standing preference: the layout appears whenever a team
   // is in the room (or a past evaluation is open) and gives way to the queue when
   // nobody is, then comes back with the next team.
   const focusing = focusMode && canJudge && reviewTarget != null && !windowOpen;
@@ -381,13 +380,12 @@ export default function QueuePage() {
       data-wide
       data-judging-page
     >
-      <Surface padding="none" className="px-4 py-3">
+      <Surface padding="none" className="px-5 py-3">
         {/* Fluid header (H29, issue #61): room, live numbers and actions share one row and
             wrap under tight widths (tiling WMs, tablet/mobile) instead of overflowing the card.
-            The numbers live here so they stay visible in Expanded judging. */}
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-          <div className="w-full min-w-36 space-y-1.5 sm:w-64">
-            <Label htmlFor="queue-room">{t("roomLabel")}</Label>
+            The numbers live here so they stay visible in Project view. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-3 xl:grid-cols-[14rem_minmax(0,1fr)_auto] xl:gap-x-8">
+          <div className="min-w-0 sm:max-w-64 xl:max-w-none">
             <Select
               value={activeRoomId ? String(activeRoomId) : ""}
               onValueChange={(value) => {
@@ -395,7 +393,7 @@ export default function QueuePage() {
               }}
               disabled={roomsLoading || rooms.length === 0}
             >
-              <SelectTrigger id="queue-room" className="w-full">
+              <SelectTrigger id="queue-room" aria-label={t("roomLabel")} className="w-full">
                 <SelectValue placeholder={t("selectRoomPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
@@ -414,6 +412,7 @@ export default function QueuePage() {
             timingAction={
               effectiveChallengeId && (
                 <TrackTiming
+                  iconOnly
                   challengeId={effectiveChallengeId}
                   onSaved={() => void refreshLive()}
                 />
@@ -421,7 +420,7 @@ export default function QueuePage() {
             }
           />
 
-          <div className="flex shrink-0 flex-wrap items-end gap-2 sm:ml-auto sm:justify-end">
+          <div className="flex shrink-0 items-center gap-2">
             {canJudge && (
               <IconButton
                 label={t("judgingExpanded")}
@@ -641,7 +640,7 @@ export default function QueuePage() {
             )}
           </div>
 
-          {/* Expanded judging: the form slides in beside the project while a team is
+          {/* Project view: the form slides in beside the project while a team is
               in the room and out again once nobody is. */}
           {focusMode && (
             <div className="min-w-0 xl:h-full xl:min-h-0 xl:overflow-hidden">

@@ -80,6 +80,69 @@ for (const layout of ["on", "off"]) {
             merged: 5,
           },
         };
+      if (path === "/api/queue/repos/91/challenges")
+        body = [
+          {
+            entry_id: 501,
+            repo_id: 91,
+            id: 41,
+            title: "FOSS",
+            queue_group_id: 5,
+            queue_name: "Open",
+            status: "presenting",
+            position: null,
+            called_at: null,
+            eta_minutes: null,
+            room_id: 7,
+            room_name: "Room Alpha",
+            judging_rooms: [],
+          },
+          {
+            entry_id: 502,
+            repo_id: 91,
+            id: 42,
+            title: "Rookie",
+            queue_group_id: 5,
+            queue_name: "Open",
+            status: "presenting",
+            position: null,
+            called_at: null,
+            eta_minutes: null,
+            room_id: 7,
+            room_name: "Room Alpha",
+            judging_rooms: [],
+          },
+          {
+            entry_id: 503,
+            repo_id: 91,
+            id: 43,
+            title: "Best use of AI",
+            queue_group_id: 5,
+            queue_name: "Open",
+            status: "presenting",
+            position: null,
+            called_at: null,
+            eta_minutes: null,
+            room_id: 7,
+            room_name: "Room Alpha",
+            judging_rooms: [],
+          },
+          {
+            entry_id: 504,
+            repo_id: 91,
+            id: 44,
+            title: "Sustainability",
+            queue_group_id: null,
+            queue_name: null,
+            status: "waiting",
+            position: 3,
+            called_at: null,
+            eta_minutes: 24,
+            room_id: null,
+            room_name: null,
+            judging_rooms: [],
+          },
+        ];
       if (path === "/api/challenges") body = { challenges: [challenge] };
       if (path === "/api/queue/rooms") body = [room];
       if (path.endsWith("/view"))
@@ -188,6 +251,10 @@ for (const layout of ["on", "off"]) {
         reviewHeaderRight: rect(review.querySelector("header [role='status'] ~ *"))?.right,
       };
     });
+    // Challenges that share the room's queue are all being judged now (H29).
+    await expect(page.getByText("Now", { exact: true })).toHaveCount(3);
+    await expect(page.getByText("FOSS")).toBeVisible();
+    await expect(page.getByText("Best use of AI")).toBeVisible();
     const lefts = [
       edges.title,
       edges.prep,

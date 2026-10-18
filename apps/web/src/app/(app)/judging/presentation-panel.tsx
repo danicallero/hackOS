@@ -37,7 +37,7 @@ import {
 } from "@/lib/judging-workspace";
 import type { NativeProject } from "@/lib/native-projects";
 import { projectSummary } from "@/lib/project-text";
-import { collapseRepoQueueMemberships, getRepoChallenges, type QueueEntry } from "@/lib/queue";
+import { getRepoChallenges, type QueueEntry } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
@@ -299,7 +299,7 @@ export function ProjectInfo({
 }: {
   entry: QueueEntry;
   challenge: Challenge | null;
-  /** Expanded judging shows the project details unfolded. */
+  /** Project view shows the project details unfolded. */
   detailsOpen?: boolean;
   onExternalOpen?: () => void;
 }) {
@@ -356,15 +356,20 @@ export function ProjectInfo({
   );
   const activity = useProjectGithubActivity(entry.repo_id)?.totals;
 
+  // Every challenge the project is queued in, shared queues included. All the ones that
+  // share the room's queue are being judged now, so each reads Now.
+  const nowGroup = repoChallenges.find((row) => row.id === entry.challenge_id)?.queue_group_id;
+  const isNow = (row: { id: number; queue_group_id?: number | null }) =>
+    row.id === entry.challenge_id || (nowGroup != null && row.queue_group_id === nowGroup);
   const queues =
     repoChallenges.length > 0
-      ? collapseRepoQueueMemberships(repoChallenges)
+      ? repoChallenges
       : challenge
         ? [
             {
               id: entry.challenge_id,
               title: challengeName(t, challenge, entry.challenge_id),
-              queue_name: null,
+              queue_group_id: null,
               status: entry.status,
               room_id: null,
               room_name: null,
@@ -395,19 +400,16 @@ export function ProjectInfo({
           )}
         </Fact>
         {queues.length > 0 && (
-          // A project can be in more than one queue; shared queue siblings collapse
-          // to one row and are named by the queue group. The one in the room leads.
+          // A project can be in several challenges, in the same shared queue or not.
+          // The ones being judged now lead.
           <Fact label={t("presentingFor")} className="sm:col-span-2">
             <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
               {[...queues]
-                .sort(
-                  (a, b) =>
-                    Number(b.id === entry.challenge_id) - Number(a.id === entry.challenge_id),
-                )
+                .sort((a, b) => Number(isNow(b)) - Number(isNow(a)))
                 .map((queue) => (
                   <li key={queue.id} className="flex min-w-0 items-baseline justify-between gap-3">
                     <span className="min-w-0 truncate">
-                      {queue.queue_name ?? queue.title}
+                      {queue.title}
                       {queue.room_name && (
                         <span className="text-muted-foreground text-xs font-normal whitespace-nowrap">
                           {" "}
@@ -415,7 +417,7 @@ export function ProjectInfo({
                         </span>
                       )}
                     </span>
-                    {queue.id === entry.challenge_id ? (
+                    {isNow(queue) ? (
                       <QueueStatusDot label={t("now")} tone="success" />
                     ) : (
                       <QueueStatusDot status={queue.status} />
