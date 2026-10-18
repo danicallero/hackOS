@@ -68,6 +68,8 @@
   "apiError_schedule_ends_before_starts": "The end must be after the start.",
   "apiError_schedule_scan_needs_participants": "Only items visible to participants can require scanning.",
   "apiError_schedule_item_not_found": "This schedule item no longer exists.",
+  "apiError_project_frozen": "Withdraw the submission to edit the project.",
+  "apiError_project_github_required": "Link a GitHub repository to submit the project.",
   "apiError_not_sponsor": "Only sponsor representatives have a meal plan.",
   "apiError_meal_plan_locked": "Changes to this meal are closed.",
   "apiError_removal_pin_expired": "That security PIN has expired. Request a new one.",

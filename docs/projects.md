@@ -28,9 +28,19 @@ writes require project editing and record a transactional audit.
 is locked and revision must match before saving. A stale save receives 409 and
 never replaces a newer draft. Submission validates required fields and verifies
 that uploaded file keys belong to this project and field. Required fields are
-not enforced during autosave. Members may continue editing after submission
-while editing is open (H20); submission history remains immutable. Gallery projections always use the last submitted snapshot and its form version,
-including for team members; their personal workspace retains the working copy.
+not enforced during autosave. A submitted project is frozen for participants
+(H20, H21): edits, invitations, challenge enrolment and the GitHub link answer
+409 `project_frozen`. Inside the submission window a member calls
+`POST /api/me/projects/:id/withdraw-submission` (`canWithdraw`), which returns the
+project to a plain draft (`submitted_at` cleared, so the deadline still binds),
+then edits and submits again. Leaving, deleting and withdrawing from a challenge
+stay available. Staff with `projects:edit` return a submitted project with
+`POST /api/projects/:id/unlock` (`decision: "unlock"`, reason required), which
+keeps `submitted_at` so the team may resubmit after the deadline; staff edits
+never need it. Submission history remains immutable and gallery projections use the
+last submitted snapshot and its form version. With `project_github_required`
+(Event settings → Projects) submission needs a linked repository or one entered
+by staff, else 400 `project_github_required`.
 Staff answer corrections use `PUT /api/repos/:id/draft` with the same revision
 contract, audited independently of participant windows (H21/H53).
 

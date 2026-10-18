@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { projectDescriptionField } from "@hackos/shared/forms";
 import type { ProjectForm } from "@hackos/shared/projects";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
@@ -41,7 +42,9 @@ export async function nativeEditable(
     await assertProjectWindow(db);
   // H20/H21: a submitted project is the presented project; participants withdraw it to edit.
   if (project.submission_status === "submitted" && !allowSubmitted)
-    throw new ConflictError("Withdraw the submission to edit the project");
+    throw new ConflictError("Withdraw the submission to edit the project", {
+      code: ERROR_REASONS.PROJECT_FROZEN,
+    });
   return project;
 }
 export async function nativeForm(db: Queryable = pool) {
@@ -187,6 +190,15 @@ export async function submitNativeProject(userId: number, id: number) {
     const form = await nativeForm(db);
     validateResponses(form.template, project.responses);
     await validateLibraryAnswers(db, form.template, project.responses, userId);
+    const github = await db.query(
+      `SELECT (SELECT project_github_required FROM event_config WHERE id=1) AS required,
+              (EXISTS (SELECT 1 FROM github_repo_links WHERE repo_id=$1) OR COALESCE(trim($2),'')<>'') AS linked`,
+      [id, project.github_url],
+    );
+    if (github.rows[0].required && !github.rows[0].linked)
+      throw new BadRequestError("A GitHub repository is required to submit", {
+        code: ERROR_REASONS.PROJECT_GITHUB_REQUIRED,
+      });
     for (const field of form.template) {
       if (
         field.project_video &&

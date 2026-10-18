@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
@@ -55,6 +56,9 @@ export function ProjectEditor({
   const { can } = useSessionContext();
   const [project, setProject] = useState(initialProject);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnReason, setReturnReason] = useState("");
+  const [repoUrl, setRepoUrl] = useState(initialProject.githubUrl ?? "");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [editing, setEditing] = useState(
@@ -123,6 +127,41 @@ export function ProjectEditor({
     } catch (cause) {
       setError(apiErrorText(cause, t, t("couldNotSaveDraft")));
       setWithdrawOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function returnToTeam() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/api/projects/${project.id}/unlock`, {
+        reason: returnReason.trim(),
+        decision: "unlock",
+      });
+      invalidateProjectReads(project.id);
+      const fresh = await api.get<NativeProject>(`/api/repos/${project.id}`);
+      setProject(fresh);
+      setStatus(fresh.submissionStatus);
+      setReturnReason("");
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveProject")));
+    } finally {
+      setReturnOpen(false);
+      setBusy(false);
+    }
+  }
+  async function saveRepoUrl() {
+    const next = repoUrl.trim();
+    if (next === (project.githubUrl ?? "")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/api/repos/${project.id}`, { githubUrl: next || null });
+      invalidateProjectReads(project.id);
+      setProject({ ...project, githubUrl: next || null });
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSaveProject")));
     } finally {
       setBusy(false);
     }
@@ -235,6 +274,24 @@ export function ProjectEditor({
   return (
     <PageLayout>
       <AlertModal
+        open={returnOpen}
+        onOpenChange={setReturnOpen}
+        title={t("projectReturnTitle")}
+        description={t("projectReturnDesc")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("projectReturnCta")}
+        confirmDisabled={!returnReason.trim()}
+        pending={busy}
+        onConfirm={() => void returnToTeam()}
+      >
+        <Textarea
+          aria-label={t("projectReturnReason")}
+          value={returnReason}
+          maxLength={1000}
+          onChange={(event) => setReturnReason(event.target.value)}
+        />
+      </AlertModal>
+      <AlertModal
         open={withdrawOpen}
         onOpenChange={setWithdrawOpen}
         title={t("projectWithdrawTitle")}
@@ -268,7 +325,16 @@ export function ProjectEditor({
       <ProjectsSectionHeader
         management={staff}
         recordName={name || project.name}
-        recordAction={editAction}
+        recordAction={
+          <>
+            {editAction}
+            {staff && status === "submitted" && can(CAPABILITIES.PROJECTS_EDIT) && (
+              <Button variant="outline" disabled={busy} onClick={() => setReturnOpen(true)}>
+                {t("projectReturnCta")}
+              </Button>
+            )}
+          </>
+        }
         recordState={
           <StatusBadge tone={status === "submitted" ? "success" : "neutral"} dot={false}>
             {t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
@@ -490,7 +556,22 @@ export function ProjectEditor({
                 </form>
               )}
             </SectionCard>
-            {!staff && project.isMember && <GithubLink projectId={project.id} />}
+            {staff && project.canEdit && (
+              <div className="space-y-2">
+                <Label htmlFor="staff-project-repo">{t("projectGithubUrlField")}</Label>
+                <Input
+                  id="staff-project-repo"
+                  type="url"
+                  value={repoUrl}
+                  disabled={busy}
+                  onChange={(event) => setRepoUrl(event.target.value)}
+                  onBlur={() => void saveRepoUrl()}
+                />
+              </div>
+            )}
+            {!staff && project.isMember && (
+              <GithubLink projectId={project.id} locked={status === "submitted"} />
+            )}
             <ProjectChallenges
               project={{ ...project, challenges, canEdit: project.canEdit && editing }}
               onChange={setChallenges}
@@ -526,7 +607,7 @@ export function ProjectEditor({
           showQueue
           asideExtra={
             !staff && project.isMember ? (
-              <GithubLink projectId={project.id} variant="plain" />
+              <GithubLink projectId={project.id} variant="plain" locked={status === "submitted"} />
             ) : staff && can(CAPABILITIES.PROJECTS_READ) ? (
               <GithubActivity projectId={project.id} />
             ) : undefined

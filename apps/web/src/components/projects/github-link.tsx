@@ -24,7 +24,16 @@ interface Candidate {
 }
 
 /** Links a project to one GitHub repository (private included) through the GitHub App. */
-export function GithubLink({ projectId, variant }: { projectId: number; variant?: "plain" }) {
+export function GithubLink({
+  projectId,
+  variant,
+  locked = false,
+}: {
+  projectId: number;
+  variant?: "plain";
+  /** A submitted project keeps its repository until it is withdrawn or returned. */
+  locked?: boolean;
+}) {
   const { t } = useLocale();
   const base = `/api/me/projects/${projectId}/github`;
   const status = useServerResource(["project-github", projectId], (signal) =>
@@ -41,6 +50,7 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
 
   if (!status.data?.configured) return null;
   const link = status.data.link;
+  if (locked && !link) return null;
 
   async function run(action: () => Promise<unknown>, success?: string) {
     setBusy(true);
@@ -82,19 +92,21 @@ export function GithubLink({ projectId, variant }: { projectId: number; variant?
           >
             {link.fullName}
           </a>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              run(async () => {
-                await api.delete(base);
-                // The App stays installed: re-read what it can access instead of reusing a stale list.
-                repos.reload();
-              }, t("githubRepoUnlinked"))
-            }
-          >
-            {t("githubUnlinkRepo")}
-          </Button>
+          {!locked && (
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                run(async () => {
+                  await api.delete(base);
+                  // The App stays installed: re-read what it can access instead of reusing a stale list.
+                  repos.reload();
+                }, t("githubRepoUnlinked"))
+              }
+            >
+              {t("githubUnlinkRepo")}
+            </Button>
+          )}
         </div>
       ) : repos.data && repos.data.repos.length > 0 ? (
         <div className="space-y-3">

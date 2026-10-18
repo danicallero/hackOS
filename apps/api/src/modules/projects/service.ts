@@ -424,6 +424,25 @@ export async function updateRepo(
         patch.presentationTimingPreference ?? before.presentation_timing_preference,
       ],
     );
+    if (!participant && patch.githubUrl !== undefined) {
+      // A repository entered by hand replaces the App link: its tracked activity belongs to another repo.
+      const dropped = await db.query(
+        `DELETE FROM github_repo_links WHERE repo_id=$1 AND lower($2::text) IS DISTINCT FROM lower('https://github.com/'||full_name) RETURNING full_name`,
+        [id, patch.githubUrl],
+      );
+      if (dropped.rowCount) {
+        await db.query(`DELETE FROM github_commits WHERE repo_id=$1`, [id]);
+        await db.query(`DELETE FROM github_pull_requests WHERE repo_id=$1`, [id]);
+        await audit(db, {
+          actorId,
+          entityType: "project_github_link",
+          entityId: id,
+          action: "unlink",
+          before: { fullName: dropped.rows[0].full_name },
+          source: "admin",
+        });
+      }
+    }
     if (!participant && before.submission_status === "submitted")
       await snapshotProjectSubmission(
         db,

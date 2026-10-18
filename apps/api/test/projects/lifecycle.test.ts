@@ -77,6 +77,85 @@ describe("Native lifecycle (#1006,#1007,H20)", () => {
     expect(snapshot.form_version_id).toBeTruthy();
     expect(snapshot.snapshot.project.responses.description).toBe("Built here");
   });
+  it("requires a linked GitHub repository when the event asks for it (H18)", async () => {
+    await pool.query(`UPDATE event_config SET project_github_required=true WHERE id=1`);
+    const id = await create();
+    await app.inject({
+      method: "PUT",
+      url: `/api/me/projects/${id}/draft`,
+      headers: asUser(owner),
+      payload: { responses: { description: "Built here" }, revision: 0 },
+    });
+    const submit = () =>
+      app.inject({
+        method: "POST",
+        url: `/api/me/projects/${id}/submit`,
+        headers: asUser(owner),
+      });
+    const refused = await submit();
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.details.code).toBe("project_github_required");
+    // Staff can enter the repository by hand.
+    const patch = await app.inject({
+      method: "PATCH",
+      url: `/api/repos/${id}`,
+      headers: asUser(admin),
+      payload: { githubUrl: "https://github.com/team/project" },
+    });
+    expect(patch.statusCode, patch.body).toBe(200);
+    expect((await submit()).statusCode).toBe(200);
+  });
+  it("lets staff return a submitted project to the team and drops a replaced App link (H21)", async () => {
+    const id = await create();
+    await app.inject({
+      method: "PUT",
+      url: `/api/me/projects/${id}/draft`,
+      headers: asUser(owner),
+      payload: { responses: { description: "Built here" }, revision: 0 },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/me/projects/${id}/submit`,
+      headers: asUser(owner),
+    });
+    await pool.query(
+      `INSERT INTO github_repo_links (repo_id, installation_id, github_repo_id, full_name) VALUES ($1, 9, 1, 'team/old')`,
+      [id],
+    );
+    const frozen = await app.inject({
+      method: "DELETE",
+      url: `/api/me/projects/${id}/github`,
+      headers: asUser(owner),
+    });
+    expect(frozen.statusCode).toBe(409);
+    expect(frozen.json().error.details.code).toBe("project_frozen");
+    const returned = await app.inject({
+      method: "POST",
+      url: `/api/projects/${id}/unlock`,
+      headers: asUser(admin),
+      payload: { reason: "Wrong repository", decision: "unlock" },
+    });
+    expect(returned.statusCode, returned.body).toBe(200);
+    const unlinked = await app.inject({
+      method: "DELETE",
+      url: `/api/me/projects/${id}/github`,
+      headers: asUser(owner),
+    });
+    expect(unlinked.statusCode, unlinked.body).toBe(200);
+    await pool.query(
+      `INSERT INTO github_repo_links (repo_id, installation_id, github_repo_id, full_name) VALUES ($1, 9, 1, 'team/old')`,
+      [id],
+    );
+    await app.inject({
+      method: "PATCH",
+      url: `/api/repos/${id}`,
+      headers: asUser(admin),
+      payload: { githubUrl: "https://github.com/team/new" },
+    });
+    expect(
+      (await pool.query(`SELECT 1 FROM github_repo_links WHERE repo_id=$1`, [id])).rowCount,
+    ).toBe(0);
+  });
   it("serializes concurrent autosaves and rejects stale revision", async () => {
     const id = await create();
     const results = await Promise.all(

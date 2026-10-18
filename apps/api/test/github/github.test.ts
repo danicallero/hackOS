@@ -36,7 +36,10 @@ async function getApp(): Promise<App> {
 }
 
 async function project(name: string, memberId?: number): Promise<number> {
-  const { rows } = await pool.query(`INSERT INTO repos (name) VALUES ($1) RETURNING id`, [name]);
+  const { rows } = await pool.query(
+    `INSERT INTO repos (name, submission_status) VALUES ($1, 'draft') RETURNING id`,
+    [name],
+  );
   if (memberId)
     await pool.query(
       `INSERT INTO submissions (repo_id, user_id, status) VALUES ($1, $2, 'active')`,

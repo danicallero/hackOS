@@ -1,3 +1,4 @@
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { PoolClient } from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -153,10 +154,23 @@ export async function selectableRepos(userId: number) {
   return out;
 }
 
+/** H20/H21: a submitted project is frozen, so its repository changes only after withdrawal or staff return. */
+async function assertNotFrozen(client: PoolClient, repoId: number): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT submission_status FROM repos WHERE id = $1 FOR UPDATE`,
+    [repoId],
+  );
+  if (rows[0]?.submission_status === "submitted")
+    throw new ConflictError("Withdraw the submission to edit the project", {
+      code: ERROR_REASONS.PROJECT_FROZEN,
+    });
+}
+
 export async function linkRepo(userId: number, repoId: number, githubRepoId: number) {
   const choice = (await selectableRepos(userId)).find((repo) => repo.id === githubRepoId);
   if (!choice) throw new NotFoundError("Repository not available in your GitHub installations");
   await withTransaction(async (client) => {
+    await assertNotFrozen(client, repoId);
     const taken = await client.query(
       `SELECT repo_id FROM github_repo_links WHERE github_repo_id = $1 AND repo_id <> $2`,
       [githubRepoId, repoId],
@@ -191,6 +205,7 @@ export async function linkRepo(userId: number, repoId: number, githubRepoId: num
 
 export async function unlinkRepo(userId: number, repoId: number): Promise<void> {
   await withTransaction(async (client) => {
+    await assertNotFrozen(client, repoId);
     const { rows } = await client.query(
       `DELETE FROM github_repo_links WHERE repo_id = $1 RETURNING full_name`,
       [repoId],

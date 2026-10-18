@@ -69,6 +69,7 @@ const createSchema = (t: Translate) =>
             (Number.isInteger(Number(value)) && Number(value) > 0 && Number(value) <= 100),
           t("fieldMustBeNumber"),
         ),
+      projectGithubRequired: z.boolean(),
       eventStartsAt: z.string(),
       eventEndsAt: z.string(),
       hackingStartsAt: z.string(),
@@ -141,6 +142,7 @@ function fromConfig(cfg: EventConfig): Values {
     hackingStartsAt: toLocalInputValue(cfg.hackingStartsAt, zone),
     hackingEndsAt: toLocalInputValue(cfg.hackingEndsAt, zone),
     showStartCountdown: cfg.showStartCountdown,
+    projectGithubRequired: cfg.projectGithubRequired,
   };
 }
 
@@ -203,6 +205,7 @@ export function EventTab({
       projectGalleryOpensAt: "",
       projectGalleryAudience: "staff",
       projectMaxTeamSize: "",
+      projectGithubRequired: false,
       eventStartsAt: "",
       eventEndsAt: "",
       hackingStartsAt: "",
@@ -242,6 +245,7 @@ export function EventTab({
         projectGalleryOpensAt: fromLocalInputValue(values.projectGalleryOpensAt, zone),
         projectGalleryAudience: values.projectGalleryAudience,
         projectMaxTeamSize: values.projectMaxTeamSize ? Number(values.projectMaxTeamSize) : null,
+        projectGithubRequired: values.projectGithubRequired,
         eventStartsAt: fromLocalInputValue(values.eventStartsAt, zone),
         eventEndsAt: fromLocalInputValue(values.eventEndsAt, zone),
         hackingStartsAt: fromLocalInputValue(values.hackingStartsAt, zone),
@@ -532,6 +536,20 @@ export function EventTab({
                         <Input type="number" min={1} max={100} {...field} />
                       </FormControl>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="projectGithubRequired"
+                  render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between gap-4 py-3">
+                        <FormLabel className="font-normal">{t("projectGithubRequired")}</FormLabel>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </div>
                     </FormItem>
                   )}
                 />
