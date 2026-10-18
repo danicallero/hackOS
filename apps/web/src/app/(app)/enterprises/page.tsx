@@ -2,72 +2,32 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { PublicationControls } from "@/components/common/publication-controls";
-import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
-import { SubmitButton } from "@/components/common/submit-button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { api, apiUpload } from "@/lib/api";
+import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { formatScheduledDateTime } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import {
-  type Enterprise,
-  initials,
-  isScheduled,
-  LOGO_ACCEPT,
-  LOGO_CONTENT_TYPES,
-  visibilityTone,
-} from "./shared";
-
-const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
-const optionalPositiveInt = z
-  .string()
-  .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
-
-const createSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  website: optionalUrl,
-  logoUrl: optionalUrl,
-  logoNegativeUrl: optionalUrl,
-  description: z.string().max(2000),
-  priority: optionalPositiveInt,
-  visibility: z.enum(["visible", "hidden"]),
-  availableFrom: z.string(),
-});
-type CreateValues = z.infer<typeof createSchema>;
+import { CreateEnterpriseModal } from "./create-enterprise-modal";
+import { GroupedEnterprises } from "./grouped-enterprises";
+import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
 
 function buildColumns(t: Translate, locale: string): Column<Enterprise>[] {
   return [
@@ -143,6 +103,16 @@ function buildColumns(t: Translate, locale: string): Column<Enterprise>[] {
       },
     },
     {
+      id: "kind",
+      header: t("enterpriseKindLabel"),
+      sortValue: (e) => e.kind,
+      cell: (e) => (
+        <span className="text-sm">
+          {e.kind === "collaborator" ? t("enterpriseKindCollaborator") : t("enterpriseKindSponsor")}
+        </span>
+      ),
+    },
+    {
       id: "priority",
       header: t("priorityLabel"),
       align: "right",
@@ -170,6 +140,8 @@ export default function EnterprisesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [grouped, setGrouped] = useState(false);
+  const [reordering, setReordering] = useState(false);
 
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
 
@@ -195,6 +167,21 @@ export default function EnterprisesPage() {
       setLoading(false);
     }
   }, [t, succeeded, failed, hasLoaded]);
+
+  const reorder = useCallback(
+    async (ids: number[]) => {
+      setReordering(true);
+      try {
+        await api.post("/api/enterprises/reorder", { ids });
+        await load();
+      } catch (err) {
+        toast.error(apiErrorText(err, t, t("couldNotReorder")), t("toastCompanyOrder"));
+      } finally {
+        setReordering(false);
+      }
+    },
+    [load, t],
+  );
 
   const bulkVisibility = useCallback(
     async (visible: boolean) => {
@@ -321,56 +308,77 @@ export default function EnterprisesPage() {
         }
       />
 
-      <DataTable
-        columns={columns}
-        data={enterprises}
-        getRowId={(e) => String(e.id)}
-        stateKey="enterprises-list"
-        getRowHref={(e) => `/enterprises/${e.id}`}
-        getRowLabel={(e) => e.name}
-        searchable={(e) => `${e.name} ${e.website ?? ""}`}
-        searchPlaceholder={t("searchEnterprisesPlaceholder")}
-        pageSize={15}
-        loading={loading && !hasLoaded()}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
-        selectable
-        selectedIds={selectedIds}
-        onSelectionChange={setSelectedIds}
-        toolbar={
-          selectedIds.size > 0 ? (
-            <>
-              <span className="text-muted-foreground text-sm">
-                {t("selectedCount", { count: selectedIds.size })}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={bulkBusy}
-                onClick={() => bulkVisibility(true)}
-                loading={bulkBusy}
-              >
-                <EyeIcon aria-hidden="true" className="size-4" />
-                {t("makeVisible")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={bulkBusy}
-                onClick={() => bulkVisibility(false)}
-                loading={bulkBusy}
-              >
-                <EyeSlashIcon aria-hidden="true" className="size-4" />
-                {t("hide")}
-              </Button>
-            </>
-          ) : undefined
-        }
-        empty={{
-          icon: BuildingsIcon,
-          title: t("noEnterprisesYetTitle"),
-          description: t("createFirstSponsorEnterprise"),
-        }}
-      />
+      <div className="flex gap-2">
+        <Button
+          variant={grouped ? "outline" : "secondary"}
+          size="sm"
+          onClick={() => setGrouped(false)}
+        >
+          {t("viewTable")}
+        </Button>
+        <Button
+          variant={grouped ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => setGrouped(true)}
+        >
+          {t("viewByPriority")}
+        </Button>
+      </div>
+
+      {grouped ? (
+        <GroupedEnterprises enterprises={enterprises} busy={reordering} onReorder={reorder} />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={enterprises}
+          getRowId={(e) => String(e.id)}
+          stateKey="enterprises-list"
+          getRowHref={(e) => `/enterprises/${e.id}`}
+          getRowLabel={(e) => e.name}
+          searchable={(e) => `${e.name} ${e.website ?? ""}`}
+          searchPlaceholder={t("searchEnterprisesPlaceholder")}
+          pageSize={15}
+          loading={loading && !hasLoaded()}
+          error={loadError ? { message: loadError, onRetry: load } : undefined}
+          selectable
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+          toolbar={
+            selectedIds.size > 0 ? (
+              <>
+                <span className="text-muted-foreground text-sm">
+                  {t("selectedCount", { count: selectedIds.size })}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={bulkBusy}
+                  onClick={() => bulkVisibility(true)}
+                  loading={bulkBusy}
+                >
+                  <EyeIcon aria-hidden="true" className="size-4" />
+                  {t("makeVisible")}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={bulkBusy}
+                  onClick={() => bulkVisibility(false)}
+                  loading={bulkBusy}
+                >
+                  <EyeSlashIcon aria-hidden="true" className="size-4" />
+                  {t("hide")}
+                </Button>
+              </>
+            ) : undefined
+          }
+          empty={{
+            icon: BuildingsIcon,
+            title: t("noEnterprisesYetTitle"),
+            description: t("createFirstSponsorEnterprise"),
+          }}
+        />
+      )}
 
       <CreateEnterpriseModal
         open={createOpen}
@@ -382,275 +390,5 @@ export default function EnterprisesPage() {
         }}
       />
     </PageLayout>
-  );
-}
-
-function CreateEnterpriseModal({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (created: Enterprise) => void | Promise<void>;
-}) {
-  const { t } = useLocale();
-  const form = useForm<CreateValues>({
-    mode: "onBlur",
-    reValidateMode: "onBlur",
-    resolver: zodResolver(createSchema),
-    defaultValues: {
-      name: "",
-      website: "",
-      logoUrl: "",
-      logoNegativeUrl: "",
-      description: "",
-      priority: "",
-      visibility: "hidden",
-      availableFrom: "",
-    },
-  });
-  const { reset } = form;
-  const defaultLogoInputRef = useRef<HTMLInputElement>(null);
-  const darkLogoInputRef = useRef<HTMLInputElement>(null);
-  const [defaultLogo, setDefaultLogo] = useState<File | null>(null);
-  const [darkLogo, setDarkLogo] = useState<File | null>(null);
-  const [scheduledPublish, setScheduledPublish] = useState(false);
-  const visibility = form.watch("visibility");
-
-  // Reset the form each time the modal opens so stale input never lingers.
-  useEffect(() => {
-    if (open) {
-      reset();
-      setDefaultLogo(null);
-      setDarkLogo(null);
-      setScheduledPublish(false);
-    }
-  }, [open, reset]);
-
-  function selectLogo(file: File | undefined, variant: "default" | "negative") {
-    if (!file) return;
-    if (!LOGO_CONTENT_TYPES.includes(file.type as (typeof LOGO_CONTENT_TYPES)[number])) {
-      toast.error(t("unsupportedFileType"), t("uploadLogo"));
-      return;
-    }
-    if (variant === "default") setDefaultLogo(file);
-    else setDarkLogo(file);
-  }
-
-  async function uploadLogo(enterpriseId: number, file: File, variant: "default" | "negative") {
-    const data = new FormData();
-    data.append("file", file);
-    await apiUpload(`/api/enterprises/${enterpriseId}/logo?variant=${variant}`, data);
-  }
-
-  async function onSubmit(values: CreateValues) {
-    try {
-      // POST /api/enterprises (createEnterpriseBody). Empty strings → null so
-      // optional fields are omitted; availableFrom is coerced to a Date server-side.
-      const created = await api.post<Enterprise>("/api/enterprises", {
-        name: values.name,
-        website: values.website || null,
-        logoUrl: values.logoUrl || null,
-        logoNegativeUrl: values.logoNegativeUrl || null,
-        description: values.description || null,
-        priority: values.priority ? Number(values.priority) : null,
-        visibility: values.visibility,
-        availableFrom: fromDatetimeLocal(values.availableFrom),
-      });
-      try {
-        if (defaultLogo) await uploadLogo(created.id, defaultLogo, "default");
-        if (darkLogo) await uploadLogo(created.id, darkLogo, "negative");
-      } catch (err) {
-        toast.error(apiErrorText(err, t, t("couldNotUploadLogo")), t("uploadLogo"));
-      }
-      toast.success(t("enterpriseCreated"), { compactTitle: t("toastCreateCompany") });
-      await onCreated(created);
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotCreateEnterprise")), t("toastCreateCompany"));
-    }
-  }
-
-  return (
-    <SidePanelEditor
-      open={open}
-      onOpenChange={onOpenChange}
-      icon={BuildingsIcon}
-      title={t("newEnterprise")}
-      footer={
-        <SubmitButton form="create-enterprise-form" pending={form.formState.isSubmitting}>
-          {t("createEnterprise")}
-        </SubmitButton>
-      }
-    >
-      <Form {...form}>
-        <form
-          id="create-enterprise-form"
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="space-y-5"
-        >
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("websiteLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("descriptionLabel")}</FormLabel>
-                <FormControl>
-                  <Textarea rows={3} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <div className="space-y-5 border-t pt-5">
-            <FormField
-              control={form.control}
-              name="logoUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("logoUrlLabel")}</FormLabel>
-                  <FormControl>
-                    <Input type="url" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="logoNegativeUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
-                  <FormControl>
-                    <Input type="url" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={form.formState.isSubmitting}
-                  onClick={() => defaultLogoInputRef.current?.click()}
-                >
-                  <UploadSimpleIcon aria-hidden="true" />
-                  {defaultLogo ? defaultLogo.name : t("uploadLogo")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={form.formState.isSubmitting}
-                  onClick={() => darkLogoInputRef.current?.click()}
-                >
-                  <UploadSimpleIcon aria-hidden="true" />
-                  {darkLogo ? darkLogo.name : t("uploadDarkLogo")}
-                </Button>
-              </div>
-              <input
-                ref={defaultLogoInputRef}
-                type="file"
-                accept={LOGO_ACCEPT}
-                className="sr-only"
-                aria-label={t("uploadLogo")}
-                onChange={(event) => {
-                  selectLogo(event.target.files?.[0], "default");
-                  event.target.value = "";
-                }}
-              />
-              <input
-                ref={darkLogoInputRef}
-                type="file"
-                accept={LOGO_ACCEPT}
-                className="sr-only"
-                aria-label={t("uploadDarkLogo")}
-                onChange={(event) => {
-                  selectLogo(event.target.files?.[0], "negative");
-                  event.target.value = "";
-                }}
-              />
-            </div>
-          </div>
-          <div className="space-y-5 border-t pt-5">
-            <FormField
-              control={form.control}
-              name="priority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("priorityLabel")}</FormLabel>
-                  <FormControl>
-                    <Input inputMode="numeric" {...field} />
-                  </FormControl>
-                  <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <PublicationControls
-              id="enterprise-publication"
-              visibility={visibility}
-              hiddenValue="hidden"
-              publishedValue="visible"
-              hiddenLabel={t("hiddenOption")}
-              publishedLabel={t("visibleLabel")}
-              visibilityLabel={t("colVisibility")}
-              scheduleLabel={t("schedulePublicationLabel")}
-              publishAtLabel={t("publishAtLabel")}
-              scheduled={scheduledPublish}
-              publishAt={form.watch("availableFrom")}
-              onVisibilityChange={(next) => {
-                form.setValue("visibility", next, { shouldDirty: true });
-                if (next === "visible") {
-                  setScheduledPublish(false);
-                  form.setValue("availableFrom", "", { shouldDirty: true });
-                }
-              }}
-              onScheduledChange={(next) => {
-                setScheduledPublish(next);
-                form.setValue(
-                  "availableFrom",
-                  next ? toDatetimeLocal(new Date().toISOString()) : "",
-                  {
-                    shouldDirty: true,
-                  },
-                );
-              }}
-              onPublishAtChange={(value) =>
-                form.setValue("availableFrom", value, { shouldDirty: true })
-              }
-            />
-          </div>
-        </form>
-      </Form>
-    </SidePanelEditor>
   );
 }

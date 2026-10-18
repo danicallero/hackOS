@@ -115,6 +115,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/enterprises/stands/codes.csv` | capability:sponsors:manage |
 | POST | `/api/enterprises/stands/qr` | capability:sponsors:manage + email-verification:caller |
 | GET | `/api/enterprises/stands/qr.zip` | capability:sponsors:manage |
+| POST | `/api/enterprises/reorder` | capability:sponsors:manage + email-verification:caller |
 | POST | `/api/enterprises/visibility` | capability:sponsors:manage + email-verification:caller |
 | GET | `/api/event` | capability:anyOf(event:manage,venue:manage,wallet:manage,presence:manage,invites:manage,intolerances:manage) |
 | PUT | `/api/event` | capability:anyOf(event:manage,venue:manage,wallet:manage,presence:manage,invites:manage,intolerances:manage) + email-verification:caller |

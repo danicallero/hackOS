@@ -35,6 +35,7 @@ type Content = {
   event: PublicEvent;
   schedule: PublicScheduleItem[];
   sponsors: PublicSponsor[];
+  collaborators: PublicSponsor[];
   challenges: PublicChallenge[];
   screenAnnouncements: PublicAnnouncement[];
   openApplications: PublicApplicationForm[];
@@ -79,6 +80,7 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         event,
         schedule,
         sponsorResult,
+        collaboratorResult,
         challengeResult,
         announcementResult,
         applicationResult,
@@ -86,6 +88,7 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         api.get<PublicEvent>("/api/public/event"),
         embedded ? Promise.resolve({ items: [] }) : logisticsApi.publicSchedule(),
         api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
+        api.get<{ items: PublicSponsor[] }>("/api/public/sponsors?kind=collaborator"),
         api.get<{ items: PublicChallenge[] }>("/api/public/challenges"),
         api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
         embedded
@@ -96,6 +99,7 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         event,
         schedule: schedule.items,
         sponsors: sponsorResult.items,
+        collaborators: collaboratorResult.items,
         challenges: challengeResult.items,
         // Only announcements actually being shown on a venue screen right now
         // (H50/H41-H42) belong on the public site — everything else on this
@@ -209,7 +213,15 @@ function PublicPageContent({
   appLabel: string;
   now: number;
 }) {
-  const { event, schedule, sponsors, challenges, screenAnnouncements, openApplications } = content;
+  const {
+    event,
+    schedule,
+    sponsors,
+    collaborators,
+    challenges,
+    screenAnnouncements,
+    openApplications,
+  } = content;
   const upcomingSchedule = schedule.filter((item) => Date.parse(item.endsAt) >= now).slice(0, 4);
   const eventPhase = useEventPhase(event);
   return (
@@ -403,6 +415,15 @@ function PublicPageContent({
           <EmptyNotice>{t("sponsorsPending")}</EmptyNotice>
         )}
       </section>
+
+      {collaborators.length > 0 && (
+        <section aria-labelledby="collaborators-title" className="border-t py-12">
+          <h2 id="collaborators-title" className="text-balance font-display text-2xl font-normal">
+            {t("collaborators")}
+          </h2>
+          <SponsorGrid sponsors={collaborators} className="mt-6" />
+        </section>
+      )}
     </>
   );
 }

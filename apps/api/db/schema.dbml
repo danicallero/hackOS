@@ -444,9 +444,11 @@ Table enterprises {
   description text
   director_id integer
   id integer [pk, increment, not null]
+  kind text [not null, default: `'sponsor'::text`, note: 'H45: public group. `priority` orders only within one kind.']
   logo_negative_url text
   logo_url text
   name text [unique, not null]
+  position integer [note: 'H45: manual order within one (kind, priority) group; NULL sorts by name after positioned rows.']
   priority integer
   stand_scannable boolean [not null, default: `false`, note: '#935: attendees can collect this sponsor by scanning its stand tags. Staff-controlled.']
   visibility text [not null, default: `'hidden'::text`]

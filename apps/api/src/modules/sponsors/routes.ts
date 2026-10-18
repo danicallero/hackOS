@@ -27,6 +27,8 @@ import {
   judgeParams,
   memberParams,
   OWNER_EDITABLE_KEYS,
+  publicSponsorsQuery,
+  reorderEnterprisesBody,
   sponsorFaqBody,
   standScannableBody,
   standTagBody,
@@ -49,6 +51,7 @@ import {
   myEnterprise,
   removeEnterpriseJudge,
   removeEnterpriseMember,
+  reorderEnterprises,
   setEnterpriseLogo,
   setEnterprisesVisibility,
   updateEnterprise,
@@ -90,12 +93,16 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     {
       ...access({ kind: "public", anonymousCategory: "public-content" }),
       schema: {
+        querystring: publicSponsorsQuery,
         summary: "List public sponsors",
-        description: "Returns visible sponsor enterprises for the public event site (H45).",
+        description:
+          "Returns visible enterprises of one `kind` (`sponsor` by default, or `collaborator`) for the public event site, ordered by priority within that kind (H45).",
       },
     },
-    async () => ({
-      items: await sharedCache("public-content", "sponsors", 15, listPublicSponsors),
+    async (req) => ({
+      items: await sharedCache("public-content", `sponsors:${req.query.kind}`, 15, () =>
+        listPublicSponsors(req.query.kind),
+      ),
     }),
   );
 
@@ -149,6 +156,22 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => setEnterprisesVisibility(req.body.ids, req.body.visible, req.userId),
+  );
+
+  // Manual order inside one (kind, priority) group (H45).
+  r.post(
+    "/api/enterprises/reorder",
+    {
+      ...access({ kind: "capability", capability: CAPABILITIES.SPONSORS_MANAGE }),
+      preHandler: [manage, idempotencyGuard],
+      schema: {
+        body: reorderEnterprisesBody,
+        summary: "Reorder enterprises within a group",
+        description:
+          "Sets the display order of enterprises that share the same kind and priority; ids from different groups are rejected (H45).",
+      },
+    },
+    async (req) => reorderEnterprises(req.body.ids, req.userId),
   );
 
   // Sponsor rep's own enterprise (H44).
