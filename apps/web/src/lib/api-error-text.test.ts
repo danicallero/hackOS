@@ -19,6 +19,18 @@ describe("apiErrorText", () => {
     expect(text).not.toContain("English server text");
   });
 
+  it("explains a repository linked to another project in every locale", () => {
+    const err = new ApiError(409, "conflict", "English server text", {
+      code: ERROR_REASONS.GITHUB_REPO_ALREADY_LINKED,
+    });
+    for (const locale of ["es", "gl", "en"] as const) {
+      const t = (key: Parameters<typeof translateMessage>[1]) => translateMessage(locale, key);
+      expect(apiErrorText(err, t, "fallback")).toBe(
+        { es: commonEs, gl: commonGl, en: commonEn }[locale].apiError_github_repo_already_linked,
+      );
+    }
+  });
+
   it("uses generic localized copy by status for unknown reasons", () => {
     expect(apiErrorText(new ApiError(403, "forbidden", "No"), tGl, "fb")).toBe(
       commonGl.apiErrorForbidden,

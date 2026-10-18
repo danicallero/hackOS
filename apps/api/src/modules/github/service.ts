@@ -175,7 +175,10 @@ export async function linkRepo(userId: number, repoId: number, githubRepoId: num
       `SELECT repo_id FROM github_repo_links WHERE github_repo_id = $1 AND repo_id <> $2`,
       [githubRepoId, repoId],
     );
-    if (taken.rowCount) throw new ConflictError("This repository is already linked to a project");
+    if (taken.rowCount)
+      throw new ConflictError("This repository is already linked to another project", {
+        code: ERROR_REASONS.GITHUB_REPO_ALREADY_LINKED,
+      });
     await client.query(
       `INSERT INTO github_repo_links (repo_id, installation_id, github_repo_id, full_name, is_private, linked_by)
        VALUES ($1, $2, $3, $4, $5, $6)

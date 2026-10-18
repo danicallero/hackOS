@@ -35,7 +35,9 @@ Without them the "Link GitHub repo" button is hidden.
    A member whose account is already linked (see below) and who has the App
    installed gets the dropdown straight away, with no redirect; "Share more
    repositories" reopens the GitHub install page. A
-   repository belongs to one project. The link fills the project's GitHub URL
+   repository belongs to one project. Selecting one already linked to another
+   project returns `409` with `details.code=github_repo_already_linked`; the
+   selector shows the localized explanation inline and keeps the selection for retry. The link fills the project's GitHub URL
    when empty, is audited, and backfills up to 300 commits and 300 pull requests.
 4. **Unlink** (`DELETE .../github`) removes the link and tracked activity.
 

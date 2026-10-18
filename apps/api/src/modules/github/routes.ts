@@ -243,7 +243,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
         body: z.object({ githubRepoId: z.number().int().positive() }),
         summary: "Link a GitHub repository to a project",
         description:
-          "Links one repository the member granted the App access to. Fills the project's GitHub URL when empty, audits the change and seeds commits and pull requests in the background. A repository can belong to one project.",
+          "Links one repository the member granted the App access to. Fills the project's GitHub URL when empty, audits the change and seeds commits and pull requests in the background. A repository can belong to one project; linking one already associated with another project returns 409 with details.code=github_repo_already_linked.",
       },
     },
     async (q) => {

@@ -27,6 +27,8 @@ export const ERROR_REASONS = {
   SCHEDULE_ITEM_NOT_FOUND: "schedule_item_not_found",
   /** 409: a submitted project is frozen; the team withdraws the submission to edit. */
   PROJECT_FROZEN: "project_frozen",
+  /** 409: the GitHub repository already belongs to another project. */
+  GITHUB_REPO_ALREADY_LINKED: "github_repo_already_linked",
   /** 400: the event requires a linked GitHub repository to submit. */
   PROJECT_GITHUB_REQUIRED: "project_github_required",
 } as const;
