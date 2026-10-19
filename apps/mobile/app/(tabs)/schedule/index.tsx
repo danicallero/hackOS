@@ -496,6 +496,9 @@ export default function ScheduleScreen() {
   const twoPane = windowSizeClass(windowWidth) === "expanded";
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editSignal, setEditSignal] = useState(0);
+  // How far down the window the two-pane row starts: the native header's height.
+  const [paneTop, setPaneTop] = useState(0);
+  const rowRef = useRef<View>(null);
   const selectionValue = useMemo(() => ({ selectedId, select: setSelectedId }), [selectedId]);
 
   return (
@@ -586,7 +589,11 @@ export default function ScheduleScreen() {
         </GlassView>
       ) : null}
       <ScheduleSelectionContext.Provider value={twoPane ? selectionValue : null}>
-        <View style={{ flex: 1, flexDirection: "row" }}>
+        <View
+          ref={rowRef}
+          onLayout={() => rowRef.current?.measureInWindow((_x, y) => setPaneTop(Math.max(0, y)))}
+          style={{ flex: 1, flexDirection: "row" }}
+        >
           <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
             <ScheduleScrollGestureBoundary
               enabled={scheduleScrollGuardEnabled}
@@ -719,10 +726,16 @@ export default function ScheduleScreen() {
                 borderLeftColor: colors.separator,
                 borderLeftWidth: StyleSheet.hairlineWidth,
                 flex: 1,
+                marginTop: -paneTop,
               }}
             >
               {selectedId !== null ? (
-                <ScheduleDetailScreen editSignal={editSignal} embedded id={String(selectedId)} />
+                <ScheduleDetailScreen
+                  editSignal={editSignal}
+                  embedded
+                  headerHeight={paneTop}
+                  id={String(selectedId)}
+                />
               ) : (
                 <EmptyState icon="calendar" title={t("scheduleDetails")} />
               )}

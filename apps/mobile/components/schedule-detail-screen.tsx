@@ -41,11 +41,13 @@ import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
 /**
- * As a pane the detail runs the full height beside the list: its content starts at the top of
- * the display, level with the host's "Schedule" title, and only the title row keeps clear of
- * the host's toolbar items (filter, search) at the top right.
+ * As a pane the detail runs the full height beside the list: the host pulls it up under its
+ * header, and the title sits level with the host's "Schedule" title (a little over half-way
+ * down the header). Only the title row keeps clear of the host's toolbar items (filter,
+ * search) at the top right.
  */
-const EMBEDDED_TOP_INSET = 12;
+const EMBEDDED_TITLE_LINE = 34;
+const EMBEDDED_TITLE_CENTER = 0.58;
 const EMBEDDED_TOOLBAR_CLEARANCE = 136;
 const noTextShadow = {
   textShadowColor: "transparent" as const,
@@ -69,11 +71,14 @@ export function ScheduleDetailScreen({
   id: idProp,
   embedded = false,
   editSignal = 0,
+  headerHeight = 0,
 }: {
   id?: string;
   embedded?: boolean;
   /** Bumped by the host (the side-column pencil) to open the editor. */
   editSignal?: number;
+  /** The host header's height, which the pane is pulled up under (embedded only). */
+  headerHeight?: number;
 }) {
   const params = useLocalSearchParams<{ id: string }>();
   const id = idProp ?? params.id;
@@ -354,7 +359,11 @@ export function ScheduleDetailScreen({
           flexGrow: 1,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          paddingTop: embedded ? EMBEDDED_TOP_INSET : usesCustomAndroidHeader ? insets.top + 76 : 0,
+          paddingTop: embedded
+            ? Math.max(0, headerHeight * EMBEDDED_TITLE_CENTER - EMBEDDED_TITLE_LINE / 2)
+            : usesCustomAndroidHeader
+              ? insets.top + 76
+              : 0,
         }}
         style={{ backgroundColor: colors.background, flex: 1 }}
       >
