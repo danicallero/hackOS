@@ -499,6 +499,13 @@ export default function ScheduleScreen() {
   // How far down the window the two-pane row starts: the native header's height.
   const [paneTop, setPaneTop] = useState(0);
   const rowRef = useRef<View>(null);
+  // A two-pane window opens on the first activity, like Mail or Notes, instead of an empty pane;
+  // a selection that a filter or an edit removed falls back to the first one too.
+  const firstItemId = filteredItems[0]?.id ?? null;
+  const selectedVisible = filteredItems.some((entry) => entry.id === selectedId);
+  useEffect(() => {
+    if (twoPane && !selectedVisible && firstItemId !== null) setSelectedId(firstItemId);
+  }, [twoPane, selectedVisible, firstItemId]);
   const selectionValue = useMemo(() => ({ selectedId, select: setSelectedId }), [selectedId]);
 
   return (
