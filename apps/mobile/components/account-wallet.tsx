@@ -143,6 +143,8 @@ export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
         <WalletOverlayContent
           wallet={wallet}
           closeTestID="wallet-modal-close"
+          // The modal fills the rounded display: keep the button clear of the corner arc.
+          cornerInset={12}
           initialPurpose="badge"
         />
       </View>
@@ -152,10 +154,13 @@ export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
 
 function WalletOverlayContent({
   closeTestID,
+  cornerInset = 0,
   initialPurpose,
   toolbarCloses = false,
   wallet,
 }: {
+  /** Extra inset from the display's rounded corner, for a full-screen modal. */
+  cornerInset?: number;
   closeTestID: string;
   initialPurpose?: "ticket" | "badge";
   wallet: AccountWalletController;
@@ -176,7 +181,8 @@ function WalletOverlayContent({
           testID={closeTestID}
           wallet={wallet}
           glyph="close"
-          top={chrome.buttonTop}
+          left={16 + cornerInset}
+          top={chrome.buttonTop + cornerInset}
         />
       )}
     </>
@@ -185,11 +191,13 @@ function WalletOverlayContent({
 
 function WalletToggleButton({
   glyph,
+  left = 16,
   testID,
   top,
   wallet,
 }: {
   glyph: "wallet" | "close";
+  left?: number;
   testID: string;
   top: number;
   wallet: AccountWalletController;
@@ -211,7 +219,7 @@ function WalletToggleButton({
       style={{
         borderRadius: ACCOUNT_WALLET_BUTTON_SIZE / 2,
         height: ACCOUNT_WALLET_BUTTON_SIZE,
-        left: 16,
+        left,
         position: "absolute",
         top,
         width: ACCOUNT_WALLET_BUTTON_SIZE,
