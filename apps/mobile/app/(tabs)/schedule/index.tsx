@@ -495,6 +495,7 @@ export default function ScheduleScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const twoPane = windowSizeClass(windowWidth) === "expanded";
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [editSignal, setEditSignal] = useState(0);
   const selectionValue = useMemo(() => ({ selectedId, select: setSelectedId }), [selectedId]);
 
   return (
@@ -514,6 +515,13 @@ export default function ScheduleScreen() {
               icon="plus"
               accessibilityLabel={t("scheduleAdd")}
               onPress={() => setFormTarget("create")}
+            />
+          ) : null}
+          {canManage && twoPane && selectedId !== null ? (
+            <Stack.Toolbar.Button
+              icon="pencil"
+              accessibilityLabel={t("scheduleEdit")}
+              onPress={() => setEditSignal((count) => count + 1)}
             />
           ) : null}
         </Stack.Toolbar>
@@ -714,7 +722,7 @@ export default function ScheduleScreen() {
               }}
             >
               {selectedId !== null ? (
-                <ScheduleDetailScreen embedded id={String(selectedId)} />
+                <ScheduleDetailScreen editSignal={editSignal} embedded id={String(selectedId)} />
               ) : (
                 <EmptyState icon="calendar" title={t("scheduleDetails")} />
               )}

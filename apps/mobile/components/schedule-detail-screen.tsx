@@ -40,6 +40,8 @@ import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
+/** Clears the host Schedule's transparent header when the detail is a pane of it. */
+const EMBEDDED_TOP_INSET = 72;
 const noTextShadow = {
   textShadowColor: "transparent" as const,
   textShadowOffset: { height: 0, width: 0 },
@@ -61,9 +63,12 @@ const sectionHeaderStyle = {
 export function ScheduleDetailScreen({
   id: idProp,
   embedded = false,
+  editSignal = 0,
 }: {
   id?: string;
   embedded?: boolean;
+  /** Bumped by the host (the side-column pencil) to open the editor. */
+  editSignal?: number;
 }) {
   const params = useLocalSearchParams<{ id: string }>();
   const id = idProp ?? params.id;
@@ -89,6 +94,9 @@ export function ScheduleDetailScreen({
   const notifications = useScheduleNotifications(data ?? []);
   const [editing, setEditing] = useState(false);
   const [adminItem, setAdminItem] = useState<AdminScheduleItem | null>(null);
+  useEffect(() => {
+    if (editSignal > 0) setEditing(true);
+  }, [editSignal]);
   const [refreshing, setRefreshing] = useState(false);
 
   async function onRefresh() {
@@ -333,7 +341,7 @@ export function ScheduleDetailScreen({
         </Stack.Toolbar>
       ) : null}
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
+        contentInsetAdjustmentBehavior={embedded ? "never" : "automatic"}
         refreshControl={
           <RefreshControl onRefresh={() => void onRefresh()} refreshing={refreshing} />
         }
@@ -341,38 +349,18 @@ export function ScheduleDetailScreen({
           flexGrow: 1,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          paddingTop: embedded ? 16 : usesCustomAndroidHeader ? insets.top + 76 : 0,
+          paddingTop: embedded ? EMBEDDED_TOP_INSET : usesCustomAndroidHeader ? insets.top + 76 : 0,
         }}
         style={{ backgroundColor: colors.background, flex: 1 }}
       >
         {embedded && item ? (
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 12, paddingBottom: 8 }}>
-            <Text
-              accessibilityRole="header"
-              numberOfLines={2}
-              style={{ color: colors.label, flex: 1, fontSize: 28, fontWeight: "700" }}
-            >
-              {item.title}
-            </Text>
-            {reminderOn !== null ? (
-              <LegacyHeaderIconButton
-                accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
-                  name: item.title,
-                })}
-                accessibilityState={{ selected: reminderOn }}
-                icon={reminderOn ? "bell.fill" : "bell"}
-                tintColor={reminderOn ? colors.accent : colors.label}
-                onPress={() => void notifications.toggleEntry(item)}
-              />
-            ) : null}
-            {canManage ? (
-              <LegacyHeaderIconButton
-                accessibilityLabel={t("scheduleEdit")}
-                icon="pencil"
-                onPress={() => setEditing(true)}
-              />
-            ) : null}
-          </View>
+          <Text
+            accessibilityRole="header"
+            numberOfLines={2}
+            style={{ color: colors.label, fontSize: 28, fontWeight: "700", paddingBottom: 8 }}
+          >
+            {item.title}
+          </Text>
         ) : null}
         <View style={{ gap: 8 }}>
           <StaleDataBanner updatedAt={staleSince} />

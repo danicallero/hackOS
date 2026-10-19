@@ -383,7 +383,8 @@ left app gets the column on its left edge while its safe-area insets stay 0, so 
 collapse uses the island region as its morph target (it sits in the side column on a foldable
 iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `foldPanes()`
 (the areas above and below a horizontal fold) and `AdaptiveFrame` keeps content in the pane before a vertical fold (book pose). A horizontal
-fold (laptop or tabletop) is not handled: content still crosses it, and there is no two-pane layout. The module is a native dependency: it needs a
+fold (laptop or tabletop) keeps content above it; the area below stays empty. Schedule and Gallery
+show list and detail side by side on expanded windows (840 dp and up). The module is a native dependency: it needs a
 rebuilt development client, and without it every call reports "no region".
 
 Other foldables (Android, Samsung, Pixel, Xiaomi, Honor): the size classes, the 720 dp

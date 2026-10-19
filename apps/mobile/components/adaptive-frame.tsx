@@ -40,6 +40,9 @@ export function AdaptiveFrame({
   // system's own components.
   const fold = useDivisionRegion();
   const beforeFold = fold && fold.height > fold.width ? Math.max(0, fold.x - 8) : null;
+  // A fold running across the display (laptop or tabletop pose) leaves two stacked areas;
+  // with no two-pane layout everything stays in the upper one, above the crease.
+  const aboveFold = fold && fold.width > fold.height ? Math.max(0, fold.y - 8) : null;
   const columnWidth = Math.min(
     maxContentWidth(width),
     beforeFold === null ? Number.POSITIVE_INFINITY : beforeFold,
@@ -54,7 +57,14 @@ export function AdaptiveFrame({
         paddingRight: padSides ? insets.right : 0,
       }}
     >
-      <View style={{ flex: 1, maxWidth: columnWidth, width: "100%" }}>
+      <View
+        style={{
+          flex: 1,
+          maxHeight: aboveFold ?? undefined,
+          maxWidth: columnWidth,
+          width: "100%",
+        }}
+      >
         <SideRegionProvider value={sideRegionForInsets(insets)}>
           {padSides ? (
             <SafeAreaProvider
