@@ -513,9 +513,11 @@ export function DiaryScreen() {
       // As Activities: the title is a native leading item on the bar row,
       // beside the trailing items, so no empty row sits above a large title.
       // An empty navigation title stops iOS 26 adding its centred one.
-      title: "",
+      // Beside a side column the title is the native large title, as on Activities: a
+      // toolbar title has no backdrop there (vertical bars have no scroll-edge effect).
+      title: sideRegion.edge ? t("tabDiary") : "",
       headerShown: true,
-      headerLargeTitle: false,
+      headerLargeTitle: Boolean(sideRegion.edge),
       // The system bar background: the list scrolls under it with iOS 26's
       // scroll-edge effect, never an opaque page-coloured block.
       headerTransparent: true,
@@ -536,7 +538,7 @@ export function DiaryScreen() {
           }
         : undefined,
     });
-  }, [glassAvailable, navigation, searchable, t]);
+  }, [glassAvailable, navigation, searchable, sideRegion.edge, t]);
 
   const noteInitial =
     noteTarget?.kind === "person"
@@ -584,17 +586,6 @@ export function DiaryScreen() {
       }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
-      {glassAvailable && sideRegion.edge ? (
-        // A vertical bar has no scroll-edge effect, so a toolbar title would sit
-        // un-backed with the list scrolling through it; here it scrolls away.
-        <Text
-          accessibilityRole="header"
-          maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-          style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
-        >
-          {t("tabDiary")}
-        </Text>
-      ) : null}
       {pendingCount > 0 ? (
         <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
           {t("diaryPendingScans", { count: String(pendingCount) })}

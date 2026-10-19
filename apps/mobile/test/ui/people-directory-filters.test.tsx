@@ -20,6 +20,7 @@ jest.mock("expo-router/stack", () => {
 });
 let mockActivityId: string | undefined;
 
+jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useLocalSearchParams: () => ({ activityId: mockActivityId }),

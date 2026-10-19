@@ -26,6 +26,7 @@ const mockT = (key: string, params?: Record<string, string>) =>
     teamDetailMemberAddedByStaff: "Added by staff",
   })[key] ?? key;
 
+jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => ({ entryId: "900", roomId: "4" }),
   useNavigation: () => ({ setOptions: mockSetOptions }),
