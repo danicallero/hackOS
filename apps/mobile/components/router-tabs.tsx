@@ -538,7 +538,13 @@ function VerticalTabBar({
           liquidGlass={liquidGlass}
           reducedMotion={reducedMotion}
           surfaceComponent={surfaceComponent}
-          style={{ borderRadius: barWidth / 2, height: barWidth, width: barWidth }}
+          style={{
+            alignItems: "center",
+            borderRadius: barWidth / 2,
+            height: barWidth,
+            justifyContent: "center",
+            width: barWidth,
+          }}
           testID={`${testID}-overflow-group`}
           theme={theme}
         >
