@@ -74,9 +74,10 @@ export function AccountWalletButton({ wallet }: { wallet: AccountWalletControlle
   if (sideRegion.edge && isRealLiquidGlassAvailable()) {
     return (
       <Stack.Toolbar placement="left">
+        {/* The same item becomes the close control while the wallet is open. */}
         <Stack.Toolbar.Button
-          icon="wallet.pass"
-          accessibilityLabel={t("tabWallet")}
+          icon={wallet.open ? "xmark" : "wallet.pass"}
+          accessibilityLabel={wallet.open ? t("close") : t("tabWallet")}
           onPress={wallet.toggle}
         />
       </Stack.Toolbar>
@@ -152,16 +153,20 @@ function WalletOverlayContent({
   wallet: AccountWalletController;
 }) {
   const chrome = accountWalletChrome(useSafeAreaInsets().top, Platform.OS);
+  // Beside a side column the toolbar item itself turns into the close control.
+  const toolbarCloses = Boolean(useSideRegion().edge) && isRealLiquidGlassAvailable();
   return (
     <>
       <WalletScreen contentTopInset={chrome.walletContentTop} initialPurpose={initialPurpose} />
       <AndroidStatusBarScrim />
-      <WalletToggleButton
-        testID={closeTestID}
-        wallet={wallet}
-        glyph="close"
-        top={chrome.buttonTop}
-      />
+      {toolbarCloses ? null : (
+        <WalletToggleButton
+          testID={closeTestID}
+          wallet={wallet}
+          glyph="close"
+          top={chrome.buttonTop}
+        />
+      )}
     </>
   );
 }
