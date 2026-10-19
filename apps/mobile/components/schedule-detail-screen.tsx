@@ -62,11 +62,17 @@ export function ScheduleDetailScreen({
   id: idProp,
   embedded = false,
   editSignal = 0,
+  onScrollOffset,
+  topInset = 0,
 }: {
   id?: string;
   embedded?: boolean;
   /** Bumped by the host (the side-column pencil) to open the editor. */
   editSignal?: number;
+  /** Embedded: reports the scroll offset so the host can fade in its top band. */
+  onScrollOffset?: (offset: number) => void;
+  /** Embedded: the host's top band the content starts below. */
+  topInset?: number;
 }) {
   const params = useLocalSearchParams<{ id: string }>();
   const id = idProp ?? params.id;
@@ -340,6 +346,10 @@ export function ScheduleDetailScreen({
       ) : null}
       <ScrollView
         contentInsetAdjustmentBehavior={embedded ? "never" : "automatic"}
+        onScroll={
+          embedded ? (event) => onScrollOffset?.(event.nativeEvent.contentOffset.y) : undefined
+        }
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl onRefresh={() => void onRefresh()} refreshing={refreshing} />
         }
@@ -347,7 +357,7 @@ export function ScheduleDetailScreen({
           flexGrow: 1,
           paddingBottom: 40,
           paddingHorizontal: CONTENT_PADDING,
-          paddingTop: embedded ? 8 : usesCustomAndroidHeader ? insets.top + 76 : 0,
+          paddingTop: embedded ? topInset + 8 : usesCustomAndroidHeader ? insets.top + 76 : 0,
         }}
         style={{ backgroundColor: colors.background, flex: 1 }}
       >

@@ -97,6 +97,8 @@ interface ScheduleSection {
 const SECTION_HEADER_HEIGHT = 34;
 // Size + placement of the floating "add" button — the list's own bottom
 // padding reserves this much space so its last card never renders behind it.
+/** Height of each column's own top band in the two-pane layout. */
+const TWO_PANE_BAND = 72;
 const FAB_SIZE = 52;
 const FAB_MARGIN = 24;
 // Short clearance above the tab bar: enough to keep the FAB tappable without
@@ -223,20 +225,18 @@ export default function ScheduleScreen() {
       return;
     }
     navigation.setOptions({
-      title: t("tabSchedule"),
+      // Two panes: each column draws its own top band (below), so the bar paints nothing.
+      title: twoPane ? "" : t("tabSchedule"),
       headerShown: true,
       headerLargeTitle: false,
-      // Two panes: the bar must not paint a band across the detail pane, which runs under it;
-      // the list column paints its own backing below instead.
       headerTransparent: twoPane,
-      // One backing for the list column replaces the bar's own blur, which would span the
-      // detail pane as well.
       ...(twoPane
         ? {
+            headerBlurEffect: "none" as const,
             scrollEdgeEffects: {
-              bottom: "automatic" as const,
-              left: "automatic" as const,
-              right: "automatic" as const,
+              bottom: "hidden" as const,
+              left: "hidden" as const,
+              right: "hidden" as const,
               top: "hidden" as const,
             },
           }
@@ -511,10 +511,8 @@ export default function ScheduleScreen() {
 
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editSignal, setEditSignal] = useState(0);
-  // How far down the window the two-pane row starts: the native header's height.
-  const [paneTop, setPaneTop] = useState(0);
+  const [detailOffset, setDetailOffset] = useState(0);
   const selectedTitle = filteredItems.find((entry) => entry.id === selectedId)?.title ?? null;
-  const bandProbeRef = useRef<View>(null);
   // A two-pane window opens on the first activity, like Mail or Notes, instead of an empty pane;
   // a selection that a filter or an edit removed falls back to the first one too.
   const firstItemId = filteredItems[0]?.id ?? null;
@@ -611,44 +609,28 @@ export default function ScheduleScreen() {
           </Pressable>
         </GlassView>
       ) : null}
-      {twoPane ? (
-        // A 1 pt scroll view that never scrolls: iOS insets its content by the native bar's
-        // height, so where its child lands in the window is the bar's height. The list cannot
-        // say it (it is scrolled to the current activity), the window cannot (the bar is
-        // transparent).
-        <ScrollView
-          pointerEvents="none"
-          contentInsetAdjustmentBehavior="automatic"
-          scrollEnabled={false}
-          style={{ height: 1, left: 0, opacity: 0, position: "absolute", top: 0, width: 1 }}
-        >
-          <View
-            ref={bandProbeRef}
-            onLayout={() =>
-              bandProbeRef.current?.measureInWindow((_x, y) => {
-                if (y > 0) setPaneTop(y);
-              })
-            }
-            style={{ height: 1, width: 1 }}
-          />
-        </ScrollView>
-      ) : null}
       <ScheduleSelectionContext.Provider value={twoPane ? selectionValue : null}>
         <View style={{ flex: 1, flexDirection: "row" }}>
           <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
             {twoPane ? (
+              // The list's own top band, in the page colour: the dates and cards stop at its
+              // bottom edge, the way they stop under the bar on a phone.
               <View
                 pointerEvents="none"
                 style={{
                   backgroundColor: colors.background,
-                  height: paneTop,
-                  left: 0,
-                  position: "absolute",
-                  right: 0,
-                  top: 0,
-                  zIndex: 5,
+                  height: TWO_PANE_BAND,
+                  justifyContent: "center",
+                  paddingHorizontal: 16,
                 }}
-              />
+              >
+                <Text
+                  accessibilityRole="header"
+                  style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+                >
+                  {t("tabSchedule")}
+                </Text>
+              </View>
             ) : null}
             <ScheduleScrollGestureBoundary
               enabled={scheduleScrollGuardEnabled}
@@ -658,7 +640,7 @@ export default function ScheduleScreen() {
                 ref={listRef}
                 sections={sections}
                 keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
-                contentInsetAdjustmentBehavior="automatic"
+                contentInsetAdjustmentBehavior={twoPane ? "never" : "automatic"}
                 contentContainerStyle={{
                   flexGrow: 1,
                   // Exactly clears the FAB (its own offset + height + a small gap) —
@@ -781,33 +763,55 @@ export default function ScheduleScreen() {
                 borderLeftColor: colors.separator,
                 borderLeftWidth: StyleSheet.hairlineWidth,
                 flex: 1,
-                marginTop: paneTop,
               }}
             >
-              {selectedTitle ? (
-                // In the header band, level with "Schedule"; the pane itself starts below the
-                // bar so nothing scrolls under it and no scroll-edge blur is drawn over it.
-                <Text
-                  accessibilityRole="header"
-                  numberOfLines={1}
-                  style={{
-                    color: colors.label,
-                    fontSize: 28,
-                    fontWeight: "700",
-                    left: 20,
-                    position: "absolute",
-                    right: 136,
-                    top: Math.max(0, paneTop * 0.58 - 17) - paneTop,
-                  }}
-                >
-                  {selectedTitle}
-                </Text>
-              ) : null}
               {selectedId !== null ? (
-                <ScheduleDetailScreen editSignal={editSignal} embedded id={String(selectedId)} />
+                <ScheduleDetailScreen
+                  editSignal={editSignal}
+                  embedded
+                  id={String(selectedId)}
+                  onScrollOffset={setDetailOffset}
+                  topInset={TWO_PANE_BAND}
+                />
               ) : (
                 <EmptyState icon="calendar" title={t("scheduleDetails")} />
               )}
+              {/* The detail's own top band: the activity's name, with a backing that fades in as
+                  the content scrolls under it. */}
+              <View
+                pointerEvents="none"
+                style={{
+                  height: TWO_PANE_BAND,
+                  justifyContent: "center",
+                  left: 0,
+                  paddingLeft: 20,
+                  paddingRight: 136,
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                }}
+              >
+                <View
+                  style={{
+                    backgroundColor: colors.background,
+                    borderBottomColor: colors.separator,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    bottom: 0,
+                    left: 0,
+                    opacity: Math.min(1, Math.max(0, detailOffset / 16)),
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  }}
+                />
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+                >
+                  {selectedTitle ?? ""}
+                </Text>
+              </View>
             </View>
           ) : null}
         </View>
