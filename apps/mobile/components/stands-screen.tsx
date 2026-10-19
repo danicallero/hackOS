@@ -33,7 +33,6 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { filterStands, type StandSummary } from "@/lib/stands";
 import { canManageStands } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
@@ -53,7 +52,6 @@ const LOGO_SIZE = 40;
  * page. QR codes are printed from the web.
  */
 export function StandsScreen() {
-  const searchInToolbar = useSearchInToolbar();
   useColorScheme();
   const { t } = useLocale();
   const router = useRouter();
@@ -118,14 +116,14 @@ export function StandsScreen() {
         placeholder: t("standsSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: searchInToolbar,
+        allowToolbarIntegration: false,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
         onCancelButtonPress: () => setQuery(""),
       },
     });
-  }, [glassAvailable, navigation, t, searchInToolbar]);
+  }, [glassAvailable, navigation, t]);
 
   if (!allowed) {
     return <EmptyState icon="lock.fill" title={t("requestUnavailable")} />;

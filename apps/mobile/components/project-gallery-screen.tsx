@@ -19,7 +19,6 @@ import {
   mergeProjects,
   type NativeProject,
 } from "@/lib/projects";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
@@ -93,7 +92,6 @@ export function clearGallerySnapshots() {
 
 /** H18: audience and publication policy remain entirely server-owned; no persistent gallery cache. */
 export function ProjectGalleryScreen() {
-  const searchInToolbar = useSearchInToolbar();
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const router = useRouter();
@@ -156,7 +154,7 @@ export function ProjectGalleryScreen() {
               placeholder: t("projectSearch"),
               autoCapitalize: "none",
               hideWhenScrolling: false,
-              allowToolbarIntegration: searchInToolbar,
+              allowToolbarIntegration: false,
               placement: "integratedButton",
               onChangeText: (event: { nativeEvent: { text: string } }) =>
                 setSearch(event.nativeEvent.text),

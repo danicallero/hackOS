@@ -28,7 +28,6 @@ import {
 } from "@/lib/queue-search";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-events";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { canOperateQueues, isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -55,7 +54,6 @@ function actionErrorMessage(cause: unknown, t: ReturnType<typeof useLocale>["t"]
 
 /** H29-H35 mobile operator view: room state, door queue, queue head, and re-notification. */
 export function QueueOperationsScreen() {
-  const searchInToolbar = useSearchInToolbar();
   useColorScheme();
   const { t } = useLocale();
   const { me } = useMeContext();
@@ -135,7 +133,7 @@ export function QueueOperationsScreen() {
         placeholder: t("queueOpsSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: searchInToolbar,
+        allowToolbarIntegration: false,
         // Match the People directory: keep the inactive search control as a
         // compact native button even when regular-width iPad has room.
         placement: "integratedButton",
@@ -143,7 +141,7 @@ export function QueueOperationsScreen() {
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle, searchInToolbar]);
+  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle]);
 
   const visibleRooms = useMemo(
     () =>

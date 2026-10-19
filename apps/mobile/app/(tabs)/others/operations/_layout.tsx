@@ -2,7 +2,6 @@ import { Slot } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
 import { nativeStackScreenOptions } from "@/lib/navigation";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -12,7 +11,6 @@ import { isPadIdiom } from "@/lib/tabs";
  * and search.
  */
 export default function OperationsLayout() {
-  const searchInToolbar = useSearchInToolbar();
   const { t } = useLocale();
   if (isPadIdiom()) return <Slot />;
 
@@ -27,7 +25,7 @@ export default function OperationsLayout() {
             placeholder: t("queueOpsSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
-            allowToolbarIntegration: searchInToolbar,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}

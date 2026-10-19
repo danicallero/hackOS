@@ -32,7 +32,6 @@ import {
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
@@ -40,7 +39,6 @@ import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
 export function PeopleDirectoryScreen() {
-  const searchInToolbar = useSearchInToolbar();
   const { activityId, autoSearch } = useLocalSearchParams<{
     activityId?: string;
     /** Set by the scanner's "search participants" entry point (H22-H26) so the
@@ -186,7 +184,7 @@ export function PeopleDirectoryScreen() {
         placeholder: t("scannerPeopleSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: searchInToolbar,
+        allowToolbarIntegration: false,
         // iOS 26 otherwise expands this into a full field on regular-width
         // iPads whenever UIKit decides there is enough trailing space.
         placement: "integratedButton",
@@ -195,7 +193,7 @@ export function PeopleDirectoryScreen() {
       },
       headerRight: undefined,
     });
-  }, [glassAvailable, navigation, t, usesListTitle, searchInToolbar]);
+  }, [glassAvailable, navigation, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();

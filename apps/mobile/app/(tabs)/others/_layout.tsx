@@ -2,7 +2,6 @@ import { Stack } from "expo-router/stack";
 import { Platform } from "react-native";
 import { useLocale } from "@/lib/i18n";
 import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -21,7 +20,6 @@ const compactHeaderOptions = {
 } as const;
 
 export default function OthersLayout() {
-  const searchInToolbar = useSearchInToolbar();
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const headerShown = isPadIdiom();
@@ -133,7 +131,7 @@ export default function OthersLayout() {
             placeholder: t("queueOpsSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
-            allowToolbarIntegration: searchInToolbar,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}

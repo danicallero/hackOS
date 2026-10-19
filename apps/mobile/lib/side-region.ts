@@ -40,12 +40,3 @@ export function SideRegionProvider({
 export function useSideRegion(): SideRegion {
   return useContext(SideRegionContext);
 }
-
-/**
- * Whether a native search button joins the toolbar. Beside a side column it must, so the
- * system can place it in its vertical bar with the other items; elsewhere it keeps its
- * own integrated button.
- */
-export function useSearchInToolbar(): boolean {
-  return useSideRegion().edge !== null;
-}

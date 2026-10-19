@@ -15,7 +15,6 @@ import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
@@ -43,7 +42,6 @@ function dayHeading(iso: string): string {
 }
 
 export function ScanLogScreen() {
-  const searchInToolbar = useSearchInToolbar();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const navigation = useNavigation();
   const pathname = usePathname();
@@ -86,14 +84,14 @@ export function ScanLogScreen() {
         placeholder: t("scanLogSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: searchInToolbar,
+        allowToolbarIntegration: false,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
         onCancelButtonPress: () => setQuery(""),
       },
     });
-  }, [coldLink, fallbackRoute, navigation, router, t, searchInToolbar]);
+  }, [coldLink, fallbackRoute, navigation, router, t]);
 
   const load = useCallback(async (offset: number) => {
     const page = await fetchScanLog(PAGE_SIZE, offset);

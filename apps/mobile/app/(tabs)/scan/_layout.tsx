@@ -2,12 +2,10 @@ import { Stack } from "expo-router/stack";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
 import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
-import { useSearchInToolbar } from "@/lib/side-region";
 
 import { colors } from "@/theme/colors";
 
 export default function ScannerLayout() {
-  const searchInToolbar = useSearchInToolbar();
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const glassAvailable = isRealLiquidGlassAvailable();
@@ -45,7 +43,7 @@ export default function ScannerLayout() {
             placeholder: t("scannerPeopleSearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
-            allowToolbarIntegration: searchInToolbar,
+            allowToolbarIntegration: false,
             placement: "integratedButton",
           },
         }}
