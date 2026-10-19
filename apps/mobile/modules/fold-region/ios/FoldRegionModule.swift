@@ -36,7 +36,9 @@ public class FoldRegionModule: Module {
       ) { [weak self] _ in
         self?.sendEvent("onChange", ["region": Self.region(division: true) as Any, "barEdge": Self.verticalBarEdge() as Any])
       }
-      DispatchQueue.main.async { self.watchTraits() }
+      DispatchQueue.main.async {
+        MainActor.assumeIsolated { self.watchTraits() }
+      }
     }
 
     OnStopObserving {
@@ -47,6 +49,7 @@ public class FoldRegionModule: Module {
 
   /// Pose changes reach an app as trait and geometry changes, so the window's traits are
   /// watched and the region is re-read on each.
+  @MainActor
   private func watchTraits() {
     guard #available(iOS 17.0, *), let window = Self.keyWindow() else { return }
     window.registerForTraitChanges(
