@@ -4,10 +4,12 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import Stack from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
@@ -36,15 +38,18 @@ export function ProjectDetailScreen() {
   const [error, setError] = useState<Error | null>(null);
   const [epoch, setEpoch] = useState(0);
   const navigation = useNavigation();
+  const glassAvailable = isRealLiquidGlassAvailable();
   useEffect(() => {
     if (project)
       navigation.setOptions({
-        title: project.name,
-        headerLargeTitle: true,
+        // On iOS 26+ the name is a toolbar item beside the back (a left toolbar
+        // group beside a native large title would not reach a vertical bar).
+        title: glassAvailable ? "" : project.name,
+        headerLargeTitle: !glassAvailable,
         headerLargeTitleShadowVisible: false,
         headerShadowVisible: false,
       });
-  }, [navigation, project]);
+  }, [navigation, project, glassAvailable]);
   // Quiet reload for pull-to-refresh and after actions: the screen keeps showing the project.
   const refresh = useCallback(async () => {
     // H20: saves and uploads from a previous visit land before the reload.
@@ -439,7 +444,19 @@ export function ProjectEditor({
       );
   return (
     <>
-      <EntryBackToolbar fallback="/(tabs)/queue" />
+      <EntryBackToolbar fallback="/(tabs)/queue">
+        {project ? (
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+            >
+              {project.name}
+            </Text>
+          </Stack.Toolbar.View>
+        ) : null}
+      </EntryBackToolbar>
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"

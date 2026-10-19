@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import Stack from "expo-router/stack";
+import type { ReactNode } from "react";
 import { Pressable } from "react-native";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
@@ -47,7 +48,14 @@ export function HeaderBackButton({ onPress }: { onPress: () => void }) {
  * screen's Stack hides its own back item (`headerBackVisible: false`) so this
  * is the only one, whatever the screen's position in its stack.
  */
-export function EntryBackToolbar({ fallback }: { fallback: Parameters<typeof safeBack>[1] }) {
+export function EntryBackToolbar({
+  fallback,
+  children,
+}: {
+  fallback: Parameters<typeof safeBack>[1];
+  /** Extra left-group items (a title): a second left toolbar would replace this one. */
+  children?: ReactNode;
+}) {
   const { t } = useLocale();
   const router = useRouter();
   if (!isRealLiquidGlassAvailable()) return null;
@@ -58,6 +66,7 @@ export function EntryBackToolbar({ fallback }: { fallback: Parameters<typeof saf
         icon="chevron.left"
         onPress={() => safeBack(router, fallback)}
       />
+      {children}
     </Stack.Toolbar>
   );
 }
