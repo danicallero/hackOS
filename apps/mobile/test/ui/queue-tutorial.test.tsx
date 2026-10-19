@@ -6,6 +6,7 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ back: jest.fn() }),
   useScrollToTop: () => {},
 }));
+jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
 jest.mock("@/components/stale-data-banner", () => ({ StaleDataBanner: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));

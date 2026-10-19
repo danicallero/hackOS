@@ -11,6 +11,9 @@ export default function ProjectsLayout() {
   const { t } = useLocale();
   const stackScreenOptions = useTabStackScreenOptions();
   const glassAvailable = isRealLiquidGlassAvailable();
+  // [id], gallery and queue render their own `EntryBackToolbar` on iOS 26+, so the
+  // native item is hidden there; other screens keep it.
+  const ownBack = glassAvailable ? false : undefined;
   return (
     <Stack
       screenOptions={({ navigation }) => ({
@@ -28,6 +31,7 @@ export default function ProjectsLayout() {
       <Stack.Screen
         name="[id]"
         options={{
+          headerBackVisible: ownBack,
           headerLargeTitle: true,
           headerLargeTitleShadowVisible: false,
           title: t("projectFields"),
@@ -70,6 +74,7 @@ export default function ProjectsLayout() {
       <Stack.Screen
         name="gallery"
         options={{
+          headerBackVisible: ownBack,
           headerLargeTitle: false,
           headerShadowVisible: false,
           headerTransparent: Platform.OS === "ios",
@@ -80,6 +85,7 @@ export default function ProjectsLayout() {
       <Stack.Screen
         name="queue"
         options={{
+          headerBackVisible: ownBack,
           headerLargeTitle: false,
           headerShadowVisible: false,
           headerTransparent: Platform.OS === "ios",
