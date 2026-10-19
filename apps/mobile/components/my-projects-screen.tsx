@@ -2,7 +2,6 @@ import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
-import { BarBlur } from "@/components/bar-blur";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { GlassButton, NavRow } from "@/components/project-ui";
@@ -103,6 +102,8 @@ export function MyProjectsScreen() {
     navigation.setOptions({
       ...barTitle,
       headerShown: true,
+      headerTransparent: true,
+      headerBlurEffect: "systemChromeMaterial" as const,
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       // iOS 26 gets native glass toolbar circles below; elsewhere the same
@@ -136,7 +137,6 @@ export function MyProjectsScreen() {
   }
   return (
     <>
-      <BarBlur />
       {glassAvailable ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button

@@ -374,8 +374,10 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
   Insets come from `react-native-safe-area-context`, per edge.
 
-**Bar blur.** `components/bar-blur.tsx` (`expo-blur`, a native dependency) draws a blurred band under the
-transparent top bar of Activities, My Projects and Contacts, so content scrolling beneath it fades out.
+**Bar blur.** Activities, My Projects and Contacts use the native header with `headerTransparent` and
+`headerBlurEffect: "systemChromeMaterial"`, so content scrolling under the bar is blurred by the system.
+The two-pane Schedule and Gallery cannot (one bar spans both columns): their per-column title bands
+use `components/system-blur.tsx` (`expo-blur`, a native dependency) with the same material.
 
 **Fold and island (iOS 27.1).** `modules/fold-region` reads `UIView.reservedRegions(kind:)`
 for the key window: `getDivisionRegion()` is the fold, `getOcclusionRegion()` the Dynamic Island,

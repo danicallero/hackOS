@@ -15,7 +15,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
-import { BarBlur } from "@/components/bar-blur";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import {
   ConnectionCelebration,
@@ -518,6 +517,7 @@ export function DiaryScreen() {
       // The system bar background: the list scrolls under it with iOS 26's
       // scroll-edge effect, never an opaque page-coloured block.
       headerTransparent: true,
+      headerBlurEffect: "systemChromeMaterial" as const,
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable
@@ -753,7 +753,6 @@ export function DiaryScreen() {
             />
           ) : null}
         </Stack.Toolbar>
-        <BarBlur />
         {overlays}
       </>
     );

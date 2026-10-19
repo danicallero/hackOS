@@ -4,7 +4,6 @@ import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BarBlur } from "@/components/bar-blur";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
@@ -193,9 +192,10 @@ export function ActivitiesScreen() {
       title: "",
       headerShown: true,
       headerLargeTitle: false,
-      headerTransparent: false,
+      // The system's own header blur (the bar is transparent, content scrolls under it).
+      headerTransparent: true,
+      headerBlurEffect: "systemChromeMaterial" as const,
       headerShadowVisible: false,
-      headerStyle: { backgroundColor: colors.background },
       headerTitleAlign: "left",
       headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },
       headerSearchBarOptions: {
@@ -253,7 +253,6 @@ export function ActivitiesScreen() {
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       {glassAvailable ? (
         <>
-          <BarBlur />
           <Stack.Toolbar placement="left">
             <Stack.Toolbar.View hidesSharedBackground>
               <Text
