@@ -22,7 +22,16 @@ export default function QueueLayout() {
         contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
       }}
     >
-      <Stack.Screen name="index" />
+      <Stack.Screen
+        name="index"
+        // Set here, not only from the screen: a transparent bar chosen after the first layout
+        // does not move the content under it, which then stops at a hard edge instead of blurring.
+        options={{
+          headerBlurEffect: "systemChromeMaterial",
+          headerShadowVisible: false,
+          headerTransparent: true,
+        }}
+      />
       <Stack.Screen
         name="new"
         options={{ ...header, presentation: "modal", title: t("projectNewTitle") }}
