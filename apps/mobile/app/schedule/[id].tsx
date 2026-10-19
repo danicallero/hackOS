@@ -3,7 +3,7 @@ import Stack from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView } from "@/components/glass-view";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { EmptyState, LegacyHeaderIconButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -129,6 +129,7 @@ export default function ScheduleDetailScreen() {
   const item = rawItem ? { ...rawItem, ...resolveScheduleText(rawItem, language) } : null;
   const reminderOn = item && notifications.ready ? notifications.isEntrySubscribed(item) : null;
   const usesCustomAndroidHeader = process.env.EXPO_OS === "android";
+  const glassAvailable = isRealLiquidGlassAvailable();
 
   async function saveEdit(
     values: ScheduleInput,
@@ -265,7 +266,7 @@ export default function ScheduleDetailScreen() {
               ? () => <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/schedule")} />
               : undefined,
             headerRight:
-              item && reminderOn !== null
+              item && reminderOn !== null && !glassAvailable
                 ? () => (
                     <Pressable
                       accessibilityLabel={t(
@@ -297,6 +298,29 @@ export default function ScheduleDetailScreen() {
           }}
         />
       )}
+      {glassAvailable && !usesCustomAndroidHeader && item ? (
+        <Stack.Toolbar placement="right">
+          {reminderOn !== null ? (
+            <Stack.Toolbar.Button
+              icon={reminderOn ? "bell.fill" : "bell"}
+              accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+                name: item.title,
+              })}
+              disabled={notifications.savingKey === itemCategory(item.id)}
+              selected={reminderOn}
+              tintColor={reminderOn ? colors.accent : undefined}
+              onPress={() => void notifications.toggleEntry(item)}
+            />
+          ) : null}
+          {canManage ? (
+            <Stack.Toolbar.Button
+              icon="pencil"
+              accessibilityLabel={t("scheduleEdit")}
+              onPress={() => setEditing(true)}
+            />
+          ) : null}
+        </Stack.Toolbar>
+      ) : null}
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         refreshControl={
@@ -456,7 +480,7 @@ export default function ScheduleDetailScreen() {
         )}
       </ScrollView>
 
-      {canManage && item ? (
+      {canManage && item && !glassAvailable ? (
         <GlassView
           glassEffectStyle="regular"
           isInteractive

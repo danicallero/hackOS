@@ -46,7 +46,10 @@ jest.mock("expo-router/stack", () => ({
     },
   },
 }));
-jest.mock("@/components/glass-view", () => ({ GlassView: () => null }));
+jest.mock("@/components/glass-view", () => ({
+  GlassView: () => null,
+  isRealLiquidGlassAvailable: () => false,
+}));
 jest.mock("@/components/native-ui", () => ({
   EmptyState: () => null,
   LegacyHeaderIconButton: () => null,

@@ -498,6 +498,13 @@ export default function ScheduleScreen() {
             ) : null}
           </Stack.Toolbar.Button>
           <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
+          {canManage ? (
+            <Stack.Toolbar.Button
+              icon="plus"
+              accessibilityLabel={t("scheduleAdd")}
+              onPress={() => setFormTarget("create")}
+            />
+          ) : null}
         </Stack.Toolbar>
       ) : (
         <LegacyScreenHeader
@@ -534,7 +541,7 @@ export default function ScheduleScreen() {
           topInset={legacyTopInset}
         />
       )}
-      {canManage ? (
+      {canManage && !glassAvailable ? (
         <GlassView
           colorScheme="auto"
           glassEffectStyle="regular"
