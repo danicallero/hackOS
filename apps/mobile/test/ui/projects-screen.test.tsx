@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, View } from "react-native";
+import { ActionSheetIOS, Alert, View } from "react-native";
 
 let mockParams: Record<string, string> = { id: "5" };
 const mockPush = jest.fn();
@@ -42,6 +42,9 @@ jest.mock("expo-router/stack", () => {
 jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => false,
   GlassView: ({ children }: { children?: unknown }) => children ?? null,
+}));
+jest.mock("expo-network", () => ({
+  addNetworkStateListener: () => ({ remove: jest.fn() }),
 }));
 jest.mock("expo-document-picker", () => ({ getDocumentAsync: jest.fn() }));
 jest.mock("expo-image-picker", () => ({ launchImageLibraryAsync: jest.fn() }));
@@ -279,6 +282,32 @@ it("does not infer member photos or unpublished winners from directory data (H18
   expect(screen.queryByRole("image")).toBeNull();
   expect(screen.queryByText(/projectWinner/)).toBeNull();
 });
+it("reports a gallery project from a native sheet, never the team's own (H18)", async () => {
+  const sheet = jest
+    .spyOn(ActionSheetIOS, "showActionSheetWithOptions")
+    .mockImplementation((_options, done) => done(1));
+  const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  mockApi.mockResolvedValue({ id: 1, status: "open" });
+  await renderMobile(<ProjectReadView project={project} />);
+  await fireEvent.press(screen.getByRole("button", { name: "reportContent" }));
+  expect(sheet).toHaveBeenCalledTimes(1);
+  await waitFor(() =>
+    expect(mockApi).toHaveBeenCalledWith(
+      "/api/reports",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ projectId: 5, reason: "harassment" }),
+      }),
+    ),
+  );
+  await waitFor(() => expect(alert).toHaveBeenCalledWith("reportSent", "reportSentBody"));
+  sheet.mockRestore();
+  alert.mockRestore();
+});
+it("offers no report on the team's own project (H18)", async () => {
+  await renderMobile(<ProjectReadView project={{ ...project, isMember: true }} />);
+  expect(screen.queryByRole("button", { name: "reportContent" })).toBeNull();
+});
 it("renders published winners only from the approved projection (H60)", async () => {
   await renderMobile(
     <ProjectReadView
@@ -309,16 +338,14 @@ it("edits shared organizer-defined questions without enforcing required fields o
   expect(change).toHaveBeenCalledWith("story", "Built a rover");
 });
 
-it("disables participant edits and submission when the server closes editing (H17/H20)", async () => {
+it("locks participant edits and offers no submission when the server closes editing (H17/H20)", async () => {
   mockApi.mockResolvedValue([]);
   await renderMobile(
     <ProjectEditor reload={async () => {}} project={{ ...project, canEdit: false }} />,
   );
   expect(await screen.findByText("projectLocked")).toBeTruthy();
   expect(screen.getByLabelText("projectName").props.editable).toBe(false);
-  expect(
-    screen.getByRole("button", { name: "projectSubmit" }).props.accessibilityState.disabled,
-  ).toBe(true);
+  expect(screen.queryByRole("button", { name: "projectSubmit" })).toBeNull();
 });
 
 it("labels a submitted project's action Resubmit and shows the server deadline (H20)", async () => {
@@ -878,6 +905,7 @@ it("selects catalogue values and proposes several values as arrays (H16)", async
       onChange={changed}
     />,
   );
+  await fireEvent.press(screen.getByRole("button", { name: "Technologies" }));
   await waitFor(() => expect(screen.getByText("TypeScript")).toBeTruthy());
   await fireEvent.press(screen.getByRole("checkbox", { name: "TypeScript" }));
   expect(changed).toHaveBeenLastCalledWith("tech", ["React", "TypeScript"]);

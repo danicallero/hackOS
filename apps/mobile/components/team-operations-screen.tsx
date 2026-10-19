@@ -70,9 +70,15 @@ interface RoomView {
 }
 
 interface RepoChallenge {
+  /** The team's queue entry for this challenge. */
+  entry_id: number;
   id: number;
   title: string;
   status: string;
+  position: number | null;
+  eta_minutes: number | null;
+  call_count: number;
+  queue_group_id: number | null;
   room_id: number | null;
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
@@ -87,6 +93,49 @@ interface HistoryRow {
   created_at: string;
   actor_name: string | null;
   actor_surname: string | null;
+}
+
+const QUEUE_STAGE_RANK: Record<string, number> = {
+  presenting: 0,
+  in_room: 1,
+  called: 2,
+  waiting: 3,
+  completed: 4,
+};
+
+/**
+ * Challenges that share one queue are one place in line: every one of them
+ * shows the team's furthest-along entry (status, rank, wait, room, calls).
+ */
+function shareQueueInfo(challenges: RepoChallenge[]): RepoChallenge[] {
+  const canonical = new Map<number, RepoChallenge>();
+  for (const challenge of challenges) {
+    if (challenge.queue_group_id == null) continue;
+    const current = canonical.get(challenge.queue_group_id);
+    const rank = (item: RepoChallenge) => QUEUE_STAGE_RANK[item.status] ?? 5;
+    if (
+      !current ||
+      rank(challenge) < rank(current) ||
+      (rank(challenge) === rank(current) &&
+        (challenge.position ?? Number.POSITIVE_INFINITY) <
+          (current.position ?? Number.POSITIVE_INFINITY))
+    )
+      canonical.set(challenge.queue_group_id, challenge);
+  }
+  return challenges.map((challenge) => {
+    const lead = challenge.queue_group_id == null ? null : canonical.get(challenge.queue_group_id);
+    if (!lead || lead === challenge) return challenge;
+    return {
+      ...challenge,
+      entry_id: lead.entry_id,
+      status: lead.status,
+      position: lead.position,
+      eta_minutes: lead.eta_minutes,
+      call_count: lead.call_count,
+      room_id: lead.room_id,
+      room_name: lead.room_name,
+    };
+  });
 }
 
 type TeamLoadState = "loading" | "ready" | "missing" | "error";
@@ -167,9 +216,6 @@ export function TeamOperationsScreen() {
   const [room, setRoom] = useState<RoomView["room"] | null>(null);
   const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
   const [selectedQueueIndex, setSelectedQueueIndex] = useState(0);
-  const [roomViews, setRoomViews] = useState<Map<number, RoomView>>(new Map());
-  const roomViewsRef = useRef(roomViews);
-  roomViewsRef.current = roomViews;
   const [selectedEntryHistory, setSelectedEntryHistory] = useState<HistoryRow[] | null>(null);
   const [tabLoading, setTabLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -193,10 +239,7 @@ export function TeamOperationsScreen() {
     setError(null);
     setLoadState((current) => (current === "ready" ? current : "loading"));
     try {
-      const [view, historyRows] = await Promise.all([
-        apiFetch<RoomView>(`/api/queue/rooms/${roomId}/view`),
-        apiFetch<HistoryRow[]>(`/api/queue/entries/${entryId}/history`),
-      ]);
+      const view = await apiFetch<RoomView>(`/api/queue/rooms/${roomId}/view`);
       const targetEntryId = Number(entryId);
       const found = [view.active, ...view.called, ...view.next].find(
         (item) => item != null && Number(item.id) === targetEntryId,
@@ -211,15 +254,14 @@ export function TeamOperationsScreen() {
       setEntry(found ?? null);
       setRoom(view.room);
       setLoadState("ready");
-      setRoomViews(new Map([[Number(roomId), view]]));
-      setSelectedEntryHistory(historyRows);
       try {
         const challenges = await apiFetch<RepoChallenge[]>(
           `/api/queue/repos/${found.repo_id}/challenges`,
         );
-        setRepoChallenges(challenges);
+        const shared = shareQueueInfo(challenges);
+        setRepoChallenges(shared);
         const targetChallengeId = Number(found.challenge_id);
-        const idx = challenges.findIndex((qc) => Number(qc.id) === targetChallengeId);
+        const idx = shared.findIndex((qc) => Number(qc.id) === targetChallengeId);
         setSelectedQueueIndex(idx >= 0 ? idx : 0);
       } catch {
         setRepoChallenges([]);
@@ -234,37 +276,6 @@ export function TeamOperationsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (loadState !== "ready") return;
-    let cancelled = false;
-    const prefetchAll = async () => {
-      try {
-        const rooms = await apiFetch<Array<{ id: number }>>("/api/queue/rooms");
-        if (cancelled) return;
-        const currentViews = roomViewsRef.current;
-        const uncachedIds = rooms.map((r) => Number(r.id)).filter((id) => !currentViews.has(id));
-        if (uncachedIds.length === 0) return;
-        const views = await Promise.all(
-          uncachedIds.map((id) => apiFetch<RoomView>(`/api/queue/rooms/${id}/view`)),
-        );
-        if (cancelled) return;
-        setRoomViews((prev) => {
-          const next = new Map(prev);
-          for (let i = 0; i < uncachedIds.length; i++) {
-            next.set(uncachedIds[i], views[i]);
-          }
-          return next;
-        });
-      } catch {
-        /* tab switching will fall back to individual fetch */
-      }
-    };
-    void prefetchAll();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadState]);
 
   const teamName = entry?.repo_name ?? t("queueOpsUnnamedTeam");
 
@@ -338,73 +349,20 @@ export function TeamOperationsScreen() {
 
   const selectedQueue = repoChallenges[selectedQueueIndex] ?? null;
 
-  const selectedEntry = (() => {
-    if (!selectedQueue) return null;
-    const targetId = Number(selectedQueue.id);
-    if (entry && Number(entry.challenge_id) === targetId) return entry;
-    for (const [, view] of roomViews) {
-      if (view.active && Number(view.active.challenge_id) === targetId) return view.active;
-      const found = [...view.called, ...view.next].find(
-        (item) => item != null && Number(item.challenge_id) === targetId,
+  // The tab's own queue entry carries rank, wait and call count, wherever it is queued.
+  const fetchTabData = useCallback(async (qc: RepoChallenge) => {
+    setSelectedEntryHistory(null);
+    setTabLoading(true);
+    try {
+      setSelectedEntryHistory(
+        await apiFetch<HistoryRow[]>(`/api/queue/entries/${qc.entry_id}/history`),
       );
-      if (found) return found;
+    } catch {
+      setSelectedEntryHistory([]);
+    } finally {
+      setTabLoading(false);
     }
-    return null;
-  })();
-
-  const fetchTabData = useCallback(
-    async (qc: RepoChallenge) => {
-      const targetId = Number(qc.id);
-      const findEntry = (view: RoomView) => {
-        if (view.active && Number(view.active.challenge_id) === targetId) return view.active;
-        return (
-          [...view.called, ...view.next].find(
-            (item) => item != null && Number(item.challenge_id) === targetId,
-          ) ?? null
-        );
-      };
-      const currentViews = roomViewsRef.current;
-      for (const [, view] of currentViews) {
-        const found = findEntry(view);
-        if (found) {
-          try {
-            const rows = await apiFetch<HistoryRow[]>(`/api/queue/entries/${found.id}/history`);
-            setSelectedEntryHistory(rows);
-          } catch {
-            setSelectedEntryHistory([]);
-          }
-          return;
-        }
-      }
-      const roomIdKey = qc.room_id ?? qc.judging_rooms[0]?.id ?? Number(roomId);
-      if (!roomIdKey) {
-        setSelectedEntryHistory(null);
-        return;
-      }
-      setSelectedEntryHistory(null);
-      setTabLoading(true);
-      try {
-        const view = await apiFetch<RoomView>(`/api/queue/rooms/${roomIdKey}/view`);
-        setRoomViews((prev) => new Map(prev).set(Number(roomIdKey), view));
-        const found = findEntry(view);
-        if (found) {
-          try {
-            const rows = await apiFetch<HistoryRow[]>(`/api/queue/entries/${found.id}/history`);
-            setSelectedEntryHistory(rows);
-          } catch {
-            setSelectedEntryHistory([]);
-          }
-        } else {
-          setSelectedEntryHistory(null);
-        }
-      } catch {
-        setSelectedEntryHistory(null);
-      } finally {
-        setTabLoading(false);
-      }
-    },
-    [roomId],
-  );
+  }, []);
 
   useEffect(() => {
     if (selectedQueue) {
@@ -818,7 +776,6 @@ export function TeamOperationsScreen() {
           {selectedQueue ? (
             <QueueDetailView
               queue={selectedQueue}
-              entry={selectedEntry}
               history={tabLoading ? null : selectedEntryHistory}
               canEdit={canEditProject}
               onRemove={removeFromQueue}
@@ -845,6 +802,7 @@ export function TeamOperationsScreen() {
         >
           <View style={{ backgroundColor: colors.background, flex: 1 }}>
             <ScrollView
+              alwaysBounceVertical
               contentInsetAdjustmentBehavior="automatic"
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{
@@ -1161,7 +1119,6 @@ function QueueTabBar({
 
 function QueueDetailView({
   queue,
-  entry,
   history,
   canEdit,
   onRemove,
@@ -1169,7 +1126,6 @@ function QueueDetailView({
   t,
 }: {
   queue: RepoChallenge;
-  entry: TeamEntry | null;
   history: HistoryRow[] | null;
   canEdit: boolean;
   onRemove: (qc: RepoChallenge) => void;
@@ -1224,11 +1180,11 @@ function QueueDetailView({
           </>
         ) : null}
 
-        <Separator inset={16} />
-        <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 10 }}>
-          {entry ? (
-            <>
-              {entry.position != null ? (
+        {queue.position != null || queue.eta_minutes != null || queue.call_count > 0 ? (
+          <>
+            <Separator inset={16} />
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 10 }}>
+              {queue.position != null ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <SymbolView
                     name="number.circle"
@@ -1240,11 +1196,11 @@ function QueueDetailView({
                     {t("queuePositionLabel")}
                   </Text>
                   <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
-                    {entry.position}
+                    {queue.position}
                   </Text>
                 </View>
               ) : null}
-              {entry.eta_minutes != null ? (
+              {queue.eta_minutes != null ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <SymbolView
                     name="hourglass"
@@ -1256,11 +1212,11 @@ function QueueDetailView({
                     {t("queueWaitLabel")}
                   </Text>
                   <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
-                    {formatEta(entry.eta_minutes, t("queueAnyMoment"))}
+                    {formatEta(queue.eta_minutes, t("queueAnyMoment"))}
                   </Text>
                 </View>
               ) : null}
-              {entry.call_count > 0 ? (
+              {queue.call_count > 0 ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <SymbolView
                     name="bell.badge"
@@ -1272,23 +1228,13 @@ function QueueDetailView({
                     {t("teamDetailCallCount")}
                   </Text>
                   <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
-                    {entry.call_count}
+                    {queue.call_count}
                   </Text>
                 </View>
               ) : null}
-            </>
-          ) : (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <SymbolView
-                name="questionmark.circle"
-                tintColor={colors.tertiaryLabel}
-                size={16}
-                accessible={false}
-              />
-              <Text style={{ color: colors.tertiaryLabel, fontSize: 15 }}>{t("queueLoading")}</Text>
             </View>
-          )}
-        </View>
+          </>
+        ) : null}
 
         {canEdit ? (
           <>

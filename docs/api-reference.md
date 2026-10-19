@@ -121,7 +121,9 @@ event-access account gives an explicit dietary answer (its own `PATCH /api/me`
 with `foodIntolerances`/`foodIntoleranceNotes`, an empty list included; an
 invite claim whose kind shows the dietary fields; or an application form that
 asks for dietary data — staff edits through `PATCH /api/users/:id` do not
-count; never for a locked profile, H7, which cannot change it), and
+count; never once dietary data is locked, H7: after an accepted application
+it takes one first answer, then only staff change it, and `/api/me` reports
+`dietaryLocked`), and
 `meal_plan` while a sponsor representative has an open offered
 meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
 /api/me/meal-plan`; a meal is offered when its activity kind has meal semantics

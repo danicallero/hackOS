@@ -6,6 +6,7 @@ import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
 import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
+import { FlagIcon } from "@phosphor-icons/react/dist/ssr/Flag";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/ssr/FolderSimple";
 import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
@@ -379,6 +380,12 @@ export const WORKSPACES: Workspace[] = [
         href: "/permissions",
         icon: ShieldCheckIcon,
         capability: CAPABILITIES.PERMISSIONS_MANAGE,
+      },
+      {
+        title: "contentReports",
+        href: "/reports",
+        icon: FlagIcon,
+        anyCapability: [CAPABILITIES.USERS_WRITE, CAPABILITIES.PROJECTS_EDIT],
       },
       {
         title: "auditLog",

@@ -73,6 +73,88 @@ synthetic enterprises. A guessed private-upload key or personal export bundle
 cannot cross that boundary. Synthetic rows are excluded from statistics and
 exports and are not permanent anonymous audit data.
 
+## App Store review notes
+
+Text for the **Notes for Review** field, based on the submitted notes and
+corrected for features added since. Passwords, the deletion code and the
+deployment URL go in the private handoff, never in this repository.
+
+> **What is this app?** hackOS is the official mobile app for HackUDC, a public
+> student hackathon organised by GPUL in A Coruña, Spain. Anyone eligible can
+> apply through the public event website; accepted attendees receive mobile
+> access. No paid content, subscriptions or in-app purchases.
+>
+> **Core features.** Attendees view the schedule and set activity reminders,
+> open wallet passes, receive announcements and notifications, follow their
+> presentation queue position and estimated time, create and edit their team's
+> project (including linking its GitHub repository through the GitHub App and
+> submitting it), browse the project gallery once it opens, and edit an optional
+> networking profile. Staff scan entrance tickets and badges and record
+> presence, meals and activities.
+>
+> **Review access.** Enable Development Mode by tapping the app version seven
+> times on Sign In or in Account; a red DEV badge appears. Sign in with
+> `app-review-<scenario>@hackos.test` and the shared password from the private
+> handoff. Accounts: `participant-anonymize-outside` (primary participant),
+> `participant-delete` (full deletion), `participant-anonymize-inside`
+> (anonymisation with a pending exit) and `staff-exit-operator`. All are
+> synthetic, hold an event ticket and see only fixture data.
+>
+> **Account deletion and anonymisation.** Account → Delete account, confirmation
+> code in the handoff. Full deletion: `participant-delete`. Anonymisation
+> outside the venue: the primary participant. Checked-in attendees may keep
+> anonymous audit data for public-funding audits; an attendee inside the venue
+> is retained until an exit operator records their departure or 12 hours pass,
+> for venue insurance headcounts.
+>
+> **Privacy and permissions.** Camera: scanning QR codes only; the app does not
+> take photos. Photo library: attendees may pick a profile photo and project
+> images to upload. NFC: staff read badge serial numbers, and attendees can tap
+> company tags. Notifications: event announcements and queue updates. The app
+> does not sell personal data. Privacy Policy and Terms: `/privacy`, `/terms`
+> on the event site.
+>
+> **User-generated content.** Attendees' project pages (name, description,
+> images, team members) and optional networking profiles (headline, bio, links,
+> photo) are visible to other signed-in attendees; showing a name or photo
+> requires the person's consent, and a profile is visible only to attendees who
+> scanned that person. There is no direct messaging, chat or comment feature between
+> users; team invitations carry no free text. Any attendee can report a project (Gallery →
+> project → Report) or a saved person's profile (Report on their card) with a
+> reason; reports go to a moderation inbox that organisers review, and
+> organisers can edit a project or hide a profile or its photo. Other concerns
+> can be sent to hackudc@gpul.org, the address in the Privacy Policy.
+
+Statements from the earlier notes that were removed because they stopped being
+true: "no user-generated content visible to other users" (the gallery and
+networking profiles show attendee content) and "does not take, store or upload
+photos" (photo pickers upload profile photos and project images). The notes now
+state both, plus NFC and the GitHub App sign-in.
+
+What each account can and cannot show a reviewer today:
+
+- The **Gallery** lists only fixture projects. The generated graph has one
+  project and it is a draft, so the Gallery is empty for these accounts unless
+  the event's draft visibility makes drafts visible. Gallery, GitHub linking,
+  shared queues and every queue stage other than "waiting" are not
+  demonstrable with the current fixtures.
+- The staff account has no queue, judging, project or schedule management
+  capability, so the queue manager, judging screens and organiser tools are not
+  reachable by review accounts.
+- Anything that needs real event data (directory, sponsors, statistics,
+  exports) is intentionally excluded from the fixture scope.
+
+Gaps to close before a review that must cover those screens, each needing its
+own marked graph and cleanup pointers (the registry holds one project,
+challenge and entry per fixture key, so multi-project data needs a schema
+change):
+
+1. A project-owning participant with a submitted project, a draft, a shared
+   queue challenge, an entry in each queue stage and a linked repository row.
+2. A queue/judge operator limited to fixture rooms and projects.
+3. Fixture gallery projects so the Gallery is not empty.
+4. Optionally a scoped organiser and a sponsor representative.
+
 ## Checking whether credentials were used
 
 The admin dialog reads `GET /api/admin/review-fixtures` and displays the

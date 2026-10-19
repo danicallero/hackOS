@@ -23,9 +23,12 @@ export const loadingImageStyle = { position: "absolute", opacity: 0 } as const;
  * An authenticated API image (`/api/users/:id/photo`, #934) for `expo-image`:
  * render `<Image {...props} />` while `props` is set, hidden with
  * `loadingImageStyle` until `loaded`, and the fallback until then. A missing
- * or hidden photo (an error) drops `props` and keeps the fallback.
+ * or hidden photo (an error) drops `props` and keeps the fallback. `persist`
+ * keeps the bytes on disk, for the signed-in person's own photo so it still
+ * shows offline; other people's photos stay in memory so a hidden one is gone
+ * after the next launch.
  */
-export function useApiImage(uri: string | null | undefined): ApiImage {
+export function useApiImage(uri: string | null | undefined, persist = false): ApiImage {
   const [status, setStatus] = useState<{ uri: string; loaded: boolean } | null>(null);
   // Switching account goes through sign-in, which remounts every avatar, so
   // the session in the cache key is read once per photo.
@@ -36,7 +39,7 @@ export function useApiImage(uri: string | null | undefined): ApiImage {
     loaded: current?.loaded ?? false,
     props: {
       source,
-      cachePolicy: "memory",
+      cachePolicy: persist ? "disk" : "memory",
       onLoad: () => setStatus({ uri, loaded: true }),
       onError: () => setStatus({ uri, loaded: false }),
     },

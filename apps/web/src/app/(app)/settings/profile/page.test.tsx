@@ -98,6 +98,7 @@ const baseMe = {
   foodIntoleranceNotes: "No nuts",
   dietaryConfirmedAt: "2026-10-01T00:00:00.000Z",
   profileLocked: false,
+  dietaryLocked: false,
   isSponsorRep: false,
   capabilities: [],
   roles: [],
@@ -146,6 +147,20 @@ describe("My profile dietary answer (#933)", () => {
       "/api/me",
       expect.objectContaining({ foodIntolerances: [], foodIntoleranceNotes: null }),
     );
+  });
+
+  it("keeps dietary data editable after acceptance until a first answer locks it (H7)", async () => {
+    session.me = { ...baseMe, profileLocked: true, dietaryLocked: false };
+    await render();
+    expect(noneBox().disabled).toBe(false);
+    expect(notes().disabled).toBe(false);
+  });
+
+  it("locks the recorded dietary data for the participant (H7)", async () => {
+    session.me = { ...baseMe, profileLocked: true, dietaryLocked: true };
+    await render();
+    expect(noneBox().disabled).toBe(true);
+    expect(notes().disabled).toBe(true);
   });
 
   it("restores the previous answer when No restrictions is unticked", async () => {

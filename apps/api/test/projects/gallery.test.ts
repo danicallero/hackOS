@@ -104,6 +104,28 @@ describe("Gallery phase/consent/snapshot policy (#1008,#1009)", () => {
     await pool.query(`UPDATE event_config SET project_gallery_opens_at=NULL`);
     expect((await get("/api/public/projects", staff)).statusCode).toBe(200);
   });
+  it("lists only fixture projects to a synthetic account, so every listed project opens (H18)", async () => {
+    await app.inject({
+      method: "POST",
+      url: `/api/me/projects/${id}/submit`,
+      headers: asUser(owner),
+    });
+    await pool.query(
+      `UPDATE event_config SET project_gallery_opens_at=now()-interval '1 second',project_gallery_audience='public'`,
+    );
+    const reviewer = await createUser();
+    await pool.query(`UPDATE users SET is_test_account=true WHERE id=$1`, [reviewer]);
+    const { rows } = await pool.query(
+      `INSERT INTO repos(name,submission_status,is_test_account) VALUES('Fixture project','submitted',true) RETURNING id`,
+    );
+    await invalidateSharedCache("gallery");
+    const real = (await get("/api/public/projects", outsider)).json().items;
+    expect(real.map((item: { id: number }) => item.id)).toEqual([id]);
+    const fixture = (await get("/api/public/projects", reviewer)).json().items;
+    expect(fixture.map((item: { id: number }) => item.id)).toEqual([rows[0].id]);
+    expect((await get(`/api/public/projects/${rows[0].id}`, reviewer)).statusCode).toBe(200);
+    expect((await get(`/api/public/projects/${id}`, reviewer)).statusCode).toBe(404);
+  });
   it("freezes a submitted project until the team withdraws it inside the window (H20, H21)", async () => {
     const draft = (description: string, revision: number) =>
       app.inject({

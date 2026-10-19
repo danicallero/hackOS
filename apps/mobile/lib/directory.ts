@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import { getCurrentSessionCookie } from "./api";
 import type { DiaryEntry } from "./diary";
 import { API_URL } from "./env";
@@ -42,9 +43,15 @@ function sessionTag(cookie: string): string {
  * unlike React Native's `Image`). The cache key includes the session: another
  * account on this device re-checks access. Callers keep `cachePolicy="memory"`
  * so a photo is never written to disk and one hidden later is gone after the
- * next launch; the `?v=` in the route changes with every upload. Sponsor logos
+ * next launch, except the signed-in person's own photo (`persist`), which is
+ * cleared with `clearPersistedPhotos`; the `?v=` in the route changes with every upload. Sponsor logos
  * are absolute public URLs and load directly.
  */
+/** Forget the signed-in person's disk-cached photo (sign-out, session loss). */
+export function clearPersistedPhotos(): void {
+  void Image.clearDiskCache().catch(() => undefined);
+}
+
 export function apiImageSource(path: string): {
   uri: string;
   headers?: Record<string, string>;

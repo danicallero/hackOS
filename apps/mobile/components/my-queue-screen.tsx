@@ -94,7 +94,7 @@ export default function QueueScreen() {
   const { data, loading, error, staleSince, load } = useCachedApi(
     `user:${me?.id ?? "unknown"}:queue`,
     fetchQueue,
-    { enabled: me !== null, backgroundRevalidationMs: 0 },
+    { enabled: me !== null, backgroundRevalidationMs: 0, cacheFirst: true },
   );
   const entries = data ?? [];
 
@@ -151,8 +151,8 @@ export default function QueueScreen() {
   const orderedEntries = useMemo(
     () =>
       [...entries].sort((a, b) => {
-        const calledDifference = Number(b.status === "called") - Number(a.status === "called");
-        if (calledDifference !== 0) return calledDifference;
+        const rankDifference = queueRank(a.status) - queueRank(b.status);
+        if (rankDifference !== 0) return rankDifference;
         const etaA = a.etaMinutes ?? Number.POSITIVE_INFINITY;
         const etaB = b.etaMinutes ?? Number.POSITIVE_INFINITY;
         if (etaA !== etaB) return etaA - etaB;
@@ -419,7 +419,7 @@ export function QueueTutorial({
             </View>
 
             <ScrollView
-              bounces={scrollEnabled}
+              alwaysBounceVertical
               contentContainerStyle={{
                 alignItems: "center",
                 flexGrow: 1,
@@ -604,6 +604,14 @@ function combineCleanups(cleanups: Array<() => void>) {
   };
 }
 
+/** In the room first, then at the door, then waiting; judged teams last. */
+function queueRank(status: string) {
+  if (status === "presenting" || status === "in_room") return 0;
+  if (status === "called") return 1;
+  if (status === "completed") return 3;
+  return 2;
+}
+
 const QueueCard = memo(function QueueCard({
   item,
   precalled,
@@ -613,6 +621,9 @@ const QueueCard = memo(function QueueCard({
 }) {
   const { t } = useLocale();
   const calledRoom = item.status === "called" ? item.room : null;
+  const inRoom = item.status === "presenting" || item.status === "in_room";
+  // Judged: nothing left to act on, so the card keeps only its heading.
+  const judged = item.status === "completed";
   const eta = formatEta(item.etaMinutes, t);
 
   return (
@@ -621,7 +632,8 @@ const QueueCard = memo(function QueueCard({
         backgroundColor: colors.surface,
         borderCurve: "continuous",
         borderRadius: 16,
-        gap: 14,
+        gap: judged ? 0 : 14,
+        opacity: judged ? 0.6 : 1,
         padding: 16,
       }}
     >
@@ -637,7 +649,41 @@ const QueueCard = memo(function QueueCard({
         <StatusPill tone={statusTone(item.status)}>{statusLabel(item.status, t)}</StatusPill>
       </View>
 
-      {calledRoom ? (
+      {judged ? null : inRoom ? (
+        <View
+          accessibilityRole="alert"
+          style={{
+            backgroundColor: colors.successSurface,
+            borderCurve: "continuous",
+            borderRadius: 12,
+            gap: 7,
+            padding: 14,
+          }}
+        >
+          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+            <SymbolView
+              name="door.left.hand.open"
+              tintColor={colors.onSuccessSurface}
+              size={22}
+              accessible={false}
+            />
+            <Text
+              selectable
+              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
+            >
+              {item.room ? `${t("queueBeInRoom")} · ${item.room.name}` : t("queueBeInRoom")}
+            </Text>
+          </View>
+          {item.room?.location ? (
+            <Text
+              selectable
+              style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}
+            >
+              {item.room.location}
+            </Text>
+          ) : null}
+        </View>
+      ) : calledRoom ? (
         <View
           accessibilityRole="alert"
           style={{

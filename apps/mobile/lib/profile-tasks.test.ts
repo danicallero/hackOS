@@ -60,8 +60,8 @@ describe("shouldPresentProfileTasks", () => {
     expect(isScannerPath("/others/statistics")).toBe(false);
   });
 
-  it("never prompts a locked profile for dietary data", () => {
-    const locked = { ...me, profileLocked: true } as Me;
+  it("never prompts locked dietary data", () => {
+    const locked = { ...me, profileLocked: true, dietaryLocked: true } as Me;
     expect(shouldPresentProfileTasks({ ...ready, me: locked })).toBe(false);
     const sponsor = { ...locked, pendingProfileTasks: ["dietary", "meal_plan"] } as Me;
     expect(shouldPresentProfileTasks({ ...ready, me: sponsor })).toBe(true);

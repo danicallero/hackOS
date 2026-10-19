@@ -2,6 +2,7 @@ import * as Network from "expo-network";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { ApiError, apiFetch, getCurrentSessionCookie } from "./api";
+import { clearPersistedPhotos } from "./directory";
 import {
   clearCachedValue,
   clearCachedValues,
@@ -88,7 +89,10 @@ export function useMe(enabled = true) {
     setStaleSince(null);
     setOfflineEntryAvailable(false);
     if (previousCacheKey) void clearCachedValue(previousCacheKey);
-    if (previousMe) void clearCachedValues(`user:${previousMe.id}:`);
+    if (previousMe) {
+      void clearCachedValues(`user:${previousMe.id}:`);
+      clearPersistedPhotos();
+    }
   }, [enabled]);
 
   // Check only the current Better Auth session namespace. This intentionally
@@ -197,7 +201,10 @@ export function useMe(enabled = true) {
           setStaleSince(null);
           setOfflineEntryAvailable(false);
           if (cacheKey) void clearCachedValue(cacheKey);
-          if (invalidatedMe) void clearCachedValues(`user:${invalidatedMe.id}:`);
+          if (invalidatedMe) {
+            void clearCachedValues(`user:${invalidatedMe.id}:`);
+            clearPersistedPhotos();
+          }
           return null;
         } else if (!hasData.current) {
           // The server couldn't be confirmed as rejecting the session (network

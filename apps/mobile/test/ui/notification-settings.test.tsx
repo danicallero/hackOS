@@ -1,7 +1,6 @@
-import { act, render, screen, userEvent } from "@testing-library/react-native";
+import { act, screen } from "@testing-library/react-native";
 import type { ScheduleItem } from "@/lib/schedule";
 
-const mockPush = jest.fn();
 const mockSchedule: { data: ScheduleItem[] } = { data: [] };
 const mockSubscribed = new Set<number>();
 const mockToggleEntry = jest.fn((item: ScheduleItem) => {
@@ -9,9 +8,10 @@ const mockToggleEntry = jest.fn((item: ScheduleItem) => {
   else mockSubscribed.add(item.id);
 });
 
+const mockSetOptions = jest.fn();
 jest.mock("expo-router", () => ({
-  useNavigation: () => ({ setOptions: jest.fn() }),
-  useRouter: () => ({ push: mockPush }),
+  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useRouter: () => ({ push: jest.fn() }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: { Screen: () => null } }));
 jest.mock("@/theme/colors", () => ({
@@ -89,74 +89,66 @@ function activity(id: number, hour: number, type = "talk"): ScheduleItem {
   } as unknown as ScheduleItem;
 }
 
-function reminderSwitches() {
-  return screen.queryAllByLabelText(/^Reminder on for /);
-}
-
 beforeEach(() => {
-  mockPush.mockClear();
   mockToggleEntry.mockClear();
   mockSubscribed.clear();
+  mockSetOptions.mockClear();
   mockSchedule.data = [1, 2, 3, 4, 5].map((id) => activity(id, 8 + id, id % 2 ? "talk" : "meal"));
 });
 
+async function typeSearch(text: string) {
+  const { headerSearchBarOptions } = mockSetOptions.mock.calls.at(-1)?.[0] ?? {};
+  await act(async () => headerSearchBarOptions.onChangeText({ nativeEvent: { text } }));
+}
+
 describe("Activity reminders settings (H59)", () => {
-  it("orders channels, then bulk switches by type, then the reminders coming up", async () => {
+  it("orders channels, then bulk switches by type", async () => {
     await renderMobile(<NotificationCategoryScreen category="schedule" />);
 
     const headers = (await screen.findAllByRole("header")).map((node) => node.props.children);
-    expect(headers).toEqual(["Show notifications", "By activity type", "Coming up"]);
+    expect(headers).toEqual(["Show notifications", "By activity type"]);
   });
 
-  it("caps Coming up and opens the full list from See all", async () => {
-    for (const id of [1, 2, 3, 4, 5]) mockSubscribed.add(id);
+  it("searches activities from the header and toggles one", async () => {
     await renderMobile(<NotificationCategoryScreen category="schedule" />);
+    await screen.findByText("By activity type");
 
-    await screen.findByText("Coming up");
-    expect(reminderSwitches()).toHaveLength(3);
-    await userEvent.press(screen.getByRole("button", { name: "See all, 5" }));
-    expect(mockPush).toHaveBeenCalledWith({
-      pathname: "/(tabs)/others/reminders/[kind]",
-      params: { kind: "all", subscribed: "1" },
-    });
-    expect(screen.getByRole("button", { name: "Add an activity" })).toBeTruthy();
-  });
-
-  it("omits See all when every reminder fits", async () => {
-    mockSubscribed.add(2);
-    await renderMobile(<NotificationCategoryScreen category="schedule" />);
-
-    await screen.findByText("Coming up");
-    expect(reminderSwitches()).toHaveLength(1);
-    expect(screen.queryByText("See all")).toBeNull();
-  });
-
-  it("keeps a reminder switched off in the full list until the person leaves", async () => {
-    mockSubscribed.add(1);
-    mockSubscribed.add(4);
-    // Plain render so rerender keeps the same tree (and the screen's state).
-    const view = await render(<ReminderPickerScreen kind="all" subscribedOnly />);
-
-    expect(reminderSwitches()).toHaveLength(2);
-    expect(screen.queryByText("Activity 2")).toBeNull();
-
-    mockSubscribed.delete(4);
-    await act(() => view.rerender(<ReminderPickerScreen kind="all" subscribedOnly />));
+    await typeSearch("activity 4");
+    expect(screen.queryByText("By activity type")).toBeNull();
     expect(screen.getByText("Activity 4")).toBeTruthy();
+    expect(screen.queryByText("Activity 2")).toBeNull();
     expect(screen.getByLabelText("Reminder off for Activity 4")).toBeTruthy();
+
+    await typeSearch("zzz");
+    expect(screen.getByText("No results")).toBeTruthy();
+  });
+
+  it("does not add search to other notification types", async () => {
+    mockSetOptions.mockClear();
+    await renderMobile(<NotificationCategoryScreen category="announcements" />);
+    expect(mockSetOptions).not.toHaveBeenCalled();
+  });
+
+  it("filters one kind's activities by search", async () => {
+    await renderMobile(<ReminderPickerScreen kind="talk" />);
+    expect(screen.getByText("Activity 1")).toBeTruthy();
+    expect(screen.getByText("Activity 3")).toBeTruthy();
+
+    await typeSearch("3");
+    expect(screen.queryByText("Activity 1")).toBeNull();
+    expect(screen.getByText("Activity 3")).toBeTruthy();
   });
 
   it("centers every switch in its row and keeps times on one line", async () => {
     mockSubscribed.add(5);
     await renderMobile(<NotificationCategoryScreen category="schedule" />);
 
-    await screen.findByText("Coming up");
+    await screen.findByText("By activity type");
     const switches = screen.getAllByRole("switch");
-    // Channels (3), activity types (2) and the one reminder.
-    expect(switches).toHaveLength(6);
+    // Channels (3) and activity types (2).
+    expect(switches).toHaveLength(5);
     for (const toggle of switches) {
       expect(toggle).toHaveStyle({ alignSelf: "center" });
     }
-    expect(screen.getByText("01:00 PM").props.numberOfLines).toBe(1);
   });
 });

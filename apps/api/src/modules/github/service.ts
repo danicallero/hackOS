@@ -182,6 +182,10 @@ export async function linkRepo(userId: number, repoId: number, githubRepoId: num
       throw new ConflictError("This repository is already linked to a project", {
         code: ERROR_REASONS.GITHUB_REPO_ALREADY_LINKED,
       });
+    const { rows: previous } = await client.query(
+      `SELECT full_name FROM github_repo_links WHERE repo_id = $1`,
+      [repoId],
+    );
     await client.query(
       `INSERT INTO github_repo_links (repo_id, installation_id, github_repo_id, full_name, is_private, linked_by)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -190,10 +194,15 @@ export async function linkRepo(userId: number, repoId: number, githubRepoId: num
          is_private = EXCLUDED.is_private, linked_by = EXCLUDED.linked_by`,
       [repoId, choice.installationId, githubRepoId, choice.fullName, choice.isPrivate, userId],
     );
-    await client.query(`UPDATE repos SET github_url = COALESCE(github_url, $2) WHERE id = $1`, [
-      repoId,
-      `https://github.com/${choice.fullName}`,
-    ]);
+    // The project's URL follows its link: filled when empty, and replaced when it was
+    // the previous link's address. A URL a person typed for another place is kept.
+    await client.query(
+      `UPDATE repos SET github_url = $2
+        WHERE id = $1
+          AND (github_url IS NULL OR github_url = ''
+               OR ($3::text IS NOT NULL AND github_url = 'https://github.com/' || $3))`,
+      [repoId, `https://github.com/${choice.fullName}`, previous[0]?.full_name ?? null],
+    );
     await audit(client, {
       actorId: userId,
       entityType: "project_github_link",
@@ -217,6 +226,11 @@ export async function unlinkRepo(userId: number, repoId: number): Promise<void> 
       [repoId],
     );
     if (!rows[0]) throw new NotFoundError("No GitHub repository is linked");
+    await client.query(
+      `UPDATE repos SET github_url = NULL
+        WHERE id = $1 AND github_url = 'https://github.com/' || $2::text`,
+      [repoId, rows[0].full_name],
+    );
     await client.query(`DELETE FROM github_commits WHERE repo_id = $1`, [repoId]);
     await client.query(`DELETE FROM github_pull_requests WHERE repo_id = $1`, [repoId]);
     await audit(client, {

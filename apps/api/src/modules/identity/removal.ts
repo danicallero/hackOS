@@ -1414,6 +1414,11 @@ async function scrubRelationships(
   await client.query(`DELETE FROM diary_entries WHERE owner_id = $1 OR target_user_id = $1`, [
     userId,
   ]);
+  // H18: reports the subject filed and reports about them; staff read the
+  // reported content live, so nothing else keeps their identity.
+  await client.query(`DELETE FROM content_reports WHERE reporter_id = $1 OR target_user_id = $1`, [
+    userId,
+  ]);
   await client.query(`DELETE FROM project_files WHERE uploaded_by=$1`, [userId]);
   await client.query(
     `UPDATE users SET gallery_show_photo=false,gallery_show_name=false,gallery_consented_at=NULL WHERE id=$1`,

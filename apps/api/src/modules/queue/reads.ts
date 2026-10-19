@@ -1191,7 +1191,7 @@ export async function repoChallenges(repoId: number) {
                       AND (earlier.position, earlier.id) < (oe.position, oe.id)
                  )
             ) ELSE NULL END AS position,
-            qe.called_at,
+            qe.called_at, qe.call_count,
             qgc.queue_group_id, qg.display_name AS queue_name,
             qe.assigned_room_id AS room_id, r.name AS room_name,
             COALESCE(
@@ -1248,6 +1248,7 @@ export async function repoChallenges(repoId: number) {
       status: string;
       position: number | null;
       called_at: string | null;
+      call_count: number;
       minutes_per_slot: string;
     }) => ({
       ...row,

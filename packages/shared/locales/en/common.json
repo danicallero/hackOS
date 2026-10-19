@@ -55,6 +55,7 @@
   "queueStatusWaiting": "In queue",
   "queueStatusCalled": "Waiting at the door",
   "queueStatusPresenting": "Presenting",
+  "queueBeInRoom": "Be in the room",
   "queueStatusCompleted": "Scored",
   "queueStatusDisqualified": "Disqualified",
   "apiError_idempotency_in_flight": "This request is already being processed. Try again in a moment.",

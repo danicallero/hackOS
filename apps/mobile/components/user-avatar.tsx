@@ -23,17 +23,20 @@ export function UserAvatar({
   name,
   image,
   size = 40,
+  persist = false,
   testID,
 }: {
   name: string;
   /** Authenticated photo route from the API, or null. */
   image: string | null | undefined;
   size?: number;
+  /** The signed-in person's own photo: cached on disk to survive offline launches. */
+  persist?: boolean;
   testID?: string;
 }) {
   // The photo route is private: it is fetched with the session, and the
   // initials stay until it arrives or when it cannot load (#934).
-  const photo = useApiImage(image);
+  const photo = useApiImage(image, persist);
 
   return (
     <View

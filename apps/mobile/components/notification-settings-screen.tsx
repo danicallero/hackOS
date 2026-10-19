@@ -23,6 +23,7 @@ import { useMeContext } from "@/lib/me-context";
 import type { NotificationChannel } from "@/lib/notification-preferences";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { has } from "@/lib/tabs";
+import { useHeaderSearch } from "@/lib/use-header-search";
 import { useNotificationPreferences } from "@/lib/use-notification-preferences";
 
 type Translate = ReturnType<typeof useLocale>["t"];
@@ -240,13 +241,14 @@ export function NotificationSettingsScreen() {
 
 /**
  * H51/H59: one notification type. Channel switches for the whole type; for
- * activity reminders also the reminders the person has, an activity picker
- * and a bulk switch per activity type.
+ * activity reminders also a bulk switch per activity type and a header search
+ * to find one activity.
  */
 export function NotificationCategoryScreen({ category }: { category: NotificationCategory }) {
   const { t } = useLocale();
   const preferences = useNotificationPreferences();
   const reminders = useScheduleReminders();
+  const query = useHeaderSearch(category === "schedule" ? t("scheduleSearchPlaceholder") : null);
   const [refreshing, setRefreshing] = useState(false);
   const contentContainerStyle = useScrollContentStyle();
   const channels = categoryChannels(category, preferences.channels);
@@ -303,7 +305,9 @@ export function NotificationCategoryScreen({ category }: { category: Notificatio
           ))}
         </Section>
       )}
-      {category === "schedule" ? <ScheduleReminderSections reminders={reminders} /> : null}
+      {category === "schedule" ? (
+        <ScheduleReminderSections reminders={reminders} query={query} />
+      ) : null}
     </ScrollView>
   );
 }

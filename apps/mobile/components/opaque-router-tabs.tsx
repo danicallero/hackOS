@@ -145,6 +145,7 @@ export interface OpaqueRouterTabsProps {
 /** Matches the 22pt tab symbols; the ring adds a 1pt gap and a 2pt stroke. */
 const TAB_AVATAR_SIZE = 22;
 const TAB_AVATAR_FRAME = TAB_AVATAR_SIZE + 6;
+const OVERFLOW_AVATAR_INSET = 14;
 
 /** The account photo as a tab icon; the selected tab adds a ring in the tab tint. */
 function AccountTabAvatar({
@@ -168,7 +169,48 @@ function AccountTabAvatar({
         width: TAB_AVATAR_FRAME,
       }}
     >
-      <UserAvatar testID="account-tab-avatar" name={name} image={image} size={TAB_AVATAR_SIZE} />
+      <UserAvatar
+        testID="account-tab-avatar"
+        name={name}
+        image={image}
+        size={TAB_AVATAR_SIZE}
+        persist
+      />
+    </View>
+  );
+}
+
+/** The account photo inside the separated overflow circle, ringed in the tab tint. */
+function OverflowAccountAvatar({
+  name,
+  image,
+  size,
+  ringColor,
+}: {
+  name: string;
+  image: string;
+  size: number;
+  ringColor: string;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        borderColor: ringColor,
+        borderRadius: size / 2,
+        borderWidth: 2,
+        height: size,
+        justifyContent: "center",
+        width: size,
+      }}
+    >
+      <UserAvatar
+        testID="account-overflow-avatar"
+        name={name}
+        image={image}
+        size={size - 6}
+        persist
+      />
     </View>
   );
 }
@@ -346,16 +388,25 @@ function OverflowTriggerIcon({
   account,
   activeIconColor,
   activeOverflowId,
+  circleSize,
   iconColor,
 }: {
   account: OpaqueOverflowMenuProps["account"];
   activeIconColor: string;
   activeOverflowId: OverflowTabKey | null;
+  circleSize: number;
   iconColor: string;
 }) {
   if (activeOverflowId === "account" && account?.image) {
+    // The circle is large, so the ringed photo sits inset in it rather than
+    // shrinking to a tab-icon size.
     return (
-      <AccountTabAvatar name={account.name} image={account.image} ringColor={activeIconColor} />
+      <OverflowAccountAvatar
+        name={account.name}
+        image={account.image}
+        size={Math.round(circleSize - OVERFLOW_AVATAR_INSET * 2)}
+        ringColor={activeIconColor}
+      />
     );
   }
   return (
@@ -451,6 +502,7 @@ function NativeOverflowMenu({
           account={account}
           activeIconColor={activeIconColor}
           activeOverflowId={activeOverflowId}
+          circleSize={tabBarHeight}
           iconColor={iconColor}
         />
       </View>
@@ -528,6 +580,7 @@ function AndroidOverflowMenu({
           account={account}
           activeIconColor={activeIconColor}
           activeOverflowId={activeOverflowId}
+          circleSize={tabBarHeight}
           iconColor={iconColor}
         />
       </Pressable>

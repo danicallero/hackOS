@@ -52,6 +52,8 @@ export interface Me {
   canCreateProject: boolean;
   /** H7: once an application is accepted, name/shirt-size/dietary fields are no longer self-editable. */
   profileLocked: boolean;
+  /** H7: dietary data stays editable after acceptance only until a first answer exists. */
+  dietaryLocked: boolean;
   hasStatisticsPanels: boolean;
   /** H45/H47: the event's IANA timezone; every shown and typed time is this wall clock, not the browser's. */
   eventTimezone: string;

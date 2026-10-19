@@ -24,6 +24,9 @@ export interface NativeProject {
     position?: number | null;
   }[];
   winners?: { challengeId: number; rank: number; challengeTitle?: string }[];
+  githubUrl?: string | null;
+  /** The signed-in person is on the team; a team never reports its own project. */
+  isMember?: boolean;
   canEdit?: boolean;
   canSubmit?: boolean;
   /** Inside the submission window a team withdraws a submitted project to edit it. */

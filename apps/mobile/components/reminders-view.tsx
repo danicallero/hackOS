@@ -1,10 +1,9 @@
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   AppSwitch,
   EmptyState,
-  InfoRow,
   Section,
   Separator,
   SWITCH_IN_ROW_STYLE,
@@ -12,7 +11,6 @@ import {
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
-import { SymbolView } from "@/components/symbol";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
@@ -23,6 +21,7 @@ import {
   scheduleTypeLabel,
 } from "@/lib/schedule";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { matchesQuery, useHeaderSearch } from "@/lib/use-header-search";
 import {
   itemCategory,
   kindCategory,
@@ -30,9 +29,6 @@ import {
 } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
-
-/** "Coming up" shows this many reminders before "See all" (H59). */
-export const UPCOMING_PREVIEW_LIMIT = 3;
 
 /**
  * Reminder rows reserve a leading column for the start time, wide enough for
@@ -91,39 +87,43 @@ export function useScheduleReminders() {
   return { items, kinds, notifications, loading, error, staleSince, reload };
 }
 
-function isUpcoming(item: ScheduleItem, now: number) {
-  return Date.parse(item.endsAt) > now;
-}
-
 /**
  * H59: the reminder part of Account → Notifications → Activity reminders,
- * below the channel switches: a bulk switch per activity type, then the next
- * few reminders with "See all" and an activity picker to add more. Bulk
- * switches come first so a long reminder list never pushes them out of
- * reach. Rendered inside the caller's ScrollView.
+ * below the channel switches: a bulk switch per activity type. A search query
+ * replaces them with the matching activities, each with its own reminder
+ * switch. Rendered inside the caller's ScrollView.
  */
 export function ScheduleReminderSections({
   reminders,
+  query = "",
 }: {
   reminders: ReturnType<typeof useScheduleReminders>;
+  query?: string;
 }) {
   const { t } = useLocale();
   const router = useRouter();
   const timeColumnWidth = useTimeColumnWidth();
   const { items, kinds, notifications, loading, error, reload } = reminders;
 
-  const now = Date.now();
   const ready = notifications.ready && items.length > 0;
-  const upcomingReminders = ready
-    ? items.filter((item) => isUpcoming(item, now) && notifications.isEntrySubscribed(item))
-    : [];
-  const previewReminders = upcomingReminders.slice(0, UPCOMING_PREVIEW_LIMIT);
+  const searching = query.trim().length > 0;
 
   if (!ready) {
     if (error && !loading) return <RequestFeedback error={error} onRetry={() => void reload()} />;
     if (loading || !notifications.ready) return <RequestFeedback loading />;
     return null;
   }
+
+  const matches = searching
+    ? items.filter((item) =>
+        matchesQuery(
+          query,
+          item.title,
+          item.location,
+          item.type ? scheduleTypeLabel(item.type, t) : null,
+        ),
+      )
+    : [];
 
   return (
     <>
@@ -136,7 +136,27 @@ export function ScheduleReminderSections({
         />
       ) : null}
 
-      {kinds.length > 0 ? (
+      {searching ? (
+        matches.length === 0 ? (
+          <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
+        ) : (
+          <Section>
+            {matches.map((item, index) => (
+              <View key={item.id}>
+                {index > 0 ? <Separator inset={rowSeparatorInset(timeColumnWidth)} /> : null}
+                <ReminderRow
+                  item={item}
+                  showDay
+                  subscribed={notifications.isEntrySubscribed(item)}
+                  timeColumnWidth={timeColumnWidth}
+                  busy={notifications.savingKey === itemCategory(item.id)}
+                  onToggle={() => void notifications.toggleEntry(item)}
+                />
+              </View>
+            ))}
+          </Section>
+        )
+      ) : kinds.length > 0 ? (
         <Section title={t("alertsByKind")}>
           {kinds.map((kind, index) => {
             const kindItems = items.filter((item) => item.type === kind);
@@ -162,103 +182,23 @@ export function ScheduleReminderSections({
           })}
         </Section>
       ) : null}
-
-      <Section title={t("alertsUpcoming")} footer={t("scheduleNotificationsSubtitle")}>
-        {previewReminders.map((item, index) => (
-          <View key={item.id}>
-            {index > 0 ? <Separator inset={rowSeparatorInset(timeColumnWidth)} /> : null}
-            <ReminderRow
-              item={item}
-              showDay
-              subscribed
-              timeColumnWidth={timeColumnWidth}
-              busy={notifications.savingKey === itemCategory(item.id)}
-              onToggle={() => void notifications.toggleEntry(item)}
-            />
-          </View>
-        ))}
-        {upcomingReminders.length > UPCOMING_PREVIEW_LIMIT ? (
-          <>
-            <Separator />
-            <Pressable
-              accessibilityLabel={`${t("alertsSeeAll")}, ${upcomingReminders.length}`}
-              accessibilityRole="button"
-              onPress={() =>
-                router.push({
-                  pathname: "/(tabs)/others/reminders/[kind]",
-                  params: { kind: "all", subscribed: "1" },
-                })
-              }
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-            >
-              <InfoRow
-                accessoryIcon="chevron.right"
-                label={t("alertsSeeAll")}
-                value={String(upcomingReminders.length)}
-              />
-            </Pressable>
-          </>
-        ) : null}
-        {previewReminders.length > 0 ? <Separator /> : null}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() =>
-            router.push({
-              pathname: "/(tabs)/others/reminders/[kind]",
-              params: { kind: "all" },
-            })
-          }
-          style={({ pressed }) => ({
-            alignItems: "center",
-            flexDirection: "row",
-            gap: 12,
-            minHeight: 50,
-            opacity: pressed ? 0.6 : 1,
-            paddingHorizontal: 16,
-          })}
-        >
-          <SymbolView
-            name="plus.circle.fill"
-            tintColor={colors.accent}
-            size={22}
-            accessible={false}
-          />
-          <Text style={{ color: colors.accent, flex: 1, fontSize: 16 }}>
-            {t("notificationsAddActivityReminder")}
-          </Text>
-        </Pressable>
-      </Section>
     </>
   );
 }
 
 /**
- * H59: every activity of one kind (or every upcoming activity for `all`),
- * grouped by day, each with its own reminder toggle — how a person adds a
- * reminder from Alerts without hunting for the card in the schedule.
- * `subscribedOnly` is the full "Coming up" list: the upcoming activities the
- * person is reminded about. A row switched off there stays until the person
- * leaves, so a mistaken tap can be undone in place.
+ * H59: every activity of one kind grouped by day, each with its own reminder
+ * toggle, searchable from the header.
  */
-export function ReminderPickerScreen({
-  kind,
-  subscribedOnly = false,
-}: {
-  kind: string;
-  subscribedOnly?: boolean;
-}) {
+export function ReminderPickerScreen({ kind }: { kind: string }) {
   const { t, language } = useLocale();
   const { items, notifications, loading, error, staleSince, reload } = useScheduleReminders();
+  const query = useHeaderSearch(t("scheduleSearchPlaceholder"));
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const timeColumnWidth = useTimeColumnWidth();
-  const shownSubscribed = useRef(new Set<number>());
-  const now = Date.now();
-  const visible = items.filter((item) => {
-    if (kind === "all" ? !isUpcoming(item, now) : item.type !== kind) return false;
-    if (!subscribedOnly || !notifications.ready) return true;
-    if (notifications.isEntrySubscribed(item)) shownSubscribed.current.add(item.id);
-    return shownSubscribed.current.has(item.id);
-  });
+  const visible = items.filter(
+    (item) => item.type === kind && matchesQuery(query, item.title, item.location),
+  );
   const eventZone = useEventTimeZone();
   const days = useMemo(() => {
     const groups = new Map<string, ScheduleItem[]>();
@@ -281,6 +221,7 @@ export function ReminderPickerScreen({
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
+      keyboardDismissMode="on-drag"
       contentContainerStyle={{
         gap: 20,
         padding: 16,
@@ -303,12 +244,7 @@ export function ReminderPickerScreen({
           onRetry={() => void reload()}
         />
       ) : days.length === 0 ? (
-        <EmptyState
-          icon={subscribedOnly ? "bell.slash" : "calendar.badge.clock"}
-          title={t(
-            subscribedOnly ? "notificationsNoActiveReminders" : "notificationsNoUpcomingActivities",
-          )}
-        />
+        <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
       ) : (
         days.map((day) => (
           <Section key={day.key} title={day.title}>

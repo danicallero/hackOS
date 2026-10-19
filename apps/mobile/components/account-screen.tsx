@@ -252,7 +252,7 @@ export default function AccountScreen() {
   if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
 
   const fullName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
-  const canEditDietary = !offline && !me.profileLocked;
+  const canEditDietary = !offline && !me.dietaryLocked;
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
     .join(", ");
@@ -568,6 +568,7 @@ export default function AccountScreen() {
       <ProfileAvatarCollapse
         controller={avatarCollapse}
         image={me.image}
+        persist
         name={fullName}
         size={96}
         variant="account"

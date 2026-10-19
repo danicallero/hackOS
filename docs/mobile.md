@@ -251,7 +251,10 @@ distributed to other Expo Router apps without importing hackOS code.
   tab shows it instead of the person symbol, with a ring in the tab tint when
   selected, and the Account screen header shows it in place of the initials.
   On a compact phone a participant's Account sits behind Others, so the Others
-  circle shows the same ringed photo while Account is open.
+  circle shows the photo filling the whole circle, with no ring, while Account
+  is open. The signed-in person's own photo is cached on disk (`persist` on
+  `UserAvatar`/`useApiImage`, cleared on sign-out) so it still shows offline;
+  every other person's photo stays memory-only.
   Tapping the Account avatar (or the one at the top of the networking profile
   editor) opens a native menu (#934): Take photo, Choose from library and, when
   a photo exists, Remove photo (`components/profile-photo-menu.tsx`, one hook
@@ -420,6 +423,7 @@ notifications, SSE updates and polling. `/projects/:id` is the submission
 screen: the name field (its footer shows the save state and, when the server
 provides `submissionsCloseAt`, the deadline), grouped form sections, challenge
 rows, team with an Invite row, and a floating Submit / Resubmit glass button. A frozen submitted project (`canWithdraw`, inside the submission window) shows a **Withdraw submission** glass button instead, with a confirmation, which calls `POST /api/me/projects/:id/withdraw-submission`; the project becomes a draft again and leaves the gallery and queue until it is submitted again (H20, H21). Staff return and manual repositories stay web-only.
+A **GitHub** section links the project to a repository through the GitHub App (the system browser returns via `hackos://github-callback`, see [github-activity](./github-activity.md)), unlinks it, and the read view shows the repository link; commit and pull-request counts stay web-only (H18).
 Queue context lives on My Projects and the queue screen, not in the editor. Leaving a team uses the authenticated
 `DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
@@ -513,8 +517,9 @@ they are not device screenshots or proof of native toolbar behavior.
   device's top camera cutout.
   Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
-  records as a confirmed empty answer; the row is read-only offline or once the
-  H7 profile lock applies (the next-entry prompt then skips the dietary step).
+  records as a confirmed empty answer; the row is read-only offline or once
+  `dietaryLocked` (H7: after an accepted application the first answer is allowed,
+  then only staff change it; the next-entry prompt then skips the dietary step).
   The screen follows the other form modals: grouped sections (No restrictions,
   intolerances, a dedicated Dietary notes section matching the web
   `foodIntoleranceNotes` field, read-only while No restrictions is on), a
@@ -671,7 +676,10 @@ they are not device screenshots or proof of native toolbar behavior.
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback. Participant ranks exclude waiting sibling entries of teams already
   called, in a room, presenting or completed in the same shared queue. My queue
-  refreshes when the tab regains focus. On the first visit to My queue for each
+  refreshes when the tab regains focus and keeps its last response on the device
+  (`cacheFirst`), shown under the "Offline data" banner when the server does
+  not answer; My Projects shares that cache entry. On a phone its header is the
+  compact translucent title used by Open-source licenses. On the first visit to My queue for each
   account, the app shows a
   persisted native tutorial explaining the three participant-facing stages:
   get ready (do not go to the room), wait outside the door, and enter only
@@ -703,12 +711,10 @@ they are not device screenshots or proof of native toolbar behavior.
   `others/notification-settings/`) lists each notification type with its state;
   a type opens its channel switches. Activity reminders
   (`components/reminders-view.tsx`) continues with a bulk switch per activity
-  type (the label side, marked by a chevron, opens that type's activities)
-  and then "Coming up":
-  the next three reminders, "See all" when there are more (the same
-  `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
-  switched off stays until the person leaves), and an "Add an activity"
-  picker (`kind=all`). Switch rows use `ToggleRow` from
+  type (the label side, marked by a chevron, opens that type's activities).
+  The header search (`lib/use-header-search.ts`, same native configuration as
+  Schedule) replaces the type list with the matching activities, each with its
+  own reminder switch; the per-type screen has the same search. Switch rows use `ToggleRow` from
   `components/native-ui.tsx`; any other `Switch` placed in a row needs
   `SWITCH_IN_ROW_STYLE`, because React Native's iOS Switch defaults to
   `alignSelf: "flex-start"` and otherwise sits at the top of the row.
@@ -898,8 +904,14 @@ directory to browse: people get into the diary only by a badge scan. The
 `?view=people` / `?view=companies` route parameter opens a segment directly.
 Pull-to-refresh, focus and foregrounding refetch, which is also how a person
 who was scanned sees the scanner appear (scans are mutual when the scanner
-shares a profile, `diary.md`). Nothing is written to the
-offline cache, so a profile hidden later cannot reappear from device storage.
+shares a profile, `diary.md`). The list itself is never written to the
+offline cache, so a profile hidden later cannot reappear from device storage;
+without a connection the screen shows the offline state (`RequestFeedback`:
+"You're offline" with Retry). Scanning still works offline: a code that never
+reached the server is queued on the device (`lib/diary-pending.ts`, one entry
+per code, cleared with the account's other caches), "Waiting for connection: n"
+shows above the scan button, and the queue is sent on reconnect, on focus and
+on launch; a code the server answers (accepted or refused) leaves the queue.
 
 The diary uses the system header, laid out like Activities. On iOS 26
 (`isRealLiquidGlassAvailable`) it is the transparent native bar: the list

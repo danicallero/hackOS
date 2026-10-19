@@ -30,6 +30,11 @@ export function localizedFormText(
 }
 
 /** H16/H20: native controls consume the same schema as applications. */
+/** Only web links are handed to the system; free text never reaches `Linking`. */
+function isHttpUrl(value: string) {
+  return /^https?:\/\/\S+$/i.test(value.trim());
+}
+
 export function DynamicForm({
   template,
   sections,
@@ -186,10 +191,7 @@ export function DynamicForm({
       );
     }
     if (readOnly) {
-      const isLink =
-        item.validation?.text_condition === "url" &&
-        typeof value === "string" &&
-        /^https?:\/\//i.test(value);
+      const isLink = typeof value === "string" && isHttpUrl(value);
       return (
         <FieldRow key={item.key} label={label}>
           {isLink ? (
@@ -213,6 +215,7 @@ export function DynamicForm({
         <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
           <FieldLibraryPicker
             libraryId={item.library_id}
+            title={label}
             value={
               Array.isArray(value)
                 ? value.filter((value): value is string => typeof value === "string")
@@ -224,38 +227,59 @@ export function DynamicForm({
         </FieldRow>
       );
     const numeric = item.kind === "number" || item.kind === "birth_year";
+    const openable = typeof value === "string" && isHttpUrl(value) ? value : null;
     return (
       <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
-        <TextInput
-          accessibilityLabel={label}
-          editable={!disabled}
-          value={value == null ? "" : String(value)}
-          multiline={item.kind === "textarea"}
-          scrollEnabled={false}
-          keyboardType={
-            numeric
-              ? "numeric"
-              : item.kind === "phone"
-                ? "phone-pad"
-                : item.validation?.text_condition === "url"
-                  ? "url"
-                  : "default"
-          }
-          autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
-          maxLength={item.validation?.max_length}
-          placeholder={item.placeholder ? localizedFormText(item.placeholder, language) : undefined}
-          placeholderTextColor={colors.tertiaryLabel}
-          onChangeText={(next) =>
-            onChange?.(item.key, numeric ? (next === "" ? null : Number(next)) : next)
-          }
-          style={{
-            color: colors.label,
-            fontSize: 17,
-            minHeight: item.kind === "textarea" ? 88 : 28,
-            padding: 0,
-            textAlignVertical: "top",
-          }}
-        />
+        <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 12 }}>
+          <TextInput
+            accessibilityLabel={label}
+            editable={!disabled}
+            value={value == null ? "" : String(value)}
+            multiline={item.kind === "textarea"}
+            scrollEnabled={false}
+            keyboardType={
+              numeric
+                ? "numeric"
+                : item.kind === "phone"
+                  ? "phone-pad"
+                  : item.validation?.text_condition === "url"
+                    ? "url"
+                    : "default"
+            }
+            autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
+            maxLength={item.validation?.max_length}
+            placeholder={
+              item.placeholder ? localizedFormText(item.placeholder, language) : undefined
+            }
+            placeholderTextColor={colors.tertiaryLabel}
+            onChangeText={(next) =>
+              onChange?.(item.key, numeric ? (next === "" ? null : Number(next)) : next)
+            }
+            style={{
+              color: colors.label,
+              flex: 1,
+              fontSize: 17,
+              minHeight: item.kind === "textarea" ? 88 : 28,
+              padding: 0,
+              textAlignVertical: "top",
+            }}
+          />
+          {openable ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={openable}
+              hitSlop={10}
+              onPress={() => void Linking.openURL(openable)}
+            >
+              <SymbolView
+                name="arrow.up.right.square"
+                tintColor={colors.accent}
+                size={22}
+                accessible={false}
+              />
+            </Pressable>
+          ) : null}
+        </View>
       </FieldRow>
     );
   };

@@ -129,6 +129,45 @@ describe("project GitHub link", () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it("hands a mobile-app flow back to the app without a browser session", async () => {
+    const server = await getApp();
+    const member = await createUser();
+    const repoId = await project("Team", member);
+    const { signState } = await import("../../src/modules/github/client.js");
+    const state = encodeURIComponent(signState(member, repoId, true));
+    const res = await server.inject({
+      method: "GET",
+      url: `/api/github/callback?installation_id=1&code=c&state=${state}`,
+    });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe(
+      `hackos://github-callback?installation_id=1&code=c&state=${state}`,
+    );
+  });
+
+  it("starts a mobile-app link whose state completes only for its member", async () => {
+    const server = await getApp();
+    const member = await createUser();
+    const other = await createUser();
+    const repoId = await project("Team", member);
+    const started = await server.inject({
+      method: "POST",
+      url: `/api/me/projects/${repoId}/github/install`,
+      headers: { ...asUser(member), "idempotency-key": crypto.randomUUID() },
+      payload: { app: true },
+    });
+    const state = new URL(started.json().url).searchParams.get("state") as string;
+    const { verifyState } = await import("../../src/modules/github/client.js");
+    expect(verifyState(state)).toMatchObject({ userId: member, repoId, app: true });
+    const stolen = await server.inject({
+      method: "POST",
+      url: "/api/me/github/complete",
+      headers: { ...asUser(other), "idempotency-key": crypto.randomUUID() },
+      payload: { code: "c", state, installationId: 1 },
+    });
+    expect(stolen.statusCode).toBe(400);
+  });
+
   it("sends an expired session through login and back to the callback (H18)", async () => {
     const server = await getApp();
     const path = "/api/github/callback?installation_id=1&code=c&state=s";
@@ -140,6 +179,35 @@ describe("project GitHub link", () => {
   it("reports an invalid app private key as a clear error, not a 500", async () => {
     const { installationToken } = await import("../../src/modules/github/client.js");
     await expect(installationToken(123)).rejects.toThrow(/private key is invalid/);
+  });
+
+  it("clears the project's URL on unlink only when it was the linked repository's", async () => {
+    const server = await getApp();
+    const member = await createUser();
+    const linked = await project("Linked", member);
+    const typed = await project("Typed", member);
+    await link(linked, 101);
+    await link(typed, 102);
+    await pool.query(
+      `UPDATE repos SET github_url = 'https://github.com/org/repo-101' WHERE id = $1`,
+      [linked],
+    );
+    await pool.query(`UPDATE repos SET github_url = 'https://example.com/mine' WHERE id = $1`, [
+      typed,
+    ]);
+    for (const repoId of [linked, typed]) {
+      const res = await server.inject({
+        method: "DELETE",
+        url: `/api/me/projects/${repoId}/github`,
+        headers: { ...asUser(member), "idempotency-key": crypto.randomUUID() },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+    const { rows } = await pool.query(`SELECT id, github_url FROM repos ORDER BY id`);
+    expect(rows).toEqual([
+      { id: linked, github_url: null },
+      { id: typed, github_url: "https://example.com/mine" },
+    ]);
   });
 
   it("unlinks, audits and drops the tracked activity", async () => {

@@ -257,8 +257,8 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
     const tab = screen.getByTestId("opaque-tab-account");
     expect(tab).toBeTruthy();
     expect(screen.queryByTestId("symbol-account_circle")).toBeNull();
-    // Loaded with the session in memory only; expo-image sends the Cookie
-    // header on Android (React Native's Image dropped it).
+    // The signed-in person's own photo is kept on disk to show offline;
+    // expo-image sends the Cookie header on Android (React Native's Image dropped it).
     const photo = await screen.findByTestId("account-tab-avatar-photo", {
       includeHiddenElements: true,
     });
@@ -266,7 +266,7 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
       uri: "https://api.test/api/users/7/photo?v=abc",
       headers: { Cookie: "session=abc" },
     });
-    expect(photo.props.cachePolicy).toBe("memory");
+    expect(photo.props.cachePolicy).toBe("disk");
   });
 
   it("keeps the Account symbol without a photo", async () => {
@@ -298,9 +298,13 @@ describe("OpaqueRouterTabs — account photo (#934)", () => {
           account={{ name: "Ada Lovelace", image: "/api/users/7/photo?v=abc" }}
         />,
       );
+      // The photo fills the circle itself: no selection ring around a tab-sized icon.
       expect(
-        await screen.findByTestId("account-tab-avatar-photo", { includeHiddenElements: true }),
+        await screen.findByTestId("account-overflow-avatar-photo", { includeHiddenElements: true }),
       ).toBeTruthy();
+      expect(
+        screen.queryByTestId("account-tab-avatar", { includeHiddenElements: true }),
+      ).toBeNull();
     });
 
     it("keeps the Others symbol while another destination is open", async () => {
