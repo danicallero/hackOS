@@ -9,6 +9,7 @@ import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
+import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -185,14 +186,13 @@ export function GeneralScannerScreen() {
     [router, sync.serverSnapshot, t],
   );
 
-  const roleFilter = (
-    <ScannerRoleFilter
-      options={roleOptions}
-      groups={groups}
-      onToggle={toggleGroup}
-      onClear={clearGroups}
-    />
-  );
+  const roleFilter = useScannerRoleFilterMenu({
+    options: roleOptions,
+    groups,
+    onToggle: toggleGroup,
+    onClear: clearGroups,
+  });
+  const filterInColumn = useFilterInToolbarColumn();
   const queueStatus = (
     <ScannerQueueStatus
       queue={sync.queue}
@@ -204,7 +204,7 @@ export function GeneralScannerScreen() {
       clockSkewMs={sync.clockSkewMs}
       fillWidth={false}
       nativeToolbar={glassAvailable}
-      toolbarAccessory={glassAvailable ? roleFilter : undefined}
+      toolbarAccessory={glassAvailable && !filterInColumn ? roleFilter : undefined}
     />
   );
   const title = (
@@ -225,6 +225,9 @@ export function GeneralScannerScreen() {
             <Stack.Toolbar.View hidesSharedBackground>{title}</Stack.Toolbar.View>
           </Stack.Toolbar>
           {queueStatus}
+          {filterInColumn ? (
+            <Stack.Toolbar placement="right">{toolbarFilter(roleFilter, true)}</Stack.Toolbar>
+          ) : null}
         </>
       ) : (
         <View
@@ -321,7 +324,7 @@ export function GeneralScannerScreen() {
 }
 
 /** H22–H26: labelled filter and People Finder controls stay directly reachable. */
-function ScannerRoleFilter({
+function useScannerRoleFilterMenu({
   options,
   groups,
   onToggle,

@@ -10,7 +10,7 @@ import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
-import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
+import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import {
   activityKinds,
   closestActivity,
@@ -51,6 +51,7 @@ export function ActivitiesScreen() {
   const returningFromScanner = useRef(false);
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
+  const filterInColumn = useFilterInToolbarColumn();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   // SQLite is an offline backup. A successful online snapshot must replace
@@ -271,7 +272,7 @@ export function ActivitiesScreen() {
             </Stack.Toolbar.View>
           </Stack.Toolbar>
           <Stack.Toolbar placement="right">
-            <ToolbarFilterSlot>{filterMenu}</ToolbarFilterSlot>
+            {toolbarFilter(filterMenu, filterInColumn)}
           </Stack.Toolbar>
         </>
       ) : (

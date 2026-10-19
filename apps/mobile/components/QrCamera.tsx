@@ -16,6 +16,7 @@ import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
+import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
@@ -160,6 +161,7 @@ function CameraPreview({
   const { t } = useLocale();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const sideRegion = useSideRegion();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
   const permissionRequestStarted = useRef(false);
@@ -453,7 +455,15 @@ function CameraPreview({
           glassEffectStyle="regular"
           isInteractive
           colorScheme="dark"
-          style={[styles.backControl, { top: insets.top + 12 }]}
+          style={[
+            styles.backControl,
+            { top: insets.top + 12 },
+            // With a side column the control stands in it, top-aligned like a system back.
+            sideRegion.edge && {
+              left: undefined,
+              [sideRegion.edge]: Math.max(8, (sideRegion.size - 44) / 2),
+            },
+          ]}
         >
           <Pressable
             accessibilityLabel={t("back")}

@@ -36,7 +36,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   type AudienceFilterValue,
-  ScheduleFilterButton,
+  useScheduleFilterMenu,
 } from "@/components/schedule-filter-button";
 import {
   ScheduleFormModal,
@@ -46,7 +46,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
-import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
+import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -201,6 +201,7 @@ export default function ScheduleScreen() {
   // keep the original hand-rolled header because it supports the shared
   // action pill and in-place search expansion.
   const glassAvailable = isRealLiquidGlassAvailable();
+  const filterInColumn = useFilterInToolbarColumn();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -472,20 +473,18 @@ export default function ScheduleScreen() {
     setFormTarget(null);
   }
 
-  const scheduleFilter = (
-    <ScheduleFilterButton
-      kinds={kinds}
-      selectedKinds={selectedKinds}
-      onToggleKind={toggleKind}
-      showAudience={canReadFull}
-      selectedAudiences={selectedAudiences}
-      onToggleAudience={toggleAudience}
-      onClear={() => {
-        setSelectedKinds([]);
-        setSelectedAudiences([]);
-      }}
-    />
-  );
+  const scheduleFilter = useScheduleFilterMenu({
+    kinds,
+    selectedKinds,
+    onToggleKind: toggleKind,
+    showAudience: canReadFull,
+    selectedAudiences,
+    onToggleAudience: toggleAudience,
+    onClear: () => {
+      setSelectedKinds([]);
+      setSelectedAudiences([]);
+    },
+  });
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
@@ -498,7 +497,7 @@ export default function ScheduleScreen() {
               </Stack.Toolbar.Badge>
             ) : null}
           </Stack.Toolbar.Button>
-          <ToolbarFilterSlot>{scheduleFilter}</ToolbarFilterSlot>
+          {toolbarFilter(scheduleFilter, filterInColumn)}
           {canManage ? (
             <Stack.Toolbar.Button
               icon="plus"

@@ -21,7 +21,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
-import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
+import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { safeBack } from "@/lib/navigation";
@@ -64,6 +64,7 @@ export function PeopleDirectoryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const usesListTitle = isPadIdiom();
   const glassAvailable = isRealLiquidGlassAvailable();
+  const filterInColumn = useFilterInToolbarColumn();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const showInlineListTitle = usesListTitle && glassAvailable;
@@ -355,9 +356,7 @@ export function PeopleDirectoryScreen() {
       <>
         {list}
         <EntryBackToolbar fallback="/(tabs)/others/account" />
-        <Stack.Toolbar placement="right">
-          <ToolbarFilterSlot>{filterMenu}</ToolbarFilterSlot>
-        </Stack.Toolbar>
+        <Stack.Toolbar placement="right">{toolbarFilter(filterMenu, filterInColumn)}</Stack.Toolbar>
       </>
     );
   return (

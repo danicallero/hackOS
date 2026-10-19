@@ -9,7 +9,7 @@ import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
+import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
@@ -114,6 +114,7 @@ export function ProjectGalleryScreen() {
   const [error, setError] = useState<Error | null>(null);
   const generation = useRef(0);
   const glassAvailable = isRealLiquidGlassAvailable();
+  const filterInColumn = useFilterInToolbarColumn();
   const filterItems: FilterMenuProps["items"] = [
     ...challenges.map((item) => ({
       id: String(item.id),
@@ -287,9 +288,7 @@ export function ProjectGalleryScreen() {
     <>
       <EntryBackToolbar fallback="/(tabs)/queue" />
       {glassAvailable && challenges.length > 0 ? (
-        <Stack.Toolbar placement="right">
-          <ToolbarFilterSlot>{filter}</ToolbarFilterSlot>
-        </Stack.Toolbar>
+        <Stack.Toolbar placement="right">{toolbarFilter(filter, filterInColumn)}</Stack.Toolbar>
       ) : null}
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"

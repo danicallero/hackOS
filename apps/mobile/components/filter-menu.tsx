@@ -1,9 +1,7 @@
-import Stack from "expo-router/stack";
 import { View } from "react-native";
 import { GlassView, type GlassViewProps } from "@/components/glass-view";
 import { AndroidFilterMenu } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-import { useFilterAsToolbarMenu } from "@/components/toolbar-filter-slot";
 import { colors } from "@/theme/colors";
 
 export interface FilterMenuProps {
@@ -30,27 +28,6 @@ export function FilterMenu({
   colorScheme = "auto",
   embedded = false,
 }: FilterMenuProps) {
-  const asToolbarMenu = useFilterAsToolbarMenu();
-  if (asToolbarMenu) {
-    return (
-      <Stack.Toolbar.Menu
-        icon="line.3.horizontal.decrease"
-        accessibilityLabel={accessibilityLabel}
-        tintColor={active ? colors.accent : undefined}
-      >
-        {items.map((item) => (
-          <Stack.Toolbar.MenuAction
-            key={item.id}
-            isOn={item.selected}
-            unstable_keepPresented
-            onPress={() => onSelect(item.id)}
-          >
-            {item.label}
-          </Stack.Toolbar.MenuAction>
-        ))}
-      </Stack.Toolbar.Menu>
-    );
-  }
   const content = (
     <View style={{ width: 48, height: 48 }}>
       <AndroidFilterMenu

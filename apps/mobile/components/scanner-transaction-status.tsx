@@ -9,7 +9,6 @@ import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { GlassView } from "@/components/glass-view";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -683,7 +682,9 @@ export function ScannerQueueStatus({
     <>
       {nativeToolbar ? (
         <Stack.Toolbar placement="right">
-          {toolbarAccessory ? <ToolbarFilterSlot>{toolbarAccessory}</ToolbarFilterSlot> : null}
+          {toolbarAccessory ? (
+            <Stack.Toolbar.View hidesSharedBackground>{toolbarAccessory}</Stack.Toolbar.View>
+          ) : null}
           {toolbarAccessory ? <Stack.Toolbar.Spacer width={8} /> : null}
           {sideRegion.edge ? (
             // A symbol-only item can join the system's vertical bar; the labelled pill cannot.
