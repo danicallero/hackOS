@@ -228,6 +228,18 @@ export default function ScheduleScreen() {
       // Two panes: the bar must not paint a band across the detail pane, which runs under it;
       // the list column paints its own backing below instead.
       headerTransparent: twoPane,
+      // One backing for the list column replaces the bar's own blur, which would span the
+      // detail pane as well.
+      ...(twoPane
+        ? {
+            scrollEdgeEffects: {
+              bottom: "automatic" as const,
+              left: "automatic" as const,
+              right: "automatic" as const,
+              top: "hidden" as const,
+            },
+          }
+        : {}),
       headerShadowVisible: false,
       headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
@@ -501,7 +513,7 @@ export default function ScheduleScreen() {
   // How far down the window the two-pane row starts: the native header's height.
   const [paneTop, setPaneTop] = useState(0);
   const selectedTitle = filteredItems.find((entry) => entry.id === selectedId)?.title ?? null;
-  const rowRef = useRef<View>(null);
+  const bandProbeRef = useRef<View>(null);
   // A two-pane window opens on the first activity, like Mail or Notes, instead of an empty pane;
   // a selection that a filter or an edit removed falls back to the first one too.
   const firstItemId = filteredItems[0]?.id ?? null;
@@ -599,11 +611,7 @@ export default function ScheduleScreen() {
         </GlassView>
       ) : null}
       <ScheduleSelectionContext.Provider value={twoPane ? selectionValue : null}>
-        <View
-          ref={rowRef}
-          onLayout={() => rowRef.current?.measureInWindow((_x, y) => setPaneTop(Math.max(0, y)))}
-          style={{ flex: 1, flexDirection: "row" }}
-        >
+        <View style={{ flex: 1, flexDirection: "row" }}>
           <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
             {twoPane ? (
               <View
@@ -612,7 +620,6 @@ export default function ScheduleScreen() {
                   backgroundColor: colors.background,
                   height: paneTop,
                   left: 0,
-                  marginTop: -paneTop,
                   position: "absolute",
                   right: 0,
                   top: 0,
@@ -643,7 +650,18 @@ export default function ScheduleScreen() {
                 stickySectionHeadersEnabled
                 onScrollToIndexFailed={(info) => retryScrollToActive(info)}
                 ListHeaderComponent={
-                  <View style={{ gap: 8 }}>
+                  <View
+                    ref={bandProbeRef}
+                    // At rest this view sits right under the native bar, so where it lands in
+                    // the window is the bar's height; the two-pane layout is built from it.
+                    onLayout={() =>
+                      bandProbeRef.current?.measureInWindow((_x, y) => {
+                        // The header slot has 8 pt of top padding above this view.
+                        if (y > 8) setPaneTop((current) => (current === 0 ? y - 8 : current));
+                      })
+                    }
+                    style={{ gap: 8 }}
+                  >
                     <StaleDataBanner updatedAt={staleSince} />
                     {notifications.error ? (
                       <RequestFeedback
@@ -751,6 +769,7 @@ export default function ScheduleScreen() {
                 borderLeftColor: colors.separator,
                 borderLeftWidth: StyleSheet.hairlineWidth,
                 flex: 1,
+                marginTop: paneTop,
               }}
             >
               {selectedTitle ? (
@@ -766,7 +785,7 @@ export default function ScheduleScreen() {
                     left: 20,
                     position: "absolute",
                     right: 136,
-                    top: -paneTop + Math.max(0, paneTop * 0.58 - 17),
+                    top: Math.max(0, paneTop * 0.58 - 17) - paneTop,
                   }}
                 >
                   {selectedTitle}
