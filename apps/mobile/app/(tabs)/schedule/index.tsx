@@ -228,17 +228,6 @@ export default function ScheduleScreen() {
       // Two panes: the bar must not paint a band across the detail pane, which runs under it;
       // the list column paints its own backing below instead.
       headerTransparent: twoPane,
-      // No scroll-edge blur: it would fade the detail's content where it passes under the bar.
-      ...(twoPane
-        ? {
-            scrollEdgeEffects: {
-              bottom: "automatic" as const,
-              left: "automatic" as const,
-              right: "automatic" as const,
-              top: "hidden" as const,
-            },
-          }
-        : {}),
       headerShadowVisible: false,
       headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
@@ -511,6 +500,7 @@ export default function ScheduleScreen() {
   const [editSignal, setEditSignal] = useState(0);
   // How far down the window the two-pane row starts: the native header's height.
   const [paneTop, setPaneTop] = useState(0);
+  const selectedTitle = filteredItems.find((entry) => entry.id === selectedId)?.title ?? null;
   const rowRef = useRef<View>(null);
   // A two-pane window opens on the first activity, like Mail or Notes, instead of an empty pane;
   // a selection that a filter or an edit removed falls back to the first one too.
@@ -761,16 +751,29 @@ export default function ScheduleScreen() {
                 borderLeftColor: colors.separator,
                 borderLeftWidth: StyleSheet.hairlineWidth,
                 flex: 1,
-                marginTop: -paneTop,
               }}
             >
+              {selectedTitle ? (
+                // In the header band, level with "Schedule"; the pane itself starts below the
+                // bar so nothing scrolls under it and no scroll-edge blur is drawn over it.
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={{
+                    color: colors.label,
+                    fontSize: 28,
+                    fontWeight: "700",
+                    left: 20,
+                    position: "absolute",
+                    right: 136,
+                    top: -paneTop + Math.max(0, paneTop * 0.58 - 17),
+                  }}
+                >
+                  {selectedTitle}
+                </Text>
+              ) : null}
               {selectedId !== null ? (
-                <ScheduleDetailScreen
-                  editSignal={editSignal}
-                  embedded
-                  headerHeight={paneTop}
-                  id={String(selectedId)}
-                />
+                <ScheduleDetailScreen editSignal={editSignal} embedded id={String(selectedId)} />
               ) : (
                 <EmptyState icon="calendar" title={t("scheduleDetails")} />
               )}
