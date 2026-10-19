@@ -9,7 +9,7 @@ const baseDatabaseUrl = new URL(
 const shardDirectories = [
   ["identity", "applications"],
   ["queue", "logistics", "live-activities"],
-  ["projects", "github", "diary", "directory", "challenges", "sponsors", "event"],
+  ["projects", "github", "diary", "directory", "reports", "challenges", "sponsors", "event"],
   ["notifications", "exports", "statistics"],
 ];
 
