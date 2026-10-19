@@ -1,4 +1,5 @@
 import { useSideRegion } from "@/lib/side-region";
+import { colors } from "@/theme/colors";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 /**
@@ -13,7 +14,10 @@ export function useBarTitleOptions(title: string) {
         title,
         headerLargeTitle: false,
         headerTitleAlign: "left",
-        headerTitleStyle: { ...SCREEN_TITLE },
+        headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },
+        // The bar takes the page colour, as Schedule's and Activities' do, not the system's white.
+        headerStyle: { backgroundColor: colors.background },
+        headerShadowVisible: false,
       } as const)
     : ({ title, headerLargeTitle: true } as const);
 }
