@@ -40,8 +40,13 @@ import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 20;
-/** Clears the host Schedule's transparent header when the detail is a pane of it. */
-const EMBEDDED_TOP_INSET = 72;
+/**
+ * As a pane the detail runs the full height beside the list: its content starts at the top of
+ * the display, level with the host's "Schedule" title, and only the title row keeps clear of
+ * the host's toolbar items (filter, search) at the top right.
+ */
+const EMBEDDED_TOP_INSET = 12;
+const EMBEDDED_TOOLBAR_CLEARANCE = 136;
 const noTextShadow = {
   textShadowColor: "transparent" as const,
   textShadowOffset: { height: 0, width: 0 },
@@ -357,7 +362,13 @@ export function ScheduleDetailScreen({
           <Text
             accessibilityRole="header"
             numberOfLines={2}
-            style={{ color: colors.label, fontSize: 28, fontWeight: "700", paddingBottom: 8 }}
+            style={{
+              color: colors.label,
+              fontSize: 28,
+              fontWeight: "700",
+              paddingBottom: 8,
+              paddingRight: EMBEDDED_TOOLBAR_CLEARANCE,
+            }}
           >
             {item.title}
           </Text>
