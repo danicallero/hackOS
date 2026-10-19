@@ -29,6 +29,7 @@ import {
 } from "@/lib/scanner-group-filter";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
+import { useSideRegion } from "@/lib/side-region";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
@@ -47,6 +48,7 @@ export function GeneralScannerScreen() {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const glassAvailable = isRealLiquidGlassAvailable();
+  const sideRegion = useSideRegion();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!error) return;
@@ -193,6 +195,7 @@ export function GeneralScannerScreen() {
       onClear={clearGroups}
     />
   );
+  const filterInColumn = glassAvailable && Boolean(sideRegion.edge);
   const queueStatus = (
     <ScannerQueueStatus
       queue={sync.queue}
@@ -204,7 +207,7 @@ export function GeneralScannerScreen() {
       clockSkewMs={sync.clockSkewMs}
       fillWidth={false}
       nativeToolbar={glassAvailable}
-      toolbarAccessory={glassAvailable ? roleFilter : undefined}
+      toolbarAccessory={glassAvailable && !filterInColumn ? roleFilter : undefined}
     />
   );
   const title = (
@@ -225,6 +228,17 @@ export function GeneralScannerScreen() {
             <Stack.Toolbar.View hidesSharedBackground>{title}</Stack.Toolbar.View>
           </Stack.Toolbar>
           {queueStatus}
+          {filterInColumn ? (
+            <Stack.Toolbar placement="right">
+              <ScannerRoleFilter
+                asToolbarItem
+                options={roleOptions}
+                groups={groups}
+                onToggle={toggleGroup}
+                onClear={clearGroups}
+              />
+            </Stack.Toolbar>
+          ) : null}
         </>
       ) : (
         <View
@@ -326,11 +340,13 @@ function ScannerRoleFilter({
   groups,
   onToggle,
   onClear,
+  asToolbarItem = false,
 }: {
   options: RoleFilterOption[];
   groups: string[];
   onToggle: (group: string) => void;
   onClear: () => void;
+  asToolbarItem?: boolean;
 }) {
   const { t } = useLocale();
   const rows = [
@@ -348,6 +364,28 @@ function ScannerRoleFilter({
     else onToggle(id.slice("role:".length));
   };
 
+  if (asToolbarItem) {
+    // A native menu item, so the system can move it into a vertical bar beside a
+    // side column; the custom filter view stays horizontal.
+    return (
+      <Stack.Toolbar.Menu
+        icon="line.3.horizontal.decrease"
+        accessibilityLabel={t("scannerFilterGroups")}
+        tintColor={groups.length > 0 ? colors.accent : undefined}
+      >
+        {rows.map((row) => (
+          <Stack.Toolbar.MenuAction
+            key={row.id}
+            isOn={row.selected}
+            unstable_keepPresented
+            onPress={() => select(row.id)}
+          >
+            {row.label}
+          </Stack.Toolbar.MenuAction>
+        ))}
+      </Stack.Toolbar.Menu>
+    );
+  }
   return (
     <FilterMenu
       colorScheme="auto"
