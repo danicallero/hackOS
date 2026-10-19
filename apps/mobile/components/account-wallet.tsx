@@ -10,6 +10,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AndroidStatusBarScrim } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
@@ -139,15 +140,17 @@ export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
         if (wallet.open) wallet.toggle();
       }}
     >
-      <View testID="wallet-modal" style={{ backgroundColor: colors.background, flex: 1 }}>
-        <WalletOverlayContent
-          wallet={wallet}
-          closeTestID="wallet-modal-close"
-          // The modal fills the rounded display: keep the button clear of the corner arc.
-          cornerInset={12}
-          initialPurpose="badge"
-        />
-      </View>
+      <AdaptiveFrame>
+        <View testID="wallet-modal" style={{ backgroundColor: colors.background, flex: 1 }}>
+          <WalletOverlayContent
+            wallet={wallet}
+            closeTestID="wallet-modal-close"
+            // The modal fills the rounded display: keep the button clear of the corner arc.
+            cornerInset={12}
+            initialPurpose="badge"
+          />
+        </View>
+      </AdaptiveFrame>
     </Modal>
   );
 }
