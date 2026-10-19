@@ -776,7 +776,7 @@ describe("New Live Activity kinds (#966)", () => {
         name.startsWith("future props");
       const caps = {
         compactLeading: name.startsWith("queue") ? 40 : leading ? 36 : 24,
-        compactTrailing: leading ? 22 : 56,
+        compactTrailing: leading ? 24 : 56,
         minimal: 36,
       } as const;
       for (const [slot, width] of Object.entries(caps)) {

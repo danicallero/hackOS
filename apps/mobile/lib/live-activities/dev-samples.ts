@@ -195,7 +195,7 @@ export function handleDevLiveActivityLink(path: string): string | null {
     return "/";
   }
   const sample = SAMPLES[name] ?? KIND_SAMPLES[name];
-  if (sample) void applyDesiredActivities(sample()).catch(() => undefined);
+  if (sample) void applyDesiredActivities(sample(), { reopen: true }).catch(() => undefined);
   return "/";
 }
 

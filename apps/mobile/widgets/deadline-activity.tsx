@@ -38,24 +38,19 @@ export const DeadlineActivityLayout = (
 
   // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
   // the camera): whatever the value, locale or text size, the island never
-  // grows past them. Each slot is as wide as its content up to the cap; text
-  // scales down rather than truncating, and the type size stays fixed.
+  // grows past them. Each slot hugs its content (no padding beyond what the
+  // text needs, so the margin to the island's edge matches the one above and
+  // below it) up to the cap; the type size stays fixed.
   const islandSlot = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
-    // Equal on both sides so the content stays on the axis of the vertical
-    // island of a foldable instead of drifting towards one end.
-    inset: { horizontal?: number } = {},
-    // A fixed, centred box (the symbol), so it sits on the axis of the
-    // vertical island instead of hugging one end.
-    exact = false,
   ) => (
     <HStack
       spacing={0}
       modifiers={[
-        frame(exact ? { width, alignment: "center" } : { maxWidth: width, alignment }),
-        padding(inset),
+        frame({ maxWidth: width, alignment }),
+        fixedSize({ horizontal: true }),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -70,7 +65,7 @@ export const DeadlineActivityLayout = (
   ) => ({
     ...layout,
     compactLeading: islandSlot(layout.compactLeading as never, 36, "trailing"),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 22, "center", {}, true),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 24, "center"),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // A newer, incompatible props shape degrades to the title.

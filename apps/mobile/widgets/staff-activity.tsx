@@ -55,16 +55,12 @@ export const StaffActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
-    // Equal on both sides so the content stays on the axis of the vertical
-    // island of a foldable instead of drifting towards one end.
-    inset: { horizontal?: number } = {},
   ) => (
     <HStack
       spacing={0}
       modifiers={[
         frame({ maxWidth: width, alignment }),
         fixedSize({ horizontal: true }),
-        padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -78,8 +74,8 @@ export const StaffActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { horizontal: 3 }),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { horizontal: 3 }),
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible
@@ -341,8 +337,8 @@ export const StaffActivityLayout = (
     ? countdown(12, islandAccent, 56, "short")
     : accredited || !liveText
       ? `${scanned}/${accredited ?? ""}`.length > 7
-        ? counter(scanned, 15, islandAccent, "semibold")
-        : ratio(15, 11, islandAccent, "semibold")
+        ? counter(scanned, 12, islandAccent, "semibold")
+        : ratio(12, 9, islandAccent, "semibold")
       : liveText;
 
   // Minimal: the scanned share as a ring; live without it, the symbol with a

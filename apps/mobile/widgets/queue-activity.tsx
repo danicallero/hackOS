@@ -62,16 +62,12 @@ export const QueueActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
-    // The outer end's inset, so the content's margin to the pill's rounded
-    // end matches its top and bottom margins (HIG: concentric margins).
-    inset: { leading?: number; trailing?: number } = {},
   ) => (
     <HStack
       spacing={0}
       modifiers={[
         frame({ maxWidth: width, alignment }),
         fixedSize({ horizontal: true }),
-        padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -87,8 +83,8 @@ export const QueueActivityLayout = (
     ...layout,
     // Wider than the other kinds' 24 pt: the position reaches three digits
     // (`#128` was truncated to `#1…`); four still scale down within it.
-    compactLeading: islandSlot(layout.compactLeading as never, 40, "trailing", { leading: 3 }),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
+    compactLeading: islandSlot(layout.compactLeading as never, 40, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading"),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible
@@ -157,7 +153,8 @@ export const QueueActivityLayout = (
     typeof props.etaMinutes === "number" && Number.isFinite(props.etaMinutes)
       ? Math.max(1, Math.round(props.etaMinutes))
       : null;
-  const etaShort = eta === null ? null : `~${eta}m`;
+  // Compact island: no tilde, so it fits the vertical island of a foldable.
+  const etaCompact = eta === null ? null : `${eta}m`;
   const etaLong = eta === null ? null : `~${eta} ${labels.minutes}`;
   // Unknown ETA shows the server's active placeholder, never a dash; a
   // payload without it (older server) simply omits the ETA.
@@ -346,7 +343,7 @@ export const QueueActivityLayout = (
     ) : (
       <Text
         modifiers={[
-          font({ size: 15, weight: "semibold" }),
+          font({ size: 13, weight: "semibold" }),
           monospacedDigit(),
           contentTransition("numericText", { countsDown: true }),
           lineLimit(1),
@@ -362,7 +359,7 @@ export const QueueActivityLayout = (
       room ? (
         <Text
           modifiers={[
-            font({ size: 15, weight: "semibold" }),
+            font({ size: 12, weight: "semibold" }),
             lineLimit(1),
             frame({ maxWidth: 64 }),
             ...colorMods(islandColor),
@@ -371,18 +368,18 @@ export const QueueActivityLayout = (
           {room}
         </Text>
       ) : (
-        (calledTimer(15, "semibold", 48) ?? <Text> </Text>)
+        (calledTimer(12, "semibold", 48) ?? <Text> </Text>)
       )
-    ) : etaShort ? (
+    ) : etaCompact ? (
       <Text
         modifiers={[
-          font({ size: 15, weight: "semibold" }),
+          font({ size: 12, weight: "semibold" }),
           monospacedDigit(),
           contentTransition("numericText", { countsDown: true }),
           ...colorMods(islandColor),
         ]}
       >
-        {etaShort}
+        {etaCompact}
       </Text>
     ) : (
       <Image systemName="hourglass" color={symbolColor} size={14} />
