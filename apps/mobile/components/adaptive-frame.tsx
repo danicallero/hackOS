@@ -2,7 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SideRegionProvider, sideRegionForInsets } from "@/lib/side-region";
-import { MAX_CONTENT_WIDTH } from "@/lib/window-size";
+import { maxContentWidth } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
 
 /**
@@ -17,7 +17,7 @@ import { colors } from "@/theme/colors";
  *   read is only the inset that is left.
  * - The root navigator passes `padSides={false}`: its screens pad themselves
  *   (`contentStyle`), and the tab layout keeps the side column free for its bar.
- * - Content stops growing at `MAX_CONTENT_WIDTH` and is centred on wider windows.
+ * - Content stops growing at `maxContentWidth` and is centred on wider windows.
  *
  * The tree is the same at every width and every pose (only styles change), so
  * folding, unfolding or resizing never remounts the navigator or loses a draft.
@@ -41,7 +41,7 @@ export function AdaptiveFrame({
         paddingRight: padSides ? insets.right : 0,
       }}
     >
-      <View style={{ flex: 1, maxWidth: MAX_CONTENT_WIDTH, width: "100%" }}>
+      <View style={{ flex: 1, maxWidth: maxContentWidth(width), width: "100%" }}>
         <SideRegionProvider value={sideRegionForInsets(insets)}>
           {padSides ? (
             <SafeAreaProvider

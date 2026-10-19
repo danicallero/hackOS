@@ -1,6 +1,7 @@
 import {
   COMPACT_MAX_WIDTH,
   contentFrameWidth,
+  EXPANDED_MAX_CONTENT_WIDTH,
   MAX_CONTENT_WIDTH,
   MEDIUM_MAX_WIDTH,
   windowSizeClass,
@@ -21,7 +22,7 @@ describe("window size classes", () => {
   it("never lets content grow past the readable column", () => {
     expect(contentFrameWidth(390)).toBe(390);
     expect(contentFrameWidth(MAX_CONTENT_WIDTH)).toBe(MAX_CONTENT_WIDTH);
-    expect(contentFrameWidth(841)).toBe(MAX_CONTENT_WIDTH);
-    expect(contentFrameWidth(1280)).toBe(MAX_CONTENT_WIDTH);
+    expect(contentFrameWidth(841)).toBe(841); // expanded: most of the width
+    expect(contentFrameWidth(1280)).toBe(EXPANDED_MAX_CONTENT_WIDTH);
   });
 });

@@ -1,5 +1,11 @@
 import { type MenuAction, type MenuComponentRef, MenuView } from "@expo/ui/community/menu";
-import { useFocusEffect, useLocalSearchParams, useRouter, useScrollToTop } from "expo-router";
+import {
+  useFocusEffect,
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+  useScrollToTop,
+} from "expo-router";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -83,6 +89,12 @@ export default function AccountScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   const wallet = useAccountWallet();
+  const navigation = useNavigation();
+  // The wallet overlay is a page of its own: its title replaces "Account" in the native
+  // header instead of "Account" showing above it.
+  useEffect(() => {
+    navigation.setOptions({ title: wallet.open ? t("tabWallet") : t("tabAccount") });
+  }, [navigation, wallet.open, t]);
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);
   useScrollToTop(avatarCollapse.scrollToTopRef);
   useFocusEffect(avatarCollapse.settleAtRest);

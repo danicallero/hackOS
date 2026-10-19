@@ -96,6 +96,8 @@ export function AccountWalletButton({ wallet }: { wallet: AccountWalletControlle
 
 /** The wallet overlay and its close button; render it over the whole screen. */
 export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletController }) {
+  // Beside a side column the Account toolbar item itself turns into the close control.
+  const toolbarCloses = Boolean(useSideRegion().edge) && isRealLiquidGlassAvailable();
   if (!wallet.open) return null;
   return (
     <Animated.View
@@ -113,7 +115,11 @@ export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletControll
         zIndex: 30,
       }}
     >
-      <WalletOverlayContent wallet={wallet} closeTestID="account-wallet-close" />
+      <WalletOverlayContent
+        wallet={wallet}
+        closeTestID="account-wallet-close"
+        toolbarCloses={toolbarCloses}
+      />
     </Animated.View>
   );
 }
@@ -147,15 +153,16 @@ export function WalletModal({ wallet }: { wallet: AccountWalletController }) {
 function WalletOverlayContent({
   closeTestID,
   initialPurpose,
+  toolbarCloses = false,
   wallet,
 }: {
   closeTestID: string;
   initialPurpose?: "ticket" | "badge";
   wallet: AccountWalletController;
+  /** The Account toolbar item is the close control, so no in-page button is drawn. */
+  toolbarCloses?: boolean;
 }) {
   const chrome = accountWalletChrome(useSafeAreaInsets().top, Platform.OS);
-  // Beside a side column the toolbar item itself turns into the close control.
-  const toolbarCloses = Boolean(useSideRegion().edge) && isRealLiquidGlassAvailable();
   return (
     <>
       <WalletScreen
