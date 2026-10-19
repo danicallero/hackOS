@@ -454,7 +454,7 @@ export function ActivityScannerScreen() {
           </Text>
         </View>
       )}
-      <View style={{ flex: 1, marginTop: insets.top + (glassAvailable ? 44 : 56) }}>
+      <View style={{ flex: 1, marginTop: insets.top + 56 }}>
         <ActivityStatistics activity={activity} stats={stats} inside={inside} />
         {error ? (
           <GlassView
