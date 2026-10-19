@@ -6,6 +6,7 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   useWindowDimensions,
   View,
@@ -30,6 +31,7 @@ import {
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { windowSizeClass } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE, SCREEN_TITLE_CENTER, TWO_PANE_BAND } from "@/theme/screen-title";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
 export function galleryClosedNotice(
@@ -149,11 +151,26 @@ export function ProjectGalleryScreen() {
     />
   );
 
+  const { width: windowWidth } = useWindowDimensions();
+  const twoPane = windowSizeClass(windowWidth) === "expanded";
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: t("gallery"),
+      // Two panes: each column draws its own top band with its own title (as Schedule does).
+      title: twoPane ? "" : t("gallery"),
       headerShown: true,
-      headerLargeTitle: true,
+      headerLargeTitle: !twoPane,
+      ...(twoPane
+        ? {
+            headerTransparent: true,
+            headerBlurEffect: "none" as const,
+            scrollEdgeEffects: {
+              bottom: "hidden" as const,
+              left: "hidden" as const,
+              right: "hidden" as const,
+              top: "hidden" as const,
+            },
+          }
+        : {}),
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
@@ -287,8 +304,6 @@ export function ProjectGalleryScreen() {
     }, [load, snapshotKey, streamDown]),
   );
   // An expanded window shows the project beside the list instead of pushing a route.
-  const { width: windowWidth } = useWindowDimensions();
-  const twoPane = windowSizeClass(windowWidth) === "expanded";
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const openProject = useCallback(
     (id: number) =>
@@ -308,8 +323,23 @@ export function ProjectGalleryScreen() {
       ) : null}
       <View style={{ flex: 1, flexDirection: "row" }}>
         <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+          {twoPane ? (
+            <View
+              pointerEvents="none"
+              style={{
+                backgroundColor: colors.background,
+                height: TWO_PANE_BAND,
+                paddingHorizontal: 19,
+                paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
+              }}
+            >
+              <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+                {t("gallery")}
+              </Text>
+            </View>
+          ) : null}
           <ScrollView
-            contentInsetAdjustmentBehavior="automatic"
+            contentInsetAdjustmentBehavior={twoPane ? "never" : "automatic"}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}
           >
@@ -374,10 +404,35 @@ export function ProjectGalleryScreen() {
             }}
           >
             {selectedId !== null ? (
-              <ProjectDetailScreen embedded gallery="1" id={String(selectedId)} />
+              <View style={{ flex: 1, paddingTop: TWO_PANE_BAND }}>
+                <ProjectDetailScreen embedded gallery="1" id={String(selectedId)} />
+              </View>
             ) : (
               <EmptyState icon="hammer" title={t("gallery")} />
             )}
+            {/* The detail's own top band: the project's name, level with "Gallery" on the left. */}
+            <View
+              pointerEvents="none"
+              style={{
+                backgroundColor: colors.background,
+                height: TWO_PANE_BAND,
+                left: 0,
+                paddingLeft: 20,
+                paddingRight: 136,
+                paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
+                position: "absolute",
+                right: 0,
+                top: 0,
+              }}
+            >
+              <Text
+                accessibilityRole="header"
+                numberOfLines={1}
+                style={{ color: colors.label, ...SCREEN_TITLE }}
+              >
+                {projects.find((entry) => entry.id === selectedId)?.name ?? ""}
+              </Text>
+            </View>
           </View>
         ) : null}
       </View>

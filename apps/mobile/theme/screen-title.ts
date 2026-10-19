@@ -6,3 +6,6 @@
  */
 export const SCREEN_TITLE = { fontSize: 28, fontWeight: "800", lineHeight: 34 } as const;
 export const SCREEN_TITLE_CENTER = 47.5;
+
+/** Height of each column's own top band in a two-pane layout (Schedule, Gallery). */
+export const TWO_PANE_BAND = 72;

@@ -82,7 +82,7 @@ import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
 import { windowSizeClass } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
-import { SCREEN_TITLE, SCREEN_TITLE_CENTER } from "@/theme/screen-title";
+import { SCREEN_TITLE, SCREEN_TITLE_CENTER, TWO_PANE_BAND } from "@/theme/screen-title";
 
 type NowMarker = { kind: "now"; id: string };
 type ItemRow = ScheduleItem & { kind: "item"; active: boolean };
@@ -97,8 +97,6 @@ interface ScheduleSection {
 const SECTION_HEADER_HEIGHT = 34;
 // Size + placement of the floating "add" button — the list's own bottom
 // padding reserves this much space so its last card never renders behind it.
-/** Height of each column's own top band in the two-pane layout. */
-const TWO_PANE_BAND = 72;
 const FAB_SIZE = 52;
 const FAB_MARGIN = 24;
 // Short clearance above the tab bar: enough to keep the FAB tappable without
