@@ -113,7 +113,7 @@ function RootLayoutSessionContents() {
       <PersonalEventStream authenticated={authenticated} />
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <PendingCompanyTagResume authenticated={authenticated} />
-      <AdaptiveFrame>
+      <AdaptiveFrame padSides={false}>
         <RootLayoutNav
           authenticated={authenticated}
           pending={initialSessionPending}
@@ -392,9 +392,12 @@ function RootLayoutNav({
   enterOffline: () => Promise<void>;
 }) {
   const colorScheme = useColorScheme();
+  const safeInsets = useSafeAreaInsets();
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
+  const sidePadding = { paddingLeft: safeInsets.left, paddingRight: safeInsets.right };
+  const noSidePadding = { paddingLeft: 0, paddingRight: 0 };
 
   // Keep one navigator in charge of session transitions. Protected screens
   // are removed from navigation history when their guard changes, so signing
@@ -442,13 +445,24 @@ function RootLayoutNav({
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={nativeStackScreenOptions}>
+      <Stack
+        screenOptions={{
+          ...nativeStackScreenOptions,
+          // Foreground content stays clear of the side the system reserves on a foldable
+          // iPhone (asymmetric insets). The tab layout and native sheets handle their own.
+          contentStyle: sidePadding,
+        }}
+      >
         <Stack.Protected guard={!authenticated}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>
         <Stack.Protected guard={canEnterApp}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="(tabs)"
+            // The tab layout pads its own content so its bar can use the side column.
+            options={{ contentStyle: noSidePadding, headerShown: false }}
+          />
           <Stack.Screen name="projects" options={{ headerShown: false }} />
           <Stack.Screen
             name="schedule/[id]"
@@ -472,11 +486,11 @@ function RootLayoutNav({
           />
           <Stack.Screen
             name="profile-tasks"
-            options={{ headerShown: false, presentation: "modal" }}
+            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
           />
           <Stack.Screen
             name="networking-profile"
-            options={{ headerShown: false, presentation: "modal" }}
+            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
           />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
@@ -502,7 +516,8 @@ function DevelopmentIndicator() {
         paddingHorizontal: 9,
         paddingVertical: 4,
         position: "absolute",
-        right: 12,
+        // Clear of the side the system indicators occupy on a foldable iPhone.
+        right: insets.right + 12,
         // Keep this directly below the status indicators and above any
         // screen-specific header actions (search, filters, overflow, etc.).
         top: Math.max(0, insets.top - 4),

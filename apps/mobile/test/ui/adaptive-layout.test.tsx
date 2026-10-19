@@ -1,6 +1,6 @@
 import { act, screen } from "@testing-library/react-native";
 import { useState } from "react";
-import { Dimensions, Text, TextInput, View } from "react-native";
+import { Dimensions, StyleSheet, Text, TextInput, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { MAX_CONTENT_WIDTH, useWindowSizeClass } from "@/lib/window-size";
 import { renderMobile } from "./render";
@@ -23,6 +23,16 @@ function setWindow(width: number, height: number) {
   Dimensions.set({ window: metrics, screen: metrics });
 }
 
+function ancestorStyle(testID: string, key: string) {
+  let node = screen.getByTestId(testID).parent;
+  while (node) {
+    const style = StyleSheet.flatten(node.props.style);
+    if (style && key in style) return style;
+    node = node.parent;
+  }
+  throw new Error(`No ancestor with ${key}`);
+}
+
 describe("adaptive layout", () => {
   beforeEach(() => setWindow(390, 844));
 
@@ -32,8 +42,24 @@ describe("adaptive layout", () => {
         <View testID="content" />
       </AdaptiveFrame>,
     );
-    const column = screen.getByTestId("content").parent;
-    expect(column?.props.style).toMatchObject({ maxWidth: MAX_CONTENT_WIDTH, width: "100%" });
+    expect(ancestorStyle("content", "maxWidth")).toMatchObject({
+      maxWidth: MAX_CONTENT_WIDTH,
+      width: "100%",
+    });
+  });
+
+  it("keeps content clear of the side the system indicators use, edge by edge", async () => {
+    // Foldable iPhone, closed: status indicators and the Dynamic Island down the right edge.
+    await renderMobile(
+      <AdaptiveFrame>
+        <View testID="content" />
+      </AdaptiveFrame>,
+      { insets: { left: 0, right: 84 } },
+    );
+    expect(ancestorStyle("content", "paddingRight")).toMatchObject({
+      paddingLeft: 0,
+      paddingRight: 84,
+    });
   });
 
   it("keeps a typed draft while the window folds, unfolds and resizes", async () => {

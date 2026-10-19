@@ -344,16 +344,33 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   native dependency: a development client built without it applies no lock until it
   is rebuilt (the lookup fails soft).
 - **Readable column.** `components/adaptive-frame.tsx` wraps the navigator in
-  `app/_layout.tsx` and every `Modal` sheet, capping content at 720 dp and centring
-  it on wider windows (the floating tab bar sits inside the column). The tree is
-  identical at every width, so fold, unfold and window resizing never remount the
-  navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
+  `app/_layout.tsx` and every `Modal` sheet (and, as `SheetFrame`, every native
+  modal route), capping content at 720 dp and centring it on wider windows. The
+  tree is identical at every width, so fold, unfold and window resizing never
+  remount the navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
+- **Asymmetric safe areas.** On a foldable iPhone the system status indicators and
+  the Dynamic Island run down one side and the horizontal insets differ by pose, and
+  a plain `ScrollView` never insets for them. Foreground content is padded per edge:
+  root screens through `contentStyle` in `app/_layout.tsx`, the tab layout around its
+  `TabSlot` (`router-tabs.tsx`), sheets through `SheetFrame` (which measures the
+  sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
+  same side.
+- **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
+  (outer display, inner display in landscape, the outer edge of a Split View half) and
+  keeps horizontal bars on the inner display in portrait. The system only moves bars it
+  owns, so the custom tab bar does it itself: a horizontal inset of at least 56 pt
+  (`lib/side-region.ts`) puts `VerticalTabBar` in that column, on the same side,
+  bottom-aligned below the indicators, symbol only (labels stay the accessibility
+  names), with the overflow circle underneath; the number of direct tabs follows the
+  height left below the indicators (`routerTabBarVerticalBudget`). No inset, no vertical
+  bar: nothing branches on a device model. Native navigation bars inside the tab
+  screens sit in the padded area, so they stay horizontal there.
 - **System behaviour kept.** `MainActivity` already declares
   `configChanges="...|screenSize|screenLayout|smallestScreenSize|orientation"`, so
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
   Insets come from `react-native-safe-area-context`, per edge.
 
-Not built: a hinge or fold-posture API (React Native exposes none; it would need a
+Not built: native `UITabBarController` tabs (the system would move them itself; the custom Liquid Glass shell is kept), a hinge or fold-posture API (React Native exposes none; it would need a
 native module over Jetpack WindowManager `FoldingFeature`), two-pane list/detail
 layouts for expanded windows, and dual-screen devices that span a hinge (Surface Duo).
 The iPhone Duo guidance in the third-party skills is iOS 27.1-specific and was used

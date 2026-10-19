@@ -36,11 +36,14 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
+  ROUTER_TAB_BAR_VERTICAL_CELL,
   RouterTabBarInsetsProvider,
   ROUTER_TAB_BAR_HEIGHT as TAB_BAR_HEIGHT,
   useRouterTabBarInsets,
 } from "@/lib/router-tabs-inset";
+import { useSideRegion } from "@/lib/side-region";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 export type { RouterTabBarInsets } from "@/lib/router-tabs-inset";
@@ -191,10 +194,14 @@ export function RouterTabs({
     );
   }
 
+  // Screens keep clear of the sides the system reserves; a vertical bar stands in that column.
+  const { left, right } = useSafeAreaInsets();
   return (
     <RouterTabBarInsetsProvider>
       <Tabs style={{ flex: 1 }} testID={testID}>
-        <TabSlot style={{ flex: 1 }} />
+        <View style={{ flex: 1, paddingLeft: left, paddingRight: right }}>
+          <TabSlot style={{ flex: 1 }} />
+        </View>
         <RouterTabsContent
           colorScheme={colorScheme}
           directTabs={directTabs}
@@ -240,6 +247,7 @@ function RouterTabsContent({
   theme,
 }: RouterTabsContentProps) {
   const pathname = usePathname();
+  const sideRegion = useSideRegion();
   const {
     tabBarBottomPadding: bottomPadding,
     tabBarHeight,
@@ -332,6 +340,27 @@ function RouterTabsContent({
     selectionOffset,
   ]);
 
+  const sideEdge = sideRegion.edge;
+  if (sideEdge) {
+    return (
+      <VerticalTabBar
+        colorScheme={colorScheme}
+        directTabs={directTabs}
+        liquidGlass={liquidGlass}
+        onTabPress={onTabPress}
+        overflow={overflow}
+        pathname={pathname}
+        reducedMotion={reducedMotion}
+        edge={sideEdge}
+        size={sideRegion.size}
+        surfaceComponent={surfaceComponent}
+        testID={testID}
+        theme={theme}
+        bottomPadding={bottomPadding}
+      />
+    );
+  }
+
   return (
     <View
       style={{
@@ -419,6 +448,110 @@ function RouterTabsContent({
   );
 }
 
+/**
+ * The tab bar standing in the side column the system reserves on a foldable
+ * iPhone (outer display, inner display in landscape, and the outer edge of a
+ * Split View half). Bottom-aligned below the system indicators, symbol-only,
+ * on the same physical side as the system's own bars. The column lies in the
+ * padding the frame leaves beside the content, so nothing overlaps.
+ */
+function VerticalTabBar({
+  bottomPadding,
+  colorScheme,
+  directTabs,
+  liquidGlass,
+  onTabPress,
+  overflow,
+  pathname,
+  reducedMotion,
+  edge,
+  size,
+  surfaceComponent,
+  testID,
+  theme,
+}: {
+  bottomPadding: number;
+  colorScheme: RouterTabsColorScheme;
+  directTabs: RouterTabItem[];
+  liquidGlass: boolean;
+  onTabPress?: (tab: RouterTabItem) => void;
+  overflow?: ReactNode;
+  pathname: string;
+  reducedMotion: boolean;
+  edge: "left" | "right";
+  size: number;
+  surfaceComponent: RouterTabsSurfaceComponent;
+  testID: string;
+  theme: RouterTabsTheme;
+}) {
+  const cell = ROUTER_TAB_BAR_VERTICAL_CELL;
+  const barWidth = Math.min(cell + 8, size - 12);
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        alignItems: "center",
+        bottom: 0,
+        gap: 8,
+        justifyContent: "flex-end",
+        paddingBottom: bottomPadding,
+        position: "absolute",
+        top: 0,
+        width: size,
+        zIndex: 10,
+        // The side the system reserved; the tab content is padded away from it.
+        ...(edge === "right" ? { right: 0 } : { left: 0 }),
+      }}
+    >
+      <TabSurface
+        colorScheme={colorScheme}
+        liquidGlass={liquidGlass}
+        reducedMotion={reducedMotion}
+        surfaceComponent={surfaceComponent}
+        style={{
+          alignItems: "center",
+          borderRadius: barWidth / 2,
+          flexDirection: "column",
+          gap: 4,
+          paddingVertical: 4,
+          width: barWidth,
+        }}
+        testID={`${testID}-vertical`}
+        theme={theme}
+      >
+        {directTabs.map((tab) => (
+          <TabTrigger key={tab.name} asChild name={tab.name}>
+            <RouterTabButton
+              activeOverride={tab.isActive ? isTabActive(pathname, tab) : undefined}
+              icon={tab.icon}
+              itemHeight={cell}
+              label={tab.label}
+              onTabPress={() => onTabPress?.(tab)}
+              selectedIcon={tab.selectedIcon}
+              testID={tab.testID ?? `${testID}-${tab.name}`}
+              theme={theme}
+              vertical
+            />
+          </TabTrigger>
+        ))}
+      </TabSurface>
+      {overflow ? (
+        <TabSurface
+          colorScheme={colorScheme}
+          liquidGlass={liquidGlass}
+          reducedMotion={reducedMotion}
+          surfaceComponent={surfaceComponent}
+          style={{ borderRadius: barWidth / 2, height: barWidth, width: barWidth }}
+          testID={`${testID}-overflow-group`}
+          theme={theme}
+        >
+          {overflow}
+        </TabSurface>
+      ) : null}
+    </View>
+  );
+}
+
 function isTabActive(pathname: string, tab: RouterTabItem): boolean {
   if (tab.isActive) return tab.isActive(pathname);
   const activePath = normalizeRoutePath(pathname);
@@ -458,6 +591,8 @@ type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
   onTabPress?: () => void;
   selectedIcon?: ReactNode;
   theme: RouterTabsTheme;
+  /** Symbol only, with its own selection lens: the bar stands in a narrow side column. */
+  vertical?: boolean;
 };
 
 const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTabButton(
@@ -474,11 +609,43 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
     onTabPress,
     selectedIcon,
     theme,
+    vertical = false,
     ...props
   },
   ref,
 ) {
   const isFocused = activeOverride ?? triggerFocused;
+  if (vertical) {
+    // A vertical bar is fixed in width, so it favours the symbol; the label stays the
+    // accessibility name.
+    return (
+      <Pressable
+        ref={ref}
+        {...props}
+        accessible
+        accessibilityLabel={label}
+        accessibilityRole="tab"
+        accessibilityState={{ ...accessibilityState, selected: isFocused }}
+        onLongPress={onLongPress}
+        onPress={(event) => {
+          onTabPress?.();
+          onPress?.(event);
+        }}
+        style={({ pressed }) => ({
+          alignItems: "center",
+          backgroundColor: isFocused ? theme.selectedSurface : theme.transparent,
+          borderCurve: "continuous",
+          borderRadius: itemHeight / 2,
+          height: itemHeight,
+          justifyContent: "center",
+          opacity: pressed ? 0.65 : 1,
+          width: itemHeight,
+        })}
+      >
+        {isFocused ? (selectedIcon ?? icon) : icon}
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       ref={ref}
