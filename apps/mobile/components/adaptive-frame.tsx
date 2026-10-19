@@ -32,13 +32,19 @@ export function AdaptiveFrame({
   padSides?: boolean;
 }) {
   const safeInsets = useSafeAreaInsets();
-  const sideInsets = useSideInsets();
+  const windowSideInsets = useSideInsets();
+  // The root frame (`padSides` false) lays out beside the system's column and fold. Every other
+  // frame is a sheet or modal: its own presentation, whose safe area is already right, so it
+  // must not inherit the window's vertical-bar column or fold.
+  const root = !padSides;
+  const sideInsets = root ? windowSideInsets : safeInsets;
   const insets = { ...safeInsets, left: sideInsets.left, right: sideInsets.right };
   const { width, height } = useWindowDimensions();
   // A fold running top to bottom (book pose) divides the display; content stays in the
   // pane before it instead of bending across the crease, and the rest is left to the
   // system's own components.
-  const fold = useDivisionRegion();
+  const windowFold = useDivisionRegion();
+  const fold = root ? windowFold : null;
   const beforeFold = fold && fold.height > fold.width ? Math.max(0, fold.x - 8) : null;
   // A fold running across the display (laptop or tabletop pose) leaves two stacked areas;
   // with no two-pane layout everything stays in the upper one, above the crease.

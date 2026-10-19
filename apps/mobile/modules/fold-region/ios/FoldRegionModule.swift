@@ -57,13 +57,23 @@ public class FoldRegionModule: Module {
   }
 
   private static func verticalBarEdge() -> String? {
-    guard #available(iOS 27.1, *) else { return nil }
     var result: String?
     let read = {
-      switch keyWindow()?.traitCollection.verticalBarEdge {
-      case .leading: result = "left"
-      case .trailing: result = "right"
-      default: result = nil
+      guard let window = keyWindow() else { return }
+      if #available(iOS 27.1, *) {
+        switch window.traitCollection.verticalBarEdge {
+        case .leading: result = "left"
+        case .trailing: result = "right"
+        default: break
+        }
+      }
+      if result == nil, let screen = window.windowScene?.screen {
+        // Split View: the app fills one half. The system puts controls on each app's outer
+        // edge, so the half's position on the display says which side the column is on.
+        let frame = window.convert(window.bounds, to: screen.coordinateSpace)
+        let narrower = frame.width < screen.bounds.width - 100
+        if narrower && frame.minX < 1 { result = "left" }
+        else if narrower && frame.maxX > screen.bounds.width - 1 { result = "right" }
       }
     }
     if Thread.isMainThread { read() } else { DispatchQueue.main.sync(execute: read) }
