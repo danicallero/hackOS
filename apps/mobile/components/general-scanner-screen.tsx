@@ -4,7 +4,6 @@ import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { BarBlur } from "@/components/bar-blur";
 import { FilterMenu } from "@/components/filter-menu";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
@@ -218,7 +217,6 @@ export function GeneralScannerScreen() {
       <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
       {glassAvailable ? (
         <>
-          <BarBlur />
           <Stack.Toolbar placement="left">
             <Stack.Toolbar.View hidesSharedBackground>{title}</Stack.Toolbar.View>
           </Stack.Toolbar>
