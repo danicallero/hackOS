@@ -433,7 +433,7 @@ export function ActivityScannerScreen() {
           </Text>
         </View>
       )}
-      <View style={{ flex: 1, marginTop: insets.top + 56 }}>
+      <View style={{ flex: 1, marginTop: insets.top + (sideRegion.edge ? 44 : 56) }}>
         {sideRegion.edge ? (
           // The side column carries back, so the name is a heading in the content, not an overlay.
           <Text
@@ -442,9 +442,9 @@ export function ActivityScannerScreen() {
             testID={UI_TEST_IDS.scanner.result}
             style={{
               color: colors.label,
-              fontSize: 28,
+              fontSize: 22,
               fontWeight: "700",
-              marginBottom: 12,
+              marginBottom: 4,
               paddingHorizontal: 24,
             }}
           >

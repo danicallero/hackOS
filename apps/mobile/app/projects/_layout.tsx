@@ -15,11 +15,11 @@ export default function ProjectsLayout() {
         ...stackScreenOptions,
         contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
         headerShadowVisible: false,
-        headerLeft: () => (
-          <HeaderBackButton
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/queue"))}
-          />
-        ),
+        // The native back item can join a vertical bar; only a cold deep link
+        // (nothing to pop) needs the explicit one.
+        headerLeft: router.canGoBack()
+          ? undefined
+          : () => <HeaderBackButton onPress={() => router.replace("/(tabs)/queue")} />,
       }}
     >
       <Stack.Screen
