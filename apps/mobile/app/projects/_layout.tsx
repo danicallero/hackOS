@@ -22,10 +22,15 @@ export default function ProjectsLayout() {
         headerShadowVisible: false,
         // The native back item can join a vertical bar; only a cold deep link
         // (nothing to pop in this screen's own stack) needs the explicit one.
-        headerLeft:
-          glassAvailable || navigation.getState().index > 0
-            ? undefined
-            : () => <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />,
+        // No `headerLeft` key at all on iOS 26+: even an undefined one can displace the
+        // screens' left toolbar items.
+        ...(glassAvailable || navigation.getState().index > 0
+          ? {}
+          : {
+              headerLeft: () => (
+                <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />
+              ),
+            }),
       })}
     >
       <Stack.Screen
