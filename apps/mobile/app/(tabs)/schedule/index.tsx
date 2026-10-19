@@ -17,6 +17,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -610,6 +611,28 @@ export default function ScheduleScreen() {
           </Pressable>
         </GlassView>
       ) : null}
+      {twoPane ? (
+        // A 1 pt scroll view that never scrolls: iOS insets its content by the native bar's
+        // height, so where its child lands in the window is the bar's height. The list cannot
+        // say it (it is scrolled to the current activity), the window cannot (the bar is
+        // transparent).
+        <ScrollView
+          pointerEvents="none"
+          contentInsetAdjustmentBehavior="automatic"
+          scrollEnabled={false}
+          style={{ height: 1, left: 0, opacity: 0, position: "absolute", top: 0, width: 1 }}
+        >
+          <View
+            ref={bandProbeRef}
+            onLayout={() =>
+              bandProbeRef.current?.measureInWindow((_x, y) => {
+                if (y > 0) setPaneTop(y);
+              })
+            }
+            style={{ height: 1, width: 1 }}
+          />
+        </ScrollView>
+      ) : null}
       <ScheduleSelectionContext.Provider value={twoPane ? selectionValue : null}>
         <View style={{ flex: 1, flexDirection: "row" }}>
           <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
@@ -650,18 +673,7 @@ export default function ScheduleScreen() {
                 stickySectionHeadersEnabled
                 onScrollToIndexFailed={(info) => retryScrollToActive(info)}
                 ListHeaderComponent={
-                  <View
-                    ref={bandProbeRef}
-                    // At rest this view sits right under the native bar, so where it lands in
-                    // the window is the bar's height; the two-pane layout is built from it.
-                    onLayout={() =>
-                      bandProbeRef.current?.measureInWindow((_x, y) => {
-                        // The header slot has 8 pt of top padding above this view.
-                        if (y > 8) setPaneTop((current) => (current === 0 ? y - 8 : current));
-                      })
-                    }
-                    style={{ gap: 8 }}
-                  >
+                  <View style={{ gap: 8 }}>
                     <StaleDataBanner updatedAt={staleSince} />
                     {notifications.error ? (
                       <RequestFeedback
