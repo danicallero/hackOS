@@ -16,6 +16,8 @@ import {
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import {
   EmptyState,
   FloatingGlassButton,
@@ -514,400 +516,410 @@ export function TeamOperationsScreen() {
   ].filter((link) => Boolean(link.url));
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 22, padding: 16, paddingBottom: 40 }}
-      style={{ backgroundColor: colors.background }}
-    >
-      {entry.status === "called" ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            backgroundColor: colors.successSurface,
-            borderCurve: "continuous",
-            borderRadius: 12,
-            gap: 7,
-            padding: 14,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-            <SymbolView
-              name="door.left.hand.open"
-              tintColor={colors.onSuccessSurface}
-              size={22}
-              accessible={false}
-            />
-            <Text
-              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
-            >
-              {t("teamDetailAtDoor", { room: room.name })}
-            </Text>
+    <>
+      <EntryBackToolbar fallback="/(tabs)/others" />
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ gap: 22, padding: 16, paddingBottom: 40 }}
+        style={{ backgroundColor: colors.background }}
+      >
+        {entry.status === "called" ? (
+          <View
+            accessibilityRole="alert"
+            style={{
+              backgroundColor: colors.successSurface,
+              borderCurve: "continuous",
+              borderRadius: 12,
+              gap: 7,
+              padding: 14,
+            }}
+          >
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <SymbolView
+                name="door.left.hand.open"
+                tintColor={colors.onSuccessSurface}
+                size={22}
+                accessible={false}
+              />
+              <Text
+                style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
+              >
+                {t("teamDetailAtDoor", { room: room.name })}
+              </Text>
+            </View>
+            {room.location ? (
+              <Text style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}>
+                {room.location}
+              </Text>
+            ) : null}
           </View>
-          {room.location ? (
-            <Text style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}>
-              {room.location}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+        ) : null}
 
-      <Section title={t("teamDetailMembers")}>
-        {members.map((member, index) => (
-          <View key={member.userId ?? member.email}>
-            {index > 0 ? <Separator /> : null}
-            <SwipeableMemberRow
-              enabled={canEditProject && member.userId !== null}
-              actionLabel={t("teamDetailRemoveMember")}
-              onAction={() => removeMember(member)}
-            >
-              <View
-                accessible
-                accessibilityLabel={`${memberDisplayName(member)}, ${member.email}`}
-                style={{
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 44,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                }}
+        <Section title={t("teamDetailMembers")}>
+          {members.map((member, index) => (
+            <View key={member.userId ?? member.email}>
+              {index > 0 ? <Separator /> : null}
+              <SwipeableMemberRow
+                enabled={canEditProject && member.userId !== null}
+                actionLabel={t("teamDetailRemoveMember")}
+                onAction={() => removeMember(member)}
               >
-                <View style={{ flex: 1, justifyContent: "center" }}>
-                  <Text selectable numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
-                    {memberDisplayName(member)}
-                  </Text>
-                  <Text
-                    selectable
-                    numberOfLines={1}
-                    style={{ color: colors.secondaryLabel, fontSize: 15 }}
-                  >
-                    {member.email}
-                  </Text>
-                </View>
-              </View>
-            </SwipeableMemberRow>
-          </View>
-        ))}
-        {canEditProject ? (
-          <>
-            {members.length ? <Separator /> : null}
-            <View style={{ gap: 8, padding: 16 }}>
-              <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
-                {t("teamDetailAddMember")}
-              </Text>
-              <Text style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
-                {t("teamDetailAddMemberHint")}
-              </Text>
-              <View
-                style={{
-                  alignItems: "center",
-                  backgroundColor: colors.elevatedSurface,
-                  borderCurve: "continuous",
-                  borderRadius: 10,
-                  flexDirection: "row",
-                  gap: 8,
-                  minHeight: 36,
-                  paddingHorizontal: 8,
-                }}
-              >
-                <Pressable
-                  accessibilityLabel={t("teamDetailMemberSearch")}
-                  accessibilityRole="button"
-                  onPress={() => void memberSearch.search()}
-                  hitSlop={8}
-                >
-                  <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
-                </Pressable>
-                <TextInput
-                  accessibilityLabel={t("teamDetailMemberSearch")}
-                  editable={memberMutation === null && !memberSearch.loading}
-                  onChangeText={(value) => {
-                    memberSearch.setQuery(value);
-                    memberSearch.setCandidates([]);
-                    memberSearch.setError(null);
-                    memberSearch.setSearched(false);
-                  }}
-                  onSubmitEditing={() => void memberSearch.search()}
-                  placeholder={t("teamDetailMemberSearchPlaceholder")}
-                  placeholderTextColor={colors.tertiaryLabel}
-                  returnKeyType="search"
-                  value={memberSearch.query}
+                <View
+                  accessible
+                  accessibilityLabel={`${memberDisplayName(member)}, ${member.email}`}
                   style={{
-                    color: colors.label,
-                    flex: 1,
-                    fontSize: 17,
-                    minHeight: 36,
+                    flexDirection: "row",
+                    gap: 12,
+                    minHeight: 44,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
                   }}
-                />
-                {memberSearch.query.length > 0 ? (
+                >
+                  <View style={{ flex: 1, justifyContent: "center" }}>
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ color: colors.label, fontSize: 17 }}
+                    >
+                      {memberDisplayName(member)}
+                    </Text>
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                    >
+                      {member.email}
+                    </Text>
+                  </View>
+                </View>
+              </SwipeableMemberRow>
+            </View>
+          ))}
+          {canEditProject ? (
+            <>
+              {members.length ? <Separator /> : null}
+              <View style={{ gap: 8, padding: 16 }}>
+                <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
+                  {t("teamDetailAddMember")}
+                </Text>
+                <Text style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
+                  {t("teamDetailAddMemberHint")}
+                </Text>
+                <View
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: 10,
+                    flexDirection: "row",
+                    gap: 8,
+                    minHeight: 36,
+                    paddingHorizontal: 8,
+                  }}
+                >
                   <Pressable
-                    accessibilityLabel={t("cancel")}
-                    onPress={() => {
-                      memberSearch.setQuery("");
+                    accessibilityLabel={t("teamDetailMemberSearch")}
+                    accessibilityRole="button"
+                    onPress={() => void memberSearch.search()}
+                    hitSlop={8}
+                  >
+                    <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
+                  </Pressable>
+                  <TextInput
+                    accessibilityLabel={t("teamDetailMemberSearch")}
+                    editable={memberMutation === null && !memberSearch.loading}
+                    onChangeText={(value) => {
+                      memberSearch.setQuery(value);
                       memberSearch.setCandidates([]);
                       memberSearch.setError(null);
                       memberSearch.setSearched(false);
                     }}
-                    hitSlop={8}
-                  >
-                    <SymbolView
-                      name="xmark.circle.fill"
-                      tintColor={colors.tertiaryLabel}
-                      size={16}
-                      accessible={false}
-                    />
-                  </Pressable>
-                ) : null}
-              </View>
-              {memberSearch.error ? (
-                <RequestFeedback error={memberSearch.error} message={memberSearch.error.message} />
-              ) : null}
-              {memberMutationError ? (
-                <RequestFeedback
-                  error={memberMutationError}
-                  message={memberMutationError.message}
-                />
-              ) : null}
-              {memberSearch.candidates.map((candidate) => (
-                <View key={candidate.id}>
-                  <Separator inset={0} />
-                  <View
+                    onSubmitEditing={() => void memberSearch.search()}
+                    placeholder={t("teamDetailMemberSearchPlaceholder")}
+                    placeholderTextColor={colors.tertiaryLabel}
+                    returnKeyType="search"
+                    value={memberSearch.query}
                     style={{
-                      alignItems: "center",
-                      flexDirection: "row",
-                      gap: 12,
-                      minHeight: 44,
-                      paddingVertical: 6,
+                      color: colors.label,
+                      flex: 1,
+                      fontSize: 17,
+                      minHeight: 36,
+                    }}
+                  />
+                  {memberSearch.query.length > 0 ? (
+                    <Pressable
+                      accessibilityLabel={t("cancel")}
+                      onPress={() => {
+                        memberSearch.setQuery("");
+                        memberSearch.setCandidates([]);
+                        memberSearch.setError(null);
+                        memberSearch.setSearched(false);
+                      }}
+                      hitSlop={8}
+                    >
+                      <SymbolView
+                        name="xmark.circle.fill"
+                        tintColor={colors.tertiaryLabel}
+                        size={16}
+                        accessible={false}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+                {memberSearch.error ? (
+                  <RequestFeedback
+                    error={memberSearch.error}
+                    message={memberSearch.error.message}
+                  />
+                ) : null}
+                {memberMutationError ? (
+                  <RequestFeedback
+                    error={memberMutationError}
+                    message={memberMutationError.message}
+                  />
+                ) : null}
+                {memberSearch.candidates.map((candidate) => (
+                  <View key={candidate.id}>
+                    <Separator inset={0} />
+                    <View
+                      style={{
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 12,
+                        minHeight: 44,
+                        paddingVertical: 6,
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{ color: colors.label, fontSize: 17 }}
+                        >
+                          {memberCandidateName(candidate)}
+                        </Text>
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                        >
+                          {candidate.email}
+                        </Text>
+                      </View>
+                      {memberMutation === `add:${candidate.id}` ? (
+                        <ActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t("teamDetailAddCandidate", {
+                            name: memberCandidateName(candidate),
+                          })}
+                          disabled={memberMutation !== null}
+                          onPress={() => void addMember(candidate.id)}
+                          hitSlop={8}
+                          style={({ pressed }) => ({
+                            minHeight: 44,
+                            minWidth: 44,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            opacity: pressed ? 0.5 : 1,
+                          })}
+                        >
+                          <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                {!memberSearch.loading &&
+                memberSearch.searched &&
+                memberSearch.candidates.length === 0 ? (
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      paddingTop: 4,
+                      textAlign: "center",
                     }}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        selectable
-                        numberOfLines={1}
-                        style={{ color: colors.label, fontSize: 17 }}
-                      >
-                        {memberCandidateName(candidate)}
-                      </Text>
-                      <Text
-                        selectable
-                        numberOfLines={1}
-                        style={{ color: colors.secondaryLabel, fontSize: 15 }}
-                      >
-                        {candidate.email}
-                      </Text>
-                    </View>
-                    {memberMutation === `add:${candidate.id}` ? (
-                      <ActivityIndicator size="small" color={colors.accent} />
-                    ) : (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={t("teamDetailAddCandidate", {
-                          name: memberCandidateName(candidate),
-                        })}
-                        disabled={memberMutation !== null}
-                        onPress={() => void addMember(candidate.id)}
-                        hitSlop={8}
-                        style={({ pressed }) => ({
-                          minHeight: 44,
-                          minWidth: 44,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          opacity: pressed ? 0.5 : 1,
-                        })}
-                      >
-                        <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
-                      </Pressable>
-                    )}
-                  </View>
-                </View>
-              ))}
-              {!memberSearch.loading &&
-              memberSearch.searched &&
-              memberSearch.candidates.length === 0 ? (
-                <Text
-                  selectable
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 13,
-                    paddingTop: 4,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailNoMemberCandidates")}
-                </Text>
-              ) : null}
-            </View>
-          </>
-        ) : null}
-      </Section>
-
-      {links.length ? (
-        <Section title={t("teamDetailLinks")}>
-          {links.map((link, index) => (
-            <View key={link.label}>
-              {index > 0 ? <Separator /> : null}
-              <Pressable
-                accessibilityRole="link"
-                onPress={() => void Linking.openURL(link.url!)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-              >
-                <InfoRow
-                  label={link.label}
-                  value={link.url!}
-                  icon={link.icon}
-                  accessoryIcon="chevron.right"
-                />
-              </Pressable>
-            </View>
-          ))}
-        </Section>
-      ) : null}
-
-      {repoChallenges.length > 0 ? (
-        <View style={{ gap: 12 }}>
-          <QueueTabBar
-            challenges={repoChallenges}
-            selectedIndex={selectedQueueIndex}
-            onSelect={setSelectedQueueIndex}
-            canEdit={canEditProject}
-            onAdd={openAddChallenge}
-            t={t}
-            scrollRef={tabScrollRef}
-          />
-          {selectedQueue ? (
-            <QueueDetailView
-              queue={selectedQueue}
-              history={tabLoading ? null : selectedEntryHistory}
-              canEdit={canEditProject}
-              onRemove={removeFromQueue}
-              removing={removing}
-              t={t}
-            />
-          ) : null}
-        </View>
-      ) : (
-        <Section>
-          <EmptyState
-            icon="tray"
-            title={t("teamDetailNoQueues")}
-            description={t("teamDetailQueueEmpty")}
-          />
-        </Section>
-      )}
-
-      {showAddChallenge ? (
-        <Modal
-          animationType="slide"
-          onRequestClose={closeAddChallenge}
-          presentationStyle="pageSheet"
-        >
-          <View style={{ backgroundColor: colors.background, flex: 1 }}>
-            <ScrollView
-              alwaysBounceVertical
-              contentInsetAdjustmentBehavior="automatic"
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{
-                gap: 22,
-                padding: 16,
-                paddingBottom: Math.max(32, insets.bottom + 16),
-                paddingTop: 16 + sheetTopInset,
-              }}
-            >
-              <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
-                <Text
-                  selectable
-                  style={{
-                    color: colors.label,
-                    fontSize: 20,
-                    fontWeight: "700",
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailAddQueue")}
-                </Text>
+                    {t("teamDetailNoMemberCandidates")}
+                  </Text>
+                ) : null}
               </View>
+            </>
+          ) : null}
+        </Section>
 
-              <Section>
-                <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {t("teamDetailSelectChallenge")}
+        {links.length ? (
+          <Section title={t("teamDetailLinks")}>
+            {links.map((link, index) => (
+              <View key={link.label}>
+                {index > 0 ? <Separator /> : null}
+                <Pressable
+                  accessibilityRole="link"
+                  onPress={() => void Linking.openURL(link.url!)}
+                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+                >
+                  <InfoRow
+                    label={link.label}
+                    value={link.url!}
+                    icon={link.icon}
+                    accessoryIcon="chevron.right"
+                  />
+                </Pressable>
+              </View>
+            ))}
+          </Section>
+        ) : null}
+
+        {repoChallenges.length > 0 ? (
+          <View style={{ gap: 12 }}>
+            <QueueTabBar
+              challenges={repoChallenges}
+              selectedIndex={selectedQueueIndex}
+              onSelect={setSelectedQueueIndex}
+              canEdit={canEditProject}
+              onAdd={openAddChallenge}
+              t={t}
+              scrollRef={tabScrollRef}
+            />
+            {selectedQueue ? (
+              <QueueDetailView
+                queue={selectedQueue}
+                history={tabLoading ? null : selectedEntryHistory}
+                canEdit={canEditProject}
+                onRemove={removeFromQueue}
+                removing={removing}
+                t={t}
+              />
+            ) : null}
+          </View>
+        ) : (
+          <Section>
+            <EmptyState
+              icon="tray"
+              title={t("teamDetailNoQueues")}
+              description={t("teamDetailQueueEmpty")}
+            />
+          </Section>
+        )}
+
+        {showAddChallenge ? (
+          <Modal
+            animationType="slide"
+            onRequestClose={closeAddChallenge}
+            presentationStyle="pageSheet"
+          >
+            <AdaptiveFrame>
+              <ScrollView
+                alwaysBounceVertical
+                contentInsetAdjustmentBehavior="automatic"
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{
+                  gap: 22,
+                  padding: 16,
+                  paddingBottom: Math.max(32, insets.bottom + 16),
+                  paddingTop: 16 + sheetTopInset,
+                }}
+              >
+                <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.label,
+                      fontSize: 20,
+                      fontWeight: "700",
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("teamDetailAddQueue")}
                   </Text>
                 </View>
-              </Section>
 
-              {availableChallengesLoading ? (
-                <View style={{ paddingVertical: 24 }}>
-                  <ActivityIndicator size="small" color={colors.accent} />
-                </View>
-              ) : availableChallenges.length > 0 ? (
                 <Section>
-                  {availableChallenges.map((ch, index) => (
-                    <View key={ch.id}>
-                      {index > 0 ? <Separator /> : null}
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          gap: 12,
-                          minHeight: 44,
-                          alignItems: "center",
-                          paddingHorizontal: 16,
-                          paddingVertical: 10,
-                        }}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
-                            {ch.title}
-                          </Text>
-                        </View>
-                        {enrolling === ch.id ? (
-                          <ActivityIndicator size="small" color={colors.accent} />
-                        ) : (
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t("teamDetailAddQueue")}
-                            disabled={enrolling !== null}
-                            onPress={() => void enrollChallenge(ch.id)}
-                            hitSlop={8}
-                            style={({ pressed }) => ({
-                              minHeight: 44,
-                              minWidth: 44,
-                              alignItems: "center",
-                              justifyContent: "center",
-                              opacity: pressed ? 0.5 : 1,
-                            })}
-                          >
-                            <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    </View>
-                  ))}
+                  <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
+                    <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                      {t("teamDetailSelectChallenge")}
+                    </Text>
+                  </View>
                 </Section>
-              ) : (
-                <Text
-                  selectable
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 13,
-                    paddingTop: 4,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailAlreadyEnqueued")}
-                </Text>
-              )}
-            </ScrollView>
 
-            <FloatingGlassButton
-              top={16 + sheetTopInset}
-              side="left"
-              icon="xmark"
-              accessibilityLabel={t("cancel")}
-              onPress={closeAddChallenge}
-            />
-          </View>
-        </Modal>
-      ) : null}
-    </ScrollView>
+                {availableChallengesLoading ? (
+                  <View style={{ paddingVertical: 24 }}>
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  </View>
+                ) : availableChallenges.length > 0 ? (
+                  <Section>
+                    {availableChallenges.map((ch, index) => (
+                      <View key={ch.id}>
+                        {index > 0 ? <Separator /> : null}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            gap: 12,
+                            minHeight: 44,
+                            alignItems: "center",
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
+                              {ch.title}
+                            </Text>
+                          </View>
+                          {enrolling === ch.id ? (
+                            <ActivityIndicator size="small" color={colors.accent} />
+                          ) : (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={t("teamDetailAddQueue")}
+                              disabled={enrolling !== null}
+                              onPress={() => void enrollChallenge(ch.id)}
+                              hitSlop={8}
+                              style={({ pressed }) => ({
+                                minHeight: 44,
+                                minWidth: 44,
+                                alignItems: "center",
+                                justifyContent: "center",
+                                opacity: pressed ? 0.5 : 1,
+                              })}
+                            >
+                              <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
+                            </Pressable>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </Section>
+                ) : (
+                  <Text
+                    selectable
+                    style={{
+                      color: colors.secondaryLabel,
+                      fontSize: 13,
+                      paddingTop: 4,
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("teamDetailAlreadyEnqueued")}
+                  </Text>
+                )}
+              </ScrollView>
+
+              <FloatingGlassButton
+                top={16 + sheetTopInset}
+                side="left"
+                icon="xmark"
+                accessibilityLabel={t("cancel")}
+                onPress={closeAddChallenge}
+              />
+            </AdaptiveFrame>
+          </Modal>
+        ) : null}
+      </ScrollView>
+    </>
   );
 }
 

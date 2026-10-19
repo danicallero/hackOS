@@ -20,6 +20,8 @@ import Animated, {
   useReducedMotion,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -170,6 +172,7 @@ export default function QueueScreen() {
 
   return (
     <>
+      <EntryBackToolbar fallback="/(tabs)/queue" />
       <FlatList
         ref={listRef}
         {...trueTop.scrollProps}
@@ -375,7 +378,7 @@ export function QueueTutorial({
       transparent
       visible={visible}
     >
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <AdaptiveFrame>
         <View
           style={{
             flex: 1,
@@ -593,7 +596,7 @@ export function QueueTutorial({
             />
           </View>
         </View>
-      </View>
+      </AdaptiveFrame>
     </Modal>
   );
 }

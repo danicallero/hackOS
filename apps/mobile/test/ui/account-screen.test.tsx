@@ -51,6 +51,7 @@ jest.mock("@expo/ui/community/menu", () => {
   return { MenuView: ({ children }: { children: unknown }) => children };
 });
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({ setOptions: jest.fn() }),
   useFocusEffect: (callback: () => void) => {
     mockFocusEffect(callback);
     const ReactLib = require("react");

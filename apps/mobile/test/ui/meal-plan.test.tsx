@@ -49,6 +49,7 @@ jest.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children }: { children: unknown }) => children,
 }));
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({ setOptions: jest.fn() }),
   useLocalSearchParams: () => mockParams,
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),

@@ -40,6 +40,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { enqueueLocalScan, findPersonById, pendingScans } from "@/lib/scanner-db";
 import { submitScannerMutation } from "@/lib/scanner-sync";
 import type { ScannerPerson, ScannerSnapshot, ScanPayload } from "@/lib/scanner-types";
+import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
@@ -177,6 +178,7 @@ export function PersonOperationsScreen() {
     navigation.setOptions(transparentDetailHeaderOptions);
   }, [navigation]);
 
+  const sideRegion = useSideRegion();
   const trueTop = useTrueTopScroll(scrollRef);
   const { me } = useMeContext();
   const ownerUserId = me?.id;
@@ -936,6 +938,12 @@ export function PersonOperationsScreen() {
                 {person.email}
               </Text>
             ) : null}
+            {rolePill && sideRegion.edge ? (
+              // The overlay below would cover the name beside a side column.
+              <View style={{ alignSelf: "flex-start", marginTop: 6 }}>
+                <StatusPill tone={rolePill.tone}>{rolePill.label}</StatusPill>
+              </View>
+            ) : null}
           </View>
 
           <Section title={t("personPersonalData")}>
@@ -1028,7 +1036,7 @@ export function PersonOperationsScreen() {
         </ScrollView>
       </View>
 
-      {rolePill ? (
+      {rolePill && !sideRegion.edge ? (
         <View
           pointerEvents="none"
           style={{

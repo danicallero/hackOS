@@ -325,6 +325,86 @@ distributed to other Expo Router apps without importing hackOS code.
   y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
   fails when a screen with the automatic inset calls `useScrollToTop` directly.
 
+## Foldables and large screens
+
+One app that resizes, not a layout per device: nothing branches on a device model
+or a fold posture, only on the window the app has right now (`lib/window-size.ts`).
+
+- **Size classes.** `windowSizeClass(width)`: compact < 600 dp (phones, a folded
+  cover display), medium < 840 dp (a Galaxy Z Fold inner display in portrait),
+  expanded from 840 dp (Pixel Fold inner, tablets). `useWindowSizeClass()`
+  re-renders on every resize and keeps nothing between renders.
+- **Orientation.** `app.json` no longer locks portrait: the lock made Android
+  12L+ letterbox the app on an unfolded display and Android 16 ignores it there.
+  `lib/screen-orientation.ts` (`expo-screen-orientation`) locks portrait while the
+  *physical display's* smallest side is under 600 dp and its long side is at least 1.6
+  times the short one (an iPhone Duo panel is squarish), and unlocks it otherwise, and
+  re-evaluates when the display changes (fold, unfold). It is decided on the
+  display, not the window, so split-screen cannot flip it. iPhone keeps its portrait-only
+  `Info.plist`; iPad lists all four orientations (`ios.infoPlist`). The module is a
+  native dependency: a development client built without it applies no lock until it
+  is rebuilt (the lookup fails soft).
+- **Readable column.** `components/adaptive-frame.tsx` wraps the navigator in
+  `app/_layout.tsx` and every `Modal` sheet (and, as `SheetFrame`, every native
+  modal route), capping content at 720 dp and centring it on wider windows. The
+  tree is identical at every width, so fold, unfold and window resizing never
+  remount the navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
+- **Asymmetric safe areas.** On a foldable iPhone the system status indicators and
+  the Dynamic Island run down one side and the horizontal insets differ by pose, and
+  a plain `ScrollView` never insets for them. Foreground content is padded per edge:
+  root screens through `contentStyle` in `app/_layout.tsx`, each tab's Stack through
+  `useTabStackScreenOptions` (`lib/navigation.ts`; the `TabSlot` itself stays unpadded so
+  the system can move its native bars into the column), sheets through `SheetFrame` (which measures the
+  sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
+  same side.
+- **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
+  (outer display, inner display in landscape, the outer edge of a Split View half) and
+  keeps horizontal bars on the inner display in portrait. The system only moves bars it
+  owns, so the custom tab bar does it itself: a horizontal inset of at least 56 pt
+  (`lib/side-region.ts`) puts `VerticalTabBar` in that column, on the same side,
+  bottom-aligned below the indicators, symbol only (labels stay the accessibility
+  names), with the overflow circle underneath; the number of direct tabs follows the
+  height left below the indicators (`routerTabBarVerticalBudget`). No inset, no vertical
+  bar: nothing branches on a device model. Native navigation bars in the tab
+  screens span the full window, so the system moves their icon items (back, bell,
+  add, edit) into the same column, above the tab bar; custom views in a toolbar (the
+  filter) stay horizontal.
+- **System behaviour kept.** `MainActivity` already declares
+  `configChanges="...|screenSize|screenLayout|smallestScreenSize|orientation"`, so
+  resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
+  Insets come from `react-native-safe-area-context`, per edge.
+
+**Bar colour.** Activities, My Projects and Contacts paint their native header with the page colour
+(`headerStyle.backgroundColor`), like Schedule: the system blur materials read whiter than the page. The
+two-pane Schedule keeps per-column title bands, with `components/system-blur.tsx` (`expo-blur`, a native
+dependency) behind the detail title.
+
+**Fold and island (iOS 27.1).** `modules/fold-region` reads `UIView.reservedRegions(kind:)`
+for the key window: `getDivisionRegion()` is the fold, `getOcclusionRegion()` the Dynamic Island,
+both in window points, `null` before iOS 27.1 or when no region is active; `getVerticalBarEdge()` is
+`traitCollection.verticalBarEdge`, the edge the system puts its vertical bar on. In Split View the
+left app gets the column on its left edge while its safe-area insets stay 0, so `useSideInsets`
+(`lib/vertical-bar-edge.ts`) folds a 64 pt column into the insets from that edge. The profile avatar's
+collapse uses the island region as its morph target (it sits in the side column on a foldable
+iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `foldPanes()`
+(the areas above and below a horizontal fold) and `AdaptiveFrame` keeps content in the pane before a vertical fold (book pose). A horizontal
+fold (laptop or tabletop) keeps content above it; the area below stays empty. Schedule and Gallery
+show list and detail side by side on expanded windows (840 dp and up). The module is a native dependency: it needs a
+rebuilt development client, and without it every call reports "no region".
+
+Other foldables (Android, Samsung, Pixel, Xiaomi, Honor): the size classes, the 720 dp
+readable column, the orientation policy (no portrait lock on a 600 dp+ or squarish display),
+per-edge content padding and the side-region tab bar are driven by window size and safe-area
+insets, not by a device model, so they apply wherever the platform reports those values.
+The iOS 26 toolbar items (`EntryBackToolbar`, symbol buttons) are iOS-only; Android keeps its
+own headers. Untested on a device or emulator so far (no Android foldable run yet).
+
+Not built: native `UITabBarController` tabs (the system would move them itself; the custom Liquid Glass shell is kept), a Jetpack WindowManager fold feature for Android (React Native exposes none; it would need a
+native module over Jetpack WindowManager `FoldingFeature`), two-pane list/detail
+layouts for expanded windows, and dual-screen devices that span a hinge (Surface Duo).
+The iPhone Duo guidance in the third-party skills is iOS 27.1-specific and was used
+only for its framework-neutral principles.
+
 ## Auth flow
 
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for

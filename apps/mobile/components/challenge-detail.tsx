@@ -2,6 +2,7 @@ import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, Modal, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { NavRow } from "@/components/project-ui";
@@ -209,7 +210,7 @@ export function ChallengeSheet({
   const top = process.env.EXPO_OS === "android" ? insets.top : 0;
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <AdaptiveFrame>
         {error ? (
           <View style={{ paddingTop: 76 + top }}>
             <RequestFeedback error={error} onRetry={() => void load()} />
@@ -238,7 +239,7 @@ export function ChallengeSheet({
           accessibilityLabel={t("close")}
           onPress={onClose}
         />
-      </View>
+      </AdaptiveFrame>
     </Modal>
   );
 }

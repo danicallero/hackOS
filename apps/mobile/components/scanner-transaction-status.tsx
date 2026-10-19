@@ -5,6 +5,7 @@ import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { GlassView } from "@/components/glass-view";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
@@ -15,6 +16,7 @@ import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
 import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
+import { useSideRegion } from "@/lib/side-region";
 import { colors } from "@/theme/colors";
 
 function ClockSkewBanner() {
@@ -639,6 +641,7 @@ export function ScannerQueueStatus({
   // Android has no page-sheet presentation: the modal is full-screen, so its
   // chrome has to clear the status bar itself.
   const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
+  const sideRegion = useSideRegion();
   const [open, setOpen] = useState(false);
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
@@ -683,7 +686,17 @@ export function ScannerQueueStatus({
             <Stack.Toolbar.View hidesSharedBackground>{toolbarAccessory}</Stack.Toolbar.View>
           ) : null}
           {toolbarAccessory ? <Stack.Toolbar.Spacer width={8} /> : null}
-          <Stack.Toolbar.View>{trigger}</Stack.Toolbar.View>
+          {sideRegion.edge ? (
+            // A symbol-only item can join the system's vertical bar; the labelled pill cannot.
+            <Stack.Toolbar.Button
+              accessibilityLabel={label}
+              icon={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+              onPress={() => setOpen(true)}
+              tintColor={hasAttention ? colors.destructive : undefined}
+            />
+          ) : (
+            <Stack.Toolbar.View>{trigger}</Stack.Toolbar.View>
+          )}
         </Stack.Toolbar>
       ) : (
         <GlassView
@@ -706,7 +719,7 @@ export function ScannerQueueStatus({
         presentationStyle="pageSheet"
         visible={open}
       >
-        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+        <AdaptiveFrame>
           <ScrollView
             alwaysBounceVertical
             contentInsetAdjustmentBehavior="automatic"
@@ -925,7 +938,7 @@ export function ScannerQueueStatus({
               (hasAttention ? onRetry : onSync)();
             }}
           />
-        </View>
+        </AdaptiveFrame>
       </Modal>
     </>
   );

@@ -11,6 +11,7 @@ import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import {
   EmptyState,
   LegacyHeaderIconButton,
@@ -352,6 +353,7 @@ export function PeopleDirectoryScreen() {
     return (
       <>
         {list}
+        <EntryBackToolbar fallback="/(tabs)/others/account" />
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
         </Stack.Toolbar>

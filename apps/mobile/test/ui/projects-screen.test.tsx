@@ -7,6 +7,7 @@ const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockSetOptions = jest.fn();
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717" }) }));
+jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),

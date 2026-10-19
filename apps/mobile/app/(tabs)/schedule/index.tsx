@@ -1,8 +1,10 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import {
+  createContext,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -16,8 +18,10 @@ import {
   Pressable,
   RefreshControl,
   SectionList,
+  StyleSheet,
   Text,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -34,9 +38,10 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { ScheduleDetailScreen } from "@/components/schedule-detail-screen";
 import {
   type AudienceFilterValue,
-  ScheduleFilterButton,
+  useScheduleFilterMenu,
 } from "@/components/schedule-filter-button";
 import {
   ScheduleFormModal,
@@ -46,6 +51,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { SystemBlur } from "@/components/system-blur";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -75,7 +81,9 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
+import { windowSizeClass } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE, SCREEN_TITLE_CENTER, TWO_PANE_BAND } from "@/theme/screen-title";
 
 type NowMarker = { kind: "now"; id: string };
 type ItemRow = ScheduleItem & { kind: "item"; active: boolean };
@@ -200,6 +208,10 @@ export default function ScheduleScreen() {
   // keep the original hand-rolled header because it supports the shared
   // action pill and in-place search expansion.
   const glassAvailable = isRealLiquidGlassAvailable();
+  // An expanded window (an unfolded inner display in landscape) has room for the list and
+  // an item side by side; narrower windows keep the pushed detail route.
+  const { width: windowWidth } = useWindowDimensions();
+  const twoPane = windowSizeClass(windowWidth) === "expanded";
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -212,12 +224,24 @@ export default function ScheduleScreen() {
       return;
     }
     navigation.setOptions({
-      title: t("tabSchedule"),
+      // Two panes: each column draws its own top band (below), so the bar paints nothing.
+      title: twoPane ? "" : t("tabSchedule"),
       headerShown: true,
       headerLargeTitle: false,
-      headerTransparent: false,
+      headerTransparent: twoPane,
+      ...(twoPane
+        ? {
+            headerBlurEffect: "none" as const,
+            scrollEdgeEffects: {
+              bottom: "hidden" as const,
+              left: "hidden" as const,
+              right: "hidden" as const,
+              top: "hidden" as const,
+            },
+          }
+        : {}),
       headerShadowVisible: false,
-      headerStyle: { backgroundColor: colors.background },
+      headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
       headerTitleStyle: { color: colors.label, fontSize: 28, fontWeight: "800" },
       headerSearchBarOptions: {
@@ -230,7 +254,7 @@ export default function ScheduleScreen() {
           setSearchQuery(event.nativeEvent.text),
       },
     });
-  }, [navigation, t, glassAvailable]);
+  }, [navigation, t, glassAvailable, twoPane]);
 
   useFocusEffect(
     useCallback(() => {
@@ -471,20 +495,31 @@ export default function ScheduleScreen() {
     setFormTarget(null);
   }
 
-  const scheduleFilter = (
-    <ScheduleFilterButton
-      kinds={kinds}
-      selectedKinds={selectedKinds}
-      onToggleKind={toggleKind}
-      showAudience={canReadFull}
-      selectedAudiences={selectedAudiences}
-      onToggleAudience={toggleAudience}
-      onClear={() => {
-        setSelectedKinds([]);
-        setSelectedAudiences([]);
-      }}
-    />
-  );
+  const scheduleFilter = useScheduleFilterMenu({
+    kinds,
+    selectedKinds,
+    onToggleKind: toggleKind,
+    showAudience: canReadFull,
+    selectedAudiences,
+    onToggleAudience: toggleAudience,
+    onClear: () => {
+      setSelectedKinds([]);
+      setSelectedAudiences([]);
+    },
+  });
+
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [editSignal, setEditSignal] = useState(0);
+  const [detailOffset, setDetailOffset] = useState(0);
+  const selectedTitle = filteredItems.find((entry) => entry.id === selectedId)?.title ?? null;
+  // A two-pane window opens on the first activity, like Mail or Notes, instead of an empty pane;
+  // a selection that a filter or an edit removed falls back to the first one too.
+  const firstItemId = filteredItems[0]?.id ?? null;
+  const selectedVisible = filteredItems.some((entry) => entry.id === selectedId);
+  useEffect(() => {
+    if (twoPane && !selectedVisible && firstItemId !== null) setSelectedId(firstItemId);
+  }, [twoPane, selectedVisible, firstItemId]);
+  const selectionValue = useMemo(() => ({ selectedId, select: setSelectedId }), [selectedId]);
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
@@ -498,6 +533,20 @@ export default function ScheduleScreen() {
             ) : null}
           </Stack.Toolbar.Button>
           <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
+          {canManage ? (
+            <Stack.Toolbar.Button
+              icon="plus"
+              accessibilityLabel={t("scheduleAdd")}
+              onPress={() => setFormTarget("create")}
+            />
+          ) : null}
+          {canManage && twoPane && selectedId !== null ? (
+            <Stack.Toolbar.Button
+              icon="pencil"
+              accessibilityLabel={t("scheduleEdit")}
+              onPress={() => setEditSignal((count) => count + 1)}
+            />
+          ) : null}
         </Stack.Toolbar>
       ) : (
         <LegacyScreenHeader
@@ -534,7 +583,7 @@ export default function ScheduleScreen() {
           topInset={legacyTopInset}
         />
       )}
-      {canManage ? (
+      {canManage && !glassAvailable ? (
         <GlassView
           colorScheme="auto"
           glassEffectStyle="regular"
@@ -559,123 +608,209 @@ export default function ScheduleScreen() {
           </Pressable>
         </GlassView>
       ) : null}
-      <ScheduleScrollGestureBoundary
-        enabled={scheduleScrollGuardEnabled}
-        gesture={scheduleScrollGesture}
-      >
-        <SectionList
-          ref={listRef}
-          sections={sections}
-          keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
-          contentInsetAdjustmentBehavior="automatic"
-          contentContainerStyle={{
-            flexGrow: 1,
-            // Exactly clears the FAB (its own offset + height + a small gap) —
-            // was previously adding `insets.bottom` a second time on top of an
-            // already-inset-aware FAB offset, which let the list scroll well
-            // past the last card into empty space.
-            paddingBottom: canManage
-              ? tabBarScrollBottomInset + FAB_BOTTOM_OFFSET + FAB_SIZE + 16
-              : tabBarScrollBottomInset + 16,
-          }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          stickySectionHeadersEnabled
-          onScrollToIndexFailed={(info) => retryScrollToActive(info)}
-          ListHeaderComponent={
-            <View style={{ gap: 8 }}>
-              <StaleDataBanner updatedAt={staleSince} />
-              {notifications.error ? (
-                <RequestFeedback
-                  error={notifications.error}
-                  message={t("scheduleReminderError")}
-                  onRetry={notifications.retry}
-                  retrying={notifications.savingKey !== null}
-                />
-              ) : null}
-            </View>
-          }
-          ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
-          ListEmptyComponent={
-            loading ? (
-              <RequestFeedback loading />
-            ) : error ? (
-              <RequestFeedback error={error} onRetry={() => void load()} />
-            ) : (
-              <EmptyState
-                icon="calendar.badge.clock"
-                title={t("scheduleEmptyTitle")}
-                description={normalizedQuery ? t("scheduleSearchEmpty") : t("scheduleEmpty")}
-              />
-            )
-          }
-          renderSectionHeader={({ section }) => (
-            <View
-              style={{
-                backgroundColor: colors.background,
-                height: SECTION_HEADER_HEIGHT,
-                justifyContent: "center",
-              }}
-            >
-              <Text
-                selectable
-                accessibilityRole="header"
+      <ScheduleSelectionContext.Provider value={twoPane ? selectionValue : null}>
+        <View style={{ flex: 1, flexDirection: "row" }}>
+          <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+            {twoPane ? (
+              // The list's own top band, in the page colour: the dates and cards stop at its
+              // bottom edge, the way they stop under the bar on a phone.
+              <View
+                pointerEvents="none"
                 style={{
-                  color: colors.secondaryLabel,
-                  fontSize: 13,
-                  fontWeight: "600",
-                  paddingHorizontal: 16,
-                  textTransform: "uppercase",
+                  backgroundColor: colors.background,
+                  height: TWO_PANE_BAND,
+                  paddingHorizontal: 19,
+                  paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
                 }}
               >
-                {section.title}
-              </Text>
-            </View>
-          )}
-          renderItem={({ item, index, section }) =>
-            item.kind === "now" ? (
-              <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <View style={{ width: TIMELINE_GUTTER_WIDTH, alignItems: "center" }}>
+                <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+                  {t("tabSchedule")}
+                </Text>
+              </View>
+            ) : null}
+            <ScheduleScrollGestureBoundary
+              enabled={scheduleScrollGuardEnabled}
+              gesture={scheduleScrollGesture}
+            >
+              <SectionList
+                ref={listRef}
+                sections={sections}
+                keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
+                contentInsetAdjustmentBehavior={twoPane ? "never" : "automatic"}
+                contentContainerStyle={{
+                  flexGrow: 1,
+                  // Exactly clears the FAB (its own offset + height + a small gap) —
+                  // was previously adding `insets.bottom` a second time on top of an
+                  // already-inset-aware FAB offset, which let the list scroll well
+                  // past the last card into empty space.
+                  paddingBottom: canManage
+                    ? tabBarScrollBottomInset + FAB_BOTTOM_OFFSET + FAB_SIZE + 16
+                    : tabBarScrollBottomInset + 16,
+                }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                stickySectionHeadersEnabled
+                onScrollToIndexFailed={(info) => retryScrollToActive(info)}
+                ListHeaderComponent={
+                  <View style={{ gap: 8 }}>
+                    <StaleDataBanner updatedAt={staleSince} />
+                    {notifications.error ? (
+                      <RequestFeedback
+                        error={notifications.error}
+                        message={t("scheduleReminderError")}
+                        onRetry={notifications.retry}
+                        retrying={notifications.savingKey !== null}
+                      />
+                    ) : null}
+                  </View>
+                }
+                ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
+                ListEmptyComponent={
+                  loading ? (
+                    <RequestFeedback loading />
+                  ) : error ? (
+                    <RequestFeedback error={error} onRetry={() => void load()} />
+                  ) : (
+                    <EmptyState
+                      icon="calendar.badge.clock"
+                      title={t("scheduleEmptyTitle")}
+                      description={normalizedQuery ? t("scheduleSearchEmpty") : t("scheduleEmpty")}
+                    />
+                  )
+                }
+                renderSectionHeader={({ section }) => (
+                  <View
+                    style={{
+                      backgroundColor: colors.background,
+                      height: SECTION_HEADER_HEIGHT,
+                      justifyContent: "center",
+                    }}
+                  >
                     <Text
-                      numberOfLines={1}
+                      selectable
+                      accessibilityRole="header"
                       style={{
-                        color: colors.accent,
+                        color: colors.secondaryLabel,
                         fontSize: 13,
-                        fontVariant: ["tabular-nums"],
-                        fontWeight: "700",
+                        fontWeight: "600",
+                        paddingHorizontal: 16,
+                        textTransform: "uppercase",
                       }}
                     >
-                      {formatTime(now, language)}
+                      {section.title}
                     </Text>
                   </View>
-                  <View
-                    style={{ backgroundColor: colors.accent, flex: 1, height: 2, marginLeft: 8 }}
-                  />
-                </View>
-              </View>
-            ) : (
-              <ScheduleSwipeRow
-                enabled={canManage}
-                editLabel={t("scheduleEdit")}
-                deleteLabel={t("scheduleDelete")}
-                onEdit={() => setFormTarget(item)}
-                onDelete={() => confirmDelete(item)}
-                scrollGesture={scheduleScrollGuardEnabled ? scheduleScrollGesture : undefined}
-              >
-                <ScheduleCard
-                  item={item}
-                  active={item.active}
-                  language={language}
-                  last={index === section.data.length - 1}
-                  reminderOn={notifications.ready ? notifications.isEntrySubscribed(item) : null}
-                  reminderBusy={notifications.savingKey === itemCategory(item.id)}
-                  onToggleReminder={() => void notifications.toggleEntry(item)}
+                )}
+                renderItem={({ item, index, section }) =>
+                  item.kind === "now" ? (
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <View style={{ width: TIMELINE_GUTTER_WIDTH, alignItems: "center" }}>
+                          <Text
+                            numberOfLines={1}
+                            style={{
+                              color: colors.accent,
+                              fontSize: 13,
+                              fontVariant: ["tabular-nums"],
+                              fontWeight: "700",
+                            }}
+                          >
+                            {formatTime(now, language)}
+                          </Text>
+                        </View>
+                        <View
+                          style={{
+                            backgroundColor: colors.accent,
+                            flex: 1,
+                            height: 2,
+                            marginLeft: 8,
+                          }}
+                        />
+                      </View>
+                    </View>
+                  ) : (
+                    <ScheduleSwipeRow
+                      enabled={canManage}
+                      editLabel={t("scheduleEdit")}
+                      deleteLabel={t("scheduleDelete")}
+                      onEdit={() => setFormTarget(item)}
+                      onDelete={() => confirmDelete(item)}
+                      scrollGesture={scheduleScrollGuardEnabled ? scheduleScrollGesture : undefined}
+                    >
+                      <ScheduleCard
+                        item={item}
+                        active={item.active}
+                        language={language}
+                        last={index === section.data.length - 1}
+                        reminderOn={
+                          notifications.ready ? notifications.isEntrySubscribed(item) : null
+                        }
+                        reminderBusy={notifications.savingKey === itemCategory(item.id)}
+                        onToggleReminder={() => void notifications.toggleEntry(item)}
+                      />
+                    </ScheduleSwipeRow>
+                  )
+                }
+              />
+            </ScheduleScrollGestureBoundary>
+          </View>
+          {twoPane ? (
+            <View
+              style={{
+                borderLeftColor: colors.separator,
+                borderLeftWidth: StyleSheet.hairlineWidth,
+                flex: 1,
+              }}
+            >
+              {selectedId !== null ? (
+                <ScheduleDetailScreen
+                  editSignal={editSignal}
+                  embedded
+                  id={String(selectedId)}
+                  onScrollOffset={setDetailOffset}
+                  topInset={TWO_PANE_BAND}
                 />
-              </ScheduleSwipeRow>
-            )
-          }
-        />
-      </ScheduleScrollGestureBoundary>
+              ) : (
+                <EmptyState icon="calendar" title={t("scheduleDetails")} />
+              )}
+              {/* The detail's own top band: the activity's name, with a backing that fades in as
+                  the content scrolls under it. */}
+              <View
+                pointerEvents="none"
+                style={{
+                  height: TWO_PANE_BAND,
+                  left: 0,
+                  paddingLeft: 20,
+                  paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
+                  paddingRight: 136,
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                }}
+              >
+                <View
+                  style={{
+                    bottom: 0,
+                    left: 0,
+                    opacity: Math.min(1, Math.max(0, detailOffset / 16)),
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  }}
+                >
+                  <SystemBlur />
+                </View>
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={{ color: colors.label, ...SCREEN_TITLE }}
+                >
+                  {selectedTitle ?? ""}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </ScheduleSelectionContext.Provider>
 
       {formTarget === "create" ? (
         <ScheduleFormModal
@@ -816,6 +951,12 @@ function StartTimeFlag({ time }: { time: string }) {
   );
 }
 
+/** Set on an expanded window: opening an item fills the detail pane instead of pushing a route. */
+const ScheduleSelectionContext = createContext<{
+  selectedId: number | null;
+  select: (id: number) => void;
+} | null>(null);
+
 function ScheduleCard({
   item,
   active,
@@ -835,6 +976,7 @@ function ScheduleCard({
 }) {
   const { t } = useLocale();
   const router = useRouter();
+  const selection = useContext(ScheduleSelectionContext);
   const truncated = isScheduleCardTruncated(item);
   const audienceBadge = scheduleAudienceOnlyBadge(item, t);
   const startsAt = new Date(item.startsAt);
@@ -915,13 +1057,17 @@ function ScheduleCard({
             .join(", ")}
           accessibilityRole="button"
           onPress={() =>
-            router.push({
-              pathname: "/schedule/[id]",
-              params: { id: String(item.id) },
-            })
+            selection
+              ? selection.select(item.id)
+              : router.push({
+                  pathname: "/schedule/[id]",
+                  params: { id: String(item.id) },
+                })
           }
           style={{
             backgroundColor: colors.surface,
+            borderColor: selection?.selectedId === item.id ? colors.accent : "transparent",
+            borderWidth: 2,
             borderCurve: "continuous",
             borderRadius: 14,
             flex: 1,

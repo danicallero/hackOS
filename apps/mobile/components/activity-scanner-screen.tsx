@@ -44,6 +44,7 @@ import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ActivityScanResult {
   badgeId: string;
@@ -119,6 +120,9 @@ export function ActivityScannerScreen() {
         : localActivity,
     [activityId, localActivity, syncState.serverSnapshot],
   );
+  const goBack = () =>
+    cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities");
+  const activityName = activity ? resolveActivityText(activity, language) : t("scannerActivity");
 
   useEffect(() => {
     if (
@@ -388,14 +392,14 @@ export function ActivityScannerScreen() {
           nfcReadSucceeded.current = false;
         }}
       />
-      <AdaptiveBackButton
-        top={insets.top}
-        colorScheme="auto"
-        tintColor={colors.label}
-        onPress={() =>
-          cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities")
-        }
-      />
+      {glassAvailable ? null : (
+        <AdaptiveBackButton
+          top={insets.top}
+          colorScheme="auto"
+          tintColor={colors.label}
+          onPress={goBack}
+        />
+      )}
       {glassAvailable ? (
         queueStatus
       ) : (
@@ -406,29 +410,51 @@ export function ActivityScannerScreen() {
           {queueStatus}
         </View>
       )}
-      <View
-        testID={UI_TEST_IDS.scanner.result}
-        style={{
-          alignSelf: "center",
-          borderRadius: 999,
-          height: 44,
-          justifyContent: "center",
-          left: 72,
-
-          paddingHorizontal: 16,
-          position: "absolute",
-          right: 140,
-          top: insets.top,
-        }}
-      >
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{ color: colors.label, fontSize: 16, fontWeight: "700", textAlign: "center" }}
+      {glassAvailable ? (
+        // Same title treatment as the Scan tab. Back shares this group: a second
+        // left toolbar would replace it.
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.Button
+            accessibilityLabel={t("back")}
+            icon="chevron.left"
+            onPress={goBack}
+          />
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              testID={UI_TEST_IDS.scanner.result}
+              style={{ color: colors.label, ...SCREEN_TITLE }}
+            >
+              {activityName}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
+      {glassAvailable ? null : (
+        <View
+          testID={UI_TEST_IDS.scanner.result}
+          style={{
+            alignSelf: "center",
+            borderRadius: 999,
+            height: 44,
+            justifyContent: "center",
+            left: 72,
+            paddingHorizontal: 16,
+            position: "absolute",
+            right: 140,
+            top: insets.top,
+          }}
         >
-          {activity ? resolveActivityText(activity, language) : t("scannerActivity")}
-        </Text>
-      </View>
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 16, fontWeight: "700", textAlign: "center" }}
+          >
+            {activityName}
+          </Text>
+        </View>
+      )}
       <View style={{ flex: 1, marginTop: insets.top + 56 }}>
         <ActivityStatistics activity={activity} stats={stats} inside={inside} />
         {error ? (

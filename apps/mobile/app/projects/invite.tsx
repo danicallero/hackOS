@@ -1,1 +1,4 @@
-export { InviteTeammatesScreen as default } from "@/components/invite-teammates-screen";
+import { withSheetFrame } from "@/components/adaptive-frame";
+import { InviteTeammatesScreen } from "@/components/invite-teammates-screen";
+
+export default withSheetFrame(InviteTeammatesScreen);

@@ -32,6 +32,7 @@ import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
@@ -185,14 +186,12 @@ export function GeneralScannerScreen() {
     [router, sync.serverSnapshot, t],
   );
 
-  const roleFilter = (
-    <ScannerRoleFilter
-      options={roleOptions}
-      groups={groups}
-      onToggle={toggleGroup}
-      onClear={clearGroups}
-    />
-  );
+  const roleFilter = useScannerRoleFilterMenu({
+    options: roleOptions,
+    groups,
+    onToggle: toggleGroup,
+    onClear: clearGroups,
+  });
   const queueStatus = (
     <ScannerQueueStatus
       queue={sync.queue}
@@ -208,10 +207,7 @@ export function GeneralScannerScreen() {
     />
   );
   const title = (
-    <Text
-      accessibilityRole="header"
-      style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
-    >
+    <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
       {t("tabScan")}
     </Text>
   );
@@ -321,7 +317,7 @@ export function GeneralScannerScreen() {
 }
 
 /** H22–H26: labelled filter and People Finder controls stay directly reachable. */
-function ScannerRoleFilter({
+function useScannerRoleFilterMenu({
   options,
   groups,
   onToggle,

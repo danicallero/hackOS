@@ -57,6 +57,7 @@ import {
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import CameraCapabilities from "@/modules/camera-capabilities";
+import FoldRegion from "@/modules/fold-region";
 import { ProfileGooeyView } from "@/modules/profile-gooey";
 import { colors } from "@/theme/colors";
 
@@ -413,17 +414,35 @@ function useProfileCameraTarget(
       return null;
     }
   }, [screenHeight, screenWidth]);
+  // iOS 27.1 reports the island where it really is (the side column on a foldable iPhone).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: window size changes when the island moves.
+  const islandFrame = useMemo(() => {
+    if (Platform.OS !== "ios") return null;
+    try {
+      const region = FoldRegion?.getOcclusionRegion?.();
+      if (!region || region.width < 24 || region.height < 24) return null;
+      const inset = 4;
+      return {
+        left: region.x + inset,
+        top: region.y + inset,
+        width: region.width - 2 * inset,
+        height: region.height - 2 * inset,
+      };
+    } catch {
+      return null;
+    }
+  }, [screenHeight, screenWidth]);
   return useMemo(
     () =>
       resolveProfileCameraTarget({
-        cameraCutoutFrame,
+        cameraCutoutFrame: cameraCutoutFrame ?? islandFrame,
         displayCutoutRects,
         height: screenHeight,
         platform: Platform.OS,
         safeAreaTop,
         screenWidth,
       }),
-    [cameraCutoutFrame, displayCutoutRects, safeAreaTop, screenHeight, screenWidth],
+    [cameraCutoutFrame, islandFrame, displayCutoutRects, safeAreaTop, screenHeight, screenWidth],
   );
 }
 

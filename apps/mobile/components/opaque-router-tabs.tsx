@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import {
   type RouterTabItem,
@@ -39,10 +40,14 @@ import {
   type OverflowTabKey,
 } from "@/lib/overflow-tabs";
 import {
+  ROUTER_TAB_BAR_VERTICAL_WIDTH,
+  routerTabBarBottomPadding,
   routerTabBarDirectTabsForWidth,
   routerTabBarMaxTabsWithoutOverflowForWidth,
+  routerTabBarVerticalBudget,
   useRouterTabBarInsets,
 } from "@/lib/router-tabs-inset";
+import { useSideRegion } from "@/lib/side-region";
 import { overflowTabs, primaryTabs, type TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
@@ -223,15 +228,22 @@ function OverflowAccountAvatar({
 export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const systemColorScheme = useColorScheme();
-  const { width } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  const { bottom: safeBottom } = useSafeAreaInsets();
+  const verticalBudget =
+    useSideRegion().edge === null
+      ? null
+      : routerTabBarVerticalBudget(height, routerTabBarBottomPadding(safeBottom));
   const fallbackColorScheme: "dark" | "light" = systemColorScheme === "dark" ? "dark" : "light";
   const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#000000";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
   const personalTabContext = { hasQueueItems };
   const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
   const overflowTabKeys = overflowTabs(capabilities, personalTabContext);
-  const directTabLimit = routerTabBarDirectTabsForWidth(width);
-  const maxTabsWithoutOverflow = routerTabBarMaxTabsWithoutOverflowForWidth(width);
+  // A vertical bar is limited by the height it has below the system indicators, not by width.
+  const directTabLimit = verticalBudget?.direct ?? routerTabBarDirectTabsForWidth(width);
+  const maxTabsWithoutOverflow =
+    verticalBudget?.withoutOverflow ?? routerTabBarMaxTabsWithoutOverflowForWidth(width);
   const allTabKeys = [...primaryTabKeys, ...overflowTabKeys];
   const showOverflow = allTabKeys.length > maxTabsWithoutOverflow;
   const directOverflowCount = Math.max(0, directTabLimit - primaryTabKeys.length);
@@ -451,7 +463,9 @@ function NativeOverflowMenu({
   overflowIds,
 }: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
-  const { tabBarHeight } = useRouterTabBarInsets();
+  const { tabBarHeight: horizontalBarHeight, vertical } = useRouterTabBarInsets();
+  // In the vertical bar the overflow circle is as wide as the bar cells.
+  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_WIDTH : horizontalBarHeight;
   const pathname = usePathname();
   const router = useRouter();
   const focusedSection = operationsSectionFromPathname(pathname);
@@ -524,7 +538,8 @@ function AndroidOverflowMenu({
   overflowIds,
 }: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
-  const { tabBarHeight } = useRouterTabBarInsets();
+  const { tabBarHeight: horizontalBarHeight, vertical } = useRouterTabBarInsets();
+  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_WIDTH : horizontalBarHeight;
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const pathname = usePathname();
   const router = useRouter();

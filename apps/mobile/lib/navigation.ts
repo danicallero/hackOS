@@ -1,4 +1,6 @@
 import type { Href, ImperativeRouter } from "expo-router";
+import { useMemo } from "react";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 
 /**
  * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
@@ -12,6 +14,23 @@ export const nativeStackScreenOptions = {
   headerBackButtonDisplayMode: "minimal",
   headerBackButtonMenuEnabled: false,
 } as const;
+
+/**
+ * `nativeStackScreenOptions` for a tab's top-level Stack. On iPhone Duo the
+ * system reserves a side column and only moves a native bar into it while
+ * the bar spans the full window, so the tab slot stays unpadded and each
+ * screen's content keeps clear of the column here instead.
+ */
+export function useTabStackScreenOptions() {
+  const { left, right } = useSideInsets();
+  return useMemo(
+    () => ({
+      ...nativeStackScreenOptions,
+      contentStyle: { paddingLeft: left, paddingRight: right },
+    }),
+    [left, right],
+  );
+}
 
 /**
  * Keep the native stack back action while removing the app-bar surface and

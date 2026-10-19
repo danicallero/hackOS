@@ -10,6 +10,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { UpgradeRequiredScreen } from "@/components/upgrade-required-screen";
@@ -30,10 +31,13 @@ import {
   shouldPresentProfileTasks,
 } from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
+import { useOrientationPolicy } from "@/lib/screen-orientation";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
+import { sideRegionForInsets } from "@/lib/side-region";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { useLocalReminders } from "@/lib/use-local-reminders";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
 
@@ -94,6 +98,7 @@ function RootLayoutSessionContents() {
   const { mode } = useApiMode();
   const initialSessionPending = useInitialSessionPending(loading);
   const upgradeRequired = useUpgradeRequired();
+  useOrientationPolicy();
 
   // The API refuses every request from this build (#999); nothing else can work.
   if (upgradeRequired) return <UpgradeRequiredScreen />;
@@ -110,15 +115,17 @@ function RootLayoutSessionContents() {
       <PersonalEventStream authenticated={authenticated} />
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <PendingCompanyTagResume authenticated={authenticated} />
-      <RootLayoutNav
-        authenticated={authenticated}
-        pending={initialSessionPending}
-        me={me}
-        loading={loading}
-        error={error}
-        offlineEntryAvailable={offlineEntryAvailable}
-        enterOffline={enterOffline}
-      />
+      <AdaptiveFrame padSides={false}>
+        <RootLayoutNav
+          authenticated={authenticated}
+          pending={initialSessionPending}
+          me={me}
+          loading={loading}
+          error={error}
+          offlineEntryAvailable={offlineEntryAvailable}
+          enterOffline={enterOffline}
+        />
+      </AdaptiveFrame>
       {mode === "development" ? <DevelopmentIndicator /> : null}
     </View>
   );
@@ -387,9 +394,12 @@ function RootLayoutNav({
   enterOffline: () => Promise<void>;
 }) {
   const colorScheme = useColorScheme();
+  const safeInsets = useSideInsets();
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
+  const sidePadding = { paddingLeft: safeInsets.left, paddingRight: safeInsets.right };
+  const noSidePadding = { paddingLeft: 0, paddingRight: 0 };
 
   // Keep one navigator in charge of session transitions. Protected screens
   // are removed from navigation history when their guard changes, so signing
@@ -437,14 +447,29 @@ function RootLayoutNav({
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={nativeStackScreenOptions}>
+      <Stack
+        screenOptions={{
+          ...nativeStackScreenOptions,
+          // Foreground content stays clear of the side the system reserves on a foldable
+          // iPhone (asymmetric insets). The tab layout and native sheets handle their own.
+          contentStyle: sidePadding,
+        }}
+      >
         <Stack.Protected guard={!authenticated}>
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack.Protected>
         <Stack.Protected guard={canEnterApp}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="projects" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="(tabs)"
+            // The tab layout pads its own content so its bar can use the side column.
+            options={{ contentStyle: noSidePadding, headerShown: false }}
+          />
+          <Stack.Screen
+            name="projects"
+            // Its own Stack pads its content, leaving the native bars the side column.
+            options={{ contentStyle: noSidePadding, headerShown: false }}
+          />
           <Stack.Screen
             name="schedule/[id]"
             options={{
@@ -467,11 +492,11 @@ function RootLayoutNav({
           />
           <Stack.Screen
             name="profile-tasks"
-            options={{ headerShown: false, presentation: "modal" }}
+            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
           />
           <Stack.Screen
             name="networking-profile"
-            options={{ headerShown: false, presentation: "modal" }}
+            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
           />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
@@ -484,6 +509,9 @@ function RootLayoutNav({
 /** A persistent, non-interactive safety cue whenever requests target development. */
 function DevelopmentIndicator() {
   const insets = useSafeAreaInsets();
+  // Outside the frame that provides the side region, so derived from the insets.
+  const sideInsets = useSideInsets();
+  const sideRegion = sideRegionForInsets(sideInsets);
   return (
     <View
       pointerEvents="none"
@@ -497,15 +525,20 @@ function DevelopmentIndicator() {
         paddingHorizontal: 9,
         paddingVertical: 4,
         position: "absolute",
-        right: 12,
-        // Keep this directly below the status indicators and above any
-        // screen-specific header actions (search, filters, overflow, etc.).
-        top: Math.max(0, insets.top - 4),
+        // Beside a side column it sits in the bottom corner away from it, clear of the
+        // column's bars; elsewhere top-right below the status indicators.
+        ...(sideRegion.edge
+          ? { bottom: Math.max(insets.bottom, 8) + 4, left: 12 }
+          : {
+              right: sideInsets.right + 12,
+              top: Math.max(0, insets.top - 4),
+            }),
         zIndex: 10,
       }}
     >
       <Text style={{ color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }}>
-        DEV
+        {/* Safe-area sides, to read what a foldable pose reports (Split View, outer display). */}
+        {`DEV ${Math.round(sideInsets.left)}|${Math.round(sideInsets.right)}`}
       </Text>
     </View>
   );

@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
@@ -836,7 +837,7 @@ function ActivityPicker({
         presentationStyle="pageSheet"
         visible={open}
       >
-        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+        <AdaptiveFrame>
           <ScrollView
             alwaysBounceVertical
             contentInsetAdjustmentBehavior="automatic"
@@ -924,7 +925,7 @@ function ActivityPicker({
             accessibilityLabel={t("close")}
             onPress={() => setOpen(false)}
           />
-        </View>
+        </AdaptiveFrame>
       </Modal>
     </>
   );
@@ -996,7 +997,7 @@ function SignalEditor({
 
   return (
     <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <AdaptiveFrame>
         <ScrollView
           alwaysBounceVertical
           contentInsetAdjustmentBehavior="automatic"
@@ -1114,7 +1115,7 @@ function SignalEditor({
           disabled={saving}
           onPress={() => void save()}
         />
-      </View>
+      </AdaptiveFrame>
     </Modal>
   );
 }
