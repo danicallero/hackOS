@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { Platform } from "react-native";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
 import { safeBack, useTabStackScreenOptions } from "@/lib/navigation";
@@ -9,6 +10,7 @@ export default function ProjectsLayout() {
   const router = useRouter();
   const { t } = useLocale();
   const stackScreenOptions = useTabStackScreenOptions();
+  const glassAvailable = isRealLiquidGlassAvailable();
   return (
     <Stack
       screenOptions={({ navigation }) => ({
@@ -17,9 +19,10 @@ export default function ProjectsLayout() {
         headerShadowVisible: false,
         // The native back item can join a vertical bar; only a cold deep link
         // (nothing to pop in this screen's own stack) needs the explicit one.
-        headerLeft: navigation.canGoBack()
-          ? undefined
-          : () => <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />,
+        headerLeft:
+          glassAvailable || navigation.getState().index > 0
+            ? undefined
+            : () => <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />,
       })}
     >
       <Stack.Screen

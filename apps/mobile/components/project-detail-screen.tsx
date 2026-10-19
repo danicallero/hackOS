@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DynamicForm } from "@/components/dynamic-form";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
@@ -438,6 +439,7 @@ export function ProjectEditor({
       );
   return (
     <>
+      <EntryBackToolbar fallback="/(tabs)/queue" />
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"

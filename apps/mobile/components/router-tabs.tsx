@@ -36,7 +36,6 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   ROUTER_TAB_BAR_VERTICAL_CELL,
   RouterTabBarInsetsProvider,
@@ -194,8 +193,6 @@ export function RouterTabs({
     );
   }
 
-  // Screens keep clear of the sides the system reserves; a vertical bar stands in that column.
-  const { left, right } = useSafeAreaInsets();
   return (
     <RouterTabBarInsetsProvider>
       <Tabs style={{ flex: 1 }} testID={testID}>

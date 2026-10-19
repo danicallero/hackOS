@@ -119,6 +119,8 @@ export function ActivityScannerScreen() {
         : localActivity,
     [activityId, localActivity, syncState.serverSnapshot],
   );
+  const goBack = () =>
+    cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities");
   const activityName = activity ? resolveActivityText(activity, language) : t("scannerActivity");
 
   useEffect(() => {
@@ -389,14 +391,14 @@ export function ActivityScannerScreen() {
           nfcReadSucceeded.current = false;
         }}
       />
-      <AdaptiveBackButton
-        top={insets.top}
-        colorScheme="auto"
-        tintColor={colors.label}
-        onPress={() =>
-          cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities")
-        }
-      />
+      {glassAvailable ? null : (
+        <AdaptiveBackButton
+          top={insets.top}
+          colorScheme="auto"
+          tintColor={colors.label}
+          onPress={goBack}
+        />
+      )}
       {glassAvailable ? (
         queueStatus
       ) : (
@@ -408,8 +410,14 @@ export function ActivityScannerScreen() {
         </View>
       )}
       {glassAvailable ? (
-        // Same title treatment as the Scan tab: a left toolbar item beside the native back.
+        // Same title treatment as the Scan tab. Back shares this group: a second
+        // left toolbar would replace it.
         <Stack.Toolbar placement="left">
+          <Stack.Toolbar.Button
+            accessibilityLabel={t("back")}
+            icon="chevron.left"
+            onPress={goBack}
+          />
           <Stack.Toolbar.View hidesSharedBackground>
             <Text
               accessibilityRole="header"

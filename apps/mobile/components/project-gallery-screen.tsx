@@ -5,6 +5,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 
 import { Platform, ScrollView, TextInput, View } from "react-native";
 import { FilterMenu, type FilterMenuProps } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -283,6 +284,7 @@ export function ProjectGalleryScreen() {
   const closed = galleryClosedNotice(error, t, language);
   return (
     <>
+      <EntryBackToolbar fallback="/(tabs)/queue" />
       {glassAvailable && challenges.length > 0 ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.View hidesSharedBackground>{filter}</Stack.Toolbar.View>

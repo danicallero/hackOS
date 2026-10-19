@@ -1,8 +1,12 @@
+import { useNavigation, useRouter } from "expo-router";
+import Stack from "expo-router/stack";
 import { Pressable } from "react-native";
 
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 /**
@@ -34,5 +38,27 @@ export function HeaderBackButton({ onPress }: { onPress: () => void }) {
         weight="semibold"
       />
     </Pressable>
+  );
+}
+
+/**
+ * Back for the first screen of a stack, when the native back item is absent.
+ * A symbol toolbar item is the form the system can move into a vertical bar on
+ * a foldable iPhone; the custom `HeaderBackButton` cannot be moved.
+ */
+export function EntryBackToolbar({ fallback }: { fallback: Parameters<typeof safeBack>[1] }) {
+  const { t } = useLocale();
+  const router = useRouter();
+  const navigation = useNavigation();
+  // `canGoBack` also counts parent navigators; the native item needs a screen below in this stack.
+  if (!isRealLiquidGlassAvailable() || (navigation.getState()?.index ?? 0) > 0) return null;
+  return (
+    <Stack.Toolbar placement="left">
+      <Stack.Toolbar.Button
+        accessibilityLabel={t("back")}
+        icon="chevron.left"
+        onPress={() => safeBack(router, fallback)}
+      />
+    </Stack.Toolbar>
   );
 }
