@@ -12,6 +12,7 @@ import { registerLiveActivitiesModule } from "./live-activities/index.js";
 import { registerLogisticsModule } from "./logistics/index.js";
 import { registerNotificationsModule } from "./notifications/index.js";
 import { registerProjectsModule } from "./projects/index.js";
+import { registerFixtureBoundaryGuard } from "./queue/fixture-boundary.js";
 import { registerQueueModule } from "./queue/index.js";
 import { registerReportsModule } from "./reports/index.js";
 import { registerSponsorsModule } from "./sponsors/index.js";
@@ -25,6 +26,8 @@ import { registerTelemetryModule } from "./telemetry/index.js";
  * conflicts between parallel workstreams.
  */
 export async function registerModules(app: FastifyInstance): Promise<void> {
+  // Registered first so it covers every module's routes (H18, H54).
+  registerFixtureBoundaryGuard(app);
   await registerApplicationsModule(app); // WS-A2 (H11-H15, H27)
   await registerChallengesModule(app); // WS-G  (H44)
   await registerDiaryModule(app); // #935 event diary (people and sponsor stands)
