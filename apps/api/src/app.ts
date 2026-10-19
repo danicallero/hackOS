@@ -68,6 +68,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   exports: "Application and operational data exports (H54, H56).",
   directory: "Opt-in public participant profiles and their shared details (#934).",
   diary: "The attendee's saved people and sponsor stands (#935).",
+  reports: "Attendee content reports and the organiser moderation inbox (H18).",
   "live-activities": "Participant and staff Live Activities / Live Updates (#966).",
   statistics: "Configurable event statistics and their access controls (H27).",
   sponsors: "Sponsor content, including the sponsor FAQ (H43–H45, H58).",
@@ -91,6 +92,8 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (routeMatchesPrefix(url, "/api/public")) return "public";
   if (routeMatchesPrefix(url, "/api/auth")) return "auth";
   if (routeMatchesPrefix(url, "/api/form-libraries")) return "form-libraries";
+  if (["/api/reports", "/api/content-reports"].some((prefix) => routeMatchesPrefix(url, prefix)))
+    return "reports";
 
   if (routeMatchesPrefix(url, "/api/me/diary")) return "diary";
   if (routeMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";

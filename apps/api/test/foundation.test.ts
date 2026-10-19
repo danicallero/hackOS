@@ -118,6 +118,9 @@ describe("foundation", () => {
       { bearerToken: [] },
     ]);
     expect(operationAt("/api/challenges", "get").tags).toEqual(["challenges"]);
+    expect(operationAt("/api/reports", "post").tags).toEqual(["reports"]);
+    expect(operationAt("/api/content-reports", "get").tags).toEqual(["reports"]);
+    expect(operationAt("/api/content-reports/{id}", "patch").tags).toEqual(["reports"]);
     expect(operationAt("/api/realtime/stream", "get").tags).toEqual(["foundation"]);
     expect(operationAt("/api/presence/lookup", "post").tags).toEqual(["logistics"]);
     expect(operationAt("/api/statistics/query", "post").tags).toEqual(["statistics"]);
