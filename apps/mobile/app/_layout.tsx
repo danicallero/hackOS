@@ -33,6 +33,7 @@ import {
 import { registerForPushNotifications } from "@/lib/push";
 import { useOrientationPolicy } from "@/lib/screen-orientation";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
+import { sideRegionForInsets } from "@/lib/side-region";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { useLocalReminders } from "@/lib/use-local-reminders";
@@ -507,6 +508,8 @@ function RootLayoutNav({
 /** A persistent, non-interactive safety cue whenever requests target development. */
 function DevelopmentIndicator() {
   const insets = useSafeAreaInsets();
+  // Outside the frame that provides the side region, so derived from the insets.
+  const sideRegion = sideRegionForInsets(insets);
   return (
     <View
       pointerEvents="none"
@@ -520,11 +523,14 @@ function DevelopmentIndicator() {
         paddingHorizontal: 9,
         paddingVertical: 4,
         position: "absolute",
-        // Clear of the side the system indicators occupy on a foldable iPhone.
-        right: insets.right + 12,
-        // Keep this directly below the status indicators and above any
-        // screen-specific header actions (search, filters, overflow, etc.).
-        top: Math.max(0, insets.top - 4),
+        // Beside a side column it sits in the bottom corner away from it, clear of the
+        // column's bars; elsewhere top-right below the status indicators.
+        ...(sideRegion.edge
+          ? { bottom: Math.max(insets.bottom, 8) + 4, left: 12 }
+          : {
+              right: insets.right + 12,
+              top: Math.max(0, insets.top - 4),
+            }),
         zIndex: 10,
       }}
     >

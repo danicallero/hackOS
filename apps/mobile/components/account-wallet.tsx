@@ -1,3 +1,4 @@
+import Stack from "expo-router/stack";
 import { useCallback, useEffect, useState } from "react";
 import { BackHandler, Modal, Platform, Pressable, View } from "react-native";
 import Animated, {
@@ -9,7 +10,7 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { GlassView } from "@/components/glass-view";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AndroidStatusBarScrim } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
 import WalletScreen from "@/components/wallet-screen";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/account-wallet-toggle";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { useSideRegion } from "@/lib/side-region";
 import { colors } from "@/theme/colors";
 
 const MORPH_MS = 220;
@@ -65,6 +67,21 @@ export function useAccountWallet() {
 /** The wallet glyph button; render it inside the Account scroll content. */
 export function AccountWalletButton({ wallet }: { wallet: AccountWalletController }) {
   const chrome = accountWalletChrome(useSafeAreaInsets().top, Platform.OS);
+  const { t } = useLocale();
+  const sideRegion = useSideRegion();
+  // Beside a side column the in-page circle cannot join the system's vertical bar;
+  // a native toolbar item can (the Diary's wallet button is the same item).
+  if (sideRegion.edge && isRealLiquidGlassAvailable()) {
+    return (
+      <Stack.Toolbar placement="left">
+        <Stack.Toolbar.Button
+          icon="wallet.pass"
+          accessibilityLabel={t("tabWallet")}
+          onPress={wallet.toggle}
+        />
+      </Stack.Toolbar>
+    );
+  }
   return (
     <WalletToggleButton
       testID="account-wallet-button"

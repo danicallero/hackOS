@@ -49,6 +49,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useSideRegion } from "@/lib/side-region";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -97,6 +98,7 @@ export function DiaryScreen() {
   // iOS 26 gets the native large-title header with its own search bar;
   // Android and earlier iOS keep the shared hand-rolled header.
   const glassAvailable = isRealLiquidGlassAvailable();
+  const sideRegion = useSideRegion();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
@@ -582,6 +584,17 @@ export function DiaryScreen() {
       }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
     >
+      {glassAvailable && sideRegion.edge ? (
+        // A vertical bar has no scroll-edge effect, so a toolbar title would sit
+        // un-backed with the list scrolling through it; here it scrolls away.
+        <Text
+          accessibilityRole="header"
+          maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+          style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+        >
+          {t("tabDiary")}
+        </Text>
+      ) : null}
       {pendingCount > 0 ? (
         <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
           {t("diaryPendingScans", { count: String(pendingCount) })}
@@ -716,24 +729,26 @@ export function DiaryScreen() {
     return (
       <>
         {list}
-        <Stack.Toolbar placement="left">
-          <Stack.Toolbar.View hidesSharedBackground>
-            <Text
-              accessibilityRole="header"
-              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-              style={{
-                // A fixed colour, not the dynamic label: iOS 26 flips a bar
-                // item's light/dark appearance with what scrolls behind it,
-                // which turned the title white over the blue scan pill.
-                color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                fontSize: 28,
-                fontWeight: "800",
-              }}
-            >
-              {t("tabDiary")}
-            </Text>
-          </Stack.Toolbar.View>
-        </Stack.Toolbar>
+        {sideRegion.edge ? null : (
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.View hidesSharedBackground>
+              <Text
+                accessibilityRole="header"
+                maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                style={{
+                  // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                  // item's light/dark appearance with what scrolls behind it,
+                  // which turned the title white over the blue scan pill.
+                  color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                  fontSize: 28,
+                  fontWeight: "800",
+                }}
+              >
+                {t("tabDiary")}
+              </Text>
+            </Stack.Toolbar.View>
+          </Stack.Toolbar>
+        )}
         {/* Native SF Symbol bar items, so the system draws the same circles as its search button. */}
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
