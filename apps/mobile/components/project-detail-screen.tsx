@@ -29,6 +29,7 @@ import {
 import { reportContent } from "@/lib/reports";
 import { useProjectDraft } from "@/lib/use-project-draft";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 /**
  * One project. As a route it owns its native header; `embedded` (the detail pane of a
@@ -106,7 +107,7 @@ export function ProjectDetailScreen({
   }
   if (!project) return <RequestFeedback loading />;
   return gallery ? (
-    <ProjectReadView project={project} onRefresh={refresh} />
+    <ProjectReadView project={project} onRefresh={refresh} titleHeader={embedded} />
   ) : (
     <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} embedded={embedded} />
   );
@@ -116,9 +117,12 @@ export function ProjectDetailScreen({
 export function ProjectReadView({
   project,
   onRefresh,
+  titleHeader = false,
 }: {
   project: NativeProject;
   onRefresh?: () => Promise<void>;
+  /** The project's name as the first row of the scroll content (the detail pane of a two-pane Gallery). */
+  titleHeader?: boolean;
 }) {
   const { t } = useLocale();
   const router = useRouter();
@@ -142,6 +146,11 @@ export function ProjectReadView({
       contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
       style={{ backgroundColor: colors.background }}
     >
+      {titleHeader ? (
+        <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+          {project.name}
+        </Text>
+      ) : null}
       {project.winners?.length ? (
         <Section>
           {project.winners.map((winner, index) => (

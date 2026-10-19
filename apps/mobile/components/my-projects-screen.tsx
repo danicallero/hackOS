@@ -22,9 +22,11 @@ import {
   settleProjectDrafts,
 } from "@/lib/projects";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useSideRegion } from "@/lib/side-region";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 const STATUS_KEY: Record<string, MessageKey> = {
   waiting: "queueStatusWaiting",
@@ -94,13 +96,16 @@ export function MyProjectsScreen() {
   );
   const glassAvailable = isRealLiquidGlassAvailable();
   const barTitle = useBarTitleOptions(t("projects"));
+  const sideRegion = useSideRegion();
   const openInvites = useCallback(() => router.push("/queue/invites"), [router]);
   const openGallery = useCallback(() => router.push("/projects/gallery"), [router]);
   const openQueue = useCallback(() => router.push("/projects/queue"), [router]);
   const openNew = useCallback(() => router.push("/queue/new"), [router]);
   useLayoutEffect(() => {
     navigation.setOptions({
-      ...barTitle,
+      // Beside a side column the title is a left toolbar item on the bar row, exactly like
+      // Contacts, so the bar blurs the same way; elsewhere the native large title stays.
+      ...(glassAvailable && sideRegion.edge ? { title: "", headerLargeTitle: false } : barTitle),
       headerShown: true,
       headerTransparent: true,
       headerBlurEffect: "systemChromeMaterial" as const,
@@ -119,7 +124,7 @@ export function MyProjectsScreen() {
             </View>
           ),
     });
-  }, [navigation, t, glassAvailable, canCreate, openNew, openQueue, barTitle]);
+  }, [navigation, t, glassAvailable, canCreate, openNew, openQueue, barTitle, sideRegion.edge]);
 
   function briefLines(project: NativeProject) {
     return queueBriefFor(queue, project.id)
@@ -137,6 +142,15 @@ export function MyProjectsScreen() {
   }
   return (
     <>
+      {glassAvailable && sideRegion.edge ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+              {t("projects")}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
       {glassAvailable ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
