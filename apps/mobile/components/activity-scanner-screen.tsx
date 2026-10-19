@@ -440,7 +440,13 @@ export function ActivityScannerScreen() {
             accessibilityRole="header"
             selectable
             testID={UI_TEST_IDS.scanner.result}
-            style={{ color: colors.label, fontSize: 28, fontWeight: "700", marginBottom: 12 }}
+            style={{
+              color: colors.label,
+              fontSize: 28,
+              fontWeight: "700",
+              marginBottom: 12,
+              paddingHorizontal: 24,
+            }}
           >
             {activityName}
           </Text>

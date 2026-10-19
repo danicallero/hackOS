@@ -3,16 +3,17 @@ import Stack from "expo-router/stack";
 import { Platform } from "react-native";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions } from "@/lib/navigation";
+import { useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 export default function ProjectsLayout() {
   const router = useRouter();
   const { t } = useLocale();
+  const stackScreenOptions = useTabStackScreenOptions();
   return (
     <Stack
       screenOptions={{
-        ...nativeStackScreenOptions,
-        contentStyle: { backgroundColor: colors.background },
+        ...stackScreenOptions,
+        contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
         headerShadowVisible: false,
         headerLeft: () => (
           <HeaderBackButton

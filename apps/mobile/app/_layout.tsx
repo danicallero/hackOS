@@ -463,7 +463,11 @@ function RootLayoutNav({
             // The tab layout pads its own content so its bar can use the side column.
             options={{ contentStyle: noSidePadding, headerShown: false }}
           />
-          <Stack.Screen name="projects" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="projects"
+            // Its own Stack pads its content, leaving the native bars the side column.
+            options={{ contentStyle: noSidePadding, headerShown: false }}
+          />
           <Stack.Screen
             name="schedule/[id]"
             options={{
