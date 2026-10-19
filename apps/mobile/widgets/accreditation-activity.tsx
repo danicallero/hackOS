@@ -1,6 +1,7 @@
 import { Gauge, HStack, Image, Link, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
+  activityBackgroundTint,
   allowsTightening,
   background,
   contentTransition,
@@ -279,7 +280,12 @@ export const AccreditationActivityLayout = (
     <VStack
       alignment="leading"
       spacing={10}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ all: 14 }),
+        // Transparent: the wallpaper shows through instead of a black card.
+        activityBackgroundTint("#00000000"),
+      ]}
     >
       <HStack spacing={8}>
         <Image systemName={symbol} color={bannerAccent ?? neutral} size={17} />

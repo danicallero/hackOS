@@ -10,7 +10,7 @@ index a8843b7..5369090 100644
 +     * Live countdown, no leading zero beside a unit: `2h 34m`, `1h 5m`, `34m`,
 +     * `9m`; `4:05` (colon, zero-padded) in the last five minutes; `48s`, `9s`
 +     * under a minute; `4m` / `<1m` in Always-On. Size defaults to 12; weight
-+     * defaults to semibold; legacy forms share this policy. (hackOS patch, #966)
++     * defaults to semibold; `short` keeps the leading unit only (`12h`, `38m`, `45s`). (hackOS patch, #966)
 +     */
 +    compactCountdown?: 'full' | 'short' | 'long';
 +    compactCountdownSize?: number;
@@ -34,7 +34,7 @@ index 7dfe0a9..6b7caa1 100644
  
    // Override default frame alignment for text views
    override var defaultFrameAlignment: Alignment { .leading }
-@@ -37,9 +41,19 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -37,9 +41,20 @@ public struct TextView: ExpoSwiftUI.View {
      self.props = props
    }
  
@@ -45,7 +45,8 @@ index 7dfe0a9..6b7caa1 100644
 +      CompactCountdown(
 +        end: end,
 +        size: props.compactCountdownSize ?? 12,
-+        bold: props.compactCountdownWeight == "bold"
++        bold: props.compactCountdownWeight == "bold",
++        short: props.compactCountdown == "short"
 +      )
        .applyModifiers(props.modifiers, appContext: props.appContext, globalEventDispatcher: props.globalEventDispatcher)
 +    } else {
@@ -55,7 +56,7 @@ index 7dfe0a9..6b7caa1 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +87,94 @@
+@@ -73,3 +87,119 @@
      return result
    }
  }
@@ -71,18 +72,25 @@ index 7dfe0a9..6b7caa1 100644
 +  let end: Date
 +  let size: Double
 +  let bold: Bool
++  let short: Bool
 +  @Environment(\.isLuminanceReduced) private var reduced
 +
 +  private func row(_ scale: Double) -> some View {
-+    CompactCountdownRow(end: end, size: size * scale, bold: bold, reduced: reduced)
++    CompactCountdownRow(end: end, size: size * scale, bold: bold, short: short, reduced: reduced)
 +  }
 +
 +  var body: some View {
-+    ViewThatFits(in: .horizontal) {
++    if short {
++      // One unit at one size: scaling it down to the island's slot made it
++      // unreadable on the vertical island of a foldable.
 +      row(1)
-+      row(0.88)
-+      row(0.76)
-+      row(0.6)
++    } else {
++      ViewThatFits(in: .horizontal) {
++        row(1)
++        row(0.88)
++        row(0.76)
++        row(0.6)
++      }
 +    }
 +  }
 +}
@@ -91,6 +99,7 @@ index 7dfe0a9..6b7caa1 100644
 +  let end: Date
 +  let size: Double
 +  let bold: Bool
++  let short: Bool
 +  let reduced: Bool
 +
 +  private var uiFont: UIFont {
@@ -124,7 +133,24 @@ index 7dfe0a9..6b7caa1 100644
 +  var body: some View {
 +    let left = max(0, end.timeIntervalSinceNow)
 +    HStack(spacing: 0) {
-+      if left >= 3600 {
++      if short {
++        // Narrowest form (the vertical island of a foldable): the leading
++        // unit only, `12h`, `38m`, `45s`. Same live fields as below.
++        if left >= 3600 {
++          field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
++          unit("h")
++        } else if left < 60 {
++          if reduced {
++            unit("<1m")
++          } else {
++            field(skip: 0, width: digitsWidth(left >= 10 ? 2 : 1))
++            unit("s")
++          }
++        } else {
++          field(skip: colon + 2 * digit, width: digitsWidth(left >= 600 ? 2 : 1))
++          unit("m")
++        }
++      } else if left >= 3600 {
 +        // `2h 34m`; minutes-of-hour under ten drop their zero: `1h 5m`.
 +        let shortMinutes = (Int(left) % 3600) / 60 < 10
 +        field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
@@ -162,7 +188,7 @@ index 2351ee8..00432b5 100644
 +   * Live countdown, no leading zero beside a unit: `2h 34m`, `1h 5m`, `34m`,
 +   * `9m`; `4:05` (colon, zero-padded) in the last five minutes; `48s`, `9s`
 +   * under a minute; `4m` / `<1m` in Always-On. Size defaults to 12; weight
-+   * defaults to semibold; legacy forms share this policy. (hackOS patch, #966)
++   * defaults to semibold; `short` keeps the leading unit only (`12h`, `38m`, `45s`). (hackOS patch, #966)
 +   */
 +  compactCountdown?: 'full' | 'short' | 'long';
 +  compactCountdownSize?: number;

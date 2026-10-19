@@ -1,5 +1,6 @@
 import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  activityBackgroundTint,
   dynamicTypeSize,
   fixedSize,
   font,
@@ -44,15 +45,17 @@ export const DeadlineActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
-    // The outer end's inset, so the content's margin to the pill's rounded
-    // end matches its top and bottom margins (HIG: concentric margins).
-    inset: { leading?: number; trailing?: number } = {},
+    // Equal on both sides so the content stays on the axis of the vertical
+    // island of a foldable instead of drifting towards one end.
+    inset: { horizontal?: number } = {},
+    // A fixed, centred box (the symbol), so it sits on the axis of the
+    // vertical island instead of hugging one end.
+    exact = false,
   ) => (
     <HStack
       spacing={0}
       modifiers={[
-        frame({ maxWidth: width, alignment }),
-        fixedSize({ horizontal: true }),
+        frame(exact ? { width, alignment: "center" } : { maxWidth: width, alignment }),
         padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
@@ -67,8 +70,8 @@ export const DeadlineActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
+    compactLeading: islandSlot(layout.compactLeading as never, 36, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 22, "center", {}, true),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // A newer, incompatible props shape degrades to the title.
@@ -251,33 +254,35 @@ export const DeadlineActivityLayout = (
     <Image systemName={symbol} color={color ?? neutral} size={size} />
   );
 
-  // Compact: the symbol a little larger than the text so both sides weigh
-  // about the same; the countdown is as wide as its value, snug to the camera.
-  const compactLeading = glyph(islandColor, 15);
-  const compactTrailing = countdown(
+  // Compact, like Luma's pre-event activity: the countdown leads, snug to the
+  // camera, one unit (`2h`, `38m`) at a fixed 12 pt and narrow enough for
+  // the vertical island of a foldable; the status symbol sits opposite.
+  const compactLeading = countdown(
     12,
     submitted ? neutral : valueIsland,
     56,
     "semibold",
-    "leading",
+    "trailing",
+    "short",
   ) ?? <Text> </Text>;
+  const compactTrailing = glyph(islandColor, 15);
 
   // #966: minimal identifies the phase without shrinking a multi-unit timer.
   const minimal = glyph(islandColor, 20);
 
-  const expandedLeading = (
-    <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>
-  );
   // Inset from the island's rounded corners so labels never clip. Submitted
   // keeps the time left, smaller and neutral.
-  const expandedTrailing = (
-    <VStack alignment="trailing" spacing={0} modifiers={[padding({ trailing: 8, top: 4 })]}>
-      {caption(labels.closesIn, "trailing")}
+  const expandedLeading = (
+    <VStack alignment="leading" spacing={0} modifiers={[padding({ leading: 8, top: 4 })]}>
+      {caption(labels.closesIn)}
       {submitted
-        ? countdown(17, neutral, 140, "semibold", "trailing", "long")
+        ? countdown(17, neutral, 140, "semibold", "leading", "long")
         : // Same hero scale as the other kinds; width fitting handles long hours.
-          (countdown(28, valueIsland, 180, "bold", "trailing", "long") ?? <Text> </Text>)}
+          (countdown(28, valueIsland, 180, "bold", "leading", "long") ?? <Text> </Text>)}
     </VStack>
+  );
+  const expandedTrailing = (
+    <VStack modifiers={[padding({ trailing: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>
   );
   const expandedBottom = (
     <VStack
@@ -300,32 +305,21 @@ export const DeadlineActivityLayout = (
     </VStack>
   );
 
-  // H19/H20 / #966: identity first, context left, primary value right.
+  // H19/H20 / #966: the primary value leads (as in Luma's pre-event activity),
+  // the status and symbol close the row, then title and project.
   const banner = (
     <VStack
       alignment="leading"
-      spacing={10}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+      spacing={8}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ all: 14 }),
+        // Transparent: the wallpaper shows through instead of a black card.
+        activityBackgroundTint("#00000000"),
+      ]}
     >
-      <HStack spacing={8}>
-        {glyph(bannerColor, 17)}
-        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
-          {labels.title}
-        </Text>
-        <Spacer />
-        {submitted ? null : status(12, false)}
-      </HStack>
-      <HStack alignment="bottom" spacing={12}>
-        <VStack
-          alignment="leading"
-          spacing={2}
-          modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
-        >
-          {caption(props.projectName)}
-          {submitted ? caption(labels.closesIn) : null}
-          {submitted ? countdown(17, null, 140, "semibold", "leading", "full") : null}
-        </VStack>
-        <VStack alignment="trailing" spacing={0} modifiers={[layoutPriority(1)]}>
+      <HStack alignment="top" spacing={8}>
+        <VStack alignment="leading" spacing={0} modifiers={[layoutPriority(1)]}>
           {submitted ? (
             <Text
               modifiers={[
@@ -338,13 +332,20 @@ export const DeadlineActivityLayout = (
               {labels.submitted}
             </Text>
           ) : (
-            <VStack alignment="trailing" spacing={0}>
-              {caption(labels.closesIn, "trailing")}
-              {countdown(28, valueBanner, 220, "bold", "trailing", "long")}
+            <VStack alignment="leading" spacing={0}>
+              {caption(labels.closesIn)}
+              {countdown(28, valueBanner, 220, "bold", "leading", "long")}
             </VStack>
           )}
         </VStack>
+        <Spacer />
+        {submitted ? null : status(12, false)}
+        {glyph(bannerColor, 17)}
       </HStack>
+      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(2)]}>{labels.title}</Text>
+      {caption(props.projectName)}
+      {submitted ? caption(labels.closesIn) : null}
+      {submitted ? countdown(17, null, 140, "semibold", "leading", "full") : null}
       {bar(valueBanner)}
     </VStack>
   );

@@ -1,6 +1,7 @@
 import { Gauge, HStack, Image, Link, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
+  activityBackgroundTint,
   allowsTightening,
   background,
   contentTransition,
@@ -55,9 +56,9 @@ export const StaffActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
-    // The outer end's inset, so the content's margin to the pill's rounded
-    // end matches its top and bottom margins (HIG: concentric margins).
-    inset: { leading?: number; trailing?: number } = {},
+    // Equal on both sides so the content stays on the axis of the vertical
+    // island of a foldable instead of drifting towards one end.
+    inset: { horizontal?: number } = {},
   ) => (
     <HStack
       spacing={0}
@@ -78,8 +79,8 @@ export const StaffActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
+    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { horizontal: 3 }),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { horizontal: 3 }),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible
@@ -338,7 +339,7 @@ export const StaffActivityLayout = (
   // Past `142/180` the ratio no longer fits the 56 pt slot (`1142/1380`
   // clipped its denominator), so four-digit counts show the scanned count alone.
   const compactTrailing = !live
-    ? countdown(12, islandAccent, 56)
+    ? countdown(12, islandAccent, 56, "short")
     : accredited || !liveText
       ? `${scanned}/${accredited ?? ""}`.length > 7
         ? counter(scanned, 15, islandAccent, "semibold")
@@ -429,7 +430,12 @@ export const StaffActivityLayout = (
     <VStack
       alignment="leading"
       spacing={10}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ all: 14 }),
+        // Transparent: the wallpaper shows through instead of a black card.
+        activityBackgroundTint("#00000000"),
+      ]}
     >
       <HStack spacing={8}>
         {glyph(bannerAccent, 17)}

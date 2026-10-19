@@ -10,6 +10,7 @@ import {
   ZStack,
 } from "@expo/ui/swift-ui";
 import {
+  activityBackgroundTint,
   allowsTightening,
   contentTransition,
   dynamicTypeSize,
@@ -574,7 +575,12 @@ export const QueueActivityLayout = (
     <VStack
       alignment="leading"
       spacing={10}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ all: 14 }),
+        // Transparent: the wallpaper shows through instead of a black card.
+        activityBackgroundTint("#00000000"),
+      ]}
     >
       {header}
       {hero}

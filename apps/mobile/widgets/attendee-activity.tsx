@@ -1,5 +1,6 @@
 import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
+  activityBackgroundTint,
   dynamicTypeSize,
   fixedSize,
   font,
@@ -45,15 +46,17 @@ export const AttendeeActivityLayout = (
     view: Parameters<typeof HStack>[0]["children"],
     width: number,
     alignment: "leading" | "center" | "trailing",
-    // The outer end's inset, so the content's margin to the pill's rounded
-    // end matches its top and bottom margins (HIG: concentric margins).
-    inset: { leading?: number; trailing?: number } = {},
+    // Equal on both sides so the content stays on the axis of the vertical
+    // island of a foldable instead of drifting towards one end.
+    inset: { horizontal?: number } = {},
+    // A fixed, centred box (the symbol), so it sits on the axis of the
+    // vertical island instead of hugging one end.
+    exact = false,
   ) => (
     <HStack
       spacing={0}
       modifiers={[
-        frame({ maxWidth: width, alignment }),
-        fixedSize({ horizontal: true }),
+        frame(exact ? { width, alignment: "center" } : { maxWidth: width, alignment }),
         padding(inset),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
@@ -68,8 +71,8 @@ export const AttendeeActivityLayout = (
     layout: L,
   ) => ({
     ...layout,
-    compactLeading: islandSlot(layout.compactLeading as never, 24, "trailing", { leading: 3 }),
-    compactTrailing: islandSlot(layout.compactTrailing as never, 56, "leading", { trailing: 7 }),
+    compactLeading: islandSlot(layout.compactLeading as never, 36, "trailing"),
+    compactTrailing: islandSlot(layout.compactTrailing as never, 22, "center", {}, true),
     minimal: islandSlot(layout.minimal as never, 36, "center"),
   });
   // APNs delivers props straight to this layout, so a newer, incompatible
@@ -151,6 +154,7 @@ export const AttendeeActivityLayout = (
     width: number | null,
     weight: "semibold" | "bold" = "semibold",
     form: "full" | "short" | "long" = "full",
+    align: "leading" | "trailing" = "trailing",
   ) =>
     (live ? validEnd : validStart) ? (
       <Text
@@ -162,7 +166,7 @@ export const AttendeeActivityLayout = (
         modifiers={[
           lineLimit(1),
           minimumScaleFactor(0.6),
-          ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
+          ...(width ? [frame({ maxWidth: width, alignment: align })] : []),
           ...colorMods(color),
         ]}
       />
@@ -178,9 +182,9 @@ export const AttendeeActivityLayout = (
   // Countdown with its caption above: "Starts in" with the seconds, or
   // "Ends in" (`1h 5m` / `34m` / `4:21`).
   const countdownStat = (size: number, color: string | null, width: number) => {
-    const value = timer(size, color, width, "bold", live ? "full" : "long");
+    const value = timer(size, color, width, "bold", live ? "full" : "long", "leading");
     return value ? (
-      <VStack alignment="trailing" spacing={0}>
+      <VStack alignment="leading" spacing={0}>
         {caption(live ? labels.endsIn : labels.startsIn)}
         {value}
       </VStack>
@@ -235,9 +239,10 @@ export const AttendeeActivityLayout = (
     </HStack>
   );
 
-  // Compact: the symbol a little larger than the text so both sides weigh
-  // about the same; the countdown is as wide as its value, snug to the camera.
-  const compactLeading = glyph(islandAccent, 15);
+  // Compact, like Luma's pre-event activity: the countdown leads, snug to the
+  // camera, one unit (`2h`, `38m`) at a fixed 12 pt and narrow enough for
+  // the vertical island of a foldable; the category symbol sits opposite.
+  const compactTrailing = glyph(islandAccent, 15);
   // The accent countdown to the start, then "Live" (one colour with the
   // symbol, so both sides read as one piece of information).
   const liveText = (size: number) =>
@@ -253,7 +258,9 @@ export const AttendeeActivityLayout = (
         {liveLabel}
       </Text>
     ) : null;
-  const compactTrailing = (live ? liveText(12) : timer(12, islandAccent, 56)) ?? <Text> </Text>;
+  const compactLeading = (live
+    ? liveText(12)
+    : timer(12, islandAccent, 56, "semibold", "short")) ?? <Text> </Text>;
 
   // #966: minimal keeps the category recognizable; live adds a status dot.
   const minimal = live ? (
@@ -265,14 +272,14 @@ export const AttendeeActivityLayout = (
     glyph(islandAccent, 20)
   );
 
-  const expandedLeading = (
-    <VStack modifiers={[padding({ leading: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
-  );
   // Inset from the island's rounded corners so labels never clip.
-  const expandedTrailing = (
-    <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
+  const expandedLeading = (
+    <VStack alignment="leading" modifiers={[padding({ leading: 8, top: 4 })]}>
       {countdownStat(28, live ? null : islandAccent, 160) ?? <Text> </Text>}
     </VStack>
+  );
+  const expandedTrailing = (
+    <VStack modifiers={[padding({ trailing: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
   );
   const expandedBottom = (
     <VStack
@@ -293,29 +300,27 @@ export const AttendeeActivityLayout = (
     </VStack>
   );
 
-  // H59 / #966: shared header, context + trailing hero, optional progress.
+  // H59 / #966: the countdown leads (as in Luma's pre-event activity), the
+  // symbol and the live badge close the row, then title, context, progress.
   const banner = (
     <VStack
       alignment="leading"
-      spacing={10}
-      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
+      spacing={8}
+      modifiers={[
+        frame({ maxWidth: 10000, alignment: "leading" }),
+        padding({ all: 14 }),
+        // Transparent: the wallpaper shows through instead of a black card.
+        activityBackgroundTint("#00000000"),
+      ]}
     >
-      <HStack spacing={8}>
-        {glyph(bannerAccent, 17)}
-        <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>{props.name}</Text>
+      <HStack alignment="top" spacing={8}>
+        {countdownStat(28, live ? null : bannerAccent, 180) ?? <Text> </Text>}
         <Spacer />
         {live ? liveBadge(12, bannerAccent ?? neutral) : null}
+        {glyph(bannerAccent, 17)}
       </HStack>
-      <HStack alignment="bottom" spacing={12}>
-        <VStack
-          alignment="leading"
-          spacing={2}
-          modifiers={[frame({ maxWidth: 10000, alignment: "leading" })]}
-        >
-          {context}
-        </VStack>
-        {countdownStat(28, live ? null : bannerAccent, 180)}
-      </HStack>
+      <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(2)]}>{props.name}</Text>
+      {context}
       {bar(bannerAccent)}
     </VStack>
   );

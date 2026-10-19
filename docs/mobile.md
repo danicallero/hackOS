@@ -1914,9 +1914,16 @@ Apple's HIG:
 | Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge · hero `#4`, line `~12 min`; called: "Go to" room + location; in room: room | name · countdown, or `42/180` + "Scanned"; no buttons |
 
+Every Lock Screen banner has a transparent background (`activityBackgroundTint`
+clear): the wallpaper shows through instead of a black card. The attendee and
+deadline compact slots keep the countdown as one unit in a 12 pt box (the
+patched `compactCountdown="short"`, no scaling) and the symbol in a fixed,
+centred box, so both sit on the axis of the vertical island of a foldable
+(checked on the iPhone Duo and iPhone 18 Pro simulators).
+
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | category symbol / countdown to the start; live: "Live" (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (white; grey once submitted, never red) | `person.badge.key` / accredited count |
+| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" / symbol (blue) | countdown (white; grey once submitted, never red) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.badge.key` / accredited count |
 | Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
 | Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
 | Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red only on the symbol and "Not submitted"; countdown and bar stay neutral. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
@@ -1994,7 +2001,9 @@ minute (including `bannerSmall`). A value beside a unit never has a leading zero
 appears only in colon notation. Always-On uses the native `isLuminanceReduced`
 environment to show minutes only (`4m`) or `<1m` below a minute; waking restores
 the colon form, with no placeholder. `Text`'s
-`compactCountdown` (the legacy form names share this precision policy;
+`compactCountdown` (`short` keeps only the leading unit, `12h`, `38m`, `45s`, and is what
+the compact island slot uses so it fits the vertical island of a foldable; the other form names share the
+precision policy;
 `patches/@expo__ui@57.0.22.patch`) draws each number from a live
 `Text(timerInterval:)`, clipped to its digits next to static `h`/`m`/`s`.
 Monospaced digits keep the fields aligned. `ViewThatFits` fits the fixed-width
@@ -2053,9 +2062,9 @@ rank change alone changes the props signature, so it re-applies the score.
 | Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
 | Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
 | Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
-| Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
-| Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
-| Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Attendee upcoming (H59) | countdown to `startsAt` in one unit (`2h`, `38m`) on the camera's leading side, category glyph opposite | "Starts in" + countdown (leading, as in Luma's pre-event activity) · category glyph / name / `hh:mm–hh:mm · location` | Starts in + countdown (blue, leading) · glyph; name; time · location |
+| Attendee live | **Now** leading, glyph opposite | "Ends in" + countdown (leading) · **Now** · glyph / name / time · location; elapsed-time track | Ends in + countdown (leading) · Now · glyph; name; time · location; elapsed-time track |
+| Deadline open (H19) | countdown to `endsAt` in one unit on the camera's leading side, status symbol opposite | "Closes in" + countdown (leading) · status · symbol / title / project; hacking-window track (none without `startsAt`) | Closes in + countdown (blue, leading) · status · symbol; title; project (amber "Not submitted", green "Submitted", none when unknown); window track |
 | Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
 | Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
