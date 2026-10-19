@@ -32,6 +32,7 @@ import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
@@ -206,10 +207,7 @@ export function GeneralScannerScreen() {
     />
   );
   const title = (
-    <Text
-      accessibilityRole="header"
-      style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
-    >
+    <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
       {t("tabScan")}
     </Text>
   );

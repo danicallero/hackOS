@@ -44,6 +44,7 @@ import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ActivityScanResult {
   badgeId: string;
@@ -423,7 +424,7 @@ export function ActivityScannerScreen() {
               accessibilityRole="header"
               numberOfLines={1}
               testID={UI_TEST_IDS.scanner.result}
-              style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+              style={{ color: colors.label, ...SCREEN_TITLE }}
             >
               {activityName}
             </Text>

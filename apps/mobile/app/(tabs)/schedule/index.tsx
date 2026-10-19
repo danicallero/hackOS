@@ -83,6 +83,7 @@ import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
 import { windowSizeClass } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
+import { SCREEN_TITLE, SCREEN_TITLE_CENTER } from "@/theme/screen-title";
 
 type NowMarker = { kind: "now"; id: string };
 type ItemRow = ScheduleItem & { kind: "item"; active: boolean };
@@ -620,14 +621,11 @@ export default function ScheduleScreen() {
                 style={{
                   backgroundColor: colors.background,
                   height: TWO_PANE_BAND,
-                  justifyContent: "center",
                   paddingHorizontal: 16,
+                  paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
                 }}
               >
-                <Text
-                  accessibilityRole="header"
-                  style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
-                >
+                <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
                   {t("tabSchedule")}
                 </Text>
               </View>
@@ -782,9 +780,9 @@ export default function ScheduleScreen() {
                 pointerEvents="none"
                 style={{
                   height: TWO_PANE_BAND,
-                  justifyContent: "center",
                   left: 0,
                   paddingLeft: 20,
+                  paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
                   paddingRight: 136,
                   position: "absolute",
                   right: 0,
@@ -807,7 +805,7 @@ export default function ScheduleScreen() {
                 <Text
                   accessibilityRole="header"
                   numberOfLines={1}
-                  style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+                  style={{ color: colors.label, ...SCREEN_TITLE }}
                 >
                   {selectedTitle ?? ""}
                 </Text>
