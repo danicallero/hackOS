@@ -206,6 +206,10 @@ export default function ScheduleScreen() {
   // keep the original hand-rolled header because it supports the shared
   // action pill and in-place search expansion.
   const glassAvailable = isRealLiquidGlassAvailable();
+  // An expanded window (an unfolded inner display in landscape) has room for the list and
+  // an item side by side; narrower windows keep the pushed detail route.
+  const { width: windowWidth } = useWindowDimensions();
+  const twoPane = windowSizeClass(windowWidth) === "expanded";
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -221,9 +225,11 @@ export default function ScheduleScreen() {
       title: t("tabSchedule"),
       headerShown: true,
       headerLargeTitle: false,
-      headerTransparent: false,
+      // Two panes: the bar must not paint a band across the detail pane, which runs under it;
+      // the list column paints its own backing below instead.
+      headerTransparent: twoPane,
       headerShadowVisible: false,
-      headerStyle: { backgroundColor: colors.background },
+      headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
       headerTitleStyle: { color: colors.label, fontSize: 28, fontWeight: "800" },
       headerSearchBarOptions: {
@@ -236,7 +242,7 @@ export default function ScheduleScreen() {
           setSearchQuery(event.nativeEvent.text),
       },
     });
-  }, [navigation, t, glassAvailable]);
+  }, [navigation, t, glassAvailable, twoPane]);
 
   useFocusEffect(
     useCallback(() => {
@@ -490,10 +496,6 @@ export default function ScheduleScreen() {
     },
   });
 
-  // An expanded window (an unfolded inner display in landscape) has room for the list and
-  // an item side by side; narrower windows keep the pushed detail route.
-  const { width: windowWidth } = useWindowDimensions();
-  const twoPane = windowSizeClass(windowWidth) === "expanded";
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editSignal, setEditSignal] = useState(0);
   // How far down the window the two-pane row starts: the native header's height.
@@ -602,6 +604,21 @@ export default function ScheduleScreen() {
           style={{ flex: 1, flexDirection: "row" }}
         >
           <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+            {twoPane ? (
+              <View
+                pointerEvents="none"
+                style={{
+                  backgroundColor: colors.background,
+                  height: paneTop,
+                  left: 0,
+                  marginTop: -paneTop,
+                  position: "absolute",
+                  right: 0,
+                  top: 0,
+                  zIndex: 5,
+                }}
+              />
+            ) : null}
             <ScheduleScrollGestureBoundary
               enabled={scheduleScrollGuardEnabled}
               gesture={scheduleScrollGesture}
