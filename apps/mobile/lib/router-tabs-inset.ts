@@ -53,7 +53,7 @@ export function routerTabBarMaxTabsWithoutOverflowForWidth(width: number): numbe
 }
 
 /** Cell side and gap of the vertical bar, and the space its column leaves to the system indicators. */
-export const ROUTER_TAB_BAR_VERTICAL_CELL = 56;
+export const ROUTER_TAB_BAR_VERTICAL_CELL = 44;
 const ROUTER_TAB_BAR_VERTICAL_GAP = 8;
 const ROUTER_TAB_BAR_VERTICAL_TOP_RESERVE = 176;
 
