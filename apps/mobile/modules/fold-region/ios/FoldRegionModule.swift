@@ -13,7 +13,13 @@ public class FoldRegionModule: Module {
     Events("onChange")
 
     Function("getDivisionRegion") { () -> [String: Any]? in
-      return Self.divisionRegion()
+      return Self.region(division: true)
+    }
+
+    /// The Dynamic Island, as the occlusion reserved region (it moves to the side column on
+    /// a foldable iPhone, so a hard-coded centred frame is wrong there).
+    Function("getOcclusionRegion") { () -> [String: Any]? in
+      return Self.region(division: false)
     }
 
     OnStartObserving {
@@ -22,7 +28,7 @@ public class FoldRegionModule: Module {
         object: nil,
         queue: .main
       ) { [weak self] _ in
-        self?.sendEvent("onChange", ["region": Self.divisionRegion() as Any])
+        self?.sendEvent("onChange", ["region": Self.region(division: true) as Any])
       }
       DispatchQueue.main.async { self.watchTraits() }
     }
@@ -40,7 +46,7 @@ public class FoldRegionModule: Module {
     window.registerForTraitChanges(
       [UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self, UITraitUserInterfaceIdiom.self]
     ) { [weak self] (_: UIWindow, _) in
-      self?.sendEvent("onChange", ["region": Self.divisionRegion() as Any])
+      self?.sendEvent("onChange", ["region": Self.region(division: true) as Any])
     }
   }
 
@@ -51,12 +57,13 @@ public class FoldRegionModule: Module {
       .first { $0.isKeyWindow }
   }
 
-  private static func divisionRegion() -> [String: Any]? {
+  private static func region(division: Bool) -> [String: Any]? {
     guard #available(iOS 27.1, *) else { return nil }
     var result: [String: Any]?
     let read = {
       guard let root = keyWindow()?.rootViewController?.view else { return }
-      guard let region = root.reservedRegions(kind: .division).first(where: { $0.isActive }) else {
+      let regions = division ? root.reservedRegions(kind: .division) : root.reservedRegions(kind: .occlusion)
+      guard let region = regions.first(where: { $0.isActive }) else {
         return
       }
       result = [

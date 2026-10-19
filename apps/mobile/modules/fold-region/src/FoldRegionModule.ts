@@ -7,6 +7,8 @@ type FoldRegionEvents = { onChange: (event: { region: DivisionRegion | null }) =
 
 declare class FoldRegionModule extends NativeModule<FoldRegionEvents> {
   getDivisionRegion(): DivisionRegion | null;
+  /** The Dynamic Island, where the system reports it. */
+  getOcclusionRegion(): DivisionRegion | null;
 }
 
 /** Missing on Android and on a development client built before the module existed. */

@@ -374,6 +374,15 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
   Insets come from `react-native-safe-area-context`, per edge.
 
+**Fold and island (iOS 27.1).** `modules/fold-region` reads `UIView.reservedRegions(kind:)`
+for the key window: `getDivisionRegion()` is the fold, `getOcclusionRegion()` the Dynamic Island,
+both in window points, `null` before iOS 27.1 or when no region is active. The profile avatar's
+collapse uses the island region as its morph target (it sits in the side column on a foldable
+iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `foldPanes()`
+(the areas above and below a horizontal fold) but no screen lays out around the fold yet: content
+still crosses it in the laptop and tabletop poses. The module is a native dependency: it needs a
+rebuilt development client, and without it every call reports "no region".
+
 Other foldables (Android, Samsung, Pixel, Xiaomi, Honor): the size classes, the 720 dp
 readable column, the orientation policy (no portrait lock on a 600 dp+ or squarish display),
 per-edge content padding and the side-region tab bar are driven by window size and safe-area
@@ -381,7 +390,7 @@ insets, not by a device model, so they apply wherever the platform reports those
 The iOS 26 toolbar items (`EntryBackToolbar`, symbol buttons) are iOS-only; Android keeps its
 own headers. Untested on a device or emulator so far (no Android foldable run yet).
 
-Not built: native `UITabBarController` tabs (the system would move them itself; the custom Liquid Glass shell is kept), a hinge or fold-posture API (React Native exposes none; it would need a
+Not built: native `UITabBarController` tabs (the system would move them itself; the custom Liquid Glass shell is kept), a Jetpack WindowManager fold feature for Android (React Native exposes none; it would need a
 native module over Jetpack WindowManager `FoldingFeature`), two-pane list/detail
 layouts for expanded windows, and dual-screen devices that span a hinge (Surface Duo).
 The iPhone Duo guidance in the third-party skills is iOS 27.1-specific and was used
