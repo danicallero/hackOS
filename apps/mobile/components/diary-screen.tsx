@@ -517,7 +517,7 @@ export function DiaryScreen() {
       // The system bar background: the list scrolls under it with iOS 26's
       // scroll-edge effect, never an opaque page-coloured block.
       headerTransparent: true,
-      headerBlurEffect: "systemChromeMaterial" as const,
+      headerBlurEffect: "systemUltraThinMaterial" as const,
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable

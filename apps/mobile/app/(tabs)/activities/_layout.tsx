@@ -16,7 +16,7 @@ export default function ActivitiesLayout() {
           // Match Schedule: the real iOS 26 header owns the search button and
           // the toolbar material; the screen supplies the fallback elsewhere.
           headerShown: glassAvailable,
-          headerBlurEffect: "systemChromeMaterial",
+          headerBlurEffect: "systemUltraThinMaterial",
           headerTransparent: true,
           title: t("tabActivities"),
         }}

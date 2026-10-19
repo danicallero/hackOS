@@ -194,7 +194,7 @@ export function ActivitiesScreen() {
       headerLargeTitle: false,
       // The system's own header blur (the bar is transparent, content scrolls under it).
       headerTransparent: true,
-      headerBlurEffect: "systemChromeMaterial" as const,
+      headerBlurEffect: "systemUltraThinMaterial" as const,
       headerShadowVisible: false,
       headerTitleAlign: "left",
       headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },

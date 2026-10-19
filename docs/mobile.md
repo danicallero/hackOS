@@ -375,7 +375,7 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   Insets come from `react-native-safe-area-context`, per edge.
 
 **Bar blur.** Activities, My Projects and Contacts use the native header with `headerTransparent` and
-`headerBlurEffect: "systemChromeMaterial"`, so content scrolling under the bar is blurred by the system.
+`headerBlurEffect: "systemUltraThinMaterial"`, so content scrolling under the bar is blurred by the system.
 The two-pane Schedule and Gallery cannot (one bar spans both columns): their per-column title bands
 use `components/system-blur.tsx` (`expo-blur`, a native dependency) with the same material.
 

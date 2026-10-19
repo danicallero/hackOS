@@ -108,7 +108,7 @@ export function MyProjectsScreen() {
       ...(glassAvailable && sideRegion.edge ? { title: "", headerLargeTitle: false } : barTitle),
       headerShown: true,
       headerTransparent: true,
-      headerBlurEffect: "systemChromeMaterial" as const,
+      headerBlurEffect: "systemUltraThinMaterial" as const,
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       // iOS 26 gets native glass toolbar circles below; elsewhere the same

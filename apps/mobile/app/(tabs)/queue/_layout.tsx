@@ -27,7 +27,7 @@ export default function QueueLayout() {
         // Set here, not only from the screen: a transparent bar chosen after the first layout
         // does not move the content under it, which then stops at a hard edge instead of blurring.
         options={{
-          headerBlurEffect: "systemChromeMaterial",
+          headerBlurEffect: "systemUltraThinMaterial",
           headerShadowVisible: false,
           headerTransparent: true,
         }}
