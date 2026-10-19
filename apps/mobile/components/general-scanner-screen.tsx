@@ -9,7 +9,6 @@ import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
-import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -192,7 +191,6 @@ export function GeneralScannerScreen() {
     onToggle: toggleGroup,
     onClear: clearGroups,
   });
-  const filterInColumn = useFilterInToolbarColumn();
   const queueStatus = (
     <ScannerQueueStatus
       queue={sync.queue}
@@ -204,7 +202,7 @@ export function GeneralScannerScreen() {
       clockSkewMs={sync.clockSkewMs}
       fillWidth={false}
       nativeToolbar={glassAvailable}
-      toolbarAccessory={glassAvailable && !filterInColumn ? roleFilter : undefined}
+      toolbarAccessory={glassAvailable ? roleFilter : undefined}
     />
   );
   const title = (
@@ -225,9 +223,6 @@ export function GeneralScannerScreen() {
             <Stack.Toolbar.View hidesSharedBackground>{title}</Stack.Toolbar.View>
           </Stack.Toolbar>
           {queueStatus}
-          {filterInColumn ? (
-            <Stack.Toolbar placement="right">{toolbarFilter(roleFilter, true)}</Stack.Toolbar>
-          ) : null}
         </>
       ) : (
         <View
