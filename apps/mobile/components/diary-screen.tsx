@@ -49,6 +49,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useSideRegion } from "@/lib/side-region";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -97,6 +98,7 @@ export function DiaryScreen() {
   // iOS 26 gets the native large-title header with its own search bar;
   // Android and earlier iOS keep the shared hand-rolled header.
   const glassAvailable = isRealLiquidGlassAvailable();
+  const sideRegion = useSideRegion();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
@@ -516,8 +518,9 @@ export function DiaryScreen() {
       headerLargeTitle: false,
       // The system bar background: the list scrolls under it with iOS 26's
       // scroll-edge effect, never an opaque page-coloured block.
-      headerTransparent: false,
-      headerStyle: { backgroundColor: colors.background },
+      // Beside a side column the bar is just the page colour; elsewhere the system bar.
+      headerTransparent: !sideRegion.edge,
+      ...(sideRegion.edge ? { headerStyle: { backgroundColor: colors.background } } : {}),
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable
@@ -535,7 +538,7 @@ export function DiaryScreen() {
           }
         : undefined,
     });
-  }, [glassAvailable, navigation, searchable, t]);
+  }, [glassAvailable, navigation, searchable, t, sideRegion.edge]);
 
   const noteInitial =
     noteTarget?.kind === "person"
