@@ -661,8 +661,11 @@ because they have no progress/action footer.
   ten minutes (`9m`), five minutes, one minute and ten seconds (`9s`). A flip
   changes the state hash and sends one routine update, exempt from the
   30 s counter throttle. The worker schedules a tick at the next boundary
-  (`nextCountdownBoundary`, with the phase boundaries), so the update lands
-  within a second instead of on the next 20 s repetition.
+  (`nextCountdownBoundary`, with the phase boundaries and the instant a
+  staff, attendee or deadline activity ends), so the update lands within a
+  second instead of on the next 20 s repetition and a finished countdown is
+  removed at 0:00 (`end` with an immediate `dismissal-date`; the iOS app also
+  dismisses a finished activity at once).
 - **Few at once.** A device shows at most `maxConcurrent` (default 2), the
   most important leading the Dynamic Island.
 
