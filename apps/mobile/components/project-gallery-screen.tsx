@@ -18,6 +18,7 @@ import { ActionButton, EmptyState, Section, Separator } from "@/components/nativ
 import { ProjectDetailScreen } from "@/components/project-detail-screen";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { SystemBlur } from "@/components/system-blur";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
@@ -327,12 +328,12 @@ export function ProjectGalleryScreen() {
             <View
               pointerEvents="none"
               style={{
-                backgroundColor: colors.background,
                 height: TWO_PANE_BAND,
                 paddingHorizontal: 19,
                 paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
               }}
             >
+              <SystemBlur />
               <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
                 {t("gallery")}
               </Text>
@@ -414,7 +415,6 @@ export function ProjectGalleryScreen() {
             <View
               pointerEvents="none"
               style={{
-                backgroundColor: colors.background,
                 height: TWO_PANE_BAND,
                 left: 0,
                 paddingLeft: 20,
@@ -425,6 +425,7 @@ export function ProjectGalleryScreen() {
                 top: 0,
               }}
             >
+              <SystemBlur />
               <Text
                 accessibilityRole="header"
                 numberOfLines={1}

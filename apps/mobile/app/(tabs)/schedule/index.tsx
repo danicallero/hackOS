@@ -51,6 +51,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { SystemBlur } from "@/components/system-blur";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -788,9 +789,6 @@ export default function ScheduleScreen() {
               >
                 <View
                   style={{
-                    backgroundColor: colors.background,
-                    borderBottomColor: colors.separator,
-                    borderBottomWidth: StyleSheet.hairlineWidth,
                     bottom: 0,
                     left: 0,
                     opacity: Math.min(1, Math.max(0, detailOffset / 16)),
@@ -798,7 +796,9 @@ export default function ScheduleScreen() {
                     right: 0,
                     top: 0,
                   }}
-                />
+                >
+                  <SystemBlur />
+                </View>
                 <Text
                   accessibilityRole="header"
                   numberOfLines={1}

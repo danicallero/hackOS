@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 
 /** Floor for the band: the bar row of a window whose top inset is small (the Duo reports about 0). */
-const MIN_BAND = 76;
+const MIN_BAND = 80;
 
 /**
  * A blurred band under a transparent header, so content scrolling beneath it fades out instead of
