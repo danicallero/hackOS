@@ -25,22 +25,43 @@ export function toolbarFilter(
   if (!inColumn) {
     return <Stack.Toolbar.View hidesSharedBackground>{menu}</Stack.Toolbar.View>;
   }
+  // Sections become inline submenus with their title, as the in-page filter's headers.
+  const sections = items.reduce<Array<{ title: string | undefined; rows: typeof items }>>(
+    (groups, item) => {
+      const group = groups.find((entry) => entry.title === item.section);
+      if (group) group.rows.push(item);
+      else groups.push({ title: item.section, rows: [item] });
+      return groups;
+    },
+    [],
+  );
+  const actions = (rows: typeof items) =>
+    rows.map((item) => (
+      <Stack.Toolbar.MenuAction
+        key={item.id}
+        isOn={item.selected}
+        // Multi-select: the menu stays open while choices are toggled.
+        unstable_keepPresented
+        onPress={() => onSelect(item.id)}
+      >
+        {item.label}
+      </Stack.Toolbar.MenuAction>
+    ));
   return (
     <Stack.Toolbar.Menu
       icon="line.3.horizontal.decrease"
       accessibilityLabel={accessibilityLabel}
       tintColor={active ? colors.accent : undefined}
     >
-      {items.map((item) => (
-        <Stack.Toolbar.MenuAction
-          key={item.id}
-          isOn={item.selected}
-          unstable_keepPresented
-          onPress={() => onSelect(item.id)}
-        >
-          {item.label}
-        </Stack.Toolbar.MenuAction>
-      ))}
+      {sections.map((section) =>
+        section.title ? (
+          <Stack.Toolbar.Menu key={section.title} inline title={section.title}>
+            {actions(section.rows)}
+          </Stack.Toolbar.Menu>
+        ) : (
+          actions(section.rows)
+        ),
+      )}
     </Stack.Toolbar.Menu>
   );
 }

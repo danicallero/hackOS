@@ -46,6 +46,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -200,6 +201,7 @@ export default function ScheduleScreen() {
   // keep the original hand-rolled header because it supports the shared
   // action pill and in-place search expansion.
   const glassAvailable = isRealLiquidGlassAvailable();
+  const filterInColumn = useFilterInToolbarColumn();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -495,7 +497,7 @@ export default function ScheduleScreen() {
               </Stack.Toolbar.Badge>
             ) : null}
           </Stack.Toolbar.Button>
-          {<Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>}
+          {toolbarFilter(scheduleFilter, filterInColumn)}
           {canManage ? (
             <Stack.Toolbar.Button
               icon="plus"
