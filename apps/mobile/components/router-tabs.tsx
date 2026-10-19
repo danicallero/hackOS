@@ -482,16 +482,20 @@ function VerticalTabBar({
   theme: RouterTabsTheme;
 }) {
   const cell = ROUTER_TAB_BAR_VERTICAL_CELL;
-  const barWidth = Math.min(cell + 8, size - 12);
+  // The system's own column (its back, bell and add controls) is 44 pt wide, 20 pt in from the
+  // display's edge; the bar uses the same width and the same line so they read as one column.
+  const barWidth = cell;
+  const columnInset = 20;
   return (
     <View
       pointerEvents="box-none"
       style={{
-        alignItems: "center",
+        alignItems: edge === "right" ? "flex-end" : "flex-start",
         bottom: 0,
         gap: 8,
         justifyContent: "flex-end",
         paddingBottom: bottomPadding,
+        ...(edge === "right" ? { paddingRight: columnInset } : { paddingLeft: columnInset }),
         position: "absolute",
         top: 0,
         width: size,
@@ -510,7 +514,7 @@ function VerticalTabBar({
           borderRadius: barWidth / 2,
           flexDirection: "column",
           gap: 4,
-          paddingVertical: 4,
+          paddingVertical: 2,
           width: barWidth,
         }}
         testID={`${testID}-vertical`}
