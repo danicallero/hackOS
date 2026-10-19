@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
+import { BarBlur } from "@/components/bar-blur";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import {
   ConnectionCelebration,
@@ -752,6 +753,7 @@ export function DiaryScreen() {
             />
           ) : null}
         </Stack.Toolbar>
+        <BarBlur />
         {overlays}
       </>
     );

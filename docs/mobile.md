@@ -374,6 +374,10 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
   Insets come from `react-native-safe-area-context`, per edge.
 
+**Bar blur.** `components/bar-blur.tsx` (`expo-blur`, a native dependency) draws a blurred band under the
+transparent top bar of Contacts and Scanner when a side column holds the bars: a vertical bar has no
+scroll-edge effect of its own. Elsewhere the system draws it, so it renders nothing.
+
 **Fold and island (iOS 27.1).** `modules/fold-region` reads `UIView.reservedRegions(kind:)`
 for the key window: `getDivisionRegion()` is the fold, `getOcclusionRegion()` the Dynamic Island,
 both in window points, `null` before iOS 27.1 or when no region is active; `getVerticalBarEdge()` is
