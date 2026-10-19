@@ -1,6 +1,5 @@
 import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  activityBackgroundTint,
   dynamicTypeSize,
   fixedSize,
   font,
@@ -311,12 +310,7 @@ export const DeadlineActivityLayout = (
     <VStack
       alignment="leading"
       spacing={8}
-      modifiers={[
-        frame({ maxWidth: 10000, alignment: "leading" }),
-        padding({ all: 14 }),
-        // Transparent: the wallpaper shows through instead of a black card.
-        activityBackgroundTint("#00000000"),
-      ]}
+      modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
     >
       <HStack alignment="top" spacing={8}>
         <VStack alignment="leading" spacing={0} modifiers={[layoutPriority(1)]}>

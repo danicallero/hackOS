@@ -1914,8 +1914,8 @@ Apple's HIG:
 | Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge · hero `#4`, line `~12 min`; called: "Go to" room + location; in room: room | name · countdown, or `42/180` + "Scanned"; no buttons |
 
-Every Lock Screen banner has a transparent background (`activityBackgroundTint`
-clear): the wallpaper shows through instead of a black card. The attendee and
+Lock Screen banners keep the system's black card (design decision: it makes
+the activity stand out; a transparent tint was tried and dropped). The attendee and
 deadline compact slots keep the countdown as one unit in a 12 pt box (the
 patched `compactCountdown="short"`, no scaling) and the symbol in a fixed,
 centred box, so both sit on the axis of the vertical island of a foldable
