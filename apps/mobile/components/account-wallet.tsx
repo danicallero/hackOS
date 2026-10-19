@@ -15,6 +15,7 @@ import { AndroidStatusBarScrim } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
 import WalletScreen from "@/components/wallet-screen";
 import {
+  ACCOUNT_WALLET_BUTTON_GAP,
   ACCOUNT_WALLET_BUTTON_SIZE,
   accountWalletChrome,
   walletToggleIconFrames,
@@ -157,7 +158,11 @@ function WalletOverlayContent({
   const toolbarCloses = Boolean(useSideRegion().edge) && isRealLiquidGlassAvailable();
   return (
     <>
-      <WalletScreen contentTopInset={chrome.walletContentTop} initialPurpose={initialPurpose} />
+      <WalletScreen
+        // No button row to clear when the toolbar item is the close control.
+        contentTopInset={toolbarCloses ? ACCOUNT_WALLET_BUTTON_GAP : chrome.walletContentTop}
+        initialPurpose={initialPurpose}
+      />
       <AndroidStatusBarScrim />
       {toolbarCloses ? null : (
         <WalletToggleButton
