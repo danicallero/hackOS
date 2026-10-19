@@ -46,6 +46,7 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -497,7 +498,7 @@ export default function ScheduleScreen() {
               </Stack.Toolbar.Badge>
             ) : null}
           </Stack.Toolbar.Button>
-          <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
+          <ToolbarFilterSlot>{scheduleFilter}</ToolbarFilterSlot>
           {canManage ? (
             <Stack.Toolbar.Button
               icon="plus"

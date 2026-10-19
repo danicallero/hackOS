@@ -10,6 +10,7 @@ import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
 import {
   activityKinds,
   closestActivity,
@@ -270,7 +271,7 @@ export function ActivitiesScreen() {
             </Stack.Toolbar.View>
           </Stack.Toolbar>
           <Stack.Toolbar placement="right">
-            <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
+            <ToolbarFilterSlot>{filterMenu}</ToolbarFilterSlot>
           </Stack.Toolbar>
         </>
       ) : (

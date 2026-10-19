@@ -21,6 +21,7 @@ import {
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { ToolbarFilterSlot } from "@/components/toolbar-filter-slot";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { safeBack } from "@/lib/navigation";
@@ -355,7 +356,7 @@ export function PeopleDirectoryScreen() {
         {list}
         <EntryBackToolbar fallback="/(tabs)/others/account" />
         <Stack.Toolbar placement="right">
-          <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
+          <ToolbarFilterSlot>{filterMenu}</ToolbarFilterSlot>
         </Stack.Toolbar>
       </>
     );
