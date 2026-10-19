@@ -535,7 +535,8 @@ function DevelopmentIndicator() {
       }}
     >
       <Text style={{ color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }}>
-        DEV
+        {/* Safe-area sides, to read what a foldable pose reports (Split View, outer display). */}
+        {`DEV ${Math.round(insets.left)}|${Math.round(insets.right)}`}
       </Text>
     </View>
   );

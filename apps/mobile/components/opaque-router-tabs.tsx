@@ -503,10 +503,10 @@ function NativeOverflowMenu({
         accessibilityState={{ selected: activeOverflowId !== null }}
         style={{
           alignItems: "center",
-          alignSelf: "stretch",
           borderRadius: tabBarHeight / 2,
-          flex: 1,
+          height: tabBarHeight,
           justifyContent: "center",
+          width: tabBarHeight,
         }}
       >
         <OverflowTriggerIcon
