@@ -3,7 +3,7 @@ import Stack from "expo-router/stack";
 import { Platform } from "react-native";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
-import { useTabStackScreenOptions } from "@/lib/navigation";
+import { safeBack, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 export default function ProjectsLayout() {
   const router = useRouter();
@@ -11,16 +11,16 @@ export default function ProjectsLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   return (
     <Stack
-      screenOptions={{
+      screenOptions={({ navigation }) => ({
         ...stackScreenOptions,
         contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
         headerShadowVisible: false,
         // The native back item can join a vertical bar; only a cold deep link
-        // (nothing to pop) needs the explicit one.
-        headerLeft: router.canGoBack()
+        // (nothing to pop in this screen's own stack) needs the explicit one.
+        headerLeft: navigation.canGoBack()
           ? undefined
-          : () => <HeaderBackButton onPress={() => router.replace("/(tabs)/queue")} />,
-      }}
+          : () => <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />,
+      })}
     >
       <Stack.Screen
         name="[id]"

@@ -41,7 +41,6 @@ import {
 } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
-import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -66,7 +65,6 @@ export function ActivityScannerScreen() {
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
-  const sideRegion = useSideRegion();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -409,7 +407,22 @@ export function ActivityScannerScreen() {
           {queueStatus}
         </View>
       )}
-      {sideRegion.edge ? null : (
+      {glassAvailable ? (
+        // Same title treatment as the Scan tab: a left toolbar item beside the native back.
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              testID={UI_TEST_IDS.scanner.result}
+              style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+            >
+              {activityName}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
+      {glassAvailable ? null : (
         <View
           testID={UI_TEST_IDS.scanner.result}
           style={{
@@ -433,24 +446,7 @@ export function ActivityScannerScreen() {
           </Text>
         </View>
       )}
-      <View style={{ flex: 1, marginTop: insets.top + (sideRegion.edge ? 44 : 56) }}>
-        {sideRegion.edge ? (
-          // The side column carries back, so the name is a heading in the content, not an overlay.
-          <Text
-            accessibilityRole="header"
-            selectable
-            testID={UI_TEST_IDS.scanner.result}
-            style={{
-              color: colors.label,
-              fontSize: 22,
-              fontWeight: "700",
-              marginBottom: 4,
-              paddingHorizontal: 24,
-            }}
-          >
-            {activityName}
-          </Text>
-        ) : null}
+      <View style={{ flex: 1, marginTop: insets.top + (glassAvailable ? 44 : 56) }}>
         <ActivityStatistics activity={activity} stats={stats} inside={inside} />
         {error ? (
           <GlassView
