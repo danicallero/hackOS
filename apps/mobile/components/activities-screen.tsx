@@ -23,6 +23,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
+import { useSearchInToolbar } from "@/lib/side-region";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -33,6 +34,7 @@ import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 const MARKER_TICK_MS = 60_000;
 
 export function ActivitiesScreen() {
+  const searchInToolbar = useSearchInToolbar();
   const colorScheme = useColorScheme();
   const router = useRouter();
   const navigation = useNavigation();
@@ -177,7 +179,7 @@ export function ActivitiesScreen() {
           placeholder: t("scannerActivitiesSearchPlaceholder"),
           autoCapitalize: "none",
           hideWhenScrolling: true,
-          allowToolbarIntegration: false,
+          allowToolbarIntegration: searchInToolbar,
           placement: "integratedButton",
           onChangeText: (event: { nativeEvent: { text: string } }) =>
             setQuery(event.nativeEvent.text),
@@ -202,13 +204,13 @@ export function ActivitiesScreen() {
         placeholder: t("scannerActivitiesSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: false,
+        allowToolbarIntegration: searchInToolbar,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [glassAvailable, filterMenu, navigation, t]);
+  }, [glassAvailable, filterMenu, navigation, t, searchInToolbar]);
 
   // Forces the FlatList back to the top on focus so the native large-title
   // header re-syncs its collapsed/expanded state with the actual scroll

@@ -49,7 +49,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { useSideRegion } from "@/lib/side-region";
+import { useSearchInToolbar, useSideRegion } from "@/lib/side-region";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -90,6 +90,7 @@ const JSON_HEADERS = () => ({
  * device, so a profile hidden later disappears here.
  */
 export function DiaryScreen() {
+  const searchInToolbar = useSearchInToolbar();
   const colorScheme = useColorScheme();
   const { t } = useLocale();
   const router = useRouter();
@@ -528,7 +529,7 @@ export function DiaryScreen() {
             placeholder: t("diarySearchPlaceholder"),
             autoCapitalize: "none",
             hideWhenScrolling: true,
-            allowToolbarIntegration: false,
+            allowToolbarIntegration: searchInToolbar,
             placement: "integratedButton",
             onChangeText: (event: { nativeEvent: { text: string } }) =>
               setQuery(event.nativeEvent.text),
@@ -538,7 +539,7 @@ export function DiaryScreen() {
           }
         : undefined,
     });
-  }, [glassAvailable, navigation, searchable, sideRegion.edge, t]);
+  }, [glassAvailable, navigation, searchable, sideRegion.edge, t, searchInToolbar]);
 
   const noteInitial =
     noteTarget?.kind === "person"

@@ -7,7 +7,6 @@ import {
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-
 import { HeaderBackButton } from "@/components/header-back-button";
 import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -16,6 +15,7 @@ import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
+import { useSearchInToolbar } from "@/lib/side-region";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 
@@ -43,6 +43,7 @@ function dayHeading(iso: string): string {
 }
 
 export function ScanLogScreen() {
+  const searchInToolbar = useSearchInToolbar();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const navigation = useNavigation();
   const pathname = usePathname();
@@ -85,14 +86,14 @@ export function ScanLogScreen() {
         placeholder: t("scanLogSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: false,
+        allowToolbarIntegration: searchInToolbar,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setQuery(event.nativeEvent.text),
         onCancelButtonPress: () => setQuery(""),
       },
     });
-  }, [coldLink, fallbackRoute, navigation, router, t]);
+  }, [coldLink, fallbackRoute, navigation, router, t, searchInToolbar]);
 
   const load = useCallback(async (offset: number) => {
     const page = await fetchScanLog(PAGE_SIZE, offset);

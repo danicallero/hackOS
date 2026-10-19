@@ -1,4 +1,4 @@
-import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
+import { SSE_TOPICS } from "@hackos/shared/events";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -20,6 +20,7 @@ import {
   mergeProjects,
   type NativeProject,
 } from "@/lib/projects";
+import { useSearchInToolbar } from "@/lib/side-region";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors } from "@/theme/colors";
 
@@ -93,6 +94,7 @@ export function clearGallerySnapshots() {
 
 /** H18: audience and publication policy remain entirely server-owned; no persistent gallery cache. */
 export function ProjectGalleryScreen() {
+  const searchInToolbar = useSearchInToolbar();
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const router = useRouter();
@@ -155,7 +157,7 @@ export function ProjectGalleryScreen() {
               placeholder: t("projectSearch"),
               autoCapitalize: "none",
               hideWhenScrolling: false,
-              allowToolbarIntegration: false,
+              allowToolbarIntegration: searchInToolbar,
               placement: "integratedButton",
               onChangeText: (event: { nativeEvent: { text: string } }) =>
                 setSearch(event.nativeEvent.text),

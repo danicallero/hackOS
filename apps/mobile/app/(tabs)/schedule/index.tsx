@@ -70,6 +70,7 @@ import {
   updateScheduleItem,
   upsertScheduleItem,
 } from "@/lib/schedule";
+import { useSearchInToolbar } from "@/lib/side-region";
 import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -145,6 +146,7 @@ function scheduleItemMatchesQuery(item: ScheduleItem, query: string): boolean {
 
 /** Participant schedule backed by the same public read model used on web. */
 export default function ScheduleScreen() {
+  const searchInToolbar = useSearchInToolbar();
   useColorScheme();
   const { t, language } = useLocale();
   const { me } = useMeContext();
@@ -226,13 +228,13 @@ export default function ScheduleScreen() {
         placeholder: t("scheduleSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: false,
+        allowToolbarIntegration: searchInToolbar,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setSearchQuery(event.nativeEvent.text),
       },
     });
-  }, [navigation, t, glassAvailable]);
+  }, [navigation, t, glassAvailable, searchInToolbar]);
 
   useFocusEffect(
     useCallback(() => {
