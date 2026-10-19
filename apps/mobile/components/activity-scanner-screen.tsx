@@ -121,6 +121,7 @@ export function ActivityScannerScreen() {
         : localActivity,
     [activityId, localActivity, syncState.serverSnapshot],
   );
+  const activityName = activity ? resolveActivityText(activity, language) : t("scannerActivity");
 
   useEffect(() => {
     if (
@@ -408,36 +409,42 @@ export function ActivityScannerScreen() {
           {queueStatus}
         </View>
       )}
-      <View
-        testID={UI_TEST_IDS.scanner.result}
-        style={{
-          alignSelf: "center",
-          borderRadius: 999,
-          height: 44,
-          justifyContent: "center",
-          // A vertical bar carries back in the side column, so the name starts at the edge.
-          left: sideRegion.edge ? 16 : 72,
-
-          paddingHorizontal: 16,
-          position: "absolute",
-          right: 140,
-          top: insets.top,
-        }}
-      >
-        <Text
-          selectable
-          numberOfLines={1}
+      {sideRegion.edge ? null : (
+        <View
+          testID={UI_TEST_IDS.scanner.result}
           style={{
-            color: colors.label,
-            fontSize: sideRegion.edge ? 20 : 16,
-            fontWeight: "700",
-            textAlign: sideRegion.edge ? "left" : "center",
+            alignSelf: "center",
+            borderRadius: 999,
+            height: 44,
+            justifyContent: "center",
+            left: 72,
+            paddingHorizontal: 16,
+            position: "absolute",
+            right: 140,
+            top: insets.top,
           }}
         >
-          {activity ? resolveActivityText(activity, language) : t("scannerActivity")}
-        </Text>
-      </View>
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ color: colors.label, fontSize: 16, fontWeight: "700", textAlign: "center" }}
+          >
+            {activityName}
+          </Text>
+        </View>
+      )}
       <View style={{ flex: 1, marginTop: insets.top + 56 }}>
+        {sideRegion.edge ? (
+          // The side column carries back, so the name is a heading in the content, not an overlay.
+          <Text
+            accessibilityRole="header"
+            selectable
+            testID={UI_TEST_IDS.scanner.result}
+            style={{ color: colors.label, fontSize: 28, fontWeight: "700", marginBottom: 12 }}
+          >
+            {activityName}
+          </Text>
+        ) : null}
         <ActivityStatistics activity={activity} stats={stats} inside={inside} />
         {error ? (
           <GlassView
