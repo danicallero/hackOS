@@ -228,6 +228,17 @@ export default function ScheduleScreen() {
       // Two panes: the bar must not paint a band across the detail pane, which runs under it;
       // the list column paints its own backing below instead.
       headerTransparent: twoPane,
+      // No scroll-edge blur: it would fade the detail's content where it passes under the bar.
+      ...(twoPane
+        ? {
+            scrollEdgeEffects: {
+              bottom: "automatic" as const,
+              left: "automatic" as const,
+              right: "automatic" as const,
+              top: "hidden" as const,
+            },
+          }
+        : {}),
       headerShadowVisible: false,
       headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
