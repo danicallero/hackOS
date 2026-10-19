@@ -2,11 +2,19 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Platform, ScrollView, TextInput, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { FilterMenu, type FilterMenuProps } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import { ProjectDetailScreen } from "@/components/project-detail-screen";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -20,6 +28,7 @@ import {
   type NativeProject,
 } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
+import { windowSizeClass } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
@@ -277,10 +286,16 @@ export function ProjectGalleryScreen() {
       };
     }, [load, snapshotKey, streamDown]),
   );
+  // An expanded window shows the project beside the list instead of pushing a route.
+  const { width: windowWidth } = useWindowDimensions();
+  const twoPane = windowSizeClass(windowWidth) === "expanded";
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const openProject = useCallback(
     (id: number) =>
-      router.push({ pathname: "/projects/[id]", params: { id: String(id), gallery: "1" } }),
-    [router],
+      twoPane
+        ? setSelectedId(id)
+        : router.push({ pathname: "/projects/[id]", params: { id: String(id), gallery: "1" } }),
+    [router, twoPane],
   );
   const closed = galleryClosedNotice(error, t, language);
   return (
@@ -291,62 +306,81 @@ export function ProjectGalleryScreen() {
           <Stack.Toolbar.View hidesSharedBackground>{filter}</Stack.Toolbar.View>
         </Stack.Toolbar>
       ) : null}
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}
-      >
-        {Platform.OS !== "ios" ? (
-          <TextInput
-            accessibilityLabel={t("projectSearch")}
-            value={search}
-            onChangeText={setSearch}
-            placeholder={t("projectSearch")}
-            placeholderTextColor={colors.tertiaryLabel}
-            style={{
-              color: colors.label,
-              padding: 12,
-              minHeight: 44,
-              fontSize: 17,
-              backgroundColor: colors.surface,
-              borderRadius: 8,
-            }}
-          />
-        ) : null}
-        {closed ? (
-          <EmptyState icon="clock" title={closed} />
-        ) : error ? (
-          <RequestFeedback
-            error={error}
-            onRetry={
-              error instanceof ApiError && error.status === 403 ? undefined : () => void load()
-            }
-          />
-        ) : null}
-        {!loading && !error && projects.length === 0 ? (
-          <EmptyState icon="hammer" title={t("projectNoGallery")} />
-        ) : null}
-        {projects.length > 0 ? (
-          <Section>
-            {projects.map((project, index) => (
-              <GalleryRow
-                key={project.id}
-                project={project}
-                separated={index > 0}
-                onOpen={openProject}
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+          <ScrollView
+            contentInsetAdjustmentBehavior="automatic"
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}
+          >
+            {Platform.OS !== "ios" ? (
+              <TextInput
+                accessibilityLabel={t("projectSearch")}
+                value={search}
+                onChangeText={setSearch}
+                placeholder={t("projectSearch")}
+                placeholderTextColor={colors.tertiaryLabel}
+                style={{
+                  color: colors.label,
+                  padding: 12,
+                  minHeight: 44,
+                  fontSize: 17,
+                  backgroundColor: colors.surface,
+                  borderRadius: 8,
+                }}
               />
-            ))}
-          </Section>
+            ) : null}
+            {closed ? (
+              <EmptyState icon="clock" title={closed} />
+            ) : error ? (
+              <RequestFeedback
+                error={error}
+                onRetry={
+                  error instanceof ApiError && error.status === 403 ? undefined : () => void load()
+                }
+              />
+            ) : null}
+            {!loading && !error && projects.length === 0 ? (
+              <EmptyState icon="hammer" title={t("projectNoGallery")} />
+            ) : null}
+            {projects.length > 0 ? (
+              <Section>
+                {projects.map((project, index) => (
+                  <GalleryRow
+                    key={project.id}
+                    project={project}
+                    separated={index > 0}
+                    onOpen={openProject}
+                  />
+                ))}
+              </Section>
+            ) : null}
+            {loading ? <RequestFeedback loading compact={projects.length > 0} /> : null}
+            {loaded < total ? (
+              <ActionButton
+                label={t("projectMore")}
+                disabled={loading}
+                onPress={() => void load(page + 1)}
+              />
+            ) : null}
+          </ScrollView>
+        </View>
+        {twoPane ? (
+          <View
+            style={{
+              borderLeftColor: colors.separator,
+              borderLeftWidth: StyleSheet.hairlineWidth,
+              flex: 1,
+            }}
+          >
+            {selectedId !== null ? (
+              <ProjectDetailScreen embedded gallery="1" id={String(selectedId)} />
+            ) : (
+              <EmptyState icon="hammer" title={t("gallery")} />
+            )}
+          </View>
         ) : null}
-        {loading ? <RequestFeedback loading compact={projects.length > 0} /> : null}
-        {loaded < total ? (
-          <ActionButton
-            label={t("projectMore")}
-            disabled={loading}
-            onPress={() => void load(page + 1)}
-          />
-        ) : null}
-      </ScrollView>
+      </View>
     </>
   );
 }

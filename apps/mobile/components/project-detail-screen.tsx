@@ -30,21 +30,35 @@ import { reportContent } from "@/lib/reports";
 import { useProjectDraft } from "@/lib/use-project-draft";
 import { colors } from "@/theme/colors";
 
-export function ProjectDetailScreen() {
-  const { id, gallery } = useLocalSearchParams<{ id: string; gallery?: string }>();
+/**
+ * One project. As a route it owns its native header; `embedded` (the detail pane of a
+ * two-pane Gallery) takes the project from props and leaves the host's header alone.
+ */
+export function ProjectDetailScreen({
+  id: idProp,
+  gallery: galleryProp,
+  embedded = false,
+}: {
+  id?: string;
+  gallery?: string;
+  embedded?: boolean;
+}) {
+  const params = useLocalSearchParams<{ id: string; gallery?: string }>();
+  const id = idProp ?? params.id;
+  const gallery = galleryProp ?? params.gallery;
   const [project, setProject] = useState<NativeProject | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [epoch, setEpoch] = useState(0);
   const navigation = useNavigation();
   useEffect(() => {
-    if (project)
+    if (project && !embedded)
       navigation.setOptions({
         title: project.name,
         headerLargeTitle: true,
         headerLargeTitleShadowVisible: false,
         headerShadowVisible: false,
       });
-  }, [navigation, project]);
+  }, [navigation, project, embedded]);
   // Quiet reload for pull-to-refresh and after actions: the screen keeps showing the project.
   const refresh = useCallback(async () => {
     // H20: saves and uploads from a previous visit land before the reload.
@@ -94,7 +108,7 @@ export function ProjectDetailScreen() {
   return gallery ? (
     <ProjectReadView project={project} onRefresh={refresh} />
   ) : (
-    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} />
+    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} embedded={embedded} />
   );
 }
 
@@ -288,9 +302,11 @@ async function pickDocument(field: TemplateField) {
 export function ProjectEditor({
   project,
   reload,
+  embedded = false,
 }: {
   project: NativeProject;
   reload: () => Promise<void>;
+  embedded?: boolean;
 }) {
   const { t, language } = useLocale();
   const router = useRouter();
@@ -439,7 +455,7 @@ export function ProjectEditor({
       );
   return (
     <>
-      <EntryBackToolbar fallback="/(tabs)/queue" />
+      {embedded ? null : <EntryBackToolbar fallback="/(tabs)/queue" />}
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"
