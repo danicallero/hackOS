@@ -41,6 +41,7 @@ import {
 } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
+import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { colors } from "@/theme/colors";
@@ -65,6 +66,7 @@ export function ActivityScannerScreen() {
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const sideRegion = useSideRegion();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -413,7 +415,8 @@ export function ActivityScannerScreen() {
           borderRadius: 999,
           height: 44,
           justifyContent: "center",
-          left: 72,
+          // A vertical bar carries back in the side column, so the name starts at the edge.
+          left: sideRegion.edge ? 16 : 72,
 
           paddingHorizontal: 16,
           position: "absolute",
@@ -424,7 +427,12 @@ export function ActivityScannerScreen() {
         <Text
           selectable
           numberOfLines={1}
-          style={{ color: colors.label, fontSize: 16, fontWeight: "700", textAlign: "center" }}
+          style={{
+            color: colors.label,
+            fontSize: sideRegion.edge ? 20 : 16,
+            fontWeight: "700",
+            textAlign: sideRegion.edge ? "left" : "center",
+          }}
         >
           {activity ? resolveActivityText(activity, language) : t("scannerActivity")}
         </Text>

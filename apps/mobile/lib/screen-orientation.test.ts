@@ -13,6 +13,8 @@ describe("orientation policy", () => {
     expect(orientationPolicy({ width: 673, height: 841 })).toBe("any"); // Galaxy Z Fold inner
     expect(orientationPolicy({ width: 841, height: 700 })).toBe("any"); // Pixel Fold inner
     expect(orientationPolicy({ width: 1280, height: 800 })).toBe("any"); // tablet
+    expect(orientationPolicy({ width: 466, height: 678 })).toBe("any"); // iPhone Duo outer
+    expect(orientationPolicy({ width: 375, height: 667 })).toBe("portrait"); // compact phone
   });
 
   it("locks portrait or unlocks through the native module", async () => {

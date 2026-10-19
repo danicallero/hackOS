@@ -1,7 +1,7 @@
 import { Stack } from "expo-router/stack";
 import { Platform } from "react-native";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
+import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
 import { isPadIdiom } from "@/lib/tabs";
 
 /**
@@ -20,11 +20,12 @@ const compactHeaderOptions = {
 } as const;
 
 export default function OthersLayout() {
+  const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const headerShown = isPadIdiom();
 
   return (
-    <Stack screenOptions={{ ...nativeStackScreenOptions, headerShown: false }}>
+    <Stack screenOptions={{ ...stackScreenOptions, headerShown: false }}>
       <Stack.Screen
         name="index"
         options={{ headerShown, headerLargeTitle: true, title: t("tabOthers") }}

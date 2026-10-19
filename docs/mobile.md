@@ -337,7 +337,8 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 - **Orientation.** `app.json` no longer locks portrait: the lock made Android
   12L+ letterbox the app on an unfolded display and Android 16 ignores it there.
   `lib/screen-orientation.ts` (`expo-screen-orientation`) locks portrait while the
-  *physical display's* smallest side is under 600 dp and unlocks it from 600 dp, and
+  *physical display's* smallest side is under 600 dp and its long side is at least 1.6
+  times the short one (an iPhone Duo panel is squarish), and unlocks it otherwise, and
   re-evaluates when the display changes (fold, unfold). It is decided on the
   display, not the window, so split-screen cannot flip it. iPhone keeps its portrait-only
   `Info.plist`; iPad lists all four orientations (`ios.infoPlist`). The module is a
@@ -351,8 +352,9 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 - **Asymmetric safe areas.** On a foldable iPhone the system status indicators and
   the Dynamic Island run down one side and the horizontal insets differ by pose, and
   a plain `ScrollView` never insets for them. Foreground content is padded per edge:
-  root screens through `contentStyle` in `app/_layout.tsx`, the tab layout around its
-  `TabSlot` (`router-tabs.tsx`), sheets through `SheetFrame` (which measures the
+  root screens through `contentStyle` in `app/_layout.tsx`, each tab's Stack through
+  `useTabStackScreenOptions` (`lib/navigation.ts`; the `TabSlot` itself stays unpadded so
+  the system can move its native bars into the column), sheets through `SheetFrame` (which measures the
   sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
   same side.
 - **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
@@ -363,8 +365,10 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   bottom-aligned below the indicators, symbol only (labels stay the accessibility
   names), with the overflow circle underneath; the number of direct tabs follows the
   height left below the indicators (`routerTabBarVerticalBudget`). No inset, no vertical
-  bar: nothing branches on a device model. Native navigation bars inside the tab
-  screens sit in the padded area, so they stay horizontal there.
+  bar: nothing branches on a device model. Native navigation bars in the tab
+  screens span the full window, so the system moves their icon items (back, bell,
+  add, edit) into the same column, above the tab bar; custom views in a toolbar (the
+  filter) stay horizontal.
 - **System behaviour kept.** `MainActivity` already declares
   `configChanges="...|screenSize|screenLayout|smallestScreenSize|orientation"`, so
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.

@@ -2,15 +2,16 @@ import { Stack } from "expo-router/stack";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
+import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
 
 import { colors } from "@/theme/colors";
 
 export default function ScannerLayout() {
+  const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const glassAvailable = isRealLiquidGlassAvailable();
   return (
-    <Stack screenOptions={nativeStackScreenOptions}>
+    <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen
         name="index"
         options={{

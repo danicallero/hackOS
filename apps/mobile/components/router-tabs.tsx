@@ -199,7 +199,7 @@ export function RouterTabs({
   return (
     <RouterTabBarInsetsProvider>
       <Tabs style={{ flex: 1 }} testID={testID}>
-        <View style={{ flex: 1, paddingLeft: left, paddingRight: right }}>
+        <View style={{ flex: 1 }}>
           <TabSlot style={{ flex: 1 }} />
         </View>
         <RouterTabsContent

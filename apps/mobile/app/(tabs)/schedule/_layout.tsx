@@ -1,6 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions } from "@/lib/navigation";
+import { useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 /**
@@ -10,9 +10,10 @@ import { colors } from "@/theme/colors";
  * between its toolbar groups; notification settings live in Account.
  */
 export default function ScheduleLayout() {
+  const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   return (
-    <Stack screenOptions={nativeStackScreenOptions}>
+    <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen name="index" />
       <Stack.Screen
         name="alerts"
@@ -21,7 +22,7 @@ export default function ScheduleLayout() {
           headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.background },
           headerTitleAlign: "center",
-          headerTitleStyle: { color: colors.label, fontSize: 20, fontWeight: "700" },
+          headerTitleStyle: { color: colors.label, fontSize: 17, fontWeight: "600" },
           presentation: "modal",
           title: t("tabNotifications"),
         }}
