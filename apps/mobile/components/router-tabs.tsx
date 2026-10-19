@@ -38,6 +38,7 @@ import Animated, {
 } from "react-native-reanimated";
 import {
   ROUTER_TAB_BAR_VERTICAL_CELL,
+  ROUTER_TAB_BAR_VERTICAL_WIDTH,
   RouterTabBarInsetsProvider,
   ROUTER_TAB_BAR_HEIGHT as TAB_BAR_HEIGHT,
   useRouterTabBarInsets,
@@ -483,9 +484,9 @@ function VerticalTabBar({
 }) {
   const cell = ROUTER_TAB_BAR_VERTICAL_CELL;
   // The system's own column (its back, bell and add controls) is 44 pt wide, 20 pt in from the
-  // display's edge; the bar uses the same width and the same line so they read as one column.
-  const barWidth = cell;
-  const columnInset = 20;
+  // display's edge. The bar's cells match that, in a pill with a 4 pt rim, centred on the same line.
+  const barWidth = ROUTER_TAB_BAR_VERTICAL_WIDTH;
+  const columnInset = 20 - (barWidth - cell) / 2;
   return (
     <View
       pointerEvents="box-none"
@@ -514,7 +515,7 @@ function VerticalTabBar({
           borderRadius: barWidth / 2,
           flexDirection: "column",
           gap: 4,
-          paddingVertical: 2,
+          paddingVertical: 4,
           width: barWidth,
         }}
         testID={`${testID}-vertical`}

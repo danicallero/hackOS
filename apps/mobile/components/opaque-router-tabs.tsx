@@ -40,7 +40,7 @@ import {
   type OverflowTabKey,
 } from "@/lib/overflow-tabs";
 import {
-  ROUTER_TAB_BAR_VERTICAL_CELL,
+  ROUTER_TAB_BAR_VERTICAL_WIDTH,
   routerTabBarBottomPadding,
   routerTabBarDirectTabsForWidth,
   routerTabBarMaxTabsWithoutOverflowForWidth,
@@ -465,7 +465,7 @@ function NativeOverflowMenu({
   const { t } = useLocale();
   const { tabBarHeight: horizontalBarHeight, vertical } = useRouterTabBarInsets();
   // In the vertical bar the overflow circle is as wide as the bar cells.
-  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_CELL : horizontalBarHeight;
+  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_WIDTH : horizontalBarHeight;
   const pathname = usePathname();
   const router = useRouter();
   const focusedSection = operationsSectionFromPathname(pathname);
@@ -539,7 +539,7 @@ function AndroidOverflowMenu({
 }: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
   const { tabBarHeight: horizontalBarHeight, vertical } = useRouterTabBarInsets();
-  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_CELL : horizontalBarHeight;
+  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_WIDTH : horizontalBarHeight;
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const pathname = usePathname();
   const router = useRouter();
