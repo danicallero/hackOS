@@ -46,7 +46,6 @@ import {
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
-import { toolbarFilter, useFilterInToolbarColumn } from "@/components/toolbar-filter-slot";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -70,7 +69,6 @@ import {
   updateScheduleItem,
   upsertScheduleItem,
 } from "@/lib/schedule";
-import { useSearchInToolbar } from "@/lib/side-region";
 import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -146,7 +144,6 @@ function scheduleItemMatchesQuery(item: ScheduleItem, query: string): boolean {
 
 /** Participant schedule backed by the same public read model used on web. */
 export default function ScheduleScreen() {
-  const searchInToolbar = useSearchInToolbar();
   useColorScheme();
   const { t, language } = useLocale();
   const { me } = useMeContext();
@@ -203,7 +200,6 @@ export default function ScheduleScreen() {
   // keep the original hand-rolled header because it supports the shared
   // action pill and in-place search expansion.
   const glassAvailable = isRealLiquidGlassAvailable();
-  const filterInColumn = useFilterInToolbarColumn();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -228,13 +224,13 @@ export default function ScheduleScreen() {
         placeholder: t("scheduleSearchPlaceholder"),
         autoCapitalize: "none",
         hideWhenScrolling: true,
-        allowToolbarIntegration: searchInToolbar,
+        allowToolbarIntegration: false,
         placement: "integratedButton",
         onChangeText: (event: { nativeEvent: { text: string } }) =>
           setSearchQuery(event.nativeEvent.text),
       },
     });
-  }, [navigation, t, glassAvailable, searchInToolbar]);
+  }, [navigation, t, glassAvailable]);
 
   useFocusEffect(
     useCallback(() => {
@@ -499,7 +495,7 @@ export default function ScheduleScreen() {
               </Stack.Toolbar.Badge>
             ) : null}
           </Stack.Toolbar.Button>
-          {toolbarFilter(scheduleFilter, filterInColumn)}
+          {<Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>}
           {canManage ? (
             <Stack.Toolbar.Button
               icon="plus"
