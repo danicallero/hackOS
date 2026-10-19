@@ -8,7 +8,7 @@ GPUL-operated hackOS service and do not mention a particular review channel.
 ## Scope and safety boundary
 
 An administrator with `ADMIN_ALL` can use **Users → Regenerate review accounts**.
-The API resets the four marked synthetic accounts to their default scenarios,
+The API resets the six marked synthetic accounts to their default scenarios,
 revoking their sessions and replacing their credentials while keeping each
 login email address unchanged. The reset also removes push tokens, scanner
 data, project graph, queue graph and synthetic anonymous rows. The generation
@@ -51,8 +51,10 @@ explicit release/security approval for the reset operation.
 | `participant-anonymize-outside` | Participant | Canonically accredited, with a closed door interval; exercises irreversible anonymization outside the venue. It owns the synthetic participant-facing judging queue. |
 | `participant-anonymize-inside` | Participant | Canonically accredited, with an open door interval; exercises accepted anonymization with a pending exit. |
 | `staff-exit-operator` | Staff | Synthetic operator with accreditation, presence and activity scan capabilities; can act only on marked synthetic subjects. |
+| `participant-explorer` | Participant | Non-destructive demo account, accredited and outside the venue. Owns six projects and walks every queue stage: *Aurora Rover* (submitted, repository, waiting in a queue shared by two challenges), *Pixel Garden* (scored), *Nimbus Notes* (called to room A), *Tidal Lab* (inside room A), *Ember Engine* (presenting in room B) and *Draft Notes* (draft). Sees two other teams' projects (*Lumen Labs*, *Orbit Kit*) in the Gallery and can report them. |
+| `staff-queue-operator` | Staff | Synthetic queue/judge operator (`queue:status`, `queue:operate`, `judge:panel`, `projects:read`, `projects:edit`) for the two synthetic rooms, their projects and challenges; it cannot reach any other queue, room, project or challenge. |
 
-All four generated accounts hold an event-bearing role and receive a durable
+All six generated accounts hold an event-bearing role and receive a durable
 entrance ticket. This includes `staff-exit-operator`: its scan capabilities
 still restrict what it can do operationally, but it also retains the
 participant-facing app entry point and ticket flow used by the published mobile
@@ -95,10 +97,13 @@ deployment URL go in the private handoff, never in this repository.
 > **Review access.** Enable Development Mode by tapping the app version seven
 > times on Sign In or in Account; a red DEV badge appears. Sign in with
 > `app-review-<scenario>@hackos.test` and the shared password from the private
-> handoff. Accounts: `participant-anonymize-outside` (primary participant),
-> `participant-delete` (full deletion), `participant-anonymize-inside`
-> (anonymisation with a pending exit) and `staff-exit-operator`. All are
-> synthetic, hold an event ticket and see only fixture data.
+> handoff. Accounts: `participant-explorer` (walks the app: six projects, every queue stage, the
+> gallery and reporting), `participant-anonymize-outside`
+> (anonymisation outside the venue), `participant-delete` (full deletion),
+> `participant-anonymize-inside` (anonymisation with a pending exit),
+> `staff-exit-operator` and `staff-queue-operator` (runs the two synthetic
+> rooms and judges their projects). All are synthetic, hold an event ticket and
+> see only fixture data.
 >
 > **Account deletion and anonymisation.** Account → Delete account, confirmation
 > code in the handoff. Full deletion: `participant-delete`. Anonymisation
@@ -131,29 +136,51 @@ networking profiles show attendee content) and "does not take, store or upload
 photos" (photo pickers upload profile photos and project images). The notes now
 state both, plus NFC and the GitHub App sign-in.
 
-What each account can and cannot show a reviewer today:
+What each account can show a reviewer today:
 
-- The **Gallery** lists only fixture projects. The generated graph has one
-  project and it is a draft, so the Gallery is empty for these accounts unless
-  the event's draft visibility makes drafts visible. Gallery, GitHub linking,
-  shared queues and every queue stage other than "waiting" are not
-  demonstrable with the current fixtures.
-- The staff account has no queue, judging, project or schedule management
-  capability, so the queue manager, judging screens and organiser tools are not
-  reachable by review accounts.
+- The **Gallery** shows fixture projects only, and a synthetic attendee can
+  browse it whatever the real event's gallery phase is (project content only;
+  published winners are real data and never take this bypass). Other teams'
+  projects can be reported.
+- **My projects** and **My queue** show the explorer's six projects and an
+  entry in every stage: waiting (also in the shared queue), called, inside,
+  presenting and scored. Editing and submitting still follow the real event's
+  project phase. Linking a repository needs the GitHub App and is not
+  demonstrable.
+- The **queue operator** runs the two synthetic rooms (*Review room A* serves
+  the shared queue, *Review room B* its own): room views, calling, bringing
+  teams in, presenting, scoring, the team manager and the shared-queue view.
+- The exit operator keeps accreditation, presence and activity scanning.
 - Anything that needs real event data (directory, sponsors, statistics,
   exports) is intentionally excluded from the fixture scope.
 
-Gaps to close before a review that must cover those screens, each needing its
-own marked graph and cleanup pointers (the registry holds one project,
-challenge and entry per fixture key, so multi-project data needs a schema
-change):
+## Synthetic boundary
 
-1. A project-owning participant with a submitted project, a draft, a shared
-   queue challenge, an entry in each queue stage and a linked repository row.
-2. A queue/judge operator limited to fixture rooms and projects.
-3. Fixture gallery projects so the Gallery is not empty.
-4. Optionally a scoped organiser and a sponsor representative.
+The fixture graph is one synthetic enterprise: three challenges (*Open* and
+*Design* share one queue group, *Hardware* has its own), two rooms, eight
+submitted projects, a draft and nine queue entries. Rooms carry no marker of
+their own: a room's scope is inferred from the queue groups it serves and the
+enterprise it is pooled into, which are synthetic-only, so every room list, the
+TV snapshot and the pump already skip them for ordinary operators. The
+fixture purge verifies that inference before it deletes a room.
+
+`queue/fixture-boundary.ts` adds one check that does not depend on each
+route: before validation, every room, entry, queue group, challenge or project
+id a queue, project or challenge route names (in the path, query or body) must
+be on the caller's side of the marker. A synthetic operator reaching ordinary
+data answers 403, an ordinary operator, wildcard included, reaching fixture
+data answers 404. `test/queue/fixture-boundary.test.ts` calls every such route
+with both kinds of id and both kinds of operator, and compares the lists. Adding
+the guard closed one gap the per-route checks had:
+`GET /api/projects/:id/github-activity` answered across the boundary.
+
+Registry: `review_fixture_queues` holds one pointer row per slot (`fixture_key`,
+`slot`; migration `0311`) and may point at a project, challenge, queue entry
+and room; an account's slots share one enterprise and sponsor and are purged
+together after every pointer is checked.
+
+Still not covered: a scoped organiser and a sponsor representative, and
+anything that needs a real GitHub App installation.
 
 ## Checking whether credentials were used
 
@@ -178,7 +205,7 @@ controlled by the deployment.
 
 ## Operational rules
 
-- Keep the four credentials and the deployment URL together in the private
+- Keep the six credentials and the deployment URL together in the private
   review/QA handoff, never in the repository or a public API response.
 - Regeneration revokes previous sessions and resets all synthetic state. Login
   email addresses remain stable; the shared deployment password and reviewer

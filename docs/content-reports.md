@@ -5,6 +5,7 @@ gallery (name, description, images, team) and the public profile of a person
 saved in an event diary (headline, bio, links, photo). Any attendee can report
 either one; organisers review the reports in the web app. There is no direct
 messaging between users, so reports cover published content only.
+The generated API documentation groups all three endpoints under `reports`.
 
 ## Filing a report
 

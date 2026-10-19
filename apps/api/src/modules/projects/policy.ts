@@ -68,12 +68,19 @@ export async function projectViewer(db: Queryable, userId: number | null) {
 export async function galleryAccess(
   db: Queryable,
   userId: number | null,
+  /**
+   * Project content only: a synthetic review attendee browses the (fixture-only)
+   * gallery whatever the real event's gallery phase is. Published winners are
+   * real data and never take this bypass.
+   */
+  { fixtureBypass = false }: { fixtureBypass?: boolean } = {},
 ): Promise<
   { allowed: true } | { allowed: false; reason: "closed" | "audience"; opensAt: string | null }
 > {
   const phase = await projectPhase(db);
   const viewer = await projectViewer(db, userId);
   if (viewer.staff) return { allowed: true };
+  if (fixtureBypass && viewer.fixtureMarker && viewer.attendee) return { allowed: true };
   const audience =
     phase.galleryAudience === "public" ||
     (phase.galleryAudience === "attendees" && viewer.attendee);
@@ -93,7 +100,7 @@ export async function canViewGallery(db: Queryable, userId: number | null): Prom
 
 /** H18: a refused gallery read says whether it is not open yet (and when) or not for this audience. */
 export async function assertGalleryVisible(db: Queryable, userId: number | null) {
-  const access = await galleryAccess(db, userId);
+  const access = await galleryAccess(db, userId, { fixtureBypass: true });
   if (!access.allowed)
     throw new ForbiddenError(
       access.reason === "closed"
@@ -135,7 +142,9 @@ export async function canViewProject(
     }
   }
   const phase = await projectPhase(db);
-  if (project.submission_status === "submitted") return canViewGallery(db, userId);
+  if (project.submission_status === "submitted") {
+    return (await galleryAccess(db, userId, { fixtureBypass: true })).allowed;
+  }
   return (
     phase.draftsOpen &&
     (phase.draftVisibility === "public" ||

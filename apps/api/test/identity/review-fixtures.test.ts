@@ -67,6 +67,15 @@ async function regenerate(a: App, adminId: number, key = `review-fixtures-${cryp
   };
 }
 
+function emailOf(
+  result: { accounts: Array<{ fixtureKey: string; email: string }> },
+  key: string,
+): string {
+  const email = result.accounts.find((account) => account.fixtureKey === key)?.email;
+  if (!email) throw new Error(`Missing fixture ${key}`);
+  return email;
+}
+
 async function fixtureUserId(email: string): Promise<number> {
   const { pool } = await import("../../src/db/pool.js");
   const { rows } = await pool.query<{ id: number }>(`SELECT id FROM users WHERE email = $1`, [
@@ -89,7 +98,117 @@ function sessionCookie(response: { headers: Record<string, unknown> }): string {
 }
 
 describe("review fixture regeneration", () => {
-  it("requires admin capability and preserves app/ticket access for all four reviewer accounts", async () => {
+  it("builds the explorer's demo graph, resets it and purges it completely (H18)", async () => {
+    const a = await getApp();
+    const admin = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+    const { pool } = await import("../../src/db/pool.js");
+    const first = await regenerate(a, admin);
+    const explorerId = await fixtureUserId(emailOf(first, "participant-explorer"));
+
+    const projects = await a.inject({
+      method: "GET",
+      url: "/api/me/projects",
+      headers: asUser(explorerId),
+    });
+    expect(projects.statusCode).toBe(200);
+    const mine = projects.json().projects as Array<{ name: string; submissionStatus: string }>;
+    expect(mine.map((project) => [project.name, project.submissionStatus]).sort()).toEqual([
+      ["Aurora Rover", "submitted"],
+      ["Draft Notes", "draft"],
+      ["Ember Engine", "submitted"],
+      ["Nimbus Notes", "submitted"],
+      ["Pixel Garden", "submitted"],
+      ["Tidal Lab", "submitted"],
+    ]);
+
+    // One entry per stage; the two shared-queue entries of Aurora Rover collapse to one row.
+    const queue = await a.inject({
+      method: "GET",
+      url: "/api/queue/me",
+      headers: asUser(explorerId),
+    });
+    expect(queue.statusCode).toBe(200);
+    const rows = queue.json() as Array<{
+      repoName: string;
+      status: string;
+      room: { name: string } | null;
+    }>;
+    expect(
+      rows.map((entry) => [entry.repoName, entry.status, entry.room?.name ?? null]).sort(),
+    ).toEqual([
+      ["Aurora Rover", "waiting", null],
+      ["Ember Engine", "presenting", "Review room B"],
+      ["Nimbus Notes", "called", "Review room A"],
+      ["Pixel Garden", "completed", null],
+      ["Tidal Lab", "in_room", "Review room A"],
+    ]);
+
+    // The gallery is fixture-scoped: only synthetic projects, every one of which opens,
+    // while the real event's gallery stays closed.
+    await pool.query(
+      `INSERT INTO event_config (id, project_gallery_audience) VALUES (1, 'staff')
+       ON CONFLICT (id) DO UPDATE SET project_gallery_opens_at = NULL,
+         project_gallery_audience = 'staff'`,
+    );
+    const gallery = await a.inject({
+      method: "GET",
+      url: "/api/public/projects",
+      headers: asUser(explorerId),
+    });
+    expect(gallery.statusCode).toBe(200);
+    const items = gallery.json().items as Array<{ id: number; name: string }>;
+    expect(items.map((item) => item.name).sort()).toEqual([
+      "Aurora Rover",
+      "Ember Engine",
+      "Lumen Labs",
+      "Nimbus Notes",
+      "Orbit Kit",
+      "Pixel Garden",
+      "Synthetic participant project",
+      "Tidal Lab",
+    ]);
+    for (const item of items) {
+      const detail = await a.inject({
+        method: "GET",
+        url: `/api/public/projects/${item.id}`,
+        headers: asUser(explorerId),
+      });
+      expect(detail.statusCode).toBe(200);
+    }
+
+    // Rooms and queue groups: the shared queue serves two challenges.
+    const { rows: groups } = await pool.query(
+      `SELECT qg.display_name, count(*)::int AS challenges
+         FROM queue_groups qg
+         JOIN queue_group_challenges qgc ON qgc.queue_group_id = qg.id
+         JOIN challenges c ON c.id = qgc.challenge_id
+        WHERE c.is_test_account = true AND c.title LIKE '%(review)'
+        GROUP BY qg.id, qg.display_name
+        ORDER BY qg.display_name`,
+    );
+    expect(groups).toEqual([
+      { display_name: "Hardware challenge (review)", challenges: 1 },
+      { display_name: "Open and design (shared queue)", challenges: 2 },
+    ]);
+
+    // Regeneration replaces the whole graph: nothing from generation 1 is left behind.
+    await regenerate(a, admin);
+    const { rows: repos } = await pool.query(
+      `SELECT name FROM repos WHERE is_test_account = true ORDER BY name`,
+    );
+    expect(repos).toHaveLength(9);
+    const { rows: rooms } = await pool.query(`SELECT name FROM rooms ORDER BY name`);
+    expect(rooms.map((row) => row.name)).toEqual(["Review room A", "Review room B"]);
+    const counts = await pool.query(
+      `SELECT (SELECT count(*) FROM enterprises WHERE name LIKE 'Review %')::int AS enterprises,
+              (SELECT count(*) FROM challenges WHERE is_test_account)::int AS challenges,
+              (SELECT count(*) FROM queue_entries)::int AS entries,
+              (SELECT count(*) FROM room_queue_state)::int AS room_states`,
+    );
+    expect(counts.rows[0]).toEqual({ enterprises: 2, challenges: 4, entries: 9, room_states: 2 });
+  });
+
+  it("requires admin capability and preserves app/ticket access for all six reviewer accounts", async () => {
     const a = await getApp();
     const ordinary = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     const denied = await a.inject({
@@ -108,6 +227,8 @@ describe("review fixture regeneration", () => {
       "participant-anonymize-outside",
       "participant-anonymize-inside",
       "staff-exit-operator",
+      "participant-explorer",
+      "staff-queue-operator",
     ]);
 
     const { pool } = await import("../../src/db/pool.js");
@@ -121,7 +242,7 @@ describe("review fixture regeneration", () => {
         WHERE email LIKE 'app-review-%@hackos.test'
         ORDER BY email`,
     );
-    expect(users).toHaveLength(4);
+    expect(users).toHaveLength(6);
     expect(users.every((user) => user.is_test_account)).toBe(true);
     const { rows: registry } = await pool.query(
       `SELECT fixture_key, user_id, generation
@@ -129,13 +250,13 @@ describe("review fixture regeneration", () => {
         WHERE user_id IS NOT NULL
         ORDER BY fixture_key`,
     );
-    expect(registry).toHaveLength(4);
+    expect(registry).toHaveLength(6);
     expect(registry.every((row) => row.generation === 1)).toBe(true);
 
     // Every App Store reviewer account must retain the participant-facing app
     // entry point after event access became role-derived. The operator is
     // still a participant for this purpose: their operational capabilities do
-    // not replace the entrance entitlement, and all four accounts need a
+    // not replace the entrance entitlement, and all six accounts need a
     // ticket so the published mobile build can exercise the same entry flow.
     for (const account of result.accounts) {
       const accountId = await fixtureUserId(account.email);
@@ -217,7 +338,7 @@ describe("review fixture regeneration", () => {
       headers: asUser(staffId),
     });
     expect(snapshot.statusCode).toBe(200);
-    expect(snapshot.json().people).toHaveLength(3);
+    expect(snapshot.json().people).toHaveLength(4);
     expect(
       snapshot
         .json()
@@ -291,7 +412,7 @@ describe("review fixture regeneration", () => {
         ORDER BY email`,
       [[...firstEmails.values()]],
     );
-    expect(current.rows).toHaveLength(4);
+    expect(current.rows).toHaveLength(6);
     expect(current.rows.every((row) => row.account_state === "active")).toBe(true);
     expect(current.rows.every((row) => row.email_verified && row.is_test_account)).toBe(true);
     const resetOutside = current.rows.find((row) => row.email === outsideEmail);
@@ -338,7 +459,7 @@ describe("review fixture regeneration", () => {
         ORDER BY u.email`,
       [[...firstEmails.values()]],
     );
-    expect(tickets.rows).toHaveLength(4);
+    expect(tickets.rows).toHaveLength(6);
     expect(tickets.rows.every((row) => row.token.length > 0)).toBe(true);
 
     const info = vi.spyOn(a.log, "info");
