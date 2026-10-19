@@ -382,8 +382,8 @@ left app gets the column on its left edge while its safe-area insets stay 0, so 
 (`lib/vertical-bar-edge.ts`) folds a 64 pt column into the insets from that edge. The profile avatar's
 collapse uses the island region as its morph target (it sits in the side column on a foldable
 iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `foldPanes()`
-(the areas above and below a horizontal fold) but no screen lays out around the fold yet: content
-still crosses it in the laptop and tabletop poses. The module is a native dependency: it needs a
+(the areas above and below a horizontal fold) and `AdaptiveFrame` keeps content in the pane before a vertical fold (book pose). A horizontal
+fold (laptop or tabletop) is not handled: content still crosses it, and there is no two-pane layout. The module is a native dependency: it needs a
 rebuilt development client, and without it every call reports "no region".
 
 Other foldables (Android, Samsung, Pixel, Xiaomi, Honor): the size classes, the 720 dp

@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { useDivisionRegion } from "@/lib/fold-region";
 import { SideRegionProvider, sideRegionForInsets } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { maxContentWidth } from "@/lib/window-size";
@@ -34,17 +35,26 @@ export function AdaptiveFrame({
   const sideInsets = useSideInsets();
   const insets = { ...safeInsets, left: sideInsets.left, right: sideInsets.right };
   const { width, height } = useWindowDimensions();
+  // A fold running top to bottom (book pose) divides the display; content stays in the
+  // pane before it instead of bending across the crease, and the rest is left to the
+  // system's own components.
+  const fold = useDivisionRegion();
+  const beforeFold = fold && fold.height > fold.width ? Math.max(0, fold.x - 8) : null;
+  const columnWidth = Math.min(
+    maxContentWidth(width),
+    beforeFold === null ? Number.POSITIVE_INFINITY : beforeFold,
+  );
   return (
     <View
       style={{
-        alignItems: "center",
+        alignItems: beforeFold === null ? "center" : "flex-start",
         backgroundColor: colors.background,
         flex: 1,
         paddingLeft: padSides ? insets.left : 0,
         paddingRight: padSides ? insets.right : 0,
       }}
     >
-      <View style={{ flex: 1, maxWidth: maxContentWidth(width), width: "100%" }}>
+      <View style={{ flex: 1, maxWidth: columnWidth, width: "100%" }}>
         <SideRegionProvider value={sideRegionForInsets(insets)}>
           {padSides ? (
             <SafeAreaProvider
