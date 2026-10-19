@@ -1,6 +1,6 @@
 import type { Href, ImperativeRouter } from "expo-router";
 import { useMemo } from "react";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 
 /**
  * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
@@ -22,7 +22,7 @@ export const nativeStackScreenOptions = {
  * screen's content keeps clear of the column here instead.
  */
 export function useTabStackScreenOptions() {
-  const { left, right } = useSafeAreaInsets();
+  const { left, right } = useSideInsets();
   return useMemo(
     () => ({
       ...nativeStackScreenOptions,

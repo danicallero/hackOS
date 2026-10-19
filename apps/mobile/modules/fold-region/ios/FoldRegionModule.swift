@@ -16,6 +16,12 @@ public class FoldRegionModule: Module {
       return Self.region(division: true)
     }
 
+    /// Where the system places its vertical bar ("left", "right", or nil when it uses none).
+    /// Authoritative for Split View, where the safe-area insets do not report the column.
+    Function("getVerticalBarEdge") { () -> String? in
+      return Self.verticalBarEdge()
+    }
+
     /// The Dynamic Island, as the occlusion reserved region (it moves to the side column on
     /// a foldable iPhone, so a hard-coded centred frame is wrong there).
     Function("getOcclusionRegion") { () -> [String: Any]? in
@@ -28,7 +34,7 @@ public class FoldRegionModule: Module {
         object: nil,
         queue: .main
       ) { [weak self] _ in
-        self?.sendEvent("onChange", ["region": Self.region(division: true) as Any])
+        self?.sendEvent("onChange", ["region": Self.region(division: true) as Any, "barEdge": Self.verticalBarEdge() as Any])
       }
       DispatchQueue.main.async { self.watchTraits() }
     }
@@ -46,8 +52,22 @@ public class FoldRegionModule: Module {
     window.registerForTraitChanges(
       [UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self, UITraitUserInterfaceIdiom.self]
     ) { [weak self] (_: UIWindow, _) in
-      self?.sendEvent("onChange", ["region": Self.region(division: true) as Any])
+      self?.sendEvent("onChange", ["region": Self.region(division: true) as Any, "barEdge": Self.verticalBarEdge() as Any])
     }
+  }
+
+  private static func verticalBarEdge() -> String? {
+    guard #available(iOS 27.1, *) else { return nil }
+    var result: String?
+    let read = {
+      switch keyWindow()?.traitCollection.verticalBarEdge {
+      case .leading: result = "left"
+      case .trailing: result = "right"
+      default: result = nil
+      }
+    }
+    if Thread.isMainThread { read() } else { DispatchQueue.main.sync(execute: read) }
+    return result
   }
 
   private static func keyWindow() -> UIWindow? {

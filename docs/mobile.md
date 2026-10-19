@@ -376,7 +376,10 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 
 **Fold and island (iOS 27.1).** `modules/fold-region` reads `UIView.reservedRegions(kind:)`
 for the key window: `getDivisionRegion()` is the fold, `getOcclusionRegion()` the Dynamic Island,
-both in window points, `null` before iOS 27.1 or when no region is active. The profile avatar's
+both in window points, `null` before iOS 27.1 or when no region is active; `getVerticalBarEdge()` is
+`traitCollection.verticalBarEdge`, the edge the system puts its vertical bar on. In Split View the
+left app gets the column on its left edge while its safe-area insets stay 0, so `useSideInsets`
+(`lib/vertical-bar-edge.ts`) folds a 64 pt column into the insets from that edge. The profile avatar's
 collapse uses the island region as its morph target (it sits in the side column on a foldable
 iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `foldPanes()`
 (the areas above and below a horizontal fold) but no screen lays out around the fold yet: content

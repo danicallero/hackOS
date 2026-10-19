@@ -18,6 +18,27 @@ export interface SideRegion {
 
 export const NO_SIDE_REGION: SideRegion = { edge: null, size: 0 };
 
+/** Width given to the system's column where the insets do not report it (Split View). */
+export const RESERVED_COLUMN_SIZE = 64;
+
+/**
+ * The horizontal insets with the system's vertical-bar column folded in. In Split View the
+ * left app's column sits on its outer edge but the safe-area insets stay 0, so the edge the
+ * system reports through `UITraitCollection.verticalBarEdge` supplies the column instead.
+ */
+export function effectiveSideInsets(
+  insets: { left: number; right: number },
+  barEdge: "left" | "right" | null,
+): { left: number; right: number } {
+  if (barEdge === "left" && insets.left < SIDE_REGION_MIN_SIZE) {
+    return { left: RESERVED_COLUMN_SIZE, right: insets.right };
+  }
+  if (barEdge === "right" && insets.right < SIDE_REGION_MIN_SIZE) {
+    return { left: insets.left, right: RESERVED_COLUMN_SIZE };
+  }
+  return insets;
+}
+
 export function sideRegionForInsets(insets: { left: number; right: number }): SideRegion {
   const size = Math.max(insets.left, insets.right);
   if (size < SIDE_REGION_MIN_SIZE) return NO_SIDE_REGION;

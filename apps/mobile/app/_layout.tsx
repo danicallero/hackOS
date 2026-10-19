@@ -37,6 +37,7 @@ import { sideRegionForInsets } from "@/lib/side-region";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { useLocalReminders } from "@/lib/use-local-reminders";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { warmWalletCache } from "@/lib/wallet-cache";
 import { colors } from "@/theme/colors";
 
@@ -393,7 +394,7 @@ function RootLayoutNav({
   enterOffline: () => Promise<void>;
 }) {
   const colorScheme = useColorScheme();
-  const safeInsets = useSafeAreaInsets();
+  const safeInsets = useSideInsets();
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
@@ -509,7 +510,8 @@ function RootLayoutNav({
 function DevelopmentIndicator() {
   const insets = useSafeAreaInsets();
   // Outside the frame that provides the side region, so derived from the insets.
-  const sideRegion = sideRegionForInsets(insets);
+  const sideInsets = useSideInsets();
+  const sideRegion = sideRegionForInsets(sideInsets);
   return (
     <View
       pointerEvents="none"
@@ -528,7 +530,7 @@ function DevelopmentIndicator() {
         ...(sideRegion.edge
           ? { bottom: Math.max(insets.bottom, 8) + 4, left: 12 }
           : {
-              right: insets.right + 12,
+              right: sideInsets.right + 12,
               top: Math.max(0, insets.top - 4),
             }),
         zIndex: 10,
@@ -536,7 +538,7 @@ function DevelopmentIndicator() {
     >
       <Text style={{ color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }}>
         {/* Safe-area sides, to read what a foldable pose reports (Split View, outer display). */}
-        {`DEV ${Math.round(insets.left)}|${Math.round(insets.right)}`}
+        {`DEV ${Math.round(sideInsets.left)}|${Math.round(sideInsets.right)}`}
       </Text>
     </View>
   );

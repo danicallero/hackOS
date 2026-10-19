@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { SideRegionProvider, sideRegionForInsets } from "@/lib/side-region";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { maxContentWidth } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
 
@@ -29,7 +30,9 @@ export function AdaptiveFrame({
   children: ReactNode;
   padSides?: boolean;
 }) {
-  const insets = useSafeAreaInsets();
+  const safeInsets = useSafeAreaInsets();
+  const sideInsets = useSideInsets();
+  const insets = { ...safeInsets, left: sideInsets.left, right: sideInsets.right };
   const { width, height } = useWindowDimensions();
   return (
     <View
