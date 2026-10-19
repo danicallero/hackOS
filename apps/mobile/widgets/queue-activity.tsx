@@ -145,6 +145,13 @@ export const QueueActivityLayout = (
   });
 
   const room = props.roomName ?? "";
+  // Compact island: the part that identifies the room ("Room B" -> "B", a long
+  // name -> its first three characters), so it fits the vertical island.
+  const roomWords = room.trim().split(/\s+/);
+  const roomCompact =
+    roomWords.length > 1
+      ? (roomWords[roomWords.length - 1] ?? "").slice(0, 3)
+      : room.trim().slice(0, 3);
   const position =
     typeof props.position === "number" && Number.isFinite(props.position)
       ? `#${props.position}`
@@ -356,7 +363,7 @@ export const QueueActivityLayout = (
 
   const compactTrailing =
     called || inRoom ? (
-      room ? (
+      roomCompact ? (
         <Text
           modifiers={[
             font({ size: 12, weight: "semibold" }),
@@ -365,7 +372,7 @@ export const QueueActivityLayout = (
             ...colorMods(islandColor),
           ]}
         >
-          {room}
+          {roomCompact}
         </Text>
       ) : (
         (calledTimer(12, "semibold", 48) ?? <Text> </Text>)
