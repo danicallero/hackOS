@@ -16,6 +16,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { useBarTitleOptions } from "@/lib/bar-title";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -97,10 +98,10 @@ export function QueueOperationsScreen() {
     );
   }, []);
 
+  const barTitle = useBarTitleOptions(t("tabQueueOperations"));
   useLayoutEffect(() => {
     headerNavigation.setOptions({
-      title: usesListTitle ? "" : t("tabQueueOperations"),
-      headerLargeTitle: !usesListTitle,
+      ...(usesListTitle ? { title: "", headerLargeTitle: false } : barTitle),
       headerRight: () => (
         <FilterMenu
           embedded
@@ -141,7 +142,7 @@ export function QueueOperationsScreen() {
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle]);
+  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle, barTitle]);
 
   const visibleRooms = useMemo(
     () =>

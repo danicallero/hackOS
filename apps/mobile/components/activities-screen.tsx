@@ -27,6 +27,7 @@ import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
@@ -195,7 +196,7 @@ export function ActivitiesScreen() {
       headerShadowVisible: false,
       headerStyle: { backgroundColor: colors.background },
       headerTitleAlign: "left",
-      headerTitleStyle: { color: colors.label, fontSize: 28, fontWeight: "800" },
+      headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },
       headerSearchBarOptions: {
         placeholder: t("scannerActivitiesSearchPlaceholder"),
         autoCapitalize: "none",

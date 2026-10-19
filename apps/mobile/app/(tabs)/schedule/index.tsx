@@ -17,7 +17,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -621,7 +620,7 @@ export default function ScheduleScreen() {
                 style={{
                   backgroundColor: colors.background,
                   height: TWO_PANE_BAND,
-                  paddingHorizontal: 16,
+                  paddingHorizontal: 19,
                   paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
                 }}
               >

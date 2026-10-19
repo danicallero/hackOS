@@ -5,4 +5,4 @@
  * (the two-pane Schedule) sits on the same line.
  */
 export const SCREEN_TITLE = { fontSize: 28, fontWeight: "800", lineHeight: 34 } as const;
-export const SCREEN_TITLE_CENTER = 43;
+export const SCREEN_TITLE_CENTER = 46;

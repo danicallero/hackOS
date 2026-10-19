@@ -9,6 +9,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { useBarTitleOptions } from "@/lib/bar-title";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
@@ -92,15 +93,15 @@ export function MyProjectsScreen() {
     }, [load]),
   );
   const glassAvailable = isRealLiquidGlassAvailable();
+  const barTitle = useBarTitleOptions(t("projects"));
   const openInvites = useCallback(() => router.push("/queue/invites"), [router]);
   const openGallery = useCallback(() => router.push("/projects/gallery"), [router]);
   const openQueue = useCallback(() => router.push("/projects/queue"), [router]);
   const openNew = useCallback(() => router.push("/queue/new"), [router]);
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: t("projects"),
+      ...barTitle,
       headerShown: true,
-      headerLargeTitle: true,
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       // iOS 26 gets native glass toolbar circles below; elsewhere the same
@@ -116,7 +117,7 @@ export function MyProjectsScreen() {
             </View>
           ),
     });
-  }, [navigation, t, glassAvailable, canCreate, openNew, openQueue]);
+  }, [navigation, t, glassAvailable, canCreate, openNew, openQueue, barTitle]);
 
   function briefLines(project: NativeProject) {
     return queueBriefFor(queue, project.id)
