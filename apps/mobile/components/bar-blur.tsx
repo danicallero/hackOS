@@ -3,10 +3,9 @@ import { useColorScheme } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { SCREEN_TITLE_CENTER } from "@/theme/screen-title";
 
-/** Below the title's centre line: the band runs to just under the bar row, not into the content. */
-const BELOW_TITLE = 36;
+/** Floor for the band: the bar row of a window whose top inset is small (the Duo reports about 0). */
+const MIN_BAND = 60;
 
 /**
  * A blurred band under a transparent header, so content scrolling beneath it fades out instead of
@@ -22,8 +21,7 @@ export function BarBlur() {
       intensity={40}
       tint={scheme === "dark" ? "systemChromeMaterialDark" : "systemChromeMaterialLight"}
       style={{
-        // Title centre + a little (the Duo reports a small top inset); phones add their notch.
-        height: Math.max(insets.top + 44, SCREEN_TITLE_CENTER + BELOW_TITLE),
+        height: Math.max(insets.top + 44, MIN_BAND),
         left: 0,
         position: "absolute",
         right: 0,
