@@ -513,7 +513,7 @@ describe("New Live Activity kinds (#966)", () => {
         expect.arrayContaining(["Starts in", "Rust workshop"]),
       );
       expect(nodes(upcoming.banner, "ProgressView")).toHaveLength(0);
-      const [countdown] = nodes(upcoming.compactTrailing, "Text");
+      const [countdown] = nodes(upcoming.compactLeading, "Text");
       expect((countdown?.props?.timerInterval as { upper: Date }).upper).toEqual(
         new Date("2026-02-20T12:10:00.000Z"),
       );
@@ -524,7 +524,7 @@ describe("New Live Activity kinds (#966)", () => {
       );
       expect(texts(live.banner)).toEqual(expect.arrayContaining(["Live", "Ends in"]));
       expect(nodes(live.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
-      expect(texts(live.compactTrailing)).toEqual(["Live"]);
+      expect(texts(live.compactLeading)).toEqual(["Live"]);
       expect(nodes(live.minimal, "Image").map((image) => image.props?.systemName)).toEqual([
         "mic.fill",
         "circle.fill",
@@ -537,9 +537,9 @@ describe("New Live Activity kinds (#966)", () => {
       ["stale upcoming", attendee(), { ...environment, isStale: true } as LiveActivityEnvironment],
     ] as const)("%s: Live in the island, Ends in on the expanded and Lock Screen", (_name, props, env) => {
       const layout = AttendeeActivityLayout(props, env);
-      expect(texts(layout.compactTrailing)).toEqual(["Live"]);
+      expect(texts(layout.compactLeading)).toEqual(["Live"]);
       expect(allTexts(layout)).not.toContain("Starts in");
-      for (const slot of ["expandedTrailing", "banner"]) {
+      for (const slot of ["expandedLeading", "banner"]) {
         expect(texts(layout[slot])).toContain("Ends in");
         const [timer] = nodes(layout[slot], "Text").filter((text) => text.props?.timerInterval);
         expect((timer?.props?.timerInterval as { upper: Date }).upper).toEqual(
@@ -555,7 +555,7 @@ describe("New Live Activity kinds (#966)", () => {
     it("keeps the countdown to the start while upcoming and not stale", () => {
       const layout = AttendeeActivityLayout(attendee(), { ...environment, isStale: false });
       expect(allTexts(layout)).not.toContain("Live");
-      expect(texts(layout.expandedTrailing)).toContain("Starts in");
+      expect(texts(layout.expandedLeading)).toContain("Starts in");
       expect(nodes(layout.minimal, "Text")).toHaveLength(0);
       expect(nodes(layout.minimal, "Image")).toHaveLength(1);
     });
@@ -566,7 +566,7 @@ describe("New Live Activity kinds (#966)", () => {
         attendee({ phase: "live", labels: older as AttendeeActivityLiveProps["labels"] }),
         environment,
       );
-      expect(texts(layout.compactTrailing)).toEqual(["Now"]);
+      expect(texts(layout.compactLeading)).toEqual(["Now"]);
     });
 
     it("has no buttons on any presentation", () => {
@@ -605,14 +605,14 @@ describe("New Live Activity kinds (#966)", () => {
 
     it("turns red while closing and calm green once submitted", () => {
       const closing = DeadlineActivityLayout(deadline({ phase: "closing" }), environment);
-      expect(colors(closing.compactLeading)).toContain("#FF453A");
+      expect(colors(closing.compactTrailing)).toContain("#FF453A");
       expect(texts(closing.bannerSmall)).toContain("Not submitted");
 
       const submitted = DeadlineActivityLayout(
         deadline({ phase: "submitted", submission: "submitted" }),
         environment,
       );
-      expect(colors(submitted.compactLeading)).toContain("#30D158");
+      expect(colors(submitted.compactTrailing)).toContain("#30D158");
       expect(texts(submitted.banner)).toEqual(expect.arrayContaining(["Submitted", "Closes in"]));
       expect(texts(submitted.bannerSmall)).toContain("Submitted");
       // Submission keeps the elapsed window bar; the remaining time stays small.
@@ -707,7 +707,7 @@ describe("New Live Activity kinds (#966)", () => {
       );
     }
 
-    it.each(states)("%s: every countdown uses the native unit renderer", (_name, layout) => {
+    it.each(states)("%s: every countdown uses the native unit renderer", (name, layout) => {
       expect(
         nodes(layout.minimal, "Text").filter((text) => text.props?.timerInterval),
       ).toHaveLength(0);
@@ -716,7 +716,12 @@ describe("New Live Activity kinds (#966)", () => {
       for (const [slot, text] of found) {
         // Legacy form names all follow the same native five-minute / Always-On
         // precision policy; each surface still supplies its own font size.
-        const expected = slot === "compactTrailing" ? ["full"] : ["full", "long"];
+        // The attendee and deadline activities lead with their countdown, as Luma does.
+        const compact =
+          name.startsWith("attendee") || name.startsWith("deadline")
+            ? "compactLeading"
+            : "compactTrailing";
+        const expected = slot === compact ? ["short"] : ["full", "long"];
         expect(expected).toContain(text.props?.compactCountdown);
         expect(typeof text.props?.compactCountdownSize).toBe("number");
         const modifiers = (text.props?.modifiers as { modifier: string }[]).map((m) => m.modifier);
@@ -726,7 +731,7 @@ describe("New Live Activity kinds (#966)", () => {
 
     it("routes expanded and Lock Screen heroes through the native timer", () => {
       const layout = DeadlineActivityLayout(deadline(), environment);
-      for (const slot of ["expandedTrailing", "banner"]) {
+      for (const slot of ["expandedLeading", "banner"]) {
         const forms = nodes(layout[slot], "Text").map((text) => text.props?.compactCountdown);
         expect(forms).toContain("long");
       }
@@ -735,7 +740,7 @@ describe("New Live Activity kinds (#966)", () => {
     it("keeps compact timers at 12 pt and minimal symbols legible", () => {
       const layout = DeadlineActivityLayout(deadline(), environment);
       const size = (slot: string) => nodes(layout[slot], "Text")[0]?.props?.compactCountdownSize;
-      expect(size("compactTrailing")).toBe(12);
+      expect(size("compactLeading")).toBe(12);
       expect(nodes(layout.minimal, "Text")).toHaveLength(0);
       expect(nodes(layout.minimal, "Image")[0]?.props?.size).toBe(20);
     });
@@ -765,16 +770,21 @@ describe("New Live Activity kinds (#966)", () => {
       Record<string, unknown>,
     ][])("%s: hard island caps, whatever the value", (name, layout) => {
       // The queue's leading slot is wider so a three-digit position fits.
+      const leading =
+        name.startsWith("attendee") ||
+        name.startsWith("deadline") ||
+        name.startsWith("future props");
       const caps = {
-        compactLeading: name.startsWith("queue") ? 40 : 24,
-        compactTrailing: 56,
+        compactLeading: name.startsWith("queue") ? 40 : leading ? 36 : 24,
+        compactTrailing: leading ? 24 : 56,
         minimal: 36,
       } as const;
       for (const [slot, width] of Object.entries(caps)) {
         const root = layout[slot] as Node;
         const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
         const frame = modifiers.find((m) => m.modifier === "frame");
-        expect((frame?.args[0] as { maxWidth: number }).maxWidth).toBe(width);
+        const box = frame?.args[0] as { maxWidth?: number; width?: number };
+        expect(box.maxWidth ?? box.width).toBe(width);
         expect(modifiers.map((m) => m.modifier)).toEqual(
           expect.arrayContaining(["minimumScaleFactor", "dynamicTypeSize"]),
         );

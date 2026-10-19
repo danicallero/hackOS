@@ -113,6 +113,15 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+/**
+ * A value that arrives through `reset` reaches the select before its options
+ * mount, and Radix's hidden native select then reports an empty change that
+ * would blank the field and dirty the form. Real picks are never empty.
+ */
+const audienceChange = (onChange: (value: string) => void) => (value: string) => {
+  if (value) onChange(value);
+};
+
 function fromConfig(cfg: EventConfig): Values {
   const zone = cfg.timezone || "Europe/Madrid";
   return {
@@ -488,7 +497,7 @@ export function EventTab({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("projectDraftVisibilityLabel")}</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select value={field.value} onValueChange={audienceChange(field.onChange)}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue />
@@ -510,7 +519,7 @@ export function EventTab({
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>{t("projectGalleryAudienceLabel")}</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
+                      <Select value={field.value} onValueChange={audienceChange(field.onChange)}>
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue />
