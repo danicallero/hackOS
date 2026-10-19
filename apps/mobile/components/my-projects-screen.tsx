@@ -107,8 +107,8 @@ export function MyProjectsScreen() {
       // Contacts, so the bar blurs the same way; elsewhere the native large title stays.
       ...(glassAvailable && sideRegion.edge ? { title: "", headerLargeTitle: false } : barTitle),
       headerShown: true,
-      headerTransparent: true,
-      headerBlurEffect: "systemUltraThinMaterial" as const,
+      headerTransparent: false,
+      headerStyle: { backgroundColor: colors.background },
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       // iOS 26 gets native glass toolbar circles below; elsewhere the same

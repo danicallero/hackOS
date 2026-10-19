@@ -27,9 +27,10 @@ export default function QueueLayout() {
         // Set here, not only from the screen: a transparent bar chosen after the first layout
         // does not move the content under it, which then stops at a hard edge instead of blurring.
         options={{
-          headerBlurEffect: "systemUltraThinMaterial",
+          // Just the page colour: no blur material, which reads whiter than the page.
           headerShadowVisible: false,
-          headerTransparent: true,
+          headerStyle: { backgroundColor: colors.background },
+          headerTransparent: false,
         }}
       />
       <Stack.Screen
