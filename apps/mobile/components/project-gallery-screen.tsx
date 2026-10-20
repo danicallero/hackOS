@@ -19,6 +19,7 @@ import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
+import { useBookCrease } from "@/lib/fold-region";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
@@ -150,16 +151,18 @@ export function ProjectGalleryScreen() {
   );
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS);
+  const crease = useBookCrease();
+  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS, crease);
   const twoPane = paneLayout.enabled;
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t("gallery"),
       headerShown: true,
-      headerLargeTitle: true,
+      headerLargeTitle: Platform.OS === "ios",
       headerBlurEffect: "none",
-      headerTransparent: true,
-      headerStyle: { backgroundColor: "transparent" },
+      // Android has no large-title bar or content inset: a transparent header there floats over the list.
+      headerTransparent: Platform.OS === "ios",
+      headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : colors.background },
       scrollEdgeEffects: { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" },
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
@@ -389,6 +392,7 @@ export function ProjectGalleryScreen() {
               borderLeftColor: colors.separator,
               borderLeftWidth: StyleSheet.hairlineWidth,
               flex: 1,
+              paddingLeft: paneLayout.gutter,
             }}
           >
             {selectedId !== null ? (

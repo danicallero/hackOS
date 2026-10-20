@@ -195,7 +195,8 @@ export default function QueueScreen({ embedded = false }: { embedded?: boolean }
           gap: 12,
           padding: 16,
           paddingBottom: tabBarBottomInset + 16,
-          paddingTop: 16 + androidTopInset,
+          // Embedded under My Projects' own header, the bar already clears the status bar.
+          paddingTop: embedded ? 16 : 16 + androidTopInset,
         }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={

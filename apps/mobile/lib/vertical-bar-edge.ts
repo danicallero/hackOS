@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Dimensions, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { POSE_POLL_MS } from "@/lib/fold-region";
 import { navigationSideInsets } from "@/lib/side-region";
 import FoldRegion from "@/modules/fold-region";
 
@@ -12,7 +13,7 @@ function readEdge(): "left" | "right" | null {
   }
 }
 
-/** The edge the system puts its vertical bar on, re-read when the pose or window changes. */
+/** The edge the system puts its vertical bar on, re-read when the pose or window changes (a hinge move is polled). */
 export function useVerticalBarEdge(): "left" | "right" | null {
   const [edge, setEdge] = useState(readEdge);
   useEffect(() => {
@@ -21,9 +22,11 @@ export function useVerticalBarEdge(): "left" | "right" | null {
     const native = FoldRegion?.addListener?.("onChange", (event) =>
       setEdge(event.barEdge ?? readEdge()),
     );
+    const poll = FoldRegion ? setInterval(() => setEdge(readEdge()), POSE_POLL_MS) : null;
     return () => {
       resize.remove();
       native?.remove();
+      if (poll) clearInterval(poll);
     };
   }, []);
   return edge;

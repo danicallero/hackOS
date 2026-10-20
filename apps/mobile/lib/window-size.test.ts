@@ -37,11 +37,31 @@ describe("foldable window layouts", () => {
     expect(isCompactPassportWindow(673, 841)).toBe(false);
   });
   it("opens Android folds into two panes while keeping short landscape phones single pane", () => {
-    expect(listDetailLayout(673, 841, "android")).toEqual({ enabled: true, listWidth: 300 });
+    expect(listDetailLayout(673, 841, "android")).toEqual({
+      enabled: true,
+      gutter: 0,
+      listWidth: 300,
+    });
     expect(listDetailLayout(841, 673, "android").enabled).toBe(true);
     expect(listDetailLayout(600, 841, "android").enabled).toBe(false);
     expect(listDetailLayout(844, 390, "android").enabled).toBe(false);
     expect(listDetailLayout(951, 669, "ios").enabled).toBe(true);
     expect(listDetailLayout(1366, 1032, "ios").listWidth).toBe(420);
+  });
+  it("splits at a book-pose crease: list before it, detail after it", () => {
+    const crease = { x: 470, width: 12 };
+    expect(listDetailLayout(951, 669, "ios", crease)).toEqual({
+      enabled: true,
+      gutter: 12,
+      listWidth: 470,
+    });
+    // A crease too close to an edge leaves a page too narrow to use; the usual split applies.
+    expect(listDetailLayout(951, 669, "ios", { x: 200, width: 12 })).toEqual({
+      enabled: true,
+      gutter: 0,
+      listWidth: 380,
+    });
+    // Narrow windows stay single pane whatever the crease.
+    expect(listDetailLayout(600, 841, "ios", { x: 300, width: 12 }).enabled).toBe(false);
   });
 });

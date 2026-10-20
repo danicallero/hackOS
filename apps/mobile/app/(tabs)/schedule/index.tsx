@@ -53,6 +53,7 @@ import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { SystemBlur } from "@/components/system-blur";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
+import { useBookCrease } from "@/lib/fold-region";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -211,7 +212,8 @@ export default function ScheduleScreen() {
   // An expanded window (an unfolded inner display in landscape) has room for the list and
   // an item side by side; narrower windows keep the pushed detail route.
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS);
+  const crease = useBookCrease();
+  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS, crease);
   const twoPane = paneLayout.enabled;
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
@@ -765,6 +767,7 @@ export default function ScheduleScreen() {
                 borderLeftColor: colors.separator,
                 borderLeftWidth: StyleSheet.hairlineWidth,
                 flex: 1,
+                paddingLeft: paneLayout.gutter,
               }}
             >
               <View style={{ alignSelf: "center", flex: 1, maxWidth: 760, width: "100%" }}>

@@ -407,9 +407,8 @@ both in window points, `null` before iOS 27.1 or when no region is active; `getV
 left app gets the column on its left edge while its safe-area insets stay 0, so `useSideInsets`
 (`lib/vertical-bar-edge.ts`) folds a 64 pt column into the insets from that edge. The profile avatar's
 collapse uses the island region as its morph target (it sits in the side column on a foldable
-iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `foldPanes()`
-(the areas above and below a horizontal fold) and `AdaptiveFrame` keeps content in the pane before a vertical fold (book pose). A horizontal
-fold (laptop or tabletop) keeps content above it; the area below stays empty. Schedule and Gallery
+iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `AdaptiveFrame` spans both pages of a vertical fold (book pose) and Schedule and Gallery put the list before the crease and the detail after it (`bookCrease()`, `listDetailLayout(..., crease)`). The pose is polled every 400 ms (`POSE_POLL_MS`) because moving the hinge changes neither the window size nor the traits, so the native event alone left the previous pose on screen. A horizontal
+fold (laptop or tabletop) is not avoided: the whole display stays available so lists scroll to the real bottom edge. Schedule and Gallery
 show list and detail side by side on expanded windows (840 dp and up). The module is a native dependency: it needs a
 rebuilt development client, and without it every call reports "no region".
 

@@ -84,6 +84,7 @@ const ANDROID_SYMBOL_NAMES = {
   globe: "public",
   "arrow.up.right.square": "open_in_new",
   hammer: "construction",
+  "hammer.fill": "construction",
   hourglass: "hourglass_empty",
   "internaldrive.fill": "save",
   "key.card": "key",
@@ -149,6 +150,13 @@ const ANDROID_SYMBOL_NAMES = {
   "building.2": "business",
   "doc.fill": "description",
   photo: "image",
+  "list.number": "format_list_numbered",
+  "checkmark.circle": "check_circle",
+  "xmark.circle": "cancel",
+  "pause.circle": "pause_circle",
+  "square.grid.2x2": "grid_view",
+  "trophy.fill": "emoji_events",
+  "photo.on.rectangle": "photo_library",
 } as const satisfies Record<string, string> & Record<ActivityKindSymbolName, string>;
 
 /** Return the Material Symbol alias used by Android/web, when one exists. */

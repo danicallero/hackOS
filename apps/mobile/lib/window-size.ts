@@ -70,17 +70,36 @@ export function isCompactPassportWindow(width: number, height: number): boolean 
   );
 }
 
-/** H55: opened Android windows fit a narrower list beside their detail, even in portrait. */
-export function listDetailLayout(width: number, height: number, platform: string) {
+/** Narrowest a page either side of a vertical crease may be and still hold a list or a detail. */
+export const MIN_PAGE_WIDTH = 280;
+
+/**
+ * H55: opened Android windows fit a narrower list beside their detail, even in portrait. On a
+ * foldable iPhone half open like a book, the crease is the divider: the list fills the page before
+ * it, the detail the page after it, and `gutter` is the crease the detail keeps clear.
+ */
+export function listDetailLayout(
+  width: number,
+  height: number,
+  platform: string,
+  crease: { x: number; width: number } | null = null,
+) {
+  const enabled =
+    platform === "android" ? width >= 640 && height >= 600 : windowSizeClass(width) === "expanded";
+  const pagesFit =
+    crease !== null &&
+    crease.x >= MIN_PAGE_WIDTH &&
+    width - crease.x - crease.width >= MIN_PAGE_WIDTH;
   return {
-    enabled:
-      platform === "android"
-        ? width >= 640 && height >= 600
-        : windowSizeClass(width) === "expanded",
-    listWidth: isTabletLandscapeWindow(width, height)
-      ? 420
-      : platform === "android" && width < 840
-        ? 300
-        : 380,
+    enabled,
+    gutter: enabled && pagesFit ? Math.round(crease.width) : 0,
+    listWidth:
+      enabled && pagesFit
+        ? Math.round(crease.x)
+        : isTabletLandscapeWindow(width, height)
+          ? 420
+          : platform === "android" && width < 840
+            ? 300
+            : 380,
   };
 }

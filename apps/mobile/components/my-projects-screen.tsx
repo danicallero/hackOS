@@ -128,7 +128,11 @@ export function MyProjectsScreen() {
         ? undefined
         : () => (
             <View style={{ flexDirection: "row", gap: 8 }}>
-              <CircleButton icon="list.number" label={t("projectQueue")} onPress={openQueue} />
+              <CircleButton
+                icon={queueOpen ? "xmark" : "list.number"}
+                label={queueOpen ? t("close") : t("projectQueue")}
+                onPress={openQueue}
+              />
               {canCreate ? (
                 <CircleButton icon="plus" label={t("createProject")} onPress={openNew} />
               ) : null}
