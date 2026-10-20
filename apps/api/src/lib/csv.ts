@@ -13,10 +13,13 @@ export function recordsToCsv(header: string[], rows: Record<string, unknown>[]):
   return rows.map((r) => header.map((h) => r[h]));
 }
 
+/** UTF-8 BOM so Excel decodes ñ and accents as UTF-8 instead of Mac Roman. */
+export const CSV_BOM = "\uFEFF";
+
 export function toCsv(header: string[], rows: unknown[][]): string {
   const lines = [header.join(",")];
   for (const row of rows) lines.push(row.map(csvCell).join(","));
-  return `${lines.join("\r\n")}\r\n`;
+  return `${CSV_BOM}${lines.join("\r\n")}\r\n`;
 }
 
 /** Send a CSV download. Exports carry personal data, so they are never cached. */

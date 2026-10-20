@@ -457,6 +457,24 @@ async function distributionBuckets(
       [applicationId, key],
     );
     rows = result.rows as Array<{ value: string; n: number }>;
+  } else if (kind === "city") {
+    // City answers are structured ({city, province, country}); chart "City, Province, Country".
+    const result = await pool.query(
+      `SELECT concat_ws(', ',
+                NULLIF(btrim(r.responses -> $2 ->> 'city'), ''),
+                NULLIF(btrim(r.responses -> $2 ->> 'province'), ''),
+                NULLIF(btrim(r.responses -> $2 ->> 'country'), '')) AS value,
+              count(*)::int AS n
+         FROM application_responses r
+         JOIN users u ON u.id = r.user_id
+        WHERE r.application_id = $1 AND ${statusCondition}
+          AND jsonb_typeof(r.responses -> $2) = 'object'
+          AND btrim(COALESCE(r.responses -> $2 ->> 'city', '')) <> ''
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+        GROUP BY value ORDER BY n DESC, value`,
+      [applicationId, key],
+    );
+    rows = result.rows as Array<{ value: string; n: number }>;
   } else if (kind === "checkbox") {
     const result = await pool.query(
       `SELECT CASE WHEN r.responses ->> $2 = 'true' THEN 'true' ELSE 'false' END AS value,
