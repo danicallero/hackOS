@@ -13,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAccountWallet, WalletModal } from "@/components/account-wallet";
+import { AccountWalletOverlay, useAccountWallet, WalletModal } from "@/components/account-wallet";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import {
@@ -49,7 +49,6 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { useSideRegion } from "@/lib/side-region";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -98,7 +97,6 @@ export function DiaryScreen() {
   // iOS 26 gets the native large-title header with its own search bar;
   // Android and earlier iOS keep the shared hand-rolled header.
   const glassAvailable = isRealLiquidGlassAvailable();
-  const sideRegion = useSideRegion();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
@@ -515,12 +513,12 @@ export function DiaryScreen() {
       // An empty navigation title stops iOS 26 adding its centred one.
       title: "",
       headerShown: true,
+      gestureEnabled: !wallet.open,
       headerLargeTitle: false,
-      // The system bar background: the list scrolls under it with iOS 26's
-      // scroll-edge effect, never an opaque page-coloured block.
-      // Beside a side column the bar is just the page colour; elsewhere the system bar.
-      headerTransparent: !sideRegion.edge,
-      ...(sideRegion.edge ? { headerStyle: { backgroundColor: colors.background } } : {}),
+      // As Activities: the bar is the page colour, so the list starts below the title
+      // instead of scrolling behind it.
+      headerTransparent: false,
+      headerStyle: { backgroundColor: colors.background },
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable
@@ -538,7 +536,7 @@ export function DiaryScreen() {
           }
         : undefined,
     });
-  }, [glassAvailable, navigation, searchable, t, sideRegion.edge]);
+  }, [glassAvailable, navigation, searchable, t, wallet.open]);
 
   const noteInitial =
     noteTarget?.kind === "person"
@@ -574,7 +572,7 @@ export function DiaryScreen() {
       testID="diary-scroll"
       accessibilityElementsHidden={inputOpen}
       importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior={glassAvailable ? "never" : "automatic"}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       style={{ backgroundColor: colors.background }}
@@ -664,7 +662,11 @@ export function DiaryScreen() {
         onCovered={revealMet}
         onDone={finishCelebration}
       />
-      <WalletModal wallet={wallet} />
+      {glassAvailable ? (
+        <AccountWalletOverlay wallet={wallet} nativeToolbar initialPurpose="badge" />
+      ) : (
+        <WalletModal wallet={wallet} />
+      )}
       <NfcReader
         visible={input === "nfc"}
         onValue={(uid) => void submitScan(uid)}
@@ -734,16 +736,16 @@ export function DiaryScreen() {
                 fontWeight: "800",
               }}
             >
-              {t("tabDiary")}
+              {wallet.open ? "" : t("tabDiary")}
             </Text>
           </Stack.Toolbar.View>
         </Stack.Toolbar>
         {/* Native SF Symbol bar items, so the system draws the same circles as its search button. */}
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
-            icon="wallet.pass"
+            icon={wallet.open ? "xmark" : "wallet.pass"}
             separateBackground
-            accessibilityLabel={t("tabWallet")}
+            accessibilityLabel={wallet.open ? t("close") : t("tabWallet")}
             onPress={wallet.toggle}
           />
           {searchable ? (
