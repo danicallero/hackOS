@@ -1,6 +1,7 @@
 import {
   effectiveSideInsets,
   NO_SIDE_REGION,
+  navigationSideInsets,
   SIDE_REGION_MIN_SIZE,
   sideRegionForInsets,
 } from "./side-region";
@@ -18,6 +19,50 @@ describe("side region", () => {
     expect(sideRegionForInsets({ left: 0, right: SIDE_REGION_MIN_SIZE - 1 })).toEqual(
       NO_SIDE_REGION,
     );
+  });
+});
+
+describe("landscape tablet navigation", () => {
+  const noInsets = { left: 0, right: 0 };
+
+  it("reserves a left rail in landscape and restores the bottom bar in portrait", () => {
+    expect(navigationSideInsets(noInsets, null, { width: 1366, height: 1032 }, "ios")).toEqual({
+      left: 200,
+      right: 0,
+    });
+    expect(navigationSideInsets(noInsets, null, { width: 1032, height: 1366 }, "ios")).toEqual(
+      noInsets,
+    );
+  });
+
+  it("keeps the Duo inner window on its compact rail", () => {
+    expect(navigationSideInsets(noInsets, null, { width: 951, height: 669 }, "ios")).toEqual({
+      left: 64,
+      right: 0,
+    });
+    expect(
+      navigationSideInsets({ left: 0, right: 84 }, "right", { width: 951, height: 669 }, "ios"),
+    ).toEqual({ left: 0, right: 84 });
+  });
+
+  it("keeps short phone windows horizontal and gives Android tablets a rail", () => {
+    expect(navigationSideInsets(noInsets, null, { width: 844, height: 390 }, "ios")).toEqual(
+      noInsets,
+    );
+    expect(navigationSideInsets(noInsets, null, { width: 1366, height: 1032 }, "android")).toEqual({
+      left: 64,
+      right: 0,
+    });
+  });
+
+  it("preserves the system's foldable column instead of adding another rail", () => {
+    expect(
+      navigationSideInsets({ left: 0, right: 84 }, "right", { width: 1366, height: 1032 }, "ios"),
+    ).toEqual({ left: 0, right: 84 });
+    expect(navigationSideInsets(noInsets, "right", { width: 1366, height: 1032 }, "ios")).toEqual({
+      left: 0,
+      right: 64,
+    });
   });
 });
 

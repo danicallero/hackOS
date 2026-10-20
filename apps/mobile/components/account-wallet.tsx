@@ -1,9 +1,9 @@
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useState } from "react";
-import { BackHandler, Modal, Platform, Pressable, View } from "react-native";
+import { Modal, Platform, Pressable, View } from "react-native";
 import Animated, {
-  FadeIn,
-  FadeOut,
+  SlideInRight,
+  SlideOutRight,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -11,6 +11,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { useBackDismiss } from "@/components/app-back-gesture";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AndroidStatusBarScrim } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
@@ -24,6 +25,7 @@ import {
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useSideRegion } from "@/lib/side-region";
+import { isPadIdiom } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 const MORPH_MS = 220;
@@ -48,21 +50,12 @@ export function useAccountWallet() {
     progress.value = withTiming(open ? 1 : 0, { duration: reduceMotion ? 0 : MORPH_MS });
   }, [open, progress, reduceMotion]);
 
-  // Android's system back closes the wallet before it leaves Account.
-  useEffect(() => {
-    if (!open) return;
-    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      setOpen(false);
-      return true;
-    });
-    return () => subscription.remove();
-  }, [open]);
-
   const toggle = useCallback(() => {
     void haptic("light");
     setOpen((current) => !current);
   }, []);
 
+  useBackDismiss(open, toggle);
   return { open, progress, reduceMotion, toggle };
 }
 
@@ -73,9 +66,9 @@ export function AccountWalletButton({ wallet }: { wallet: AccountWalletControlle
   const sideRegion = useSideRegion();
   // Beside a side column the in-page circle cannot join the system's vertical bar;
   // a native toolbar item can (the Diary's wallet button is the same item).
-  if (sideRegion.edge && isRealLiquidGlassAvailable()) {
+  if ((sideRegion.edge || isPadIdiom()) && isRealLiquidGlassAvailable()) {
     return (
-      <Stack.Toolbar placement="left">
+      <Stack.Toolbar placement={isPadIdiom() ? "right" : "left"}>
         {/* The same item becomes the close control while the wallet is open. */}
         <Stack.Toolbar.Button
           icon={wallet.open ? "xmark" : "wallet.pass"}
@@ -96,14 +89,24 @@ export function AccountWalletButton({ wallet }: { wallet: AccountWalletControlle
 }
 
 /** The wallet overlay and its close button; render it over the whole screen. */
-export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletController }) {
+export function AccountWalletOverlay({
+  wallet,
+  nativeToolbar,
+  initialPurpose,
+}: {
+  wallet: AccountWalletController;
+  nativeToolbar?: boolean;
+  initialPurpose?: "ticket" | "badge";
+}) {
   // Beside a side column the Account toolbar item itself turns into the close control.
-  const toolbarCloses = Boolean(useSideRegion().edge) && isRealLiquidGlassAvailable();
+  const side = useSideRegion();
+  const toolbarCloses =
+    nativeToolbar ?? ((Boolean(side.edge) || isPadIdiom()) && isRealLiquidGlassAvailable());
   if (!wallet.open) return null;
   return (
     <Animated.View
-      entering={wallet.reduceMotion ? undefined : FadeIn.duration(MORPH_MS)}
-      exiting={wallet.reduceMotion ? undefined : FadeOut.duration(MORPH_MS)}
+      entering={wallet.reduceMotion ? undefined : SlideInRight.duration(MORPH_MS)}
+      exiting={wallet.reduceMotion ? undefined : SlideOutRight.duration(MORPH_MS)}
       testID="account-wallet-overlay"
       style={{
         backgroundColor: colors.background,
@@ -119,6 +122,7 @@ export function AccountWalletOverlay({ wallet }: { wallet: AccountWalletControll
       <WalletOverlayContent
         wallet={wallet}
         closeTestID="account-wallet-close"
+        initialPurpose={initialPurpose}
         toolbarCloses={toolbarCloses}
       />
     </Animated.View>
@@ -236,6 +240,8 @@ function WalletToggleButton({
         accessibilityState={{ expanded: open }}
         onPress={toggle}
         style={({ pressed }) => ({
+          cursor: "pointer",
+          borderRadius: ACCOUNT_WALLET_BUTTON_SIZE / 2,
           alignItems: "center",
           flex: 1,
           justifyContent: "center",

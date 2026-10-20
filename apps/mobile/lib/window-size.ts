@@ -1,4 +1,5 @@
 import { useWindowDimensions } from "react-native";
+import { SQUARISH_MAX_ASPECT } from "@/lib/screen-orientation";
 
 /**
  * Window size classes, measured on the window the app actually has (a folded
@@ -32,6 +33,11 @@ export function maxContentWidth(windowWidth: number): number {
     : MAX_CONTENT_WIDTH;
 }
 
+/** H55: enough room for navigation, a readable list and a separate detail pane. */
+export function isTabletLandscapeWindow(width: number, height: number): boolean {
+  return width >= 1100 && height >= 800 && width > height;
+}
+
 export function windowSizeClass(width: number): WindowSizeClass {
   if (width < COMPACT_MAX_WIDTH) return "compact";
   if (width < MEDIUM_MAX_WIDTH) return "medium";
@@ -51,4 +57,30 @@ export function useWindowSizeClass(): {
 } {
   const { width, height } = useWindowDimensions();
   return { width, height, sizeClass: windowSizeClass(width) };
+}
+
+/** H55: compact passport covers use the same navigation shape as Duo's cover. */
+export function isCompactPassportWindow(width: number, height: number): boolean {
+  const short = Math.min(width, height);
+  return (
+    short >= 320 &&
+    short < 600 &&
+    height >= 400 &&
+    Math.max(width, height) < short * SQUARISH_MAX_ASPECT
+  );
+}
+
+/** H55: opened Android windows fit a narrower list beside their detail, even in portrait. */
+export function listDetailLayout(width: number, height: number, platform: string) {
+  return {
+    enabled:
+      platform === "android"
+        ? width >= 640 && height >= 600
+        : windowSizeClass(width) === "expanded",
+    listWidth: isTabletLandscapeWindow(width, height)
+      ? 420
+      : platform === "android" && width < 840
+        ? 300
+        : 380,
+  };
 }

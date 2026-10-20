@@ -6,7 +6,14 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockSetOptions = jest.fn();
+jest.mock("react-native-screens/experimental", () => ({
+  ScrollViewMarker: ({ children }: { children: unknown }) => children,
+}));
 jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#171717" }) }));
+jest.mock("@/components/my-queue-screen", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
@@ -84,7 +91,11 @@ import { InviteTeammatesScreen } from "@/components/invite-teammates-screen";
 import { MyProjectsScreen } from "@/components/my-projects-screen";
 import { NewProjectScreen } from "@/components/new-project-screen";
 import { ProjectChallengesScreen } from "@/components/project-challenges-screen";
-import { ProjectEditor, ProjectReadView } from "@/components/project-detail-screen";
+import {
+  ProjectDetailScreen,
+  ProjectEditor,
+  ProjectReadView,
+} from "@/components/project-detail-screen";
 import { clearGallerySnapshots, ProjectGalleryScreen } from "@/components/project-gallery-screen";
 import { ProjectInvitesScreen } from "@/components/project-invites-screen";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -916,4 +927,13 @@ it("selects catalogue values and proposes several values as arrays (H16)", async
   await fireEvent.changeText(screen.getByLabelText("fieldLibrarySearch"), "Go");
   await fireEvent.press(screen.getByRole("button", { name: "fieldLibraryAdd" }));
   await waitFor(() => expect(changed).toHaveBeenLastCalledWith("tech", ["React", "Go"]));
+});
+
+it("shows retryable feedback for an incomplete project instead of rendering the editor (H20)", async () => {
+  mockApi.mockResolvedValue({ items: [], success: true });
+  await renderMobile(<ProjectDetailScreen />);
+  expect(await screen.findByText("requestError")).toBeTruthy();
+  mockApi.mockResolvedValue(project);
+  await fireEvent.press(screen.getByRole("button", { name: "retry" }));
+  expect(await screen.findByDisplayValue("Rover")).toBeTruthy();
 });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Dimensions } from "react-native";
+import { Dimensions, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { effectiveSideInsets } from "@/lib/side-region";
+import { navigationSideInsets } from "@/lib/side-region";
 import FoldRegion from "@/modules/fold-region";
 
 function readEdge(): "left" | "right" | null {
@@ -33,5 +33,6 @@ export function useVerticalBarEdge(): "left" | "right" | null {
 export function useSideInsets(): { left: number; right: number } {
   const insets = useSafeAreaInsets();
   const edge = useVerticalBarEdge();
-  return effectiveSideInsets(insets, edge);
+  const window = useWindowDimensions();
+  return navigationSideInsets(insets, edge, window, Platform.OS);
 }

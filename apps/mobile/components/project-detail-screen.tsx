@@ -4,9 +4,11 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { HeaderHeightContext } from "expo-router/react-navigation";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollViewMarker } from "react-native-screens/experimental";
 import { DynamicForm } from "@/components/dynamic-form";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
@@ -22,6 +24,7 @@ import { createIdempotencyKey } from "@/lib/idempotency-key";
 import {
   type NativeProject,
   type ProjectFile,
+  parseNativeProject,
   projectMutation,
   settleProjectDrafts,
   trackProjectTask,
@@ -65,8 +68,8 @@ export function ProjectDetailScreen({
     // H20: saves and uploads from a previous visit land before the reload.
     if (!gallery) await settleProjectDrafts(Number(id));
     setProject(
-      await apiFetch<NativeProject>(
-        `${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`,
+      parseNativeProject(
+        await apiFetch<unknown>(`${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`),
       ),
     );
     setEpoch((current) => current + 1);
@@ -126,85 +129,100 @@ export function ProjectReadView({
 }) {
   const { t } = useLocale();
   const router = useRouter();
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [refreshing, setRefreshing] = useState(false);
   return (
-    <ScrollView
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              void onRefresh()
-                .catch(() => {})
-                .finally(() => setRefreshing(false));
-            }}
-          />
-        ) : undefined
+    <ScrollViewMarker
+      style={{ flex: 1 }}
+      scrollEdgeEffects={
+        titleHeader
+          ? { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" }
+          : undefined
       }
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
-      style={{ backgroundColor: colors.background }}
     >
-      {titleHeader ? (
-        <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
-          {project.name}
-        </Text>
-      ) : null}
-      {project.winners?.length ? (
-        <Section>
-          {project.winners.map((winner, index) => (
-            <View key={`${winner.challengeId}:${winner.rank}`}>
-              {index > 0 ? <Separator /> : null}
-              <InfoRow
-                icon="trophy.fill"
-                label={t("projectWinner")}
-                value={winner.challengeTitle ?? String(winner.rank)}
-              />
-            </View>
-          ))}
+      <ScrollView
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void onRefresh()
+                  .catch(() => {})
+                  .finally(() => setRefreshing(false));
+              }}
+            />
+          ) : undefined
+        }
+        contentInsetAdjustmentBehavior={titleHeader ? "never" : "automatic"}
+        contentContainerStyle={{
+          gap: 24,
+          padding: 16,
+          paddingBottom: 32,
+          paddingTop: titleHeader ? Math.max(16, headerHeight - 52) : 16,
+        }}
+        style={{ backgroundColor: colors.background }}
+      >
+        {titleHeader ? (
+          <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+            {project.name}
+          </Text>
+        ) : null}
+        {project.winners?.length ? (
+          <Section>
+            {project.winners.map((winner, index) => (
+              <View key={`${winner.challengeId}:${winner.rank}`}>
+                {index > 0 ? <Separator /> : null}
+                <InfoRow
+                  icon="trophy.fill"
+                  label={t("projectWinner")}
+                  value={winner.challengeTitle ?? String(winner.rank)}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        <DynamicForm
+          template={project.template}
+          sections={project.sections}
+          responses={project.responses}
+          readOnly
+          files={project.files}
+        />
+        {project.githubUrl ? <ProjectRepoRow url={project.githubUrl} /> : null}
+        <Section title={t("projectTeam")}>
+          <ProjectMembers project={project} />
         </Section>
-      ) : null}
-      <DynamicForm
-        template={project.template}
-        sections={project.sections}
-        responses={project.responses}
-        readOnly
-        files={project.files}
-      />
-      {project.githubUrl ? <ProjectRepoRow url={project.githubUrl} /> : null}
-      <Section title={t("projectTeam")}>
-        <ProjectMembers project={project} />
-      </Section>
-      {project.challenges.length ? (
-        <Section title={t("projectChallenges")}>
-          {project.challenges.map((challenge, index) => (
-            <View key={challenge.id}>
-              {index > 0 ? <Separator /> : null}
-              <NavRow
-                title={challenge.title}
-                onPress={() =>
-                  router.push({
-                    pathname: "/projects/challenge",
-                    params: { challengeId: String(challenge.id) },
-                  })
-                }
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
-      {project.isMember ? null : (
-        <Section>
-          <ActionButton
-            label={t("reportContent")}
-            icon="flag"
-            destructive
-            onPress={() => reportContent({ projectId: project.id }, t)}
-          />
-        </Section>
-      )}
-    </ScrollView>
+        {project.challenges.length ? (
+          <Section title={t("projectChallenges")}>
+            {project.challenges.map((challenge, index) => (
+              <View key={challenge.id}>
+                {index > 0 ? <Separator /> : null}
+                <NavRow
+                  title={challenge.title}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/projects/challenge",
+                      params: { challengeId: String(challenge.id) },
+                    })
+                  }
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {project.isMember ? null : (
+          <Section>
+            <ActionButton
+              label={t("reportContent")}
+              icon="flag"
+              destructive
+              onPress={() => reportContent({ projectId: project.id }, t)}
+            />
+          </Section>
+        )}
+      </ScrollView>
+    </ScrollViewMarker>
   );
 }
 

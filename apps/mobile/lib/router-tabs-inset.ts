@@ -66,6 +66,7 @@ const ROUTER_TAB_BAR_VERTICAL_TOP_RESERVE = 176;
 export function routerTabBarVerticalBudget(
   windowHeight: number,
   bottomPadding: number,
+  windowWidth = 0,
 ): { direct: number; withoutOverflow: number } {
   const room =
     windowHeight -
@@ -74,8 +75,11 @@ export function routerTabBarVerticalBudget(
     ROUTER_TAB_BAR_VERTICAL_GAP;
   const cells = Math.floor(room / (ROUTER_TAB_BAR_VERTICAL_CELL + 4));
   return {
-    direct: Math.min(4, Math.max(2, cells - 1)),
-    withoutOverflow: Math.min(5, Math.max(2, cells)),
+    direct: Math.min(routerTabBarDirectTabsForWidth(windowWidth), Math.max(2, cells - 1)),
+    withoutOverflow: Math.min(
+      routerTabBarMaxTabsWithoutOverflowForWidth(windowWidth),
+      Math.max(2, cells),
+    ),
   };
 }
 

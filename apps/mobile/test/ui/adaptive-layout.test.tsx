@@ -2,7 +2,11 @@ import { act, screen } from "@testing-library/react-native";
 import { useState } from "react";
 import { Dimensions, StyleSheet, Text, TextInput, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
-import { MAX_CONTENT_WIDTH, useWindowSizeClass } from "@/lib/window-size";
+import {
+  EXPANDED_MAX_CONTENT_WIDTH,
+  MAX_CONTENT_WIDTH,
+  useWindowSizeClass,
+} from "@/lib/window-size";
 import { renderMobile } from "./render";
 
 /** Foldables and large windows: one tree at every width, state kept across resizes. */
@@ -46,6 +50,38 @@ describe("adaptive layout", () => {
       maxWidth: MAX_CONTENT_WIDTH,
       width: "100%",
     });
+  });
+
+  it("uses the full landscape tablet window for the navigator, keeping sheets bounded", async () => {
+    setWindow(1366, 1032);
+    await renderMobile(
+      <>
+        <AdaptiveFrame padSides={false}>
+          <View testID="content" />
+        </AdaptiveFrame>
+        <AdaptiveFrame>
+          <View testID="sheet" />
+        </AdaptiveFrame>
+      </>,
+    );
+    expect(ancestorStyle("content", "maxWidth").maxWidth).toBe(1366);
+    expect(ancestorStyle("sheet", "maxWidth").maxWidth).toBe(EXPANDED_MAX_CONTENT_WIDTH);
+  });
+
+  it.each([
+    [951, 669],
+    [669, 951],
+    [1032, 1366],
+  ])("preserves the Duo and portrait frame at %s × %s", async (width, height) => {
+    setWindow(width, height);
+    await renderMobile(
+      <AdaptiveFrame padSides={false}>
+        <View testID="content" />
+      </AdaptiveFrame>,
+    );
+    expect(ancestorStyle("content", "maxWidth").maxWidth).toBe(
+      width >= 840 ? EXPANDED_MAX_CONTENT_WIDTH : MAX_CONTENT_WIDTH,
+    );
   });
 
   it("keeps content clear of the side the system indicators use, edge by edge", async () => {

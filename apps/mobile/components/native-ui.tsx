@@ -612,6 +612,8 @@ export function LegacyHeaderIconButton({
       }}
       style={({ pressed }) => ({
         alignItems: "center",
+        cursor: "pointer",
+        borderRadius: 22,
         height: 44,
         justifyContent: "center",
         opacity: pressed ? 0.6 : 1,
@@ -916,6 +918,8 @@ export function FloatingGlassButton({
           alignItems: "center",
           flex: 1,
           justifyContent: "center",
+          cursor: disabled ? "auto" : "pointer",
+          borderRadius: 22,
           opacity: disabled ? 0.4 : 1,
         }}
       >

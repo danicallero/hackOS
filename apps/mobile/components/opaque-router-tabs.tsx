@@ -15,7 +15,6 @@ import {
   View,
 } from "react-native";
 
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView } from "@/components/glass-view";
 import {
   type RouterTabItem,
@@ -39,16 +38,9 @@ import {
   OVERFLOW_TAB_ROUTE,
   type OverflowTabKey,
 } from "@/lib/overflow-tabs";
-import {
-  ROUTER_TAB_BAR_VERTICAL_WIDTH,
-  routerTabBarBottomPadding,
-  routerTabBarDirectTabsForWidth,
-  routerTabBarMaxTabsWithoutOverflowForWidth,
-  routerTabBarVerticalBudget,
-  useRouterTabBarInsets,
-} from "@/lib/router-tabs-inset";
-import { useSideRegion } from "@/lib/side-region";
-import { overflowTabs, primaryTabs, type TabKey } from "@/lib/tabs";
+import { ROUTER_TAB_BAR_VERTICAL_WIDTH, useRouterTabBarInsets } from "@/lib/router-tabs-inset";
+import { useTabPresentation } from "@/lib/tab-presentation";
+import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 type TabLabelKey =
@@ -228,29 +220,14 @@ function OverflowAccountAvatar({
 export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const systemColorScheme = useColorScheme();
-  const { height, width } = useWindowDimensions();
-  const { bottom: safeBottom } = useSafeAreaInsets();
-  const verticalBudget =
-    useSideRegion().edge === null
-      ? null
-      : routerTabBarVerticalBudget(height, routerTabBarBottomPadding(safeBottom));
   const fallbackColorScheme: "dark" | "light" = systemColorScheme === "dark" ? "dark" : "light";
   const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#000000";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
-  const personalTabContext = { hasQueueItems };
-  const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
-  const overflowTabKeys = overflowTabs(capabilities, personalTabContext);
-  // A vertical bar is limited by the height it has below the system indicators, not by width.
-  const directTabLimit = verticalBudget?.direct ?? routerTabBarDirectTabsForWidth(width);
-  const maxTabsWithoutOverflow =
-    verticalBudget?.withoutOverflow ?? routerTabBarMaxTabsWithoutOverflowForWidth(width);
-  const allTabKeys = [...primaryTabKeys, ...overflowTabKeys];
-  const showOverflow = allTabKeys.length > maxTabsWithoutOverflow;
-  const directOverflowCount = Math.max(0, directTabLimit - primaryTabKeys.length);
-  const visibleTabKeys = showOverflow
-    ? [...primaryTabKeys, ...overflowTabKeys.slice(0, directOverflowCount)]
-    : allTabKeys;
-  const overflowIds = showOverflow ? overflowTabKeys.slice(directOverflowCount) : [];
+  const presentation = useTabPresentation(capabilities, { hasQueueItems });
+  const directTabLimit = presentation.directLimit;
+  const maxTabsWithoutOverflow = presentation.withoutOverflow;
+  const visibleTabKeys = presentation.visible;
+  const overflowIds = presentation.overflow;
   const tabs: RouterTabItem[] = visibleTabKeys.map((key) => {
     const definition = TAB_DEFINITIONS[key];
     const { icon, selectedIcon } = definition;

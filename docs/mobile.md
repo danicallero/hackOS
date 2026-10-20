@@ -242,8 +242,14 @@ distributed to other Expo Router apps without importing hackOS code.
   the glyph morphs in place. Android's system back also closes it. The
   overlay avoids a pushed or modal route, which would slide or cover the corner.
   The wallet has no title: the Ticket/Badge control leads it.
-  `app/(tabs)/others/wallet.tsx` remains for deep links, with a title-less
-  back header. Queue-only
+  `app/(tabs)/others/wallet.tsx` remains for deep links, without a top bar and with an
+  explicit close action that returns through available stack history or falls
+  back to Account when opened directly. On iOS with native glass, the close
+  action is a real toolbar symbol on a transparent, title-less header, so UIKit
+  aligns it with other navigation controls and moves it into Duo's side column.
+  Scroll content clears the native toolbar once; it does not reserve an extra
+  floating-button row. Earlier iOS and Android retain the shared floating close
+  control; Android also protects the status bar with the existing scrim. Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
@@ -346,15 +352,21 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   is rebuilt (the lookup fails soft).
 - **Readable column.** `components/adaptive-frame.tsx` wraps the navigator in
   `app/_layout.tsx` and every `Modal` sheet (and, as `SheetFrame`, every native
-  modal route), capping content at 720 dp and centring it on wider windows. The
-  tree is identical at every width, so fold, unfold and window resizing never
+  modal route). Compact/medium content is capped at 720 dp, expanded content at
+  960 dp. Large landscape windows (at least 1100 × 800 dp) give the root
+  navigator the whole window instead: navigation belongs at the display edge,
+  not inside a centred reading column. Schedule uses a 420 dp list beside a
+  detail pane capped at 760 dp; smaller expanded windows retain the 380 dp list.
+  Sheets retain their own content cap. The tree is identical at every width, so fold, unfold and window resizing never
   remount the navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
 - **Asymmetric safe areas.** On a foldable iPhone the system status indicators and
   the Dynamic Island run down one side and the horizontal insets differ by pose, and
   a plain `ScrollView` never insets for them. Foreground content is padded per edge:
   root screens through `contentStyle` in `app/_layout.tsx`, each tab's Stack through
-  `useTabStackScreenOptions` (`lib/navigation.ts`; the `TabSlot` itself stays unpadded so
-  the system can move its native bars into the column), sheets through `SheetFrame` (which measures the
+  `useTabStackScreenOptions` (`lib/navigation.ts`; the foldable `TabSlot` stays
+  unpadded so the system can move its native bars into the column). The large
+  tablet sidebar instead pads `TabSlot` itself, keeping native headers aligned
+  with their content without double-padding screens, sheets through `SheetFrame` (which measures the
   sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
   same side.
 - **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
@@ -364,8 +376,15 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   (`lib/side-region.ts`) puts `VerticalTabBar` in that column, on the same side,
   bottom-aligned below the indicators, symbol only (labels stay the accessibility
   names), with the overflow circle underneath; the number of direct tabs follows the
-  height left below the indicators (`routerTabBarVerticalBudget`). No inset, no vertical
-  bar: nothing branches on a device model. Native navigation bars in the tab
+  height left below the indicators (`routerTabBarVerticalBudget`). Landscape iOS
+  windows with at least 600 pt of height also reserve a leading rail. Large
+  landscape windows (at least 1100 × 800 dp) use a 200 dp sidebar with labelled
+  destinations; smaller windows keep the 64 dp symbol rail.
+  Portrait and narrow split-screen windows restore the bottom bar without
+  remounting the screen. A system-owned foldable column takes precedence.
+  The rail is top-aligned below the title band on large landscape windows;
+  smaller foldable windows keep the system-aligned bottom rail.
+  iPad retains its native horizontal header controls; native navigation bars in foldable tab
   screens span the full window, so the system moves their icon items (back, bell,
   add, edit) into the same column, above the tab bar; custom views in a toolbar (the
   filter) stay horizontal.
@@ -374,7 +393,9 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
   Insets come from `react-native-safe-area-context`, per edge.
 
-**Bar colour.** Activities, My Projects and Contacts paint their native header with the page colour
+**Bar colour.** The navigation theme paints the same page background behind
+floating bars and sidebars, avoiding a visible seam with the navigation library's
+default canvas on iPad and Duo. Activities, My Projects and Contacts paint their native header with the page colour
 (`headerStyle.backgroundColor`), like Schedule: the system blur materials read whiter than the page. The
 two-pane Schedule keeps per-column title bands, with `components/system-blur.tsx` (`expo-blur`, a native
 dependency) behind the detail title.
@@ -1144,7 +1165,7 @@ The morph only runs where a real camera cutout exists:
   function and Android uses the plain collapse. With a hole punch, Android does
   not use the island mask above (its keyframes squeeze a small round target
   into a thin vertical needle); it uses the native gooey view described below.
-- **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
+- **Duo lateral island, no cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
   (`hasCutout: false`): no morph and no overlay (`simple`). The avatar stays in
   the scroll content: it holds still and shrinks to 0.75 until the view right
   below it (the name block, wired with `onNameLayout`) reaches its shrunken
@@ -1155,7 +1176,7 @@ The morph only runs where a real camera cutout exists:
   `contentMinHeight` floor apply, since nothing is ever half-morphed.
 
 `cameraCutoutFrame` (a `useProfileAvatarCollapse` option) still overrides the
-target for OEM placements. Reduced Motion uses the same in-content path without
+target for OEM placements in the top camera band. A lateral Duo island uses the in-content collapse so the avatar never crosses the page diagonally into the system rail. Reduced Motion uses the same in-content path without
 the hold or shrink: the avatar simply scrolls with the page.
 
 #### Android hole-punch gooey morph
@@ -2488,3 +2509,16 @@ inline proposal action. Selections and new proposals have no count limit. The
 catalogue belongs to its question; curation remains in the web form editor.
 Read-only projects display the saved names, including historical answers after
 catalogue deletion. See [question-owned libraries](./form-libraries.md).
+
+
+### Responsive Account and Wallet (H28, H55)
+
+Account uses the Contacts native toolbar pattern beside a rail or on iPad: leading title, trailing Wallet action, matching canvas and no root back action. Its form remains a centred 720 pt reading column. Wallet uses two stable panes when its measured viewport reaches 720 pt: compact Ticket/Badge selector and QR on the left, holder and pass actions on the right; narrower windows stack those groups. Resizing preserves the selected credential. The personal queue keeps its back action without a redundant My queue title.
+
+Android navigation responds to the current window. Compact passport proportions use a rail; tall covers keep the phone bottom bar. Opened windows at least 640 × 600 dp use list/detail panes, including portrait folds; narrower or short landscape windows keep one pane. This is window geometry, not physical hinge occlusion detection. The overflow hub uses the same visible-tab budget as the bar, lists only hidden destinations, and redirects to Account when none remain.
+
+The native Account and Contacts bars stay transparent in either orientation, preserving the system scroll-edge treatment instead of clipping the profile with an opaque band. iPad profile avatars use 144 pt; phone and Duo sizes remain unchanged. Contacts keeps Wallet in-page, changing the same native toolbar item to Close. My Projects opens My queue in-page with its opener becoming Close; both overlays enter and exit on the right and respect Reduce Motion. Back gestures and Android Back close an open overlay before leaving its owner.
+
+The root iOS back recognizer covers side navigation and the bottom dock outside child stacks; native stacks retain their content gesture. A dock back gesture takes priority over tab scrubbing only while back/dismiss is possible. It rejects vertical drags and short horizontal movements. Contacts uses the measured native-header height with manual scroll padding to avoid restoring an obsolete automatic top inset. Projects uses a leading toolbar title immediately, without waiting for a large-title scroll event.
+
+Project detail validates required project collections before mounting the editor (H20). A malformed response uses the existing retryable RequestFeedback state. Gallery removes the unused detail column when there are no results, centres its empty detail placeholder, and avoids inheriting the large-title offset for its embedded project header. The New project sheet uses matching header/body backgrounds with native X/check toolbar actions.

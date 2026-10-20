@@ -1,5 +1,6 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect } from "expo-router";
+import { Stack } from "expo-router/stack";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -59,7 +60,7 @@ interface QueueEntry {
 const POLL_MS = 15_000;
 
 /** Live participant queue, matching the web read model and SSE events. */
-export default function QueueScreen() {
+export default function QueueScreen({ embedded = false }: { embedded?: boolean } = {}) {
   useColorScheme();
   const { t } = useLocale();
   const { me } = useMeContext();
@@ -172,7 +173,17 @@ export default function QueueScreen() {
 
   return (
     <>
-      <EntryBackToolbar fallback="/(tabs)/queue" />
+      {embedded ? null : (
+        <Stack.Screen
+          options={{
+            title: "",
+            headerTitle: "",
+            headerLargeTitle: false,
+            headerShadowVisible: false,
+          }}
+        />
+      )}
+      {embedded ? null : <EntryBackToolbar fallback="/(tabs)/queue" />}
       <FlatList
         ref={listRef}
         {...trueTop.scrollProps}

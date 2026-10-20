@@ -1,4 +1,9 @@
 import { createContext, createElement, type ReactNode, useContext } from "react";
+import {
+  isCompactPassportWindow,
+  isTabletLandscapeWindow,
+  listDetailLayout,
+} from "@/lib/window-size";
 
 /**
  * On a foldable iPhone the system moves its bars and indicators to one side:
@@ -20,6 +25,35 @@ export const NO_SIDE_REGION: SideRegion = { edge: null, size: 0 };
 
 /** Width given to the system's column where the insets do not report it (Split View). */
 export const RESERVED_COLUMN_SIZE = 64;
+export const TABLET_NAVIGATION_WIDTH = 200;
+
+/** H55: wide iPad windows share the side navigation used by foldable windows. */
+export function navigationSideInsets(
+  insets: { left: number; right: number },
+  systemEdge: "left" | "right" | null,
+  window: { width: number; height: number },
+  platform: string,
+): { left: number; right: number } {
+  // A system-owned column always wins, including a foldable's right-hand column.
+  const reserved = effectiveSideInsets(insets, systemEdge);
+  if (sideRegionForInsets(reserved).edge) return reserved;
+  if (
+    platform === "android" &&
+    (isCompactPassportWindow(window.width, window.height) ||
+      listDetailLayout(window.width, window.height, platform).enabled)
+  ) {
+    return { left: reserved.left + RESERVED_COLUMN_SIZE, right: reserved.right };
+  }
+  if (platform === "ios" && window.width > window.height && window.height >= 600) {
+    return {
+      left: isTabletLandscapeWindow(window.width, window.height)
+        ? TABLET_NAVIGATION_WIDTH
+        : RESERVED_COLUMN_SIZE,
+      right: reserved.right,
+    };
+  }
+  return reserved;
+}
 
 /**
  * The horizontal insets with the system's vertical-bar column folded in. In Split View the

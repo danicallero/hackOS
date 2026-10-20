@@ -28,7 +28,7 @@ import {
   type NativeProject,
 } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
-import { windowSizeClass } from "@/lib/window-size";
+import { listDetailLayout } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
@@ -149,13 +149,18 @@ export function ProjectGalleryScreen() {
     />
   );
 
-  const { width: windowWidth } = useWindowDimensions();
-  const twoPane = windowSizeClass(windowWidth) === "expanded";
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS);
+  const twoPane = paneLayout.enabled;
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t("gallery"),
       headerShown: true,
       headerLargeTitle: true,
+      headerBlurEffect: "none",
+      headerTransparent: true,
+      headerStyle: { backgroundColor: "transparent" },
+      scrollEdgeEffects: { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" },
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
@@ -298,6 +303,8 @@ export function ProjectGalleryScreen() {
     [router, twoPane],
   );
   const closed = galleryClosedNotice(error, t, language);
+  const showDetailPane = twoPane && projects.length > 0;
+  const empty = !loading && projects.length === 0;
   return (
     <>
       <EntryBackToolbar fallback="/(tabs)/queue" />
@@ -307,11 +314,22 @@ export function ProjectGalleryScreen() {
         </Stack.Toolbar>
       ) : null}
       <View style={{ flex: 1, flexDirection: "row" }}>
-        <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+        <View
+          style={{
+            flex: showDetailPane ? 0 : 1,
+            width: showDetailPane ? paneLayout.listWidth : undefined,
+          }}
+        >
           <ScrollView
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}
+            contentContainerStyle={{
+              padding: 16,
+              gap: 20,
+              paddingBottom: empty ? 96 : 32,
+              flexGrow: 1,
+              justifyContent: empty ? "center" : undefined,
+            }}
           >
             {Platform.OS !== "ios" ? (
               <TextInput
@@ -365,7 +383,7 @@ export function ProjectGalleryScreen() {
             ) : null}
           </ScrollView>
         </View>
-        {twoPane ? (
+        {showDetailPane ? (
           <View
             style={{
               borderLeftColor: colors.separator,
@@ -376,7 +394,9 @@ export function ProjectGalleryScreen() {
             {selectedId !== null ? (
               <ProjectDetailScreen embedded gallery="1" id={String(selectedId)} />
             ) : (
-              <EmptyState icon="hammer" title={t("gallery")} />
+              <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
+                <EmptyState icon="hammer" title={t("gallery")} />
+              </View>
             )}
           </View>
         ) : null}

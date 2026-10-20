@@ -1,5 +1,7 @@
 import type { Href, ImperativeRouter } from "expo-router";
 import { useMemo } from "react";
+import { Platform } from "react-native";
+import { TABLET_NAVIGATION_WIDTH, useSideRegion } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 
 /**
@@ -11,6 +13,8 @@ import { useSideInsets } from "@/lib/vertical-bar-edge";
  * tab navigator would offer the route group's name, "(tabs)".
  */
 export const nativeStackScreenOptions = {
+  gestureEnabled: true,
+  fullScreenGestureEnabled: true,
   headerBackButtonDisplayMode: "minimal",
   headerBackButtonMenuEnabled: false,
 } as const;
@@ -23,12 +27,20 @@ export const nativeStackScreenOptions = {
  */
 export function useTabStackScreenOptions() {
   const { left, right } = useSideInsets();
+  const side = useSideRegion();
+  const slotPadsSide = Platform.OS === "android";
   return useMemo(
     () => ({
       ...nativeStackScreenOptions,
-      contentStyle: { paddingLeft: left, paddingRight: right },
+      // H55: the tablet TabSlot already clears its sidebar, including native headers.
+      contentStyle: {
+        paddingLeft:
+          left === TABLET_NAVIGATION_WIDTH || (slotPadsSide && side.edge === "left") ? 0 : left,
+        paddingRight:
+          right === TABLET_NAVIGATION_WIDTH || (slotPadsSide && side.edge === "right") ? 0 : right,
+      },
     }),
-    [left, right],
+    [left, right, slotPadsSide, side.edge],
   );
 }
 

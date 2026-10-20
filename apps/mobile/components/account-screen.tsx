@@ -1,5 +1,6 @@
 import { type MenuAction, type MenuComponentRef, MenuView } from "@expo/ui/community/menu";
 import {
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
   useNavigation,
@@ -32,6 +33,7 @@ import {
   AccountWalletOverlay,
   useAccountWallet,
 } from "@/components/account-wallet";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -67,7 +69,8 @@ import {
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
-import { canManageStands, canViewStaffStatistics } from "@/lib/tabs";
+import { useSideRegion } from "@/lib/side-region";
+import { canManageStands, canViewStaffStatistics, isPadIdiom } from "@/lib/tabs";
 import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -88,13 +91,24 @@ export default function AccountScreen() {
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const avatarSize = isPadIdiom() ? 144 : 96;
   const wallet = useAccountWallet();
   const navigation = useNavigation();
-  // The wallet overlay is a page of its own: its title replaces "Account" in the native
-  // header instead of "Account" showing above it.
+  const side = useSideRegion();
+  const nativeHeader = isRealLiquidGlassAvailable() && (Boolean(side.edge) || isPadIdiom());
   useEffect(() => {
-    navigation.setOptions({ title: wallet.open ? t("tabWallet") : t("tabAccount") });
-  }, [navigation, wallet.open, t]);
+    navigation.setOptions({
+      title: "",
+      headerTitle: "",
+      headerShown: nativeHeader,
+      headerBackVisible: false,
+      gestureEnabled: !wallet.open,
+      headerLargeTitle: false,
+      headerShadowVisible: false,
+      headerTransparent: true,
+      headerStyle: { backgroundColor: "transparent" },
+    });
+  }, [navigation, nativeHeader, wallet.open]);
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);
   useScrollToTop(avatarCollapse.scrollToTopRef);
   useFocusEffect(avatarCollapse.settleAtRest);
@@ -282,6 +296,18 @@ export default function AccountScreen() {
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
+      {nativeHeader && !wallet.open ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+            >
+              {t("tabAccount")}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
       <Animated.ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -298,6 +324,9 @@ export default function AccountScreen() {
         contentContainerStyle={{
           gap: 20,
           padding: 16,
+          alignSelf: "center",
+          maxWidth: 720,
+          width: "100%",
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
           paddingTop: 16 + androidTopInset,
         }}
@@ -317,8 +346,13 @@ export default function AccountScreen() {
         ) : null}
 
         <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
-          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
-            <ProfilePhotoMenu testID="account-avatar" name={fullName} image={me.image} size={96} />
+          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
+            <ProfilePhotoMenu
+              testID="account-avatar"
+              name={fullName}
+              image={me.image}
+              size={avatarSize}
+            />
           </ProfileAvatarCollapseAnchor>
           <View onLayout={avatarCollapse.onNameLayout} style={{ alignItems: "center", gap: 5 }}>
             <Text
@@ -582,7 +616,7 @@ export default function AccountScreen() {
         image={me.image}
         persist
         name={fullName}
-        size={96}
+        size={avatarSize}
         variant="account"
       />
       <AccountWalletOverlay wallet={wallet} />

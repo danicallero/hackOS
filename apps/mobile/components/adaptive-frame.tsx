@@ -4,7 +4,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { useDivisionRegion } from "@/lib/fold-region";
 import { SideRegionProvider, sideRegionForInsets } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
-import { maxContentWidth } from "@/lib/window-size";
+import { isTabletLandscapeWindow, maxContentWidth } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
 
 /**
@@ -19,7 +19,8 @@ import { colors } from "@/theme/colors";
  *   read is only the inset that is left.
  * - The root navigator passes `padSides={false}`: its screens pad themselves
  *   (`contentStyle`), and the tab layout keeps the side column free for its bar.
- * - Content stops growing at `maxContentWidth` and is centred on wider windows.
+ * - Large landscape windows give the root navigator the full window. Reading
+ *   limits belong to its panes; sheets keep their own content cap.
  *
  * The tree is the same at every width and every pose (only styles change), so
  * folding, unfolding or resizing never remounts the navigator or loses a draft.
@@ -50,7 +51,7 @@ export function AdaptiveFrame({
   // with no two-pane layout everything stays in the upper one, above the crease.
   const aboveFold = fold && fold.width > fold.height ? Math.max(0, fold.y - 8) : null;
   const columnWidth = Math.min(
-    maxContentWidth(width),
+    root && isTabletLandscapeWindow(width, height) ? width : maxContentWidth(width),
     beforeFold === null ? Number.POSITIVE_INFINITY : beforeFold,
   );
   return (

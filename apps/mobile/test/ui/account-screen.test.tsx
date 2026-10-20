@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { act, fireEvent, screen, userEvent, waitFor, within } from "@testing-library/react-native";
-import { Alert, BackHandler, ScrollView } from "react-native";
+import { Alert, BackHandler, Platform, ScrollView } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -443,6 +443,7 @@ describe("account removal UI flow", () => {
   });
 
   it("closes the wallet on Android system back before leaving Account (H28)", async () => {
+    const platform = jest.replaceProperty(Platform, "OS", "android");
     const backHandler = jest.spyOn(BackHandler, "addEventListener");
     const user = userEvent.setup();
     await renderMobile(<AccountScreen />);
@@ -457,6 +458,7 @@ describe("account removal UI flow", () => {
     expect(handled).toBe(true);
     await waitFor(() => expect(screen.queryByTestId("wallet-screen")).toBeNull());
     backHandler.mockRestore();
+    platform.restore();
   });
 
   it("consumes the alerts highlight param once: scroll to Notifications, flash, clear", async () => {

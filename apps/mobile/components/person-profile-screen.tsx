@@ -31,6 +31,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
+import { isPadIdiom } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
 
 type State =
@@ -47,6 +48,7 @@ type State =
  * reader's favourite and note.
  */
 export function PersonProfileScreen() {
+  const avatarSize = isPadIdiom() ? 144 : 112;
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const router = useRouter();
@@ -246,8 +248,8 @@ export function PersonProfileScreen() {
               data={person}
               onNameLayout={avatarCollapse.onNameLayout}
               avatar={
-                <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={112}>
-                  <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
+                <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
+                  <PersonAvatar size={avatarSize} name={person.displayName} uri={person.photoUrl} />
                 </ProfileAvatarCollapseAnchor>
               }
               actions={
@@ -347,7 +349,7 @@ export function PersonProfileScreen() {
           controller={avatarCollapse}
           image={person.photoUrl}
           name={person.displayName}
-          size={112}
+          size={avatarSize}
           variant="person"
         />
       ) : null}

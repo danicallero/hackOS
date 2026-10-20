@@ -27,6 +27,9 @@ function schemeHex(light: string, dark: string) {
   return Appearance.getColorScheme() === "dark" ? dark : light;
 }
 
+/** H55: navigation requires string colours; these match the semantic page canvas. */
+export const navigationCanvas = { light: "#f2f2f7", dark: "#000000" } as const;
+
 interface ColorSpec {
   ios: () => ColorValue;
   android: () => ColorValue;
@@ -63,7 +66,7 @@ const SPECS = {
   },
   background: {
     ios: () => Color.ios.systemGroupedBackground,
-    android: () => schemeHex("#f2f2f7", "#000000"),
+    android: () => schemeHex(navigationCanvas.light, navigationCanvas.dark),
     web: "#f5f5f7",
   },
   surface: {

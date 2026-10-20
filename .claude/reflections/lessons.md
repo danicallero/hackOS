@@ -916,3 +916,29 @@ CSV columns follow the current and historical form definitions.
 
 ### Exceptions
 Explicit user authorization to populate a particular event's form is allowed.
+
+
+## [R028] Separate navigator width from reading width on tablets
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-10-20
+
+### Trigger
+Adapting a phone or foldable layout to a large tablet window.
+
+### Mistake
+Moved the tab bar to a rail but left the whole navigator capped inside a centred column. Large empty margins remained, while the list and detail competed for the restricted width.
+
+### Lesson
+A navigation rail alone does not establish a tablet layout. The navigator must use the available window; reading limits belong to the content panes.
+
+### Action
+Review the outer frame, navigation anchoring, pane widths and header alignment together. Match the navigation canvas to screen backgrounds, including native reserved side columns. Preserve existing smaller foldable geometry when changing the tablet policy.
+
+### Validation
+Inspect native tablet screenshots at full size and compare foldable portrait/landscape captures. Confirm selection and drafts survive rotation, not just that controls remain on screen.
+
+### Exceptions
+Sheets and focused single-column editors retain their own readable content bounds.

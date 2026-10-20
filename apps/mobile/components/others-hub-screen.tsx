@@ -6,7 +6,7 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { OVERFLOW_TAB_ICON, OVERFLOW_TAB_LABEL_KEY, OVERFLOW_TAB_ROUTE } from "@/lib/overflow-tabs";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { overflowTabs } from "@/lib/tabs";
+import { useTabPresentation } from "@/lib/tab-presentation";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 
@@ -23,7 +23,9 @@ export function OthersHubScreen() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
   const { me } = useMeContext();
-  const ids = overflowTabs(me?.capabilities ?? []);
+  const { overflow: ids } = useTabPresentation(me?.capabilities ?? [], {
+    hasQueueItems: me?.hasQueueItems ?? false,
+  });
 
   const trueTop = useTrueTopScroll(scrollRef);
 
@@ -48,7 +50,7 @@ export function OthersHubScreen() {
               <Pressable
                 accessibilityLabel={t(OVERFLOW_TAB_LABEL_KEY[id])}
                 accessibilityRole="button"
-                onPress={() => router.push(OVERFLOW_TAB_ROUTE[id])}
+                onPress={() => router.replace(OVERFLOW_TAB_ROUTE[id])}
                 style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
               >
                 <InfoRow

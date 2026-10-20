@@ -1150,10 +1150,16 @@ architecture: [`mobile.md`](./mobile.md).**
 
 - **Design for width, not for a device.** Layouts answer to the window the app has
   now (compact < 600 dp, medium < 840 dp, expanded from 840 dp), never to a
-  manufacturer, model or fold posture. Content stops growing at 720 dp and is
-  centred (`AdaptiveFrame`, also inside every `Modal` sheet); nothing may remount
-  or reset on a resize, because foldables resize mid-task. Details in
+  manufacturer, model or fold posture. Bound reading content (720 dp on smaller
+  windows, 960 dp on expanded ones), not the entire tablet navigator. In large
+  landscape windows (at least 1100 × 800 dp), `AdaptiveFrame` gives navigation
+  the full display width and panes apply their own reading limits. Sheets keep
+  their content cap. Nothing may remount or reset on a resize, because foldables resize mid-task. Details in
   [`mobile.md`](./mobile.md#foldables-and-large-screens).
+  On iOS, landscape windows at least 600 pt tall use a leading navigation rail;
+  portrait and narrower split-screen windows keep bottom navigation. A system
+  side column takes precedence over the app's leading rail. Content clears the
+  rail and reflows without remounting; iPad retains native horizontal headers.
 - **Tab budget is hard.** Every platform uses the custom Expo Router shell in
   `components/router-tabs.tsx`: iOS 26+ renders Liquid Glass surfaces, while
   earlier iOS and Android use the same geometry with solid surfaces. Five total
@@ -1201,6 +1207,12 @@ architecture: [`mobile.md`](./mobile.md).**
   system `PKAddPassButton` (never custom artwork, per Apple's guidelines);
   destructive actions (delete message, sign out) use native confirmation
   alerts; lists use native section/grouped styling.
+- **Navigation actions follow native chrome.** On iOS with native glass, route
+  close/back actions use toolbar symbols, including title-less screens. A
+  transparent header can own the controls without adding a visible top bar.
+  Let the native scroll inset clear that toolbar once; do not add a second
+  floating-button row. Floating controls remain for camera/modal surfaces and
+  the platform fallback, aligned within their own safe-area coordinate space.
 - Touch and layout: primary targets ≥ 44 pt; safe-area insets respected for
   fixed actions and scanner feedback; critical scan actions never depend on
   small overflow menus.
@@ -1404,3 +1416,6 @@ actions below this navigation: they belong beside the page title in PageHeader.
 The schedule current-time marker uses red as a temporal locator (time badge, dot
 and line), following the calendar convention; event categories retain their own
 colors and are never recolored because they overlap the current time.
+
+
+Account beside a navigation rail follows Contacts: leading native title, trailing Wallet action, matching canvas and no root back button (H55). Wallet credentials use a compact selector and QR in the leading pane with identity/actions in the trailing pane from 720 pt of measured content width; compact windows stack the same mounted groups (H28). Profile avatars collapse within the page when the camera island is lateral rather than in the top band (#935).

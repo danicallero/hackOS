@@ -4,6 +4,7 @@ import {
   routerTabBarInsets,
   routerTabBarMaxTabsWithoutOverflowForWidth,
   routerTabBarScrollBottomInset,
+  routerTabBarVerticalBudget,
   routerTabBarVerticalPaddingForWidth,
 } from "./router-tabs-inset";
 
@@ -39,5 +40,11 @@ describe("router tab bar geometry", () => {
 
     expect(routerTabBarScrollBottomInset(insets, "ios")).toBe(56);
     expect(routerTabBarScrollBottomInset(insets, "android")).toBe(90);
+  });
+
+  it("keeps six tablet destinations in the landscape rail when height permits", () => {
+    expect(routerTabBarVerticalBudget(1032, 12, 1366)).toEqual({ direct: 6, withoutOverflow: 6 });
+    expect(routerTabBarVerticalBudget(390, 12, 844)).toEqual({ direct: 3, withoutOverflow: 4 });
+    expect(routerTabBarInsets(20, 1366, true).contentBottomInset).toBe(20);
   });
 });

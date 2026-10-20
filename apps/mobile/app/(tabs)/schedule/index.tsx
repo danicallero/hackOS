@@ -81,7 +81,7 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
-import { windowSizeClass } from "@/lib/window-size";
+import { listDetailLayout } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
 import { SCREEN_TITLE, SCREEN_TITLE_CENTER, TWO_PANE_BAND } from "@/theme/screen-title";
 
@@ -210,8 +210,9 @@ export default function ScheduleScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   // An expanded window (an unfolded inner display in landscape) has room for the list and
   // an item side by side; narrower windows keep the pushed detail route.
-  const { width: windowWidth } = useWindowDimensions();
-  const twoPane = windowSizeClass(windowWidth) === "expanded";
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS);
+  const twoPane = paneLayout.enabled;
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -610,7 +611,12 @@ export default function ScheduleScreen() {
       ) : null}
       <ScheduleSelectionContext.Provider value={twoPane ? selectionValue : null}>
         <View style={{ flex: 1, flexDirection: "row" }}>
-          <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+          <View
+            style={{
+              flex: twoPane ? 0 : 1,
+              width: twoPane ? paneLayout.listWidth : undefined,
+            }}
+          >
             {twoPane ? (
               // The list's own top band, in the page colour: the dates and cards stop at its
               // bottom edge, the way they stop under the bar on a phone.
@@ -761,51 +767,53 @@ export default function ScheduleScreen() {
                 flex: 1,
               }}
             >
-              {selectedId !== null ? (
-                <ScheduleDetailScreen
-                  editSignal={editSignal}
-                  embedded
-                  id={String(selectedId)}
-                  onScrollOffset={setDetailOffset}
-                  topInset={TWO_PANE_BAND}
-                />
-              ) : (
-                <EmptyState icon="calendar" title={t("scheduleDetails")} />
-              )}
-              {/* The detail's own top band: the activity's name, with a backing that fades in as
+              <View style={{ alignSelf: "center", flex: 1, maxWidth: 760, width: "100%" }}>
+                {selectedId !== null ? (
+                  <ScheduleDetailScreen
+                    editSignal={editSignal}
+                    embedded
+                    id={String(selectedId)}
+                    onScrollOffset={setDetailOffset}
+                    topInset={TWO_PANE_BAND}
+                  />
+                ) : (
+                  <EmptyState icon="calendar" title={t("scheduleDetails")} />
+                )}
+                {/* The detail's own top band: the activity's name, with a backing that fades in as
                   the content scrolls under it. */}
-              <View
-                pointerEvents="none"
-                style={{
-                  height: TWO_PANE_BAND,
-                  left: 0,
-                  paddingLeft: 20,
-                  paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
-                  paddingRight: 136,
-                  position: "absolute",
-                  right: 0,
-                  top: 0,
-                }}
-              >
                 <View
+                  pointerEvents="none"
                   style={{
-                    bottom: 0,
+                    height: TWO_PANE_BAND,
                     left: 0,
-                    opacity: Math.min(1, Math.max(0, detailOffset / 16)),
+                    paddingLeft: 20,
+                    paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
+                    paddingRight: 136,
                     position: "absolute",
                     right: 0,
                     top: 0,
                   }}
                 >
-                  <SystemBlur />
+                  <View
+                    style={{
+                      bottom: 0,
+                      left: 0,
+                      opacity: Math.min(1, Math.max(0, detailOffset / 16)),
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                    }}
+                  >
+                    <SystemBlur />
+                  </View>
+                  <Text
+                    accessibilityRole="header"
+                    numberOfLines={1}
+                    style={{ color: colors.label, ...SCREEN_TITLE }}
+                  >
+                    {selectedTitle ?? ""}
+                  </Text>
                 </View>
-                <Text
-                  accessibilityRole="header"
-                  numberOfLines={1}
-                  style={{ color: colors.label, ...SCREEN_TITLE }}
-                >
-                  {selectedTitle ?? ""}
-                </Text>
               </View>
             </View>
           ) : null}
