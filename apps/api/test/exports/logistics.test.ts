@@ -31,7 +31,10 @@ afterAll(async () => {
 });
 
 function lines(text: string): string[] {
-  return text.trim().split("\r\n");
+  return text
+    .replace(/^\uFEFF/, "")
+    .trim()
+    .split("\r\n");
 }
 
 describe("activity attendance exports", () => {

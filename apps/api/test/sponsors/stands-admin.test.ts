@@ -301,7 +301,7 @@ describe("code exports", () => {
     expect(res.headers["cache-control"]).toBe("private, no-store");
     const web = config.WEB_URL.replace(/\/+$/, "");
     expect(res.body).toBe(
-      `enterprise_id,name,kind,code,label,url\r\n${acme},"Acme, Inc.",nfc,04ACAC00000001,Lanyard Ana,${web}/s/04ACAC00000001\r\n${acme},"Acme, Inc.",qr,STAND-AAAAAAAAAAAAAAAA,,${web}/s/STAND-AAAAAAAAAAAAAAAA\r\n`,
+      `\uFEFFenterprise_id,name,kind,code,label,url\r\n${acme},"Acme, Inc.",nfc,04ACAC00000001,Lanyard Ana,${web}/s/04ACAC00000001\r\n${acme},"Acme, Inc.",qr,STAND-AAAAAAAAAAAAAAAA,,${web}/s/STAND-AAAAAAAAAAAAAAAA\r\n`,
     );
     expect(await audits("stand_codes.exported")).toEqual([
       expect.objectContaining({

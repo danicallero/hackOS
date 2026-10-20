@@ -184,6 +184,8 @@ export interface ResponseRow {
   id: number;
   user_id: number;
   name: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string;
   /** Logistics shirt size, from the user row (H12). */
   shirt_size: string | null;

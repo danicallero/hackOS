@@ -109,9 +109,8 @@ interface ExportFailure {
 const MAX_FAILURES_IN_HEADER = 50;
 
 const PROFILE_FIELDS: StaticFieldDefinition[] = [
-  { key: "full_name", label: { en: "Full name", es: "Nombre completo", gl: "Nome completo" } },
   { key: "name", label: { en: "Name", es: "Nombre", gl: "Nome" } },
-  { key: "surname", label: { en: "Surname", es: "Apellidos", gl: "Apelidos" } },
+  { key: "surname", label: { en: "Last name", es: "Apellidos", gl: "Apelidos" } },
   { key: "email", label: { en: "Email", es: "Correo electrónico", gl: "Correo electrónico" } },
   { key: "dni", label: { en: "DNI", es: "DNI", gl: "DNI" } },
   {
@@ -221,8 +220,6 @@ function hasSponsorConsent(row: ApplicationExportRow, fieldKey: string): boolean
 
 function fieldValueForProfile(row: ApplicationExportRow, key: string): unknown {
   switch (key) {
-    case "full_name":
-      return [row.name, row.surname].filter(Boolean).join(" ");
     case "name":
       return row.name;
     case "surname":
@@ -301,6 +298,13 @@ function libraryId(value: unknown): number | null {
   return null;
 }
 
+/** "A Coruña, A Coruña, España" from the structured city answer (H11). */
+function cityText(value: unknown): string {
+  if (typeof value !== "object" || value === null) return String(value);
+  const { city, province, country } = value as Record<string, unknown>;
+  return [city, province, country].filter((part) => typeof part === "string" && part).join(", ");
+}
+
 function formatAnswer(
   row: ApplicationExportRow,
   field: TemplateField,
@@ -338,6 +342,7 @@ function formatAnswer(
       ? { en: "Yes", es: "Sí", gl: "Si" }[language]
       : { en: "No", es: "No", gl: "Non" }[language];
   }
+  if (field.kind === "city") return cityText(value);
   if (typeof value === "object") return JSON.stringify(value);
   return value;
 }
@@ -726,7 +731,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       const archive = new ZipArchive({ zlib: { level: 9 } });
       const sent = reply.send(archive);
       try {
-        const csv = `${[headers.join(","), ...csvRows.map((row) => row.map(csvCell).join(","))].join("\r\n")}\r\n`;
+        const csv = `\uFEFF${[headers.join(","), ...csvRows.map((row) => row.map(csvCell).join(","))].join("\r\n")}\r\n`;
         archive.append(csv, { name: "applications.csv" });
         for (const document of readableDocuments) {
           try {

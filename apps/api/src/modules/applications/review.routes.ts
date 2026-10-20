@@ -106,6 +106,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       }
       const { rows } = await pool.query(
         `SELECT r.id, r.user_id, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
+                u.name AS first_name, u.surname AS last_name,
                 u.email, u.shirt_size,
                 u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
                 r.status, r.responses,

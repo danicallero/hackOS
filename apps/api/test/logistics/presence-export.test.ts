@@ -55,6 +55,7 @@ async function doorScan(badgeId: string, kind: "in" | "out", scannedAt: Date) {
 
 function parseCsv(text: string): string[][] {
   return text
+    .replace(/^\uFEFF/, "")
     .trim()
     .split("\r\n")
     .map((line) => line.split(","));
