@@ -5,13 +5,13 @@ import { useDialogCardColors } from "@/components/native-ui";
 import { ScannerCodeEntryActions } from "@/components/scanner-code-entry-actions";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 /**
- * H22–H26: shared manual entry for camera scans and badge assignment/replacement.
- * One opaque, system-themed dialog for every caller, including camera and diary (#935).
+ * H22–H26: manual entry card for Android and web, where there is no system text
+ * prompt. iOS uses UIKit's own alert (`scanner-code-entry.ios.tsx`) (#935).
  */
-export function ScannerCodeEntry({
+export function ScannerCodeCard({
   visible,
   onValue,
   onClose,
@@ -69,17 +69,14 @@ export function ScannerCodeEntry({
   const cardStyle = {
     borderCurve: "continuous" as const,
     // H22–H26: 16-point field curves plus the 16-point content inset.
-    borderRadius: 32,
+    borderRadius: radius.sheet,
     maxWidth: 390,
     overflow: "hidden" as const,
     width: "100%" as const,
   };
   const body = (
     <View accessibilityViewIsModal style={{ padding: 16, gap: 16 }}>
-      <Text
-        accessibilityRole="header"
-        style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
-      >
+      <Text accessibilityRole="header" style={[type.headline, { color: colors.label }]}>
         {heading}
       </Text>
       <TextInput
@@ -97,9 +94,9 @@ export function ScannerCodeEntry({
         style={{
           backgroundColor: fill.field,
           borderCurve: "continuous",
-          borderRadius: 16,
+          borderRadius: radius.control,
           color: colors.label,
-          fontSize: 17,
+          ...type.body,
           minHeight: 48,
           paddingHorizontal: 16,
           paddingVertical: 12,
@@ -121,7 +118,7 @@ export function ScannerCodeEntry({
         accessibilityLabel={t("close")}
         accessibilityRole="button"
         onPress={onClose}
-        style={{ backgroundColor: "rgba(0,0,0,0.4)", position: "absolute", inset: 0 }}
+        style={{ backgroundColor: colors.scrim, position: "absolute", inset: 0 }}
       />
       <View
         pointerEvents="box-none"
