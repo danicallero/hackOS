@@ -92,6 +92,54 @@ describe("application fields integrated into Logistics", () => {
     );
   });
 
+  it("charts degree answers by catalogue name, not the stored id (H13, H54)", async () => {
+    const viewer = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const applicant = await createUser();
+    const degree = await pool.query<{ id: number }>(
+      `INSERT INTO university_degrees (name) VALUES ('Computer Engineering') RETURNING id`,
+    );
+    const degreeId = degree.rows[0]?.id;
+    const template = [
+      {
+        key: "studies",
+        kind: "degree",
+        label: { en: "Studies", es: "Estudios", gl: "Estudos" },
+        statistics: { enabled: true, visualization: "bar" },
+      },
+    ];
+    const application = await pool.query<{ id: number }>(
+      `INSERT INTO applications (name, template)
+       VALUES ('Participants', $1::jsonb) RETURNING id`,
+      [JSON.stringify(template)],
+    );
+    const applicationId = application.rows[0]?.id;
+    if (!applicationId) throw new Error("Application fixture was not created");
+    const formVersionId = await ensureApplicationFormVersion(applicationId);
+    await pool.query(
+      `INSERT INTO application_responses
+         (user_id, application_id, application_form_version_id, status, responses, submitted_at)
+       VALUES ($1, $2, $3, 'review', $4::jsonb, now())`,
+      [applicant, applicationId, formVersionId, JSON.stringify({ studies: degreeId })],
+    );
+
+    const query = await app.inject({
+      method: "POST",
+      url: "/api/statistics/query",
+      headers: asUser(viewer),
+      payload: { scopes: [`application:${applicationId}`], participant_filter: "submitted" },
+    });
+
+    expect(query.statusCode).toBe(200);
+    expect(query.json().field_distributions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: expect.objectContaining({ key: "studies" }),
+          buckets: [{ value: "Computer Engineering", n: 1 }],
+        }),
+      ]),
+    );
+  });
+
   it("resolves application and role scope ACLs with one bounded set query", async () => {
     const reader = await createUser();
     const readerRole = await createRole();
