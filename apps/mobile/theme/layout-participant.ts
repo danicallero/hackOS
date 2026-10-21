@@ -13,7 +13,7 @@ export type ContentKind = "form" | "list" | "grid";
 
 /** Style for a ScrollView/FlatList `contentContainerStyle`: centred, bounded (full width when expanded), equal gutters. */
 export interface ReadableContentStyle {
-  alignSelf: "center";
+  alignSelf: "center" | "flex-start";
   maxWidth: number;
   paddingHorizontal: number;
   width: "100%";
@@ -51,11 +51,15 @@ export function participantLayout(
         ? windowWidth
         : readableContentWidth(windowWidth);
   const columnWidth = Math.min(windowWidth, cap);
+  // A narrow form centred in an expanded window leaves the native title at the window edge and
+  // the body in the middle of an empty canvas. There it starts at the leading edge, under the title.
+  const alignSelf =
+    kind === "form" && windowSizeClass(windowWidth) === "expanded" ? "flex-start" : "center";
   const innerWidth = columnWidth - gutter * 2;
   return {
     columnWidth,
     columns: (minTile, gap, max) => columnCount(innerWidth, minTile, gap, max),
-    content: { alignSelf: "center", maxWidth: cap, paddingHorizontal: gutter, width: "100%" },
+    content: { alignSelf, maxWidth: cap, paddingHorizontal: gutter, width: "100%" },
     gutter,
     innerWidth,
     stacked: isAccessibilityTextSize(fontScale),

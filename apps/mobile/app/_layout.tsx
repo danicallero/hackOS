@@ -403,8 +403,11 @@ function RootLayoutNav({
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
-  const sidePadding = { paddingLeft: safeInsets.left, paddingRight: safeInsets.right };
-  const noSidePadding = { paddingLeft: 0, paddingRight: 0 };
+  // One page colour for every screen: the navigation theme canvas is a fixed black, so a screen
+  // that paints nothing itself would show it (pitch black on Mac and iPad) beside the grouped page.
+  const page = { backgroundColor: colors.background };
+  const sidePadding = { ...page, paddingLeft: safeInsets.left, paddingRight: safeInsets.right };
+  const noSidePadding = { ...page, paddingLeft: 0, paddingRight: 0 };
 
   // Keep one navigator in charge of session transitions. Protected screens
   // are removed from navigation history when their guard changes, so signing

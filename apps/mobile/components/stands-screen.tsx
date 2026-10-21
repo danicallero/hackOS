@@ -22,6 +22,7 @@ import {
 } from "@/components/stand-tag-link";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { useBarTitleOptions } from "@/lib/bar-title";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -48,6 +49,7 @@ const LOGO_SIZE = 40;
 export function StandsScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const barTitle = useBarTitleOptions(t("standsTitle"));
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -101,9 +103,8 @@ export function StandsScreen() {
       return;
     }
     navigation.setOptions({
-      title: t("standsTitle"),
+      ...barTitle,
       headerShown: true,
-      headerLargeTitle: process.env.EXPO_OS === "ios",
       headerTransparent: true,
       headerShadowVisible: false,
       headerSearchBarOptions: {
@@ -117,7 +118,7 @@ export function StandsScreen() {
         onCancelButtonPress: () => setQuery(""),
       },
     });
-  }, [glassAvailable, navigation, t]);
+  }, [barTitle, glassAvailable, navigation, t]);
 
   if (!allowed) {
     return <EmptyState icon="lock.fill" title={t("requestUnavailable")} />;

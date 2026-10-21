@@ -1181,7 +1181,12 @@ architecture: [`mobile.md`](./mobile.md).**
   windows, 960 dp on expanded ones), not the entire tablet navigator. In large
   landscape windows (at least 1100 × 800 dp), `AdaptiveFrame` gives navigation
   the full display width and panes apply their own reading limits. Sheets keep
-  their content cap. Nothing may remount or reset on a resize, because foldables resize mid-task. Details in
+  their content cap. Every screen paints `colors.background` (stacks get it from
+  `useTabStackScreenOptions` and the root navigator), never the fixed-black
+  navigation canvas. Top-level titles share one bar row beside a rail
+  (`useBarTitleOptions`). A capped form column in an expanded window starts at
+  the leading edge under the native title instead of floating centred.
+  Nothing may remount or reset on a resize, because foldables resize mid-task. Details in
   [`mobile.md`](./mobile.md#foldables-and-large-screens).
   On iOS, landscape windows at least 600 pt tall use a leading navigation rail;
   portrait and narrower split-screen windows keep bottom navigation. A system
