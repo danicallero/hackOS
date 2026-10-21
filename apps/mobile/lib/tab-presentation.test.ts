@@ -20,4 +20,14 @@ describe("responsive overflow destinations (H55)", () => {
       expect(new Set([...result.visible, ...result.overflow]).size).toBe(6);
     }
   });
+  it("shows a lone overflow destination as a tab instead of a one-item menu", () => {
+    const result = tabPresentation(caps, { hasQueueItems: true }, 5, 5);
+    expect(result.overflow).toEqual([]);
+    expect(result.visible).toHaveLength(6);
+    expect(result.withoutOverflow).toBe(6);
+  });
+  it("keeps the menu when two or more destinations remain", () => {
+    const result = tabPresentation(caps, { hasQueueItems: true }, 4, 5);
+    expect(result.overflow.length).toBeGreaterThanOrEqual(2);
+  });
 });

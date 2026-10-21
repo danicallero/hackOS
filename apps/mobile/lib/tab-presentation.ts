@@ -19,11 +19,14 @@ export function tabPresentation(
   const primary = primaryTabs(capabilities, context);
   const secondary = overflowTabs(capabilities, context);
   const all = [...primary, ...secondary];
-  const hasOverflow = all.length > withoutOverflow;
   const promoted = Math.max(0, direct - primary.length);
+  // A menu holding a single destination is not worth its toggle. The overflow circle and a direct
+  // cell take the same slot, so that last destination is shown as a tab instead.
+  const loneOverflow = all.length > withoutOverflow && all.length === direct + 1;
+  const hasOverflow = all.length > withoutOverflow && !loneOverflow;
   return {
     directLimit: direct,
-    withoutOverflow,
+    withoutOverflow: loneOverflow ? all.length : withoutOverflow,
     visible: hasOverflow ? [...primary, ...secondary.slice(0, promoted)] : all,
     overflow: hasOverflow ? secondary.slice(promoted) : [],
   };
