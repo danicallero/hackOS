@@ -3560,8 +3560,6 @@
   "projectWinnersPublished": "Ganadores publicados",
   "myProjectEmptyDesc": "Crea un proyecto e invita a tu equipo.",
   "resetJudgingDataDeletesProjects": "Elimina proyectos, equipos y datos de evaluación.",
-  "devpostEmailPlaceholder": "tu@correo-devpost.com",
-  "willUseToMatchDevpost": "La usaremos para vincular tus proyectos de Devpost al importarlos.",
   "capabilityDescriptionProjectsRead": "Leer proyectos",
   "capabilityDescriptionProjectsEdit": "Editar proyectos",
   "galleryNotOpen": "La galería aún no está abierta",

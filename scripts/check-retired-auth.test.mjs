@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -45,24 +45,5 @@ test("#1005 leaves immutable SQL history and ordinary live-activity reconciliati
     write("apps/api/db/migration-history/0300_projects_devpost.sql", "projects:import");
     write("apps/mobile/lib/sync.ts", "export function reconcileLiveActivities() {}");
     assert.equal(check().status, 0);
-  });
-});
-
-test("#1016 exceptions accept only the exact existing locale path, key and value", () => {
-  const value = JSON.parse(
-    readFileSync(new URL("../packages/shared/locales/en/web.json", import.meta.url), "utf8"),
-  ).devpostEmailPlaceholder;
-  // The test remains useful after #1016 removes its locale entry.
-  if (value === undefined) return;
-  fixture((write, check) => {
-    const file = "packages/shared/locales/en/web.json";
-    write(file, JSON.stringify({ devpostEmailPlaceholder: value }));
-    assert.equal(check().status, 0);
-    write(file, JSON.stringify({ devpostEmailPlaceholder: `${value} new` }));
-    assert.equal(check().status, 1);
-    write(file, JSON.stringify({ newKey: value }));
-    assert.equal(check().status, 1);
-    write(file, JSON.stringify({ devpostEmailPlaceholder: value, newKey: "devpost" }));
-    assert.equal(check().status, 1);
   });
 });
