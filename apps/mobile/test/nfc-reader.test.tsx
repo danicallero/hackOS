@@ -5,6 +5,10 @@ import { startNfcRead } from "@/lib/nfc-reader";
 
 let mockFocused = true;
 const mockTranslate = (key: string) => key;
+jest.mock("@/lib/alert", () => ({
+  alert: (...args: unknown[]) =>
+    (jest.requireActual("react-native").Alert.alert as (...a: unknown[]) => void)(...args),
+}));
 jest.mock("expo-router", () => ({ useIsFocused: () => mockFocused }));
 jest.mock("@/lib/nfc-reader", () => ({ startNfcRead: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: mockTranslate }) }));

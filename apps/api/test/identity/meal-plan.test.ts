@@ -417,7 +417,7 @@ describe("dietary confirmation and pendingProfileTasks (#933)", () => {
     expect((await me(userId)).pendingProfileTasks).toEqual([]);
   });
 
-  it("keeps the H7 lock: changing values after an accepted application is refused", async () => {
+  it("keeps the H7 lock: changing recorded values after an accepted application is refused", async () => {
     const userId = await attendee();
     const pool = await db();
     const { rows: apps } = await pool.query(
@@ -431,6 +431,7 @@ describe("dietary confirmation and pendingProfileTasks (#933)", () => {
        VALUES ($1, $2, 'accepted', $3)`,
       [apps[0].id, userId, versionId],
     );
+    await pool.query(`UPDATE users SET dietary_confirmed_at = now() WHERE id = $1`, [userId]);
     const changed = await (await getApp()).inject({
       method: "PATCH",
       url: "/api/me",
@@ -449,7 +450,7 @@ describe("dietary confirmation and pendingProfileTasks (#933)", () => {
     expect(unchanged.statusCode).toBe(200);
   });
 
-  it("does not ask a locked profile (H7) for dietary data", async () => {
+  it("lets a locked profile (H7) give dietary data once, then locks it", async () => {
     const userId = await attendee();
     const pool = await db();
     const { rows: apps } = await pool.query(
@@ -463,9 +464,31 @@ describe("dietary confirmation and pendingProfileTasks (#933)", () => {
        VALUES ($1, $2, 'accepted', $3)`,
       [apps[0].id, userId, versionId],
     );
-    const profile = await me(userId);
-    expect(profile.profileLocked).toBe(true);
-    expect(profile.pendingProfileTasks).toEqual([]);
+    const before = await me(userId);
+    expect(before.profileLocked).toBe(true);
+    expect(before.dietaryLocked).toBe(false);
+    expect(before.pendingProfileTasks).toEqual(["dietary"]);
+
+    const server = await getApp();
+    const first = await server.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(userId),
+      payload: { foodIntolerances: [], foodIntoleranceNotes: "no nuts" },
+    });
+    expect(first.statusCode).toBe(200);
+    const after = await me(userId);
+    expect(after.dietaryLocked).toBe(true);
+    expect(after.pendingProfileTasks).toEqual([]);
+
+    const again = await server.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(userId),
+      payload: { foodIntolerances: [], foodIntoleranceNotes: "no eggs" },
+    });
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.details.code).toBe("profile_locked");
   });
 
   it("asks sponsors for a meal plan until every open meal is answered, and again for a new meal", async () => {

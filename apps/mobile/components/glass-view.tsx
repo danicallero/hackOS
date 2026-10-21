@@ -34,8 +34,8 @@ export function isRealLiquidGlassAvailable(): boolean {
  * `isLiquidGlassAvailable()` (real check on iOS, always `false` elsewhere)
  * is what actually gates the native view. Neither platform has an
  * equivalent to Liquid Glass's live blur, so both substitute an opaque
- * Material-style surface + elevation instead, keeping the same chrome
- * legible.
+ * surface with a soft UIKit-style shadow instead (never Material elevation),
+ * keeping the same chrome legible.
  */
 export function GlassView({
   colorScheme = "auto",

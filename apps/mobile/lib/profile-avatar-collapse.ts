@@ -276,7 +276,13 @@ export function resolveProfileCameraTarget({
   screenWidth: number;
 }): ProfileAvatarFrame & { hasCutout: boolean } {
   const isLandscape = screenWidth > height;
-  if (cameraCutoutFrame) return { ...cameraCutoutFrame, hasCutout: true };
+  if (cameraCutoutFrame) {
+    // #935: a lateral foldable island is outside the scrolling content's axis.
+    // Keep the avatar in the page instead of pulling it diagonally into the rail.
+    const topCutout =
+      cameraCutoutFrame.top + cameraCutoutFrame.height <= Math.max(80, safeAreaTop + 12);
+    return { ...cameraCutoutFrame, hasCutout: topCutout };
+  }
 
   if (!isLandscape && platform === "ios" && safeAreaTop >= 55) {
     // iOS does not expose a public Dynamic Island frame. Use its published

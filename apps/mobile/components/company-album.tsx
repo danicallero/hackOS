@@ -1,21 +1,13 @@
 import { Image } from "expo-image";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Animated, Easing, Linking, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { SheetModal } from "@/components/app-sheet";
 import { ChallengeSheet } from "@/components/challenge-detail";
 import { FavouriteStar } from "@/components/favourite-star";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { NavRow } from "@/components/project-ui";
 import { SymbolView } from "@/components/symbol";
@@ -27,9 +19,11 @@ import {
 } from "@/lib/diary-sponsors";
 import { displayUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
-const COLUMNS = 3;
+const MIN_CELL = 100;
+const MAX_COLUMNS = 6;
 const GRID_GAP = 12;
 const ROW_ICON_INSET = 52;
 
@@ -50,19 +44,20 @@ export function CompanyAlbum({
   onOpen: (item: SponsorCollectionItem) => void;
 }) {
   const { t } = useLocale();
-  const { width } = useWindowDimensions();
+  const readable = useParticipantLayout("list");
   if (collection.items.length === 0) {
     return <EmptyState icon="building.2" title={t("diaryCompaniesEmpty")} />;
   }
-  // Three columns inside the screen's 16pt gutters; badges shrink on narrow phones.
-  const cell = (width - 32 - GRID_GAP * (COLUMNS - 1)) / COLUMNS;
+  // At least MIN_CELL per badge inside the column; badges shrink on narrow phones.
+  const columns = readable.columns(MIN_CELL, GRID_GAP, MAX_COLUMNS);
+  const cell = readable.tile(columns, GRID_GAP);
   const size = Math.max(64, Math.min(88, Math.floor(cell) - 12));
   return (
     <View style={{ gap: 20 }}>
       <AlbumProgress collected={collection.collected} total={collection.total} />
       <View style={{ flexDirection: "row", flexWrap: "wrap", rowGap: 20 }}>
         {collection.items.map((item) => (
-          <View key={item.enterpriseId} style={{ width: `${100 / COLUMNS}%` }}>
+          <View key={item.enterpriseId} style={{ width: `${100 / columns}%` }}>
             <CompanyBadge
               item={item}
               size={size}
@@ -80,8 +75,8 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
   const { t } = useLocale();
   const size = 76;
   const stroke = 8;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
+  const ringRadius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * ringRadius;
   const progress = collectionProgress({ collected, total });
   return (
     <View
@@ -96,7 +91,7 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
         alignItems: "center",
         backgroundColor: colors.surface,
         borderCurve: "continuous",
-        borderRadius: 20,
+        borderRadius: radius.container,
         flexDirection: "row",
         gap: 16,
         padding: 16,
@@ -107,7 +102,7 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
           <Circle
             cx={size / 2}
             cy={size / 2}
-            r={radius}
+            r={ringRadius}
             stroke={colors.elevatedSurface as string}
             strokeWidth={stroke}
             fill="none"
@@ -115,7 +110,7 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
           <Circle
             cx={size / 2}
             cy={size / 2}
-            r={radius}
+            r={ringRadius}
             stroke={colors.accent as string}
             strokeWidth={stroke}
             strokeLinecap="round"
@@ -126,18 +121,24 @@ function AlbumProgress({ collected, total }: { collected: number; total: number 
             origin={`${size / 2}, ${size / 2}`}
           />
         </Svg>
-        <Text style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}>
+        <Text style={{ color: colors.label, fontSize: type.subhead.fontSize, fontWeight: "700" }}>
           {Math.round(progress * 100)}%
         </Text>
       </View>
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}>
+        <Text style={{ color: colors.label, fontSize: type.title.fontSize, fontWeight: "700" }}>
           {collected}
-          <Text style={{ color: colors.secondaryLabel, fontSize: 20, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: type.title3.fontSize,
+              fontWeight: "600",
+            }}
+          >
             {` / ${total}`}
           </Text>
         </Text>
-        <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+        <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
           {t("diaryCompaniesCollected")}
         </Text>
       </View>
@@ -163,7 +164,7 @@ function Medallion({
           alignItems: "center",
           // Logos are designed for a light ground, so the sticker stays white
           // in dark mode too. An empty slot is a dashed outline.
-          backgroundColor: collected ? "#ffffff" : colors.surface,
+          backgroundColor: collected ? colors.accentText : colors.surface,
           borderColor: collected ? colors.separator : colors.tertiaryLabel,
           borderRadius: size / 2,
           borderStyle: collected ? "solid" : "dashed",
@@ -205,7 +206,7 @@ function Medallion({
           style={{
             alignItems: "center",
             backgroundColor: colors.surface,
-            borderRadius: 13,
+            borderRadius: radius.full,
             boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
             height: 26,
             justifyContent: "center",
@@ -223,7 +224,7 @@ function Medallion({
           style={{
             alignItems: "center",
             backgroundColor: colors.surface,
-            borderRadius: 12,
+            borderRadius: radius.control,
             bottom: 0,
             height: 24,
             justifyContent: "center",
@@ -300,7 +301,7 @@ function CompanyBadge({
         numberOfLines={2}
         style={{
           color: collected ? colors.label : colors.tertiaryLabel,
-          fontSize: 13,
+          fontSize: type.footnote.fontSize,
           fontWeight: collected ? "600" : "500",
           lineHeight: 16,
           textAlign: "center",
@@ -319,14 +320,14 @@ function CompanyBadge({
     );
   }
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={item.name}
       onPress={onOpen}
-      style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
     >
       {content}
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -356,28 +357,28 @@ export function CompanySheet({
   const { t, language } = useLocale();
   const insets = useSafeAreaInsets();
   const entry = item?.entry ?? null;
+  const sheetContent = useParticipantLayout("form").content;
   // H45: a challenge's brief stacks over this sheet (see `children`).
   const [challengeId, setChallengeId] = useState<number | null>(null);
   const collectedOn = entry
     ? new Date(entry.createdAt).toLocaleDateString(language, { day: "numeric", month: "long" })
     : null;
   return (
-    <Modal
+    <SheetModal
       visible={item !== null && entry !== null}
       animationType="slide"
-      presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
       {item && entry ? (
         <View style={{ backgroundColor: colors.background, flex: 1 }}>
           {/* Room for the 44pt glass close circle the other sheets use. */}
-          <View style={{ height: 60 + (process.env.EXPO_OS === "android" ? insets.top : 0) }} />
+          <View style={{ height: 60 }} />
           <ScrollView
             testID="company-sheet"
             contentContainerStyle={{
               gap: 24,
               paddingBottom: Math.max(32, insets.bottom + 16),
-              paddingHorizontal: 16,
+              ...sheetContent,
             }}
           >
             <View style={{ alignItems: "center", gap: 12 }}>
@@ -387,7 +388,7 @@ export function CompanySheet({
                   accessibilityRole="header"
                   style={{
                     color: colors.label,
-                    fontSize: 26,
+                    fontSize: type.title.fontSize,
                     fontWeight: "700",
                     textAlign: "center",
                   }}
@@ -395,7 +396,7 @@ export function CompanySheet({
                   {item.name}
                 </Text>
                 {collectedOn ? (
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+                  <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
                     {t("diaryCompanyCollectedOn", { date: collectedOn })}
                   </Text>
                 ) : null}
@@ -437,7 +438,7 @@ export function CompanySheet({
                   selectable
                   style={{
                     color: colors.label,
-                    fontSize: 16,
+                    fontSize: type.callout.fontSize,
                     lineHeight: 23,
                     paddingHorizontal: 16,
                     paddingVertical: 14,
@@ -470,27 +471,27 @@ export function CompanySheet({
             ) : null}
 
             <Section>
-              <Pressable
+              <PressableFeedback
+                feedback="row"
                 accessibilityRole="button"
                 accessibilityState={{ disabled: busy }}
                 disabled={busy}
                 onPress={onRemove}
-                style={({ pressed }) => ({
+                style={{
                   alignItems: "center",
-                  backgroundColor: pressed ? colors.elevatedSurface : undefined,
                   justifyContent: "center",
                   minHeight: 50,
                   paddingHorizontal: 16,
-                })}
+                }}
               >
-                <Text style={{ color: colors.destructive, fontSize: 16 }}>
+                <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
                   {t("diaryCompanyRemove")}
                 </Text>
-              </Pressable>
+              </PressableFeedback>
             </Section>
           </ScrollView>
           <FloatingGlassButton
-            top={16 + (process.env.EXPO_OS === "android" ? insets.top : 0)}
+            top={16}
             side="right"
             icon="xmark"
             accessibilityLabel={t("close")}
@@ -502,6 +503,6 @@ export function CompanySheet({
           ) : null}
         </View>
       ) : null}
-    </Modal>
+    </SheetModal>
   );
 }

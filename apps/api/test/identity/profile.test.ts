@@ -2528,7 +2528,7 @@ describe("staff user routes (H7)", () => {
     expect(locked.statusCode).toBe(409);
     expect(locked.json().error.details.code).toBe("profile_locked");
 
-    // …and so are shirt size and dietary info.
+    // …and so is shirt size. Dietary info can still be written once.
     const lockedShirt = await a.inject({
       method: "PATCH",
       url: "/api/me",
@@ -2537,14 +2537,33 @@ describe("staff user routes (H7)", () => {
     });
     expect(lockedShirt.statusCode).toBe(409);
     expect(lockedShirt.json().error.details.code).toBe("profile_locked");
-    const lockedDietary = await a.inject({
+    const firstDietary = await a.inject({
       method: "PATCH",
       url: "/api/me",
       headers: asUser(user),
       payload: { foodIntoleranceNotes: "no nuts" },
     });
+    expect(firstDietary.statusCode).toBe(200);
+    // Once any answer exists it locks, even for an identical-looking edit of another field.
+    const lockedDietary = await a.inject({
+      method: "PATCH",
+      url: "/api/me",
+      headers: asUser(user),
+      payload: { foodIntoleranceNotes: "no nuts, no eggs" },
+    });
     expect(lockedDietary.statusCode).toBe(409);
     expect(lockedDietary.json().error.details.code).toBe("profile_locked");
+    // Resubmitting the stored value is still allowed.
+    expect(
+      (
+        await a.inject({
+          method: "PATCH",
+          url: "/api/me",
+          headers: asUser(user),
+          payload: { foodIntoleranceNotes: "no nuts" },
+        })
+      ).statusCode,
+    ).toBe(200);
 
     // …but non-locked fields still work, and staff can still change locked ones.
     expect(

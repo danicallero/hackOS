@@ -8,7 +8,7 @@ GPUL-operated hackOS service and do not mention a particular review channel.
 ## Scope and safety boundary
 
 An administrator with `ADMIN_ALL` can use **Users → Regenerate review accounts**.
-The API resets the four marked synthetic accounts to their default scenarios,
+The API resets the six marked synthetic accounts to their default scenarios,
 revoking their sessions and replacing their credentials while keeping each
 login email address unchanged. The reset also removes push tokens, scanner
 data, project graph, queue graph and synthetic anonymous rows. The generation
@@ -51,8 +51,10 @@ explicit release/security approval for the reset operation.
 | `participant-anonymize-outside` | Participant | Canonically accredited, with a closed door interval; exercises irreversible anonymization outside the venue. It owns the synthetic participant-facing judging queue. |
 | `participant-anonymize-inside` | Participant | Canonically accredited, with an open door interval; exercises accepted anonymization with a pending exit. |
 | `staff-exit-operator` | Staff | Synthetic operator with accreditation, presence and activity scan capabilities; can act only on marked synthetic subjects. |
+| `participant-explorer` | Participant | Non-destructive demo account, accredited and outside the venue. Owns six projects and walks every queue stage: *Aurora Rover* (submitted, repository, waiting in a queue shared by two challenges), *Pixel Garden* (scored), *Nimbus Notes* (called to room A), *Tidal Lab* (inside room A), *Ember Engine* (presenting in room B) and *Draft Notes* (draft). Sees two other teams' projects (*Lumen Labs*, *Orbit Kit*) in the Gallery and can report them. |
+| `staff-queue-operator` | Staff | Synthetic queue/judge operator (`queue:status`, `queue:operate`, `judge:panel`, `projects:read`, `projects:edit`) for the two synthetic rooms, their projects and challenges; it cannot reach any other queue, room, project or challenge. |
 
-All four generated accounts hold an event-bearing role and receive a durable
+All six generated accounts hold an event-bearing role and receive a durable
 entrance ticket. This includes `staff-exit-operator`: its scan capabilities
 still restrict what it can do operationally, but it also retains the
 participant-facing app entry point and ticket flow used by the published mobile
@@ -72,6 +74,113 @@ lists use the same marker boundary, while the public sponsor reveal excludes
 synthetic enterprises. A guessed private-upload key or personal export bundle
 cannot cross that boundary. Synthetic rows are excluded from statistics and
 exports and are not permanent anonymous audit data.
+
+## App Store review notes
+
+Text for the **Notes for Review** field, based on the submitted notes and
+corrected for features added since. Passwords, the deletion code and the
+deployment URL go in the private handoff, never in this repository.
+
+> **What is this app?** hackOS is the official mobile app for HackUDC, a public
+> student hackathon organised by GPUL in A Coruña, Spain. Anyone eligible can
+> apply through the public event website; accepted attendees receive mobile
+> access. No paid content, subscriptions or in-app purchases.
+>
+> **Core features.** Attendees view the schedule and set activity reminders,
+> open wallet passes, receive announcements and notifications, follow their
+> presentation queue position and estimated time, create and edit their team's
+> project (including linking its GitHub repository through the GitHub App and
+> submitting it), browse the project gallery once it opens, and edit an optional
+> networking profile. Staff scan entrance tickets and badges and record
+> presence, meals and activities.
+>
+> **Review access.** Enable Development Mode by tapping the app version seven
+> times on Sign In or in Account; a red DEV badge appears. Sign in with
+> `app-review-<scenario>@hackos.test` and the shared password from the private
+> handoff. Accounts: `participant-explorer` (walks the app: six projects, every queue stage, the
+> gallery and reporting), `participant-anonymize-outside`
+> (anonymisation outside the venue), `participant-delete` (full deletion),
+> `participant-anonymize-inside` (anonymisation with a pending exit),
+> `staff-exit-operator` and `staff-queue-operator` (runs the two synthetic
+> rooms and judges their projects). All are synthetic, hold an event ticket and
+> see only fixture data.
+>
+> **Account deletion and anonymisation.** Account → Delete account, confirmation
+> code in the handoff. Full deletion: `participant-delete`. Anonymisation
+> outside the venue: the primary participant. Checked-in attendees may keep
+> anonymous audit data for public-funding audits; an attendee inside the venue
+> is retained until an exit operator records their departure or 12 hours pass,
+> for venue insurance headcounts.
+>
+> **Privacy and permissions.** Camera: scanning QR codes only; the app does not
+> take photos. Photo library: attendees may pick a profile photo and project
+> images to upload. NFC: staff read badge serial numbers, and attendees can tap
+> company tags. Notifications: event announcements and queue updates. The app
+> does not sell personal data. Privacy Policy and Terms: `/privacy`, `/terms`
+> on the event site.
+>
+> **User-generated content.** Attendees' project pages (name, description,
+> images, team members) and optional networking profiles (headline, bio, links,
+> photo) are visible to other signed-in attendees; showing a name or photo
+> requires the person's consent, and a profile is visible only to attendees who
+> scanned that person. There is no direct messaging, chat or comment feature between
+> users; team invitations carry no free text. Any attendee can report a project (Gallery →
+> project → Report) or a saved person's profile (Report on their card) with a
+> reason; reports go to a moderation inbox that organisers review, and
+> organisers can edit a project or hide a profile or its photo. Other concerns
+> can be sent to hackudc@gpul.org, the address in the Privacy Policy.
+
+Statements from the earlier notes that were removed because they stopped being
+true: "no user-generated content visible to other users" (the gallery and
+networking profiles show attendee content) and "does not take, store or upload
+photos" (photo pickers upload profile photos and project images). The notes now
+state both, plus NFC and the GitHub App sign-in.
+
+What each account can show a reviewer today:
+
+- The **Gallery** shows fixture projects only, and a synthetic attendee can
+  browse it whatever the real event's gallery phase is (project content only;
+  published winners are real data and never take this bypass). Other teams'
+  projects can be reported.
+- **My projects** and **My queue** show the explorer's six projects and an
+  entry in every stage: waiting (also in the shared queue), called, inside,
+  presenting and scored. Editing and submitting still follow the real event's
+  project phase. Linking a repository needs the GitHub App and is not
+  demonstrable.
+- The **queue operator** runs the two synthetic rooms (*Review room A* serves
+  the shared queue, *Review room B* its own): room views, calling, bringing
+  teams in, presenting, scoring, the team manager and the shared-queue view.
+- The exit operator keeps accreditation, presence and activity scanning.
+- Anything that needs real event data (directory, sponsors, statistics,
+  exports) is intentionally excluded from the fixture scope.
+
+## Synthetic boundary
+
+The fixture graph is one synthetic enterprise: three challenges (*Open* and
+*Design* share one queue group, *Hardware* has its own), two rooms, eight
+submitted projects, a draft and nine queue entries. Rooms carry no marker of
+their own: a room's scope is inferred from the queue groups it serves and the
+enterprise it is pooled into, which are synthetic-only, so every room list, the
+TV snapshot and the pump already skip them for ordinary operators. The
+fixture purge verifies that inference before it deletes a room.
+
+`queue/fixture-boundary.ts` adds one check that does not depend on each
+route: before validation, every room, entry, queue group, challenge or project
+id a queue, project or challenge route names (in the path, query or body) must
+be on the caller's side of the marker. A synthetic operator reaching ordinary
+data answers 403, an ordinary operator, wildcard included, reaching fixture
+data answers 404. `test/queue/fixture-boundary.test.ts` calls every such route
+with both kinds of id and both kinds of operator, and compares the lists. Adding
+the guard closed one gap the per-route checks had:
+`GET /api/projects/:id/github-activity` answered across the boundary.
+
+Registry: `review_fixture_queues` holds one pointer row per slot (`fixture_key`,
+`slot`; migration `0311`) and may point at a project, challenge, queue entry
+and room; an account's slots share one enterprise and sponsor and are purged
+together after every pointer is checked.
+
+Still not covered: a scoped organiser and a sponsor representative, and
+anything that needs a real GitHub App installation.
 
 ## Checking whether credentials were used
 
@@ -96,7 +205,7 @@ controlled by the deployment.
 
 ## Operational rules
 
-- Keep the four credentials and the deployment URL together in the private
+- Keep the six credentials and the deployment URL together in the private
   review/QA handoff, never in the repository or a public API response.
 - Regeneration revokes previous sessions and resets all synthetic state. Login
   email addresses remain stable; the shared deployment password and reviewer

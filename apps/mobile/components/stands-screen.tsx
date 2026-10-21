@@ -1,15 +1,9 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   AndroidStatusBarScrim,
@@ -28,6 +22,7 @@ import {
 } from "@/components/stand-tag-link";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
+import { useBarTitleOptions } from "@/lib/bar-title";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -54,6 +49,7 @@ const LOGO_SIZE = 40;
 export function StandsScreen() {
   useColorScheme();
   const { t } = useLocale();
+  const barTitle = useBarTitleOptions(t("standsTitle"));
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -107,9 +103,8 @@ export function StandsScreen() {
       return;
     }
     navigation.setOptions({
-      title: t("standsTitle"),
+      ...barTitle,
       headerShown: true,
-      headerLargeTitle: process.env.EXPO_OS === "ios",
       headerTransparent: true,
       headerShadowVisible: false,
       headerSearchBarOptions: {
@@ -123,7 +118,7 @@ export function StandsScreen() {
         onCancelButtonPress: () => setQuery(""),
       },
     });
-  }, [glassAvailable, navigation, t]);
+  }, [barTitle, glassAvailable, navigation, t]);
 
   if (!allowed) {
     return <EmptyState icon="lock.fill" title={t("requestUnavailable")} />;
@@ -144,7 +139,7 @@ export function StandsScreen() {
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       refreshControl={
-        <RefreshControl
+        <AppRefreshControl
           refreshing={refreshing}
           onRefresh={async () => {
             setRefreshing(true);
@@ -339,7 +334,7 @@ function StandRow({
           }}
         >
           {busy ? (
-            <ActivityIndicator color={colors.onAccentSurface} size="small" />
+            <AppActivityIndicator color={colors.onAccentSurface} size="small" />
           ) : (
             <SymbolView
               accessible={false}

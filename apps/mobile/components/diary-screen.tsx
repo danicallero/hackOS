@@ -1,19 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  AppState,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { AppState, Modal, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAccountWallet, WalletModal } from "@/components/account-wallet";
+import { AccountWalletOverlay, useAccountWallet, WalletModal } from "@/components/account-wallet";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import {
@@ -26,13 +17,21 @@ import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyScreenHeader, Section, Separator } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { type DiaryEntry, diaryScanErrorKey, upsertDiaryEntry } from "@/lib/diary";
+import {
+  enqueuePendingScan,
+  flushPendingScans,
+  isOfflineError,
+  readPendingScans,
+} from "@/lib/diary-pending";
 import {
   type SponsorCollection,
   type SponsorCollectionItem,
@@ -44,9 +43,11 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
+import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const SCAN_LABELS: ScanActionLabels = {
   nfc: "diaryScanNfc",
@@ -84,6 +85,7 @@ const JSON_HEADERS = () => ({
 export function DiaryScreen() {
   const colorScheme = useColorScheme();
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -120,6 +122,7 @@ export function DiaryScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<Error | null>(null);
   const [collectionError, setCollectionError] = useState<Error | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [input, setInput] = useState<ScanInput | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -140,6 +143,8 @@ export function DiaryScreen() {
     people: t("diaryPeopleTab"),
     companies: t("diaryCompaniesTab"),
   };
+
+  const userId = me?.id ?? null;
 
   const load = useCallback(async () => {
     const request = ++requestId.current;
@@ -168,6 +173,38 @@ export function DiaryScreen() {
       setCollectionError(error instanceof Error ? error : new Error(String(error)));
     }
   }, []);
+
+  // Badges scanned without a connection become contacts once the server answers.
+  const flushing = useRef(false);
+  const flushPending = useCallback(async () => {
+    if (userId === null || flushing.current) return;
+    flushing.current = true;
+    try {
+      const { sent, remaining } = await flushPendingScans(userId, (code) =>
+        apiFetch<DiaryEntry>("/api/me/diary/scan", {
+          method: "POST",
+          headers: JSON_HEADERS(),
+          body: JSON.stringify({ code }),
+        }),
+      );
+      setPendingCount(remaining.length);
+      if (sent > 0) {
+        void haptic("success");
+        await Promise.all([load(), loadCollection()]);
+      }
+    } finally {
+      flushing.current = false;
+    }
+  }, [userId, load, loadCollection]);
+
+  useEffect(() => {
+    if (userId === null) return;
+    void readPendingScans(userId).then((queue) => {
+      setPendingCount(queue.length);
+      if (queue.length > 0) void flushPending();
+    });
+  }, [userId, flushPending]);
+  useRetryOnReconnect(pendingCount > 0, () => void flushPending());
 
   // Also refreshes after returning from a profile, where the entry may change.
   useFocusEffect(
@@ -285,8 +322,15 @@ export function DiaryScreen() {
       }
     } catch (error) {
       if (fromQr) setInput(null);
+      if (userId !== null && isOfflineError(error)) {
+        const queue = await enqueuePendingScan(userId, value);
+        setPendingCount(queue.length);
+        void haptic("warning");
+        alert(t("tabDiary"), t("diaryScanQueued"));
+        return;
+      }
       void haptic("error");
-      Alert.alert(t("tabDiary"), t(diaryScanErrorKey(error)));
+      alert(t("tabDiary"), t(diaryScanErrorKey(error)));
     } finally {
       scanInFlight.current = false;
       setScanning(false);
@@ -320,7 +364,7 @@ export function DiaryScreen() {
       await action();
     } catch {
       void haptic("error");
-      Alert.alert(t("tabDiary"), t("diaryActionError"));
+      alert(t("tabDiary"), t("diaryActionError"));
     } finally {
       setBusyKeys((current) => {
         const next = new Set(current);
@@ -346,7 +390,7 @@ export function DiaryScreen() {
   }
 
   function confirmRemove(onConfirm: () => void) {
-    Alert.alert(t("diaryRemoveTitle"), undefined, [
+    alert(t("diaryRemoveTitle"), undefined, [
       { text: t("cancel"), style: "cancel" },
       { text: t("remove"), style: "destructive", onPress: onConfirm },
     ]);
@@ -464,10 +508,12 @@ export function DiaryScreen() {
       // An empty navigation title stops iOS 26 adding its centred one.
       title: "",
       headerShown: true,
+      gestureEnabled: !wallet.open,
       headerLargeTitle: false,
-      // The system bar background: the list scrolls under it with iOS 26's
-      // scroll-edge effect, never an opaque page-coloured block.
-      headerTransparent: true,
+      // As Activities: the bar is the page colour, so the list starts below the title
+      // instead of scrolling behind it.
+      headerTransparent: false,
+      headerStyle: { backgroundColor: colors.background },
       headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable
@@ -485,7 +531,7 @@ export function DiaryScreen() {
           }
         : undefined,
     });
-  }, [glassAvailable, navigation, searchable, t]);
+  }, [glassAvailable, navigation, searchable, t, wallet.open]);
 
   const noteInitial =
     noteTarget?.kind === "person"
@@ -521,18 +567,26 @@ export function DiaryScreen() {
       testID="diary-scroll"
       accessibilityElementsHidden={inputOpen}
       importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior={glassAvailable ? "never" : "automatic"}
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={{
         gap: 16,
-        padding: 16,
+        paddingVertical: 16,
+        ...readable.content,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
         paddingTop: 8,
       }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
+      {pendingCount > 0 ? (
+        <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
+          {t("diaryPendingScans", { count: String(pendingCount) })}
+        </Text>
+      ) : null}
       <BadgeLinkActions
         testID="diary-scan"
         labels={SCAN_LABELS}
@@ -606,7 +660,11 @@ export function DiaryScreen() {
         onCovered={revealMet}
         onDone={finishCelebration}
       />
-      <WalletModal wallet={wallet} />
+      {glassAvailable ? (
+        <AccountWalletOverlay wallet={wallet} nativeToolbar initialPurpose="badge" />
+      ) : (
+        <WalletModal wallet={wallet} />
+      )}
       <NfcReader
         visible={input === "nfc"}
         onValue={(uid) => void submitScan(uid)}
@@ -672,20 +730,20 @@ export function DiaryScreen() {
                 // item's light/dark appearance with what scrolls behind it,
                 // which turned the title white over the blue scan pill.
                 color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                fontSize: 28,
+                fontSize: type.title.fontSize,
                 fontWeight: "800",
               }}
             >
-              {t("tabDiary")}
+              {wallet.open ? "" : t("tabDiary")}
             </Text>
           </Stack.Toolbar.View>
         </Stack.Toolbar>
         {/* Native SF Symbol bar items, so the system draws the same circles as its search button. */}
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
-            icon="wallet.pass"
+            icon={wallet.open ? "xmark" : "wallet.pass"}
             separateBackground
-            accessibilityLabel={t("tabWallet")}
+            accessibilityLabel={wallet.open ? t("close") : t("tabWallet")}
             onPress={wallet.toggle}
           />
           {searchable ? (
@@ -711,7 +769,7 @@ export function DiaryScreen() {
               colorScheme="auto"
               glassEffectStyle="regular"
               isInteractive
-              style={{ borderRadius: 22, height: 44, width: 44 }}
+              style={{ borderRadius: radius.full, height: 44, width: 44 }}
             >
               <WalletToggle onToggle={wallet.toggle} />
             </GlassView>
@@ -720,7 +778,7 @@ export function DiaryScreen() {
                 colorScheme="auto"
                 glassEffectStyle="regular"
                 isInteractive
-                style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
+                style={{ borderRadius: radius.full, flexDirection: "row", height: 44 }}
               >
                 <FavouritesToggle visible on={favouritesOnly} onToggle={toggleFavourites} />
                 <Pressable
@@ -775,22 +833,17 @@ function FavouritesToggle({
   const { t } = useLocale();
   if (!visible) return null;
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="togglebutton"
       accessibilityLabel={t("diaryShowFavourites")}
       accessibilityState={{ checked: on }}
       onPress={onToggle}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        height: 44,
-        justifyContent: "center",
-        opacity: pressed ? 0.6 : 1,
-        width: 44,
-      })}
+      style={{ alignItems: "center", height: 44, justifyContent: "center", width: 44 }}
     >
       {/* Material Symbols ship only an outlined star; this one also fills. */}
       <FavouriteStar on={on} />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -798,19 +851,14 @@ function FavouritesToggle({
 function WalletToggle({ onToggle }: { onToggle: () => void }) {
   const { t } = useLocale();
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={t("tabWallet")}
       onPress={onToggle}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        height: 44,
-        justifyContent: "center",
-        opacity: pressed ? 0.6 : 1,
-        width: 44,
-      })}
+      style={{ alignItems: "center", height: 44, justifyContent: "center", width: 44 }}
     >
       <SymbolView accessible={false} name="wallet.pass" size={19} tintColor={colors.label} />
-    </Pressable>
+    </PressableFeedback>
   );
 }

@@ -1,11 +1,12 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions } from "@/lib/navigation";
+import { useTabStackScreenOptions } from "@/lib/navigation";
 
 export default function OperationsLayout() {
+  const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   return (
-    <Stack screenOptions={nativeStackScreenOptions}>
+    <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen
         name="index"
         options={{

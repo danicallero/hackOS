@@ -242,8 +242,14 @@ distributed to other Expo Router apps without importing hackOS code.
   the glyph morphs in place. Android's system back also closes it. The
   overlay avoids a pushed or modal route, which would slide or cover the corner.
   The wallet has no title: the Ticket/Badge control leads it.
-  `app/(tabs)/others/wallet.tsx` remains for deep links, with a title-less
-  back header. Queue-only
+  `app/(tabs)/others/wallet.tsx` remains for deep links, without a top bar and with an
+  explicit close action that returns through available stack history or falls
+  back to Account when opened directly. On iOS with native glass, the close
+  action is a real toolbar symbol on a transparent, title-less header, so UIKit
+  aligns it with other navigation controls and moves it into Duo's side column.
+  Scroll content clears the native toolbar once; it does not reserve an extra
+  floating-button row. Earlier iOS and Android retain the shared floating close
+  control; Android also protects the status bar with the existing scrim. Queue-only
   operators instead get Queue operations in the primary bar; scanner
   operators with queue access find it in Others, preserving Scanner's direct
   placement.
@@ -251,7 +257,10 @@ distributed to other Expo Router apps without importing hackOS code.
   tab shows it instead of the person symbol, with a ring in the tab tint when
   selected, and the Account screen header shows it in place of the initials.
   On a compact phone a participant's Account sits behind Others, so the Others
-  circle shows the same ringed photo while Account is open.
+  circle shows the photo filling the whole circle, with no ring, while Account
+  is open. The signed-in person's own photo is cached on disk (`persist` on
+  `UserAvatar`/`useApiImage`, cleared on sign-out) so it still shows offline;
+  every other person's photo stays memory-only.
   Tapping the Account avatar (or the one at the top of the networking profile
   editor) opens a native menu (#934): Take photo, Choose from library and, when
   a photo exists, Remove photo (`components/profile-photo-menu.tsx`, one hook
@@ -321,6 +330,146 @@ distributed to other Expo Router apps without importing hackOS code.
   re-press, sets `scrollToOverflowEnabled`, and moves a page iOS restored to
   y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
   fails when a screen with the automatic inset calls `useScrollToTop` directly.
+
+## Design system
+
+Tokens (`theme/`: `colors`, `space`, `radius`, `type`, `motion`, `pressed`) and
+the primitives `AppText` and `PressableFeedback` are specified in
+[`DESIGN.md` §12](./DESIGN.md#12-mobile-specifics). `NavRow`, `RowButton`,
+`ActionButton`, `ToggleRow` and `AuthButton` are migrated; remaining screens move
+over as they are touched, guarded by `pnpm check:mobile-tokens` (H55, H59).
+
+Responsive layout: `theme/layout.ts` (size-class gutters, readable widths),
+`theme/layout-screens.ts` (scanner/operator column, stat block and action
+layouts), `theme/layout-participant.ts` (`useParticipantLayout`: centred
+form/list/grid columns) and `lib/pane-width.ts` (list pane share, column
+counts, badge-beside-title rule). Pure functions, so every layout decision is
+unit-tested; screens never branch on a device model.
+
+## Foldables and large screens
+
+One app that resizes, not a layout per device: nothing branches on a device model
+or a fold posture, only on the window the app has right now (`lib/window-size.ts`).
+
+- **Size classes.** `windowSizeClass(width)`: compact < 600 dp (phones, a folded
+  cover display), medium < 840 dp (a Galaxy Z Fold inner display in portrait),
+  expanded from 840 dp (Pixel Fold inner, tablets). `useWindowSizeClass()`
+  re-renders on every resize and keeps nothing between renders.
+- **Other breakpoints.** All live in `lib/window-size.ts`, named, each with the verified
+  layout that keeps it off 600/840: `TABLET_TAB_BAR_MIN_WIDTH` (700, so the portrait Fold
+  inner display at ~673 dp keeps the phone tab bar), `TABLET_LANDSCAPE_MIN_*` (1100 × 800,
+  the labelled tablet rail; a Duo book at 951 dp keeps the 64 dp column) and
+  `ANDROID_LIST_DETAIL_MIN_*` (640 × 600, two panes on the Fold inner display in portrait).
+  `SideRegion.tabletRail` marks the labelled rail; nothing infers it from the column width.
+  Android has no reserved-region API, so it reserves `ANDROID_RAIL_COLUMN_SIZE` (76 dp,
+  the whole symbol bar plus a gap) in route content.
+- **Hardware keyboard.** `modules/hardware-shortcuts` (iOS: iPad keyboard, Mac Designed for
+  iPad) registers Command+1...9 for the destinations in visible order (direct cells, then
+  overflow) and Command+, for Account, from `components/opaque-router-tabs.tsx`. React Native
+  0.86 has no iOS key-event API, so this is a local Expo module (`UIKeyCommand` on the root
+  view controller): it needs a native rebuild and is a no-op in older development clients.
+- **Orientation.** `app.json` no longer locks portrait: the lock made Android
+  12L+ letterbox the app on an unfolded display and Android 16 ignores it there.
+  `lib/screen-orientation.ts` (`expo-screen-orientation`) locks portrait while the
+  *physical display's* smallest side is under 600 dp and its long side is at least 1.6
+  times the short one (an iPhone Duo panel is squarish), and unlocks it otherwise, and
+  re-evaluates when the display changes (fold, unfold). It is decided on the
+  display, not the window, so split-screen cannot flip it. iPhone keeps its portrait-only
+  `Info.plist`; iPad lists all four orientations (`ios.infoPlist`). The module is a
+  native dependency: a development client built without it applies no lock until it
+  is rebuilt (the lookup fails soft).
+- **Readable column.** `components/adaptive-frame.tsx` wraps the navigator in
+  `app/_layout.tsx` and every `Modal` sheet (and, as `SheetFrame`, every native
+  modal route). Compact/medium content is capped at 720 dp, expanded content at
+  960 dp. Large landscape windows (at least 1100 × 800 dp) give the root
+  navigator the whole window instead: navigation belongs at the display edge,
+  not inside a centred reading column. Schedule uses a 420 dp list beside a
+  detail pane capped at 760 dp; smaller expanded windows retain the 380 dp list.
+  The Scanner uses the same list/detail rule (`lib/scan-pane.ts`): where
+  `listDetailLayout().enabled`, the reader stays on the left and a scanned badge or QR opens that
+  person's profile (`PersonOperationsScreen` with `embedded`) on the right instead of pushing
+  `scan/person/[id]`; a new scan replaces the person, Android back clears the pane, and the person
+  route hands a deep link or a people-list/history tap to the scanner as `personId` params. Compact
+  windows still push the route.
+  "View people" opens the people finder over the scanner pane only. On iOS the pane is its own
+  native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
+  its root bar carries the title, role filter and sync status, `People` is pushed with the native
+  large title, back item, integrated search and filter, and the route's header is hidden
+  (`headerShown: false`) because a native bar over the pane swallows touches on RN chrome drawn
+  under it. Android and web use `PeopleFinderPane`, an RN panel with the same header.
+  `lib/scan-pane.ts` holds the pure rules (`peopleDestination`, `backAction`, `collapseProgress`).
+  An empty detail pane (no scan yet, no activity selected) shows `PanePlaceholder`, a
+  ContentUnavailableView-style symbol, headline and line that fade out when a result replaces them.
+  The scanner surface (`NfcScannerSurface`) never scrolls: it measures its own height and
+  `surfaceFit`/`readerFit` (`theme/layout-screens.ts`) switch to a dense stats line and a row of
+  icon-over-label actions, then shrink and hide the reader symbol, instead.
+  Sheets retain their own content cap. The tree is identical at every width, so fold, unfold and window resizing never
+  remount the navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
+- **Asymmetric safe areas.** On a foldable iPhone the system status indicators and
+  the Dynamic Island run down one side and the horizontal insets differ by pose, and
+  a plain `ScrollView` never insets for them. Foreground content is padded per edge:
+  root screens through `contentStyle` in `app/_layout.tsx`, each tab's Stack through
+  `useTabStackScreenOptions` (`lib/navigation.ts`; the foldable `TabSlot` stays
+  unpadded so the system can move its native bars into the column). The large
+  tablet sidebar instead pads `TabSlot` itself, keeping native headers aligned
+  with their content without double-padding screens, sheets through `SheetFrame` (which measures the
+  sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
+  same side.
+- **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
+  (outer display, inner display in landscape, the outer edge of a Split View half) and
+  keeps horizontal bars on the inner display in portrait. The system only moves bars it
+  owns, so the custom tab bar does it itself: a horizontal inset of at least 56 pt
+  (`lib/side-region.ts`) puts `VerticalTabBar` in that column, on the same side,
+  bottom-aligned below the indicators, symbol only (labels stay the accessibility
+  names), with the overflow circle underneath; the number of direct tabs follows the
+  height left below the indicators (`routerTabBarVerticalBudget`). Landscape iOS
+  windows with at least 600 pt of height also reserve a leading rail. Large
+  landscape windows (at least 1100 × 800 dp) use a 200 dp sidebar with labelled
+  destinations; smaller windows keep the 64 dp symbol rail.
+  Portrait and narrow split-screen windows restore the bottom bar without
+  remounting the screen. A system-owned foldable column takes precedence.
+  The rail is top-aligned below the title band on large landscape windows;
+  smaller foldable windows keep the system-aligned bottom rail.
+  iPad retains its native horizontal header controls; native navigation bars in foldable tab
+  screens span the full window, so the system moves their icon items (back, bell,
+  add, edit) into the same column, above the tab bar; custom views in a toolbar (the
+  filter) stay horizontal.
+- **System behaviour kept.** `MainActivity` already declares
+  `configChanges="...|screenSize|screenLayout|smallestScreenSize|orientation"`, so
+  resizing never recreates the activity, and `windowSoftInputMode="adjustResize"`.
+  Insets come from `react-native-safe-area-context`, per edge.
+
+**Bar colour.** The navigation theme paints the same page background behind
+floating bars and sidebars, avoiding a visible seam with the navigation library's
+default canvas on iPad and Duo. Activities, My Projects and Contacts paint their native header with the page colour
+(`headerStyle.backgroundColor`), like Schedule: the system blur materials read whiter than the page. The
+two-pane Schedule keeps per-column title bands, with `components/system-blur.tsx` (`expo-blur`, a native
+dependency) behind the detail title.
+
+**Fold and island (iOS 27.1).** `modules/fold-region` reads `UIView.reservedRegions(kind:)`
+for the key window: `getDivisionRegion()` is the fold, `getOcclusionRegion()` the Dynamic Island,
+both in window points, `null` before iOS 27.1 or when no region is active; `getVerticalBarEdge()` is
+`traitCollection.verticalBarEdge`, the edge the system puts its vertical bar on. In Split View the
+left app gets the column on its left edge while its safe-area insets stay 0, so `useSideInsets`
+(`lib/vertical-bar-edge.ts`) folds a 64 pt column into the insets from that edge. The profile avatar's
+collapse uses the island region as its morph target (it sits in the side column on a foldable
+iPhone, not at the top centre). `lib/fold-region.ts` has `useDivisionRegion()` and `AdaptiveFrame` spans both pages of a vertical fold (book pose) and Schedule and Gallery put the list before the crease and the detail after it (`bookCrease()`, `listDetailLayout(..., crease)`). The pose is polled every 400 ms (`POSE_POLL_MS`) because moving the hinge changes neither the window size nor the traits, so the native event alone left the previous pose on screen. A horizontal
+fold (laptop or tabletop) is not avoided: the whole display stays available so lists scroll to the real bottom edge. Schedule and Gallery
+show list and detail side by side on expanded windows (840 dp and up). The module is a native dependency: it needs a
+rebuilt development client, and without it every call reports "no region".
+
+Other foldables (Android, Samsung, Pixel, Xiaomi, Honor): the size classes, the 720 dp
+readable column, the orientation policy (no portrait lock on a 600 dp+ or squarish display),
+per-edge content padding and the side-region tab bar are driven by window size and safe-area
+insets, not by a device model, so they apply wherever the platform reports those values.
+The iOS 26 toolbar items (`EntryBackToolbar`, symbol buttons) are iOS-only; Android keeps its
+own headers. Untested on a device or emulator so far (no Android foldable run yet).
+
+Not built: native `UITabBarController` tabs (the system would move them itself; the custom Liquid Glass shell is kept), a Jetpack WindowManager fold feature for Android (React Native exposes none; it would need a
+native module over Jetpack WindowManager `FoldingFeature`), two-pane list/detail
+layouts for expanded windows, and dual-screen devices that span a hinge (Surface Duo).
+The iPhone Duo guidance in the third-party skills is iOS 27.1-specific and was used
+only for its framework-neutral principles.
 
 ## Auth flow
 
@@ -420,6 +569,7 @@ notifications, SSE updates and polling. `/projects/:id` is the submission
 screen: the name field (its footer shows the save state and, when the server
 provides `submissionsCloseAt`, the deadline), grouped form sections, challenge
 rows, team with an Invite row, and a floating Submit / Resubmit glass button. A frozen submitted project (`canWithdraw`, inside the submission window) shows a **Withdraw submission** glass button instead, with a confirmation, which calls `POST /api/me/projects/:id/withdraw-submission`; the project becomes a draft again and leaves the gallery and queue until it is submitted again (H20, H21). Staff return and manual repositories stay web-only.
+A **GitHub** section links the project to a repository through the GitHub App (the system browser returns via `hackos://github-callback`, see [github-activity](./github-activity.md)), unlinks it, and the read view shows the repository link; commit and pull-request counts stay web-only (H18).
 Queue context lives on My Projects and the queue screen, not in the editor. Leaving a team uses the authenticated
 `DELETE /api/me/projects/:id/leave` route after confirmation. No planning-record conversion or
 external submission path remains in the native client.
@@ -513,8 +663,9 @@ they are not device screenshots or proof of native toolbar behavior.
   device's top camera cutout.
   Food intolerances opens `app/profile-tasks.tsx` to edit the dietary answer,
   including an explicit "No restrictions" option (#933) that `PATCH /api/me`
-  records as a confirmed empty answer; the row is read-only offline or once the
-  H7 profile lock applies (the next-entry prompt then skips the dietary step).
+  records as a confirmed empty answer; the row is read-only offline or once
+  `dietaryLocked` (H7: after an accepted application the first answer is allowed,
+  then only staff change it; the next-entry prompt then skips the dietary step).
   The screen follows the other form modals: grouped sections (No restrictions,
   intolerances, a dedicated Dietary notes section matching the web
   `foodIntoleranceNotes` field, read-only while No restrictions is on), a
@@ -671,7 +822,10 @@ they are not device screenshots or proof of native toolbar behavior.
   (below) and also polls `GET /api/queue/me` every 15s while focused as a
   fallback. Participant ranks exclude waiting sibling entries of teams already
   called, in a room, presenting or completed in the same shared queue. My queue
-  refreshes when the tab regains focus. On the first visit to My queue for each
+  refreshes when the tab regains focus and keeps its last response on the device
+  (`cacheFirst`), shown under the "Offline data" banner when the server does
+  not answer; My Projects shares that cache entry. On a phone its header is the
+  compact translucent title used by Open-source licenses. On the first visit to My queue for each
   account, the app shows a
   persisted native tutorial explaining the three participant-facing stages:
   get ready (do not go to the room), wait outside the door, and enter only
@@ -703,12 +857,10 @@ they are not device screenshots or proof of native toolbar behavior.
   `others/notification-settings/`) lists each notification type with its state;
   a type opens its channel switches. Activity reminders
   (`components/reminders-view.tsx`) continues with a bulk switch per activity
-  type (the label side, marked by a chevron, opens that type's activities)
-  and then "Coming up":
-  the next three reminders, "See all" when there are more (the same
-  `others/reminders/[kind]` route with `kind=all&subscribed=1`, where a row
-  switched off stays until the person leaves), and an "Add an activity"
-  picker (`kind=all`). Switch rows use `ToggleRow` from
+  type (the label side, marked by a chevron, opens that type's activities).
+  The header search (`lib/use-header-search.ts`, same native configuration as
+  Schedule) replaces the type list with the matching activities, each with its
+  own reminder switch; the per-type screen has the same search. Switch rows use `ToggleRow` from
   `components/native-ui.tsx`; any other `Switch` placed in a row needs
   `SWITCH_IN_ROW_STYLE`, because React Native's iOS Switch defaults to
   `alignSelf: "flex-start"` and otherwise sits at the top of the row.
@@ -898,8 +1050,14 @@ directory to browse: people get into the diary only by a badge scan. The
 `?view=people` / `?view=companies` route parameter opens a segment directly.
 Pull-to-refresh, focus and foregrounding refetch, which is also how a person
 who was scanned sees the scanner appear (scans are mutual when the scanner
-shares a profile, `diary.md`). Nothing is written to the
-offline cache, so a profile hidden later cannot reappear from device storage.
+shares a profile, `diary.md`). The list itself is never written to the
+offline cache, so a profile hidden later cannot reappear from device storage;
+without a connection the screen shows the offline state (`RequestFeedback`:
+"You're offline" with Retry). Scanning still works offline: a code that never
+reached the server is queued on the device (`lib/diary-pending.ts`, one entry
+per code, cleared with the account's other caches), "Waiting for connection: n"
+shows above the scan button, and the queue is sent on reconnect, on focus and
+on launch; a code the server answers (accepted or refused) leaves the queue.
 
 The diary uses the system header, laid out like Activities. On iOS 26
 (`isRealLiquidGlassAvailable`) it is the transparent native bar: the list
@@ -1052,7 +1210,7 @@ The morph only runs where a real camera cutout exists:
   function and Android uses the plain collapse. With a hole punch, Android does
   not use the island mask above (its keyframes squeeze a small round target
   into a thin vertical needle); it uses the native gooey view described below.
-- **No cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
+- **Duo lateral island, no cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
   (`hasCutout: false`): no morph and no overlay (`simple`). The avatar stays in
   the scroll content: it holds still and shrinks to 0.75 until the view right
   below it (the name block, wired with `onNameLayout`) reaches its shrunken
@@ -1063,7 +1221,7 @@ The morph only runs where a real camera cutout exists:
   `contentMinHeight` floor apply, since nothing is ever half-morphed.
 
 `cameraCutoutFrame` (a `useProfileAvatarCollapse` option) still overrides the
-target for OEM placements. Reduced Motion uses the same in-content path without
+target for OEM placements in the top camera band. A lateral Duo island uses the in-content collapse so the avatar never crosses the page diagonally into the system rail. Reduced Motion uses the same in-content path without
 the hold or shrink: the avatar simply scrolls with the page.
 
 #### Android hole-punch gooey morph
@@ -1521,6 +1679,33 @@ needs a person to look at it rather than wait for reconnection.
 
 ### Activities
 
+**List and scanner panes.** Where `listDetailLayout` is enabled (same helper, book
+crease and `resolveListPaneWidth` as Schedule), the list stays on the left with
+its own title band and the selected activity's scanner opens on the right
+instead of pushing `activities/[id]`: `ActivityScannerScreen` with `embedded`,
+`activityId` and `topInset` draws its title, queue status pill and the scan
+result overlay inside the pane, below the band (`twoPaneBandHeight`). Nothing is
+selected at first, so the pane is empty and no camera or NFC session starts
+unasked. The selection lives in `ActivitiesScreen` above the layout branch (it
+survives rotation and a compact detour) and the scanner is keyed by activity.
+`[id].tsx` in a two-pane window hands its id back to the list
+(`dismissTo` with `selected`/`selectedNonce`), so deep links select the row.
+Compact windows keep pushing the route. Pure helpers: `lib/activity-pane.ts`;
+geometry hook and constants: `theme/layout-activity-pane.ts`. Scan, queue and
+idempotency paths are unchanged.
+
+On iOS each pane is its own native stack (`components/pane-native-stack.ios.tsx`,
+an independent navigation tree) and the route sets `headerShown: false`, so no
+transparent bar sits over the panes. The list pane's bar carries the shared
+screen title, the kind filter as a native menu item and the integrated search.
+The scanner pane's root bar carries the activity name and the queue status as a
+native button item (`lib/pane-header-items.ts`; the queue sheet is hosted by
+`ScannerQueueStatus triggerless`). "View people" pushes the Scanner's
+`PeopleDirectoryScreen` (`nativeHeader`, `requireBadge`) over it with an icon-only
+back item; a pick is scanned as if read. Pressing the selected Activities tab
+again clears the selection (`lib/tab-reselect.ts`). Android and web keep the
+in-page bands and `PeopleFinderPane`.
+
 `components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
 operator's list of scannable activities, read straight from the local
 `scanner_activities` cache. On iOS 26+ its native header follows Schedule: a
@@ -1550,8 +1735,8 @@ compact ellipsis button to its right opens a native menu with the secondary
 “Scan QR code” and “Enter code” alternatives. The swipe-revealed Replace badge
 action opens a native system dialog with QR first, NFC as the preferred primary
 action below it, and Cancel. Manual entry is available only in the linking menu.
-Android uses a native Material 3 dialog with rounded corners, secondary QR above
-a filled primary NFC button, and Cancel last; outside/back also dismiss it.
+Android draws the same stacked dialog through `lib/alert.ts` + `AlertHost`
+(NFC, QR, Cancel); outside/back also dismiss it.
 Badge linking renders as separate rounded Liquid Glass controls: a tinted NFC
 primary capsule and a circular overflow menu, without a shared section surface.
 
@@ -1822,9 +2007,16 @@ Apple's HIG:
 | Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge · hero `#4`, line `~12 min`; called: "Go to" room + location; in room: room | name · countdown, or `42/180` + "Scanned"; no buttons |
 
+Lock Screen banners keep the system's black card (design decision: it makes
+the activity stand out; a transparent tint was tried and dropped). The attendee and
+deadline compact slots keep the countdown as one unit in a 12 pt box (the
+patched `compactCountdown="short"`, no scaling) and the symbol in a fixed,
+centred box, so both sit on the axis of the vertical island of a foldable
+(checked on the iPhone Duo and iPhone 18 Pro simulators).
+
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | category symbol / countdown to the start; live: "Live" (both blue) | hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) / countdown (white; grey once submitted, never red) | `person.badge.key` / accredited count |
+| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" / symbol (blue) | countdown (white; grey once submitted, never red) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.badge.key` / accredited count |
 | Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
 | Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
 | Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red only on the symbol and "Not submitted"; countdown and bar stay neutral. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
@@ -1902,7 +2094,9 @@ minute (including `bannerSmall`). A value beside a unit never has a leading zero
 appears only in colon notation. Always-On uses the native `isLuminanceReduced`
 environment to show minutes only (`4m`) or `<1m` below a minute; waking restores
 the colon form, with no placeholder. `Text`'s
-`compactCountdown` (the legacy form names share this precision policy;
+`compactCountdown` (`short` keeps only the leading unit, `12h`, `38m`, `45s`, and is what
+the compact island slot uses so it fits the vertical island of a foldable; the other form names share the
+precision policy;
 `patches/@expo__ui@57.0.22.patch`) draws each number from a live
 `Text(timerInterval:)`, clipped to its digits next to static `h`/`m`/`s`.
 Monospaced digits keep the fields aligned. `ViewThatFits` fits the fixed-width
@@ -1961,9 +2155,9 @@ rank change alone changes the props signature, so it re-applies the score.
 | Queue in room | room | In room · **Room B** / location · challenge | In room · Room B (grey); stage track at the end |
 | Staff upcoming | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown | Starts in + countdown (blue); time · location |
 | Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
-| Attendee upcoming (H59) | countdown to `startsAt` | name / `hh:mm–hh:mm · location` · "Starts in" + countdown; category glyph | Starts in + countdown (blue); time · location |
-| Attendee live | countdown to `endsAt` | **Now** · name / time · location · "Ends in" + countdown; elapsed-time track | Now · name; Ends in + countdown (blue); time · location; elapsed-time track |
-| Deadline open (H19) | countdown to `endsAt` | project (else the title) / status · "Closes in" + countdown; hourglass, blue; hacking-window track (none without `startsAt`) | Closes in + countdown (blue) · project over its status (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Attendee upcoming (H59) | countdown to `startsAt` in one unit (`2h`, `38m`) on the camera's leading side, category glyph opposite | "Starts in" + countdown (leading, as in Luma's pre-event activity) · category glyph / name / `hh:mm–hh:mm · location` | Starts in + countdown (blue, leading) · glyph; name; time · location |
+| Attendee live | **Now** leading, glyph opposite | "Ends in" + countdown (leading) · **Now** · glyph / name / time · location; elapsed-time track | Ends in + countdown (leading) · Now · glyph; name; time · location; elapsed-time track |
+| Deadline open (H19) | countdown to `endsAt` in one unit on the camera's leading side, status symbol opposite | "Closes in" + countdown (leading) · status · symbol / title / project; hacking-window track (none without `startsAt`) | Closes in + countdown (blue, leading) · status · symbol; title; project (amber "Not submitted", green "Submitted", none when unknown); window track |
 | Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
 | Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
@@ -2281,10 +2475,9 @@ an id's first post).
   `web.json`: it covers scanner and participant controls, not the full web
   admin surface.
 - Account language row (`components/account-screen.tsx`) — on iOS the whole row
-  is the `MenuView` trigger. On Android, `@expo/ui`'s Material `DropdownMenu`
-  aligns its popup to the anchor's start edge, so a full-width trigger opened the
-  menu at the screen's left; the row is a `Pressable` calling `MenuView`'s
-  `ref.show()` and the menu is anchored to a 1dp strip at the row's trailing edge.
+  is the `MenuView` trigger (`components/app-menu.tsx`). On Android that wrapper draws
+  the iOS-style `MenuPopover`; the row stays a `Pressable` calling `ref.show()`, with
+  the menu anchored to a 1dp strip at the row's trailing edge.
 - Dynamic Type. `patches/react-native@0.86.3.patch` makes every root `Text`
   remount once when the system text size changes. Without it, Fabric
   re-measured text only on its native branch: the next React commit (a tab
@@ -2356,8 +2549,8 @@ centered below the statistics on both screens and dismiss after six seconds.
 
 Every on/off control uses `AppSwitch` (`components/native-ui.tsx`, also behind
 `ToggleRow`) rather than react-native's `Switch`. iOS keeps the native control;
-Android, whose Material default is teal, gets the `accent` token as the on
-track with a white thumb and a neutral off track, in both themes.
+Android draws UIKit's switch (`components/ios-switch.tsx`): 51 x 31 capsule, white
+thumb, `success` (green) on track, `separator` off track, in both themes.
 
 ### Contacts toolbar grouping
 
@@ -2387,3 +2580,16 @@ inline proposal action. Selections and new proposals have no count limit. The
 catalogue belongs to its question; curation remains in the web form editor.
 Read-only projects display the saved names, including historical answers after
 catalogue deletion. See [question-owned libraries](./form-libraries.md).
+
+
+### Responsive Account and Wallet (H28, H55)
+
+Account uses the Contacts native toolbar pattern beside a rail or on iPad: leading title, trailing Wallet action, matching canvas and no root back action. Its form remains a centred 720 pt reading column. Wallet uses two stable panes when its measured viewport reaches 720 pt: compact Ticket/Badge selector and QR on the left, holder and pass actions on the right; narrower windows stack those groups. Resizing preserves the selected credential. The personal queue keeps its back action without a redundant My queue title.
+
+Android navigation responds to the current window. Compact passport proportions use a rail; tall covers keep the phone bottom bar. Opened windows at least 640 × 600 dp use list/detail panes, including portrait folds; narrower or short landscape windows keep one pane. This is window geometry, not physical hinge occlusion detection. The overflow hub uses the same visible-tab budget as the bar, lists only hidden destinations, and redirects to Account when none remain.
+
+The native Account and Contacts bars stay transparent in either orientation, preserving the system scroll-edge treatment instead of clipping the profile with an opaque band. iPad profile avatars use 144 pt; phone and Duo sizes remain unchanged. Contacts keeps Wallet in-page, changing the same native toolbar item to Close. My Projects opens My queue in-page with its opener becoming Close; both overlays enter and exit on the right and respect Reduce Motion. Back gestures and Android Back close an open overlay before leaving its owner.
+
+The root iOS back recognizer covers side navigation and the bottom dock outside child stacks; native stacks retain their content gesture. A dock back gesture takes priority over tab scrubbing only while back/dismiss is possible. It rejects vertical drags and short horizontal movements. Contacts uses the measured native-header height with manual scroll padding to avoid restoring an obsolete automatic top inset. Projects uses a leading toolbar title immediately, without waiting for a large-title scroll event.
+
+Project detail validates required project collections before mounting the editor (H20). A malformed response uses the existing retryable RequestFeedback state. Gallery removes the unused detail column when there are no results, centres its empty detail placeholder, and avoids inheriting the large-title offset for its embedded project header. The New project sheet uses matching header/body backgrounds with native X/check toolbar actions.

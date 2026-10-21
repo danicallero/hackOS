@@ -1,0 +1,167 @@
+{
+  "app/_layout.tsx": {
+    "hex": 2,
+    "fontSize": 0,
+    "radius": 0
+  },
+  "components/QrCamera.tsx": {
+    "hex": 1,
+    "fontSize": 5,
+    "radius": 4
+  },
+  "components/RequestFeedback.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 2
+  },
+  "components/activities-screen.tsx": {
+    "hex": 2,
+    "fontSize": 4,
+    "radius": 2
+  },
+  "components/activity-scanner-screen.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/auth-ui.tsx": {
+    "hex": 0,
+    "fontSize": 6,
+    "radius": 3
+  },
+  "components/badge-link-actions.tsx": {
+    "hex": 0,
+    "fontSize": 0,
+    "radius": 3
+  },
+  "components/connection-celebration-skia.tsx": {
+    "hex": 5,
+    "fontSize": 0,
+    "radius": 0
+  },
+  "components/connection-celebration.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/diary-screen.tsx": {
+    "hex": 2,
+    "fontSize": 0,
+    "radius": 0
+  },
+  "components/field-library-picker.tsx": {
+    "hex": 0,
+    "fontSize": 4,
+    "radius": 2
+  },
+  "components/file-viewer.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/filter-menu.ios.tsx": {
+    "hex": 0,
+    "fontSize": 0,
+    "radius": 1
+  },
+  "components/filter-menu.tsx": {
+    "hex": 0,
+    "fontSize": 0,
+    "radius": 1
+  },
+  "components/invite-teammates-screen.tsx": {
+    "hex": 0,
+    "fontSize": 5,
+    "radius": 0
+  },
+  "components/live-activity-kinds-screen.tsx": {
+    "hex": 1,
+    "fontSize": 0,
+    "radius": 1
+  },
+  "components/native-ui.tsx": {
+    "hex": 0,
+    "fontSize": 11,
+    "radius": 7
+  },
+  "components/nfc-reader.tsx": {
+    "hex": 0,
+    "fontSize": 3,
+    "radius": 1
+  },
+  "components/opaque-router-tabs.tsx": {
+    "hex": 15,
+    "fontSize": 1,
+    "radius": 2
+  },
+  "components/photo-carousel.tsx": {
+    "hex": 3,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/profile-avatar-collapse.tsx": {
+    "hex": 6,
+    "fontSize": 0,
+    "radius": 0
+  },
+  "components/project-ui.tsx": {
+    "hex": 0,
+    "fontSize": 4,
+    "radius": 0
+  },
+  "components/router-tabs.tsx": {
+    "hex": 0,
+    "fontSize": 2,
+    "radius": 0
+  },
+  "components/scanner-action-button.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/scanner-nfc-surface.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/schedule-detail-screen.tsx": {
+    "hex": 1,
+    "fontSize": 0,
+    "radius": 2
+  },
+  "components/segmented-control.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 2
+  },
+  "components/session-state.tsx": {
+    "hex": 0,
+    "fontSize": 3,
+    "radius": 0
+  },
+  "components/stale-data-banner.tsx": {
+    "hex": 0,
+    "fontSize": 2,
+    "radius": 1
+  },
+  "components/stand-tag-link.tsx": {
+    "hex": 1,
+    "fontSize": 0,
+    "radius": 0
+  },
+  "components/stands-screen.tsx": {
+    "hex": 0,
+    "fontSize": 4,
+    "radius": 1
+  },
+  "components/statistics-screen.tsx": {
+    "hex": 0,
+    "fontSize": 1,
+    "radius": 0
+  },
+  "components/symbol.tsx": {
+    "hex": 1,
+    "fontSize": 0,
+    "radius": 0
+  }
+}

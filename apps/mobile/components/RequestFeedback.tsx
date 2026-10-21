@@ -1,12 +1,7 @@
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
 
+import { SymbolView } from "@/components/symbol";
 import { ApiError } from "@/lib/api";
 import { apiErrorCopy } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
@@ -54,7 +49,7 @@ export function RequestFeedback({
           compact ? null : { justifyContent: "center", minHeight: height * 0.6 },
         ]}
       >
-        <ActivityIndicator color={colors.accent} />
+        <AppActivityIndicator color={colors.accent} />
         <Text selectable style={[styles.message, { color: colors.secondaryLabel }]}>
           {t("loading")}
         </Text>
@@ -63,6 +58,49 @@ export function RequestFeedback({
   }
 
   if (!error) return null;
+
+  // A transport failure has no status: the device, not the server, is the problem.
+  if (error instanceof ApiError && !error.status) {
+    return (
+      <View
+        accessibilityLiveRegion="polite"
+        accessibilityRole="alert"
+        style={[styles.container, styles.offlineContainer]}
+      >
+        <SymbolView
+          name="wifi.slash"
+          size={34}
+          tintColor={colors.secondaryLabel}
+          accessible={false}
+        />
+        <Text selectable style={[styles.offlineTitle, { color: colors.label }]}>
+          {t("requestOfflineTitle")}
+        </Text>
+        <Text selectable style={[styles.error, { color: colors.secondaryLabel }]}>
+          {t("requestOfflineBody")}
+        </Text>
+        {onRetry ? (
+          <Pressable
+            accessibilityLabel={t("retry")}
+            accessibilityRole="button"
+            accessibilityState={{ busy: retrying, disabled: retrying }}
+            disabled={retrying}
+            onPress={() => {
+              void haptic("light");
+              onRetry();
+            }}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: colors.surface, opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },
+            ]}
+          >
+            {retrying ? <AppActivityIndicator color={colors.accent} size="small" /> : null}
+            <Text style={[styles.buttonText, { color: colors.accent }]}>{t("retry")}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
     <View
@@ -92,7 +130,9 @@ export function RequestFeedback({
             { opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },
           ]}
         >
-          {retrying ? <ActivityIndicator color={colors.onDestructiveSurface} size="small" /> : null}
+          {retrying ? (
+            <AppActivityIndicator color={colors.onDestructiveSurface} size="small" />
+          ) : null}
           <Text style={[styles.buttonText, { color: colors.onDestructiveSurface }]}>
             {t("retry")}
           </Text>
@@ -104,6 +144,8 @@ export function RequestFeedback({
 
 const styles = StyleSheet.create({
   container: { alignItems: "center", gap: 10, padding: 16 },
+  offlineContainer: { gap: 8, paddingVertical: 32 },
+  offlineTitle: { fontSize: 17, fontWeight: "600", textAlign: "center" },
   errorContainer: { borderCurve: "continuous", borderRadius: 12 },
   message: { opacity: 0.7, textAlign: "center" },
   error: { textAlign: "center" },

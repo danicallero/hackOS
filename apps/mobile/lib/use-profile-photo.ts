@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useRef, useState } from "react";
-import { Alert } from "react-native";
+import { alert } from "@/lib/alert";
 import { ApiError } from "./api";
 import { type MessageKey, useLocale } from "./i18n";
 import { createIdempotencyKey } from "./idempotency-key";
@@ -35,7 +35,7 @@ export function useProfilePhoto() {
           if (action === "camera") {
             const permission = await ImagePicker.requestCameraPermissionsAsync();
             if (!permission.granted) {
-              Alert.alert(t("profilePhotoTitle"), t("profilePhotoCameraDenied"));
+              alert(t("profilePhotoTitle"), t("profilePhotoCameraDenied"));
               return;
             }
           }
@@ -55,7 +55,7 @@ export function useProfilePhoto() {
         }
         await refetch();
       } catch (cause) {
-        Alert.alert(t("profilePhotoTitle"), photoErrorMessage(cause, action, t));
+        alert(t("profilePhotoTitle"), photoErrorMessage(cause, action, t));
       } finally {
         busy.current = false;
         setPending(null);

@@ -212,6 +212,13 @@ function fieldValueText(
           : libraryValues.degrees.get(id)) ?? String(value)
       );
     }
+    case "city": {
+      if (typeof value !== "object") return String(value);
+      const { city, province, country } = value as Record<string, unknown>;
+      return [city, province, country]
+        .filter((part) => typeof part === "string" && part)
+        .join(", ");
+    }
     default:
       return typeof value === "object" ? JSON.stringify(value) : String(value);
   }
@@ -268,9 +275,10 @@ function exportAnswers(
   ]).then(([universities, degrees, intolerances]) => {
     const libraryValues = { universities, degrees, intolerances };
     const rows: string[][] = [
-      ["Name", "Email", ...answerFields.map((field) => pickText(field.label, lang))],
+      ["Name", "Last name", "Email", ...answerFields.map((field) => pickText(field.label, lang))],
       [
-        response.name ?? "",
+        response.first_name ?? response.name ?? "",
+        response.last_name ?? "",
         response.email,
         ...answerFields.map((field) => {
           const value = fieldValueText(field, answerValues[field.key], lang, t, libraryValues);
@@ -281,7 +289,7 @@ function exportAnswers(
       ],
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;

@@ -27,6 +27,9 @@ function schemeHex(light: string, dark: string) {
   return Appearance.getColorScheme() === "dark" ? dark : light;
 }
 
+/** H55: navigation requires string colours; these match the semantic page canvas. */
+export const navigationCanvas = { light: "#f2f2f7", dark: "#000000" } as const;
+
 interface ColorSpec {
   ios: () => ColorValue;
   android: () => ColorValue;
@@ -63,7 +66,7 @@ const SPECS = {
   },
   background: {
     ios: () => Color.ios.systemGroupedBackground,
-    android: () => schemeHex("#f2f2f7", "#000000"),
+    android: () => schemeHex(navigationCanvas.light, navigationCanvas.dark),
     web: "#f5f5f7",
   },
   surface: {
@@ -80,6 +83,12 @@ const SPECS = {
     ios: () => Color.ios.separator,
     android: () => schemeHex("#c6c6c8", "#38383a"),
     web: "#d1d1d6",
+  },
+  /** Pointer hover wash for `row` controls (iPad/Mac pointer, Android mouse). */
+  hover: {
+    ios: () => Color.ios.quaternarySystemFill,
+    android: () => schemeHex("rgba(120, 120, 128, 0.12)", "rgba(120, 120, 128, 0.24)"),
+    web: "rgba(120, 120, 128, 0.12)",
   },
   accent: {
     ios: () => Color.ios.systemBlue,
@@ -182,6 +191,7 @@ type Palette = { [K in keyof typeof SPECS]: ColorValue } & {
   transparent: string;
   invisibleHitTarget: string;
   controlShadow: string;
+  scrim: string;
   qrBackground: string;
   glassLightSurface: string;
   glassDarkSurface: string;
@@ -208,6 +218,7 @@ function buildPalette(): Palette {
     transparent: "transparent",
     invisibleHitTarget: "rgba(0, 0, 0, 0.001)",
     controlShadow: "0 1px 2px rgba(0, 0, 0, 0.14)",
+    scrim: "rgba(0, 0, 0, 0.4)",
     qrBackground: "#ffffff",
     glassLightSurface,
     glassDarkSurface,

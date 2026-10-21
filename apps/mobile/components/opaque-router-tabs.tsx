@@ -4,7 +4,7 @@ import type { Href } from "expo-router";
 import { usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import type { SFSymbol } from "expo-symbols";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Modal,
   Platform,
@@ -37,14 +37,15 @@ import {
   OVERFLOW_TAB_LABEL_KEY,
   OVERFLOW_TAB_ROUTE,
   type OverflowTabKey,
+  overflowMenuPlacement,
 } from "@/lib/overflow-tabs";
-import {
-  routerTabBarDirectTabsForWidth,
-  routerTabBarMaxTabsWithoutOverflowForWidth,
-  useRouterTabBarInsets,
-} from "@/lib/router-tabs-inset";
-import { overflowTabs, primaryTabs, type TabKey } from "@/lib/tabs";
+import { ROUTER_TAB_BAR_VERTICAL_WIDTH, useRouterTabBarInsets } from "@/lib/router-tabs-inset";
+import { useTabPresentation } from "@/lib/tab-presentation";
+import { emitTabReselect } from "@/lib/tab-reselect";
+import { useTabShortcuts } from "@/lib/tab-shortcuts";
+import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
+import { MIN_TARGET } from "@/theme/tokens";
 
 type TabLabelKey =
   | "tabAccount"
@@ -145,6 +146,7 @@ export interface OpaqueRouterTabsProps {
 /** Matches the 22pt tab symbols; the ring adds a 1pt gap and a 2pt stroke. */
 const TAB_AVATAR_SIZE = 22;
 const TAB_AVATAR_FRAME = TAB_AVATAR_SIZE + 6;
+const OVERFLOW_AVATAR_INSET = 14;
 
 /** The account photo as a tab icon; the selected tab adds a ring in the tab tint. */
 function AccountTabAvatar({
@@ -168,7 +170,48 @@ function AccountTabAvatar({
         width: TAB_AVATAR_FRAME,
       }}
     >
-      <UserAvatar testID="account-tab-avatar" name={name} image={image} size={TAB_AVATAR_SIZE} />
+      <UserAvatar
+        testID="account-tab-avatar"
+        name={name}
+        image={image}
+        size={TAB_AVATAR_SIZE}
+        persist
+      />
+    </View>
+  );
+}
+
+/** The account photo inside the separated overflow circle, ringed in the tab tint. */
+function OverflowAccountAvatar({
+  name,
+  image,
+  size,
+  ringColor,
+}: {
+  name: string;
+  image: string;
+  size: number;
+  ringColor: string;
+}) {
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        borderColor: ringColor,
+        borderRadius: size / 2,
+        borderWidth: 2,
+        height: size,
+        justifyContent: "center",
+        width: size,
+      }}
+    >
+      <UserAvatar
+        testID="account-overflow-avatar"
+        name={name}
+        image={image}
+        size={size - 6}
+        persist
+      />
     </View>
   );
 }
@@ -181,22 +224,26 @@ function AccountTabAvatar({
 export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const systemColorScheme = useColorScheme();
-  const { width } = useWindowDimensions();
   const fallbackColorScheme: "dark" | "light" = systemColorScheme === "dark" ? "dark" : "light";
   const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#000000";
   const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
-  const personalTabContext = { hasQueueItems };
-  const primaryTabKeys = primaryTabs(capabilities, personalTabContext);
-  const overflowTabKeys = overflowTabs(capabilities, personalTabContext);
-  const directTabLimit = routerTabBarDirectTabsForWidth(width);
-  const maxTabsWithoutOverflow = routerTabBarMaxTabsWithoutOverflowForWidth(width);
-  const allTabKeys = [...primaryTabKeys, ...overflowTabKeys];
-  const showOverflow = allTabKeys.length > maxTabsWithoutOverflow;
-  const directOverflowCount = Math.max(0, directTabLimit - primaryTabKeys.length);
-  const visibleTabKeys = showOverflow
-    ? [...primaryTabKeys, ...overflowTabKeys.slice(0, directOverflowCount)]
-    : allTabKeys;
-  const overflowIds = showOverflow ? overflowTabKeys.slice(directOverflowCount) : [];
+  const presentation = useTabPresentation(capabilities, { hasQueueItems });
+  const directTabLimit = presentation.directLimit;
+  const maxTabsWithoutOverflow = presentation.withoutOverflow;
+  const visibleTabKeys = presentation.visible;
+  const overflowIds = presentation.overflow;
+  const router = useRouter();
+  const pathname = usePathname();
+  // H55: Command+1...9 / Command+, on a hardware keyboard follow the visible order.
+  useTabShortcuts([...visibleTabKeys, ...overflowIds], (id) => {
+    const key = id as TabKey;
+    if (visibleTabKeys.includes(key)) {
+      router.navigate(TAB_DEFINITIONS[key].href);
+      return;
+    }
+    const route = OVERFLOW_TAB_ROUTE[key as OverflowTabKey];
+    if (resolveOperationsNavigationAction(pathname, route) !== "noop") router.replace(route);
+  });
   const tabs: RouterTabItem[] = visibleTabKeys.map((key) => {
     const definition = TAB_DEFINITIONS[key];
     const { icon, selectedIcon } = definition;
@@ -263,7 +310,10 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
       {Platform.OS === "android" ? <NavigationBar style="auto" /> : null}
       <RouterTabs
         colorScheme={fallbackColorScheme}
-        onTabPress={() => void haptic("selection")}
+        onTabPress={(tab, wasSelected) => {
+          void haptic("selection");
+          if (wasSelected) emitTabReselect(tab.name);
+        }}
         onTabSelect={() => void haptic("selection")}
         overflow={
           overflowIds.length > 0 ? (
@@ -346,16 +396,25 @@ function OverflowTriggerIcon({
   account,
   activeIconColor,
   activeOverflowId,
+  circleSize,
   iconColor,
 }: {
   account: OpaqueOverflowMenuProps["account"];
   activeIconColor: string;
   activeOverflowId: OverflowTabKey | null;
+  circleSize: number;
   iconColor: string;
 }) {
   if (activeOverflowId === "account" && account?.image) {
+    // The circle is large, so the ringed photo sits inset in it rather than
+    // shrinking to a tab-icon size.
     return (
-      <AccountTabAvatar name={account.name} image={account.image} ringColor={activeIconColor} />
+      <OverflowAccountAvatar
+        name={account.name}
+        image={account.image}
+        size={Math.round(circleSize - OVERFLOW_AVATAR_INSET * 2)}
+        ringColor={activeIconColor}
+      />
     );
   }
   return (
@@ -400,7 +459,9 @@ function NativeOverflowMenu({
   overflowIds,
 }: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
-  const { tabBarHeight } = useRouterTabBarInsets();
+  const { tabBarHeight: horizontalBarHeight, vertical } = useRouterTabBarInsets();
+  // In the vertical bar the overflow circle is as wide as the bar cells.
+  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_WIDTH : horizontalBarHeight;
   const pathname = usePathname();
   const router = useRouter();
   const focusedSection = operationsSectionFromPathname(pathname);
@@ -451,6 +512,7 @@ function NativeOverflowMenu({
           account={account}
           activeIconColor={activeIconColor}
           activeOverflowId={activeOverflowId}
+          circleSize={tabBarHeight}
           iconColor={iconColor}
         />
       </View>
@@ -472,12 +534,13 @@ function AndroidOverflowMenu({
   overflowIds,
 }: OpaqueOverflowMenuProps) {
   const { t } = useLocale();
-  const { tabBarHeight } = useRouterTabBarInsets();
+  const { tabBarHeight: horizontalBarHeight, vertical } = useRouterTabBarInsets();
+  const tabBarHeight = vertical ? ROUTER_TAB_BAR_VERTICAL_WIDTH : horizontalBarHeight;
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const pathname = usePathname();
   const router = useRouter();
   const triggerRef = useRef<View>(null);
-  const [anchor, setAnchor] = useState<{ bottom: number; right: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ bottom: number; left: number } | null>(null);
   const focusedSection = operationsSectionFromPathname(pathname);
   const activeOverflowId =
     focusedSection !== "external" && overflowIds.includes(focusedSection) ? focusedSection : null;
@@ -488,13 +551,23 @@ function AndroidOverflowMenu({
     route: OVERFLOW_TAB_ROUTE[id],
   }));
 
+  // A resize, rotation or fold moves the trigger: the open card's anchor would be stale.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the window size is the trigger
+  useEffect(() => {
+    setAnchor(null);
+  }, [windowHeight, windowWidth]);
+
   function openMenu() {
     void haptic("selection");
     triggerRef.current?.measureInWindow((x, y, width) => {
-      setAnchor({
-        bottom: windowHeight - y + ANDROID_OVERFLOW_MENU_GAP,
-        right: windowWidth - x - width,
-      });
+      setAnchor(
+        overflowMenuPlacement(
+          { x, y, width },
+          { height: windowHeight, width: windowWidth },
+          ANDROID_OVERFLOW_MENU_WIDTH,
+          ANDROID_OVERFLOW_MENU_GAP,
+        ),
+      );
     });
   }
 
@@ -528,6 +601,7 @@ function AndroidOverflowMenu({
           account={account}
           activeIconColor={activeIconColor}
           activeOverflowId={activeOverflowId}
+          circleSize={tabBarHeight}
           iconColor={iconColor}
         />
       </Pressable>
@@ -542,8 +616,8 @@ function AndroidOverflowMenu({
             <View
               style={{
                 bottom: anchor.bottom,
+                left: anchor.left,
                 position: "absolute",
-                right: anchor.right,
                 width: ANDROID_OVERFLOW_MENU_WIDTH,
                 zIndex: ANDROID_OVERFLOW_MENU_Z_INDEX + 1,
               }}
@@ -617,6 +691,7 @@ function AndroidOverflowMenuRow({
           alignItems: "center",
           flexDirection: "row",
           gap: 10,
+          minHeight: MIN_TARGET,
           paddingHorizontal: 14,
           paddingVertical: 12,
         }}

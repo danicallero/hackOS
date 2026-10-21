@@ -18,10 +18,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
+import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
+import { PeopleFinderPane } from "@/components/people-finder-pane";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
+import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
+import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -29,6 +35,7 @@ import { bumpActivityScanned } from "@/lib/live-activities/sync";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
+import { queueStatusBarItem, statusShowsLabel } from "@/lib/pane-header-items";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
@@ -39,11 +46,23 @@ import {
   listScannerPeople,
   pendingScans,
 } from "@/lib/scanner-db";
+import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
+import { screenTitleElement } from "@/lib/screen-header-options";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
+import {
+  PANE_BAND_INSET,
+  PANE_CONTROL_HEIGHT,
+  PANE_CONTROL_TOP,
+  PANE_TOOLBAR_RESERVE,
+} from "@/theme/layout-activity-pane";
+import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ActivityScanResult {
   badgeId: string;
@@ -55,16 +74,38 @@ interface ActivityScanResult {
   wasRepeat?: boolean;
 }
 
-export function ActivityScannerScreen() {
-  const { id, manualBadge, manualNonce } = useLocalSearchParams<{
+/**
+ * One activity's scanner. As a route it owns the native header; `embedded` (the scanner pane of
+ * the two-pane Activities window) takes the activity from `activityId`, draws its own title band
+ * of height `topInset` and keeps the result overlay inside the pane, like the Schedule detail.
+ */
+export function ActivityScannerScreen({
+  activityId: embeddedActivityId,
+  embedded = false,
+  topInset = 0,
+}: {
+  activityId?: number;
+  embedded?: boolean;
+  topInset?: number;
+} = {}) {
+  const params = useLocalSearchParams<{
     id: string;
     manualBadge?: string;
     manualNonce?: string;
   }>();
-  const activityId = Number(id);
+  const activityId = embedded ? (embeddedActivityId ?? Number.NaN) : Number(params.id);
+  // The People picker hands a badge back through route params; a pane has no such route.
+  const manualBadge = embedded ? undefined : params.manualBadge;
+  const manualNonce = embedded ? undefined : params.manualNonce;
+  const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  const [paneWidth, setPaneWidth] = useState<number | null>(null);
+  // Embedded, the people finder covers this activity's pane only; the activity list is untouched.
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const { gutter } = useOperatorLayout(null);
+  const { fontScale } = useWindowDimensions();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -119,6 +160,9 @@ export function ActivityScannerScreen() {
         : localActivity,
     [activityId, localActivity, syncState.serverSnapshot],
   );
+  const goBack = () =>
+    cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities");
+  const activityName = activity ? resolveActivityText(activity, language) : t("scannerActivity");
 
   useEffect(() => {
     if (
@@ -338,6 +382,45 @@ export function ActivityScannerScreen() {
     [activityId, scanned],
   );
 
+  // iOS two-pane: the pane is its own native stack. The title and the sync status are real bar
+  // items of ITS header, "View people" pushes the Scanner's finder over it, and the route's header
+  // is hidden by the host, so nothing transparent sits over the pane.
+  const nativePane = embedded && NATIVE_PANE_STACK;
+  const [statusOpen, setStatusOpen] = useState(false);
+  const queueHealth = scannerQueueHealth(syncState.queue);
+  const statusLabel =
+    queueHealth.attention > 0 ? t("scannerStateAttention") : t("scannerStateReady");
+  const rootOptions = useMemo(
+    () => ({
+      headerShadowVisible: false,
+      headerStyle: { backgroundColor: colors.background },
+      headerTransparent: false,
+      title: "",
+      unstable_headerLeftItems: () => [
+        {
+          type: "custom" as const,
+          element: screenTitleElement(activityName, {
+            numberOfLines: 1,
+            testID: UI_TEST_IDS.scanner.result,
+          }),
+          hidesSharedBackground: true,
+        },
+      ],
+      unstable_headerRightItems: () => [
+        {
+          ...queueStatusBarItem({
+            hasAttention: queueHealth.attention > 0,
+            label: statusLabel,
+            onPress: () => setStatusOpen(true),
+            showLabel: statusShowsLabel(paneWidth ?? 0, isAccessibilityTextSize(fontScale)),
+          }),
+          // Busy while a sync runs.
+          selected: syncState.syncing,
+        },
+      ],
+    }),
+    [activityName, fontScale, paneWidth, queueHealth.attention, statusLabel, syncState.syncing],
+  );
   const queueStatus = (
     <ScannerQueueStatus
       queue={syncState.queue}
@@ -348,13 +431,36 @@ export function ActivityScannerScreen() {
       onDelete={(id) => void syncState.discardScan(id)}
       clockSkewMs={syncState.clockSkewMs}
       fillWidth={false}
-      nativeToolbar={glassAvailable}
+      nativeToolbar={glassAvailable && !embedded}
+      triggerless={nativePane}
+      open={nativePane ? statusOpen : undefined}
+      onOpenChange={nativePane ? setStatusOpen : undefined}
     />
   );
 
-  return (
-    <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
+  const screenView = (
+    <View
+      onLayout={
+        embedded
+          ? ({ nativeEvent }) => {
+              setPaneWidth((current) =>
+                current === nativeEvent.layout.width ? current : nativeEvent.layout.width,
+              );
+              setPaneHeight((current) =>
+                current === nativeEvent.layout.height ? current : nativeEvent.layout.height,
+              );
+            }
+          : undefined
+      }
+      style={{
+        backgroundColor: colors.background,
+        flex: 1,
+        overflow: embedded ? "hidden" : undefined,
+      }}
+    >
+      {embedded ? null : (
+        <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
+      )}
       <Modal
         visible={cameraVisible}
         animationType="slide"
@@ -388,106 +494,173 @@ export function ActivityScannerScreen() {
           nfcReadSucceeded.current = false;
         }}
       />
-      <AdaptiveBackButton
-        top={insets.top}
-        colorScheme="auto"
-        tintColor={colors.label}
-        onPress={() =>
-          cameraVisible ? setCameraVisible(false) : safeBack(router, "/(tabs)/activities")
-        }
-      />
-      {glassAvailable ? (
+      {glassAvailable || embedded ? null : (
+        <AdaptiveBackButton
+          top={insets.top}
+          colorScheme="auto"
+          tintColor={colors.label}
+          onPress={goBack}
+        />
+      )}
+      {nativePane ? (
+        queueStatus
+      ) : embedded ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 12,
+            height: PANE_CONTROL_HEIGHT,
+            left: 0,
+            paddingLeft: PANE_BAND_INSET,
+            paddingRight: PANE_TOOLBAR_RESERVE,
+            position: "absolute",
+            right: 0,
+            top: PANE_CONTROL_TOP,
+            zIndex: 30,
+          }}
+        >
+          {peopleOpen ? (
+            // The finder covers the pane's title line, so the activity name steps aside.
+            <View style={{ flex: 1 }} />
+          ) : (
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              testID={UI_TEST_IDS.scanner.result}
+              style={{ color: colors.label, flex: 1, ...SCREEN_TITLE }}
+            >
+              {activityName}
+            </Text>
+          )}
+          {queueStatus}
+        </View>
+      ) : glassAvailable ? (
         queueStatus
       ) : (
         <View
           pointerEvents="box-none"
-          style={{ position: "absolute", top: insets.top, right: 16, zIndex: 30 }}
+          style={{ position: "absolute", top: insets.top, right: gutter, zIndex: 30 }}
         >
           {queueStatus}
         </View>
       )}
-      <View
-        testID={UI_TEST_IDS.scanner.result}
-        style={{
-          alignSelf: "center",
-          borderRadius: 999,
-          height: 44,
-          justifyContent: "center",
-          left: 72,
-
-          paddingHorizontal: 16,
-          position: "absolute",
-          right: 140,
-          top: insets.top,
-        }}
-      >
-        <Text
-          selectable
-          numberOfLines={1}
-          style={{ color: colors.label, fontSize: 16, fontWeight: "700", textAlign: "center" }}
-        >
-          {activity ? resolveActivityText(activity, language) : t("scannerActivity")}
-        </Text>
-      </View>
-      <View style={{ flex: 1, marginTop: insets.top + 56 }}>
-        <ActivityStatistics activity={activity} stats={stats} inside={inside} />
-        {error ? (
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            style={{
-              borderRadius: 14,
-              marginTop: 12,
-              marginHorizontal: 32,
-              minHeight: 60,
-              overflow: "hidden",
-            }}
-          >
-            <Pressable
-              accessibilityLabel={error}
-              accessibilityHint={t("close")}
-              accessibilityRole="button"
-              accessibilityLiveRegion="assertive"
-              onPress={() => setError(null)}
-              style={{
-                minHeight: 60,
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "row",
-                gap: 9,
-                padding: 14,
-              }}
+      {glassAvailable && !embedded ? (
+        // Same title treatment as the Scan tab. Back shares this group: a second
+        // left toolbar would replace it.
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.Button
+            accessibilityLabel={t("back")}
+            icon="chevron.left"
+            onPress={goBack}
+          />
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              testID={UI_TEST_IDS.scanner.result}
+              style={{ color: colors.label, ...SCREEN_TITLE }}
             >
-              <SymbolView
-                accessible={false}
-                name="xmark.circle.fill"
-                tintColor={colors.destructive}
-                size={20}
-              />
-              <Text
-                selectable
-                style={{
-                  color: colors.label,
-                  flexShrink: 1,
-                  fontSize: 14,
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                {error}
-              </Text>
-            </Pressable>
-          </GlassView>
-        ) : null}
+              {activityName}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
+      {glassAvailable || embedded ? null : (
+        <View
+          testID={UI_TEST_IDS.scanner.result}
+          style={{
+            alignSelf: "center",
+            borderRadius: radius.full,
+            height: 44,
+            justifyContent: "center",
+            left: 72,
+            paddingHorizontal: 16,
+            position: "absolute",
+            right: 140,
+            top: insets.top,
+          }}
+        >
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ ...type.callout, color: colors.label, fontWeight: "700", textAlign: "center" }}
+          >
+            {activityName}
+          </Text>
+        </View>
+      )}
+      <View style={{ flex: 1, marginTop: nativePane ? 0 : embedded ? topInset : insets.top + 56 }}>
         <NfcScannerSurface
+          header={(layout) => (
+            <>
+              <ActivityStatistics
+                activity={activity}
+                stats={stats}
+                inside={inside}
+                layout={layout.stats}
+              />
+              {error ? (
+                <GlassView
+                  colorScheme="auto"
+                  glassEffectStyle="regular"
+                  style={{
+                    borderRadius: radius.container,
+                    marginTop: 12,
+                    minHeight: 60,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Pressable
+                    accessibilityLabel={error}
+                    accessibilityHint={t("close")}
+                    accessibilityRole="button"
+                    accessibilityLiveRegion="assertive"
+                    onPress={() => setError(null)}
+                    style={{
+                      minHeight: 60,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "row",
+                      gap: 9,
+                      padding: 14,
+                    }}
+                  >
+                    <SymbolView
+                      accessible={false}
+                      name="xmark.circle.fill"
+                      tintColor={colors.destructive}
+                      size={20}
+                    />
+                    <Text
+                      selectable
+                      style={{
+                        ...type.compact,
+                        color: colors.label,
+                        flexShrink: 1,
+
+                        fontWeight: "600",
+                        textAlign: "center",
+                      }}
+                    >
+                      {error}
+                    </Text>
+                  </Pressable>
+                </GlassView>
+              ) : null}
+            </>
+          )}
           onOpenPeople={() =>
-            router.push({
-              pathname: "/(tabs)/activities/people",
-              params:
-                process.env.EXPO_OS === "android"
-                  ? { activityId: String(activityId), autoSearch: "1" }
-                  : { activityId: String(activityId) },
-            })
+            embedded
+              ? setPeopleOpen(true)
+              : router.push({
+                  pathname: "/(tabs)/activities/people",
+                  params:
+                    process.env.EXPO_OS === "android"
+                      ? { activityId: String(activityId), autoSearch: "1" }
+                      : { activityId: String(activityId) },
+                })
           }
           onValue={(value) => void scanned(value)}
           nfcActive={nfcRunning && focused && !result && !registering}
@@ -512,6 +685,19 @@ export function ActivityScannerScreen() {
           onManual={stopNfc}
         />
       </View>
+      {embedded && !nativePane ? (
+        <PeopleFinderPane
+          backLabel={t("tabActivities")}
+          onClose={() => setPeopleOpen(false)}
+          onSelect={(person) => {
+            // The same path as the People picker route: the chosen badge is scanned as if read.
+            setPeopleOpen(false);
+            if (person.badgeId) void scanned(person.badgeId);
+          }}
+          open={peopleOpen}
+          requireBadge
+        />
+      ) : null}
       {result ? (
         <ActivityResultPanel
           activity={activity}
@@ -519,6 +705,7 @@ export function ActivityScannerScreen() {
           result={result}
           registering={registering}
           tabBarBottomInset={tabBarBottomInset}
+          pane={embedded ? { height: paneHeight, band: nativePane ? 0 : topInset } : null}
           onCancel={() => {
             setResult(null);
             setRegistering(false);
@@ -533,6 +720,33 @@ export function ActivityScannerScreen() {
       ) : null}
     </View>
   );
+  if (!nativePane) return screenView;
+  return (
+    <PaneNativeStack
+      enabled
+      pushed={{
+        open: peopleOpen,
+        onClose: () => setPeopleOpen(false),
+        // Icon-only back circle, like the standalone People.
+        options: { headerBackButtonDisplayMode: "minimal" },
+        render: () => (
+          <PeopleDirectoryScreen
+            embedded
+            nativeHeader
+            onSelect={(person) => {
+              // The same path as the People picker route: the chosen badge is scanned as if read.
+              setPeopleOpen(false);
+              if (person.badgeId) void scanned(person.badgeId);
+            }}
+            requireBadge
+          />
+        ),
+      }}
+      rootOptions={rootOptions}
+    >
+      {screenView}
+    </PaneNativeStack>
+  );
 }
 
 function ActivityResultPanel({
@@ -541,6 +755,7 @@ function ActivityResultPanel({
   registering,
   result,
   tabBarBottomInset,
+  pane,
   onCancel,
   onContinue,
   onRegisterAnother,
@@ -550,6 +765,8 @@ function ActivityResultPanel({
   registering: boolean;
   result: ActivityScanResult;
   tabBarBottomInset: number;
+  /** Set when the result sits inside a pane below its title band instead of over the window. */
+  pane: { height: number | null; band: number } | null;
   onCancel: () => void;
   onContinue: () => void;
   onRegisterAnother: () => void;
@@ -568,7 +785,13 @@ function ActivityResultPanel({
       result.person.notes);
   // Keep the scan feedback centered in the screen. Long dietary
   // details scroll without moving the decision buttons off screen.
-  const cardMaxHeight = windowHeight - insets.top - insets.bottom - tabBarBottomInset - 40;
+  const cardMaxHeight = resultCardMaxHeight({
+    windowHeight,
+    insetsTop: insets.top,
+    insetsBottom: insets.bottom,
+    tabBarBottomInset,
+    pane,
+  });
 
   return (
     <View
@@ -583,14 +806,14 @@ function ActivityResultPanel({
         paddingTop: 20,
         position: "absolute",
         right: 0,
-        top: 0,
+        top: pane?.band ?? 0,
       }}
     >
       <View
         style={{
           backgroundColor: colors.surface,
           borderCurve: "continuous",
-          borderRadius: 24,
+          borderRadius: radius.sheet,
           maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
@@ -629,9 +852,10 @@ function ActivityResultPanel({
                     accessibilityLiveRegion="polite"
                     selectable
                     style={{
+                      ...type.footnote,
                       flexShrink: 1,
                       color: colors.label,
-                      fontSize: 13,
+
                       fontWeight: "600",
                     }}
                   >
@@ -644,10 +868,10 @@ function ActivityResultPanel({
                           : t("scannerStateSaved")}
                   </Text>
                 </View>
-                <Text selectable style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}>
+                <Text selectable style={{ ...type.title2, color: colors.label, fontWeight: "700" }}>
                   {fullName}
                 </Text>
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+                <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
                   {result.person.email || t("accountNotSet")}
                 </Text>
               </View>
@@ -686,7 +910,7 @@ function ActivityResultPanel({
                   paddingTop: 16,
                 }}
               >
-                <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                <Text selectable style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
                   {t("scannerDietaryGroup")}
                 </Text>
                 {result.person.intolerances.length > 0 ? (
@@ -697,14 +921,14 @@ function ActivityResultPanel({
                         style={{
                           backgroundColor: colors.warningSurface,
                           borderCurve: "continuous",
-                          borderRadius: 12,
+                          borderRadius: radius.control,
                           paddingHorizontal: 12,
                           paddingVertical: 8,
                         }}
                       >
                         <Text
                           selectable
-                          style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}
+                          style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}
                         >
                           {item.label[language] ?? item.label.en}
                         </Text>
@@ -716,7 +940,7 @@ function ActivityResultPanel({
                   <View style={{ gap: 3 }}>
                     <Text
                       selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}
+                      style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}
                     >
                       {t("personFoodNotes")}
                     </Text>
@@ -729,7 +953,7 @@ function ActivityResultPanel({
                   <View style={{ gap: 3 }}>
                     <Text
                       selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}
+                      style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}
                     >
                       {t("personNotes")}
                     </Text>
@@ -745,7 +969,7 @@ function ActivityResultPanel({
               <Text
                 accessibilityLiveRegion="assertive"
                 selectable
-                style={{ color: colors.destructive, fontSize: 14, fontWeight: "700" }}
+                style={{ ...type.compact, color: colors.destructive, fontWeight: "700" }}
               >
                 {t("scannerBusinessRejected")}: {result.error}
               </Text>
@@ -810,37 +1034,38 @@ function ResultActionButton({
   testID?: string;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="scale"
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         alignSelf: "stretch",
         flexGrow: 1,
         backgroundColor: secondary ? colors.elevatedSurface : colors.primaryAction,
-        borderRadius: 999,
+        borderRadius: radius.full,
         minHeight: 50,
         paddingVertical: 12,
         justifyContent: "center",
-        opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
         paddingHorizontal: 12,
-      })}
+      }}
     >
       <Text
         selectable
         style={{
+          ...type.callout,
           color: secondary ? colors.interactiveText : colors.primaryActionText,
-          fontSize: 16,
+
           fontWeight: "600",
           textAlign: "center",
         }}
       >
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -855,86 +1080,31 @@ function ActivityStatistics({
   activity,
   stats,
   inside,
+  layout,
 }: {
   activity: ScannerActivity | null;
   stats: ActivityStats | null;
   inside: number | undefined;
+  layout: StatBlockLayout;
 }) {
   const { t } = useLocale();
   const meal = isMealActivityKind(activity?.category);
-  const items = [
-    { label: t("scannerDistinctPeople"), value: stats?.distinctPeople, occupancy: false },
-    {
-      label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
-      value: stats?.repeats,
-      occupancy: false,
-    },
-    { label: t("scannerInsideBuilding"), value: inside, occupancy: true },
-  ];
   return (
-    <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 24 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-        }}
-      >
-        <View style={{ gap: 4 }}>
-          <Text
-            selectable
-            style={{
-              color: colors.label,
-              fontSize: 44,
-              fontWeight: "700",
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {stats?.count ?? "…"}
-          </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-            {meal ? t("scannerServingsTotal") : t("scannerScansTotal")}
-          </Text>
-        </View>
-      </View>
-      <View
-        style={{
-          flexDirection: "row",
-          gap: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.separator,
-          paddingBottom: 24,
-        }}
-      >
-        {items.map((item) => (
-          <View
-            key={item.label}
-            style={{
-              flex: 1,
-              gap: 5,
-              ...(item.occupancy
-                ? { borderLeftWidth: 1, borderLeftColor: colors.separator, paddingLeft: 16 }
-                : {}),
-            }}
-          >
-            <Text
-              selectable
-              style={{
-                color: colors.label,
-                fontSize: 28,
-                fontWeight: "600",
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {item.value ?? "…"}
-            </Text>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
-              {item.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <ScannerStatBlock
+      capped={false}
+      layout={layout}
+      primary={{
+        label: meal ? t("scannerServingsTotal") : t("scannerScansTotal"),
+        value: stats?.count ?? "…",
+      }}
+      secondary={[
+        { label: t("scannerDistinctPeople"), value: stats?.distinctPeople ?? "…" },
+        {
+          label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
+          value: stats?.repeats ?? "…",
+        },
+        { label: t("scannerInsideBuilding"), value: inside ?? "…", divider: true },
+      ]}
+    />
   );
 }

@@ -392,6 +392,20 @@ to remain reachable.
 | Compact (`width < 700`) | 64 pt | 8 pt | 4 | 5 |
 | Tablet-width (`width >= 700`) | 56 pt | 6 pt | 6 | 6 |
 
+The navigation theme canvas matches the semantic screen background, including
+native stack views beneath system side columns. The clear area behind a floating
+rail/sidebar must not expose the navigation library's default canvas colour.
+
+On iOS landscape windows at least 600 pt tall, the app reserves a leading
+column for the vertical tab surface. In large landscape windows (at least
+1100 × 800 pt), the navigator fills the window and the rail is top-aligned below
+the title band with a 200 pt labelled sidebar; smaller foldable windows keep
+their bottom-aligned symbol rail.
+A system-provided side column takes
+precedence. The vertical budget follows both available height and the width
+class, keeping up to six tablet destinations visible when they fit. Portrait
+and narrower windows restore the horizontal surface without remounting routes.
+
 The outer wrapper uses at least 16 pt horizontal display padding and derives
 its bottom gap from `react-native-safe-area-context`. The overflow control is
 the same height and width as the surface height, so it remains a perfect
@@ -467,7 +481,7 @@ the usual cause of lists ending too high.
 | iOS 26+ | Native Liquid Glass: a clear outer surface plus a regular frosted interactive selection pill | Expo Router triggers + native `MenuView` overflow | Keep content edge-to-edge and use the inset hook for reachable endings. |
 | iOS <26 | Opaque colour-scheme-aware surface with matching geometry | Same | Supply `fallbackTheme` for screens with an explicit dark surface. |
 | Android | Opaque colour-scheme-aware surface with matching geometry | Same trigger contract; hackOS's `OpaqueRouterTabs` adapter renders a hand-rolled card menu here instead of `MenuView`'s Compose `DropdownMenu` fallback, to match the iOS card look (see `navigation.md`) | Ensure the app has Gesture Handler/Reanimated configured; use the inset hook for navigation-bar clearance. |
-| iPad / regular tablet width | Slightly thinner bar; up to six direct cells | Same | Treat width as a layout policy, not a different navigation model. |
+| iPad / regular tablet width | Up to six direct cells; leading rail in landscape, thinner horizontal bar in portrait | Same | Treat window size and orientation as layout policy, preserving the selected route across rotation. |
 
 `expo-glass-effect` is the material seam. The reusable shell checks the same
 real Liquid Glass availability gate used by `GlassView`; it does not assume

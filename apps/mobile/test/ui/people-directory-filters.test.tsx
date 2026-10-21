@@ -20,6 +20,7 @@ jest.mock("expo-router/stack", () => {
 });
 let mockActivityId: string | undefined;
 
+jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("expo-router", () => ({
   useFocusEffect: () => {},
   useLocalSearchParams: () => ({ activityId: mockActivityId }),
@@ -121,6 +122,38 @@ describe("people directory role filters", () => {
     await select("all");
     expect(screen.getByText("Linus")).toBeTruthy();
     expect(mockFilterActive).toBe(false);
+  });
+
+  it("has exactly one title in the pane's native stack: the bar's large title", async () => {
+    await renderMobile(<PeopleDirectoryScreen embedded nativeHeader backLabel="scannerBack" />);
+    await waitFor(() => expect(screen.getByText("Ada")).toBeTruthy());
+    // No list-header or band title: the native bar owns it and collapses it on scroll.
+    expect(screen.queryAllByText("scannerPeople")).toHaveLength(0);
+    expect(mockSetOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ headerLargeTitle: true, title: "scannerPeople" }),
+    );
+  });
+
+  it("returns the list as the screen's root with automatic insets in the native pane stack", async () => {
+    const view = await renderMobile(
+      <PeopleDirectoryScreen embedded nativeHeader backLabel="scannerBack" />,
+    );
+    await waitFor(() => expect(screen.getByText("Ada")).toBeTruthy());
+    // renderMobile wraps in providers; the first scroll view must be the screen root's child.
+    const insets: unknown[] = [];
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== "object") return;
+      const { props, children } = node as {
+        props?: Record<string, unknown>;
+        children?: unknown[];
+      };
+      if (props && "contentInsetAdjustmentBehavior" in props) {
+        insets.push(props.contentInsetAdjustmentBehavior);
+      }
+      for (const child of children ?? []) walk(child);
+    };
+    walk(view.toJSON());
+    expect(insets).toEqual(["automatic"]);
   });
 
   it("preserves the activity badge restriction and search within selected roles", async () => {

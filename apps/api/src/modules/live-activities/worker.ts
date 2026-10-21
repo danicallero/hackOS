@@ -226,7 +226,7 @@ function updateAlert(props: LiveActivityProps, previousPhase: string | null): bo
 
 /**
  * The next instants a desired activity changes on its own: the start while
- * upcoming, the end while live (H25, H26, H59), and the next countdown format
+ * upcoming, the end while live and a deadline's end (H19, H25, H26, H59), and the next countdown format
  * boundary (#966: one-digit minutes or seconds, colon notation, the hour), so
  * the precision flags flip, and the widget re-renders, on time.
  */
@@ -234,10 +234,13 @@ function boundaryInstants(props: LiveActivityProps, now: Date): Date[] {
   if (props.kind !== "activity" && props.kind !== "attendee_activity" && props.kind !== "deadline")
     return [];
   const out: Date[] = [];
-  if (props.kind !== "deadline") {
-    const phaseAt = new Date(props.phase === "upcoming" ? props.startsAt : props.endsAt);
-    if (Number.isFinite(phaseAt.getTime()) && phaseAt > now) out.push(phaseAt);
-  }
+  // The instant it changes phase or ends (a deadline ends at `endsAt`): the
+  // tick lands right then and the activity is removed at 0:00, not on the next
+  // 20 s repetition.
+  const phaseAt = new Date(
+    props.kind !== "deadline" && props.phase === "upcoming" ? props.startsAt : props.endsAt,
+  );
+  if (Number.isFinite(phaseAt.getTime()) && phaseAt > now) out.push(phaseAt);
   const target =
     props.kind !== "deadline" && props.phase === "upcoming" ? props.startsAt : props.endsAt;
   const precisionAt = nextCountdownBoundary(target, now);

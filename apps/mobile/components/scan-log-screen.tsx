@@ -6,10 +6,10 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-
+import { ScrollView, Text, View } from "react-native";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { ActionButton, Section, Separator } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
@@ -17,7 +17,9 @@ import { safeBack } from "@/lib/navigation";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
+import { type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { useOperatorListColumn } from "@/theme/layout-screens";
 
 const PAGE_SIZE = 30;
 
@@ -43,6 +45,7 @@ function dayHeading(iso: string): string {
 }
 
 export function ScanLogScreen() {
+  const listColumn = useOperatorListColumn();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const navigation = useNavigation();
   const pathname = usePathname();
@@ -183,7 +186,7 @@ export function ScanLogScreen() {
           size={36}
           tintColor={colors.tertiaryLabel}
         />
-        <Text style={{ color: colors.secondaryLabel, fontSize: 15, textAlign: "center" }}>
+        <Text style={{ ...type.subhead, color: colors.secondaryLabel, textAlign: "center" }}>
           {t("scanLogEmpty")}
         </Text>
       </View>
@@ -204,13 +207,19 @@ export function ScanLogScreen() {
       {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
+        ...listColumn,
         gap: 20,
-        padding: 16,
+        paddingTop: 16,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
     >
       <Text
-        style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, paddingHorizontal: 4 }}
+        style={{
+          ...type.subhead,
+          color: colors.secondaryLabel,
+          lineHeight: 21,
+          paddingHorizontal: 4,
+        }}
       >
         {t("scanLogDescription")}
       </Text>
@@ -224,14 +233,20 @@ export function ScanLogScreen() {
           />
           <Text
             accessibilityRole="header"
-            style={{ color: colors.label, fontSize: 19, fontWeight: "700", textAlign: "center" }}
+            style={{
+              color: colors.label,
+              ...type.headline,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
           >
             {t("scanLogNoMatches")}
           </Text>
           <Text
             style={{
+              ...type.compact,
               color: colors.secondaryLabel,
-              fontSize: 14,
+
               lineHeight: 20,
               textAlign: "center",
             }}
@@ -314,17 +329,13 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
   const method = methodLabel(entry, t);
 
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityHint={t("scanLogOpenProfile")}
       accessibilityLabel={`${subject}, ${sourceLabel}, ${context}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => ({
-        backgroundColor: pressed ? colors.elevatedSurface : colors.transparent,
-        gap: 7,
-        paddingHorizontal: 16,
-        paddingVertical: 14,
-      })}
+      style={{ gap: 7, paddingHorizontal: 16, paddingVertical: 14 }}
     >
       <View style={{ alignItems: "center", flexDirection: "row", gap: 12 }}>
         <SymbolView
@@ -336,11 +347,13 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
         <Text
           selectable
           numberOfLines={1}
-          style={{ color: colors.label, flex: 1, fontSize: 16, fontWeight: "700" }}
+          style={{ ...type.callout, color: colors.label, flex: 1, fontWeight: "700" }}
         >
           {subject}
         </Text>
-        <Text style={{ color: colors.secondaryLabel, fontSize: 12, fontVariant: ["tabular-nums"] }}>
+        <Text
+          style={{ ...type.caption, color: colors.secondaryLabel, fontVariant: ["tabular-nums"] }}
+        >
           {formatTime(entry.occurredAt)}
         </Text>
         <SymbolView
@@ -352,14 +365,14 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
       </View>
       <Text
         numberOfLines={1}
-        style={{ color: colors.secondaryLabel, fontSize: 14, paddingLeft: 32 }}
+        style={{ ...type.compact, color: colors.secondaryLabel, paddingLeft: 32 }}
       >
         {sourceLabel} · {context}
       </Text>
       {method ? (
         <Text
           numberOfLines={1}
-          style={{ color: colors.tertiaryLabel, fontSize: 12, paddingLeft: 32 }}
+          style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 32 }}
         >
           {method}
         </Text>
@@ -368,12 +381,12 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
         <Text
           numberOfLines={1}
           selectable
-          style={{ color: colors.tertiaryLabel, fontSize: 12, paddingLeft: 32 }}
+          style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 32 }}
         >
           {entry.notes}
         </Text>
       ) : null}
-    </Pressable>
+    </PressableFeedback>
   );
 }
 

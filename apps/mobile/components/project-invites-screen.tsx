@@ -8,11 +8,13 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { type ProjectInvite, projectMutation } from "@/lib/projects";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** H19: pending team invitations. A row leaves at once and returns if the server refuses. */
 export function ProjectInvitesScreen() {
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const [invites, setInvites] = useState<ProjectInvite[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const load = useCallback(async () => {
@@ -44,7 +46,7 @@ export function ProjectInvitesScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ flexGrow: 1, gap: 16, padding: 16 }}
+      contentContainerStyle={{ flexGrow: 1, gap: 16, paddingVertical: 16, ...readable.content }}
       style={{ backgroundColor: colors.background }}
     >
       {error ? <RequestFeedback error={error} /> : null}
@@ -57,11 +59,13 @@ export function ProjectInvitesScreen() {
               {index > 0 ? <Separator /> : null}
               <View style={{ gap: 12, padding: 16 }}>
                 <View style={{ gap: 2 }}>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                  <Text
+                    style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+                  >
                     {invite.name}
                   </Text>
                   {invite.invitedBy ? (
-                    <Text style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+                    <Text style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}>
                       {t("projectInvitedBy", { name: invite.invitedBy })}
                     </Text>
                   ) : null}

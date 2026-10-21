@@ -2,13 +2,21 @@ import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
+import Animated, { SlideInRight, SlideOutRight, useReducedMotion } from "react-native-reanimated";
+import { useBackDismiss } from "@/components/app-back-gesture";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
+import MyQueueScreen from "@/components/my-queue-screen";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { useBarTitleOptions } from "@/lib/bar-title";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useMeContext } from "@/lib/me-context";
 import { subscribeToCategory } from "@/lib/notification-events";
 import {
   formatEtaMinutes,
@@ -19,8 +27,12 @@ import {
   settleProjectDrafts,
 } from "@/lib/projects";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useSideRegion } from "@/lib/side-region";
+import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
 const STATUS_KEY: Record<string, MessageKey> = {
   waiting: "queueStatusWaiting",
@@ -34,37 +46,55 @@ const STATUS_KEY: Record<string, MessageKey> = {
 /** H19-H21: every project the user belongs to, with its live queue brief. */
 export function MyProjectsScreen() {
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const router = useRouter();
   const navigation = useNavigation();
   const scrollRef = useRef<ScrollView>(null);
   const trueTop = useTrueTopScroll(scrollRef);
   const bottomInset = useRouterTabBarScrollBottomInset();
-  const [projects, setProjects] = useState<NativeProject[] | null>(null);
-  const [invites, setInvites] = useState<ProjectInvite[]>([]);
-  const [queue, setQueue] = useState<ProjectQueueEntry[]>([]);
-  const [canCreate, setCanCreate] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const load = useCallback(async () => {
+  const { me } = useMeContext();
+  const cachePrefix = `user:${me?.id ?? "unknown"}`;
+  const fetchProjects = useCallback(async () => {
     // H20: an editor closed a moment ago may still be saving its draft or name.
     await settleProjectDrafts();
-    const [mine, invitations, entries] = await Promise.allSettled([
-      apiFetch<{ projects: NativeProject[]; canCreate: boolean }>("/api/me/projects"),
-      apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites"),
-      apiFetch<ProjectQueueEntry[]>("/api/queue/me"),
-    ]);
-    // A failed secondary read must not hide the participant's own projects.
-    setInvites(invitations.status === "fulfilled" ? invitations.value.invites : []);
-    setQueue(entries.status === "fulfilled" && Array.isArray(entries.value) ? entries.value : []);
-    if (mine.status === "fulfilled") {
-      setProjects(mine.value.projects);
-      setCanCreate(mine.value.canCreate);
-      setError(invitations.status === "rejected" ? (invitations.reason as Error) : null);
-    } else {
-      setProjects((current) => current ?? []);
-      setCanCreate(false);
-      setError(mine.reason as Error);
-    }
+    return apiFetch<{ projects: NativeProject[]; canCreate: boolean }>("/api/me/projects");
   }, []);
+  const fetchInvites = useCallback(
+    () => apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites"),
+    [],
+  );
+  // Same cache entry as My queue, so either screen warms the other offline.
+  const fetchQueue = useCallback(async () => {
+    const entries = await apiFetch<ProjectQueueEntry[]>("/api/queue/me");
+    return Array.isArray(entries) ? entries : [];
+  }, []);
+  const options = { enabled: me !== null, backgroundRevalidationMs: 0, cacheFirst: true };
+  const mine = useCachedApi(`${cachePrefix}:projects`, fetchProjects, options);
+  const invitations = useCachedApi(`${cachePrefix}:project-invites`, fetchInvites, options);
+  const entries = useCachedApi(`${cachePrefix}:queue`, fetchQueue, options);
+  const loadMine = mine.load;
+  const loadInvites = invitations.load;
+  const loadQueue = entries.load;
+  const load = useCallback(
+    () => Promise.all([loadMine(), loadInvites(), loadQueue()]).then(() => undefined),
+    [loadMine, loadInvites, loadQueue],
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await load();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [load]);
+  const projects = mine.data?.projects ?? null;
+  const canCreate = mine.data?.canCreate ?? false;
+  const invites = invitations.data?.invites ?? [];
+  const queue = entries.data ?? [];
+  // A failed secondary read must not hide the participant's own projects.
+  const error = mine.error ?? (projects ? invitations.error : null);
+  const staleSince = mine.staleSince;
   useFocusEffect(
     useCallback(() => {
       void load();
@@ -72,15 +102,28 @@ export function MyProjectsScreen() {
     }, [load]),
   );
   const glassAvailable = isRealLiquidGlassAvailable();
+  const barTitle = useBarTitleOptions(t("projects"));
+  const sideRegion = useSideRegion();
   const openInvites = useCallback(() => router.push("/queue/invites"), [router]);
   const openGallery = useCallback(() => router.push("/projects/gallery"), [router]);
-  const openQueue = useCallback(() => router.push("/projects/queue"), [router]);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const closeQueue = useCallback(() => setQueueOpen(false), []);
+  useBackDismiss(queueOpen, closeQueue);
+  const openQueue = useCallback(() => setQueueOpen((current) => !current), []);
   const openNew = useCallback(() => router.push("/queue/new"), [router]);
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: t("projects"),
+      // Beside a side column the title is a left toolbar item on the bar row, exactly like
+      // Contacts, so the bar blurs the same way; elsewhere the native large title stays.
+      ...(queueOpen || glassAvailable ? { title: "", headerLargeTitle: false } : barTitle),
       headerShown: true,
-      headerLargeTitle: true,
+      gestureEnabled: !queueOpen,
+      // Beside a side column the bar is just the page colour; elsewhere the screen keeps the
+      // system bar it always had.
+      ...(sideRegion.edge
+        ? { headerTransparent: true, headerStyle: { backgroundColor: "transparent" } }
+        : { headerTransparent: false, headerStyle: { backgroundColor: colors.background } }),
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       // iOS 26 gets native glass toolbar circles below; elsewhere the same
@@ -89,14 +132,28 @@ export function MyProjectsScreen() {
         ? undefined
         : () => (
             <View style={{ flexDirection: "row", gap: 8 }}>
-              <CircleButton icon="list.number" label={t("projectQueue")} onPress={openQueue} />
+              <CircleButton
+                icon={queueOpen ? "xmark" : "list.number"}
+                label={queueOpen ? t("close") : t("projectQueue")}
+                onPress={openQueue}
+              />
               {canCreate ? (
                 <CircleButton icon="plus" label={t("createProject")} onPress={openNew} />
               ) : null}
             </View>
           ),
     });
-  }, [navigation, t, glassAvailable, canCreate, openNew, openQueue]);
+  }, [
+    navigation,
+    t,
+    glassAvailable,
+    canCreate,
+    openNew,
+    openQueue,
+    barTitle,
+    sideRegion.edge,
+    queueOpen,
+  ]);
 
   function briefLines(project: NativeProject) {
     return queueBriefFor(queue, project.id)
@@ -105,7 +162,9 @@ export function MyProjectsScreen() {
         const status =
           entry.status === "waiting" && entry.position != null
             ? t("queuePosition", { n: String(entry.position) })
-            : t(STATUS_KEY[entry.status] ?? "queueStatusWaiting");
+            : entry.status === "presenting" || entry.status === "in_room"
+              ? t("queueBeInRoom")
+              : t(STATUS_KEY[entry.status] ?? "queueStatusWaiting");
         const eta = entry.status === "waiting" ? formatEtaMinutes(entry.etaMinutes, t) : null;
         return [entry.challengeTitle, status, eta].filter(Boolean).join(" · ");
       });
@@ -113,11 +172,20 @@ export function MyProjectsScreen() {
   return (
     <>
       {glassAvailable ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+              {queueOpen ? "" : t("projects")}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
+      {glassAvailable ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button
             separateBackground
-            icon="list.number"
-            accessibilityLabel={t("projectQueue")}
+            icon={queueOpen ? "xmark" : "list.number"}
+            accessibilityLabel={queueOpen ? t("close") : t("projectQueue")}
             onPress={openQueue}
           />
           {canCreate ? (
@@ -135,8 +203,17 @@ export function MyProjectsScreen() {
         {...trueTop.scrollProps}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: bottomInset + 24 }}
+        refreshControl={
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+        }
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: bottomInset + 24,
+        }}
       >
+        <StaleDataBanner updatedAt={staleSince} />
         {error ? (
           <RequestFeedback
             error={error}
@@ -157,7 +234,7 @@ export function MyProjectsScreen() {
           ) : null}
           <GlassPill icon="photo.on.rectangle" label={t("gallery")} onPress={openGallery} />
         </View>
-        {projects === null && !error ? <RequestFeedback loading /> : null}
+        {projects === null && !error ? <RequestFeedback loading={mine.loading} /> : null}
         {projects?.length === 0 && !error ? (
           <EmptyState
             icon="hammer"
@@ -194,6 +271,22 @@ export function MyProjectsScreen() {
           </Section>
         ) : null}
       </ScrollView>
+      {queueOpen ? (
+        <Animated.View
+          entering={reduceMotion ? undefined : SlideInRight.duration(220)}
+          exiting={reduceMotion ? undefined : SlideOutRight.duration(220)}
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            backgroundColor: colors.background,
+          }}
+        >
+          <MyQueueScreen embedded />
+        </Animated.View>
+      ) : null}
     </>
   );
 }
@@ -208,22 +301,22 @@ function CircleButton({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         backgroundColor: colors.surface,
-        borderRadius: 22,
+        borderRadius: radius.full,
         height: 44,
         justifyContent: "center",
-        opacity: pressed ? 0.6 : 1,
         width: 44,
-      })}
+      }}
     >
       <SymbolView name={icon} tintColor={colors.accent} size={19} weight="semibold" />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -246,7 +339,7 @@ function GlassPill({
       colorScheme="auto"
       glassEffectStyle="regular"
       isInteractive
-      style={{ borderCurve: "continuous", borderRadius: 999, flex: 1 }}
+      style={{ borderCurve: "continuous", borderRadius: radius.full, flex: 1 }}
     >
       <Pressable
         accessibilityRole="button"
@@ -262,10 +355,17 @@ function GlassPill({
         }}
       >
         <SymbolView name={icon} tintColor={colors.accent} size={19} accessible={false} />
-        <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+        <Text
+          numberOfLines={1}
+          style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+        >
           {label}
         </Text>
-        {value ? <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{value}</Text> : null}
+        {value ? (
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.body.fontSize }}>
+            {value}
+          </Text>
+        ) : null}
       </Pressable>
     </GlassView>
   );

@@ -1,4 +1,9 @@
 import type { Href, ImperativeRouter } from "expo-router";
+import { useMemo } from "react";
+import { Platform } from "react-native";
+import { useSideRegion } from "@/lib/side-region";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
+import { colors } from "@/theme/colors";
 
 /**
  * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
@@ -9,9 +14,36 @@ import type { Href, ImperativeRouter } from "expo-router";
  * tab navigator would offer the route group's name, "(tabs)".
  */
 export const nativeStackScreenOptions = {
+  gestureEnabled: true,
+  fullScreenGestureEnabled: true,
   headerBackButtonDisplayMode: "minimal",
   headerBackButtonMenuEnabled: false,
 } as const;
+
+/**
+ * `nativeStackScreenOptions` for a tab's top-level Stack. On iPhone Duo the
+ * system reserves a side column and only moves a native bar into it while
+ * the bar spans the full window, so the tab slot stays unpadded and each
+ * screen's content keeps clear of the column here instead.
+ */
+export function useTabStackScreenOptions() {
+  const { left, right } = useSideInsets();
+  const side = useSideRegion();
+  const slotPadsSide = Platform.OS === "android";
+  return useMemo(
+    () => ({
+      ...nativeStackScreenOptions,
+      // H55: the tablet TabSlot already clears its sidebar, including native headers.
+      // One page colour for every tab screen (not the fixed-black navigation canvas).
+      contentStyle: {
+        backgroundColor: colors.background,
+        paddingLeft: (side.tabletRail || slotPadsSide) && side.edge === "left" ? 0 : left,
+        paddingRight: (side.tabletRail || slotPadsSide) && side.edge === "right" ? 0 : right,
+      },
+    }),
+    [left, right, slotPadsSide, side.edge, side.tabletRail],
+  );
+}
 
 /**
  * Keep the native stack back action while removing the app-bar surface and

@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { act, fireEvent, screen, userEvent, waitFor, within } from "@testing-library/react-native";
-import { Alert, BackHandler, ScrollView } from "react-native";
+import { Alert, BackHandler, Platform, ScrollView } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -51,6 +51,7 @@ jest.mock("@expo/ui/community/menu", () => {
   return { MenuView: ({ children }: { children: unknown }) => children };
 });
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({ setOptions: jest.fn() }),
   useFocusEffect: (callback: () => void) => {
     mockFocusEffect(callback);
     const ReactLib = require("react");
@@ -427,7 +428,7 @@ describe("account removal UI flow", () => {
     expect(screen.getByTestId("wallet-screen")).toHaveTextContent("52");
     const close = screen.getByRole("button", { name: "Close" });
     expect(close).toBe(screen.getByTestId("account-wallet-close"));
-    expect(close.props.accessibilityState).toEqual({ expanded: true });
+    expect(close.props.accessibilityState).toMatchObject({ expanded: true });
     expect(mockPush).not.toHaveBeenCalled();
 
     await user.press(close);
@@ -442,6 +443,7 @@ describe("account removal UI flow", () => {
   });
 
   it("closes the wallet on Android system back before leaving Account (H28)", async () => {
+    const platform = jest.replaceProperty(Platform, "OS", "android");
     const backHandler = jest.spyOn(BackHandler, "addEventListener");
     const user = userEvent.setup();
     await renderMobile(<AccountScreen />);
@@ -456,6 +458,7 @@ describe("account removal UI flow", () => {
     expect(handled).toBe(true);
     await waitFor(() => expect(screen.queryByTestId("wallet-screen")).toBeNull());
     backHandler.mockRestore();
+    platform.restore();
   });
 
   it("consumes the alerts highlight param once: scroll to Notifications, flash, clear", async () => {

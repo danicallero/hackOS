@@ -9,7 +9,7 @@ import {
   type NetworkingProfile,
   needsNetworkingInvite,
 } from "@/lib/networking-profile";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 /**
  * H15: right after a participant confirms their spot, invites them to create
@@ -36,7 +36,10 @@ export function NetworkingInvite() {
   if (!needsNetworkingInvite(profile)) return null;
   return (
     <View testID="networking-invite" style={{ gap: 8 }}>
-      <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21 }}>
+      <Text
+        selectable
+        style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize, lineHeight: 21 }}
+      >
         {t("networkingInvite")}
       </Text>
       <ActionButton

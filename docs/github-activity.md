@@ -36,8 +36,20 @@ Without them the "Link GitHub repo" button is hidden.
    installed gets the dropdown straight away, with no redirect; "Share more
    repositories" reopens the GitHub install page. A
    repository belongs to one project. The link fills the project's GitHub URL
-   when empty, is audited, and backfills up to 300 commits and 300 pull requests.
+   when empty (or replaces it when it was the previous link's address; unlinking
+   clears it the same way) and is audited, and backfills up to 300 commits and 300 pull requests.
 4. **Unlink** (`DELETE .../github`) removes the link and tracked activity.
+
+The mobile app runs the same flow (H18): `POST .../github/install` with
+`app: true` signs a state flagged for the app, GitHub opens in the system
+browser (`WebBrowser.openAuthSessionAsync`), and `GET /api/github/callback`
+redirects a flagged state to `hackos://github-callback` untouched, because the
+browser has no hackOS session. The app then sends the `code`, `state` and
+`installation_id` to `POST /api/me/github/complete`, which runs the same
+verification under the app's own session; a state issued to another member is
+400. When the App still has to be installed, the response carries the GitHub URL
+to open again. The project editor (`project-github.tsx`) lists the shared
+repositories, links and unlinks; the read view shows the repository link.
 
 Only active team members can manage the link, and not while the project is
 submitted (it is frozen until withdrawn or returned by staff, see

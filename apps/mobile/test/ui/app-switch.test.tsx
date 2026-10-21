@@ -1,8 +1,8 @@
-import { screen } from "@testing-library/react-native";
+import { fireEvent, screen } from "@testing-library/react-native";
 import { Platform } from "react-native";
 import { renderMobile } from "./render";
 
-// Android's Material Switch is teal by default; AppSwitch recolours it with the accent.
+// Android draws UIKit's switch (IosSwitch) instead of the Material Switch.
 
 // The stock jest Switch drops colour props; expose them to assert what AppSwitch passes.
 jest.mock("react-native/Libraries/Components/Switch/Switch", () => {
@@ -33,11 +33,17 @@ async function renderSwitch() {
 }
 
 describe("AppSwitch", () => {
-  it("uses the accent token for thumb and track on Android", async () => {
+  it("draws the UIKit-style switch on Android and reports the toggled value", async () => {
     Platform.OS = "android";
-    const props = (await renderSwitch()).props;
-    expect(props.thumbColor).toBe("token:accentText");
-    expect(props.trackColor).toEqual({ false: "token:tertiaryLabel", true: "token:accent" });
+    const { AppSwitch } = require("@/components/native-ui");
+    const onValueChange = jest.fn();
+    await renderMobile(
+      <AppSwitch accessibilityLabel="x" value={false} onValueChange={onValueChange} />,
+    );
+    const control = screen.getByRole("switch");
+    expect(control.props.accessibilityState).toEqual({ checked: false, disabled: false });
+    await fireEvent.press(control);
+    expect(onValueChange).toHaveBeenCalledWith(true);
   });
 
   it("leaves the native iOS control untouched", async () => {

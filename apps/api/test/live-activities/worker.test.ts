@@ -674,6 +674,18 @@ describe("configurable kinds in the worker (#966)", () => {
     // stale-date is the deadline itself.
     const ends = Math.floor(new Date(propsOf(0).endsAt).getTime() / 1000);
     expect(apsOf(0)["stale-date"]).toBe(ends);
+    // A tick is scheduled at the deadline itself: the activity is removed at
+    // 0:00, not on the next 20 s repetition.
+    {
+      const { getQueue } = await import("../../src/lib/queues.js");
+      const { LIVE_ACTIVITIES_QUEUE, liveActivityBoundaryJobId } = await import(
+        "../../src/modules/live-activities/kick.js"
+      );
+      const atEnd = await getQueue(LIVE_ACTIVITIES_QUEUE).getJob(
+        liveActivityBoundaryJobId(new Date(propsOf(0).endsAt)),
+      );
+      expect(atEnd?.name).toBe("boundary");
+    }
     await setActivityToken(device.id, "deadline-token");
 
     await db.query(`UPDATE event_config SET hacking_ends_at = now() + interval '10 minutes'`);

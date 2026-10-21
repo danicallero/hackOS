@@ -1,6 +1,13 @@
 import { act, screen, userEvent } from "@testing-library/react-native";
 
-jest.mock("expo-router", () => ({ useFocusEffect: () => {}, useScrollToTop: () => {} }));
+jest.mock("expo-router", () => ({
+  useFocusEffect: () => {},
+  useNavigation: () => ({ getState: () => ({ index: 1 }) }),
+  useRouter: () => ({ back: jest.fn() }),
+  useScrollToTop: () => {},
+}));
+jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
+jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
 jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
 jest.mock("@/components/stale-data-banner", () => ({ StaleDataBanner: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));

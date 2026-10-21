@@ -1,15 +1,15 @@
 import { Stack } from "expo-router/stack";
-
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
+import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 export default function ActivitiesLayout() {
+  const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const glassAvailable = isRealLiquidGlassAvailable();
   return (
-    <Stack screenOptions={nativeStackScreenOptions}>
+    <Stack screenOptions={stackScreenOptions}>
       <Stack.Screen
         name="index"
         options={{
@@ -17,6 +17,7 @@ export default function ActivitiesLayout() {
           // the toolbar material; the screen supplies the fallback elsewhere.
           headerShown: glassAvailable,
           headerStyle: { backgroundColor: colors.background },
+          headerTransparent: false,
           title: t("tabActivities"),
         }}
       />

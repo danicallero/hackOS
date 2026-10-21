@@ -1,32 +1,53 @@
 import { useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { HeaderBackButton } from "@/components/header-back-button";
+import { Platform } from "react-native";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { HeaderBackButton, hasScreenBelow } from "@/components/header-back-button";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions } from "@/lib/navigation";
+import { safeBack, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 export default function ProjectsLayout() {
   const router = useRouter();
   const { t } = useLocale();
+  const stackScreenOptions = useTabStackScreenOptions();
+  const glassAvailable = isRealLiquidGlassAvailable();
+  // [id], gallery and queue render their own `EntryBackToolbar` on iOS 26+ when they
+  // are the first screen of this stack (the native item has nothing to pop to); with a
+  // screen below them the native back item is kept.
+  const ownBack = ({
+    navigation,
+    route,
+  }: {
+    navigation: { getState(): { routes: { key: string }[] } | undefined };
+    route: { key: string };
+  }) => (glassAvailable && !hasScreenBelow(navigation, route.key) ? false : undefined);
   return (
     <Stack
-      screenOptions={{
-        ...nativeStackScreenOptions,
-        contentStyle: { backgroundColor: colors.background },
+      screenOptions={({ navigation }) => ({
+        ...stackScreenOptions,
+        contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
         headerShadowVisible: false,
-        headerLeft: () => (
-          <HeaderBackButton
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/queue"))}
-          />
-        ),
-      }}
+        // The native back item can join a vertical bar; only a cold deep link
+        // (nothing to pop in this screen's own stack) needs the explicit one.
+        // No `headerLeft` key at all on iOS 26+: even an undefined one can displace the
+        // screens' left toolbar items.
+        ...(glassAvailable || navigation.getState().index > 0
+          ? {}
+          : {
+              headerLeft: () => (
+                <HeaderBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />
+              ),
+            }),
+      })}
     >
       <Stack.Screen
         name="[id]"
-        options={{
+        options={(props) => ({
+          headerBackVisible: ownBack(props),
           headerLargeTitle: true,
           headerLargeTitleShadowVisible: false,
           title: t("projectFields"),
-        }}
+        })}
       />
       <Stack.Screen name="challenge" options={{ title: "" }} />
       <Stack.Screen
@@ -41,6 +62,17 @@ export default function ProjectsLayout() {
         }}
       />
       <Stack.Screen
+        name="github"
+        options={{
+          headerBlurEffect: "none",
+          headerShadowVisible: false,
+          // Same surface as the challenges sheet.
+          headerStyle: { backgroundColor: colors.background },
+          presentation: "modal",
+          title: t("githubChooseRepo"),
+        }}
+      />
+      <Stack.Screen
         name="invite"
         options={{
           contentStyle: { backgroundColor: colors.surface },
@@ -51,8 +83,27 @@ export default function ProjectsLayout() {
           title: t("projectInvite"),
         }}
       />
-      <Stack.Screen name="gallery" options={{ title: t("gallery") }} />
-      <Stack.Screen name="queue" options={{ title: t("projectQueue") }} />
+      <Stack.Screen
+        name="gallery"
+        options={(props) => ({
+          headerBackVisible: ownBack(props),
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerTransparent: Platform.OS === "ios",
+          title: t("gallery"),
+        })}
+      />
+      {/* Compact title over the scrolling queue, like Open-source licenses: iOS blurs the scroll edge. */}
+      <Stack.Screen
+        name="queue"
+        options={(props) => ({
+          headerBackVisible: ownBack(props),
+          headerLargeTitle: false,
+          headerShadowVisible: false,
+          headerTransparent: Platform.OS === "ios",
+          title: t("projectQueue"),
+        })}
+      />
     </Stack>
   );
 }

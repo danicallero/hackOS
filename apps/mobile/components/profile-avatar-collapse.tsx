@@ -57,6 +57,7 @@ import {
   resolveProfileCameraTarget,
 } from "@/lib/profile-avatar-collapse";
 import CameraCapabilities from "@/modules/camera-capabilities";
+import FoldRegion from "@/modules/fold-region";
 import { ProfileGooeyView } from "@/modules/profile-gooey";
 import { colors } from "@/theme/colors";
 
@@ -116,7 +117,10 @@ export function useProfileAvatarCollapse(
   const reduceMotion = useReducedMotion();
   const safeAreaTop = useSafeAreaInsets().top;
   const target = useProfileCameraTarget(cameraCutoutFrame, safeAreaTop);
-  const simple = reduceMotion || !target.hasCutout;
+  const lateralIsland = useLateralIsland();
+  const simple = reduceMotion || lateralIsland || !target.hasCutout;
+  // No shrink on a foldable's side-column island either (#935).
+  const staticAvatar = reduceMotion || lateralIsland;
   // Layout gap between the anchor's bottom and the view below it (`simple`).
   const anchorBottom = useRef<number | null>(null);
   const nameTop = useRef<number | null>(null);
@@ -391,8 +395,40 @@ export function useProfileAvatarCollapse(
     settleAtRest,
     simple,
     simpleGap,
+    staticAvatar,
     target,
   };
+}
+
+/** The system-reported camera island in window coordinates, inset to stay inside it. */
+function readIslandFrame(): ProfileCameraCutoutFrame | null {
+  if (Platform.OS !== "ios") return null;
+  try {
+    const region = FoldRegion?.getOcclusionRegion?.();
+    if (!region || region.width < 24 || region.height < 24) return null;
+    const inset = 4;
+    return {
+      left: region.x + inset,
+      top: region.y + inset,
+      width: region.width - 2 * inset,
+      height: region.height - 2 * inset,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A foldable iPhone's island sits in the side column, off the page's scroll
+ * axis: there the photo stays a plain, unanimated part of the page (#935).
+ */
+function useLateralIsland(): boolean {
+  const { width, height } = useWindowDimensions();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: window size changes when the island moves.
+  return useMemo(() => {
+    const island = readIslandFrame();
+    return island !== null && Math.abs(island.left + island.width / 2 - width / 2) > 40;
+  }, [width, height]);
 }
 
 /**
@@ -413,17 +449,20 @@ function useProfileCameraTarget(
       return null;
     }
   }, [screenHeight, screenWidth]);
+  // iOS 27.1 reports the island where it really is (the side column on a foldable iPhone).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: window size changes when the island moves.
+  const islandFrame = useMemo(() => readIslandFrame(), [screenHeight, screenWidth]);
   return useMemo(
     () =>
       resolveProfileCameraTarget({
-        cameraCutoutFrame,
+        cameraCutoutFrame: cameraCutoutFrame ?? islandFrame,
         displayCutoutRects,
         height: screenHeight,
         platform: Platform.OS,
         safeAreaTop,
         screenWidth,
       }),
-    [cameraCutoutFrame, displayCutoutRects, safeAreaTop, screenHeight, screenWidth],
+    [cameraCutoutFrame, islandFrame, displayCutoutRects, safeAreaTop, screenHeight, screenWidth],
   );
 }
 
@@ -442,8 +481,7 @@ export function ProfileAvatarCollapseAnchor({
   children?: ReactNode;
   size: number;
 }) {
-  const { scrollOffset, anchorFrame, carryDistance, simple, simpleGap } = controller;
-  const reduceMotion = useReducedMotion();
+  const { scrollOffset, anchorFrame, carryDistance, simple, simpleGap, staticAvatar } = controller;
   const minScale = PROFILE_AVATAR_SIMPLE_MIN_SCALE;
   const style = useAnimatedStyle(() => {
     // It scrolls with the content through the carry, so it keeps pace with
@@ -458,10 +496,10 @@ export function ProfileAvatarCollapseAnchor({
       size,
       simpleGap,
       minScale,
-      reduceMotion,
+      staticAvatar,
     );
     return { opacity: 1, transform: [{ translateY }, { scale }] };
-  }, [anchorFrame, carryDistance, scrollOffset, simple, simpleGap, size, reduceMotion]);
+  }, [anchorFrame, carryDistance, scrollOffset, simple, simpleGap, size, staticAvatar]);
   return (
     <Animated.View
       ref={controller.anchorRef}
@@ -495,10 +533,13 @@ export function ProfileAvatarCollapse({
   size,
   variant,
   collapseDistance = PROFILE_AVATAR_COLLAPSE_DISTANCE,
+  persist = false,
   children,
 }: {
   controller: ProfileAvatarCollapseController;
   image: string | null | undefined;
+  /** The signed-in person's own photo: kept on disk to show offline. */
+  persist?: boolean;
   name: string;
   size: number;
   variant: AvatarVariant;
@@ -506,7 +547,7 @@ export function ProfileAvatarCollapse({
   /** Optional live avatar content (video, rings or overlays), inside the same mask. */
   children?: ReactNode;
 }) {
-  const photo = useApiImage(image);
+  const photo = useApiImage(image, persist);
   // The photo layers render once it has loaded (then from the memory cache);
   // until then a hidden loader fetches it and the initials stay (#934).
   const source = photo.loaded ? (photo.props?.source ?? null) : null;
@@ -672,7 +713,7 @@ export function ProfileAvatarCollapse({
                 <Image
                   accessible={false}
                   source={source}
-                  cachePolicy="memory"
+                  cachePolicy={persist ? "disk" : "memory"}
                   contentFit="cover"
                   style={{ height: size, width: size, borderRadius: size / 2 }}
                 />
@@ -726,7 +767,7 @@ export function ProfileAvatarCollapse({
                 <Image
                   accessible={false}
                   source={source}
-                  cachePolicy="memory"
+                  cachePolicy={persist ? "disk" : "memory"}
                   contentFit="cover"
                   style={{ height: "100%", width: "100%" }}
                 />
@@ -735,7 +776,7 @@ export function ProfileAvatarCollapse({
                     accessible={false}
                     blurRadius={6}
                     source={source}
-                    cachePolicy="memory"
+                    cachePolicy={persist ? "disk" : "memory"}
                     contentFit="cover"
                     style={absoluteFill}
                   />
@@ -745,7 +786,7 @@ export function ProfileAvatarCollapse({
                     accessible={false}
                     blurRadius={18}
                     source={source}
-                    cachePolicy="memory"
+                    cachePolicy={persist ? "disk" : "memory"}
                     contentFit="cover"
                     style={absoluteFill}
                   />

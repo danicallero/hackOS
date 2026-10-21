@@ -211,8 +211,8 @@ describe("ProfileTasksDialog (#933)", () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 
-  it("skips the dietary step for a locked profile (H7)", async () => {
-    session.me = { ...baseMe, profileLocked: true };
+  it("skips the dietary step once dietary data is locked (H7)", async () => {
+    session.me = { ...baseMe, profileLocked: true, dietaryLocked: true };
     await render();
     expect(container.textContent).not.toContain("foodIntolerances");
     expect(container.textContent).toContain("meals");

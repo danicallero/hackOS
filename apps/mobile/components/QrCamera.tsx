@@ -1,7 +1,7 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -16,9 +16,11 @@ import { getBarcodeFrameObservation } from "@/lib/qr-frame";
 import { advanceQrScanCandidate, type QrScanCandidate } from "@/lib/qr-scan-stability";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import { scannerCameraControls } from "@/lib/scanner-camera-controls";
+import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
+import { type OperatorLayout, scanFrameSize } from "@/theme/layout-screens";
 
 export function QrCamera({
   onValue,
@@ -31,6 +33,7 @@ export function QrCamera({
   nfcFirst = false,
   hideNfc = false,
   onOpenPeople,
+  surfaceHeader,
 }: {
   onValue: (value: string) => void;
   onClose?: () => void;
@@ -42,6 +45,8 @@ export function QrCamera({
   nfcFirst?: boolean;
   hideNfc?: boolean;
   onOpenPeople?: () => void;
+  /** Stats and notices shown above the NFC-first surface (they scroll with it). */
+  surfaceHeader?: (layout: OperatorLayout) => ReactNode;
 }) {
   const shouldAutoStartNfc = autoStartNfc || (nfcFirst && Platform.OS === "android");
   const nfcSupportStatus = useNfcSupportStatus();
@@ -85,6 +90,7 @@ export function QrCamera({
     <>
       {nfcFirst ? (
         <NfcScannerSurface
+          header={surfaceHeader}
           onOpenPeople={onOpenPeople}
           onValue={onValue}
           onNfc={openNfc}
@@ -160,6 +166,7 @@ function CameraPreview({
   const { t } = useLocale();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const sideRegion = useSideRegion();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const locked = useRef(false);
   const permissionRequestStarted = useRef(false);
@@ -178,10 +185,11 @@ function CameraPreview({
     permissionRequestStarted.current = true;
     void requestPermission();
   }, [requestPermission]);
-  const frameLeft = (width - FRAME) / 2;
-  const frameTop = (height - FRAME) / 2;
-  const frameRight = frameLeft + FRAME;
-  const frameBottom = frameTop + FRAME;
+  const frameSize = scanFrameSize(width, height);
+  const frameLeft = (width - frameSize) / 2;
+  const frameTop = (height - frameSize) / 2;
+  const frameRight = frameLeft + frameSize;
+  const frameBottom = frameTop + frameSize;
   const shadePath = [
     `M0 0 H${width} V${height} H0 Z`,
     `M${frameLeft + FRAME_RADIUS} ${frameTop}`,
@@ -233,7 +241,7 @@ function CameraPreview({
   const handleBarcodeScanned = useCallback(
     (result: BarcodeScanningResult) => {
       if (locked.current) return;
-      const observation = getBarcodeFrameObservation(result, { height, width }, FRAME);
+      const observation = getBarcodeFrameObservation(result, { height, width }, frameSize);
       if (!observation) {
         scanCandidate.current = null;
         return;
@@ -252,7 +260,7 @@ function CameraPreview({
         locked.current = false;
       }, 1200);
     },
-    [height, width, onValue],
+    [frameSize, height, width, onValue],
   );
 
   function nfcPermissionButton() {
@@ -365,7 +373,7 @@ function CameraPreview({
         <Path d={shadePath} fill="rgba(0,0,0,0.54)" fillRule="evenodd" />
       </Svg>
       <View pointerEvents="none" style={styles.frameOverlay}>
-        <View style={styles.frame}>
+        <View style={[styles.frame, { height: frameSize, width: frameSize }]}>
           <View style={[styles.corner, styles.topLeft]} />
           <View style={[styles.corner, styles.topRight]} />
           <View style={[styles.corner, styles.bottomLeft]} />
@@ -373,7 +381,7 @@ function CameraPreview({
         </View>
       </View>
       {hint === null ? null : (
-        <Text pointerEvents="none" style={[styles.hint, { top: height / 2 + FRAME / 2 + 24 }]}>
+        <Text pointerEvents="none" style={[styles.hint, { top: height / 2 + frameSize / 2 + 24 }]}>
           {hint ?? t("scannerQrHint")}
         </Text>
       )}
@@ -453,7 +461,15 @@ function CameraPreview({
           glassEffectStyle="regular"
           isInteractive
           colorScheme="dark"
-          style={[styles.backControl, { top: insets.top + 12 }]}
+          style={[
+            styles.backControl,
+            { top: insets.top + 12 },
+            // With a side column the control stands in it, top-aligned like a system back.
+            sideRegion.edge && {
+              left: undefined,
+              [sideRegion.edge]: Math.max(8, (sideRegion.size - 44) / 2),
+            },
+          ]}
         >
           <Pressable
             accessibilityLabel={t("back")}
@@ -474,7 +490,6 @@ function CameraPreview({
   );
 }
 
-const FRAME = 264;
 const FRAME_RADIUS = 28;
 const styles = StyleSheet.create({
   black: { backgroundColor: "#000", flex: 1 },
@@ -487,7 +502,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  frame: { borderRadius: FRAME_RADIUS, height: FRAME, overflow: "hidden", width: FRAME },
+  frame: { borderRadius: FRAME_RADIUS, overflow: "hidden" },
   corner: { borderColor: "white", height: 52, position: "absolute", width: 52 },
   topLeft: {
     borderLeftWidth: 4,

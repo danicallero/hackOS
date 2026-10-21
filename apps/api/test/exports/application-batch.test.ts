@@ -109,8 +109,8 @@ describe("batch application export (H56)", () => {
   it("filters by multiple statuses and emits only the selected profile, metadata, and answer fields", async () => {
     const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
     const applicationId = await createApplication({ name: "Main form" });
-    const accepted = await createUser({ name: "Accepted Person", email: "accepted@test.local" });
-    const confirmed = await createUser({ name: "Confirmed Person", email: "confirmed@test.local" });
+    const accepted = await createUser({ name: "Accepted", email: "accepted@test.local" });
+    const confirmed = await createUser({ name: "Confirmed", email: "confirmed@test.local" });
     const rejected = await createUser({ name: "Rejected Person", email: "rejected@test.local" });
 
     await createResponse(accepted, applicationId, {
@@ -133,7 +133,8 @@ describe("batch application export (H56)", () => {
       payload: {
         statuses: ["accepted", "confirmed"],
         fields: [
-          { source: "profile", key: "full_name" },
+          { source: "profile", key: "name" },
+          { source: "profile", key: "surname" },
           { source: "profile", key: "email" },
           { source: "metadata", key: "status" },
           { source: "answer", application_id: applicationId, key: "motivation" },
@@ -146,9 +147,9 @@ describe("batch application export (H56)", () => {
     const entries = await readZipEntries(response.rawPayload);
     const csv = entries["applications.csv"]?.toString();
     expect(csv).toBeDefined();
-    expect(csv).toContain("Nombre completo,Correo electrónico,Estado,Main form — Por qué");
-    expect(csv).toContain("Accepted Person,accepted@test.local,accepted,accepted answer");
-    expect(csv).toContain("Confirmed Person,confirmed@test.local,confirmed,confirmed answer");
+    expect(csv).toContain("Nombre,Apellidos,Correo electrónico,Estado,Main form — Por qué");
+    expect(csv).toContain("Accepted,,accepted@test.local,accepted,accepted answer");
+    expect(csv).toContain("Confirmed,,confirmed@test.local,confirmed,confirmed answer");
     expect(csv).not.toContain("rejected@test.local");
     expect(Object.keys(entries)).toEqual(["applications.csv"]);
   });

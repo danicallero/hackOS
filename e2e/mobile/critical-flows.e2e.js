@@ -45,8 +45,9 @@ async function enterCode(code) {
     .toBeVisible()
     .withTimeout(30_000);
   await element(by.id(IDS.scanner.manualEntry)).tap();
-  await element(by.id(IDS.scanner.manualCode)).typeText(code);
-  await element(by.id(IDS.scanner.manualSubmit)).tap();
+  // iOS prompts with UIKit's own alert, which carries no test ids.
+  await element(by.type("_UIAlertControllerTextField")).typeText(code);
+  await element(by.label("Register scan").and(by.type("_UIAlertControllerActionView"))).tap();
 }
 
 describe("critical in-person scanner flows", () => {

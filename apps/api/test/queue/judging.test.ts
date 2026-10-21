@@ -801,7 +801,10 @@ describe("CSV export (H40)", () => {
       headers: asUser(globalExporter),
     });
     expect(res.statusCode).toBe(200);
-    const [header, row1, row2] = res.body.trim().split("\r\n");
+    const [header, row1, row2] = res.body
+      .replace(/^\uFEFF/, "")
+      .trim()
+      .split("\r\n");
     expect(header).toBe("repo_name,status,innovation,execution,notes");
     expect(row1).toBe("Evaluated Team,submitted,9,7,solid");
     expect(row2).toBe("Pending Team,not_evaluated,,,");

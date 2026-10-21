@@ -2,10 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -16,6 +13,10 @@ import {
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { SheetModal } from "@/components/app-sheet";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import {
   EmptyState,
   FloatingGlassButton,
@@ -24,13 +25,17 @@ import {
   Separator,
   StatusPill,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { isPadIdiom } from "@/lib/tabs";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { useOperatorListColumn } from "@/theme/layout-screens";
 
 interface TeamMember {
   userId: number | null;
@@ -70,9 +75,15 @@ interface RoomView {
 }
 
 interface RepoChallenge {
+  /** The team's queue entry for this challenge. */
+  entry_id: number;
   id: number;
   title: string;
   status: string;
+  position: number | null;
+  eta_minutes: number | null;
+  call_count: number;
+  queue_group_id: number | null;
   room_id: number | null;
   room_name: string | null;
   judging_rooms: Array<{ id: number; name: string }>;
@@ -87,6 +98,49 @@ interface HistoryRow {
   created_at: string;
   actor_name: string | null;
   actor_surname: string | null;
+}
+
+const QUEUE_STAGE_RANK: Record<string, number> = {
+  presenting: 0,
+  in_room: 1,
+  called: 2,
+  waiting: 3,
+  completed: 4,
+};
+
+/**
+ * Challenges that share one queue are one place in line: every one of them
+ * shows the team's furthest-along entry (status, rank, wait, room, calls).
+ */
+function shareQueueInfo(challenges: RepoChallenge[]): RepoChallenge[] {
+  const canonical = new Map<number, RepoChallenge>();
+  for (const challenge of challenges) {
+    if (challenge.queue_group_id == null) continue;
+    const current = canonical.get(challenge.queue_group_id);
+    const rank = (item: RepoChallenge) => QUEUE_STAGE_RANK[item.status] ?? 5;
+    if (
+      !current ||
+      rank(challenge) < rank(current) ||
+      (rank(challenge) === rank(current) &&
+        (challenge.position ?? Number.POSITIVE_INFINITY) <
+          (current.position ?? Number.POSITIVE_INFINITY))
+    )
+      canonical.set(challenge.queue_group_id, challenge);
+  }
+  return challenges.map((challenge) => {
+    const lead = challenge.queue_group_id == null ? null : canonical.get(challenge.queue_group_id);
+    if (!lead || lead === challenge) return challenge;
+    return {
+      ...challenge,
+      entry_id: lead.entry_id,
+      status: lead.status,
+      position: lead.position,
+      eta_minutes: lead.eta_minutes,
+      call_count: lead.call_count,
+      room_id: lead.room_id,
+      room_name: lead.room_name,
+    };
+  });
 }
 
 type TeamLoadState = "loading" | "ready" | "missing" | "error";
@@ -154,22 +208,17 @@ function useMemberCandidateSearch(t: ReturnType<typeof useLocale>["t"], enabled 
 
 /** H29/H31 operator team detail: the participant's own queue card, with the extra context an operator needs. */
 export function TeamOperationsScreen() {
+  const listColumn = useOperatorListColumn();
   useColorScheme();
   const { entryId, roomId } = useLocalSearchParams<{ entryId: string; roomId: string }>();
   const headerNavigation = useNavigation(isPadIdiom() ? "/(tabs)/others" : undefined);
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
-  // Android has no page-sheet presentation: these modals are full-screen, so
-  // their chrome has to clear the status bar itself.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [entry, setEntry] = useState<TeamEntry | null>(null);
   const [room, setRoom] = useState<RoomView["room"] | null>(null);
   const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
   const [selectedQueueIndex, setSelectedQueueIndex] = useState(0);
-  const [roomViews, setRoomViews] = useState<Map<number, RoomView>>(new Map());
-  const roomViewsRef = useRef(roomViews);
-  roomViewsRef.current = roomViews;
   const [selectedEntryHistory, setSelectedEntryHistory] = useState<HistoryRow[] | null>(null);
   const [tabLoading, setTabLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -193,10 +242,7 @@ export function TeamOperationsScreen() {
     setError(null);
     setLoadState((current) => (current === "ready" ? current : "loading"));
     try {
-      const [view, historyRows] = await Promise.all([
-        apiFetch<RoomView>(`/api/queue/rooms/${roomId}/view`),
-        apiFetch<HistoryRow[]>(`/api/queue/entries/${entryId}/history`),
-      ]);
+      const view = await apiFetch<RoomView>(`/api/queue/rooms/${roomId}/view`);
       const targetEntryId = Number(entryId);
       const found = [view.active, ...view.called, ...view.next].find(
         (item) => item != null && Number(item.id) === targetEntryId,
@@ -211,15 +257,14 @@ export function TeamOperationsScreen() {
       setEntry(found ?? null);
       setRoom(view.room);
       setLoadState("ready");
-      setRoomViews(new Map([[Number(roomId), view]]));
-      setSelectedEntryHistory(historyRows);
       try {
         const challenges = await apiFetch<RepoChallenge[]>(
           `/api/queue/repos/${found.repo_id}/challenges`,
         );
-        setRepoChallenges(challenges);
+        const shared = shareQueueInfo(challenges);
+        setRepoChallenges(shared);
         const targetChallengeId = Number(found.challenge_id);
-        const idx = challenges.findIndex((qc) => Number(qc.id) === targetChallengeId);
+        const idx = shared.findIndex((qc) => Number(qc.id) === targetChallengeId);
         setSelectedQueueIndex(idx >= 0 ? idx : 0);
       } catch {
         setRepoChallenges([]);
@@ -234,37 +279,6 @@ export function TeamOperationsScreen() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    if (loadState !== "ready") return;
-    let cancelled = false;
-    const prefetchAll = async () => {
-      try {
-        const rooms = await apiFetch<Array<{ id: number }>>("/api/queue/rooms");
-        if (cancelled) return;
-        const currentViews = roomViewsRef.current;
-        const uncachedIds = rooms.map((r) => Number(r.id)).filter((id) => !currentViews.has(id));
-        if (uncachedIds.length === 0) return;
-        const views = await Promise.all(
-          uncachedIds.map((id) => apiFetch<RoomView>(`/api/queue/rooms/${id}/view`)),
-        );
-        if (cancelled) return;
-        setRoomViews((prev) => {
-          const next = new Map(prev);
-          for (let i = 0; i < uncachedIds.length; i++) {
-            next.set(uncachedIds[i], views[i]);
-          }
-          return next;
-        });
-      } catch {
-        /* tab switching will fall back to individual fetch */
-      }
-    };
-    void prefetchAll();
-    return () => {
-      cancelled = true;
-    };
-  }, [loadState]);
 
   const teamName = entry?.repo_name ?? t("queueOpsUnnamedTeam");
 
@@ -324,7 +338,7 @@ export function TeamOperationsScreen() {
       const name = memberDisplayName(member);
       const description = t("teamDetailRemoveMemberConfirm", { name });
       const actionLabel = t("teamDetailRemoveMember");
-      Alert.alert(actionLabel, description, [
+      alert(actionLabel, description, [
         { text: t("cancel"), style: "cancel" },
         {
           text: actionLabel,
@@ -338,73 +352,20 @@ export function TeamOperationsScreen() {
 
   const selectedQueue = repoChallenges[selectedQueueIndex] ?? null;
 
-  const selectedEntry = (() => {
-    if (!selectedQueue) return null;
-    const targetId = Number(selectedQueue.id);
-    if (entry && Number(entry.challenge_id) === targetId) return entry;
-    for (const [, view] of roomViews) {
-      if (view.active && Number(view.active.challenge_id) === targetId) return view.active;
-      const found = [...view.called, ...view.next].find(
-        (item) => item != null && Number(item.challenge_id) === targetId,
+  // The tab's own queue entry carries rank, wait and call count, wherever it is queued.
+  const fetchTabData = useCallback(async (qc: RepoChallenge) => {
+    setSelectedEntryHistory(null);
+    setTabLoading(true);
+    try {
+      setSelectedEntryHistory(
+        await apiFetch<HistoryRow[]>(`/api/queue/entries/${qc.entry_id}/history`),
       );
-      if (found) return found;
+    } catch {
+      setSelectedEntryHistory([]);
+    } finally {
+      setTabLoading(false);
     }
-    return null;
-  })();
-
-  const fetchTabData = useCallback(
-    async (qc: RepoChallenge) => {
-      const targetId = Number(qc.id);
-      const findEntry = (view: RoomView) => {
-        if (view.active && Number(view.active.challenge_id) === targetId) return view.active;
-        return (
-          [...view.called, ...view.next].find(
-            (item) => item != null && Number(item.challenge_id) === targetId,
-          ) ?? null
-        );
-      };
-      const currentViews = roomViewsRef.current;
-      for (const [, view] of currentViews) {
-        const found = findEntry(view);
-        if (found) {
-          try {
-            const rows = await apiFetch<HistoryRow[]>(`/api/queue/entries/${found.id}/history`);
-            setSelectedEntryHistory(rows);
-          } catch {
-            setSelectedEntryHistory([]);
-          }
-          return;
-        }
-      }
-      const roomIdKey = qc.room_id ?? qc.judging_rooms[0]?.id ?? Number(roomId);
-      if (!roomIdKey) {
-        setSelectedEntryHistory(null);
-        return;
-      }
-      setSelectedEntryHistory(null);
-      setTabLoading(true);
-      try {
-        const view = await apiFetch<RoomView>(`/api/queue/rooms/${roomIdKey}/view`);
-        setRoomViews((prev) => new Map(prev).set(Number(roomIdKey), view));
-        const found = findEntry(view);
-        if (found) {
-          try {
-            const rows = await apiFetch<HistoryRow[]>(`/api/queue/entries/${found.id}/history`);
-            setSelectedEntryHistory(rows);
-          } catch {
-            setSelectedEntryHistory([]);
-          }
-        } else {
-          setSelectedEntryHistory(null);
-        }
-      } catch {
-        setSelectedEntryHistory(null);
-      } finally {
-        setTabLoading(false);
-      }
-    },
-    [roomId],
-  );
+  }, []);
 
   useEffect(() => {
     if (selectedQueue) {
@@ -467,7 +428,7 @@ export function TeamOperationsScreen() {
     (qc: RepoChallenge) => {
       if (!entry) return;
       const teamName = entry.repo_name ?? t("queueOpsUnnamedTeam");
-      Alert.alert(
+      alert(
         t("teamDetailRemoveFromQueue"),
         t("teamDetailRemoveFromQueueConfirm", { team: teamName, challenge: qc.title }),
         [
@@ -556,400 +517,411 @@ export function TeamOperationsScreen() {
   ].filter((link) => Boolean(link.url));
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 22, padding: 16, paddingBottom: 40 }}
-      style={{ backgroundColor: colors.background }}
-    >
-      {entry.status === "called" ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            backgroundColor: colors.successSurface,
-            borderCurve: "continuous",
-            borderRadius: 12,
-            gap: 7,
-            padding: 14,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-            <SymbolView
-              name="door.left.hand.open"
-              tintColor={colors.onSuccessSurface}
-              size={22}
-              accessible={false}
-            />
-            <Text
-              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
-            >
-              {t("teamDetailAtDoor", { room: room.name })}
-            </Text>
+    <>
+      <EntryBackToolbar fallback="/(tabs)/others" />
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ ...listColumn, gap: 22, paddingBottom: 40, paddingTop: 16 }}
+        style={{ backgroundColor: colors.background }}
+      >
+        {entry.status === "called" ? (
+          <View
+            accessibilityRole="alert"
+            style={{
+              backgroundColor: colors.successSurface,
+              borderCurve: "continuous",
+              borderRadius: radius.control,
+              gap: 7,
+              padding: 14,
+            }}
+          >
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <SymbolView
+                name="door.left.hand.open"
+                tintColor={colors.onSuccessSurface}
+                size={22}
+                accessible={false}
+              />
+              <Text
+                style={{ ...type.body, color: colors.onSuccessSurface, flex: 1, fontWeight: "800" }}
+              >
+                {t("teamDetailAtDoor", { room: room.name })}
+              </Text>
+            </View>
+            {room.location ? (
+              <Text style={{ ...type.compact, color: colors.onSuccessSurface, paddingLeft: 30 }}>
+                {room.location}
+              </Text>
+            ) : null}
           </View>
-          {room.location ? (
-            <Text style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}>
-              {room.location}
-            </Text>
-          ) : null}
-        </View>
-      ) : null}
+        ) : null}
 
-      <Section title={t("teamDetailMembers")}>
-        {members.map((member, index) => (
-          <View key={member.userId ?? member.email}>
-            {index > 0 ? <Separator /> : null}
-            <SwipeableMemberRow
-              enabled={canEditProject && member.userId !== null}
-              actionLabel={t("teamDetailRemoveMember")}
-              onAction={() => removeMember(member)}
-            >
-              <View
-                accessible
-                accessibilityLabel={`${memberDisplayName(member)}, ${member.email}`}
-                style={{
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 44,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                }}
+        <Section title={t("teamDetailMembers")}>
+          {members.map((member, index) => (
+            <View key={member.userId ?? member.email}>
+              {index > 0 ? <Separator /> : null}
+              <SwipeableMemberRow
+                enabled={canEditProject && member.userId !== null}
+                actionLabel={t("teamDetailRemoveMember")}
+                onAction={() => removeMember(member)}
               >
-                <View style={{ flex: 1, justifyContent: "center" }}>
-                  <Text selectable numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
-                    {memberDisplayName(member)}
-                  </Text>
-                  <Text
-                    selectable
-                    numberOfLines={1}
-                    style={{ color: colors.secondaryLabel, fontSize: 15 }}
-                  >
-                    {member.email}
-                  </Text>
-                </View>
-              </View>
-            </SwipeableMemberRow>
-          </View>
-        ))}
-        {canEditProject ? (
-          <>
-            {members.length ? <Separator /> : null}
-            <View style={{ gap: 8, padding: 16 }}>
-              <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
-                {t("teamDetailAddMember")}
-              </Text>
-              <Text style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
-                {t("teamDetailAddMemberHint")}
-              </Text>
-              <View
-                style={{
-                  alignItems: "center",
-                  backgroundColor: colors.elevatedSurface,
-                  borderCurve: "continuous",
-                  borderRadius: 10,
-                  flexDirection: "row",
-                  gap: 8,
-                  minHeight: 36,
-                  paddingHorizontal: 8,
-                }}
-              >
-                <Pressable
-                  accessibilityLabel={t("teamDetailMemberSearch")}
-                  accessibilityRole="button"
-                  onPress={() => void memberSearch.search()}
-                  hitSlop={8}
-                >
-                  <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
-                </Pressable>
-                <TextInput
-                  accessibilityLabel={t("teamDetailMemberSearch")}
-                  editable={memberMutation === null && !memberSearch.loading}
-                  onChangeText={(value) => {
-                    memberSearch.setQuery(value);
-                    memberSearch.setCandidates([]);
-                    memberSearch.setError(null);
-                    memberSearch.setSearched(false);
-                  }}
-                  onSubmitEditing={() => void memberSearch.search()}
-                  placeholder={t("teamDetailMemberSearchPlaceholder")}
-                  placeholderTextColor={colors.tertiaryLabel}
-                  returnKeyType="search"
-                  value={memberSearch.query}
+                <View
+                  accessible
+                  accessibilityLabel={`${memberDisplayName(member)}, ${member.email}`}
                   style={{
-                    color: colors.label,
-                    flex: 1,
-                    fontSize: 17,
-                    minHeight: 36,
+                    flexDirection: "row",
+                    gap: 12,
+                    minHeight: 44,
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
                   }}
-                />
-                {memberSearch.query.length > 0 ? (
+                >
+                  <View style={{ flex: 1, justifyContent: "center" }}>
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ ...type.body, color: colors.label }}
+                    >
+                      {memberDisplayName(member)}
+                    </Text>
+                    <Text
+                      selectable
+                      numberOfLines={1}
+                      style={{ ...type.subhead, color: colors.secondaryLabel }}
+                    >
+                      {member.email}
+                    </Text>
+                  </View>
+                </View>
+              </SwipeableMemberRow>
+            </View>
+          ))}
+          {canEditProject ? (
+            <>
+              {members.length ? <Separator /> : null}
+              <View style={{ gap: 8, padding: 16 }}>
+                <Text style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}>
+                  {t("teamDetailAddMember")}
+                </Text>
+                <Text style={{ ...type.footnote, color: colors.secondaryLabel, lineHeight: 18 }}>
+                  {t("teamDetailAddMemberHint")}
+                </Text>
+                <View
+                  style={{
+                    alignItems: "center",
+                    backgroundColor: colors.elevatedSurface,
+                    borderCurve: "continuous",
+                    borderRadius: radius.chip,
+                    flexDirection: "row",
+                    gap: 8,
+                    minHeight: 36,
+                    paddingHorizontal: 8,
+                  }}
+                >
                   <Pressable
-                    accessibilityLabel={t("cancel")}
-                    onPress={() => {
-                      memberSearch.setQuery("");
+                    accessibilityLabel={t("teamDetailMemberSearch")}
+                    accessibilityRole="button"
+                    onPress={() => void memberSearch.search()}
+                    hitSlop={8}
+                  >
+                    <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
+                  </Pressable>
+                  <TextInput
+                    accessibilityLabel={t("teamDetailMemberSearch")}
+                    editable={memberMutation === null && !memberSearch.loading}
+                    onChangeText={(value) => {
+                      memberSearch.setQuery(value);
                       memberSearch.setCandidates([]);
                       memberSearch.setError(null);
                       memberSearch.setSearched(false);
                     }}
-                    hitSlop={8}
-                  >
-                    <SymbolView
-                      name="xmark.circle.fill"
-                      tintColor={colors.tertiaryLabel}
-                      size={16}
-                      accessible={false}
-                    />
-                  </Pressable>
-                ) : null}
-              </View>
-              {memberSearch.error ? (
-                <RequestFeedback error={memberSearch.error} message={memberSearch.error.message} />
-              ) : null}
-              {memberMutationError ? (
-                <RequestFeedback
-                  error={memberMutationError}
-                  message={memberMutationError.message}
-                />
-              ) : null}
-              {memberSearch.candidates.map((candidate) => (
-                <View key={candidate.id}>
-                  <Separator inset={0} />
-                  <View
+                    onSubmitEditing={() => void memberSearch.search()}
+                    placeholder={t("teamDetailMemberSearchPlaceholder")}
+                    placeholderTextColor={colors.tertiaryLabel}
+                    returnKeyType="search"
+                    value={memberSearch.query}
                     style={{
-                      alignItems: "center",
-                      flexDirection: "row",
-                      gap: 12,
-                      minHeight: 44,
-                      paddingVertical: 6,
+                      ...type.body,
+                      color: colors.label,
+                      flex: 1,
+
+                      minHeight: 36,
+                    }}
+                  />
+                  {memberSearch.query.length > 0 ? (
+                    <Pressable
+                      accessibilityLabel={t("cancel")}
+                      onPress={() => {
+                        memberSearch.setQuery("");
+                        memberSearch.setCandidates([]);
+                        memberSearch.setError(null);
+                        memberSearch.setSearched(false);
+                      }}
+                      hitSlop={8}
+                    >
+                      <SymbolView
+                        name="xmark.circle.fill"
+                        tintColor={colors.tertiaryLabel}
+                        size={16}
+                        accessible={false}
+                      />
+                    </Pressable>
+                  ) : null}
+                </View>
+                {memberSearch.error ? (
+                  <RequestFeedback
+                    error={memberSearch.error}
+                    message={memberSearch.error.message}
+                  />
+                ) : null}
+                {memberMutationError ? (
+                  <RequestFeedback
+                    error={memberMutationError}
+                    message={memberMutationError.message}
+                  />
+                ) : null}
+                {memberSearch.candidates.map((candidate) => (
+                  <View key={candidate.id}>
+                    <Separator inset={0} />
+                    <View
+                      style={{
+                        alignItems: "center",
+                        flexDirection: "row",
+                        gap: 12,
+                        minHeight: 44,
+                        paddingVertical: 6,
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{ ...type.body, color: colors.label }}
+                        >
+                          {memberCandidateName(candidate)}
+                        </Text>
+                        <Text
+                          selectable
+                          numberOfLines={1}
+                          style={{ ...type.subhead, color: colors.secondaryLabel }}
+                        >
+                          {candidate.email}
+                        </Text>
+                      </View>
+                      {memberMutation === `add:${candidate.id}` ? (
+                        <AppActivityIndicator size="small" color={colors.accent} />
+                      ) : (
+                        <PressableFeedback
+                          feedback="opacity"
+                          accessibilityRole="button"
+                          accessibilityLabel={t("teamDetailAddCandidate", {
+                            name: memberCandidateName(candidate),
+                          })}
+                          disabled={memberMutation !== null}
+                          onPress={() => void addMember(candidate.id)}
+                          hitSlop={8}
+                          style={{
+                            minHeight: 44,
+                            minWidth: 44,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Text style={{ ...type.body, color: colors.accent }}>{t("add")}</Text>
+                        </PressableFeedback>
+                      )}
+                    </View>
+                  </View>
+                ))}
+                {!memberSearch.loading &&
+                memberSearch.searched &&
+                memberSearch.candidates.length === 0 ? (
+                  <Text
+                    selectable
+                    style={{
+                      ...type.footnote,
+                      color: colors.secondaryLabel,
+
+                      paddingTop: 4,
+                      textAlign: "center",
                     }}
                   >
-                    <View style={{ flex: 1 }}>
-                      <Text
-                        selectable
-                        numberOfLines={1}
-                        style={{ color: colors.label, fontSize: 17 }}
-                      >
-                        {memberCandidateName(candidate)}
-                      </Text>
-                      <Text
-                        selectable
-                        numberOfLines={1}
-                        style={{ color: colors.secondaryLabel, fontSize: 15 }}
-                      >
-                        {candidate.email}
-                      </Text>
-                    </View>
-                    {memberMutation === `add:${candidate.id}` ? (
-                      <ActivityIndicator size="small" color={colors.accent} />
-                    ) : (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={t("teamDetailAddCandidate", {
-                          name: memberCandidateName(candidate),
-                        })}
-                        disabled={memberMutation !== null}
-                        onPress={() => void addMember(candidate.id)}
-                        hitSlop={8}
-                        style={({ pressed }) => ({
-                          minHeight: 44,
-                          minWidth: 44,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          opacity: pressed ? 0.5 : 1,
-                        })}
-                      >
-                        <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
-                      </Pressable>
-                    )}
-                  </View>
-                </View>
-              ))}
-              {!memberSearch.loading &&
-              memberSearch.searched &&
-              memberSearch.candidates.length === 0 ? (
-                <Text
-                  selectable
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 13,
-                    paddingTop: 4,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailNoMemberCandidates")}
-                </Text>
-              ) : null}
-            </View>
-          </>
-        ) : null}
-      </Section>
-
-      {links.length ? (
-        <Section title={t("teamDetailLinks")}>
-          {links.map((link, index) => (
-            <View key={link.label}>
-              {index > 0 ? <Separator /> : null}
-              <Pressable
-                accessibilityRole="link"
-                onPress={() => void Linking.openURL(link.url!)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-              >
-                <InfoRow
-                  label={link.label}
-                  value={link.url!}
-                  icon={link.icon}
-                  accessoryIcon="chevron.right"
-                />
-              </Pressable>
-            </View>
-          ))}
-        </Section>
-      ) : null}
-
-      {repoChallenges.length > 0 ? (
-        <View style={{ gap: 12 }}>
-          <QueueTabBar
-            challenges={repoChallenges}
-            selectedIndex={selectedQueueIndex}
-            onSelect={setSelectedQueueIndex}
-            canEdit={canEditProject}
-            onAdd={openAddChallenge}
-            t={t}
-            scrollRef={tabScrollRef}
-          />
-          {selectedQueue ? (
-            <QueueDetailView
-              queue={selectedQueue}
-              entry={selectedEntry}
-              history={tabLoading ? null : selectedEntryHistory}
-              canEdit={canEditProject}
-              onRemove={removeFromQueue}
-              removing={removing}
-              t={t}
-            />
-          ) : null}
-        </View>
-      ) : (
-        <Section>
-          <EmptyState
-            icon="tray"
-            title={t("teamDetailNoQueues")}
-            description={t("teamDetailQueueEmpty")}
-          />
-        </Section>
-      )}
-
-      {showAddChallenge ? (
-        <Modal
-          animationType="slide"
-          onRequestClose={closeAddChallenge}
-          presentationStyle="pageSheet"
-        >
-          <View style={{ backgroundColor: colors.background, flex: 1 }}>
-            <ScrollView
-              contentInsetAdjustmentBehavior="automatic"
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{
-                gap: 22,
-                padding: 16,
-                paddingBottom: Math.max(32, insets.bottom + 16),
-                paddingTop: 16 + sheetTopInset,
-              }}
-            >
-              <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
-                <Text
-                  selectable
-                  style={{
-                    color: colors.label,
-                    fontSize: 20,
-                    fontWeight: "700",
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailAddQueue")}
-                </Text>
+                    {t("teamDetailNoMemberCandidates")}
+                  </Text>
+                ) : null}
               </View>
+            </>
+          ) : null}
+        </Section>
 
-              <Section>
-                <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
-                    {t("teamDetailSelectChallenge")}
+        {links.length ? (
+          <Section title={t("teamDetailLinks")}>
+            {links.map((link, index) => (
+              <View key={link.label}>
+                {index > 0 ? <Separator /> : null}
+                <PressableFeedback
+                  feedback="opacity"
+                  accessibilityRole="link"
+                  onPress={() => void Linking.openURL(link.url!)}
+                  style={{}}
+                >
+                  <InfoRow
+                    label={link.label}
+                    value={link.url!}
+                    icon={link.icon}
+                    accessoryIcon="chevron.right"
+                  />
+                </PressableFeedback>
+              </View>
+            ))}
+          </Section>
+        ) : null}
+
+        {repoChallenges.length > 0 ? (
+          <View style={{ gap: 12 }}>
+            <QueueTabBar
+              challenges={repoChallenges}
+              selectedIndex={selectedQueueIndex}
+              onSelect={setSelectedQueueIndex}
+              canEdit={canEditProject}
+              onAdd={openAddChallenge}
+              t={t}
+              scrollRef={tabScrollRef}
+            />
+            {selectedQueue ? (
+              <QueueDetailView
+                queue={selectedQueue}
+                history={tabLoading ? null : selectedEntryHistory}
+                canEdit={canEditProject}
+                onRemove={removeFromQueue}
+                removing={removing}
+                t={t}
+              />
+            ) : null}
+          </View>
+        ) : (
+          <Section>
+            <EmptyState
+              icon="tray"
+              title={t("teamDetailNoQueues")}
+              description={t("teamDetailQueueEmpty")}
+            />
+          </Section>
+        )}
+
+        {showAddChallenge ? (
+          <SheetModal animationType="slide" onRequestClose={closeAddChallenge}>
+            <AdaptiveFrame>
+              <ScrollView
+                alwaysBounceVertical
+                contentInsetAdjustmentBehavior="automatic"
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{
+                  gap: 22,
+                  padding: 16,
+                  paddingBottom: Math.max(32, insets.bottom + 16),
+                  paddingTop: 16,
+                }}
+              >
+                <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
+                  <Text
+                    selectable
+                    style={{
+                      ...type.title3,
+                      color: colors.label,
+
+                      fontWeight: "700",
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("teamDetailAddQueue")}
                   </Text>
                 </View>
-              </Section>
 
-              {availableChallengesLoading ? (
-                <View style={{ paddingVertical: 24 }}>
-                  <ActivityIndicator size="small" color={colors.accent} />
-                </View>
-              ) : availableChallenges.length > 0 ? (
                 <Section>
-                  {availableChallenges.map((ch, index) => (
-                    <View key={ch.id}>
-                      {index > 0 ? <Separator /> : null}
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          gap: 12,
-                          minHeight: 44,
-                          alignItems: "center",
-                          paddingHorizontal: 16,
-                          paddingVertical: 10,
-                        }}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
-                            {ch.title}
-                          </Text>
-                        </View>
-                        {enrolling === ch.id ? (
-                          <ActivityIndicator size="small" color={colors.accent} />
-                        ) : (
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={t("teamDetailAddQueue")}
-                            disabled={enrolling !== null}
-                            onPress={() => void enrollChallenge(ch.id)}
-                            hitSlop={8}
-                            style={({ pressed }) => ({
-                              minHeight: 44,
-                              minWidth: 44,
-                              alignItems: "center",
-                              justifyContent: "center",
-                              opacity: pressed ? 0.5 : 1,
-                            })}
-                          >
-                            <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
-                          </Pressable>
-                        )}
-                      </View>
-                    </View>
-                  ))}
+                  <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
+                    <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
+                      {t("teamDetailSelectChallenge")}
+                    </Text>
+                  </View>
                 </Section>
-              ) : (
-                <Text
-                  selectable
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: 13,
-                    paddingTop: 4,
-                    textAlign: "center",
-                  }}
-                >
-                  {t("teamDetailAlreadyEnqueued")}
-                </Text>
-              )}
-            </ScrollView>
 
-            <FloatingGlassButton
-              top={16 + sheetTopInset}
-              side="left"
-              icon="xmark"
-              accessibilityLabel={t("cancel")}
-              onPress={closeAddChallenge}
-            />
-          </View>
-        </Modal>
-      ) : null}
-    </ScrollView>
+                {availableChallengesLoading ? (
+                  <View style={{ paddingVertical: 24 }}>
+                    <AppActivityIndicator size="small" color={colors.accent} />
+                  </View>
+                ) : availableChallenges.length > 0 ? (
+                  <Section>
+                    {availableChallenges.map((ch, index) => (
+                      <View key={ch.id}>
+                        {index > 0 ? <Separator /> : null}
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            gap: 12,
+                            minHeight: 44,
+                            alignItems: "center",
+                            paddingHorizontal: 16,
+                            paddingVertical: 10,
+                          }}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text numberOfLines={1} style={{ ...type.body, color: colors.label }}>
+                              {ch.title}
+                            </Text>
+                          </View>
+                          {enrolling === ch.id ? (
+                            <AppActivityIndicator size="small" color={colors.accent} />
+                          ) : (
+                            <PressableFeedback
+                              feedback="opacity"
+                              accessibilityRole="button"
+                              accessibilityLabel={t("teamDetailAddQueue")}
+                              disabled={enrolling !== null}
+                              onPress={() => void enrollChallenge(ch.id)}
+                              hitSlop={8}
+                              style={{
+                                minHeight: 44,
+                                minWidth: 44,
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Text style={{ ...type.body, color: colors.accent }}>{t("add")}</Text>
+                            </PressableFeedback>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </Section>
+                ) : (
+                  <Text
+                    selectable
+                    style={{
+                      ...type.footnote,
+                      color: colors.secondaryLabel,
+
+                      paddingTop: 4,
+                      textAlign: "center",
+                    }}
+                  >
+                    {t("teamDetailAlreadyEnqueued")}
+                  </Text>
+                )}
+              </ScrollView>
+
+              <FloatingGlassButton
+                top={16}
+                side="left"
+                icon="xmark"
+                accessibilityLabel={t("cancel")}
+                onPress={closeAddChallenge}
+              />
+            </AdaptiveFrame>
+          </SheetModal>
+        ) : null}
+      </ScrollView>
+    </>
   );
 }
 
@@ -980,31 +952,31 @@ function DeleteMemberRevealAction({
         {
           alignItems: "center",
           backgroundColor: colors.destructive,
-          borderBottomLeftRadius: 14,
-          borderTopLeftRadius: 14,
+          borderBottomLeftRadius: radius.container,
+          borderTopLeftRadius: radius.container,
           justifyContent: "center",
           minWidth: 140,
         },
         animatedStyle,
       ]}
     >
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={onPress}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           flexDirection: "row",
           gap: 6,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 18,
-        })}
+        }}
       >
         <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
-      </Pressable>
+        <Text style={{ ...type.compact, color: "white", fontWeight: "700" }}>{label}</Text>
+      </PressableFeedback>
     </Animated.View>
   );
 }
@@ -1102,57 +1074,58 @@ function QueueTabBar({
         {challenges.map((qc, index) => {
           const selected = index === selectedIndex;
           return (
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               key={`${qc.id}-${qc.room_id ?? "none"}`}
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={qc.title}
               onPress={() => onSelect(index)}
-              style={({ pressed }) => ({
+              style={{
                 alignItems: "center",
                 borderBottomWidth: 2,
                 borderBottomColor: selected ? colors.accent : "transparent",
                 gap: 2,
-                opacity: pressed ? 0.7 : 1,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
-              })}
+              }}
             >
               <Text
                 numberOfLines={1}
                 style={{
+                  ...type.subhead,
                   color: selected ? colors.accent : colors.secondaryLabel,
-                  fontSize: 15,
+
                   fontWeight: selected ? "600" : "400",
                 }}
               >
                 {qc.title}
               </Text>
               {qc.room_name ? (
-                <Text numberOfLines={1} style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+                <Text numberOfLines={1} style={{ ...type.caption, color: colors.tertiaryLabel }}>
                   {qc.room_name}
                 </Text>
               ) : null}
-            </Pressable>
+            </PressableFeedback>
           );
         })}
         {canEdit ? (
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityRole="button"
             accessibilityLabel={t("teamDetailAddQueue")}
             onPress={onAdd}
-            style={({ pressed }) => ({
+            style={{
               alignItems: "center",
               borderBottomWidth: 2,
               borderBottomColor: "transparent",
               justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
               paddingHorizontal: 12,
               paddingVertical: 10,
-            })}
+            }}
           >
             <SymbolView name="plus" tintColor={colors.tertiaryLabel} size={15} accessible={false} />
-          </Pressable>
+          </PressableFeedback>
         ) : null}
       </ScrollView>
     </View>
@@ -1161,7 +1134,6 @@ function QueueTabBar({
 
 function QueueDetailView({
   queue,
-  entry,
   history,
   canEdit,
   onRemove,
@@ -1169,7 +1141,6 @@ function QueueDetailView({
   t,
 }: {
   queue: RepoChallenge;
-  entry: TeamEntry | null;
   history: HistoryRow[] | null;
   canEdit: boolean;
   onRemove: (qc: RepoChallenge) => void;
@@ -1189,10 +1160,10 @@ function QueueDetailView({
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+            <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
               {t("teamDetailChallenge")}
             </Text>
-            <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600", marginTop: 2 }}>
+            <Text style={{ ...type.body, color: colors.label, fontWeight: "600", marginTop: 2 }}>
               {queue.title}
             </Text>
           </View>
@@ -1219,16 +1190,18 @@ function QueueDetailView({
                 size={16}
                 accessible={false}
               />
-              <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>{queue.room_name}</Text>
+              <Text style={{ ...type.subhead, color: colors.secondaryLabel }}>
+                {queue.room_name}
+              </Text>
             </View>
           </>
         ) : null}
 
-        <Separator inset={16} />
-        <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 10 }}>
-          {entry ? (
-            <>
-              {entry.position != null ? (
+        {queue.position != null || queue.eta_minutes != null || queue.call_count > 0 ? (
+          <>
+            <Separator inset={16} />
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 10 }}>
+              {queue.position != null ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <SymbolView
                     name="number.circle"
@@ -1236,15 +1209,15 @@ function QueueDetailView({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15, flex: 1 }}>
+                  <Text style={{ ...type.subhead, color: colors.secondaryLabel, flex: 1 }}>
                     {t("queuePositionLabel")}
                   </Text>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
-                    {entry.position}
+                  <Text style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
+                    {queue.position}
                   </Text>
                 </View>
               ) : null}
-              {entry.eta_minutes != null ? (
+              {queue.eta_minutes != null ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <SymbolView
                     name="hourglass"
@@ -1252,15 +1225,15 @@ function QueueDetailView({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15, flex: 1 }}>
+                  <Text style={{ ...type.subhead, color: colors.secondaryLabel, flex: 1 }}>
                     {t("queueWaitLabel")}
                   </Text>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
-                    {formatEta(entry.eta_minutes, t("queueAnyMoment"))}
+                  <Text style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
+                    {formatEta(queue.eta_minutes, t("queueAnyMoment"))}
                   </Text>
                 </View>
               ) : null}
-              {entry.call_count > 0 ? (
+              {queue.call_count > 0 ? (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <SymbolView
                     name="bell.badge"
@@ -1268,49 +1241,39 @@ function QueueDetailView({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15, flex: 1 }}>
+                  <Text style={{ ...type.subhead, color: colors.secondaryLabel, flex: 1 }}>
                     {t("teamDetailCallCount")}
                   </Text>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
-                    {entry.call_count}
+                  <Text style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
+                    {queue.call_count}
                   </Text>
                 </View>
               ) : null}
-            </>
-          ) : (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <SymbolView
-                name="questionmark.circle"
-                tintColor={colors.tertiaryLabel}
-                size={16}
-                accessible={false}
-              />
-              <Text style={{ color: colors.tertiaryLabel, fontSize: 15 }}>{t("queueLoading")}</Text>
             </View>
-          )}
-        </View>
+          </>
+        ) : null}
 
         {canEdit ? (
           <>
             <Separator inset={16} />
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityRole="button"
               accessibilityLabel={t("teamDetailRemoveFromQueue")}
               disabled={removing === queue.id}
               onPress={() => onRemove(queue)}
-              style={({ pressed }) => ({
+              style={{
                 alignItems: "center",
                 flexDirection: "row",
                 gap: 8,
                 justifyContent: "center",
                 minHeight: 44,
-                opacity: pressed ? 0.6 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 12,
-              })}
+              }}
             >
               {removing === queue.id ? (
-                <ActivityIndicator size="small" color={colors.destructive} />
+                <AppActivityIndicator size="small" color={colors.destructive} />
               ) : (
                 <SymbolView
                   name="trash"
@@ -1319,10 +1282,10 @@ function QueueDetailView({
                   accessible={false}
                 />
               )}
-              <Text style={{ color: colors.destructive, fontSize: 15, fontWeight: "600" }}>
+              <Text style={{ ...type.subhead, color: colors.destructive, fontWeight: "600" }}>
                 {t("teamDetailRemoveFromQueue")}
               </Text>
-            </Pressable>
+            </PressableFeedback>
           </>
         ) : null}
       </Section>
@@ -1337,15 +1300,17 @@ function QueueDetailView({
               <View key={row.id}>
                 {index > 0 ? <Separator /> : null}
                 <View style={{ gap: 2, paddingHorizontal: 16, paddingVertical: 10 }}>
-                  <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
+                  <Text style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}>
                     {historyActionLabel(row, t)}
                   </Text>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                     {[row.actor_name, row.actor_surname].filter(Boolean).join(" ") || "—"} ·{" "}
                     {new Date(row.created_at).toLocaleString()}
                   </Text>
                   {row.reason ? (
-                    <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>{row.reason}</Text>
+                    <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
+                      {row.reason}
+                    </Text>
                   ) : null}
                 </View>
               </View>

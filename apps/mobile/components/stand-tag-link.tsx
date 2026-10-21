@@ -1,14 +1,15 @@
 import { Image } from "expo-image";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, Modal, Platform, Pressable, Text, View } from "react-native";
+import { AppState, Modal, Platform, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { apiErrorCopy } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { startNfcRead } from "@/lib/nfc-reader";
 import { type StandSummary, type StandTag, standLinkErrorKey } from "@/lib/stands";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 /** The result line after a tap, for the company the tag was linked to. */
 export interface StandLinkOutcome {
@@ -83,7 +84,7 @@ export function useStandTagLink(onLinked: (stand: LinkTarget, tag: StandTag) => 
       // Unmapped API errors show the localized reason when there is one.
       const reason =
         !key && standLinkErrorKey(err) === "standsLinkFailed" ? apiErrorCopy(err, t) : null;
-      Alert.alert(t("standsLinkNfc"), reason ? `${message}\n\n${reason}` : message);
+      alert(t("standsLinkNfc"), reason ? `${message}\n\n${reason}` : message);
     } finally {
       if (session.current === current) session.current = null;
       setActive(null);
@@ -123,7 +124,7 @@ export function StandNfcModal({
           accessibilityViewIsModal
           style={{
             backgroundColor: colors.background,
-            borderRadius: 28,
+            borderRadius: radius.sheet,
             padding: 24,
             gap: 24,
             alignItems: "center",
@@ -132,11 +133,22 @@ export function StandNfcModal({
           <SymbolView accessible={false} name="wave.3.right" size={48} tintColor={colors.accent} />
           <Text
             accessibilityRole="header"
-            style={{ color: colors.label, fontSize: 22, fontWeight: "700", textAlign: "center" }}
+            style={{
+              color: colors.label,
+              fontSize: type.title2.fontSize,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
           >
             {stand?.name}
           </Text>
-          <Text style={{ color: colors.secondaryLabel, fontSize: 17, textAlign: "center" }}>
+          <Text
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: type.body.fontSize,
+              textAlign: "center",
+            }}
+          >
             {t("standsNfcPrompt")}
           </Text>
           <Pressable
@@ -144,7 +156,9 @@ export function StandNfcModal({
             onPress={onCancel}
             style={{ minHeight: 48, justifyContent: "center", alignSelf: "stretch" }}
           >
-            <Text style={{ color: colors.accent, fontSize: 17, textAlign: "center" }}>
+            <Text
+              style={{ color: colors.accent, fontSize: type.body.fontSize, textAlign: "center" }}
+            >
               {t("cancel")}
             </Text>
           </Pressable>
@@ -170,7 +184,7 @@ export function StandLinkResult({
       style={{
         backgroundColor: success ? colors.successSurface : colors.warningSurface,
         borderCurve: "continuous",
-        borderRadius: 14,
+        borderRadius: radius.container,
         gap: 8,
         paddingHorizontal: 16,
         paddingVertical: 12,
@@ -188,7 +202,7 @@ export function StandLinkResult({
           style={{
             color: success ? colors.onSuccessSurface : colors.onWarningSurface,
             flex: 1,
-            fontSize: 15,
+            fontSize: type.subhead.fontSize,
             lineHeight: 20,
           }}
         >
@@ -206,7 +220,7 @@ export function StandLogo({ stand, size }: { stand: StandSummary; size: number }
     <View
       style={{
         alignItems: "center",
-        backgroundColor: "#ffffff",
+        backgroundColor: colors.qrBackground,
         borderColor: colors.separator,
         borderCurve: "continuous",
         borderRadius: size / 2,

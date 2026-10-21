@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, useColorScheme, View } from "react-native";
-
+import { ScrollView, useColorScheme, View } from "react-native";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { alert } from "@/lib/alert";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
@@ -14,9 +14,11 @@ import {
 } from "@/lib/storage-usage";
 import { isOperator } from "@/lib/tabs";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** Device-storage controls. Staff metrics live on the separate Statistics page. */
 export default function StorageScreen() {
+  const readable = useParticipantLayout("form");
   useColorScheme();
   const { t } = useLocale();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
@@ -53,7 +55,7 @@ export default function StorageScreen() {
   }
 
   function confirmClearCache() {
-    Alert.alert(t("storageClearConfirmTitle"), t("storageClearConfirmBody"), [
+    alert(t("storageClearConfirmTitle"), t("storageClearConfirmBody"), [
       { text: t("cancel"), style: "cancel" },
       { text: t("storageClearAction"), style: "destructive", onPress: () => void clearCache() },
     ]);
@@ -81,7 +83,8 @@ export default function StorageScreen() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,
-        padding: 16,
+        paddingVertical: 16,
+        ...readable.content,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
     >

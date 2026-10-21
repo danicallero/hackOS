@@ -74,10 +74,11 @@ void readLiveActivityState().then((state) => {
 });
 
 /**
- * After an activity ends, how long its final state may stay on the Lock Screen.
- * Kept short: a 15-minute window made finished activities look stuck (#966).
+ * After an activity ends, how long its final state may stay on the Lock Screen:
+ * none. A finished activity (a countdown that reached 0) is removed at once
+ * (#966); 15 minutes, then 30 s, made it look stuck.
  */
-const FINISHED_DISMISSAL_MS = 30 * 1000;
+const FINISHED_DISMISSAL_MS = 0;
 /**
  * Same `stale-date` the API sends (`liveActivityStaleDate`): an upcoming
  * staff or attendee activity turns live at its start (the widget reads

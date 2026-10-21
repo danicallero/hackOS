@@ -22,6 +22,7 @@
     "better-auth": "^1.6.23",
     "expo": "~57.0.23",
     "expo-application": "~57.0.3",
+    "expo-blur": "~57.0.3",
     "expo-build-properties": "~57.0.20",
     "expo-camera": "~57.0.5",
     "expo-constants": "~57.0.18",
@@ -41,6 +42,7 @@
     "expo-network": "~57.0.2",
     "expo-notifications": "~57.0.19",
     "expo-router": "~57.0.21",
+    "expo-screen-orientation": "~57.0.3",
     "expo-secure-store": "~57.0.4",
     "expo-sharing": "~57.0.20",
     "expo-splash-screen": "~57.0.9",
@@ -93,7 +95,9 @@
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
-      "^react-native($|/.*)": "<rootDir>/node_modules/react-native$1"
+      "^react-native($|/.*)": "<rootDir>/node_modules/react-native$1",
+      "^@/components/pane-people-stack$": "<rootDir>/components/pane-people-stack.tsx",
+      "^@/components/pane-native-stack$": "<rootDir>/components/pane-native-stack.tsx"
     },
     "setupFiles": [
       "./jest.setup.js"

@@ -64,6 +64,8 @@ Architecture & modules:
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and
   account-removal coverage.
+- [Content reports (H18)](./content-reports.md) — attendee reports of projects and
+  public profiles, and the organiser inbox that closes them.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
   NFC/QR scan, privacy rules, stand tags and account-removal coverage.
 - [Queue groups (H46)](./queue-groups.md) — the enterprise-scoped grouping

@@ -1,14 +1,16 @@
 import { useRouter } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { ProfileCard, type ProfileCardData } from "@/components/profile-card";
 import { QuickAction, VisibilityToggle } from "@/components/profile-parts";
 import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { alert } from "@/lib/alert";
 import { haptic } from "@/lib/haptics";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
@@ -26,7 +28,8 @@ import {
   saveNetworkingProfile,
 } from "@/lib/networking-profile";
 import { cvErrorKey, deleteCv, pickCv, uploadCv } from "@/lib/profile-cv";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const AVATAR_SIZE = 112;
 
@@ -52,6 +55,7 @@ export default function NetworkingProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t } = useLocale();
+  const readable = useParticipantLayout("form");
   const { me } = useMeContext();
   const [profile, setProfile] = useState<NetworkingProfile | null>(null);
   const [stored, setStored] = useState<NetworkingDraft | null>(null);
@@ -196,7 +200,7 @@ export default function NetworkingProfileScreen() {
   }
 
   function confirmRemoveCv() {
-    Alert.alert(t("networkingCvRemove"), undefined, [
+    alert(t("networkingCvRemove"), undefined, [
       { text: t("cancel"), style: "cancel" },
       { text: t("remove"), style: "destructive", onPress: () => void changeCv("remove") },
     ]);
@@ -369,11 +373,13 @@ export default function NetworkingProfileScreen() {
         />
       ) : null}
       <ScrollView
+        alwaysBounceVertical
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           gap: 22,
-          padding: 16,
+          paddingVertical: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, insets.bottom + 16),
           paddingTop: 16 + topInset,
         }}
@@ -382,7 +388,12 @@ export default function NetworkingProfileScreen() {
           <Text
             accessibilityRole="header"
             selectable
-            style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+            style={{
+              color: colors.label,
+              fontSize: type.title3.fontSize,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
           >
             {t("networkingTitle")}
           </Text>
@@ -463,22 +474,27 @@ function CvRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
-        backgroundColor: pressed ? colors.elevatedSurface : undefined,
+      style={{
         justifyContent: "center",
         minHeight: 50,
         opacity: disabled ? 0.5 : 1,
         paddingHorizontal: 16,
-      })}
+      }}
     >
-      <Text style={{ color: destructive ? colors.destructive : colors.accent, fontSize: 16 }}>
+      <Text
+        style={{
+          color: destructive ? colors.destructive : colors.accent,
+          fontSize: type.callout.fontSize,
+        }}
+      >
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }

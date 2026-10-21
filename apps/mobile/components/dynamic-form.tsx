@@ -2,25 +2,19 @@ import type { FormSection, TemplateField } from "@hackos/shared/forms";
 import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
 import { Image } from "expo-image";
 import { Fragment, type ReactNode, useState } from "react";
-import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { FieldLibraryPicker } from "@/components/field-library-picker";
 import { FileViewer } from "@/components/file-viewer";
 import { Section, Separator, ToggleRow } from "@/components/native-ui";
 import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { PhotoCarousel } from "@/components/photo-carousel";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { FieldRow } from "@/components/project-ui";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import type { ProjectFile } from "@/lib/projects";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 export function localizedFormText(
   value: { en: string; es: string; gl: string },
@@ -30,6 +24,11 @@ export function localizedFormText(
 }
 
 /** H16/H20: native controls consume the same schema as applications. */
+/** Only web links are handed to the system; free text never reaches `Linking`. */
+function isHttpUrl(value: string) {
+  return /^https?:\/\/\S+$/i.test(value.trim());
+}
+
 export function DynamicForm({
   template,
   sections,
@@ -112,30 +111,32 @@ export function DynamicForm({
             ))}
             {uploading === item.key ? (
               <View style={[tileStyle, { alignItems: "center", justifyContent: "center" }]}>
-                <ActivityIndicator
+                <AppActivityIndicator
                   accessibilityLabel={t("projectUploading")}
                   color={colors.secondaryLabel}
                 />
               </View>
             ) : editable && keys.length < MAX_IMAGES_PER_FIELD ? (
-              <Pressable
+              <PressableFeedback
+                feedback="opacity"
                 accessibilityRole="button"
                 accessibilityLabel={t("projectAddPhotos")}
                 onPress={() => onUpload?.(item)}
-                style={({ pressed }) => [
+                style={[
                   tileStyle,
                   {
                     alignItems: "center",
                     gap: 6,
                     justifyContent: "center",
-                    opacity: pressed ? 0.6 : 1,
                     width: photos.length ? 120 : PHOTO_WIDTH,
                   },
                 ]}
               >
                 <SymbolView name="plus" tintColor={colors.accent} size={24} accessible={false} />
-                <Text style={{ color: colors.accent, fontSize: 15 }}>{t("projectAddPhotos")}</Text>
-              </Pressable>
+                <Text style={{ color: colors.accent, fontSize: type.subhead.fontSize }}>
+                  {t("projectAddPhotos")}
+                </Text>
+              </PressableFeedback>
             ) : null}
           </ScrollView>
         </FieldRow>
@@ -153,25 +154,20 @@ export function DynamicForm({
             />
           ) : uploading === item.key ? (
             <View style={{ alignItems: "center", flexDirection: "row", gap: 10, minHeight: 44 }}>
-              <ActivityIndicator color={colors.secondaryLabel} />
-              <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>
+              <AppActivityIndicator color={colors.secondaryLabel} />
+              <Text style={{ color: colors.secondaryLabel, fontSize: type.body.fontSize }}>
                 {t("projectUploading")}
               </Text>
             </View>
           ) : (
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityRole="button"
               accessibilityLabel={t("projectUpload")}
               accessibilityState={{ disabled }}
               disabled={disabled}
               onPress={() => onUpload?.(item)}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                flexDirection: "row",
-                gap: 10,
-                minHeight: 44,
-                opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
-              })}
+              style={{ alignItems: "center", flexDirection: "row", gap: 10, minHeight: 44 }}
             >
               <SymbolView
                 name="plus.circle.fill"
@@ -179,29 +175,28 @@ export function DynamicForm({
                 size={22}
                 accessible={false}
               />
-              <Text style={{ color: colors.accent, fontSize: 17 }}>{t("projectUpload")}</Text>
-            </Pressable>
+              <Text style={{ color: colors.accent, fontSize: type.body.fontSize }}>
+                {t("projectUpload")}
+              </Text>
+            </PressableFeedback>
           )}
         </FieldRow>
       );
     }
     if (readOnly) {
-      const isLink =
-        item.validation?.text_condition === "url" &&
-        typeof value === "string" &&
-        /^https?:\/\//i.test(value);
+      const isLink = typeof value === "string" && isHttpUrl(value);
       return (
         <FieldRow key={item.key} label={label}>
           {isLink ? (
             <Text
               accessibilityRole="link"
               onPress={() => void Linking.openURL(value as string)}
-              style={{ color: colors.accent, fontSize: 17 }}
+              style={{ color: colors.accent, fontSize: type.body.fontSize }}
             >
               {value as string}
             </Text>
           ) : (
-            <Text selectable style={{ color: colors.label, fontSize: 17 }}>
+            <Text selectable style={{ color: colors.label, fontSize: type.body.fontSize }}>
               {displayAnswer(item, value, language)}
             </Text>
           )}
@@ -213,6 +208,7 @@ export function DynamicForm({
         <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
           <FieldLibraryPicker
             libraryId={item.library_id}
+            title={label}
             value={
               Array.isArray(value)
                 ? value.filter((value): value is string => typeof value === "string")
@@ -224,38 +220,59 @@ export function DynamicForm({
         </FieldRow>
       );
     const numeric = item.kind === "number" || item.kind === "birth_year";
+    const openable = typeof value === "string" && isHttpUrl(value) ? value : null;
     return (
       <FieldRow key={item.key} label={label} required={requiredLabel(item)} hint={hint(item)}>
-        <TextInput
-          accessibilityLabel={label}
-          editable={!disabled}
-          value={value == null ? "" : String(value)}
-          multiline={item.kind === "textarea"}
-          scrollEnabled={false}
-          keyboardType={
-            numeric
-              ? "numeric"
-              : item.kind === "phone"
-                ? "phone-pad"
-                : item.validation?.text_condition === "url"
-                  ? "url"
-                  : "default"
-          }
-          autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
-          maxLength={item.validation?.max_length}
-          placeholder={item.placeholder ? localizedFormText(item.placeholder, language) : undefined}
-          placeholderTextColor={colors.tertiaryLabel}
-          onChangeText={(next) =>
-            onChange?.(item.key, numeric ? (next === "" ? null : Number(next)) : next)
-          }
-          style={{
-            color: colors.label,
-            fontSize: 17,
-            minHeight: item.kind === "textarea" ? 88 : 28,
-            padding: 0,
-            textAlignVertical: "top",
-          }}
-        />
+        <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 12 }}>
+          <TextInput
+            accessibilityLabel={label}
+            editable={!disabled}
+            value={value == null ? "" : String(value)}
+            multiline={item.kind === "textarea"}
+            scrollEnabled={false}
+            keyboardType={
+              numeric
+                ? "numeric"
+                : item.kind === "phone"
+                  ? "phone-pad"
+                  : item.validation?.text_condition === "url"
+                    ? "url"
+                    : "default"
+            }
+            autoCapitalize={item.validation?.text_condition ? "none" : "sentences"}
+            maxLength={item.validation?.max_length}
+            placeholder={
+              item.placeholder ? localizedFormText(item.placeholder, language) : undefined
+            }
+            placeholderTextColor={colors.tertiaryLabel}
+            onChangeText={(next) =>
+              onChange?.(item.key, numeric ? (next === "" ? null : Number(next)) : next)
+            }
+            style={{
+              color: colors.label,
+              flex: 1,
+              fontSize: type.body.fontSize,
+              minHeight: item.kind === "textarea" ? 88 : 28,
+              padding: 0,
+              textAlignVertical: "top",
+            }}
+          />
+          {openable ? (
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={openable}
+              hitSlop={10}
+              onPress={() => void Linking.openURL(openable)}
+            >
+              <SymbolView
+                name="arrow.up.right.square"
+                tintColor={colors.accent}
+                size={22}
+                accessible={false}
+              />
+            </Pressable>
+          ) : null}
+        </View>
       </FieldRow>
     );
   };
@@ -299,7 +316,7 @@ export function DynamicForm({
                   paddingHorizontal: 16,
                 }}
               >
-                <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+                <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
                   {localizedFormText(option.label, language)}
                 </Text>
                 {selected ? (
@@ -406,7 +423,7 @@ const PHOTO_HEIGHT = 150;
 const tileStyle = {
   backgroundColor: colors.elevatedSurface,
   borderCurve: "continuous",
-  borderRadius: 14,
+  borderRadius: radius.container,
   height: PHOTO_HEIGHT,
   overflow: "hidden",
   width: PHOTO_WIDTH,
@@ -487,26 +504,23 @@ function Attachment({
 }) {
   return (
     <View style={{ alignItems: "center", flexDirection: "row", gap: 12, paddingTop: 4 }}>
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={`${file.fileName}, ${fileSummary(file)}`}
         onPress={onOpen}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          flex: 1,
-          flexDirection: "row",
-          gap: 12,
-          opacity: pressed ? 0.6 : 1,
-        })}
+        style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 12 }}
       >
         <Thumbnail file={file} width={44} height={44} label={file.fileName} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
+          <Text numberOfLines={1} style={{ color: colors.label, fontSize: type.body.fontSize }}>
             {file.fileName}
           </Text>
-          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{fileSummary(file)}</Text>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
+            {fileSummary(file)}
+          </Text>
         </View>
-      </Pressable>
+      </PressableFeedback>
       {onRemove ? (
         <Pressable
           accessibilityRole="button"
@@ -542,14 +556,14 @@ function PhotoTile({
 }) {
   return (
     <View style={{ height: PHOTO_HEIGHT, width: PHOTO_WIDTH }}>
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="imagebutton"
         accessibilityLabel={`${label}, ${file.fileName}`}
         onPress={onOpen}
-        style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
       >
         <Thumbnail file={file} width={PHOTO_WIDTH} height={PHOTO_HEIGHT} label={file.fileName} />
-      </Pressable>
+      </PressableFeedback>
       {onRemove ? (
         <Pressable
           accessibilityRole="button"

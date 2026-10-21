@@ -1,5 +1,6 @@
-import { MenuView } from "@expo/ui/community/menu";
-import { ActivityIndicator, View } from "react-native";
+import { View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { MenuView } from "@/components/app-menu";
 import { SymbolView } from "@/components/symbol";
 import { UserAvatar } from "@/components/user-avatar";
 import { useLocale } from "@/lib/i18n";
@@ -67,7 +68,7 @@ export function ProfilePhotoMenu({
         accessibilityState={{ busy, disabled: busy }}
         style={{ height: size, width: size }}
       >
-        <UserAvatar testID={testID} name={name} image={image} size={size} />
+        <UserAvatar testID={testID} name={name} image={image} size={size} persist />
         {busy ? (
           <View
             testID="profile-photo-pending"
@@ -83,7 +84,7 @@ export function ProfilePhotoMenu({
               top: 0,
             }}
           >
-            <ActivityIndicator color="#fff" />
+            <AppActivityIndicator color={colors.accentText} />
           </View>
         ) : (
           <View

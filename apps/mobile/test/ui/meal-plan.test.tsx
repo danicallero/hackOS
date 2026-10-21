@@ -32,6 +32,7 @@ const baseMe = {
   capabilities: [] as string[],
   dietaryConfirmedAt: null as string | null,
   profileLocked: false,
+  dietaryLocked: false,
   isSponsorRep: true,
   pendingProfileTasks: ["dietary", "meal_plan"] as ("dietary" | "meal_plan")[],
 };
@@ -48,6 +49,7 @@ jest.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children }: { children: unknown }) => children,
 }));
 jest.mock("expo-router", () => ({
+  useNavigation: () => ({ setOptions: jest.fn() }),
   useLocalSearchParams: () => mockParams,
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: jest.fn() }),
@@ -439,11 +441,12 @@ describe("Profile tasks sheet", () => {
     expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
   });
 
-  it("skips the dietary step for a locked profile and never sends it", async () => {
+  it("skips the dietary step once dietary data is locked and never sends it", async () => {
     mockParams = { tasks: "dietary,meal_plan" };
     mockMeContext.me = {
       ...baseMe,
       profileLocked: true,
+      dietaryLocked: true,
       foodIntolerances: [3],
       foodIntoleranceNotes: " nuts ",
     };

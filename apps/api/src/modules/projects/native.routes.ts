@@ -233,6 +233,8 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
         "gallery",
         JSON.stringify([
           phase.draftVisibility,
+          // Synthetic accounts see fixture projects only, everyone else real ones (H18).
+          viewer.fixtureMarker,
           // Attendance only changes the list while drafts are for attendees.
           phase.draftVisibility === "attendees" ? viewer.attendee : null,
           search ?? null,
@@ -249,7 +251,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
                 .map((winner) => winner.repoId)
             : null;
           const { rows } = await pool.query(
-            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=false AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
+            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
             [
               phase.draftVisibility,
               viewer.attendee,
@@ -258,6 +260,7 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
               pageSize,
               (page - 1) * pageSize,
               winnerIds,
+              viewer.fixtureMarker,
             ],
           );
           const ids = rows.map((row) => row.id as number);

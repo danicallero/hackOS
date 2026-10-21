@@ -1,22 +1,16 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect, useNavigation, usePathname, useRouter } from "expo-router";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  Text,
-  useColorScheme,
-  useWindowDimensions,
-  View,
-} from "react-native";
-
+import { FlatList, Text, useColorScheme, useWindowDimensions, View } from "react-native";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import { ActionButton, EmptyState, StatusPill } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { ApiError, apiFetch } from "@/lib/api";
+import { useBarTitleOptions } from "@/lib/bar-title";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
@@ -32,6 +26,7 @@ import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-even
 import { canOperateQueues, isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
 
 const JUST_CALLED_HIGHLIGHT_MS = 12_000;
@@ -98,10 +93,10 @@ export function QueueOperationsScreen() {
     );
   }, []);
 
+  const barTitle = useBarTitleOptions(t("tabQueueOperations"));
   useLayoutEffect(() => {
     headerNavigation.setOptions({
-      title: usesListTitle ? "" : t("tabQueueOperations"),
-      headerLargeTitle: !usesListTitle,
+      ...(usesListTitle ? { title: "", headerLargeTitle: false } : barTitle),
       headerRight: () => (
         <FilterMenu
           embedded
@@ -142,7 +137,7 @@ export function QueueOperationsScreen() {
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle]);
+  }, [headerNavigation, roomFilters, selectRoomFilter, t, usesListTitle, barTitle]);
 
   const visibleRooms = useMemo(
     () =>
@@ -295,11 +290,11 @@ export function QueueOperationsScreen() {
       style={{
         backgroundColor: colors.destructiveSurface,
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.control,
         padding: 12,
       }}
     >
-      <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 14 }}>
+      <Text selectable style={{ ...type.compact, color: colors.onDestructiveSurface }}>
         {actionError}
       </Text>
     </View>
@@ -365,7 +360,9 @@ export function QueueOperationsScreen() {
         paddingTop: 16 + androidTopInset,
       }}
       columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />
+      }
       ListHeaderComponent={
         <View style={{ gap: 12 }}>
           {usesListTitle ? <QueueOperationsListTitle /> : null}
@@ -394,7 +391,9 @@ export function QueueOperationsScreen() {
 function QueueOperationsListTitle() {
   const { t } = useLocale();
   return (
-    <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700", paddingVertical: 8 }}>
+    <Text
+      style={{ ...type.largeTitle, color: colors.label, fontWeight: "700", paddingVertical: 8 }}
+    >
       {t("tabQueueOperations")}
     </Text>
   );
@@ -432,7 +431,7 @@ function SearchResultCount({ count }: { count: number }) {
     <Text
       accessibilityLiveRegion="polite"
       selectable
-      style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
+      style={{ ...type.footnote, color: colors.secondaryLabel, fontWeight: "600" }}
     >
       {count === 1
         ? t("queueOpsSearchResultCountOne")
@@ -458,31 +457,31 @@ const TeamQueueCard = memo(function TeamQueueCard({
   const calledRoom = entry.status === "called" ? (rooms[0] ?? null) : null;
 
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="scale"
       accessibilityRole="button"
       accessibilityHint={t("queueOpsViewTeamHint")}
       onPress={() => onPress(entry.id, rooms[0].id)}
-      style={({ pressed }) => ({
+      style={{
         backgroundColor: colors.surface,
         borderColor: highlighted ? colors.accent : "transparent",
         borderCurve: "continuous",
-        borderRadius: 16,
+        borderRadius: radius.container,
         borderWidth: 2,
         gap: 12,
-        opacity: pressed ? 0.8 : 1,
         padding: 16,
-      })}
+      }}
     >
       <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 10 }}>
         <View style={{ flex: 1, gap: 3 }}>
           <Text
             selectable
             numberOfLines={1}
-            style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}
+            style={{ ...type.body, color: colors.label, fontWeight: "700" }}
           >
             {challengeTitle ?? t("queueOpsNoChallenge")}
           </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
             {entry.repo_name ?? t("queueOpsUnnamedTeam")}
           </Text>
         </View>
@@ -495,7 +494,7 @@ const TeamQueueCard = memo(function TeamQueueCard({
             alignItems: "center",
             backgroundColor: colors.successSurface,
             borderCurve: "continuous",
-            borderRadius: 12,
+            borderRadius: radius.control,
             flexDirection: "row",
             gap: 8,
             padding: 12,
@@ -508,7 +507,7 @@ const TeamQueueCard = memo(function TeamQueueCard({
             accessible={false}
           />
           <Text
-            style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 15, fontWeight: "700" }}
+            style={{ ...type.subhead, color: colors.onSuccessSurface, flex: 1, fontWeight: "700" }}
           >
             {calledRoom.name}
             {calledRoom.location ? ` · ${calledRoom.location}` : ""}
@@ -536,7 +535,7 @@ const TeamQueueCard = memo(function TeamQueueCard({
                 />
                 <Text
                   selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
+                  style={{ ...type.footnote, color: colors.secondaryLabel, fontWeight: "600" }}
                 >
                   {t("queuePossibleRoomsLabel")}
                 </Text>
@@ -550,7 +549,7 @@ const TeamQueueCard = memo(function TeamQueueCard({
           ) : null}
         </>
       )}
-    </Pressable>
+    </PressableFeedback>
   );
 });
 
@@ -568,7 +567,7 @@ function QueueMetric({
       style={{
         backgroundColor: colors.background,
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.control,
         flex: 1,
         gap: 5,
         padding: 12,
@@ -576,14 +575,17 @@ function QueueMetric({
     >
       <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
         <SymbolView name={icon} tintColor={colors.secondaryLabel} size={15} accessible={false} />
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "600" }}>
+        <Text
+          selectable
+          style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "600" }}
+        >
           {label}
         </Text>
       </View>
       <Text
         selectable
         numberOfLines={1}
-        style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}
+        style={{ color: colors.label, ...type.headline, fontWeight: "700" }}
       >
         {value}
       </Text>
@@ -599,18 +601,18 @@ function RoomChip({ room }: { room: QueueRoom }) {
         alignItems: "baseline",
         backgroundColor: colors.background,
         borderCurve: "continuous",
-        borderRadius: 9,
+        borderRadius: radius.chip,
         flexDirection: "row",
         gap: 5,
         paddingHorizontal: 10,
         paddingVertical: 7,
       }}
     >
-      <Text selectable style={{ color: colors.label, fontSize: 13, fontWeight: "600" }}>
+      <Text selectable style={{ ...type.footnote, color: colors.label, fontWeight: "600" }}>
         {room.name}
       </Text>
       {room.location ? (
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+        <Text selectable style={{ ...type.caption, color: colors.secondaryLabel }}>
           {room.location}
         </Text>
       ) : null}
@@ -648,7 +650,7 @@ const RoomCard = memo(function RoomCard({
         backgroundColor: colors.surface,
         borderColor: roomJustCalled ? colors.accent : colors.separator,
         borderCurve: "continuous",
-        borderRadius: 16,
+        borderRadius: radius.container,
         borderWidth: roomJustCalled ? 2 : 1,
         flex: 1,
         gap: 14,
@@ -661,11 +663,15 @@ const RoomCard = memo(function RoomCard({
           <Text
             selectable
             numberOfLines={1}
-            style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}
+            style={{ color: colors.label, ...type.headline, fontWeight: "700" }}
           >
             {room.room.name}
           </Text>
-          <Text selectable numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+          <Text
+            selectable
+            numberOfLines={1}
+            style={{ ...type.footnote, color: colors.secondaryLabel }}
+          >
             {room.room.location ?? t("queueOpsNoLocation")}
           </Text>
         </View>
@@ -676,7 +682,7 @@ const RoomCard = memo(function RoomCard({
               alignItems: "center",
               backgroundColor: colors.accentSurface,
               borderCurve: "continuous",
-              borderRadius: 999,
+              borderRadius: radius.full,
               flexDirection: "row",
               gap: 4,
               paddingHorizontal: 9,
@@ -689,7 +695,7 @@ const RoomCard = memo(function RoomCard({
               size={12}
               accessible={false}
             />
-            <Text style={{ color: colors.onAccentSurface, fontSize: 12, fontWeight: "700" }}>
+            <Text style={{ ...type.caption, color: colors.onAccentSurface, fontWeight: "700" }}>
               {t("queueOpsJustCalled")}
             </Text>
           </View>
@@ -700,13 +706,16 @@ const RoomCard = memo(function RoomCard({
       </View>
 
       <View style={{ gap: 3 }}>
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "600" }}>
+        <Text
+          selectable
+          style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "600" }}
+        >
           {t("queueOpsChallenge")}
         </Text>
         <Text
           selectable
           numberOfLines={2}
-          style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}
+          style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}
         >
           {room.challenge?.title ?? t("queueOpsNoChallenge")}
         </Text>
@@ -731,7 +740,7 @@ const RoomCard = memo(function RoomCard({
           />
           <Text
             selectable
-            style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "700" }}
+            style={{ ...type.footnote, color: colors.secondaryLabel, fontWeight: "700" }}
           >
             {t("queueOpsAtDoor", { count: String(room.called.length) })}
           </Text>
@@ -746,27 +755,27 @@ const RoomCard = memo(function RoomCard({
                   backgroundColor: colors.accentSurface,
                   borderColor: justCalled ? colors.accent : "transparent",
                   borderCurve: "continuous",
-                  borderRadius: 12,
+                  borderRadius: radius.control,
                   borderWidth: 2,
                   gap: 4,
                   padding: 12,
                 }}
               >
-                <Pressable
+                <PressableFeedback
+                  feedback="opacity"
                   accessibilityRole="button"
                   accessibilityHint={t("queueOpsViewTeamHint")}
                   onPress={() => onOpenTeam(entry.id, room.room.id)}
-                  style={({ pressed }) => ({
+                  style={{
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 6,
-                    opacity: pressed ? 0.7 : 1,
-                  })}
+                  }}
                 >
                   <Text
                     selectable
                     numberOfLines={1}
-                    style={{ color: colors.label, flex: 1, fontSize: 15, fontWeight: "700" }}
+                    style={{ ...type.subhead, color: colors.label, flex: 1, fontWeight: "700" }}
                   >
                     {entry.repo_name ?? t("queueOpsUnnamedTeam")}
                   </Text>
@@ -779,7 +788,7 @@ const RoomCard = memo(function RoomCard({
                     />
                   ) : null}
                   <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={13} />
-                </Pressable>
+                </PressableFeedback>
                 <ActionButton
                   busy={busyEntryId === entry.id}
                   haptic={false}
@@ -792,7 +801,7 @@ const RoomCard = memo(function RoomCard({
                   <Text
                     accessibilityLiveRegion="polite"
                     selectable
-                    style={{ color: colors.success, fontSize: 13 }}
+                    style={{ ...type.footnote, color: colors.success }}
                   >
                     {t("queueOpsTeamNotified")}
                   </Text>
@@ -801,7 +810,7 @@ const RoomCard = memo(function RoomCard({
             );
           })
         ) : (
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
             {t("queueOpsNoTeamsAtDoor")}
           </Text>
         )}
@@ -843,7 +852,7 @@ function QueueSlot({
         <SymbolView name={icon} tintColor={colors.secondaryLabel} size={16} accessible={false} />
         <Text
           selectable
-          style={{ color: colors.secondaryLabel, flex: 1, fontSize: 12, fontWeight: "600" }}
+          style={{ ...type.caption, color: colors.secondaryLabel, flex: 1, fontWeight: "600" }}
         >
           {label}
         </Text>
@@ -859,14 +868,14 @@ function QueueSlot({
       <Text
         selectable
         numberOfLines={1}
-        style={{ color: colors.label, fontSize: 16, fontWeight: "700" }}
+        style={{ ...type.callout, color: colors.label, fontWeight: "700" }}
       >
         {entry?.repo_name ?? empty}
       </Text>
       {showPosition && entry?.position != null ? (
         <Text
           selectable
-          style={{ color: colors.secondaryLabel, fontSize: 13, fontVariant: ["tabular-nums"] }}
+          style={{ ...type.footnote, color: colors.secondaryLabel, fontVariant: ["tabular-nums"] }}
         >
           {t("queueOpsPosition", { position: String(entry.position) })}
         </Text>
@@ -876,23 +885,23 @@ function QueueSlot({
 
   if (onPress) {
     return (
-      <Pressable
+      <PressableFeedback
+        feedback="scale"
         accessibilityRole="button"
         accessibilityHint={t("queueOpsViewTeamHint")}
         onPress={onPress}
-        style={({ pressed }) => ({
+        style={{
           backgroundColor: colors.background,
           borderColor: highlighted ? colors.accent : "transparent",
           borderCurve: "continuous",
-          borderRadius: 12,
+          borderRadius: radius.control,
           borderWidth: 2,
           gap: 5,
-          opacity: pressed ? 0.7 : 1,
           padding: 12,
-        })}
+        }}
       >
         {content}
-      </Pressable>
+      </PressableFeedback>
     );
   }
 
@@ -902,7 +911,7 @@ function QueueSlot({
         backgroundColor: colors.background,
         borderColor: highlighted ? colors.accent : "transparent",
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.control,
         borderWidth: 2,
         gap: 5,
         padding: 12,

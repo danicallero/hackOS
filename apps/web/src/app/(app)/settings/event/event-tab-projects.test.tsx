@@ -39,6 +39,35 @@ afterEach(() => {
 });
 
 describe("project deadlines view", () => {
+  it("keeps the stored audience selected instead of a blank, dirty form", async () => {
+    apiMock.get.mockResolvedValue({
+      timezone: "Europe/Madrid",
+      projectDraftsOpenAt: "2026-09-23T00:00:00.000Z",
+      projectSubmissionsCloseAt: "2026-10-18T00:00:00.000Z",
+      projectDraftVisibility: "team_only",
+      projectGalleryAudience: "public",
+      projectGalleryOpensAt: null,
+      projectMaxTeamSize: null,
+      projectGithubRequired: false,
+    } as unknown as EventConfig);
+    const onDirtyChange = vi.fn();
+    await act(async () =>
+      root.render(
+        <EventConfigProvider refreshKey={0}>
+          <EventTab view="participants" onDirtyChange={onDirtyChange} />
+        </EventConfigProvider>,
+      ),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    const triggers = [...container.querySelectorAll('button[role="combobox"]')].map(
+      (node) => node.textContent,
+    );
+    expect(triggers).toEqual(["Team only", "Everyone"]);
+    expect(onDirtyChange).not.toHaveBeenCalledWith(true);
+  });
+
   it("falls back to a listed audience instead of a blank, dirty form when the stored value is unknown", async () => {
     apiMock.get.mockResolvedValue({
       timezone: "Europe/Madrid",

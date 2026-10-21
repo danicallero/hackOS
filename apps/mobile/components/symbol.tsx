@@ -73,6 +73,7 @@ const ANDROID_SYMBOL_NAMES = {
   "eye.slash": "visibility_off",
   "exclamationmark.arrow.circlepath": "sync_problem",
   "exclamationmark.circle.fill": "error",
+  "wifi.slash": "wifi_off",
   "exclamationmark.triangle": "warning",
   "exclamationmark.triangle.fill": "warning",
   "figure.run": "directions_run",
@@ -81,7 +82,9 @@ const ANDROID_SYMBOL_NAMES = {
   "flashlight.on.fill": "flashlight_on",
   "fork.knife": "restaurant",
   globe: "public",
+  "arrow.up.right.square": "open_in_new",
   hammer: "construction",
+  "hammer.fill": "construction",
   hourglass: "hourglass_empty",
   "internaldrive.fill": "save",
   "key.card": "key",
@@ -147,6 +150,13 @@ const ANDROID_SYMBOL_NAMES = {
   "building.2": "business",
   "doc.fill": "description",
   photo: "image",
+  "list.number": "format_list_numbered",
+  "checkmark.circle": "check_circle",
+  "xmark.circle": "cancel",
+  "pause.circle": "pause_circle",
+  "square.grid.2x2": "grid_view",
+  "trophy.fill": "emoji_events",
+  "photo.on.rectangle": "photo_library",
 } as const satisfies Record<string, string> & Record<ActivityKindSymbolName, string>;
 
 /** Return the Material Symbol alias used by Android/web, when one exists. */

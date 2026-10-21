@@ -526,6 +526,23 @@ describe("profile camera target", () => {
     expect(resolveProfileCameraTarget({ ...base, safeAreaTop: 20 })).toEqual(plain(176.5, 26));
   });
 
+  it("keeps the avatar in the page when Duo places its island in the side rail", () => {
+    expect(
+      resolveProfileCameraTarget({
+        ...base,
+        screenWidth: 951,
+        height: 669,
+        cameraCutoutFrame: { left: 880, top: 290, width: 35, height: 90 },
+      }).hasCutout,
+    ).toBe(false);
+    expect(
+      resolveProfileCameraTarget({
+        ...base,
+        cameraCutoutFrame: { left: 160, top: 12, width: 75, height: 30 },
+      }).hasCutout,
+    ).toBe(true);
+  });
+
   describe("android", () => {
     const android = { ...base, platform: "android", safeAreaTop: 32, screenWidth: 400 };
 

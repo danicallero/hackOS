@@ -236,7 +236,7 @@ describe("GET /api/logistics/meal-plans/:activityId/export.csv (#933)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
     expect(res.body).toBe(
-      "name,surname,enterprise,intolerances,notes\r\n" +
+      "\uFEFFname,surname,enterprise,intolerances,notes\r\n" +
         "Bea,Alonso,Globex,,\r\n" +
         'Ana,Zubiri,"Acme, Inc",Lactose,No nuts\r\n',
     );

@@ -1,13 +1,15 @@
 import { createContext, createElement, type ReactNode, useContext, useMemo } from "react";
 import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useSideRegion } from "@/lib/side-region";
+import { TABLET_TAB_BAR_MIN_WIDTH } from "@/lib/window-size";
 
 /** Visual height occupied by the floating tab bar, including its safe-area gap. */
 export const ROUTER_TAB_BAR_HEIGHT = 64;
 export const ROUTER_TAB_BAR_VERTICAL_PADDING = 8;
 const ROUTER_TAB_BAR_TABLET_HEIGHT = 56;
 const ROUTER_TAB_BAR_TABLET_VERTICAL_PADDING = 6;
-const ROUTER_TAB_BAR_TABLET_BREAKPOINT = 700;
+const ROUTER_TAB_BAR_TABLET_BREAKPOINT = TABLET_TAB_BAR_MIN_WIDTH;
 const ROUTER_TAB_BAR_TABLET_DIRECT_TABS = 6;
 
 export interface RouterTabBarInsets {
@@ -21,6 +23,8 @@ export interface RouterTabBarInsets {
   tabBarVerticalPadding: number;
   /** Bottom padding required for content to finish above the floating tab bar. */
   contentBottomInset: number;
+  /** The bar stands in the side column the system reserves, not along the bottom. */
+  vertical: boolean;
 }
 
 export function routerTabBarBottomPadding(safeAreaBottom: number): number {
@@ -49,7 +53,45 @@ export function routerTabBarMaxTabsWithoutOverflowForWidth(width: number): numbe
   return width >= ROUTER_TAB_BAR_TABLET_BREAKPOINT ? ROUTER_TAB_BAR_TABLET_DIRECT_TABS : 5;
 }
 
-export function routerTabBarInsets(safeAreaBottom: number, width = 0): RouterTabBarInsets {
+/** Cell side and gap of the vertical bar, and the space its column leaves to the system indicators. */
+export const ROUTER_TAB_BAR_VERTICAL_CELL = 44;
+/** The vertical bar and its overflow circle: the cell plus a 4 pt rim on each side. */
+export const ROUTER_TAB_BAR_VERTICAL_WIDTH = ROUTER_TAB_BAR_VERTICAL_CELL + 8;
+const ROUTER_TAB_BAR_VERTICAL_GAP = 8;
+const ROUTER_TAB_BAR_VERTICAL_TOP_RESERVE = 176;
+
+/**
+ * How many direct cells the vertical bar can hold in the height the window has,
+ * below the system status indicators, with and without an overflow circle.
+ */
+export function routerTabBarVerticalBudget(
+  windowHeight: number,
+  bottomPadding: number,
+  windowWidth = 0,
+  /** The labelled tablet rail lists every destination: height is the only limit. */
+  tabletRail = false,
+): { direct: number; withoutOverflow: number } {
+  const room =
+    windowHeight -
+    ROUTER_TAB_BAR_VERTICAL_TOP_RESERVE -
+    bottomPadding -
+    ROUTER_TAB_BAR_VERTICAL_GAP;
+  const cells = Math.floor(room / (ROUTER_TAB_BAR_VERTICAL_CELL + 4));
+  if (tabletRail) return { direct: Math.max(2, cells), withoutOverflow: Math.max(2, cells) };
+  return {
+    direct: Math.min(routerTabBarDirectTabsForWidth(windowWidth), Math.max(2, cells - 1)),
+    withoutOverflow: Math.min(
+      routerTabBarMaxTabsWithoutOverflowForWidth(windowWidth),
+      Math.max(2, cells),
+    ),
+  };
+}
+
+export function routerTabBarInsets(
+  safeAreaBottom: number,
+  width = 0,
+  vertical = false,
+): RouterTabBarInsets {
   const tabBarBottomPadding = routerTabBarBottomPadding(safeAreaBottom);
   const tabBarHeight = routerTabBarHeightForWidth(width);
   return {
@@ -57,8 +99,11 @@ export function routerTabBarInsets(safeAreaBottom: number, width = 0): RouterTab
     tabBarBottomPadding,
     tabBarHeight,
     tabBarVerticalPadding: routerTabBarVerticalPaddingForWidth(width),
-    contentBottomInset:
-      tabBarHeight + routerTabBarVerticalPaddingForWidth(width) + tabBarBottomPadding,
+    // Nothing floats along the bottom of a vertical layout: content only clears the safe area.
+    contentBottomInset: vertical
+      ? safeAreaBottom
+      : tabBarHeight + routerTabBarVerticalPaddingForWidth(width) + tabBarBottomPadding,
+    vertical,
   };
 }
 
@@ -68,7 +113,11 @@ const RouterTabBarInsetsContext = createContext<RouterTabBarInsets | null>(null)
 export function RouterTabBarInsetsProvider({ children }: { children: ReactNode }) {
   const { bottom } = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const insets = useMemo(() => routerTabBarInsets(bottom, width), [bottom, width]);
+  const vertical = useSideRegion().edge !== null;
+  const insets = useMemo(
+    () => routerTabBarInsets(bottom, width, vertical),
+    [bottom, width, vertical],
+  );
   return createElement(RouterTabBarInsetsContext.Provider, { value: insets }, children);
 }
 
@@ -81,7 +130,8 @@ export function useRouterTabBarInsets(): RouterTabBarInsets {
   const context = useContext(RouterTabBarInsetsContext);
   const { bottom } = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  return context ?? routerTabBarInsets(bottom, width);
+  const vertical = useSideRegion().edge !== null;
+  return context ?? routerTabBarInsets(bottom, width, vertical);
 }
 
 /** Bottom content clearance needed for a scroll view beneath the custom bar. */

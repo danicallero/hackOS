@@ -42,3 +42,23 @@ export const OVERFLOW_TAB_LABEL_KEY: Record<
 export function nativeMenuOrder<T>(ids: readonly T[]): T[] {
   return [...ids].reverse();
 }
+
+/**
+ * Where the Android overflow card opens, in window points: above the trigger, its edge
+ * aligned with the trigger's nearer window edge and always inside the window. A trigger in a
+ * left-hand vertical bar (a foldable's reserved column, a tablet rail) puts the card to its
+ * right; a bottom-bar trigger on the right opens it leftwards. A window narrower than the card
+ * pins it to the leading edge.
+ */
+export function overflowMenuPlacement(
+  trigger: { x: number; y: number; width: number },
+  window: { width: number; height: number },
+  menuWidth: number,
+  gap: number,
+  margin = 8,
+): { bottom: number; left: number } {
+  const alignRight = trigger.x + trigger.width / 2 > window.width / 2;
+  const preferred = alignRight ? trigger.x + trigger.width - menuWidth : trigger.x;
+  const left = Math.max(margin, Math.min(preferred, window.width - menuWidth - margin));
+  return { bottom: window.height - trigger.y + gap, left };
+}

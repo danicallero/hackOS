@@ -7,16 +7,7 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  Alert,
-  InteractionManager,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { InteractionManager, Modal, Platform, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
@@ -24,10 +15,12 @@ import { BadgeReplacementDialog } from "@/components/badge-replacement-dialog";
 import { EmptyState, InfoRow, Section, Separator, StatusPill } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
 import { formatMinutes, PresenceManagement } from "@/components/presence-management";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import { errorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
@@ -40,11 +33,15 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { enqueueLocalScan, findPersonById, pendingScans } from "@/lib/scanner-db";
 import { submitScannerMutation } from "@/lib/scanner-sync";
 import type { ScannerPerson, ScannerSnapshot, ScanPayload } from "@/lib/scanner-types";
+import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { usePresenceSummary } from "@/lib/use-presence-summary";
 import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { SCAN_DETAIL_TOP_GAP } from "@/theme/layout-scan-pane";
+import { useOperatorListColumn } from "@/theme/layout-screens";
 
 interface PersonDetails extends ScannerPerson {
   shirtSize?: string | null;
@@ -77,52 +74,58 @@ function AccreditationRevealActions({
   const { t } = useLocale();
   return (
     <View style={{ flexDirection: "row", height: "100%" }}>
-      <Pressable
+      <PressableFeedback
+        feedback="scale"
         accessibilityRole="button"
         accessibilityLabel={t("personReplaceBadge")}
         onPress={() => {
           void haptic("light");
           onReplace();
         }}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.accent,
           gap: 4,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 16,
-        })}
+        }}
       >
         <SymbolView name="wave.3.right" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
+        <Text style={{ ...type.caption, color: "white", fontWeight: "700" }}>
           {t("personReplaceBadge")}
         </Text>
-      </Pressable>
-      <Pressable
+      </PressableFeedback>
+      <PressableFeedback
+        feedback="scale"
         accessibilityRole="button"
         accessibilityLabel={t("personDeleteBadge")}
         onPress={() => {
           void haptic("warning");
           onDelete();
         }}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.destructive,
           gap: 4,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 16,
-        })}
+        }}
       >
         <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>
+        <Text style={{ ...type.caption, color: "white", fontWeight: "700" }}>
           {t("personDeleteBadge")}
         </Text>
-      </Pressable>
+      </PressableFeedback>
     </View>
   );
+}
+
+/** Hands the person's name to the pane host, which draws it in its top band. */
+function TitleReporter({ onTitle, title }: { onTitle?: (title: string) => void; title: string }) {
+  useEffect(() => onTitle?.(title), [onTitle, title]);
+  return null;
 }
 
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
@@ -150,13 +153,38 @@ function personRolePill(
     : { label: roleDisplayName(person.role, t), tone: "accent" };
 }
 
-export function PersonOperationsScreen() {
-  const { id, focusLogId, focusSource } = useLocalSearchParams<{
+/**
+ * One person's operations profile. As a route it owns its native header and reads the person from
+ * the route params; `embedded` (the right pane of the two-pane Scanner) takes the person as props,
+ * leaves the header to the host and clears the host's top band through `topInset`.
+ */
+export function PersonOperationsScreen({
+  embedded = false,
+  focusLogId: focusLogIdProp,
+  focusSource: focusSourceProp,
+  onScrollOffset,
+  onTitle,
+  topInset = 0,
+  userId: userIdProp,
+}: {
+  embedded?: boolean;
+  focusLogId?: string;
+  focusSource?: string;
+  onScrollOffset?: (offset: number) => void;
+  /** Embedded: the host draws the person's name in its top band, so it gets the name here. */
+  onTitle?: (title: string) => void;
+  topInset?: number;
+  userId?: number;
+} = {}) {
+  const listColumn = useOperatorListColumn();
+  const params = useLocalSearchParams<{
     id: string;
     focusLogId?: string;
     focusSource?: string;
   }>();
-  const userId = Number(id);
+  const focusLogId = embedded ? focusLogIdProp : params.focusLogId;
+  const focusSource = embedded ? focusSourceProp : params.focusSource;
+  const userId = embedded && userIdProp !== undefined ? userIdProp : Number(params.id);
   const router = useRouter();
   const navigation = useNavigation();
   const pathname = usePathname();
@@ -174,9 +202,11 @@ export function PersonOperationsScreen() {
   const badgeInputOpen = badgeReaderVisible || badgeCodeMethod !== null || badgeReplacementVisible;
 
   useLayoutEffect(() => {
-    navigation.setOptions(transparentDetailHeaderOptions);
-  }, [navigation]);
+    // Embedded, the host screen owns the header options.
+    if (!embedded) navigation.setOptions(transparentDetailHeaderOptions);
+  }, [embedded, navigation]);
 
+  const sideRegion = useSideRegion();
   const trueTop = useTrueTopScroll(scrollRef);
   const { me } = useMeContext();
   const ownerUserId = me?.id;
@@ -203,8 +233,11 @@ export function PersonOperationsScreen() {
         if (autoScrolledFocusRef.current === focusSignalKey) return;
         target.measureInWindow((_targetX, targetY) => {
           scrollViewportRef.current?.measureInWindow((_viewportX, viewportY) => {
-            const headerClearance =
-              process.env.EXPO_OS === "ios" ? insets.top + 68 : insets.top + 16;
+            const headerClearance = embedded
+              ? topInset + SCAN_DETAIL_TOP_GAP
+              : process.env.EXPO_OS === "ios"
+                ? insets.top + 68
+                : insets.top + 16;
             const targetOffset = scrollOffsetRef.current + targetY - viewportY - headerClearance;
             scrollRef.current?.scrollTo({
               animated: true,
@@ -215,7 +248,7 @@ export function PersonOperationsScreen() {
         });
       });
     },
-    [focusSignalKey, insets.top],
+    [embedded, focusSignalKey, insets.top, topInset],
   );
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [loadState, setLoadState] = useState<PersonLoadState>("loading");
@@ -360,14 +393,11 @@ export function PersonOperationsScreen() {
       // cannot turn a successful server assignment into an error state.
       const snapshot = await sync.sync().catch(() => undefined);
       await load(snapshot);
-      if (claimFailed) Alert.alert(t("personLinkBadge"), t("scannerNfcWriteFailed"));
+      if (claimFailed) alert(t("personLinkBadge"), t("scannerNfcWriteFailed"));
     } catch (cause) {
       void haptic("error");
       const message = errorText(cause, t, t("requestError"));
-      Alert.alert(
-        cause instanceof ApiError ? t("scannerBusinessRejected") : t("requestError"),
-        message,
-      );
+      alert(cause instanceof ApiError ? t("scannerBusinessRejected") : t("requestError"), message);
     } finally {
       badgeMutationInFlight.current = false;
       setBusy(false);
@@ -378,7 +408,7 @@ export function PersonOperationsScreen() {
     if (!person || busy || badgeReaderVisible || badgeCodeMethod || badgeMutationInFlight.current)
       return;
     if (!person.badgeId && person.role == null) {
-      Alert.alert(t("accreditationChooseRole"), t("accreditationChooseRoleBody"), [
+      alert(t("accreditationChooseRole"), t("accreditationChooseRoleBody"), [
         { text: t("cancel"), style: "cancel" },
         {
           text: t("roleParticipant"),
@@ -398,7 +428,7 @@ export function PersonOperationsScreen() {
       return;
     }
     if (!person.eventAccess) {
-      Alert.alert(t("scannerNoEventAccess"), t("personNoEventAccessWarning"), [
+      alert(t("scannerNoEventAccess"), t("personNoEventAccessWarning"), [
         { text: t("cancel"), style: "cancel" },
         {
           text: t("continueAnyway"),
@@ -423,7 +453,7 @@ export function PersonOperationsScreen() {
       setBadgeReplacementVisible(true);
       return;
     }
-    Alert.alert(
+    alert(
       t("personReplaceBadge"),
       t("personReplaceBadgeMethod"),
       [
@@ -445,7 +475,7 @@ export function PersonOperationsScreen() {
 
   function confirmRemoveBadge() {
     if (!person?.badgeId || ownerUserId === undefined || busy) return;
-    Alert.alert(t("personDeleteBadge"), t("personDeleteBadgeBody", { badge: person.badgeId }), [
+    alert(t("personDeleteBadge"), t("personDeleteBadgeBody", { badge: person.badgeId }), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("delete"),
@@ -475,7 +505,7 @@ export function PersonOperationsScreen() {
               void haptic(result.state === "acknowledged" ? "warning" : "light");
             } catch (cause) {
               void haptic("error");
-              Alert.alert(t("scannerBusinessRejected"), errorText(cause, t, t("requestError")));
+              alert(t("scannerBusinessRejected"), errorText(cause, t, t("requestError")));
             } finally {
               badgeMutationInFlight.current = false;
               setBusy(false);
@@ -506,10 +536,7 @@ export function PersonOperationsScreen() {
       const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
       if (stored?.status === "failed") {
         void haptic("error");
-        Alert.alert(
-          t("presenceScanRejectedTitle"),
-          stored.lastError ?? t("presenceScanRejectedBody"),
-        );
+        alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
       } else if (stored?.status === "acknowledged") {
         void haptic("success");
         setPerson({
@@ -545,10 +572,7 @@ export function PersonOperationsScreen() {
       const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
       if (stored?.status === "failed") {
         void haptic("error");
-        Alert.alert(
-          t("presenceScanRejectedTitle"),
-          stored.lastError ?? t("presenceScanRejectedBody"),
-        );
+        alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
       } else if (stored?.status === "acknowledged") {
         void haptic("success");
       } else {
@@ -633,8 +657,9 @@ export function PersonOperationsScreen() {
         <Text
           accessibilityRole="header"
           style={{
+            ...type.footnote,
             color: colors.secondaryLabel,
-            fontSize: 13,
+
             fontWeight: "600",
             paddingHorizontal: 16,
           }}
@@ -705,7 +730,8 @@ export function PersonOperationsScreen() {
   }
 
   const registerButton = (
-    <Pressable
+    <PressableFeedback
+      feedback="scale"
       accessibilityRole="button"
       accessibilityLabel={
         effectiveDirection === "in" ? t("personRegisterEntry") : t("personRegisterExit")
@@ -713,18 +739,17 @@ export function PersonOperationsScreen() {
       accessibilityState={{ busy, disabled: busy }}
       disabled={busy}
       onPress={registerPrimary}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         backgroundColor: effectiveDirection === "in" ? colors.accentSurface : colors.warningSurface,
         borderCurve: "continuous",
-        borderRadius: 14,
+        borderRadius: radius.container,
         flex: 1,
         flexDirection: "row",
         gap: 8,
         height: 50,
         justifyContent: "center",
-        opacity: busy ? 0.45 : pressed ? 0.6 : 1,
-      })}
+      }}
     >
       <SymbolView
         name={directionIcon(effectiveDirection)}
@@ -734,18 +759,20 @@ export function PersonOperationsScreen() {
       />
       <Text
         style={{
+          ...type.body,
           color: directionOnSurfaceTone(effectiveDirection),
-          fontSize: 17,
+
           fontWeight: "600",
         }}
       >
         {directionLabel(effectiveDirection)}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 
   const otherDirectionButton = (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={
         otherDirection === "in" ? t("personRegisterEntry") : t("personRegisterExit")
@@ -753,19 +780,18 @@ export function PersonOperationsScreen() {
       accessibilityState={{ busy, disabled: busy }}
       disabled={busy}
       onPress={registerOther}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         borderColor: directionTone(otherDirection),
         borderCurve: "continuous",
-        borderRadius: 14,
+        borderRadius: radius.container,
         borderWidth: 1.5,
         flexDirection: "row",
         gap: 7,
         height: 50,
         justifyContent: "center",
-        opacity: busy ? 0.45 : pressed ? 0.6 : 1,
         paddingHorizontal: 16,
-      })}
+      }}
     >
       <SymbolView
         name={directionIcon(otherDirection)}
@@ -773,10 +799,10 @@ export function PersonOperationsScreen() {
         size={16}
         weight="semibold"
       />
-      <Text style={{ color: directionTone(otherDirection), fontSize: 15, fontWeight: "600" }}>
+      <Text style={{ ...type.subhead, color: directionTone(otherDirection), fontWeight: "600" }}>
         {directionLabel(otherDirection)}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 
   // Same warning row for both divergence cases: a past session that timed
@@ -792,21 +818,21 @@ export function PersonOperationsScreen() {
         size={13}
         accessible={false}
       />
-      <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
+      <Text style={{ ...type.footnote, color: colors.warning, fontWeight: "600" }}>
         {t("presenceActivityOpenIndicator")}
       </Text>
     </View>
   ) : divergence.secondary?.reason === "invalid-window" ? (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={t("presenceFixStaleSession")}
       onPress={() => openPresenceDraft(divergence.secondary!.kind, divergence.secondary!.at)}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         flexDirection: "row",
         gap: 6,
-        opacity: pressed ? 0.6 : 1,
-      })}
+      }}
     >
       <SymbolView
         name="exclamationmark.triangle.fill"
@@ -814,10 +840,10 @@ export function PersonOperationsScreen() {
         size={13}
         accessible={false}
       />
-      <Text style={{ color: colors.warning, fontSize: 13, fontWeight: "600" }}>
+      <Text style={{ ...type.footnote, color: colors.warning, fontWeight: "600" }}>
         {t("presenceFixStaleSession")}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   ) : null;
 
   const presenceRegisterSection =
@@ -831,7 +857,8 @@ export function PersonOperationsScreen() {
           {divergenceWarning}
         </View>
         <Separator />
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityRole="button"
           accessibilityLabel={t("presenceGuaranteedHours")}
           onPress={() => {
@@ -844,7 +871,7 @@ export function PersonOperationsScreen() {
               router.push({ pathname: "/scan/person/presence/[id]", params });
             }
           }}
-          style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          style={{}}
         >
           <InfoRow
             icon="checkmark.seal.fill"
@@ -853,15 +880,18 @@ export function PersonOperationsScreen() {
             accessoryIcon="chevron.right"
             valueStyle={{ color: colors.success, fontVariant: ["tabular-nums"], fontWeight: "700" }}
           />
-        </Pressable>
+        </PressableFeedback>
       </Section>
     ) : null;
 
   // The profile owns the visible heading while the transparent native header
   // owns the back action. Android has no `contentInsetAdjustmentBehavior` (an
   // iOS-only prop), so content there has to clear that header itself.
-  const contentPaddingTop =
-    process.env.EXPO_OS === "ios" ? 0 : insets.top + ANDROID_HEADER_CLEARANCE;
+  const contentPaddingTop = embedded
+    ? topInset + SCAN_DETAIL_TOP_GAP
+    : process.env.EXPO_OS === "ios"
+      ? 0
+      : insets.top + ANDROID_HEADER_CLEARANCE;
 
   return (
     <>
@@ -898,17 +928,22 @@ export function PersonOperationsScreen() {
         style={{ backgroundColor: colors.background, flex: 1 }}
       >
         <ScrollView
+          alwaysBounceVertical
           ref={scrollRef}
           {...trueTop.scrollProps}
-          contentInsetAdjustmentBehavior="automatic"
+          contentInsetAdjustmentBehavior={embedded ? "never" : "automatic"}
           contentContainerStyle={{
+            alignSelf: listColumn.alignSelf,
             gap: 22,
+            maxWidth: listColumn.maxWidth,
             paddingBottom: Math.max(40, tabBarBottomInset + 16),
             paddingHorizontal: CONTENT_PADDING,
+            width: listColumn.width,
             paddingTop: contentPaddingTop,
           }}
           onScroll={(event) => {
             scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+            onScrollOffset?.(event.nativeEvent.contentOffset.y);
             trueTop.scrollProps.onScroll(event);
           }}
           style={{ backgroundColor: colors.background, flex: 1 }}
@@ -918,22 +953,32 @@ export function PersonOperationsScreen() {
           ) : null}
 
           <View style={{ gap: 2 }}>
-            <Text
-              selectable
-              accessibilityRole="header"
-              numberOfLines={1}
-              style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
-            >
-              {fullName}
-            </Text>
+            {embedded ? (
+              <TitleReporter title={fullName} onTitle={onTitle} />
+            ) : (
+              <Text
+                selectable
+                accessibilityRole="header"
+                numberOfLines={1}
+                style={{ ...type.title, color: colors.label, fontWeight: "800" }}
+              >
+                {fullName}
+              </Text>
+            )}
             {person.email ? (
               <Text
                 selectable
                 numberOfLines={1}
-                style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                style={{ ...type.subhead, color: colors.secondaryLabel }}
               >
                 {person.email}
               </Text>
+            ) : null}
+            {rolePill && (sideRegion.edge || embedded) ? (
+              // The overlay below would cover the name beside a side column.
+              <View style={{ alignSelf: "flex-start", marginTop: 6 }}>
+                <StatusPill tone={rolePill.tone}>{rolePill.label}</StatusPill>
+              </View>
             ) : null}
           </View>
 
@@ -951,8 +996,8 @@ export function PersonOperationsScreen() {
                 <Separator />
                 <View
                   style={{
-                    borderBottomLeftRadius: 14,
-                    borderBottomRightRadius: 14,
+                    borderBottomLeftRadius: radius.container,
+                    borderBottomRightRadius: radius.container,
                     borderCurve: "continuous",
                     overflow: "hidden",
                   }}
@@ -1027,7 +1072,7 @@ export function PersonOperationsScreen() {
         </ScrollView>
       </View>
 
-      {rolePill ? (
+      {rolePill && !sideRegion.edge && !embedded ? (
         <View
           pointerEvents="none"
           style={{

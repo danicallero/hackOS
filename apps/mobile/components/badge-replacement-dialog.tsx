@@ -1,4 +1,4 @@
-// H22–H26: iOS uses its native Alert; Android supplies a Material dialog.
+// H22–H26: iOS uses its native Alert; Android draws the AlertHost dialog.
 export function BadgeReplacementDialog(_props: {
   visible: boolean;
   onSelect: (method: "qr" | "nfc") => void;

@@ -114,7 +114,10 @@ describe("staff-scan-stats.csv", () => {
     expect(res.body).toContain(
       "staff_id,name,surname,accreditation_count,presence_count,activity_count,total",
     );
-    const lines = res.body.trim().split("\r\n");
+    const lines = res.body
+      .replace(/^\uFEFF/, "")
+      .trim()
+      .split("\r\n");
     expect(lines[1]).toContain("Busy Operator");
     expect(lines[1]).toContain(",2,0,0,2");
     expect(lines[2]).toContain("Quiet Operator");

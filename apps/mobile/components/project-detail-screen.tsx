@@ -4,15 +4,22 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { HeaderHeightContext } from "expo-router/react-navigation";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollViewMarker } from "react-native-screens/experimental";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { DynamicForm } from "@/components/dynamic-form";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
+import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
 import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
@@ -20,44 +27,66 @@ import { createIdempotencyKey } from "@/lib/idempotency-key";
 import {
   type NativeProject,
   type ProjectFile,
+  parseNativeProject,
   projectMutation,
   settleProjectDrafts,
   trackProjectTask,
 } from "@/lib/projects";
+import { reportContent } from "@/lib/reports";
 import { useProjectDraft } from "@/lib/use-project-draft";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
+import { SCREEN_TITLE } from "@/theme/screen-title";
 
-export function ProjectDetailScreen() {
-  const { id, gallery } = useLocalSearchParams<{ id: string; gallery?: string }>();
+/**
+ * One project. As a route it owns its native header; `embedded` (the detail pane of a
+ * two-pane Gallery) takes the project from props and leaves the host's header alone.
+ */
+export function ProjectDetailScreen({
+  id: idProp,
+  gallery: galleryProp,
+  embedded = false,
+}: {
+  id?: string;
+  gallery?: string;
+  embedded?: boolean;
+}) {
+  const params = useLocalSearchParams<{ id: string; gallery?: string }>();
+  const id = idProp ?? params.id;
+  const gallery = galleryProp ?? params.gallery;
   const [project, setProject] = useState<NativeProject | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [epoch, setEpoch] = useState(0);
   const navigation = useNavigation();
   useEffect(() => {
-    if (project)
+    if (project && !embedded)
       navigation.setOptions({
         title: project.name,
         headerLargeTitle: true,
         headerLargeTitleShadowVisible: false,
         headerShadowVisible: false,
       });
-  }, [navigation, project]);
+  }, [navigation, project, embedded]);
+  // Quiet reload for pull-to-refresh and after actions: the screen keeps showing the project.
+  const refresh = useCallback(async () => {
+    // H20: saves and uploads from a previous visit land before the reload.
+    if (!gallery) await settleProjectDrafts(Number(id));
+    setProject(
+      parseNativeProject(
+        await apiFetch<unknown>(`${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`),
+      ),
+    );
+    setEpoch((current) => current + 1);
+  }, [id, gallery]);
   const load = useCallback(async () => {
     setProject(null);
     setError(null);
     try {
-      // H20: saves and uploads from a previous visit land before the reload.
-      if (!gallery) await settleProjectDrafts(Number(id));
-      setProject(
-        await apiFetch<NativeProject>(
-          `${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`,
-        ),
-      );
-      setEpoch((current) => current + 1);
+      await refresh();
     } catch (cause) {
       setError(cause as Error);
     }
-  }, [id, gallery]);
+  }, [refresh]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -85,65 +114,121 @@ export function ProjectDetailScreen() {
   }
   if (!project) return <RequestFeedback loading />;
   return gallery ? (
-    <ProjectReadView project={project} />
+    <ProjectReadView project={project} onRefresh={refresh} titleHeader={embedded} />
   ) : (
-    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={load} />
+    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} embedded={embedded} />
   );
 }
 
 /** H18/H60: display only server-approved photos and published winner fields. */
-export function ProjectReadView({ project }: { project: NativeProject }) {
+export function ProjectReadView({
+  project,
+  onRefresh,
+  titleHeader = false,
+}: {
+  project: NativeProject;
+  onRefresh?: () => Promise<void>;
+  /** The project's name as the first row of the scroll content (the detail pane of a two-pane Gallery). */
+  titleHeader?: boolean;
+}) {
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const router = useRouter();
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
+  const [refreshing, setRefreshing] = useState(false);
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
-      style={{ backgroundColor: colors.background }}
+    <ScrollViewMarker
+      style={{ flex: 1 }}
+      scrollEdgeEffects={
+        titleHeader
+          ? { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" }
+          : undefined
+      }
     >
-      {project.winners?.length ? (
-        <Section>
-          {project.winners.map((winner, index) => (
-            <View key={`${winner.challengeId}:${winner.rank}`}>
-              {index > 0 ? <Separator /> : null}
-              <InfoRow
-                icon="trophy.fill"
-                label={t("projectWinner")}
-                value={winner.challengeTitle ?? String(winner.rank)}
-              />
-            </View>
-          ))}
+      <ScrollView
+        refreshControl={
+          onRefresh ? (
+            <AppRefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void onRefresh()
+                  .catch(() => {})
+                  .finally(() => setRefreshing(false));
+              }}
+            />
+          ) : undefined
+        }
+        contentInsetAdjustmentBehavior={titleHeader ? "never" : "automatic"}
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: 32,
+          paddingTop: titleHeader ? Math.max(16, headerHeight - 52) : 16,
+        }}
+        style={{ backgroundColor: colors.background }}
+      >
+        {titleHeader ? (
+          <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+            {project.name}
+          </Text>
+        ) : null}
+        {project.winners?.length ? (
+          <Section>
+            {project.winners.map((winner, index) => (
+              <View key={`${winner.challengeId}:${winner.rank}`}>
+                {index > 0 ? <Separator /> : null}
+                <InfoRow
+                  icon="trophy.fill"
+                  label={t("projectWinner")}
+                  value={winner.challengeTitle ?? String(winner.rank)}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        <DynamicForm
+          template={project.template}
+          sections={project.sections}
+          responses={project.responses}
+          readOnly
+          files={project.files}
+        />
+        {project.githubUrl ? <ProjectRepoRow url={project.githubUrl} /> : null}
+        <Section title={t("projectTeam")}>
+          <ProjectMembers project={project} />
         </Section>
-      ) : null}
-      <DynamicForm
-        template={project.template}
-        sections={project.sections}
-        responses={project.responses}
-        readOnly
-        files={project.files}
-      />
-      <Section title={t("projectTeam")}>
-        <ProjectMembers project={project} />
-      </Section>
-      {project.challenges.length ? (
-        <Section title={t("projectChallenges")}>
-          {project.challenges.map((challenge, index) => (
-            <View key={challenge.id}>
-              {index > 0 ? <Separator /> : null}
-              <NavRow
-                title={challenge.title}
-                onPress={() =>
-                  router.push({
-                    pathname: "/projects/challenge",
-                    params: { challengeId: String(challenge.id) },
-                  })
-                }
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
-    </ScrollView>
+        {project.challenges.length ? (
+          <Section title={t("projectChallenges")}>
+            {project.challenges.map((challenge, index) => (
+              <View key={challenge.id}>
+                {index > 0 ? <Separator /> : null}
+                <NavRow
+                  title={challenge.title}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/projects/challenge",
+                      params: { challengeId: String(challenge.id) },
+                    })
+                  }
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {project.isMember ? null : (
+          <Section>
+            <ActionButton
+              label={t("reportContent")}
+              icon="flag"
+              destructive
+              onPress={() => reportContent({ projectId: project.id }, t)}
+            />
+          </Section>
+        )}
+      </ScrollView>
+    </ScrollViewMarker>
   );
 }
 
@@ -165,9 +250,11 @@ function ProjectMembers({ project }: { project: NativeProject }) {
             }}
           >
             <PersonAvatar size={40} name={member.name ?? "?"} uri={member.photoUrl ?? null} />
-            <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{member.name}</Text>
+            <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
+              {member.name}
+            </Text>
             {member.status && member.status !== "active" ? (
-              <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+              <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
                 {t(member.status === "invited" ? "projectInvited" : "projectDeclined")}
               </Text>
             ) : null}
@@ -189,25 +276,25 @@ function AddRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
-        backgroundColor: pressed ? colors.elevatedSurface : "transparent",
         flexDirection: "row",
         gap: 12,
         minHeight: 50,
         opacity: disabled ? 0.5 : 1,
         paddingHorizontal: 16,
-      })}
+      }}
     >
       <SymbolView name="plus.circle.fill" tintColor={colors.accent} size={22} accessible={false} />
-      <Text style={{ color: colors.accent, flex: 1, fontSize: 17 }}>{label}</Text>
-    </Pressable>
+      <Text style={{ color: colors.accent, flex: 1, fontSize: type.body.fontSize }}>{label}</Text>
+    </PressableFeedback>
   );
 }
 
@@ -250,11 +337,14 @@ async function pickDocument(field: TemplateField) {
 export function ProjectEditor({
   project,
   reload,
+  embedded = false,
 }: {
   project: NativeProject;
   reload: () => Promise<void>;
+  embedded?: boolean;
 }) {
   const { t, language } = useLocale();
+  const readable = useParticipantLayout("form");
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const draft = useProjectDraft(project);
@@ -294,6 +384,8 @@ export function ProjectEditor({
   const canEdit = project.canEdit === true;
   const blocked = busy || !canEdit || draft.state === "conflict";
   const submitted = project.submissionStatus === "submitted";
+  // A project that cannot be (re)submitted shows no action instead of a dead one.
+  const showSubmit = Boolean(project.canWithdraw) || (canEdit && project.canSubmit !== false);
   // The challenge and invite sheets change the project: refresh when returning.
   const refreshTeam = useCallback(() => {
     void apiFetch<NativeProject>(`/api/me/projects/${project.id}`)
@@ -316,6 +408,21 @@ export function ProjectEditor({
       setError(cause as Error);
     } finally {
       setBusy(false);
+    }
+  }
+  const [refreshing, setRefreshing] = useState(false);
+  async function pullRefresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      // Pending edits land first, so the reload cannot discard them.
+      await draft.flush();
+      await saveName(name);
+      await reload();
+    } catch (cause) {
+      setError(cause as Error);
+    } finally {
+      setRefreshing(false);
     }
   }
   async function upload(field: TemplateField) {
@@ -384,12 +491,21 @@ export function ProjectEditor({
       );
   return (
     <>
+      {embedded ? null : <EntryBackToolbar fallback="/(tabs)/queue" />}
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 96 + insets.bottom }}
+        refreshControl={
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} />
+        }
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: showSubmit ? 96 + insets.bottom : Math.max(32, insets.bottom + 16),
+        }}
       >
         <Section
           footer={deadline ? `${saveCaption} · ${t("projectDeadline")}: ${deadline}` : saveCaption}
@@ -402,7 +518,12 @@ export function ProjectEditor({
               onEndEditing={() => void saveName(name).catch((cause) => setError(cause as Error))}
               editable={!blocked}
               returnKeyType="done"
-              style={{ color: colors.label, fontSize: 17, minHeight: 28, padding: 0 }}
+              style={{
+                color: colors.label,
+                fontSize: type.body.fontSize,
+                minHeight: 28,
+                padding: 0,
+              }}
             />
           </FieldRow>
         </Section>
@@ -415,6 +536,11 @@ export function ProjectEditor({
           uploading={uploading}
           onChange={draft.change}
           onUpload={(field) => void upload(field)}
+        />
+        <ProjectGithubLink
+          projectId={project.id}
+          repoUrl={project.githubUrl}
+          locked={submitted || !canEdit}
         />
         <Section title={t("projectChallenges")}>
           {chosen.map((challenge) => (
@@ -470,7 +596,7 @@ export function ProjectEditor({
             destructive
             disabled={busy}
             onPress={() =>
-              Alert.alert(t("projectLeave"), t("projectLeaveConfirm"), [
+              alert(t("projectLeave"), t("projectLeaveConfirm"), [
                 { text: t("cancel"), style: "cancel" },
                 {
                   text: t("projectLeave"),
@@ -486,46 +612,53 @@ export function ProjectEditor({
           />
         </Section>
       </ScrollView>
-      <View
-        pointerEvents="box-none"
-        style={{
-          bottom: Math.max(insets.bottom, 12),
-          left: 16,
-          position: "absolute",
-          right: 16,
-        }}
-      >
-        {project.canWithdraw ? (
-          <GlassButton
-            label={t("projectWithdraw")}
-            prominent
-            disabled={busy}
-            busy={busy}
-            onPress={() =>
-              Alert.alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
-                { text: t("cancel"), style: "cancel" },
-                {
-                  text: t("projectWithdraw"),
-                  onPress: () =>
-                    void run(() =>
-                      projectMutation(`/api/me/projects/${project.id}/withdraw-submission`, "POST"),
-                    ),
-                },
-              ])
-            }
-          />
-        ) : (
-          <GlassButton
-            label={t(submitted ? "projectResubmit" : "projectSubmit")}
-            prominent
-            disabled={blocked || uploading !== null || !name.trim() || project.canSubmit === false}
-            busy={busy}
-            onPress={() =>
-              void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
-            }
-          />
-        )}
-      </View>
+      {showSubmit ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            bottom: Math.max(insets.bottom, 12),
+            left: 16,
+            position: "absolute",
+            right: 16,
+          }}
+        >
+          {project.canWithdraw ? (
+            <GlassButton
+              label={t("projectWithdraw")}
+              prominent
+              disabled={busy}
+              busy={busy}
+              onPress={() =>
+                alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
+                  { text: t("cancel"), style: "cancel" },
+                  {
+                    text: t("projectWithdraw"),
+                    onPress: () =>
+                      void run(() =>
+                        projectMutation(
+                          `/api/me/projects/${project.id}/withdraw-submission`,
+                          "POST",
+                        ),
+                      ),
+                  },
+                ])
+              }
+            />
+          ) : (
+            <GlassButton
+              label={t(submitted ? "projectResubmit" : "projectSubmit")}
+              prominent
+              disabled={
+                blocked || uploading !== null || !name.trim() || project.canSubmit === false
+              }
+              busy={busy}
+              onPress={() =>
+                void run(() => projectMutation(`/api/me/projects/${project.id}/submit`, "POST"))
+              }
+            />
+          )}
+        </View>
+      ) : null}
     </>
   );
 }

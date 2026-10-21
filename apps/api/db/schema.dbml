@@ -355,6 +355,22 @@ Table check_in_logs {
   user_id integer
 }
 
+Table content_reports {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  details text [note: 'H18: optional free text from the reporter, at most 500 characters; visible to moderating staff only.']
+  id integer [pk, increment, not null]
+  reason text [not null]
+  repo_id integer
+  reporter_id integer [not null]
+  resolved_at "timestamp with time zone"
+  resolved_by integer
+  status text [not null, default: `'open'::text`]
+  target_user_id integer
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'H18 attendee reports of a project or public profile for organiser review; content is read live, never copied.'
+}
+
 Table data_subject_requests {
   completed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -941,13 +957,19 @@ Table review_fixture_accounts {
 Table review_fixture_queues {
   challenge_id integer [unique]
   created_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
-  enterprise_id integer [unique]
-  fixture_key text [pk, not null]
+  enterprise_id integer
+  fixture_key text [not null]
   generation integer [not null]
   queue_entry_id integer [unique]
   repo_id integer [unique]
+  room_id integer [unique, note: 'H18: synthetic judging room owned by the fixture; deleted only after its inferred scope is verified synthetic-only.']
+  slot text [not null, default: `'main'::text`, note: 'H18: which of the account\'s synthetic projects the pointers describe; \'main\' is the original single-project graph.']
   sponsor_id integer [unique]
   updated_at "timestamp with time zone" [not null, default: `clock_timestamp()`]
+
+  indexes {
+  (fixture_key, slot) [pk]
+  }
 
   Note: 'Current synthetic queue/project pointers; never use as a participant-to-anonymous mapping.'
 }
@@ -1446,6 +1468,10 @@ Ref: challenge_winners.set_by > users.id
 Ref: challenges.author > sponsors.id
 Ref: check_in_logs.staff_id > users.id
 Ref: check_in_logs.user_id > users.id
+Ref: content_reports.repo_id > repos.id
+Ref: content_reports.reporter_id > users.id
+Ref: content_reports.resolved_by > users.id
+Ref: content_reports.target_user_id > users.id
 Ref: data_subject_requests.requested_by > users.id
 Ref: data_subject_requests.subject_user_id > users.id
 Ref: diary_entries.enterprise_id > enterprises.id
@@ -1518,6 +1544,7 @@ Ref: review_fixture_queues.enterprise_id > enterprises.id
 Ref: review_fixture_queues.fixture_key > review_fixture_accounts.fixture_key
 Ref: review_fixture_queues.queue_entry_id > queue_entries.id
 Ref: review_fixture_queues.repo_id > repos.id
+Ref: review_fixture_queues.room_id > rooms.id
 Ref: review_fixture_queues.sponsor_id > sponsors.id
 Ref: role_capabilities.role_id > roles.id
 Ref: role_grant_rules.enterprise_id > enterprises.id

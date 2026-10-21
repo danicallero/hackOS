@@ -1,20 +1,12 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  useColorScheme,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { ScrollView, Text, TextInput, useColorScheme, View, type ViewStyle } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { SheetModal } from "@/components/app-sheet";
 import { DateTimeField } from "@/components/date-time-field";
 import {
   ActionButton,
@@ -24,8 +16,10 @@ import {
   Separator,
   StatusPill,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { eventDayKey, formatEventTime } from "@/lib/event-time";
 import { haptic } from "@/lib/haptics";
@@ -36,6 +30,7 @@ import { enqueueLocalScan, pendingScans } from "@/lib/scanner-db";
 import type { ScanPayload } from "@/lib/scanner-types";
 import { has } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
 
 export type SignalKind = "in" | "out" | "activity";
@@ -183,7 +178,7 @@ export function PresenceManagement({
   }
 
   function confirmDelete(signal: PresenceSignal) {
-    Alert.alert(t("presenceDeleteSignal"), t("presenceDeleteConfirm"), [
+    alert(t("presenceDeleteSignal"), t("presenceDeleteConfirm"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("delete"),
@@ -210,7 +205,7 @@ export function PresenceManagement({
             const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
             if (stored?.status === "failed") {
               void haptic("error");
-              Alert.alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
+              alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
             } else {
               void haptic("warning");
             }
@@ -264,7 +259,7 @@ export function PresenceManagement({
             <>
               <Separator />
               <View style={{ alignItems: "center", minHeight: 110, justifyContent: "center" }}>
-                <ActivityIndicator color={colors.accent} />
+                <AppActivityIndicator color={colors.accent} />
               </View>
             </>
           ) : error && !timeline ? (
@@ -290,8 +285,9 @@ export function PresenceManagement({
                   selectable
                   accessibilityRole="header"
                   style={{
+                    ...type.callout,
                     color: colors.label,
-                    fontSize: 16,
+
                     fontWeight: "700",
                     textAlign: "center",
                   }}
@@ -301,8 +297,9 @@ export function PresenceManagement({
                 <Text
                   selectable
                   style={{
+                    ...type.compact,
                     color: colors.secondaryLabel,
-                    fontSize: 14,
+
                     lineHeight: 19,
                     textAlign: "center",
                   }}
@@ -327,8 +324,9 @@ export function PresenceManagement({
               <Text
                 selectable
                 style={{
+                  ...type.footnote,
                   color: colors.secondaryLabel,
-                  fontSize: 13,
+
                   fontWeight: "700",
                   letterSpacing: 0.4,
                   textTransform: "uppercase",
@@ -336,7 +334,7 @@ export function PresenceManagement({
               >
                 {group.label}
               </Text>
-              <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>
+              <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
                 {group.items.length === 1
                   ? t("presenceRecordsCountOne", { count: "1" })
                   : t("presenceRecordsCountOther", { count: String(group.items.length) })}
@@ -364,8 +362,9 @@ export function PresenceManagement({
           <Text
             selectable
             style={{
+              ...type.footnote,
               color: colors.secondaryLabel,
-              fontSize: 13,
+
               lineHeight: 18,
               paddingHorizontal: 16,
             }}
@@ -377,8 +376,9 @@ export function PresenceManagement({
           <Text
             selectable
             style={{
+              ...type.footnote,
               color: colors.secondaryLabel,
-              fontSize: 13,
+
               lineHeight: 18,
               paddingHorizontal: 16,
             }}
@@ -489,48 +489,48 @@ function SignalCardActions({ onEdit, onDelete }: { onEdit: () => void; onDelete:
   const { t } = useLocale();
   return (
     <View style={{ flexDirection: "row", height: "100%" }}>
-      <Pressable
+      <PressableFeedback
+        feedback="scale"
         accessibilityRole="button"
         accessibilityLabel={t("edit")}
         onPress={() => {
           void haptic("light");
           onEdit();
         }}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.accent,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           width: 74,
-        })}
+        }}
       >
         <SymbolView name="pencil" tintColor="white" size={18} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+        <Text style={{ ...type.caption, color: "white", fontWeight: "700", marginTop: 4 }}>
           {t("edit")}
         </Text>
-      </Pressable>
-      <Pressable
+      </PressableFeedback>
+      <PressableFeedback
+        feedback="scale"
         accessibilityRole="button"
         accessibilityLabel={t("delete")}
         onPress={() => {
           void haptic("warning");
           onDelete();
         }}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.destructive,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           width: 74,
-        })}
+        }}
       >
         <SymbolView name="trash.fill" tintColor="white" size={18} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700", marginTop: 4 }}>
+        <Text style={{ ...type.caption, color: "white", fontWeight: "700", marginTop: 4 }}>
           {t("delete")}
         </Text>
-      </Pressable>
+      </PressableFeedback>
     </View>
   );
 }
@@ -600,7 +600,7 @@ function SignalCard({
             alignItems: "center",
             backgroundColor: background,
             borderCurve: "continuous",
-            borderRadius: 8,
+            borderRadius: radius.chip,
             height: 30,
             justifyContent: "center",
             width: 30,
@@ -612,12 +612,14 @@ function SignalCard({
           <Text
             selectable
             numberOfLines={1}
-            style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+            style={{ ...type.body, color: colors.label, fontWeight: "600" }}
           >
             {title}
           </Text>
           {focused ? (
-            <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "600", marginTop: 1 }}>
+            <Text
+              style={{ ...type.caption, color: colors.accent, fontWeight: "600", marginTop: 1 }}
+            >
               {t("presenceOpenedFromHistory")}
             </Text>
           ) : null}
@@ -625,7 +627,7 @@ function SignalCard({
             <Text
               selectable
               numberOfLines={1}
-              style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
+              style={{ ...type.caption, color: colors.tertiaryLabel, marginTop: 1 }}
             >
               {t("presenceRecordedBy", { name: recordedBy })}
             </Text>
@@ -633,7 +635,7 @@ function SignalCard({
             <Text
               selectable
               numberOfLines={1}
-              style={{ color: colors.tertiaryLabel, fontSize: 12, marginTop: 1 }}
+              style={{ ...type.caption, color: colors.tertiaryLabel, marginTop: 1 }}
             >
               {t("presenceRecordedBySystem")}
             </Text>
@@ -641,8 +643,9 @@ function SignalCard({
         </View>
         <Text
           style={{
+            ...type.subhead,
             color: colors.secondaryLabel,
-            fontSize: 15,
+
             fontVariant: ["tabular-nums"],
           }}
         >
@@ -657,7 +660,7 @@ function SignalCard({
               style={{
                 backgroundColor: colors.elevatedSurface,
                 borderCurve: "continuous",
-                borderRadius: 999,
+                borderRadius: radius.full,
                 flex: 1,
                 height: 4,
                 overflow: "hidden",
@@ -679,8 +682,9 @@ function SignalCard({
             ) : (
               <Text
                 style={{
+                  ...type.footnote,
                   color: colors.secondaryLabel,
-                  fontSize: 13,
+
                   fontVariant: ["tabular-nums"],
                 }}
               >
@@ -696,7 +700,7 @@ function SignalCard({
         {showHint ? (
           <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
             <SymbolView name="clock" tintColor={colors.accent} size={13} accessible={false} />
-            <Text style={{ color: colors.accent, flex: 1, fontSize: 12 }}>
+            <Text style={{ ...type.caption, color: colors.accent, flex: 1 }}>
               {t("presenceSecureTimeHint")}
             </Text>
           </View>
@@ -719,7 +723,7 @@ function SignalCard({
       style={{
         borderColor: focused ? colors.accent : colors.transparent,
         borderCurve: "continuous",
-        borderRadius: 14,
+        borderRadius: radius.container,
         borderWidth: focused ? 1 : 0,
         overflow: "hidden",
       }}
@@ -794,7 +798,6 @@ function ActivityPicker({
 }) {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -808,50 +811,51 @@ function ActivityPicker({
 
   return (
     <>
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={t("presenceChooseActivity")}
         onPress={() => {
           setQuery("");
           setOpen(true);
         }}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           flexDirection: "row",
           gap: 12,
           minHeight: 50,
-          opacity: pressed ? 0.6 : 1,
           padding: 16,
-        })}
+        }}
       >
-        <Text selectable numberOfLines={1} style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+        <Text
+          selectable
+          numberOfLines={1}
+          style={{ ...type.callout, color: colors.label, flex: 1 }}
+        >
           {selected ? `${selected.name} · ${selected.category}` : t("presenceChooseActivity")}
         </Text>
         <SymbolView name="chevron.up.chevron.down" tintColor={colors.secondaryLabel} size={15} />
-      </Pressable>
+      </PressableFeedback>
 
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-        presentationStyle="pageSheet"
-        visible={open}
-      >
-        <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      <SheetModal animationType="slide" onRequestClose={() => setOpen(false)} visible={open}>
+        <AdaptiveFrame>
           <ScrollView
+            alwaysBounceVertical
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
               gap: 22,
               padding: 16,
               paddingBottom: Math.max(32, insets.bottom + 16),
-              paddingTop: 16 + sheetTopInset,
+              paddingTop: 16,
             }}
           >
             <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
               <Text
                 style={{
+                  ...type.title3,
                   color: colors.label,
-                  fontSize: 20,
+
                   fontWeight: "700",
                   textAlign: "center",
                 }}
@@ -869,7 +873,7 @@ function ActivityPicker({
                 onChangeText={setQuery}
                 placeholder={t("scannerActivitiesSearchPlaceholder")}
                 placeholderTextColor={colors.tertiaryLabel}
-                style={{ color: colors.label, fontSize: 16, padding: 16 }}
+                style={{ ...type.callout, color: colors.label, padding: 16 }}
                 value={query}
               />
             </Section>
@@ -883,7 +887,8 @@ function ActivityPicker({
                 {filtered.map((activity, index) => (
                   <View key={activity.id}>
                     {index > 0 ? <Separator /> : null}
-                    <Pressable
+                    <PressableFeedback
+                      feedback="opacity"
                       accessibilityRole="button"
                       accessibilityState={{ selected: activity.id === selectedId }}
                       onPress={() => {
@@ -891,25 +896,24 @@ function ActivityPicker({
                         onSelect(activity.id);
                         setOpen(false);
                       }}
-                      style={({ pressed }) => ({
+                      style={{
                         alignItems: "center",
                         flexDirection: "row",
                         gap: 12,
                         minHeight: 50,
-                        opacity: pressed ? 0.6 : 1,
                         padding: 16,
-                      })}
+                      }}
                     >
                       <Text
                         numberOfLines={1}
-                        style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                        style={{ ...type.callout, color: colors.label, flex: 1 }}
                       >
                         {`${activity.name} · ${activity.category}`}
                       </Text>
                       {activity.id === selectedId ? (
                         <SymbolView name="checkmark" tintColor={colors.accent} size={15} />
                       ) : null}
-                    </Pressable>
+                    </PressableFeedback>
                   </View>
                 ))}
               </Section>
@@ -917,14 +921,14 @@ function ActivityPicker({
           </ScrollView>
 
           <FloatingGlassButton
-            top={16 + sheetTopInset}
+            top={16}
             side="left"
             icon="xmark"
             accessibilityLabel={t("close")}
             onPress={() => setOpen(false)}
           />
-        </View>
-      </Modal>
+        </AdaptiveFrame>
+      </SheetModal>
     </>
   );
 }
@@ -951,10 +955,6 @@ function SignalEditor({
   useColorScheme();
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
-  // `presentationStyle="pageSheet"` is an iOS presentation: on Android the
-  // modal is a plain full-screen window, so its own chrome has to clear the
-  // status bar instead of starting inside an inset card.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -994,22 +994,28 @@ function SignalEditor({
   };
 
   return (
-    <Modal animationType="slide" onRequestClose={onClose} presentationStyle="pageSheet">
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
+    <SheetModal animationType="slide" onRequestClose={onClose}>
+      <AdaptiveFrame>
         <ScrollView
+          alwaysBounceVertical
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             gap: 22,
             padding: 16,
             paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16 + sheetTopInset,
+            paddingTop: 16,
           }}
         >
           <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
             <Text
               selectable
-              style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+              style={{
+                ...type.title3,
+                color: colors.label,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
             >
               {draft.signal ? t("presenceEditSignal") : t("presenceAddSignal")}
             </Text>
@@ -1021,8 +1027,9 @@ function SignalEditor({
                 selectable
                 accessibilityRole="header"
                 style={{
+                  ...type.footnote,
                   color: colors.secondaryLabel,
-                  fontSize: 13,
+
                   fontWeight: "600",
                   paddingHorizontal: 16,
                 }}
@@ -1074,8 +1081,9 @@ function SignalEditor({
               placeholder={t("presenceNotesPlaceholder")}
               placeholderTextColor={colors.tertiaryLabel}
               style={{
+                ...type.callout,
                 color: colors.label,
-                fontSize: 16,
+
                 lineHeight: 22,
                 minHeight: 110,
                 padding: 16,
@@ -1088,7 +1096,7 @@ function SignalEditor({
           {error ? (
             <Text
               selectable
-              style={{ color: colors.destructive, fontSize: 14, textAlign: "center" }}
+              style={{ ...type.compact, color: colors.destructive, textAlign: "center" }}
             >
               {error}
             </Text>
@@ -1096,14 +1104,14 @@ function SignalEditor({
         </ScrollView>
 
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="left"
           icon="xmark"
           accessibilityLabel={t("cancel")}
           onPress={onClose}
         />
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="right"
           icon="checkmark"
           tintColor={colors.accent}
@@ -1112,8 +1120,8 @@ function SignalEditor({
           disabled={saving}
           onPress={() => void save()}
         />
-      </View>
-    </Modal>
+      </AdaptiveFrame>
+    </SheetModal>
   );
 }
 

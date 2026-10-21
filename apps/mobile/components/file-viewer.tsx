@@ -2,8 +2,9 @@ import { File, Paths } from "expo-file-system";
 import { Image } from "expo-image";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Modal, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollView, Text, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { SheetModal } from "@/components/app-sheet";
 import { EmptyState, FloatingGlassButton } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { getCurrentSessionCookie } from "@/lib/api";
@@ -57,10 +58,6 @@ export function FileViewer({
   testID?: string;
 }) {
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
-  // A pageSheet on iOS starts below the status bar; on Android the same
-  // Modal is full screen, so its chrome clears the status bar itself.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [state, setState] = useState<ViewerState>({ status: "loading" });
   const [Pdf, setPdf] = useState<PdfComponent | null>(null);
   const [pdfReaderUnavailable, setPdfReaderUnavailable] = useState(false);
@@ -132,20 +129,14 @@ export function FileViewer({
   );
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
+    <SheetModal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View testID={testID} style={{ backgroundColor: colors.background, flex: 1 }}>
         <View
           style={{
             alignItems: "center",
-            height: HEADER_HEIGHT + sheetTopInset,
+            height: HEADER_HEIGHT,
             justifyContent: "center",
             paddingHorizontal: 72,
-            paddingTop: sheetTopInset,
           }}
         >
           <Text
@@ -170,7 +161,9 @@ export function FileViewer({
                 spacing={12}
                 fitPolicy={0}
                 onError={() => setState({ status: "error" })}
-                renderActivityIndicator={() => <ActivityIndicator color={colors.secondaryLabel} />}
+                renderActivityIndicator={() => (
+                  <AppActivityIndicator color={colors.secondaryLabel} />
+                )}
                 style={{ backgroundColor: colors.background, flex: 1 }}
               />
             ) : (
@@ -204,7 +197,7 @@ export function FileViewer({
           )}
         </View>
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="left"
           icon="xmark"
           accessibilityLabel={t("close")}
@@ -212,7 +205,7 @@ export function FileViewer({
         />
         {state.status === "ready" ? (
           <FloatingGlassButton
-            top={16 + sheetTopInset}
+            top={16}
             side="right"
             icon="square.and.arrow.up"
             accessibilityLabel={shareLabel}
@@ -220,6 +213,6 @@ export function FileViewer({
           />
         ) : null}
       </View>
-    </Modal>
+    </SheetModal>
   );
 }

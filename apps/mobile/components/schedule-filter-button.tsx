@@ -20,7 +20,7 @@ function audienceFilterLabel(audience: AudienceFilterValue, t: ReturnType<typeof
 }
 
 /** Schedule kind and audience multi-select share the persistent filter menu (H59). */
-export function ScheduleFilterButton({
+export function useScheduleFilterMenu({
   kinds,
   selectedKinds,
   onToggleKind,
@@ -74,4 +74,9 @@ export function ScheduleFilterButton({
       }}
     />
   );
+}
+
+/** The same filter as a component, for screens that render it as a plain child. */
+export function ScheduleFilterButton(props: Parameters<typeof useScheduleFilterMenu>[0]) {
+  return useScheduleFilterMenu(props);
 }

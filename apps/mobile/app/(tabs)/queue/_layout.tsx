@@ -1,6 +1,6 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
-import { nativeStackScreenOptions } from "@/lib/navigation";
+import { useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 /**
@@ -9,16 +9,17 @@ import { colors } from "@/theme/colors";
  * invitation inbox is a pushed list.
  */
 export default function QueueLayout() {
+  const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
   const header = {
-    contentStyle: { backgroundColor: colors.background },
+    contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
     headerShadowVisible: false,
   };
   return (
     <Stack
       screenOptions={{
-        ...nativeStackScreenOptions,
-        contentStyle: { backgroundColor: colors.background },
+        ...stackScreenOptions,
+        contentStyle: { ...stackScreenOptions.contentStyle, backgroundColor: colors.background },
       }}
     >
       <Stack.Screen name="index" />

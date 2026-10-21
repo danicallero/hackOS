@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { GlassView } from "@/components/glass-view";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-import { colors } from "@/theme/colors";
+import { colors, MIN_TARGET, radius, space, type } from "@/theme";
 
 /**
  * Inset-grouped list row in the Settings/Mail mould: title, optional
@@ -27,32 +29,32 @@ export function NavRow({
   chevron?: boolean;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? [title, ...lines, value].filter(Boolean).join(", ")}
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
-        backgroundColor: pressed ? colors.elevatedSurface : "transparent",
         flexDirection: "row",
-        gap: 12,
+        gap: space.md,
         minHeight: 56,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-      })}
+        paddingHorizontal: space.lg,
+        paddingVertical: space.row,
+      }}
     >
       {icon ? (
         <SymbolView name={icon} tintColor={colors.accent} size={22} accessible={false} />
       ) : null}
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ alignItems: "baseline", flexDirection: "row", gap: 12 }}>
-          <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{title}</Text>
+          <Text style={[type.body, { color: colors.label, flex: 1 }]}>{title}</Text>
           {value ? (
-            <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>{value}</Text>
+            <Text style={[type.subhead, { color: colors.secondaryLabel }]}>{value}</Text>
           ) : null}
         </View>
         {lines.map((line) => (
-          <Text key={line} style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          <Text key={line} style={[type.compact, { color: colors.secondaryLabel }]}>
             {line}
           </Text>
         ))}
@@ -66,7 +68,7 @@ export function NavRow({
           accessible={false}
         />
       ) : null}
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -109,29 +111,17 @@ export function RowButton({
   destructive?: boolean;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
-        justifyContent: "center",
-        minHeight: 44,
-        opacity: disabled ? 0.4 : pressed ? 0.6 : 1,
-        paddingHorizontal: 4,
-      })}
+      style={{ justifyContent: "center", minHeight: MIN_TARGET, paddingHorizontal: space.xxs }}
     >
-      <Text
-        style={{
-          color: destructive ? colors.destructive : colors.accent,
-          fontSize: 17,
-          fontWeight: "600",
-        }}
-      >
+      <Text style={[type.headline, { color: destructive ? colors.destructive : colors.accent }]}>
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -162,7 +152,7 @@ export function GlassButton({
       isInteractive={!inactive}
       tintColor={prominent ? colors.accent : undefined}
       style={[
-        { borderCurve: "continuous", borderRadius: 999, opacity: disabled ? 0.45 : 1 },
+        { borderCurve: "continuous", borderRadius: radius.full, opacity: disabled ? 0.45 : 1 },
         style,
       ]}
     >
@@ -182,7 +172,7 @@ export function GlassButton({
         }}
       >
         {busy ? (
-          <ActivityIndicator color={prominent ? colors.primaryActionText : colors.accent} />
+          <AppActivityIndicator color={prominent ? colors.primaryActionText : colors.accent} />
         ) : null}
         <Text
           style={{

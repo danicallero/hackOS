@@ -1,13 +1,7 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import {
-  RefreshControl,
-  ScrollView,
-  Text,
-  type TextStyle,
-  useColorScheme,
-  View,
-} from "react-native";
+import { ScrollView, Text, type TextStyle, useColorScheme, View } from "react-native";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -109,7 +103,9 @@ export default function StatisticsScreen() {
         padding: 16,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
       <Text
         style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, paddingHorizontal: 4 }}

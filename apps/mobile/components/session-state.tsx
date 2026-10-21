@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
 
 import { AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { forceLocalSignOut } from "@/lib/auth-client";
@@ -51,7 +52,7 @@ export function SessionState({
           accessibilityRole="progressbar"
           style={{ alignItems: "center", gap: 18 }}
         >
-          <ActivityIndicator color={colors.interactiveText} size="large" />
+          <AppActivityIndicator color={colors.interactiveText} size="large" />
           <View style={{ alignItems: "center", gap: 6 }}>
             <Text
               selectable
