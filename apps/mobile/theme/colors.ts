@@ -84,6 +84,12 @@ const SPECS = {
     android: () => schemeHex("#c6c6c8", "#38383a"),
     web: "#d1d1d6",
   },
+  /** Pointer hover wash for `row` controls (iPad/Mac pointer, Android mouse). */
+  hover: {
+    ios: () => Color.ios.quaternarySystemFill,
+    android: () => schemeHex("rgba(120, 120, 128, 0.12)", "rgba(120, 120, 128, 0.24)"),
+    web: "rgba(120, 120, 128, 0.12)",
+  },
   accent: {
     ios: () => Color.ios.systemBlue,
     android: () => schemeHex("#007aff", "#0a84ff"),
@@ -185,6 +191,7 @@ type Palette = { [K in keyof typeof SPECS]: ColorValue } & {
   transparent: string;
   invisibleHitTarget: string;
   controlShadow: string;
+  scrim: string;
   qrBackground: string;
   glassLightSurface: string;
   glassDarkSurface: string;
@@ -211,6 +218,7 @@ function buildPalette(): Palette {
     transparent: "transparent",
     invisibleHitTarget: "rgba(0, 0, 0, 0.001)",
     controlShadow: "0 1px 2px rgba(0, 0, 0, 0.14)",
+    scrim: "rgba(0, 0, 0, 0.4)",
     qrBackground: "#ffffff",
     glassLightSurface,
     glassDarkSurface,
