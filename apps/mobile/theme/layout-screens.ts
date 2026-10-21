@@ -10,13 +10,13 @@ import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { readableContentWidth, screenGutter } from "@/theme/layout";
 
 /** Widest the scanner body column grows per size class; wider windows centre the column. */
-export const OPERATOR_COLUMN_MAX = { compact: 440, medium: 520, expanded: 600 } as const;
+export const OPERATOR_COLUMN_MAX = { compact: 440, medium: 520, expanded: 720 } as const;
 
 /** The column holds the stat block on one row from this width (primary + two equal columns). */
 export const STAT_ROW_MIN_WIDTH = 440;
 
-/** Three labelled actions sit side by side from this column width (three 160pt buttons + gaps). */
-export const ACTION_ROW_MIN_WIDTH = 504;
+/** Three labelled actions sit side by side from this column width (three 220pt buttons + gaps), so "Enter code manually" never wraps. */
+export const ACTION_ROW_MIN_WIDTH = 680;
 
 /** Below this window height the reader surface shrinks and the whole body scrolls. */
 export const OPERATOR_SHORT_HEIGHT = 520;

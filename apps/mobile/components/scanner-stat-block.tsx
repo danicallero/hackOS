@@ -36,6 +36,7 @@ export function ScannerStatBlock({
     <View
       style={{
         borderBottomColor: colors.separator,
+        alignItems: row ? "flex-end" : undefined,
         borderBottomWidth: 1,
         flexDirection: row ? "row" : "column",
         gap: row ? 16 : 24,
