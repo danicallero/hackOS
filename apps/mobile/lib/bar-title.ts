@@ -8,7 +8,9 @@ import { SCREEN_TITLE } from "@/theme/screen-title";
  * every other top-level title (Schedule, Scanner, Activities, Contacts), not a row lower.
  */
 export function useBarTitleOptions(title: string) {
-  const compact = Boolean(useSideRegion().edge);
+  const side = useSideRegion();
+  // A tablet rail is a side column too: the title shares the bar row with the other tabs' titles.
+  const compact = Boolean(side.edge) || side.tabletRail;
   return compact
     ? ({
         title,

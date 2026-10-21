@@ -11,6 +11,8 @@ let mockNativeToolbar = true;
 let mockSafeTop = 62;
 const originalOS = Platform.OS;
 jest.mock("expo-router", () => ({
+  // `lib/navigation` reads the theme palette, which resolves UIKit semantic colours at import.
+  Color: { ios: new Proxy({}, { get: () => "#000000" }) },
   useRouter: () => ({ back: mockBack, replace: mockReplace, canGoBack: () => mockCanGoBack }),
 }));
 jest.mock("expo-router/stack", () => ({

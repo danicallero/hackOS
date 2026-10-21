@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { Platform } from "react-native";
 import { useSideRegion } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
+import { colors } from "@/theme/colors";
 
 /**
  * Shared `screenOptions` for every native Stack. iOS 26 draws a chevron-only
@@ -33,7 +34,9 @@ export function useTabStackScreenOptions() {
     () => ({
       ...nativeStackScreenOptions,
       // H55: the tablet TabSlot already clears its sidebar, including native headers.
+      // One page colour for every tab screen (not the fixed-black navigation canvas).
       contentStyle: {
+        backgroundColor: colors.background,
         paddingLeft: (side.tabletRail || slotPadsSide) && side.edge === "left" ? 0 : left,
         paddingRight: (side.tabletRail || slotPadsSide) && side.edge === "right" ? 0 : right,
       },

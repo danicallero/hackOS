@@ -89,3 +89,12 @@ describe("participantLayout", () => {
     expect(participantLayout(390, 1, "list").stacked).toBe(false);
   });
 });
+
+describe("participantLayout form alignment (H55, R028)", () => {
+  it("starts a form at the leading edge in an expanded window, centres it elsewhere", () => {
+    const { participantLayout } = require("@/theme/layout-participant");
+    expect(participantLayout(1400, 1, "form").content.alignSelf).toBe("flex-start");
+    expect(participantLayout(1400, 1, "list").content.alignSelf).toBe("center");
+    expect(participantLayout(700, 1, "form").content.alignSelf).toBe("center");
+  });
+});
