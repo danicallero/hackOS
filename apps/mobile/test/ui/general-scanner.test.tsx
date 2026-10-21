@@ -27,9 +27,13 @@ jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => false,
 }));
 jest.mock("@/components/QrCamera", () => ({
-  QrCamera: (props: unknown) => {
+  QrCamera: (props: { surfaceHeader?: (layout: unknown) => unknown }) => {
     mockCameraProps(props);
-    return null;
+    // The stats ride in the camera surface's header, so the mock renders it.
+    const { operatorLayout } = jest.requireActual("@/theme/layout-screens");
+    return props.surfaceHeader?.(
+      operatorLayout({ windowWidth: 390, windowHeight: 844, fontScale: 1, columnWidth: null }),
+    );
   },
 }));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));

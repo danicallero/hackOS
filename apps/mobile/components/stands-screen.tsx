@@ -1,15 +1,9 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   AndroidStatusBarScrim,
@@ -144,7 +138,7 @@ export function StandsScreen() {
       contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       refreshControl={
-        <RefreshControl
+        <AppRefreshControl
           refreshing={refreshing}
           onRefresh={async () => {
             setRefreshing(true);
@@ -339,7 +333,7 @@ function StandRow({
           }}
         >
           {busy ? (
-            <ActivityIndicator color={colors.onAccentSurface} size="small" />
+            <AppActivityIndicator color={colors.onAccentSurface} size="small" />
           ) : (
             <SymbolView
               accessible={false}

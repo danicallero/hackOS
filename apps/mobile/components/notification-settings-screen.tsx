@@ -2,8 +2,9 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useLayoutEffect, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { ManageAnnouncementsView } from "@/components/announcement-manage-view";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   InfoRow,
@@ -12,6 +13,7 @@ import {
   Separator,
   ToggleRow,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScheduleReminderSections, useScheduleReminders } from "@/components/reminders-view";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -25,6 +27,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { has } from "@/lib/tabs";
 import { useHeaderSearch } from "@/lib/use-header-search";
 import { useNotificationPreferences } from "@/lib/use-notification-preferences";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 type Translate = ReturnType<typeof useLocale>["t"];
 
@@ -72,9 +75,11 @@ function categoryChannels(category: NotificationCategory, channels: Notification
 
 function useScrollContentStyle() {
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
+  const readable = useParticipantLayout("form");
   return {
     gap: 20,
-    padding: 16,
+    ...readable.content,
+    paddingVertical: 16,
     paddingBottom: Math.max(32, tabBarBottomInset + 16),
   };
 }
@@ -92,14 +97,14 @@ function NavigationRow({
 }) {
   if (!onPress) return <InfoRow icon={icon} label={label} value={value} />;
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityLabel={`${label}, ${value}`}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
       <InfoRow accessoryIcon="chevron.right" icon={icon} label={label} value={value} />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -165,7 +170,9 @@ export function NotificationSettingsScreen() {
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={contentContainerStyle}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
       <StaleDataBanner updatedAt={preferences.staleSince} />
       {!preferences.prefs ? (
@@ -270,7 +277,9 @@ export function NotificationCategoryScreen({ category }: { category: Notificatio
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={contentContainerStyle}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
       <StaleDataBanner updatedAt={preferences.staleSince} />
       {preferences.actionError ? (

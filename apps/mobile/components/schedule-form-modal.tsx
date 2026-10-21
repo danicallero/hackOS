@@ -1,4 +1,3 @@
-import { MenuView } from "@expo/ui/community/menu";
 import {
   ACTIVITY_KINDS,
   type ActivityKind,
@@ -6,19 +5,15 @@ import {
 } from "@hackos/shared/activity-kinds";
 import type { Language } from "@hackos/shared/locale";
 import { useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { MenuView } from "@/components/app-menu";
+import { SheetModal } from "@/components/app-sheet";
 import { DateTimeField } from "@/components/date-time-field";
 import { FloatingGlassButton, Section, ToggleRow } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
@@ -38,7 +33,7 @@ import {
   translateScheduleContent,
 } from "@/lib/schedule";
 import { prepareScheduleSubmission, scheduleSaveError } from "@/lib/schedule-save";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 const LANGUAGES: Language[] = ["es", "gl", "en"];
 
@@ -128,9 +123,6 @@ export function ScheduleFormModal({
 }) {
   const { t, language: accountLanguage } = useLocale();
   const insets = useSafeAreaInsets();
-  // Android has no page-sheet presentation: the modal is full-screen, so its
-  // chrome has to clear the status bar itself.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [values, setValues] = useState<ScheduleInput>(initial ?? emptyForm());
   const [owners, setOwners] = useState<ScheduleOwner[]>(initialOwners ?? []);
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial?.publishAt));
@@ -250,12 +242,7 @@ export function ScheduleFormModal({
   }
 
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      presentationStyle="pageSheet"
-      visible={visible}
-    >
+    <SheetModal animationType="slide" onRequestClose={onClose} visible={visible}>
       <AdaptiveFrame>
         <ScrollView
           alwaysBounceVertical
@@ -268,13 +255,18 @@ export function ScheduleFormModal({
             gap: 22,
             padding: 16,
             paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16 + sheetTopInset,
+            paddingTop: 16,
           }}
         >
           <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
             <Text
               selectable
-              style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+              style={{
+                color: colors.label,
+                fontSize: type.title3.fontSize,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
             >
               {scheduleId ? t("scheduleEdit") : t("scheduleAdd")}
             </Text>
@@ -287,11 +279,14 @@ export function ScheduleFormModal({
               style={{
                 backgroundColor: colors.destructiveSurface,
                 borderCurve: "continuous",
-                borderRadius: 12,
+                borderRadius: radius.control,
                 padding: 14,
               }}
             >
-              <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 15 }}>
+              <Text
+                selectable
+                style={{ color: colors.onDestructiveSurface, fontSize: type.subhead.fontSize }}
+              >
                 {error}
               </Text>
             </View>
@@ -303,7 +298,7 @@ export function ScheduleFormModal({
               onChangeText={(title) => setValues((current) => ({ ...current, title }))}
               placeholder={t("scheduleTitleLabel")}
               placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: 16, padding: 16 }}
+              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
               value={values.title}
             />
           </Section>
@@ -319,7 +314,7 @@ export function ScheduleFormModal({
               placeholderTextColor={colors.tertiaryLabel}
               style={{
                 color: colors.label,
-                fontSize: 16,
+                fontSize: type.callout.fontSize,
                 lineHeight: 22,
                 minHeight: 90,
                 padding: 16,
@@ -356,7 +351,7 @@ export function ScheduleFormModal({
                   padding: 16,
                 }}
               >
-                <Text style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+                <Text style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}>
                   {scheduleTypeLabel(values.type, t)}
                 </Text>
                 <SymbolView
@@ -370,20 +365,20 @@ export function ScheduleFormModal({
 
           <View style={{ gap: 8 }}>
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-              <Pressable
+              <PressableFeedback
+                feedback="opacity"
                 accessibilityRole="button"
                 accessibilityLabel={t("translationsAndSettings")}
                 accessibilityState={{ expanded: translationsOpen }}
                 onPress={() => setTranslationsOpen((open) => !open)}
                 hitSlop={8}
-                style={({ pressed }) => ({
+                style={{
                   alignItems: "center",
                   flex: 1,
                   flexDirection: "row",
                   gap: 6,
-                  opacity: pressed ? 0.6 : 1,
                   paddingVertical: 8,
-                })}
+                }}
               >
                 <SymbolView
                   name="chevron.right"
@@ -392,12 +387,19 @@ export function ScheduleFormModal({
                   weight="semibold"
                   style={{ transform: [{ rotate: translationsOpen ? "90deg" : "0deg" }] }}
                 />
-                <Text style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}>
+                <Text
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: type.footnote.fontSize,
+                    fontWeight: "600",
+                  }}
+                >
                   {t("translationsAndSettings")}
                 </Text>
-              </Pressable>
+              </PressableFeedback>
               {translateAvailable ? (
-                <Pressable
+                <PressableFeedback
+                  feedback="opacity"
                   accessibilityRole="button"
                   accessibilityLabel={t("translateAutomatically")}
                   accessibilityState={{
@@ -406,18 +408,16 @@ export function ScheduleFormModal({
                   }}
                   disabled={translating || blankTargetLanguages.length === 0}
                   onPress={() => void autoTranslate()}
-                  style={({ pressed }) => ({
+                  style={{
                     alignItems: "center",
                     backgroundColor: colors.elevatedSurface,
                     borderCurve: "continuous",
-                    borderRadius: 10,
+                    borderRadius: radius.chip,
                     flexDirection: "row",
                     gap: 8,
-                    opacity:
-                      translating || blankTargetLanguages.length === 0 ? 0.5 : pressed ? 0.7 : 1,
                     paddingHorizontal: 16,
                     paddingVertical: 10,
-                  })}
+                  }}
                 >
                   <SymbolView
                     name="character.book.closed"
@@ -425,10 +425,16 @@ export function ScheduleFormModal({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+                  <Text
+                    style={{
+                      color: colors.accent,
+                      fontSize: type.subhead.fontSize,
+                      fontWeight: "600",
+                    }}
+                  >
                     {translating ? t("translatingInProgress") : t("translateAutomatically")}
                   </Text>
-                </Pressable>
+                </PressableFeedback>
               ) : null}
             </View>
 
@@ -445,7 +451,11 @@ export function ScheduleFormModal({
                           }))
                         }
                         placeholderTextColor={colors.tertiaryLabel}
-                        style={{ color: colors.label, fontSize: 16, padding: 16 }}
+                        style={{
+                          color: colors.label,
+                          fontSize: type.callout.fontSize,
+                          padding: 16,
+                        }}
                         value={translations[language]?.title ?? ""}
                       />
                     </Section>
@@ -464,7 +474,7 @@ export function ScheduleFormModal({
                         placeholderTextColor={colors.tertiaryLabel}
                         style={{
                           color: colors.label,
-                          fontSize: 16,
+                          fontSize: type.callout.fontSize,
                           lineHeight: 22,
                           minHeight: 70,
                           padding: 16,
@@ -486,7 +496,7 @@ export function ScheduleFormModal({
               }
               placeholder={t("scheduleLocationLabel")}
               placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: 16, padding: 16 }}
+              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
               value={values.location ?? ""}
             />
           </Section>
@@ -496,7 +506,7 @@ export function ScheduleFormModal({
               accessibilityRole="header"
               style={{
                 color: colors.secondaryLabel,
-                fontSize: 13,
+                fontSize: type.footnote.fontSize,
                 fontWeight: "600",
                 paddingHorizontal: 16,
               }}
@@ -518,7 +528,7 @@ export function ScheduleFormModal({
               accessibilityRole="header"
               style={{
                 color: colors.secondaryLabel,
-                fontSize: 13,
+                fontSize: type.footnote.fontSize,
                 fontWeight: "600",
                 paddingHorizontal: 16,
               }}
@@ -575,7 +585,13 @@ export function ScheduleFormModal({
               })}
             </Section>
 
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13, paddingHorizontal: 16 }}>
+            <Text
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: type.footnote.fontSize,
+                paddingHorizontal: 16,
+              }}
+            >
               {t("scheduleStaffSeeAllHint")}
             </Text>
           </View>
@@ -649,7 +665,7 @@ export function ScheduleFormModal({
               }
               placeholder={t("scheduleContactNoteLabel")}
               placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: 16, padding: 16 }}
+              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
               value={values.contactNote ?? ""}
             />
           </Section>
@@ -665,7 +681,7 @@ export function ScheduleFormModal({
               placeholderTextColor={colors.tertiaryLabel}
               style={{
                 color: colors.label,
-                fontSize: 16,
+                fontSize: type.callout.fontSize,
                 lineHeight: 22,
                 minHeight: 70,
                 padding: 16,
@@ -679,14 +695,14 @@ export function ScheduleFormModal({
         </ScrollView>
 
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="left"
           icon="xmark"
           accessibilityLabel={t("cancel")}
           onPress={onClose}
         />
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="right"
           icon="checkmark"
           tintColor={colors.accent}
@@ -696,7 +712,7 @@ export function ScheduleFormModal({
           onPress={() => void save()}
         />
       </AdaptiveFrame>
-    </Modal>
+    </SheetModal>
   );
 }
 
@@ -841,7 +857,7 @@ function OwnersField({
             alignItems: "center",
             backgroundColor: colors.elevatedSurface,
             borderCurve: "continuous",
-            borderRadius: 10,
+            borderRadius: radius.chip,
             flexDirection: "row",
             gap: 8,
             minHeight: 36,
@@ -867,7 +883,7 @@ function OwnersField({
             placeholderTextColor={colors.tertiaryLabel}
             returnKeyType="search"
             value={query}
-            style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 36 }}
+            style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize, minHeight: 36 }}
           />
           {query.length > 0 ? (
             <Pressable
@@ -906,43 +922,49 @@ function OwnersField({
             }}
           >
             <View style={{ flex: 1 }}>
-              <Text selectable numberOfLines={1} style={{ color: colors.label, fontSize: 16 }}>
+              <Text
+                selectable
+                numberOfLines={1}
+                style={{ color: colors.label, fontSize: type.callout.fontSize }}
+              >
                 {ownerCandidateName(candidate)}
               </Text>
               <Text
                 selectable
                 numberOfLines={1}
-                style={{ color: colors.secondaryLabel, fontSize: 14 }}
+                style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
               >
                 {candidate.email}
               </Text>
             </View>
             {mutation === `add-user:${candidate.id}` ? (
-              <ActivityIndicator size="small" color={colors.accent} />
+              <AppActivityIndicator size="small" color={colors.accent} />
             ) : (
-              <Pressable
+              <PressableFeedback
+                feedback="opacity"
                 accessibilityRole="button"
                 accessibilityLabel={t("scheduleOwnerAdd")}
                 disabled={mutation !== null}
                 onPress={() => void add(candidate)}
                 hitSlop={8}
-                style={({ pressed }) => ({
+                style={{
                   alignItems: "center",
                   justifyContent: "center",
                   minHeight: 44,
                   minWidth: 44,
-                  opacity: pressed ? 0.5 : 1,
-                })}
+                }}
               >
-                <Text style={{ color: colors.accent, fontSize: 16 }}>{t("add")}</Text>
-              </Pressable>
+                <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
+                  {t("add")}
+                </Text>
+              </PressableFeedback>
             )}
           </View>
         </View>
       ))}
       {!searching && searched && results.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>
+          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
             {t("scheduleOwnerSearchEmpty")}
           </Text>
         </View>
@@ -969,34 +991,34 @@ function OwnersField({
           style={{
             backgroundColor: colors.elevatedSurface,
             borderCurve: "continuous",
-            borderRadius: 10,
+            borderRadius: radius.chip,
             color: colors.label,
             flex: 1,
-            fontSize: 16,
+            fontSize: type.callout.fontSize,
             minHeight: 36,
             paddingHorizontal: 8,
           }}
         />
         {mutation === "add-text" ? (
-          <ActivityIndicator size="small" color={colors.accent} />
+          <AppActivityIndicator size="small" color={colors.accent} />
         ) : (
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityRole="button"
             accessibilityLabel={t("scheduleOwnerAdd")}
             disabled={mutation !== null || !freeTextName.trim()}
             onPress={() => void addFreeText()}
             hitSlop={8}
-            style={({ pressed }) => ({
-              opacity: pressed || !freeTextName.trim() ? 0.5 : 1,
-            })}
           >
-            <Text style={{ color: colors.accent, fontSize: 16 }}>{t("add")}</Text>
-          </Pressable>
+            <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
+              {t("add")}
+            </Text>
+          </PressableFeedback>
         )}
       </View>
       {owners.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: 14 }}>
+          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
             {t("scheduleOwnersEmpty")}
           </Text>
         </View>
@@ -1017,7 +1039,7 @@ function OwnersField({
               <Text
                 selectable
                 numberOfLines={1}
-                style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}
               >
                 {owner.freeTextName ??
                   ([owner.name, owner.surname].filter(Boolean).join(" ").trim() ||
@@ -1025,24 +1047,26 @@ function OwnersField({
                     "")}
               </Text>
               {mutation === `remove:${owner.id}` ? (
-                <ActivityIndicator size="small" color={colors.destructive} />
+                <AppActivityIndicator size="small" color={colors.destructive} />
               ) : (
-                <Pressable
+                <PressableFeedback
+                  feedback="opacity"
                   accessibilityLabel={t("scheduleDelete")}
                   accessibilityRole="button"
                   disabled={mutation !== null}
                   onPress={() => void remove(owner.id)}
                   hitSlop={8}
-                  style={({ pressed }) => ({
+                  style={{
                     alignItems: "center",
                     justifyContent: "center",
                     minHeight: 44,
                     minWidth: 44,
-                    opacity: pressed ? 0.5 : 1,
-                  })}
+                  }}
                 >
-                  <Text style={{ color: colors.destructive, fontSize: 16 }}>{t("remove")}</Text>
-                </Pressable>
+                  <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
+                    {t("remove")}
+                  </Text>
+                </PressableFeedback>
               )}
             </View>
           </View>

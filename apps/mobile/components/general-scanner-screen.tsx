@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FilterMenu } from "@/components/filter-menu";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { QrCamera } from "@/components/QrCamera";
+import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -30,8 +31,10 @@ import {
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useScannerSync } from "@/lib/use-scanner";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ScannerRoleStat {
@@ -48,6 +51,8 @@ export function GeneralScannerScreen() {
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const glassAvailable = isRealLiquidGlassAvailable();
+  const { gutter } = useOperatorLayout(null);
+  const [barHeight, setBarHeight] = useState(48);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     if (!error) return;
@@ -207,7 +212,13 @@ export function GeneralScannerScreen() {
     />
   );
   const title = (
-    <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+    <Text
+      accessibilityRole="header"
+      // Beside the fixed-size native toolbar items the title is capped; in the in-page row it
+      // wraps and pushes the content down.
+      maxFontSizeMultiplier={glassAvailable ? CHROME_MAX_FONT_SIZE_MULTIPLIER : undefined}
+      style={{ color: colors.label, flexShrink: 1, ...SCREEN_TITLE }}
+    >
       {t("tabScan")}
     </Text>
   );
@@ -225,12 +236,13 @@ export function GeneralScannerScreen() {
       ) : (
         <View
           pointerEvents="box-none"
+          onLayout={(e) => setBarHeight(Math.max(48, e.nativeEvent.layout.height))}
           style={{
             position: "absolute",
             top: insets.top,
-            left: 24,
-            right: 16,
-            height: 48,
+            left: gutter,
+            right: gutter,
+            minHeight: 48,
             alignItems: "center",
             flexDirection: "row",
             justifyContent: "space-between",
@@ -244,57 +256,61 @@ export function GeneralScannerScreen() {
           </View>
         </View>
       )}
-      <View style={{ flex: 1, marginTop: insets.top + 56 }}>
-        <ScannerGroupStatistics stats={stats} />
-        {error ? (
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            style={{
-              borderRadius: 14,
-              marginTop: 12,
-              marginHorizontal: 32,
-              minHeight: 60,
-              overflow: "hidden",
-            }}
-          >
-            <Pressable
-              accessibilityLabel={error}
-              accessibilityHint={t("close")}
-              accessibilityRole="button"
-              onPress={() => setError(null)}
-              accessibilityLiveRegion="assertive"
-              style={{
-                minHeight: 60,
-                justifyContent: "center",
-                alignItems: "center",
-                flexDirection: "row",
-                gap: 9,
-                padding: 14,
-              }}
-            >
-              <SymbolView
-                accessible={false}
-                name="xmark.circle.fill"
-                tintColor={colors.destructive}
-                size={20}
-              />
-              <Text
-                selectable
-                style={{
-                  color: colors.label,
-                  flexShrink: 1,
-                  fontSize: 14,
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                {error}
-              </Text>
-            </Pressable>
-          </GlassView>
-        ) : null}
+      <View style={{ flex: 1, marginTop: insets.top + barHeight + 8 }}>
         <QrCamera
+          surfaceHeader={(layout) => (
+            <>
+              <ScannerGroupStatistics stats={stats} layout={layout.stats} />
+              {error ? (
+                <GlassView
+                  colorScheme="auto"
+                  glassEffectStyle="regular"
+                  style={{
+                    borderRadius: radius.container,
+                    marginTop: 12,
+                    minHeight: 60,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Pressable
+                    accessibilityLabel={error}
+                    accessibilityHint={t("close")}
+                    accessibilityRole="button"
+                    onPress={() => setError(null)}
+                    accessibilityLiveRegion="assertive"
+                    style={{
+                      minHeight: 60,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      flexDirection: "row",
+                      gap: 9,
+                      padding: 14,
+                    }}
+                  >
+                    <SymbolView
+                      accessible={false}
+                      name="xmark.circle.fill"
+                      tintColor={colors.destructive}
+                      size={20}
+                    />
+                    <Text
+                      selectable
+                      style={{
+                        ...type.compact,
+                        color: colors.label,
+                        flexShrink: 1,
+
+                        fontWeight: "600",
+                        textAlign: "center",
+                      }}
+                    >
+                      {error}
+                    </Text>
+                  </Pressable>
+                </GlassView>
+              ) : null}
+            </>
+          )}
           onOpenPeople={() =>
             router.push(
               // Android's legacy (non-Liquid-Glass) header lands on a plain
@@ -357,80 +373,20 @@ function useScannerRoleFilterMenu({
 
 function ScannerGroupStatistics({
   stats,
+  layout,
 }: {
   stats: { accredited: number; confirmed: number; inside: number };
+  layout: StatBlockLayout;
 }) {
   const { t } = useLocale();
-  const items = [
-    { label: t("scannerStatConfirmed"), value: stats.confirmed },
-    { label: t("scannerInside"), value: stats.inside },
-  ];
   return (
-    <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 24 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-        }}
-      >
-        <View style={{ gap: 4, flexShrink: 1 }}>
-          <Text
-            selectable
-            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-            style={{
-              color: colors.label,
-              fontSize: 44,
-              fontWeight: "700",
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {stats.accredited}
-          </Text>
-          <Text
-            selectable
-            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-            style={{ color: colors.secondaryLabel, fontSize: 15 }}
-          >
-            {t("scannerAccredited")}
-          </Text>
-        </View>
-      </View>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.separator,
-          paddingBottom: 24,
-        }}
-      >
-        {items.map((item) => (
-          <View key={item.label} style={{ flex: 1, gap: 5 }}>
-            <Text
-              selectable
-              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-              style={{
-                color: colors.label,
-                fontSize: 28,
-                fontWeight: "600",
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {item.value}
-            </Text>
-            <Text
-              selectable
-              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-              style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}
-            >
-              {item.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <ScannerStatBlock
+      layout={layout}
+      primary={{ label: t("scannerAccredited"), value: stats.accredited }}
+      secondary={[
+        { label: t("scannerStatConfirmed"), value: stats.confirmed },
+        { label: t("scannerInside"), value: stats.inside },
+      ]}
+    />
   );
 }

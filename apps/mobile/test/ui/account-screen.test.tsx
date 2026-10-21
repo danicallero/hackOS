@@ -428,7 +428,7 @@ describe("account removal UI flow", () => {
     expect(screen.getByTestId("wallet-screen")).toHaveTextContent("52");
     const close = screen.getByRole("button", { name: "Close" });
     expect(close).toBe(screen.getByTestId("account-wallet-close"));
-    expect(close.props.accessibilityState).toEqual({ expanded: true });
+    expect(close.props.accessibilityState).toMatchObject({ expanded: true });
     expect(mockPush).not.toHaveBeenCalled();
 
     await user.press(close);

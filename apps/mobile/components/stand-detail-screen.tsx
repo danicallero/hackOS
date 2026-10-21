@@ -1,17 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useLayoutEffect, useState } from "react";
-import {
-  Alert,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { ActionButton, AppSwitch, EmptyState, Section, Separator } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   StandLinkResult,
@@ -20,6 +13,7 @@ import {
   useStandTagLink,
 } from "@/components/stand-tag-link";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
@@ -29,7 +23,8 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import type { StandSummary, StandTag } from "@/lib/stands";
 import { canManageStands } from "@/lib/tabs";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const CODE_FONT = Platform.select({ ios: "Menlo", default: "monospace" });
 const TAG_ICON = 32;
@@ -43,6 +38,7 @@ const TAG_ICON = 32;
  * scannable flag and every tag, so returning to the list shows the same data.
  */
 export function StandDetailScreen() {
+  const readable = useParticipantLayout("list");
   useColorScheme();
   const { t } = useLocale();
   const navigation = useNavigation();
@@ -109,7 +105,7 @@ export function StandDetailScreen() {
     } catch (err) {
       setStand((current) => (current ? { ...current, scannable: previous } : current));
       void haptic("error");
-      Alert.alert(t("standsTitle"), apiErrorText(err, t, t("standsScannableFailed")));
+      alert(t("standsTitle"), apiErrorText(err, t, t("standsScannableFailed")));
     } finally {
       setScanBusy(false);
     }
@@ -135,7 +131,7 @@ export function StandDetailScreen() {
       );
     } catch (err) {
       void haptic("error");
-      Alert.alert(t("standsRemoveTag"), apiErrorText(err, t, t("standsRemoveTagFailed")));
+      alert(t("standsRemoveTag"), apiErrorText(err, t, t("standsRemoveTagFailed")));
     } finally {
       setRemoving((current) => {
         const next = new Set(current);
@@ -146,7 +142,7 @@ export function StandDetailScreen() {
   }
 
   function confirmRemove(tag: StandTag) {
-    Alert.alert(
+    alert(
       t("standsRemoveTagConfirm"),
       // Only a QR has a consequence beyond this screen: its printed copies.
       tag.kind === "qr" ? t("standsRemoveQrDetail") : undefined,
@@ -171,7 +167,7 @@ export function StandDetailScreen() {
       style={{ backgroundColor: colors.background, flex: 1 }}
       contentInsetAdjustmentBehavior="automatic"
       refreshControl={
-        <RefreshControl
+        <AppRefreshControl
           refreshing={refreshing}
           onRefresh={async () => {
             setRefreshing(true);
@@ -182,7 +178,8 @@ export function StandDetailScreen() {
       }
       contentContainerStyle={{
         gap: 24,
-        padding: 16,
+        paddingVertical: 16,
+        ...readable.content,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
     >
@@ -207,7 +204,7 @@ export function StandDetailScreen() {
               }}
             >
               <StandLogo stand={stand} size={40} />
-              <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+              <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
                 {t("standsScannable")}
               </Text>
               <AppSwitch
@@ -231,7 +228,11 @@ export function StandDetailScreen() {
             {nfcStatus === "unsupported" ? (
               <Text
                 selectable
-                style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: type.subhead.fontSize,
+                  lineHeight: 20,
+                }}
               >
                 {t("standsNfcUnavailable")}
               </Text>
@@ -298,25 +299,38 @@ function TagRow({ tag, busy, onRemove }: { tag: StandTag; busy: boolean; onRemov
       overshootRight={false}
       rightThreshold={40}
       renderRightActions={() => (
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityRole="button"
           accessibilityLabel={removeLabel}
           onPress={() => {
             void haptic("light");
             onRemove();
           }}
-          style={({ pressed }) => ({
+          style={{
             alignItems: "center",
             backgroundColor: colors.destructive,
             gap: 4,
             justifyContent: "center",
-            opacity: pressed ? 0.8 : 1,
             width: 88,
-          })}
+          }}
         >
-          <SymbolView accessible={false} name="trash.fill" size={18} tintColor="#ffffff" />
-          <Text style={{ color: "#ffffff", fontSize: 13, fontWeight: "600" }}>{t("remove")}</Text>
-        </Pressable>
+          <SymbolView
+            accessible={false}
+            name="trash.fill"
+            size={18}
+            tintColor={colors.accentText}
+          />
+          <Text
+            style={{
+              color: colors.accentText,
+              fontSize: type.footnote.fontSize,
+              fontWeight: "600",
+            }}
+          >
+            {t("remove")}
+          </Text>
+        </PressableFeedback>
       )}
     >
       <View
@@ -357,7 +371,10 @@ function TagRow({ tag, busy, onRemove }: { tag: StandTag; busy: boolean; onRemov
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           {tag.label ? (
-            <Text numberOfLines={1} style={{ color: colors.label, fontSize: 16 }}>
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.label, fontSize: type.callout.fontSize }}
+            >
               {tag.label}
             </Text>
           ) : null}

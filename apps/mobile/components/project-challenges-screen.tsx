@@ -11,7 +11,8 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { fetchChallengeCatalogue, type NativeProject, projectMutation } from "@/lib/projects";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 type Chosen = NativeProject["challenges"];
 
@@ -23,6 +24,7 @@ type Chosen = NativeProject["challenges"];
 export function ProjectChallengesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, language } = useLocale();
+  const readable = useParticipantLayout("form");
   const navigation = useNavigation();
   const router = useRouter();
   const glass = isRealLiquidGlassAvailable();
@@ -133,7 +135,7 @@ export function ProjectChallengesScreen() {
         paddingVertical: 10,
       }}
     >
-      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{title}</Text>
+      <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>{title}</Text>
       {locked ? (
         <SymbolView
           name="lock.fill"
@@ -170,7 +172,12 @@ export function ProjectChallengesScreen() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: 32,
+        }}
       >
         {Platform.OS !== "ios" ? (
           <TextInput
@@ -181,9 +188,9 @@ export function ProjectChallengesScreen() {
             placeholderTextColor={colors.tertiaryLabel}
             style={{
               backgroundColor: colors.surface,
-              borderRadius: 14,
+              borderRadius: radius.container,
               color: colors.label,
-              fontSize: 17,
+              fontSize: type.body.fontSize,
               minHeight: 44,
               paddingHorizontal: 16,
             }}

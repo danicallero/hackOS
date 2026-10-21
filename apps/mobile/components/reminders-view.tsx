@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import {
   AppSwitch,
   EmptyState,
@@ -9,6 +9,7 @@ import {
   SWITCH_IN_ROW_STYLE,
   ToggleRow,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
@@ -28,7 +29,7 @@ import {
   useScheduleNotifications,
 } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 /**
  * Reminder rows reserve a leading column for the start time, wide enough for
@@ -303,17 +304,12 @@ function ReminderRow({
         paddingVertical: 10,
       }}
     >
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={[item.title, showDay ? day : null, time].filter(Boolean).join(", ")}
         onPress={() => router.push({ pathname: "/schedule/[id]", params: { id: String(item.id) } })}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          flex: 1,
-          flexDirection: "row",
-          gap: 12,
-          opacity: pressed ? 0.6 : 1,
-        })}
+        style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 12 }}
       >
         <View style={{ width: timeColumnWidth }}>
           <Text
@@ -322,7 +318,7 @@ function ReminderRow({
             numberOfLines={1}
             style={{
               color: subscribed ? colors.accent : colors.label,
-              fontSize: 15,
+              fontSize: type.subhead.fontSize,
               fontVariant: ["tabular-nums"],
               fontWeight: "600",
             }}
@@ -334,7 +330,7 @@ function ReminderRow({
               numberOfLines={1}
               style={{
                 color: colors.secondaryLabel,
-                fontSize: 12,
+                fontSize: type.caption.fontSize,
                 textTransform: "capitalize",
               }}
             >
@@ -343,16 +339,19 @@ function ReminderRow({
           ) : null}
         </View>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={2} style={{ color: colors.label, fontSize: 16 }}>
+          <Text numberOfLines={2} style={{ color: colors.label, fontSize: type.callout.fontSize }}>
             {item.title}
           </Text>
           {meta ? (
-            <Text numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
+            >
               {meta}
             </Text>
           ) : null}
         </View>
-      </Pressable>
+      </PressableFeedback>
       <AppSwitch
         accessibilityLabel={
           subscribed

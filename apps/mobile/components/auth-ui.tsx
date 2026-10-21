@@ -1,6 +1,5 @@
 import { type ReactNode, type RefObject, useState } from "react";
 import {
-  ActivityIndicator,
   Keyboard,
   Pressable,
   ScrollView,
@@ -12,10 +11,10 @@ import {
 } from "react-native";
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-
-import { haptic } from "@/lib/haptics";
-import { colors } from "@/theme/colors";
+import { colors, radius, space, type } from "@/theme";
 
 export function AuthScreen({
   children,
@@ -314,34 +313,31 @@ export function AuthButton({
   testID?: string;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
       accessibilityLabel={label}
       accessibilityRole="button"
-      accessibilityState={{ disabled: disabled || busy, busy }}
+      accessibilityState={{ busy }}
       disabled={disabled || busy}
-      onPress={() => {
-        void haptic("light");
-        onPress();
-      }}
+      feedback="scale"
+      haptic="light"
+      onPress={onPress}
       testID={testID}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         backgroundColor: colors.primaryAction,
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.control,
         flexDirection: "row",
-        gap: 8,
+        gap: space.sm,
         justifyContent: "center",
         minHeight: 52,
-        opacity: disabled || busy ? 0.45 : pressed ? 0.75 : 1,
-        paddingHorizontal: 16,
-        transform: [{ scale: pressed && !disabled && !busy ? 0.96 : 1 }],
-      })}
+        paddingHorizontal: space.lg,
+      }}
     >
-      {busy ? <ActivityIndicator color={colors.primaryActionText} /> : null}
-      <Text style={{ color: colors.primaryActionText, fontSize: 17, fontWeight: "700" }}>
+      {busy ? <AppActivityIndicator color={colors.primaryActionText} /> : null}
+      <Text style={[type.body, { color: colors.primaryActionText, fontWeight: "700" }]}>
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }

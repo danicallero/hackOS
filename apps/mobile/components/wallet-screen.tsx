@@ -4,16 +4,7 @@ import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import QRCode from "react-native-qrcode-svg";
 import Animated, {
@@ -23,12 +14,14 @@ import Animated, {
   SlideOutLeft,
   SlideOutRight,
 } from "react-native-reanimated";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { NetworkingInvite } from "@/components/networking-invite";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
@@ -49,7 +42,8 @@ import {
   supportsAppleWalletButton,
   supportsAppleWalletFileHandoff,
 } from "@/lib/wallet-platform";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 // Roughly the full ticket/badge card's own height (QR + labels + padding).
 // The empty state shown before a badge is assigned is much shorter than
@@ -74,6 +68,7 @@ export default function WalletScreen({
   useColorScheme();
   const { language, t } = useLocale();
   const [availableWidth, setAvailableWidth] = useState(0);
+  const readable = useParticipantLayout("grid");
   const wide = availableWidth >= 720;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { me, refetch: refetchMe } = useMeContext();
@@ -246,7 +241,7 @@ export default function WalletScreen({
   }
 
   function confirmDeclineSpot(responseId: number) {
-    Alert.alert(t("walletDeclineSpotTitle"), t("walletDeclineSpotDescription"), [
+    alert(t("walletDeclineSpotTitle"), t("walletDeclineSpotDescription"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("walletDeclineSpotAction"),
@@ -305,12 +300,12 @@ export default function WalletScreen({
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,
-          padding: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
           paddingTop: 16 + contentTopInset,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
         <StaleDataBanner updatedAt={staleSince} />
@@ -331,7 +326,7 @@ export default function WalletScreen({
             style={{
               backgroundColor: colors.successSurface,
               borderCurve: "continuous",
-              borderRadius: 12,
+              borderRadius: radius.control,
               flexDirection: "row",
               gap: 9,
               padding: 14,
@@ -345,7 +340,12 @@ export default function WalletScreen({
             />
             <Text
               selectable
-              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 15, lineHeight: 21 }}
+              style={{
+                color: colors.onSuccessSurface,
+                flex: 1,
+                fontSize: type.subhead.fontSize,
+                lineHeight: 21,
+              }}
             >
               {t("walletSpotConfirmed")}
             </Text>
@@ -358,13 +358,17 @@ export default function WalletScreen({
             style={{
               backgroundColor: colors.warningSurface,
               borderCurve: "continuous",
-              borderRadius: 12,
+              borderRadius: radius.control,
               padding: 14,
             }}
           >
             <Text
               selectable
-              style={{ color: colors.onWarningSurface, fontSize: 15, lineHeight: 21 }}
+              style={{
+                color: colors.onWarningSurface,
+                fontSize: type.subhead.fontSize,
+                lineHeight: 21,
+              }}
             >
               {t("walletSpotDeclined")}
             </Text>
@@ -385,12 +389,19 @@ export default function WalletScreen({
           >
             <View style={{ gap: 12, padding: 16 }}>
               <View style={{ gap: 4 }}>
-                <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                <Text
+                  selectable
+                  style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+                >
                   {spot.applicationName}
                 </Text>
                 <Text
                   selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: type.compact.fontSize,
+                    lineHeight: 20,
+                  }}
                 >
                   {t("walletConfirmSpotDescription")}
                 </Text>
@@ -401,13 +412,17 @@ export default function WalletScreen({
                   style={{
                     backgroundColor: colors.warningSurface,
                     borderCurve: "continuous",
-                    borderRadius: 10,
+                    borderRadius: radius.chip,
                     padding: 12,
                   }}
                 >
                   <Text
                     selectable
-                    style={{ color: colors.onWarningSurface, fontSize: 14, lineHeight: 20 }}
+                    style={{
+                      color: colors.onWarningSurface,
+                      fontSize: type.compact.fontSize,
+                      lineHeight: 20,
+                    }}
                   >
                     {t("walletSpotExpired")}
                   </Text>
@@ -438,7 +453,6 @@ export default function WalletScreen({
           style={{
             alignSelf: "center",
             width: "100%",
-            maxWidth: 1040,
             flexDirection: wide ? "row" : "column",
             gap: 24,
             alignItems: wide ? "flex-start" : "stretch",
@@ -488,7 +502,7 @@ export default function WalletScreen({
                         alignItems: "center",
                         backgroundColor: colors.surface,
                         borderCurve: "continuous",
-                        borderRadius: 20,
+                        borderRadius: radius.container,
                         gap: 16,
                         padding: 18,
                       }}
@@ -502,7 +516,11 @@ export default function WalletScreen({
                         />
                         <Text
                           selectable
-                          style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}
+                          style={{
+                            color: colors.label,
+                            fontSize: type.title2.fontSize,
+                            fontWeight: "700",
+                          }}
                         >
                           {label}
                         </Text>
@@ -510,7 +528,7 @@ export default function WalletScreen({
                           selectable
                           style={{
                             color: colors.secondaryLabel,
-                            fontSize: 14,
+                            fontSize: type.compact.fontSize,
                             textAlign: "center",
                           }}
                         >
@@ -524,7 +542,7 @@ export default function WalletScreen({
                         style={{
                           backgroundColor: colors.qrBackground,
                           borderCurve: "continuous",
-                          borderRadius: 16,
+                          borderRadius: radius.container,
                           maxWidth: "100%",
                           padding: 16,
                         }}
@@ -537,7 +555,7 @@ export default function WalletScreen({
                           style={{
                             color: colors.secondaryLabel,
                             fontFamily: "SpaceMono",
-                            fontSize: 13,
+                            fontSize: type.footnote.fontSize,
                           }}
                         >
                           {ticket.badgeId}
@@ -643,7 +661,11 @@ export default function WalletScreen({
                     />
                     <Text
                       selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 13, paddingTop: 4 }}
+                      style={{
+                        color: colors.secondaryLabel,
+                        fontSize: type.footnote.fontSize,
+                        paddingTop: 4,
+                      }}
                     >
                       {t("walletDownloadPkpassHint")}
                     </Text>

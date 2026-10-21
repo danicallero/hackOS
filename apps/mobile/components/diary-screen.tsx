@@ -1,19 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  AppState,
-  Modal,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { AppState, Modal, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountWalletOverlay, useAccountWallet, WalletModal } from "@/components/account-wallet";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { BadgeLinkActions, type ScanActionLabels } from "@/components/badge-link-actions";
 import { CompanyAlbum, CompanySheet } from "@/components/company-album";
 import {
@@ -26,11 +17,13 @@ import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyScreenHeader, Section, Separator } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { type DiaryEntry, diaryScanErrorKey, upsertDiaryEntry } from "@/lib/diary";
 import {
@@ -52,8 +45,9 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const SCAN_LABELS: ScanActionLabels = {
   nfc: "diaryScanNfc",
@@ -91,6 +85,7 @@ const JSON_HEADERS = () => ({
 export function DiaryScreen() {
   const colorScheme = useColorScheme();
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
@@ -331,11 +326,11 @@ export function DiaryScreen() {
         const queue = await enqueuePendingScan(userId, value);
         setPendingCount(queue.length);
         void haptic("warning");
-        Alert.alert(t("tabDiary"), t("diaryScanQueued"));
+        alert(t("tabDiary"), t("diaryScanQueued"));
         return;
       }
       void haptic("error");
-      Alert.alert(t("tabDiary"), t(diaryScanErrorKey(error)));
+      alert(t("tabDiary"), t(diaryScanErrorKey(error)));
     } finally {
       scanInFlight.current = false;
       setScanning(false);
@@ -369,7 +364,7 @@ export function DiaryScreen() {
       await action();
     } catch {
       void haptic("error");
-      Alert.alert(t("tabDiary"), t("diaryActionError"));
+      alert(t("tabDiary"), t("diaryActionError"));
     } finally {
       setBusyKeys((current) => {
         const next = new Set(current);
@@ -395,7 +390,7 @@ export function DiaryScreen() {
   }
 
   function confirmRemove(onConfirm: () => void) {
-    Alert.alert(t("diaryRemoveTitle"), undefined, [
+    alert(t("diaryRemoveTitle"), undefined, [
       { text: t("cancel"), style: "cancel" },
       { text: t("remove"), style: "destructive", onPress: onConfirm },
     ]);
@@ -578,14 +573,17 @@ export function DiaryScreen() {
       style={{ backgroundColor: colors.background }}
       contentContainerStyle={{
         gap: 16,
-        padding: 16,
+        paddingVertical: 16,
+        ...readable.content,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
         paddingTop: 8,
       }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
       {pendingCount > 0 ? (
-        <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+        <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
           {t("diaryPendingScans", { count: String(pendingCount) })}
         </Text>
       ) : null}
@@ -732,7 +730,7 @@ export function DiaryScreen() {
                 // item's light/dark appearance with what scrolls behind it,
                 // which turned the title white over the blue scan pill.
                 color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                fontSize: 28,
+                fontSize: type.title.fontSize,
                 fontWeight: "800",
               }}
             >
@@ -771,7 +769,7 @@ export function DiaryScreen() {
               colorScheme="auto"
               glassEffectStyle="regular"
               isInteractive
-              style={{ borderRadius: 22, height: 44, width: 44 }}
+              style={{ borderRadius: radius.full, height: 44, width: 44 }}
             >
               <WalletToggle onToggle={wallet.toggle} />
             </GlassView>
@@ -780,7 +778,7 @@ export function DiaryScreen() {
                 colorScheme="auto"
                 glassEffectStyle="regular"
                 isInteractive
-                style={{ borderRadius: 22, flexDirection: "row", height: 44 }}
+                style={{ borderRadius: radius.full, flexDirection: "row", height: 44 }}
               >
                 <FavouritesToggle visible on={favouritesOnly} onToggle={toggleFavourites} />
                 <Pressable
@@ -835,22 +833,17 @@ function FavouritesToggle({
   const { t } = useLocale();
   if (!visible) return null;
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="togglebutton"
       accessibilityLabel={t("diaryShowFavourites")}
       accessibilityState={{ checked: on }}
       onPress={onToggle}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        height: 44,
-        justifyContent: "center",
-        opacity: pressed ? 0.6 : 1,
-        width: 44,
-      })}
+      style={{ alignItems: "center", height: 44, justifyContent: "center", width: 44 }}
     >
       {/* Material Symbols ship only an outlined star; this one also fills. */}
       <FavouriteStar on={on} />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -858,19 +851,14 @@ function FavouritesToggle({
 function WalletToggle({ onToggle }: { onToggle: () => void }) {
   const { t } = useLocale();
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={t("tabWallet")}
       onPress={onToggle}
-      style={({ pressed }) => ({
-        alignItems: "center",
-        height: 44,
-        justifyContent: "center",
-        opacity: pressed ? 0.6 : 1,
-        width: 44,
-      })}
+      style={{ alignItems: "center", height: 44, justifyContent: "center", width: 44 }}
     >
       <SymbolView accessible={false} name="wallet.pass" size={19} tintColor={colors.label} />
-    </Pressable>
+    </PressableFeedback>
   );
 }

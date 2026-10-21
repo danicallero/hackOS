@@ -22,6 +22,7 @@ import { formatEventTime } from "@/lib/event-time";
 import { useBookCrease } from "@/lib/fold-region";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { resolveListPaneWidth } from "@/lib/pane-width";
 import {
   fetchChallengeCatalogue,
   type GalleryPage,
@@ -30,7 +31,8 @@ import {
 } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { listDetailLayout } from "@/lib/window-size";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
 export function galleryClosedNotice(
@@ -154,6 +156,8 @@ export function ProjectGalleryScreen() {
   const crease = useBookCrease();
   const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS, crease);
   const twoPane = paneLayout.enabled;
+  const listWidth = resolveListPaneWidth(windowWidth, paneLayout, crease);
+  const readable = useParticipantLayout("list");
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t("gallery"),
@@ -320,14 +324,16 @@ export function ProjectGalleryScreen() {
         <View
           style={{
             flex: showDetailPane ? 0 : 1,
-            width: showDetailPane ? paneLayout.listWidth : undefined,
+            width: showDetailPane ? listWidth : undefined,
           }}
         >
           <ScrollView
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
-              padding: 16,
+              paddingVertical: 16,
+              // Beside a detail, the pane is the column; alone, the readable column.
+              ...(showDetailPane ? { paddingHorizontal: 16 } : readable.content),
               gap: 20,
               paddingBottom: empty ? 96 : 32,
               flexGrow: 1,
@@ -345,9 +351,9 @@ export function ProjectGalleryScreen() {
                   color: colors.label,
                   padding: 12,
                   minHeight: 44,
-                  fontSize: 17,
+                  fontSize: type.body.fontSize,
                   backgroundColor: colors.surface,
-                  borderRadius: 8,
+                  borderRadius: radius.control,
                 }}
               />
             ) : null}

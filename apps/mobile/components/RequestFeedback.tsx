@@ -1,11 +1,5 @@
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
 
 import { SymbolView } from "@/components/symbol";
 import { ApiError } from "@/lib/api";
@@ -55,7 +49,7 @@ export function RequestFeedback({
           compact ? null : { justifyContent: "center", minHeight: height * 0.6 },
         ]}
       >
-        <ActivityIndicator color={colors.accent} />
+        <AppActivityIndicator color={colors.accent} />
         <Text selectable style={[styles.message, { color: colors.secondaryLabel }]}>
           {t("loading")}
         </Text>
@@ -100,7 +94,7 @@ export function RequestFeedback({
               { backgroundColor: colors.surface, opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },
             ]}
           >
-            {retrying ? <ActivityIndicator color={colors.accent} size="small" /> : null}
+            {retrying ? <AppActivityIndicator color={colors.accent} size="small" /> : null}
             <Text style={[styles.buttonText, { color: colors.accent }]}>{t("retry")}</Text>
           </Pressable>
         ) : null}
@@ -136,7 +130,9 @@ export function RequestFeedback({
             { opacity: retrying ? 0.45 : pressed ? 0.65 : 1 },
           ]}
         >
-          {retrying ? <ActivityIndicator color={colors.onDestructiveSurface} size="small" /> : null}
+          {retrying ? (
+            <AppActivityIndicator color={colors.onDestructiveSurface} size="small" />
+          ) : null}
           <Text style={[styles.buttonText, { color: colors.onDestructiveSurface }]}>
             {t("retry")}
           </Text>

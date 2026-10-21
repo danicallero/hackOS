@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AlertHost } from "@/components/alert-host";
 import { AppBackGesture } from "@/components/app-back-gesture";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
@@ -40,7 +41,7 @@ import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { useLocalReminders } from "@/lib/use-local-reminders";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { warmWalletCache } from "@/lib/wallet-cache";
-import { colors, navigationCanvas } from "@/theme/colors";
+import { colors, navigationCanvas, radius, type } from "@/theme";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -80,6 +81,7 @@ export default function RootLayout() {
       <LocaleProvider>
         <ApiModeProvider>
           <RootLayoutSession />
+          <AlertHost />
         </ApiModeProvider>
       </LocaleProvider>
     </GestureHandlerRootView>
@@ -532,7 +534,7 @@ function DevelopmentIndicator() {
         alignItems: "center",
         backgroundColor: "#d70015",
         borderCurve: "continuous",
-        borderRadius: 999,
+        borderRadius: radius.full,
         paddingHorizontal: 9,
         paddingVertical: 4,
         position: "absolute",
@@ -547,7 +549,14 @@ function DevelopmentIndicator() {
         zIndex: 10,
       }}
     >
-      <Text style={{ color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }}>
+      <Text
+        style={{
+          color: "#ffffff",
+          fontSize: type.caption.fontSize,
+          fontWeight: "800",
+          letterSpacing: 0.5,
+        }}
+      >
         {/* Safe-area sides, to read what a foldable pose reports (Split View, outer display). */}
         {`DEV ${Math.round(sideInsets.left)}|${Math.round(sideInsets.right)}`}
       </Text>

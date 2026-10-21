@@ -7,8 +7,9 @@ import {
 } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
@@ -18,6 +19,7 @@ import {
   LegacyScreenHeader,
   Separator,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -36,9 +38,11 @@ import { isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useOperatorListColumn } from "@/theme/layout-screens";
 
 export function PeopleDirectoryScreen() {
+  const listColumn = useOperatorListColumn();
   const { activityId, autoSearch } = useLocalSearchParams<{
     activityId?: string;
     /** Set by the scanner's "search participants" entry point (H22-H26) so the
@@ -289,19 +293,27 @@ export function PeopleDirectoryScreen() {
       contentInsetAdjustmentBehavior="automatic"
       style={{ backgroundColor: colors.background, flex: 1 }}
       contentContainerStyle={{
+        ...listColumn,
         flexGrow: 1,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
-        paddingHorizontal: 16,
       }}
       data={filtered}
       keyExtractor={(person) => String(person.userId)}
       ItemSeparatorComponent={() => <Separator inset={72} />}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
       ListHeaderComponent={
         showInlineListTitle || (loadError && directory.length > 0) || syncError ? (
           <View style={{ gap: 16, paddingBottom: showInlineListTitle ? 16 : 0, paddingTop: 8 }}>
             {showInlineListTitle ? (
-              <Text style={{ color: colors.label, fontSize: 34, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: colors.label,
+                  fontSize: type.largeTitle.fontSize,
+                  fontWeight: "700",
+                }}
+              >
                 {t("scannerPeople")}
               </Text>
             ) : null}
@@ -385,7 +397,7 @@ const PersonRow = memo(function PersonRow({
     : null;
 
   return (
-    <Pressable
+    <PressableFeedback
       accessibilityHint={t("scannerViewPerson")}
       accessibilityLabel={[
         displayName,
@@ -396,22 +408,23 @@ const PersonRow = memo(function PersonRow({
         .filter(Boolean)
         .join(", ")}
       accessibilityRole="button"
+      feedback="row"
       onPress={() => onPress(person)}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
-        backgroundColor: pressed ? colors.elevatedSurface : colors.background,
+        backgroundColor: colors.background,
         flexDirection: "row",
         gap: 12,
         minHeight: participantWarning ? 98 : 84,
         paddingHorizontal: 16,
         paddingVertical: 9,
-      })}
+      }}
     >
       <View
         style={{
           alignItems: "center",
           backgroundColor: colors.accentSurface,
-          borderRadius: 999,
+          borderRadius: radius.full,
           height: 40,
           justifyContent: "center",
           width: 40,
@@ -428,7 +441,7 @@ const PersonRow = memo(function PersonRow({
         <Text
           numberOfLines={1}
           selectable
-          style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+          style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
         >
           {displayName}
         </Text>
@@ -436,12 +449,20 @@ const PersonRow = memo(function PersonRow({
           <Text
             numberOfLines={1}
             selectable
-            style={{ color: colors.tertiaryLabel, fontSize: 13, fontWeight: "400" }}
+            style={{
+              color: colors.tertiaryLabel,
+              fontSize: type.footnote.fontSize,
+              fontWeight: "400",
+            }}
           >
             {person.email}
           </Text>
         ) : null}
-        <Text numberOfLines={1} selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+        <Text
+          numberOfLines={1}
+          selectable
+          style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
+        >
           {roleDisplayName(person.role, t)} · {person.badgeId ?? t("scannerNoBadge")}
         </Text>
         {participantWarning ? (
@@ -455,7 +476,11 @@ const PersonRow = memo(function PersonRow({
             <Text
               numberOfLines={1}
               selectable
-              style={{ color: colors.destructive, fontSize: 13, fontWeight: "600" }}
+              style={{
+                color: colors.destructive,
+                fontSize: type.footnote.fontSize,
+                fontWeight: "600",
+              }}
             >
               {participantWarning.label}
             </Text>
@@ -463,6 +488,6 @@ const PersonRow = memo(function PersonRow({
         ) : null}
       </View>
       <SymbolView name="chevron.right" tintColor={colors.tertiaryLabel} size={14} />
-    </Pressable>
+    </PressableFeedback>
   );
 });

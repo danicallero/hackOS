@@ -1,6 +1,6 @@
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useState } from "react";
-import { Modal, Platform, Pressable, View } from "react-native";
+import { Modal, Platform, View } from "react-native";
 import Animated, {
   SlideInRight,
   SlideOutRight,
@@ -14,6 +14,7 @@ import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { useBackDismiss } from "@/components/app-back-gesture";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AndroidStatusBarScrim } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView } from "@/components/symbol";
 import WalletScreen from "@/components/wallet-screen";
 import {
@@ -233,20 +234,20 @@ function WalletToggleButton({
         zIndex: 31,
       }}
     >
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         testID={testID}
         accessibilityLabel={glyph === "close" ? t("close") : t("tabWallet")}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         onPress={toggle}
-        style={({ pressed }) => ({
+        style={{
           cursor: "pointer",
           borderRadius: ACCOUNT_WALLET_BUTTON_SIZE / 2,
           alignItems: "center",
           flex: 1,
           justifyContent: "center",
-          opacity: pressed ? 0.6 : 1,
-        })}
+        }}
       >
         <Animated.View style={[iconLayer, iconStyle]}>
           <SymbolView
@@ -257,7 +258,7 @@ function WalletToggleButton({
             weight="semibold"
           />
         </Animated.View>
-      </Pressable>
+      </PressableFeedback>
     </GlassView>
   );
 }

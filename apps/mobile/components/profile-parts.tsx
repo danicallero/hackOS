@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 /** Contacts-style action tile: icon above a short label. */
 export function QuickAction({
@@ -34,17 +36,19 @@ export function QuickAction({
 }) {
   return (
     <View style={{ flex: 1 }}>
-      <Pressable
+      <PressableFeedback
         accessibilityRole="button"
         accessibilityLabel={label}
         accessibilityState={{ busy, disabled: busy, selected }}
         disabled={busy}
+        feedback="row"
+        focusRadius={radius.container}
         onPress={onPress}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
-          backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
+          backgroundColor: colors.surface,
           borderCurve: "continuous",
-          borderRadius: 14,
+          borderRadius: radius.container,
           flex: 1,
           gap: 6,
           justifyContent: "center",
@@ -52,17 +56,20 @@ export function QuickAction({
           opacity: dimmed ? 0.4 : 1,
           paddingHorizontal: 8,
           paddingVertical: 10,
-        })}
+        }}
       >
         {busy ? (
-          <ActivityIndicator color={colors.accent} />
+          <AppActivityIndicator color={colors.accent} />
         ) : (
           (iconNode ?? <SymbolView accessible={false} name={icon} size={22} tintColor={iconTint} />)
         )}
-        <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 13, fontWeight: "600" }}>
+        <Text
+          numberOfLines={1}
+          style={{ color: colors.accent, fontSize: type.footnote.fontSize, fontWeight: "600" }}
+        >
           {title}
         </Text>
-      </Pressable>
+      </PressableFeedback>
       {accessory ? (
         <View style={{ position: "absolute", right: 4, top: 4 }}>{accessory}</View>
       ) : null}
@@ -86,22 +93,24 @@ export function VisibilityToggle({
   onChange: (visible: boolean) => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
       accessibilityLabel={label}
       accessibilityRole="switch"
       accessibilityState={{ checked: visible }}
+      feedback="row"
+      focusRadius={radius.container}
       hitSlop={8}
       onPress={() => onChange(!visible)}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
-        backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
+        backgroundColor: colors.surface,
         borderColor: colors.separator,
-        borderRadius: 14,
+        borderRadius: radius.container,
         borderWidth: 1,
         height: 28,
         justifyContent: "center",
         width: 28,
-      })}
+      }}
     >
       <SymbolView
         accessible={false}
@@ -109,7 +118,7 @@ export function VisibilityToggle({
         size={15}
         tintColor={visible ? colors.accent : colors.secondaryLabel}
       />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -128,22 +137,25 @@ export function NoteRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityRole="button"
       accessibilityHint={hint}
       onPress={onPress}
-      style={({ pressed }) => ({
-        backgroundColor: pressed ? colors.elevatedSurface : undefined,
+      style={{
         justifyContent: "center",
         minHeight: 56,
         paddingHorizontal: 16,
         paddingVertical: 12,
-      })}
+      }}
     >
-      <Text selectable style={{ color: colors.label, fontSize: 16, lineHeight: 22 }}>
+      <Text
+        selectable
+        style={{ color: colors.label, fontSize: type.callout.fontSize, lineHeight: 22 }}
+      >
         {note}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -175,13 +187,17 @@ export function DetailRow({
     <>
       <SymbolView accessible={false} name={icon} size={20} tintColor={colors.accent} />
       <View style={{ flex: 1, gap: 2, opacity: dimmed ? 0.4 : 1 }}>
-        {label ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{label}</Text> : null}
+        {label ? (
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
+            {label}
+          </Text>
+        ) : null}
         {valueNode ?? (
           <Text
             selectable={!onPress}
             style={{
               color: onPress ? colors.interactiveText : colors.label,
-              fontSize: 16,
+              fontSize: type.callout.fontSize,
               lineHeight: 22,
             }}
           >
@@ -219,16 +235,14 @@ export function DetailRow({
     );
   }
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityRole="link"
       accessibilityLabel={label ? `${label}, ${value}` : value}
       onPress={onPress}
-      style={({ pressed }) => [
-        style,
-        { backgroundColor: pressed ? colors.elevatedSurface : undefined },
-      ]}
+      style={style}
     >
       {content}
-    </Pressable>
+    </PressableFeedback>
   );
 }

@@ -1,9 +1,10 @@
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Platform, ScrollView, Text, TextInput, View } from "react-native";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { CircleButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
@@ -11,7 +12,8 @@ import { authorizeGithubForProject, type GithubRepoCandidate } from "@/lib/githu
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { projectMutation } from "@/lib/projects";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /**
  * H18: pick the repository a project links, in a sheet like Select challenges.
@@ -21,6 +23,7 @@ import { colors } from "@/theme/colors";
 export function ProjectGithubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t } = useLocale();
+  const readable = useParticipantLayout("form");
   const navigation = useNavigation();
   const router = useRouter();
   const glass = isRealLiquidGlassAvailable();
@@ -112,7 +115,12 @@ export function ProjectGithubScreen() {
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: 32,
+        }}
       >
         {Platform.OS !== "ios" ? (
           <TextInput
@@ -123,9 +131,9 @@ export function ProjectGithubScreen() {
             placeholderTextColor={colors.tertiaryLabel}
             style={{
               backgroundColor: colors.surface,
-              borderRadius: 14,
+              borderRadius: radius.container,
               color: colors.label,
-              fontSize: 17,
+              fontSize: type.body.fontSize,
               minHeight: 44,
               paddingHorizontal: 16,
             }}
@@ -138,22 +146,24 @@ export function ProjectGithubScreen() {
             {shown.map((repo, index) => (
               <View key={repo.id}>
                 {index > 0 ? <Separator /> : null}
-                <Pressable
+                <PressableFeedback
+                  feedback="row"
                   accessibilityRole="button"
                   accessibilityLabel={repo.fullName}
                   disabled={busy}
                   onPress={() => void choose(repo)}
-                  style={({ pressed }) => ({
-                    backgroundColor: pressed ? colors.elevatedSurface : "transparent",
+                  style={{
                     justifyContent: "center",
                     minHeight: 50,
                     opacity: busy ? 0.5 : 1,
                     paddingHorizontal: 16,
                     paddingVertical: 10,
-                  })}
+                  }}
                 >
-                  <Text style={{ color: colors.label, fontSize: 17 }}>{repo.fullName}</Text>
-                </Pressable>
+                  <Text style={{ color: colors.label, fontSize: type.body.fontSize }}>
+                    {repo.fullName}
+                  </Text>
+                </PressableFeedback>
               </View>
             ))}
           </Section>

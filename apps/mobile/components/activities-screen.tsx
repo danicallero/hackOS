@@ -2,8 +2,9 @@ import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
+import { FlatList, Pressable, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
@@ -27,6 +28,7 @@ import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { useParticipantLayout } from "@/theme/layout-participant";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
@@ -37,6 +39,7 @@ export function ActivitiesScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { language, t } = useLocale();
+  const readable = useParticipantLayout("list");
   const insets = useSafeAreaInsets();
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
@@ -300,7 +303,8 @@ export function ActivitiesScreen() {
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           flexGrow: 1,
-          padding: 16,
+          paddingVertical: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
         }}
         data={filtered}
@@ -309,7 +313,9 @@ export function ActivitiesScreen() {
         // Only a pull-to-refresh drives this spinner. Wiring it to `sync.syncing`
         // made the background 15s tick yank the list open under the header on
         // its own (H59).
-        refreshControl={<RefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />}
+        refreshControl={
+          <AppRefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />
+        }
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         ListHeaderComponent={
           (loadError && scannableDirectory.length > 0) || syncError ? (

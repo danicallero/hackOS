@@ -5,7 +5,6 @@ import type {
 import { useEffect, useState } from "react";
 import {
   type AccessibilityActionEvent,
-  RefreshControl,
   ScrollView,
   Text,
   useWindowDimensions,
@@ -21,13 +20,14 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { ActionButton, AppSwitch, Section, SWITCH_IN_ROW_STYLE } from "@/components/native-ui";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useLiveActivityKinds } from "@/lib/live-activities/use-live-activity-kinds";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 type KindPreference = MyLiveActivityPreferences["kinds"][number];
 type Slots = Record<string, number>;
@@ -94,7 +94,9 @@ export function LiveActivityKindsScreen() {
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
       scrollEnabled={!dragging}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
       {kinds.kinds.length > 0 ? (
         <Section footer={kinds.kinds.length > 1 ? t("liveActivityOrderFooter") : undefined}>
@@ -286,7 +288,10 @@ function KindRow({
         style={[{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }, separatorStyle]}
       />
       <View style={{ alignItems: "center", flex: 1, flexDirection: "row", paddingLeft: 16 }}>
-        <Text numberOfLines={2} style={{ color: colors.label, flex: 1, fontSize: 16 }}>
+        <Text
+          numberOfLines={2}
+          style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}
+        >
           {label}
         </Text>
         <AppSwitch

@@ -18,8 +18,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
+import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
@@ -43,7 +45,9 @@ import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ActivityScanResult {
@@ -66,6 +70,7 @@ export function ActivityScannerScreen() {
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
+  const { gutter } = useOperatorLayout(null);
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -405,7 +410,7 @@ export function ActivityScannerScreen() {
       ) : (
         <View
           pointerEvents="box-none"
-          style={{ position: "absolute", top: insets.top, right: 16, zIndex: 30 }}
+          style={{ position: "absolute", top: insets.top, right: gutter, zIndex: 30 }}
         >
           {queueStatus}
         </View>
@@ -436,7 +441,7 @@ export function ActivityScannerScreen() {
           testID={UI_TEST_IDS.scanner.result}
           style={{
             alignSelf: "center",
-            borderRadius: 999,
+            borderRadius: radius.full,
             height: 44,
             justifyContent: "center",
             left: 72,
@@ -449,63 +454,72 @@ export function ActivityScannerScreen() {
           <Text
             selectable
             numberOfLines={1}
-            style={{ color: colors.label, fontSize: 16, fontWeight: "700", textAlign: "center" }}
+            style={{ ...type.callout, color: colors.label, fontWeight: "700", textAlign: "center" }}
           >
             {activityName}
           </Text>
         </View>
       )}
       <View style={{ flex: 1, marginTop: insets.top + 56 }}>
-        <ActivityStatistics activity={activity} stats={stats} inside={inside} />
-        {error ? (
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            style={{
-              borderRadius: 14,
-              marginTop: 12,
-              marginHorizontal: 32,
-              minHeight: 60,
-              overflow: "hidden",
-            }}
-          >
-            <Pressable
-              accessibilityLabel={error}
-              accessibilityHint={t("close")}
-              accessibilityRole="button"
-              accessibilityLiveRegion="assertive"
-              onPress={() => setError(null)}
-              style={{
-                minHeight: 60,
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "row",
-                gap: 9,
-                padding: 14,
-              }}
-            >
-              <SymbolView
-                accessible={false}
-                name="xmark.circle.fill"
-                tintColor={colors.destructive}
-                size={20}
-              />
-              <Text
-                selectable
-                style={{
-                  color: colors.label,
-                  flexShrink: 1,
-                  fontSize: 14,
-                  fontWeight: "600",
-                  textAlign: "center",
-                }}
-              >
-                {error}
-              </Text>
-            </Pressable>
-          </GlassView>
-        ) : null}
         <NfcScannerSurface
+          header={(layout) => (
+            <>
+              <ActivityStatistics
+                activity={activity}
+                stats={stats}
+                inside={inside}
+                layout={layout.stats}
+              />
+              {error ? (
+                <GlassView
+                  colorScheme="auto"
+                  glassEffectStyle="regular"
+                  style={{
+                    borderRadius: radius.container,
+                    marginTop: 12,
+                    minHeight: 60,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Pressable
+                    accessibilityLabel={error}
+                    accessibilityHint={t("close")}
+                    accessibilityRole="button"
+                    accessibilityLiveRegion="assertive"
+                    onPress={() => setError(null)}
+                    style={{
+                      minHeight: 60,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexDirection: "row",
+                      gap: 9,
+                      padding: 14,
+                    }}
+                  >
+                    <SymbolView
+                      accessible={false}
+                      name="xmark.circle.fill"
+                      tintColor={colors.destructive}
+                      size={20}
+                    />
+                    <Text
+                      selectable
+                      style={{
+                        ...type.compact,
+                        color: colors.label,
+                        flexShrink: 1,
+
+                        fontWeight: "600",
+                        textAlign: "center",
+                      }}
+                    >
+                      {error}
+                    </Text>
+                  </Pressable>
+                </GlassView>
+              ) : null}
+            </>
+          )}
           onOpenPeople={() =>
             router.push({
               pathname: "/(tabs)/activities/people",
@@ -616,7 +630,7 @@ function ActivityResultPanel({
         style={{
           backgroundColor: colors.surface,
           borderCurve: "continuous",
-          borderRadius: 24,
+          borderRadius: radius.sheet,
           maxHeight: cardMaxHeight,
           maxWidth: 390,
           overflow: "hidden",
@@ -655,9 +669,10 @@ function ActivityResultPanel({
                     accessibilityLiveRegion="polite"
                     selectable
                     style={{
+                      ...type.footnote,
                       flexShrink: 1,
                       color: colors.label,
-                      fontSize: 13,
+
                       fontWeight: "600",
                     }}
                   >
@@ -670,10 +685,10 @@ function ActivityResultPanel({
                           : t("scannerStateSaved")}
                   </Text>
                 </View>
-                <Text selectable style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}>
+                <Text selectable style={{ ...type.title2, color: colors.label, fontWeight: "700" }}>
                   {fullName}
                 </Text>
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+                <Text selectable style={{ ...type.compact, color: colors.secondaryLabel }}>
                   {result.person.email || t("accountNotSet")}
                 </Text>
               </View>
@@ -712,7 +727,7 @@ function ActivityResultPanel({
                   paddingTop: 16,
                 }}
               >
-                <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                <Text selectable style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
                   {t("scannerDietaryGroup")}
                 </Text>
                 {result.person.intolerances.length > 0 ? (
@@ -723,14 +738,14 @@ function ActivityResultPanel({
                         style={{
                           backgroundColor: colors.warningSurface,
                           borderCurve: "continuous",
-                          borderRadius: 12,
+                          borderRadius: radius.control,
                           paddingHorizontal: 12,
                           paddingVertical: 8,
                         }}
                       >
                         <Text
                           selectable
-                          style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}
+                          style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}
                         >
                           {item.label[language] ?? item.label.en}
                         </Text>
@@ -742,7 +757,7 @@ function ActivityResultPanel({
                   <View style={{ gap: 3 }}>
                     <Text
                       selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}
+                      style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}
                     >
                       {t("personFoodNotes")}
                     </Text>
@@ -755,7 +770,7 @@ function ActivityResultPanel({
                   <View style={{ gap: 3 }}>
                     <Text
                       selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}
+                      style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}
                     >
                       {t("personNotes")}
                     </Text>
@@ -771,7 +786,7 @@ function ActivityResultPanel({
               <Text
                 accessibilityLiveRegion="assertive"
                 selectable
-                style={{ color: colors.destructive, fontSize: 14, fontWeight: "700" }}
+                style={{ ...type.compact, color: colors.destructive, fontWeight: "700" }}
               >
                 {t("scannerBusinessRejected")}: {result.error}
               </Text>
@@ -836,37 +851,38 @@ function ResultActionButton({
   testID?: string;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="scale"
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         alignSelf: "stretch",
         flexGrow: 1,
         backgroundColor: secondary ? colors.elevatedSurface : colors.primaryAction,
-        borderRadius: 999,
+        borderRadius: radius.full,
         minHeight: 50,
         paddingVertical: 12,
         justifyContent: "center",
-        opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
         paddingHorizontal: 12,
-      })}
+      }}
     >
       <Text
         selectable
         style={{
+          ...type.callout,
           color: secondary ? colors.interactiveText : colors.primaryActionText,
-          fontSize: 16,
+
           fontWeight: "600",
           textAlign: "center",
         }}
       >
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -881,86 +897,31 @@ function ActivityStatistics({
   activity,
   stats,
   inside,
+  layout,
 }: {
   activity: ScannerActivity | null;
   stats: ActivityStats | null;
   inside: number | undefined;
+  layout: StatBlockLayout;
 }) {
   const { t } = useLocale();
   const meal = isMealActivityKind(activity?.category);
-  const items = [
-    { label: t("scannerDistinctPeople"), value: stats?.distinctPeople, occupancy: false },
-    {
-      label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
-      value: stats?.repeats,
-      occupancy: false,
-    },
-    { label: t("scannerInsideBuilding"), value: inside, occupancy: true },
-  ];
   return (
-    <View style={{ paddingHorizontal: 24, paddingTop: 20, paddingBottom: 16, gap: 24 }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 16,
-        }}
-      >
-        <View style={{ gap: 4 }}>
-          <Text
-            selectable
-            style={{
-              color: colors.label,
-              fontSize: 44,
-              fontWeight: "700",
-              fontVariant: ["tabular-nums"],
-            }}
-          >
-            {stats?.count ?? "…"}
-          </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
-            {meal ? t("scannerServingsTotal") : t("scannerScansTotal")}
-          </Text>
-        </View>
-      </View>
-      <View
-        style={{
-          flexDirection: "row",
-          gap: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.separator,
-          paddingBottom: 24,
-        }}
-      >
-        {items.map((item) => (
-          <View
-            key={item.label}
-            style={{
-              flex: 1,
-              gap: 5,
-              ...(item.occupancy
-                ? { borderLeftWidth: 1, borderLeftColor: colors.separator, paddingLeft: 16 }
-                : {}),
-            }}
-          >
-            <Text
-              selectable
-              style={{
-                color: colors.label,
-                fontSize: 28,
-                fontWeight: "600",
-                fontVariant: ["tabular-nums"],
-              }}
-            >
-              {item.value ?? "…"}
-            </Text>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
-              {item.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <ScannerStatBlock
+      capped={false}
+      layout={layout}
+      primary={{
+        label: meal ? t("scannerServingsTotal") : t("scannerScansTotal"),
+        value: stats?.count ?? "…",
+      }}
+      secondary={[
+        { label: t("scannerDistinctPeople"), value: stats?.distinctPeople ?? "…" },
+        {
+          label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
+          value: stats?.repeats ?? "…",
+        },
+        { label: t("scannerInsideBuilding"), value: inside ?? "…", divider: true },
+      ]}
+    />
   );
 }

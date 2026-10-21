@@ -46,7 +46,10 @@ jest.mock("react-native-reanimated", () => {
     useAnimatedProps: (factory: () => unknown) => factory(),
     useAnimatedScrollHandler: (handlers: unknown) => handlers,
     useAnimatedStyle: (factory: () => unknown) => factory(),
+    useReducedMotion: () => false,
     useSharedValue: (value: unknown) => ReactLib.useRef({ value }).current,
+    withSpring: (value: unknown) => value,
+    withTiming: (value: unknown) => value,
   };
 });
 jest.mock("react-native-svg", () => {

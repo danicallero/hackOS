@@ -12,11 +12,9 @@ import {
   useState,
 } from "react";
 import {
-  Alert,
   type GestureResponderEvent,
   Platform,
   Pressable,
-  RefreshControl,
   SectionList,
   StyleSheet,
   Text,
@@ -30,6 +28,7 @@ import {
   useNativeGesture,
 } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   EmptyState,
@@ -37,6 +36,7 @@ import {
   LegacyScreenHeader,
   StatusPill,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScheduleDetailScreen } from "@/components/schedule-detail-screen";
 import {
@@ -52,11 +52,13 @@ import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { SystemBlur } from "@/components/system-blur";
+import { alert } from "@/lib/alert";
 import { eventDayKey, formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useBookCrease } from "@/lib/fold-region";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { badgeFitsBesideTitle, resolveListPaneWidth } from "@/lib/pane-width";
 import {
   useRouterTabBarBottomInset,
   useRouterTabBarScrollBottomInset,
@@ -82,9 +84,14 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
-import { listDetailLayout } from "@/lib/window-size";
-import { colors } from "@/theme/colors";
-import { SCREEN_TITLE, SCREEN_TITLE_CENTER, TWO_PANE_BAND } from "@/theme/screen-title";
+import { listDetailLayout, maxContentWidth } from "@/lib/window-size";
+import { colors, isAccessibilityTextSize, radius, type } from "@/theme";
+import {
+  SCREEN_TITLE,
+  SCREEN_TITLE_CENTER,
+  TWO_PANE_BAND,
+  twoPaneBandHeight,
+} from "@/theme/screen-title";
 
 type NowMarker = { kind: "now"; id: string };
 type ItemRow = ScheduleItem & { kind: "item"; active: boolean };
@@ -211,10 +218,13 @@ export default function ScheduleScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   // An expanded window (an unfolded inner display in landscape) has room for the list and
   // an item side by side; narrower windows keep the pushed detail route.
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight, fontScale } = useWindowDimensions();
+  const detailBand = twoPaneBandHeight(fontScale);
   const crease = useBookCrease();
   const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS, crease);
   const twoPane = paneLayout.enabled;
+  const listWidth = resolveListPaneWidth(windowWidth, paneLayout, crease);
+  const listRowPadding = scheduleRowPadding(twoPane ? listWidth : windowWidth);
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
 
@@ -246,7 +256,7 @@ export default function ScheduleScreen() {
       headerShadowVisible: false,
       headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
-      headerTitleStyle: { color: colors.label, fontSize: 28, fontWeight: "800" },
+      headerTitleStyle: { color: colors.label, fontSize: type.title.fontSize, fontWeight: "800" },
       headerSearchBarOptions: {
         placeholder: t("scheduleSearchPlaceholder"),
         autoCapitalize: "none",
@@ -456,7 +466,7 @@ export default function ScheduleScreen() {
       await deleteScheduleItem(item.id);
       await load();
     } catch {
-      Alert.alert(t("scheduleDeleteError"));
+      alert(t("scheduleDeleteError"));
     }
   }
 
@@ -466,7 +476,7 @@ export default function ScheduleScreen() {
   }
 
   function confirmDelete(item: ScheduleItem) {
-    Alert.alert(t("scheduleDeleteConfirmTitle"), t("scheduleDeleteConfirmMessage"), [
+    alert(t("scheduleDeleteConfirmTitle"), t("scheduleDeleteConfirmMessage"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("scheduleDelete"),
@@ -522,7 +532,10 @@ export default function ScheduleScreen() {
   useEffect(() => {
     if (twoPane && !selectedVisible && firstItemId !== null) setSelectedId(firstItemId);
   }, [twoPane, selectedVisible, firstItemId]);
-  const selectionValue = useMemo(() => ({ selectedId, select: setSelectedId }), [selectedId]);
+  const selectionValue = useMemo(
+    () => ({ selectedId, select: setSelectedId, paneWidth: listWidth }),
+    [selectedId, listWidth],
+  );
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
@@ -559,7 +572,12 @@ export default function ScheduleScreen() {
                 colorScheme="auto"
                 glassEffectStyle="regular"
                 isInteractive
-                style={{ alignItems: "center", borderRadius: 22, flexDirection: "row", height: 44 }}
+                style={{
+                  alignItems: "center",
+                  borderRadius: radius.full,
+                  flexDirection: "row",
+                  height: 44,
+                }}
               >
                 <LegacyHeaderIconButton
                   icon={bellIcon}
@@ -582,7 +600,8 @@ export default function ScheduleScreen() {
           searchOpen={legacySearchOpen}
           searchPlaceholder={t("scheduleSearchPlaceholder")}
           searchQuery={searchQuery}
-          title={t("tabSchedule")}
+          // Two panes draw their own titles in each column's band.
+          title={twoPane ? "" : t("tabSchedule")}
           topInset={legacyTopInset}
         />
       )}
@@ -592,7 +611,7 @@ export default function ScheduleScreen() {
           glassEffectStyle="regular"
           isInteractive
           style={{
-            borderRadius: 26,
+            borderRadius: radius.full,
             bottom: tabBarBottomInset + FAB_BOTTOM_OFFSET,
             height: FAB_SIZE,
             position: "absolute",
@@ -616,7 +635,7 @@ export default function ScheduleScreen() {
           <View
             style={{
               flex: twoPane ? 0 : 1,
-              width: twoPane ? paneLayout.listWidth : undefined,
+              width: twoPane ? listWidth : undefined,
             }}
           >
             {twoPane ? (
@@ -626,8 +645,9 @@ export default function ScheduleScreen() {
                 pointerEvents="none"
                 style={{
                   backgroundColor: colors.background,
-                  height: TWO_PANE_BAND,
-                  paddingHorizontal: 19,
+                  minHeight: TWO_PANE_BAND,
+                  paddingBottom: 7.5,
+                  paddingHorizontal: listRowPadding,
                   paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
                 }}
               >
@@ -655,7 +675,7 @@ export default function ScheduleScreen() {
                     ? tabBarScrollBottomInset + FAB_BOTTOM_OFFSET + FAB_SIZE + 16
                     : tabBarScrollBottomInset + 16,
                 }}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+                refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                 stickySectionHeadersEnabled
                 onScrollToIndexFailed={(info) => retryScrollToActive(info)}
                 ListHeaderComponent={
@@ -671,7 +691,7 @@ export default function ScheduleScreen() {
                     ) : null}
                   </View>
                 }
-                ListHeaderComponentStyle={{ paddingHorizontal: 16, paddingTop: 8 }}
+                ListHeaderComponentStyle={{ paddingHorizontal: listRowPadding, paddingTop: 8 }}
                 ListEmptyComponent={
                   loading ? (
                     <RequestFeedback loading />
@@ -698,9 +718,9 @@ export default function ScheduleScreen() {
                       accessibilityRole="header"
                       style={{
                         color: colors.secondaryLabel,
-                        fontSize: 13,
+                        fontSize: type.footnote.fontSize,
                         fontWeight: "600",
-                        paddingHorizontal: 16,
+                        paddingHorizontal: listRowPadding,
                         textTransform: "uppercase",
                       }}
                     >
@@ -710,14 +730,14 @@ export default function ScheduleScreen() {
                 )}
                 renderItem={({ item, index, section }) =>
                   item.kind === "now" ? (
-                    <View style={{ paddingHorizontal: 16, paddingVertical: 12 }}>
+                    <View style={{ paddingHorizontal: listRowPadding, paddingVertical: 12 }}>
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
                         <View style={{ width: TIMELINE_GUTTER_WIDTH, alignItems: "center" }}>
                           <Text
                             numberOfLines={1}
                             style={{
                               color: colors.accent,
-                              fontSize: 13,
+                              fontSize: type.footnote.fontSize,
                               fontVariant: ["tabular-nums"],
                               fontWeight: "700",
                             }}
@@ -777,7 +797,7 @@ export default function ScheduleScreen() {
                     embedded
                     id={String(selectedId)}
                     onScrollOffset={setDetailOffset}
-                    topInset={TWO_PANE_BAND}
+                    topInset={detailBand}
                   />
                 ) : (
                   <EmptyState icon="calendar" title={t("scheduleDetails")} />
@@ -787,7 +807,7 @@ export default function ScheduleScreen() {
                 <View
                   pointerEvents="none"
                   style={{
-                    height: TWO_PANE_BAND,
+                    height: detailBand,
                     left: 0,
                     paddingLeft: 20,
                     paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
@@ -950,7 +970,7 @@ function StartTimeFlag({ time }: { time: string }) {
         numberOfLines={1}
         style={{
           color: colors.accentText,
-          fontSize: 13,
+          fontSize: type.footnote.fontSize,
           fontVariant: ["tabular-nums"],
           fontWeight: "700",
           lineHeight: 16,
@@ -966,7 +986,17 @@ function StartTimeFlag({ time }: { time: string }) {
 const ScheduleSelectionContext = createContext<{
   selectedId: number | null;
   select: (id: number) => void;
+  paneWidth: number;
 } | null>(null);
+
+// Card chrome around the title column: timeline gutter, its gap to the card, the card's border
+// and padding, and the room the reminder bell takes on the right.
+const CARD_CHROME_WIDTH = TIMELINE_GUTTER_WIDTH + 8 + 2 * 2 + 18 + 40;
+
+/** Narrow list panes tighten the card's outer padding so the title keeps its room. */
+function scheduleRowPadding(paneWidth: number): number {
+  return paneWidth < 400 ? 12 : 16;
+}
 
 function ScheduleCard({
   item,
@@ -988,6 +1018,13 @@ function ScheduleCard({
   const { t } = useLocale();
   const router = useRouter();
   const selection = useContext(ScheduleSelectionContext);
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const paneWidth = selection?.paneWidth ?? Math.min(windowWidth, maxContentWidth(windowWidth));
+  const rowPadding = scheduleRowPadding(paneWidth);
+  const badgeInline = badgeFitsBesideTitle(
+    paneWidth - 2 * rowPadding - CARD_CHROME_WIDTH,
+    isAccessibilityTextSize(fontScale),
+  );
   const truncated = isScheduleCardTruncated(item);
   const audienceBadge = scheduleAudienceOnlyBadge(item, t);
   const startsAt = new Date(item.startsAt);
@@ -1002,7 +1039,7 @@ function ScheduleCard({
   }
 
   return (
-    <View style={{ backgroundColor: colors.background, paddingHorizontal: 16 }}>
+    <View style={{ backgroundColor: colors.background, paddingHorizontal: rowPadding }}>
       <View style={{ flexDirection: "row" }}>
         {/* Purely visual — the card's accessibilityLabel below already announces
             the start and end times, so this column would otherwise double up. */}
@@ -1020,7 +1057,7 @@ function ScheduleCard({
               numberOfLines={1}
               style={{
                 color: colors.label,
-                fontSize: 15,
+                fontSize: type.subhead.fontSize,
                 fontVariant: ["tabular-nums"],
                 fontWeight: "600",
                 marginTop: TIMELINE_GAP_BEFORE_LABEL,
@@ -1042,7 +1079,7 @@ function ScheduleCard({
             numberOfLines={1}
             style={{
               color: colors.tertiaryLabel,
-              fontSize: 13,
+              fontSize: type.footnote.fontSize,
               fontVariant: ["tabular-nums"],
               fontWeight: "500",
               marginBottom: TIMELINE_GAP_AFTER_LABEL,
@@ -1080,14 +1117,15 @@ function ScheduleCard({
             borderColor: selection?.selectedId === item.id ? colors.accent : "transparent",
             borderWidth: 2,
             borderCurve: "continuous",
-            borderRadius: 14,
+            borderRadius: radius.container,
             flex: 1,
             marginLeft: 8,
             position: "relative",
           }}
         >
           {reminderOn !== null ? (
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
                 name: item.title,
               })}
@@ -1096,7 +1134,7 @@ function ScheduleCard({
               disabled={reminderBusy}
               onPress={toggleReminder}
               hitSlop={{ bottom: 14, left: 14, right: 14, top: 14 }}
-              style={({ pressed }) => ({
+              style={{
                 alignItems: "center",
                 justifyContent: "center",
                 height: 22,
@@ -1104,27 +1142,33 @@ function ScheduleCard({
                 right: 12,
                 top: 12,
                 width: 22,
-                opacity: reminderBusy ? 0.4 : pressed ? 0.65 : 1,
-              })}
+              }}
             >
               <SymbolView
                 name={reminderOn ? "bell.fill" : "bell"}
                 tintColor={reminderOn ? colors.accent : colors.tertiaryLabel}
                 size={19}
               />
-            </Pressable>
+            </PressableFeedback>
           ) : null}
           <View style={{ gap: 11, padding: 18, paddingRight: 40 }}>
             {/* A non-wrapping row: a wrapping row measured the title at its
                 single-line height and clipped it as soon as it wrapped. */}
-            <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 8 }}>
+            <View
+              style={{
+                alignItems: "flex-start",
+                flexDirection: badgeInline ? "row" : "column",
+                gap: badgeInline ? 8 : 6,
+              }}
+            >
               <Text
                 selectable
                 numberOfLines={truncated ? COLLAPSED_TITLE_LINES : undefined}
                 style={{
                   color: colors.label,
-                  flex: 1,
-                  fontSize: 17,
+                  flex: badgeInline ? 1 : undefined,
+                  flexShrink: 1,
+                  fontSize: type.body.fontSize,
                   fontWeight: "700",
                   lineHeight: 22,
                 }}
@@ -1154,7 +1198,7 @@ function ScheduleCard({
                   style={{
                     alignSelf: "center",
                     color: colors.secondaryLabel,
-                    fontSize: 13,
+                    fontSize: type.footnote.fontSize,
                     fontWeight: "600",
                   }}
                 >
@@ -1162,10 +1206,20 @@ function ScheduleCard({
                 </Text>
               ) : null}
               {item.type && item.location ? (
-                <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>·</Text>
+                <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
+                  ·
+                </Text>
               ) : null}
               {item.location ? (
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                <Text
+                  selectable
+                  numberOfLines={2}
+                  style={{
+                    color: colors.secondaryLabel,
+                    flexShrink: 1,
+                    fontSize: type.footnote.fontSize,
+                  }}
+                >
                   {item.location}
                 </Text>
               ) : null}
@@ -1176,7 +1230,7 @@ function ScheduleCard({
                 numberOfLines={truncated ? COLLAPSED_DESCRIPTION_LINES : undefined}
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 15,
+                  fontSize: type.subhead.fontSize,
                   lineHeight: 21,
                 }}
               >

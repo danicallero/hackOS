@@ -24,7 +24,8 @@ import {
 import type { MealPlan } from "@/lib/types";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useFoodIntolerances } from "@/lib/use-food-intolerances";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /**
  * #933: one sheet for the pending profile tasks (dietary answer, sponsor meal
@@ -32,6 +33,7 @@ import { colors } from "@/theme/colors";
  * only, from the account screen.
  */
 export default function ProfileTasksScreen() {
+  const readable = useParticipantLayout("form");
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { t, language } = useLocale();
@@ -123,7 +125,8 @@ export default function ProfileTasksScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           gap: 22,
-          padding: 16,
+          paddingVertical: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, insets.bottom + 16),
           paddingTop: 16 + topInset,
         }}
@@ -132,7 +135,12 @@ export default function ProfileTasksScreen() {
           <Text
             accessibilityRole="header"
             selectable
-            style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+            style={{
+              color: colors.label,
+              fontSize: type.title3.fontSize,
+              fontWeight: "700",
+              textAlign: "center",
+            }}
           >
             {title}
           </Text>
@@ -177,7 +185,7 @@ export default function ProfileTasksScreen() {
                 placeholderTextColor={colors.tertiaryLabel}
                 style={{
                   color: dietary.noRestrictions ? colors.tertiaryLabel : colors.label,
-                  fontSize: 16,
+                  fontSize: type.callout.fontSize,
                   lineHeight: 22,
                   minHeight: 90,
                   padding: 16,

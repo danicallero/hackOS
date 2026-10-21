@@ -2,22 +2,22 @@ import { useFocusEffect } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
-  Pressable,
-  RefreshControl,
   ScrollView,
   Text,
   TextInput,
   useColorScheme,
   View,
 } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { ActionButton, AndroidStatusBarScrim } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { ApiError } from "@/lib/api";
 import { signOut } from "@/lib/auth-client";
 import { type MessageKey, useLocale } from "@/lib/i18n";
@@ -38,7 +38,7 @@ import {
 import { clearAccountData } from "@/lib/storage-usage";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 type AccountRemovalAction = AccountRemovalEligibility["action"];
 type AccountRemovalCredentialMode = "pin" | "password";
@@ -173,7 +173,7 @@ export default function DeleteAccountScreen() {
   ): Promise<void> {
     if (pendingMessage) {
       await new Promise<void>((resolve) => {
-        Alert.alert(t("accountRemovalPendingTitle"), pendingMessage, [
+        alert(t("accountRemovalPendingTitle"), pendingMessage, [
           { text: t("confirm"), onPress: () => resolve() },
         ]);
       });
@@ -194,7 +194,7 @@ export default function DeleteAccountScreen() {
     if (savedProgress) await saveAccountRemovalProgress(savedProgress);
     else await clearAccountRemovalProgress();
     if (localCleanupFailed && !pendingMessage) {
-      Alert.alert(t("accountRemovalDeviceCleanupPending"));
+      alert(t("accountRemovalDeviceCleanupPending"));
     }
     await signOut().catch(() => undefined);
   }
@@ -562,7 +562,7 @@ export default function DeleteAccountScreen() {
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
             refreshControl={
-              <RefreshControl
+              <AppRefreshControl
                 refreshing={removalLoading && removalEligibility !== null}
                 onRefresh={() => void loadRemovalEligibility()}
               />
@@ -677,7 +677,10 @@ function IntroScreen({
   return (
     <View style={{ gap: 28 }}>
       <View style={{ gap: 12 }}>
-        <Text selectable style={{ color: colors.label, fontSize: 17, lineHeight: 25 }}>
+        <Text
+          selectable
+          style={{ color: colors.label, fontSize: type.body.fontSize, lineHeight: 25 }}
+        >
           {t("accountDeleteIntro")}
         </Text>
         {isAnonymizedOutcome !== undefined ? (
@@ -689,17 +692,34 @@ function IntroScreen({
               paddingLeft: 12,
             }}
           >
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
+            <Text
+              selectable
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: type.footnote.fontSize,
+                lineHeight: 18,
+              }}
+            >
               {t("accountDeleteOutcomeTitle")}
             </Text>
-            <Text selectable style={{ color: colors.label, fontSize: 16, fontWeight: "600" }}>
+            <Text
+              selectable
+              style={{ color: colors.label, fontSize: type.callout.fontSize, fontWeight: "600" }}
+            >
               {t(
                 isAnonymizedOutcome
                   ? "accountDeleteAnonymizedOutcomeTitle"
                   : "accountDeleteFullOutcomeTitle",
               )}
             </Text>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}>
+            <Text
+              selectable
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: type.compact.fontSize,
+                lineHeight: 20,
+              }}
+            >
               {t(
                 isAnonymizedOutcome
                   ? "accountDeleteAnonymizedOutcomeDescription"
@@ -718,7 +738,7 @@ function IntroScreen({
         <Text
           accessibilityRole="header"
           selectable
-          style={{ color: colors.label, fontSize: 20, fontWeight: "700" }}
+          style={{ color: colors.label, fontSize: type.title3.fontSize, fontWeight: "700" }}
         >
           {t("accountDeleteWhatHappens")}
         </Text>
@@ -741,29 +761,34 @@ function IntroScreen({
         <Text
           accessibilityRole="header"
           selectable
-          style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}
+          style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "700" }}
         >
           {t("accountDeleteAnonymousDataTitle")}
         </Text>
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 22 }}>
+        <Text
+          selectable
+          style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize, lineHeight: 22 }}
+        >
           {t("accountDeleteAnonymousDataDescription")}
         </Text>
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityLabel={t(
             expanded ? "accountDeleteRetainedDisclosureHide" : "accountDeleteRetainedDisclosure",
           )}
           accessibilityRole="button"
           accessibilityState={{ expanded }}
           onPress={onToggleRetained}
-          style={({ pressed }) => ({
-            alignItems: "center",
-            flexDirection: "row",
-            gap: 8,
-            minHeight: 44,
-            opacity: pressed ? 0.6 : 1,
-          })}
+          style={{ alignItems: "center", flexDirection: "row", gap: 8, minHeight: 44 }}
         >
-          <Text style={{ color: colors.accent, flex: 1, fontSize: 15, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: colors.accent,
+              flex: 1,
+              fontSize: type.subhead.fontSize,
+              fontWeight: "600",
+            }}
+          >
             {t(
               expanded ? "accountDeleteRetainedDisclosureHide" : "accountDeleteRetainedDisclosure",
             )}
@@ -775,7 +800,7 @@ function IntroScreen({
             size={17}
             weight="semibold"
           />
-        </Pressable>
+        </PressableFeedback>
         {expanded ? <BulletList items={retainedFields} compact /> : null}
       </View>
 
@@ -850,7 +875,7 @@ function VerificationScreen({
           selectable
           style={{
             color: colors.label,
-            fontSize: 16,
+            fontSize: type.callout.fontSize,
             lineHeight: keyboardVisible ? 22 : 24,
             maxWidth: 440,
             textAlign: passwordMode ? "left" : "center",
@@ -864,7 +889,7 @@ function VerificationScreen({
               selectable
               style={{
                 color: colors.label,
-                fontSize: 15,
+                fontSize: type.subhead.fontSize,
                 fontWeight: "600",
                 textAlign: passwordMode ? "left" : "center",
               }}
@@ -897,10 +922,10 @@ function VerificationScreen({
                       ? colors.accent
                       : colors.separator,
                   borderCurve: "continuous",
-                  borderRadius: 12,
+                  borderRadius: radius.control,
                   borderWidth: inputFocused || error ? 2 : 1,
                   color: colors.label,
-                  fontSize: 16,
+                  fontSize: type.callout.fontSize,
                   minHeight: 56,
                   paddingHorizontal: 16,
                   paddingVertical: 12,
@@ -930,7 +955,8 @@ function VerificationScreen({
 
       {!passwordMode && hasChallenge ? (
         <View style={{ alignItems: "center", width: "100%" }}>
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityLabel={
               resendInSeconds > 0
                 ? t("accountDeleteResendIn", { seconds: String(resendInSeconds) })
@@ -940,19 +966,18 @@ function VerificationScreen({
             accessibilityState={{ busy: resendBusy, disabled: resendBusy || resendBlocked }}
             disabled={resendBusy || resendBlocked}
             onPress={onResend}
-            style={({ pressed }) => ({
+            style={{
               alignItems: "center",
               flexDirection: "row",
               gap: 8,
               minHeight: keyboardVisible ? 36 : 44,
-              opacity: resendBusy || resendBlocked ? 0.7 : pressed ? 0.6 : 1,
-            })}
+            }}
           >
-            {resendBusy ? <ActivityIndicator color={colors.accent} size="small" /> : null}
+            {resendBusy ? <AppActivityIndicator color={colors.accent} size="small" /> : null}
             <Text
               style={{
                 color: resendBusy || resendBlocked ? colors.tertiaryLabel : colors.accent,
-                fontSize: 15,
+                fontSize: type.subhead.fontSize,
                 fontWeight: "600",
               }}
             >
@@ -960,7 +985,7 @@ function VerificationScreen({
                 ? t("accountDeleteResendIn", { seconds: String(resendInSeconds) })
                 : t("accountDeleteResendCode")}
             </Text>
-          </Pressable>
+          </PressableFeedback>
         </View>
       ) : null}
 
@@ -1071,7 +1096,7 @@ function OtpInput({
         style={{
           bottom: 0,
           color: "transparent",
-          fontSize: 16,
+          fontSize: type.callout.fontSize,
           left: 0,
           opacity: 0.02,
           padding: 0,

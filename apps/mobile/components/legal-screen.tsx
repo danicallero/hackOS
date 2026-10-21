@@ -7,9 +7,11 @@ import { EVENT_WEBSITE_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** Privacy, terms and open-source licenses, kept out of the account overview. */
 export default function LegalScreen() {
+  const readable = useParticipantLayout("form");
   useColorScheme();
   const { t } = useLocale();
   const router = useRouter();
@@ -25,7 +27,8 @@ export default function LegalScreen() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         gap: 20,
-        padding: 16,
+        paddingVertical: 16,
+        ...readable.content,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
     >

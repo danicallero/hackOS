@@ -9,13 +9,15 @@ import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { projectMutation } from "@/lib/projects";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const NAME_MAX = 80;
 
 /** H19: a modal sheet with the Cancel / Create pattern; the name field is focused on open. */
 export function NewProjectScreen() {
   const { t } = useLocale();
+  const readable = useParticipantLayout("form");
   const router = useRouter();
   const navigation = useNavigation();
   const [name, setName] = useState("");
@@ -88,7 +90,7 @@ export function NewProjectScreen() {
       <ScrollView
         alwaysBounceVertical
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 16, padding: 16 }}
+        contentContainerStyle={{ gap: 16, paddingVertical: 16, ...readable.content }}
         style={{ backgroundColor: colors.background }}
       >
         <Section footer={!canCreate ? t("projectLocked") : undefined}>
@@ -103,7 +105,12 @@ export function NewProjectScreen() {
               placeholder={t("projectName")}
               placeholderTextColor={colors.tertiaryLabel}
               returnKeyType="done"
-              style={{ color: colors.label, fontSize: 17, minHeight: 44, padding: 0 }}
+              style={{
+                color: colors.label,
+                fontSize: type.body.fontSize,
+                minHeight: 44,
+                padding: 0,
+              }}
               value={name}
             />
           </View>
