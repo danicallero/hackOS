@@ -110,6 +110,10 @@ export default function AccountScreen() {
       headerShadowVisible: false,
       headerTransparent: true,
       headerStyle: { backgroundColor: "transparent" },
+      // Content scrolling under the bar and the system indicators is softened by the native
+      // scroll-edge blur, also where the avatar stays a plain part of the page (a foldable's
+      // side-column island, Reduce Motion).
+      scrollEdgeEffects: { top: "soft" },
     });
   }, [navigation, nativeHeader, wallet.open]);
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);

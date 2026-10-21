@@ -197,7 +197,13 @@ export function PersonProfileScreen() {
         </View>
       ) : null}
       {process.env.EXPO_OS === "ios" ? (
-        <Stack.Screen options={{ title: "", headerBackVisible: !floatingBack }} />
+        <Stack.Screen
+          options={{
+            title: "",
+            headerBackVisible: !floatingBack,
+            scrollEdgeEffects: { top: "soft" },
+          }}
+        />
       ) : null}
       {person?.cvUrl ? (
         <CvViewer
