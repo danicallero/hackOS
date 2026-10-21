@@ -64,7 +64,11 @@ export function AuthScreen({
   );
 }
 
-/** Moves the centered form on the compositor while keeping the footer fixed. */
+/**
+ * Moves the centered form on the compositor while keeping the footer fixed. Only the vertical
+ * safe area is applied here: the stack already pads the side column, and a second horizontal
+ * inset pushed the form far off-centre on a foldable.
+ */
 function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
   const keyboard = useAnimatedKeyboard();
   const formStyle = useAnimatedStyle(() => ({
@@ -72,7 +76,7 @@ function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: R
   }));
 
   return (
-    <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
+    <SafeAreaView edges={["top", "bottom"]} style={{ backgroundColor: colors.background, flex: 1 }}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
         <View
           style={{
