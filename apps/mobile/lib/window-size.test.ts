@@ -6,6 +6,7 @@ import {
   listDetailLayout,
   MAX_CONTENT_WIDTH,
   MEDIUM_MAX_WIDTH,
+  TABLET_TAB_BAR_MIN_WIDTH,
   windowSizeClass,
 } from "./window-size";
 
@@ -40,7 +41,7 @@ describe("foldable window layouts", () => {
     expect(listDetailLayout(673, 841, "android")).toEqual({
       enabled: true,
       gutter: 0,
-      listWidth: 300,
+      listWidth: 340,
     });
     expect(listDetailLayout(841, 673, "android").enabled).toBe(true);
     expect(listDetailLayout(600, 841, "android").enabled).toBe(false);
@@ -63,5 +64,18 @@ describe("foldable window layouts", () => {
     });
     // Narrow windows stay single pane whatever the crease.
     expect(listDetailLayout(600, 841, "ios", { x: 300, width: 12 }).enabled).toBe(false);
+  });
+});
+
+describe("documented breakpoint exceptions", () => {
+  it("keeps verified foldable and tablet windows on their geometry", () => {
+    // Fold inner portrait is medium and keeps the phone tab bar; iPad portrait gets the tablet one.
+    expect(windowSizeClass(673)).toBe("medium");
+    expect(673).toBeLessThan(TABLET_TAB_BAR_MIN_WIDTH);
+    expect(744).toBeGreaterThanOrEqual(TABLET_TAB_BAR_MIN_WIDTH);
+    // Duo book is expanded yet not a tablet landscape window.
+    expect(windowSizeClass(951)).toBe("expanded");
+    expect(listDetailLayout(951, 669, "ios").listWidth).toBe(380);
+    expect(listDetailLayout(673, 841, "android").listWidth).toBe(340);
   });
 });

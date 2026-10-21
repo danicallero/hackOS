@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Dimensions, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { POSE_POLL_MS } from "@/lib/fold-region";
-import { navigationSideInsets } from "@/lib/side-region";
+import { isTabletRailWindow, navigationSideInsets } from "@/lib/side-region";
 import FoldRegion from "@/modules/fold-region";
 
 function readEdge(): "left" | "right" | null {
@@ -38,4 +38,12 @@ export function useSideInsets(): { left: number; right: number } {
   const edge = useVerticalBarEdge();
   const window = useWindowDimensions();
   return navigationSideInsets(insets, edge, window, Platform.OS);
+}
+
+/** Whether the root navigator stands in the labelled tablet rail rather than a symbol column. */
+export function useTabletRail(): boolean {
+  const insets = useSafeAreaInsets();
+  const edge = useVerticalBarEdge();
+  const window = useWindowDimensions();
+  return isTabletRailWindow(insets, edge, window, Platform.OS);
 }

@@ -4,7 +4,7 @@ import type { Href } from "expo-router";
 import { usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import type { SFSymbol } from "expo-symbols";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Modal,
   Platform,
@@ -37,11 +37,14 @@ import {
   OVERFLOW_TAB_LABEL_KEY,
   OVERFLOW_TAB_ROUTE,
   type OverflowTabKey,
+  overflowMenuPlacement,
 } from "@/lib/overflow-tabs";
 import { ROUTER_TAB_BAR_VERTICAL_WIDTH, useRouterTabBarInsets } from "@/lib/router-tabs-inset";
 import { useTabPresentation } from "@/lib/tab-presentation";
+import { useTabShortcuts } from "@/lib/tab-shortcuts";
 import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
+import { MIN_TARGET } from "@/theme/tokens";
 
 type TabLabelKey =
   | "tabAccount"
@@ -228,6 +231,18 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
   const maxTabsWithoutOverflow = presentation.withoutOverflow;
   const visibleTabKeys = presentation.visible;
   const overflowIds = presentation.overflow;
+  const router = useRouter();
+  const pathname = usePathname();
+  // H55: Command+1...9 / Command+, on a hardware keyboard follow the visible order.
+  useTabShortcuts([...visibleTabKeys, ...overflowIds], (id) => {
+    const key = id as TabKey;
+    if (visibleTabKeys.includes(key)) {
+      router.navigate(TAB_DEFINITIONS[key].href);
+      return;
+    }
+    const route = OVERFLOW_TAB_ROUTE[key as OverflowTabKey];
+    if (resolveOperationsNavigationAction(pathname, route) !== "noop") router.replace(route);
+  });
   const tabs: RouterTabItem[] = visibleTabKeys.map((key) => {
     const definition = TAB_DEFINITIONS[key];
     const { icon, selectedIcon } = definition;
@@ -521,7 +536,7 @@ function AndroidOverflowMenu({
   const pathname = usePathname();
   const router = useRouter();
   const triggerRef = useRef<View>(null);
-  const [anchor, setAnchor] = useState<{ bottom: number; right: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ bottom: number; left: number } | null>(null);
   const focusedSection = operationsSectionFromPathname(pathname);
   const activeOverflowId =
     focusedSection !== "external" && overflowIds.includes(focusedSection) ? focusedSection : null;
@@ -532,13 +547,23 @@ function AndroidOverflowMenu({
     route: OVERFLOW_TAB_ROUTE[id],
   }));
 
+  // A resize, rotation or fold moves the trigger: the open card's anchor would be stale.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the window size is the trigger
+  useEffect(() => {
+    setAnchor(null);
+  }, [windowHeight, windowWidth]);
+
   function openMenu() {
     void haptic("selection");
     triggerRef.current?.measureInWindow((x, y, width) => {
-      setAnchor({
-        bottom: windowHeight - y + ANDROID_OVERFLOW_MENU_GAP,
-        right: windowWidth - x - width,
-      });
+      setAnchor(
+        overflowMenuPlacement(
+          { x, y, width },
+          { height: windowHeight, width: windowWidth },
+          ANDROID_OVERFLOW_MENU_WIDTH,
+          ANDROID_OVERFLOW_MENU_GAP,
+        ),
+      );
     });
   }
 
@@ -587,8 +612,8 @@ function AndroidOverflowMenu({
             <View
               style={{
                 bottom: anchor.bottom,
+                left: anchor.left,
                 position: "absolute",
-                right: anchor.right,
                 width: ANDROID_OVERFLOW_MENU_WIDTH,
                 zIndex: ANDROID_OVERFLOW_MENU_Z_INDEX + 1,
               }}
@@ -662,6 +687,7 @@ function AndroidOverflowMenuRow({
           alignItems: "center",
           flexDirection: "row",
           gap: 10,
+          minHeight: MIN_TARGET,
           paddingHorizontal: 14,
           paddingVertical: 12,
         }}

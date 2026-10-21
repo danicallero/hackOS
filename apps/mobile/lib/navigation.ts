@@ -1,7 +1,7 @@
 import type { Href, ImperativeRouter } from "expo-router";
 import { useMemo } from "react";
 import { Platform } from "react-native";
-import { TABLET_NAVIGATION_WIDTH, useSideRegion } from "@/lib/side-region";
+import { useSideRegion } from "@/lib/side-region";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 
 /**
@@ -34,13 +34,11 @@ export function useTabStackScreenOptions() {
       ...nativeStackScreenOptions,
       // H55: the tablet TabSlot already clears its sidebar, including native headers.
       contentStyle: {
-        paddingLeft:
-          left === TABLET_NAVIGATION_WIDTH || (slotPadsSide && side.edge === "left") ? 0 : left,
-        paddingRight:
-          right === TABLET_NAVIGATION_WIDTH || (slotPadsSide && side.edge === "right") ? 0 : right,
+        paddingLeft: (side.tabletRail || slotPadsSide) && side.edge === "left" ? 0 : left,
+        paddingRight: (side.tabletRail || slotPadsSide) && side.edge === "right" ? 0 : right,
       },
     }),
-    [left, right, slotPadsSide, side.edge],
+    [left, right, slotPadsSide, side.edge, side.tabletRail],
   );
 }
 

@@ -19,6 +19,8 @@ export interface SideRegion {
   edge: "left" | "right" | null;
   /** Width of the reserved column (0 without one). */
   size: number;
+  /** The wide labelled tablet rail rather than a symbol-only column. */
+  tabletRail?: boolean;
 }
 
 export const NO_SIDE_REGION: SideRegion = { edge: null, size: 0 };
@@ -26,6 +28,28 @@ export const NO_SIDE_REGION: SideRegion = { edge: null, size: 0 };
 /** Width given to the system's column where the insets do not report it (Split View). */
 export const RESERVED_COLUMN_SIZE = 64;
 export const TABLET_NAVIGATION_WIDTH = 200;
+/**
+ * Column Android reserves for the symbol-only bar (no reserved-region API there): the bar's
+ * right edge is 20pt (system column line) - 4pt rim + 52pt pill = 68pt, plus an 8pt gap.
+ * iOS keeps `RESERVED_COLUMN_SIZE`, where the system's own column sets the line.
+ */
+export const ANDROID_RAIL_COLUMN_SIZE = 76;
+
+/** True when the window gets the labelled tablet rail (iOS, no system column, wide landscape). */
+export function isTabletRailWindow(
+  insets: { left: number; right: number },
+  systemEdge: "left" | "right" | null,
+  window: { width: number; height: number },
+  platform: string,
+): boolean {
+  return (
+    platform === "ios" &&
+    !sideRegionForInsets(effectiveSideInsets(insets, systemEdge)).edge &&
+    window.width > window.height &&
+    window.height >= 600 &&
+    isTabletLandscapeWindow(window.width, window.height)
+  );
+}
 
 /** H55: wide iPad windows share the side navigation used by foldable windows. */
 export function navigationSideInsets(
@@ -42,11 +66,11 @@ export function navigationSideInsets(
     (isCompactPassportWindow(window.width, window.height) ||
       listDetailLayout(window.width, window.height, platform).enabled)
   ) {
-    return { left: reserved.left + RESERVED_COLUMN_SIZE, right: reserved.right };
+    return { left: reserved.left + ANDROID_RAIL_COLUMN_SIZE, right: reserved.right };
   }
   if (platform === "ios" && window.width > window.height && window.height >= 600) {
     return {
-      left: isTabletLandscapeWindow(window.width, window.height)
+      left: isTabletRailWindow(insets, systemEdge, window, platform)
         ? TABLET_NAVIGATION_WIDTH
         : RESERVED_COLUMN_SIZE,
       right: reserved.right,

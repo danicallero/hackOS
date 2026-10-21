@@ -1,5 +1,7 @@
 import {
+  ANDROID_RAIL_COLUMN_SIZE,
   effectiveSideInsets,
+  isTabletRailWindow,
   NO_SIDE_REGION,
   navigationSideInsets,
   SIDE_REGION_MIN_SIZE,
@@ -50,7 +52,7 @@ describe("landscape tablet navigation", () => {
       noInsets,
     );
     expect(navigationSideInsets(noInsets, null, { width: 1366, height: 1032 }, "android")).toEqual({
-      left: 64,
+      left: ANDROID_RAIL_COLUMN_SIZE,
       right: 0,
     });
   });
@@ -63,6 +65,34 @@ describe("landscape tablet navigation", () => {
       left: 0,
       right: 64,
     });
+  });
+});
+
+describe("Android rail column", () => {
+  it("clears the whole bar: its inset, pill and a gap", () => {
+    // Bar right edge = 20 (system line) - 4 (rim) + 52 (pill) = 68pt.
+    expect(ANDROID_RAIL_COLUMN_SIZE).toBeGreaterThanOrEqual(68 + 8);
+  });
+
+  it("reserves it for the Fold inner display in portrait and a compact cover", () => {
+    const noInsets = { left: 0, right: 0 };
+    expect(navigationSideInsets(noInsets, null, { width: 673, height: 841 }, "android").left).toBe(
+      ANDROID_RAIL_COLUMN_SIZE,
+    );
+    expect(navigationSideInsets(noInsets, null, { width: 400, height: 500 }, "android").left).toBe(
+      ANDROID_RAIL_COLUMN_SIZE,
+    );
+  });
+});
+
+describe("isTabletRailWindow", () => {
+  const none = { left: 0, right: 0 };
+  it("flags only wide iOS landscape windows without a system column", () => {
+    expect(isTabletRailWindow(none, null, { width: 1366, height: 1032 }, "ios")).toBe(true);
+    expect(isTabletRailWindow(none, null, { width: 951, height: 669 }, "ios")).toBe(false);
+    expect(isTabletRailWindow(none, null, { width: 1032, height: 1366 }, "ios")).toBe(false);
+    expect(isTabletRailWindow(none, "right", { width: 1366, height: 1032 }, "ios")).toBe(false);
+    expect(isTabletRailWindow(none, null, { width: 1366, height: 1032 }, "android")).toBe(false);
   });
 });
 

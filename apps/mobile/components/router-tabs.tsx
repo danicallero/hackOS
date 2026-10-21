@@ -44,7 +44,7 @@ import {
   ROUTER_TAB_BAR_HEIGHT as TAB_BAR_HEIGHT,
   useRouterTabBarInsets,
 } from "@/lib/router-tabs-inset";
-import { TABLET_NAVIGATION_WIDTH, useSideRegion } from "@/lib/side-region";
+import { useSideRegion } from "@/lib/side-region";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 export type { RouterTabBarInsets } from "@/lib/router-tabs-inset";
@@ -189,8 +189,7 @@ export function RouterTabs({
   const registeredRoutes = routes ?? tabs.map(({ href, name }) => ({ href, name }));
   const sideRegion = useSideRegion();
   const tabletSidebar =
-    sideRegion.size === TABLET_NAVIGATION_WIDTH ||
-    (Platform.OS === "android" && sideRegion.edge !== null);
+    sideRegion.tabletRail === true || (Platform.OS === "android" && sideRegion.edge !== null);
   const slotPadding = tabletSidebar
     ? sideRegion.edge === "right"
       ? { paddingRight: sideRegion.size }
@@ -365,6 +364,7 @@ function RouterTabsContent({
         edge={sideEdge}
         size={sideRegion.size}
         surfaceComponent={surfaceComponent}
+        tabletRail={sideRegion.tabletRail === true}
         testID={testID}
         theme={theme}
         bottomPadding={bottomPadding}
@@ -478,6 +478,7 @@ function VerticalTabBar({
   edge,
   size,
   surfaceComponent,
+  tabletRail,
   testID,
   theme,
 }: {
@@ -492,10 +493,10 @@ function VerticalTabBar({
   edge: "left" | "right";
   size: number;
   surfaceComponent: RouterTabsSurfaceComponent;
+  tabletRail: boolean;
   testID: string;
   theme: RouterTabsTheme;
 }) {
-  const tabletRail = size === TABLET_NAVIGATION_WIDTH;
   const cell = ROUTER_TAB_BAR_VERTICAL_CELL;
   // The system's own column (its back, bell and add controls) is 44 pt wide, 20 pt in from the
   // display's edge. The bar's cells match that, in a pill with a 4 pt rim, centred on the same line.
@@ -676,6 +677,8 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
         {isFocused ? (selectedIcon ?? icon) : icon}
         {labelled ? (
           <Text
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            numberOfLines={1}
             style={{
               color: theme.label,
               flex: 1,

@@ -3,9 +3,10 @@ import { useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { bookCrease, useDivisionRegion } from "@/lib/fold-region";
 import { SideRegionProvider, sideRegionForInsets } from "@/lib/side-region";
-import { useSideInsets } from "@/lib/vertical-bar-edge";
-import { isTabletLandscapeWindow, maxContentWidth } from "@/lib/window-size";
+import { useSideInsets, useTabletRail } from "@/lib/vertical-bar-edge";
+import { isTabletLandscapeWindow } from "@/lib/window-size";
 import { colors } from "@/theme/colors";
+import { readableContentWidth } from "@/theme/layout";
 
 /**
  * Lays the navigator out in the space the app really has:
@@ -34,6 +35,7 @@ export function AdaptiveFrame({
 }) {
   const safeInsets = useSafeAreaInsets();
   const windowSideInsets = useSideInsets();
+  const tabletRail = useTabletRail();
   // The root frame (`padSides` false) lays out beside the system's column and fold. Every other
   // frame is a sheet or modal: its own presentation, whose safe area is already right, so it
   // must not inherit the window's vertical-bar column or fold.
@@ -50,7 +52,7 @@ export function AdaptiveFrame({
   // A fold running across the display (laptop or tabletop pose) is not avoided either: the whole
   // display stays available, so lists scroll and bars sit at the real bottom edge.
   const columnWidth =
-    root && (book || isTabletLandscapeWindow(width, height)) ? width : maxContentWidth(width);
+    root && (book || isTabletLandscapeWindow(width, height)) ? width : readableContentWidth(width);
   return (
     <View
       style={{
@@ -68,7 +70,9 @@ export function AdaptiveFrame({
           width: "100%",
         }}
       >
-        <SideRegionProvider value={sideRegionForInsets(insets)}>
+        <SideRegionProvider
+          value={{ ...sideRegionForInsets(insets), tabletRail: root && tabletRail }}
+        >
           {padSides ? (
             <SafeAreaProvider
               initialMetrics={{

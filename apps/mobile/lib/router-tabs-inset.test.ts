@@ -48,3 +48,20 @@ describe("router tab bar geometry", () => {
     expect(routerTabBarInsets(20, 1366, true).contentBottomInset).toBe(20);
   });
 });
+
+describe("tablet breakpoint", () => {
+  it("switches geometry at the shared tablet tab-bar width", () => {
+    expect(routerTabBarHeightForWidth(699)).toBe(64);
+    expect(routerTabBarHeightForWidth(700)).toBe(56);
+  });
+});
+
+describe("tablet rail budget", () => {
+  it("lists every destination up to the height, not the width cap (H55)", () => {
+    const rail = routerTabBarVerticalBudget(1024, 20, 1180, true);
+    const bar = routerTabBarVerticalBudget(1024, 20, 1180);
+    expect(rail.direct).toBe(rail.withoutOverflow);
+    expect(rail.withoutOverflow).toBeGreaterThan(bar.withoutOverflow);
+    expect(rail.withoutOverflow).toBeGreaterThanOrEqual(8);
+  });
+});

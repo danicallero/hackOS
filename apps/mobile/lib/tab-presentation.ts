@@ -34,7 +34,12 @@ export function useTabPresentation(capabilities: string[], context: PersonalTabC
   const { bottom } = useSafeAreaInsets();
   const side = useSideRegion();
   const budget = side.edge
-    ? routerTabBarVerticalBudget(height, routerTabBarBottomPadding(bottom), width)
+    ? routerTabBarVerticalBudget(
+        height,
+        routerTabBarBottomPadding(bottom),
+        width,
+        side.tabletRail === true,
+      )
     : null;
   return tabPresentation(
     capabilities,

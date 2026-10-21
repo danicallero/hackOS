@@ -13,6 +13,35 @@ export const COMPACT_MAX_WIDTH = 600;
 export const MEDIUM_MAX_WIDTH = 840;
 
 /**
+ * Every non-class breakpoint lives here, next to the classes it refines. Each is an
+ * intentional exception to 600/840 because a layout already verified on a device depends on it.
+ *
+ * Tablet tab bar geometry (thinner bar, six direct cells). Not 600: the portrait Fold inner
+ * display (~673pt, medium) keeps the phone geometry; iPad portrait (744pt and up) gets the
+ * tablet one.
+ */
+export const TABLET_TAB_BAR_MIN_WIDTH = 700;
+
+/**
+ * A tablet window with room for a labelled rail, a list and a detail (iPad landscape,
+ * 1180x820 and up). Not the expanded class (840): an iPhone Duo book (951x669) and a short
+ * expanded window are expanded but keep the narrow 64pt rail.
+ */
+export const TABLET_LANDSCAPE_MIN_WIDTH = 1100;
+export const TABLET_LANDSCAPE_MIN_HEIGHT = 800;
+
+/**
+ * Android opens the list beside the detail from this window on, in portrait too. Not the
+ * expanded class (840): the Fold inner display in portrait (673x841) is medium and verified
+ * with two panes. iOS keeps the expanded class.
+ */
+export const ANDROID_LIST_DETAIL_MIN_WIDTH = 640;
+export const ANDROID_LIST_DETAIL_MIN_HEIGHT = 600;
+
+/** List pane widths of the list/detail layout. */
+export const LIST_PANE_WIDTH = { tablet: 420, androidMedium: 340, default: 380 } as const;
+
+/**
  * Widest a screen's content grows. Wider windows (an unfolded foldable, a
  * tablet, a floating window dragged wide) get a centred column instead of
  * stretched phone rows; the floating tab bar sits inside that column too.
@@ -35,7 +64,9 @@ export function maxContentWidth(windowWidth: number): number {
 
 /** H55: enough room for navigation, a readable list and a separate detail pane. */
 export function isTabletLandscapeWindow(width: number, height: number): boolean {
-  return width >= 1100 && height >= 800 && width > height;
+  return (
+    width >= TABLET_LANDSCAPE_MIN_WIDTH && height >= TABLET_LANDSCAPE_MIN_HEIGHT && width > height
+  );
 }
 
 export function windowSizeClass(width: number): WindowSizeClass {
@@ -85,7 +116,9 @@ export function listDetailLayout(
   crease: { x: number; width: number } | null = null,
 ) {
   const enabled =
-    platform === "android" ? width >= 640 && height >= 600 : windowSizeClass(width) === "expanded";
+    platform === "android"
+      ? width >= ANDROID_LIST_DETAIL_MIN_WIDTH && height >= ANDROID_LIST_DETAIL_MIN_HEIGHT
+      : windowSizeClass(width) === "expanded";
   const pagesFit =
     crease !== null &&
     crease.x >= MIN_PAGE_WIDTH &&
@@ -97,9 +130,9 @@ export function listDetailLayout(
       enabled && pagesFit
         ? Math.round(crease.x)
         : isTabletLandscapeWindow(width, height)
-          ? 420
-          : platform === "android" && width < 840
-            ? 300
-            : 380,
+          ? LIST_PANE_WIDTH.tablet
+          : platform === "android" && width < MEDIUM_MAX_WIDTH
+            ? LIST_PANE_WIDTH.androidMedium
+            : LIST_PANE_WIDTH.default,
   };
 }

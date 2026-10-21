@@ -331,6 +331,21 @@ distributed to other Expo Router apps without importing hackOS code.
   y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
   fails when a screen with the automatic inset calls `useScrollToTop` directly.
 
+## Design system
+
+Tokens (`theme/`: `colors`, `space`, `radius`, `type`, `motion`, `pressed`) and
+the primitives `AppText` and `PressableFeedback` are specified in
+[`DESIGN.md` §12](./DESIGN.md#12-mobile-specifics). `NavRow`, `RowButton`,
+`ActionButton`, `ToggleRow` and `AuthButton` are migrated; remaining screens move
+over as they are touched, guarded by `pnpm check:mobile-tokens` (H55, H59).
+
+Responsive layout: `theme/layout.ts` (size-class gutters, readable widths),
+`theme/layout-screens.ts` (scanner/operator column, stat block and action
+layouts), `theme/layout-participant.ts` (`useParticipantLayout`: centred
+form/list/grid columns) and `lib/pane-width.ts` (list pane share, column
+counts, badge-beside-title rule). Pure functions, so every layout decision is
+unit-tested; screens never branch on a device model.
+
 ## Foldables and large screens
 
 One app that resizes, not a layout per device: nothing branches on a device model
@@ -340,6 +355,19 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   cover display), medium < 840 dp (a Galaxy Z Fold inner display in portrait),
   expanded from 840 dp (Pixel Fold inner, tablets). `useWindowSizeClass()`
   re-renders on every resize and keeps nothing between renders.
+- **Other breakpoints.** All live in `lib/window-size.ts`, named, each with the verified
+  layout that keeps it off 600/840: `TABLET_TAB_BAR_MIN_WIDTH` (700, so the portrait Fold
+  inner display at ~673 dp keeps the phone tab bar), `TABLET_LANDSCAPE_MIN_*` (1100 × 800,
+  the labelled tablet rail; a Duo book at 951 dp keeps the 64 dp column) and
+  `ANDROID_LIST_DETAIL_MIN_*` (640 × 600, two panes on the Fold inner display in portrait).
+  `SideRegion.tabletRail` marks the labelled rail; nothing infers it from the column width.
+  Android has no reserved-region API, so it reserves `ANDROID_RAIL_COLUMN_SIZE` (76 dp,
+  the whole symbol bar plus a gap) in route content.
+- **Hardware keyboard.** `modules/hardware-shortcuts` (iOS: iPad keyboard, Mac Designed for
+  iPad) registers Command+1...9 for the destinations in visible order (direct cells, then
+  overflow) and Command+, for Account, from `components/opaque-router-tabs.tsx`. React Native
+  0.86 has no iOS key-event API, so this is a local Expo module (`UIKeyCommand` on the root
+  view controller): it needs a native rebuild and is a no-op in older development clients.
 - **Orientation.** `app.json` no longer locks portrait: the lock made Android
   12L+ letterbox the app on an unfolded display and Android 16 ignores it there.
   `lib/screen-orientation.ts` (`expo-screen-orientation`) locks portrait while the
@@ -1662,8 +1690,8 @@ compact ellipsis button to its right opens a native menu with the secondary
 “Scan QR code” and “Enter code” alternatives. The swipe-revealed Replace badge
 action opens a native system dialog with QR first, NFC as the preferred primary
 action below it, and Cancel. Manual entry is available only in the linking menu.
-Android uses a native Material 3 dialog with rounded corners, secondary QR above
-a filled primary NFC button, and Cancel last; outside/back also dismiss it.
+Android draws the same stacked dialog through `lib/alert.ts` + `AlertHost`
+(NFC, QR, Cancel); outside/back also dismiss it.
 Badge linking renders as separate rounded Liquid Glass controls: a tinted NFC
 primary capsule and a circular overflow menu, without a shared section surface.
 
@@ -2402,10 +2430,9 @@ an id's first post).
   `web.json`: it covers scanner and participant controls, not the full web
   admin surface.
 - Account language row (`components/account-screen.tsx`) — on iOS the whole row
-  is the `MenuView` trigger. On Android, `@expo/ui`'s Material `DropdownMenu`
-  aligns its popup to the anchor's start edge, so a full-width trigger opened the
-  menu at the screen's left; the row is a `Pressable` calling `MenuView`'s
-  `ref.show()` and the menu is anchored to a 1dp strip at the row's trailing edge.
+  is the `MenuView` trigger (`components/app-menu.tsx`). On Android that wrapper draws
+  the iOS-style `MenuPopover`; the row stays a `Pressable` calling `ref.show()`, with
+  the menu anchored to a 1dp strip at the row's trailing edge.
 - Dynamic Type. `patches/react-native@0.86.3.patch` makes every root `Text`
   remount once when the system text size changes. Without it, Fabric
   re-measured text only on its native branch: the next React commit (a tab
@@ -2477,8 +2504,8 @@ centered below the statistics on both screens and dismiss after six seconds.
 
 Every on/off control uses `AppSwitch` (`components/native-ui.tsx`, also behind
 `ToggleRow`) rather than react-native's `Switch`. iOS keeps the native control;
-Android, whose Material default is teal, gets the `accent` token as the on
-track with a white thumb and a neutral off track, in both themes.
+Android draws UIKit's switch (`components/ios-switch.tsx`): 51 x 31 capsule, white
+thumb, `success` (green) on track, `separator` off track, in both themes.
 
 ### Contacts toolbar grouping
 

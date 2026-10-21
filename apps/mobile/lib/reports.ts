@@ -1,4 +1,5 @@
-import { ActionSheetIOS, Alert, Platform } from "react-native";
+import { ActionSheetIOS, Platform } from "react-native";
+import { alert } from "@/lib/alert";
 import { ApiError } from "@/lib/api";
 import type { MessageKey } from "@/lib/i18n";
 import { projectMutation } from "@/lib/projects";
@@ -29,10 +30,10 @@ export function reportContent(target: ReportTarget, t: Translate): void {
   const send = async (reason: ReportReason) => {
     try {
       await projectMutation("/api/reports", "POST", { ...target, reason });
-      Alert.alert(t("reportSent"), t("reportSentBody"));
+      alert(t("reportSent"), t("reportSentBody"));
     } catch (cause) {
       const limited = cause instanceof ApiError && cause.status === 429;
-      Alert.alert(t(limited ? "reportTooMany" : "reportFailed"));
+      alert(t(limited ? "reportTooMany" : "reportFailed"));
     }
   };
   if (Platform.OS === "ios") {
@@ -49,7 +50,7 @@ export function reportContent(target: ReportTarget, t: Translate): void {
     );
     return;
   }
-  Alert.alert(
+  alert(
     t("reportTitle"),
     undefined,
     REASONS_FOR_PLATFORM.map((reason) => ({
