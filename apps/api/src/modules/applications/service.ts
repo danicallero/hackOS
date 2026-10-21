@@ -1846,7 +1846,8 @@ export async function getResponseDetail(
 ): Promise<ResponseDetail> {
   const { rows } = await pool.query(
     `SELECT r.*, u.notes AS staff_notes,
-            NULLIF(concat_ws(' ', u.name, u.surname), '') AS name, u.email, u.shirt_size,
+            NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
+            u.name AS first_name, u.surname AS last_name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name,
             (SELECT r2.name

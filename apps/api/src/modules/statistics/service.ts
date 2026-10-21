@@ -656,7 +656,7 @@ export async function statisticsCsv(
     for (const row of distribution.buckets)
       add(distribution.field.key, row.value, row.n, total > 0 ? row.n / total : null);
   }
-  return `${lines.join("\r\n")}\r\n`;
+  return `\uFEFF${lines.join("\r\n")}\r\n`;
 }
 
 function csvCell(value: unknown): string {
