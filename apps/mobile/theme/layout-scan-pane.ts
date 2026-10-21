@@ -20,3 +20,6 @@ const LEGACY_HEADER_TOP_PADDING = 8;
  */
 export const FINDER_HEADER_TOP =
   SCREEN_TITLE_CENTER - FINDER_HEADER_ROW_HEIGHT / 2 - LEGACY_HEADER_TOP_PADDING;
+
+/** Leading and trailing inset of the profile pane's title, matching the profile's content gutter. */
+export const SCAN_DETAIL_TITLE_INSET = 16;

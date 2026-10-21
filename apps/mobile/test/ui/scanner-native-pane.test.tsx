@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react-native";
+import { act, fireEvent, screen } from "@testing-library/react-native";
 import { Dimensions } from "react-native";
 
 const mockScreenOptions = jest.fn();
@@ -25,13 +25,15 @@ jest.mock("@/components/pane-people-stack", () => ({
     children: unknown;
     enabled: boolean;
     rootTitle: string;
-    rootHeaderRight: unknown;
+    rootHeaderRight: Array<{ type: string; label: string; onPress?: () => void }>;
   }) => {
     const { View, Text } = require("react-native");
     return props.enabled ? (
       <View>
         <Text>{`pane-bar:${props.rootTitle}`}</Text>
-        {props.rootHeaderRight}
+        {props.rootHeaderRight.map((item) => (
+          <Text key={item.type} onPress={item.onPress}>{`bar-item:${item.type}`}</Text>
+        ))}
         {props.children}
       </View>
     ) : (
@@ -51,9 +53,9 @@ jest.mock("@/components/person-operations-screen", () => ({ PersonOperationsScre
 jest.mock("@/components/system-blur", () => ({ SystemBlur: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/components/scanner-transaction-status", () => ({
-  ScannerQueueStatus: (props: { nativeToolbar: boolean }) => {
+  ScannerQueueStatus: (props: { triggerless?: boolean; open?: boolean }) => {
     const { Text } = require("react-native");
-    return <Text>{`queue-status:native=${props.nativeToolbar}`}</Text>;
+    return <Text>{`queue-sheet:triggerless=${props.triggerless}:open=${props.open}`}</Text>;
   },
 }));
 jest.mock("@/lib/api", () => ({ apiFetch: async () => ({ byRole: [] }) }));
@@ -108,7 +110,11 @@ describe("scanner native pane stack (H22, H55)", () => {
     );
     // The pane's own bar owns the title and the sync status; the route's toolbar does not.
     expect(screen.getByText("pane-bar:tabScan")).toBeTruthy();
-    expect(screen.getByText("queue-status:native=false")).toBeTruthy();
+    // Real bar items (a menu and a button), never custom RN views; the button opens the sheet.
+    expect(screen.getByText("bar-item:menu")).toBeTruthy();
+    expect(screen.getByText("queue-sheet:triggerless=true:open=false")).toBeTruthy();
+    await fireEvent.press(screen.getByText("bar-item:button"));
+    expect(screen.getByText("queue-sheet:triggerless=true:open=true")).toBeTruthy();
   });
 
   it("keeps the route header in a compact window", async () => {

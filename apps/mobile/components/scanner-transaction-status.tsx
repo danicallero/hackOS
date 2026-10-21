@@ -14,6 +14,7 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { queueStatusPresentation } from "@/lib/pane-header-items";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
@@ -623,6 +624,9 @@ export function ScannerQueueStatus({
   fillWidth = false,
   nativeToolbar = false,
   toolbarAccessory,
+  open: controlledOpen,
+  onOpenChange,
+  triggerless = false,
 }: {
   queue: PendingScan[];
   syncing: boolean;
@@ -634,12 +638,19 @@ export function ScannerQueueStatus({
   fillWidth?: boolean;
   nativeToolbar?: boolean;
   toolbarAccessory?: ReactElement;
+  /** The queue sheet's state, owned by the caller (a pane header item opens it). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Render only the sheet: the caller draws the trigger as a native bar item. */
+  triggerless?: boolean;
 }) {
   const { t } = useLocale();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const sideRegion = useSideRegion();
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
   const health = scannerQueueHealth(queue);
@@ -651,6 +662,7 @@ export function ScannerQueueStatus({
   }, [open]);
   const hasAttention = health.attention > 0;
   const label = hasAttention ? t("scannerStateAttention") : t("scannerStateReady");
+  const statusSymbol = queueStatusPresentation(hasAttention);
   const trigger = (
     <PressableFeedback
       feedback="opacity"
@@ -668,16 +680,16 @@ export function ScannerQueueStatus({
     >
       <SymbolView
         accessible={false}
-        name={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+        name={statusSymbol.icon}
         size={16}
-        tintColor={hasAttention ? colors.destructive : colors.label}
+        tintColor={statusSymbol.tint ?? colors.label}
       />
       <Text style={{ ...type.compact, color: colors.label, fontWeight: "700" }}>{label}</Text>
     </PressableFeedback>
   );
   return (
     <>
-      {nativeToolbar ? (
+      {triggerless ? null : nativeToolbar ? (
         <Stack.Toolbar placement="right">
           {toolbarAccessory ? (
             <Stack.Toolbar.View hidesSharedBackground>{toolbarAccessory}</Stack.Toolbar.View>
@@ -687,9 +699,9 @@ export function ScannerQueueStatus({
             // A symbol-only item can join the system's vertical bar; the labelled pill cannot.
             <Stack.Toolbar.Button
               accessibilityLabel={label}
-              icon={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+              icon={statusSymbol.icon}
               onPress={() => setOpen(true)}
-              tintColor={hasAttention ? colors.destructive : undefined}
+              tintColor={statusSymbol.tint}
             />
           ) : (
             <Stack.Toolbar.View>{trigger}</Stack.Toolbar.View>

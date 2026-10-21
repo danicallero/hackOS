@@ -41,6 +41,7 @@ import {
 } from "@/lib/overflow-tabs";
 import { ROUTER_TAB_BAR_VERTICAL_WIDTH, useRouterTabBarInsets } from "@/lib/router-tabs-inset";
 import { useTabPresentation } from "@/lib/tab-presentation";
+import { emitTabReselect } from "@/lib/tab-reselect";
 import { useTabShortcuts } from "@/lib/tab-shortcuts";
 import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
@@ -309,7 +310,10 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
       {Platform.OS === "android" ? <NavigationBar style="auto" /> : null}
       <RouterTabs
         colorScheme={fallbackColorScheme}
-        onTabPress={() => void haptic("selection")}
+        onTabPress={(tab, wasSelected) => {
+          void haptic("selection");
+          if (wasSelected) emitTabReselect(tab.name);
+        }}
         onTabSelect={() => void haptic("selection")}
         overflow={
           overflowIds.length > 0 ? (

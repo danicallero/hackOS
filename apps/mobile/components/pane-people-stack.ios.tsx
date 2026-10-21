@@ -12,6 +12,7 @@ import type { PanePeopleStackProps } from "@/components/pane-people-stack";
 import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { paneRootHeaderOptions } from "@/lib/screen-header-options";
 import { colors } from "@/theme/colors";
+import { PANE_BAR_INSET } from "@/theme/screen-title";
 
 export const NATIVE_PANE_STACK = true;
 
@@ -51,7 +52,7 @@ function NativePaneStack({
   }, [navigation, open, ready]);
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, paddingHorizontal: PANE_BAR_INSET }}>
       <NavigationIndependentTree>
         <NavigationContainer
           ref={navigation}
@@ -66,14 +67,17 @@ function NativePaneStack({
           >
             <Stack.Screen
               name="pane"
-              options={paneRootHeaderOptions({ title: rootTitle ?? "", trailing: rootHeaderRight })}
+              options={paneRootHeaderOptions({
+                title: rootTitle ?? "",
+                trailing: rootHeaderRight ?? [],
+              })}
             >
               {() => children}
             </Stack.Screen>
             <Stack.Screen
               name="people"
               listeners={{ beforeRemove: () => onClose() }}
-              options={{ headerBackTitle: backLabel }}
+              options={{ headerBackButtonDisplayMode: "minimal" }}
             >
               {() => (
                 <PeopleDirectoryScreen

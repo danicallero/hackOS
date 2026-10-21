@@ -1,5 +1,6 @@
-import { createElement, Fragment, type ReactElement, type ReactNode } from "react";
+import { createElement, type ReactElement } from "react";
 import { Text } from "react-native";
+import { type PaneBarItem, withBarGaps } from "@/lib/pane-header-items";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 import { SCREEN_TITLE } from "@/theme/screen-title";
@@ -7,13 +8,17 @@ import { SCREEN_TITLE } from "@/theme/screen-title";
 /**
  * The top-level title of a screen's native bar (Scanner, Activities, Schedule, Contacts): plain
  * text in `SCREEN_TITLE` with no shared glass capsule behind it, so it reads the same wherever it
- * is drawn and switching tabs never makes it jump. The pane stacks build their root header from
- * this so they cannot diverge from the single-pane routes.
+ * is drawn and switching tabs never makes it jump. The pane stacks and the single-pane Scanner
+ * build their title from this so they cannot diverge.
  */
-export function screenTitleElement(title: string): ReactElement {
+export function screenTitleElement(
+  title: string,
+  extra: { testID?: string; numberOfLines?: number } = {},
+): ReactElement {
   return createElement(
     Text,
     {
+      ...extra,
       accessibilityRole: "header",
       maxFontSizeMultiplier: CHROME_MAX_FONT_SIZE_MULTIPLIER,
       style: { color: colors.label, flexShrink: 1, ...SCREEN_TITLE },
@@ -23,11 +28,17 @@ export function screenTitleElement(title: string): ReactElement {
 }
 
 /**
- * Native-stack options of a pane's root screen: transparent bar without a shadow, the plain title
- * leading (its shared background hidden) and the screen's actions trailing, which are already
- * glass circles of their own.
+ * Native-stack options of a pane's root screen: a bar without a shadow, the plain title leading
+ * (its shared background hidden) and the screen's actions trailing as real bar items, each its own
+ * glass circle.
  */
-export function paneRootHeaderOptions({ title, trailing }: { title: string; trailing: ReactNode }) {
+export function paneRootHeaderOptions({
+  title,
+  trailing,
+}: {
+  title: string;
+  trailing: Array<Exclude<PaneBarItem, { type: "spacing" }>>;
+}) {
   return {
     headerShadowVisible: false,
     headerStyle: { backgroundColor: colors.background },
@@ -40,12 +51,6 @@ export function paneRootHeaderOptions({ title, trailing }: { title: string; trai
         hidesSharedBackground: true,
       },
     ],
-    unstable_headerRightItems: () => [
-      {
-        type: "custom" as const,
-        element: createElement(Fragment, null, trailing),
-        hidesSharedBackground: true,
-      },
-    ],
+    unstable_headerRightItems: () => withBarGaps(trailing),
   };
 }

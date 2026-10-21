@@ -122,6 +122,12 @@ function AccreditationRevealActions({
   );
 }
 
+/** Hands the person's name to the pane host, which draws it in its top band. */
+function TitleReporter({ onTitle, title }: { onTitle?: (title: string) => void; title: string }) {
+  useEffect(() => onTitle?.(title), [onTitle, title]);
+  return null;
+}
+
 type PersonLoadState = "loading" | "ready" | "missing" | "error";
 
 /**
@@ -157,6 +163,7 @@ export function PersonOperationsScreen({
   focusLogId: focusLogIdProp,
   focusSource: focusSourceProp,
   onScrollOffset,
+  onTitle,
   topInset = 0,
   userId: userIdProp,
 }: {
@@ -164,6 +171,8 @@ export function PersonOperationsScreen({
   focusLogId?: string;
   focusSource?: string;
   onScrollOffset?: (offset: number) => void;
+  /** Embedded: the host draws the person's name in its top band, so it gets the name here. */
+  onTitle?: (title: string) => void;
   topInset?: number;
   userId?: number;
 } = {}) {
@@ -944,14 +953,18 @@ export function PersonOperationsScreen({
           ) : null}
 
           <View style={{ gap: 2 }}>
-            <Text
-              selectable
-              accessibilityRole="header"
-              numberOfLines={1}
-              style={{ ...type.title, color: colors.label, fontWeight: "800" }}
-            >
-              {fullName}
-            </Text>
+            {embedded ? (
+              <TitleReporter title={fullName} onTitle={onTitle} />
+            ) : (
+              <Text
+                selectable
+                accessibilityRole="header"
+                numberOfLines={1}
+                style={{ ...type.title, color: colors.label, fontWeight: "800" }}
+              >
+                {fullName}
+              </Text>
+            )}
             {person.email ? (
               <Text
                 selectable

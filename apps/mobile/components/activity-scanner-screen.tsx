@@ -18,6 +18,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
+import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
@@ -33,6 +35,7 @@ import { bumpActivityScanned } from "@/lib/live-activities/sync";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
+import { queueStatusBarItem, statusShowsLabel } from "@/lib/pane-header-items";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
 import {
   enqueueLocalScan,
@@ -43,12 +46,15 @@ import {
   listScannerPeople,
   pendingScans,
 } from "@/lib/scanner-db";
+import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
+import { screenTitleElement } from "@/lib/screen-header-options";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import {
   PANE_BAND_INSET,
   PANE_CONTROL_HEIGHT,
@@ -92,12 +98,14 @@ export function ActivityScannerScreen({
   const manualBadge = embedded ? undefined : params.manualBadge;
   const manualNonce = embedded ? undefined : params.manualNonce;
   const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  const [paneWidth, setPaneWidth] = useState<number | null>(null);
   // Embedded, the people finder covers this activity's pane only; the activity list is untouched.
   const [peopleOpen, setPeopleOpen] = useState(false);
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const { gutter } = useOperatorLayout(null);
+  const { fontScale } = useWindowDimensions();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -374,6 +382,45 @@ export function ActivityScannerScreen({
     [activityId, scanned],
   );
 
+  // iOS two-pane: the pane is its own native stack. The title and the sync status are real bar
+  // items of ITS header, "View people" pushes the Scanner's finder over it, and the route's header
+  // is hidden by the host, so nothing transparent sits over the pane.
+  const nativePane = embedded && NATIVE_PANE_STACK;
+  const [statusOpen, setStatusOpen] = useState(false);
+  const queueHealth = scannerQueueHealth(syncState.queue);
+  const statusLabel =
+    queueHealth.attention > 0 ? t("scannerStateAttention") : t("scannerStateReady");
+  const rootOptions = useMemo(
+    () => ({
+      headerShadowVisible: false,
+      headerStyle: { backgroundColor: colors.background },
+      headerTransparent: false,
+      title: "",
+      unstable_headerLeftItems: () => [
+        {
+          type: "custom" as const,
+          element: screenTitleElement(activityName, {
+            numberOfLines: 1,
+            testID: UI_TEST_IDS.scanner.result,
+          }),
+          hidesSharedBackground: true,
+        },
+      ],
+      unstable_headerRightItems: () => [
+        {
+          ...queueStatusBarItem({
+            hasAttention: queueHealth.attention > 0,
+            label: statusLabel,
+            onPress: () => setStatusOpen(true),
+            showLabel: statusShowsLabel(paneWidth ?? 0, isAccessibilityTextSize(fontScale)),
+          }),
+          // Busy while a sync runs.
+          selected: syncState.syncing,
+        },
+      ],
+    }),
+    [activityName, fontScale, paneWidth, queueHealth.attention, statusLabel, syncState.syncing],
+  );
   const queueStatus = (
     <ScannerQueueStatus
       queue={syncState.queue}
@@ -385,17 +432,24 @@ export function ActivityScannerScreen({
       clockSkewMs={syncState.clockSkewMs}
       fillWidth={false}
       nativeToolbar={glassAvailable && !embedded}
+      triggerless={nativePane}
+      open={nativePane ? statusOpen : undefined}
+      onOpenChange={nativePane ? setStatusOpen : undefined}
     />
   );
 
-  return (
+  const screenView = (
     <View
       onLayout={
         embedded
-          ? ({ nativeEvent }) =>
+          ? ({ nativeEvent }) => {
+              setPaneWidth((current) =>
+                current === nativeEvent.layout.width ? current : nativeEvent.layout.width,
+              );
               setPaneHeight((current) =>
                 current === nativeEvent.layout.height ? current : nativeEvent.layout.height,
-              )
+              );
+            }
           : undefined
       }
       style={{
@@ -448,7 +502,9 @@ export function ActivityScannerScreen({
           onPress={goBack}
         />
       )}
-      {embedded ? (
+      {nativePane ? (
+        queueStatus
+      ) : embedded ? (
         <View
           pointerEvents="box-none"
           style={{
@@ -535,7 +591,7 @@ export function ActivityScannerScreen({
           </Text>
         </View>
       )}
-      <View style={{ flex: 1, marginTop: embedded ? topInset : insets.top + 56 }}>
+      <View style={{ flex: 1, marginTop: nativePane ? 0 : embedded ? topInset : insets.top + 56 }}>
         <NfcScannerSurface
           header={(layout) => (
             <>
@@ -629,7 +685,7 @@ export function ActivityScannerScreen({
           onManual={stopNfc}
         />
       </View>
-      {embedded ? (
+      {embedded && !nativePane ? (
         <PeopleFinderPane
           backLabel={t("tabActivities")}
           onClose={() => setPeopleOpen(false)}
@@ -649,7 +705,7 @@ export function ActivityScannerScreen({
           result={result}
           registering={registering}
           tabBarBottomInset={tabBarBottomInset}
-          pane={embedded ? { height: paneHeight, band: topInset } : null}
+          pane={embedded ? { height: paneHeight, band: nativePane ? 0 : topInset } : null}
           onCancel={() => {
             setResult(null);
             setRegistering(false);
@@ -663,6 +719,33 @@ export function ActivityScannerScreen({
         />
       ) : null}
     </View>
+  );
+  if (!nativePane) return screenView;
+  return (
+    <PaneNativeStack
+      enabled
+      pushed={{
+        open: peopleOpen,
+        onClose: () => setPeopleOpen(false),
+        // Icon-only back circle, like the standalone People.
+        options: { headerBackButtonDisplayMode: "minimal" },
+        render: () => (
+          <PeopleDirectoryScreen
+            embedded
+            nativeHeader
+            onSelect={(person) => {
+              // The same path as the People picker route: the chosen badge is scanned as if read.
+              setPeopleOpen(false);
+              if (person.badgeId) void scanned(person.badgeId);
+            }}
+            requireBadge
+          />
+        ),
+      }}
+      rootOptions={rootOptions}
+    >
+      {screenView}
+    </PaneNativeStack>
   );
 }
 

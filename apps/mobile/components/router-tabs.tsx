@@ -142,7 +142,7 @@ export interface RouterTabsProps {
   /** Ready-to-render overflow control; it is placed in its own circle. */
   overflow?: ReactNode;
   /** Side effects for ordinary direct-tab presses, such as haptics. */
-  onTabPress?: (tab: RouterTabItem) => void;
+  onTabPress?: (tab: RouterTabItem, wasSelected: boolean) => void;
   /** Side effects after a direct tab release, including a scrub selection. */
   onTabSelect?: (index: number) => void;
   /** Direct-cell budget when `overflow` is present; defaults to four. */
@@ -234,7 +234,7 @@ interface RouterTabsContentProps {
   colorScheme: RouterTabsColorScheme;
   directTabs: RouterTabItem[];
   liquidGlass: boolean;
-  onTabPress?: (tab: RouterTabItem) => void;
+  onTabPress?: (tab: RouterTabItem, wasSelected: boolean) => void;
   onTabSelect?: (index: number) => void;
   overflow?: ReactNode;
   surfaceComponent: RouterTabsSurfaceComponent;
@@ -425,7 +425,7 @@ function RouterTabsContent({
                     selectionOffset.value = reducedMotion
                       ? targetOffset
                       : withSpring(targetOffset, TAB_SELECTION_SPRING);
-                    onTabPress?.(tab);
+                    onTabPress?.(tab, index === selectedDirectTabIndex);
                   }}
                   selectedIcon={tab.selectedIcon}
                   itemHeight={tabItemHeight}
@@ -486,7 +486,7 @@ function VerticalTabBar({
   colorScheme: RouterTabsColorScheme;
   directTabs: RouterTabItem[];
   liquidGlass: boolean;
-  onTabPress?: (tab: RouterTabItem) => void;
+  onTabPress?: (tab: RouterTabItem, wasSelected: boolean) => void;
   overflow?: ReactNode;
   pathname: string;
   reducedMotion: boolean;
@@ -545,7 +545,7 @@ function VerticalTabBar({
               icon={tab.icon}
               itemHeight={cell}
               label={tab.label}
-              onTabPress={() => onTabPress?.(tab)}
+              onTabPress={() => onTabPress?.(tab, isTabActive(pathname, tab))}
               selectedIcon={tab.selectedIcon}
               testID={tab.testID ?? `${testID}-${tab.name}`}
               theme={theme}

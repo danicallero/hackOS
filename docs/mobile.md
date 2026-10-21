@@ -1694,6 +1694,18 @@ Compact windows keep pushing the route. Pure helpers: `lib/activity-pane.ts`;
 geometry hook and constants: `theme/layout-activity-pane.ts`. Scan, queue and
 idempotency paths are unchanged.
 
+On iOS each pane is its own native stack (`components/pane-native-stack.ios.tsx`,
+an independent navigation tree) and the route sets `headerShown: false`, so no
+transparent bar sits over the panes. The list pane's bar carries the shared
+screen title, the kind filter as a native menu item and the integrated search.
+The scanner pane's root bar carries the activity name and the queue status as a
+native button item (`lib/pane-header-items.ts`; the queue sheet is hosted by
+`ScannerQueueStatus triggerless`). "View people" pushes the Scanner's
+`PeopleDirectoryScreen` (`nativeHeader`, `requireBadge`) over it with an icon-only
+back item; a pick is scanned as if read. Pressing the selected Activities tab
+again clears the selection (`lib/tab-reselect.ts`). Android and web keep the
+in-page bands and `PeopleFinderPane`.
+
 `components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
 operator's list of scannable activities, read straight from the local
 `scanner_activities` cache. On iOS 26+ its native header follows Schedule: a

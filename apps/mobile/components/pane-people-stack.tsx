@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { View } from "react-native";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
+import type { PaneBarButton, PaneBarMenu } from "@/lib/pane-header-items";
 import type { ScannerPerson } from "@/lib/scanner-types";
 
 export interface PanePeopleStackProps {
@@ -13,7 +14,7 @@ export interface PanePeopleStackProps {
   requireBadge?: boolean;
   /** The pane's own title and trailing header items (the native stack draws them in its bar). */
   rootTitle?: string;
-  rootHeaderRight?: ReactNode;
+  rootHeaderRight?: Array<PaneBarButton | PaneBarMenu>;
   children: ReactNode;
 }
 

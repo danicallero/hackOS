@@ -95,7 +95,9 @@
   "jest": {
     "preset": "jest-expo",
     "moduleNameMapper": {
-      "^react-native($|/.*)": "<rootDir>/node_modules/react-native$1"
+      "^react-native($|/.*)": "<rootDir>/node_modules/react-native$1",
+      "^@/components/pane-people-stack$": "<rootDir>/components/pane-people-stack.tsx",
+      "^@/components/pane-native-stack$": "<rootDir>/components/pane-native-stack.tsx"
     },
     "setupFiles": [
       "./jest.setup.js"

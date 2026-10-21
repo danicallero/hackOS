@@ -92,6 +92,7 @@ jest.mock("@/theme/colors", () => ({
 }));
 
 import { GeneralScannerScreen } from "@/components/general-scanner-screen";
+import { emitTabReselect } from "@/lib/tab-reselect";
 import { renderMobile } from "./render";
 
 const initialWindow = Dimensions.get("window");
@@ -140,6 +141,26 @@ describe("scanner two panes (H22, H55)", () => {
     await fireEvent.press(screen.getByText("scan-seven"));
     expect(await screen.findByText("profile-7-pane")).toBeTruthy();
     expect(screen.queryByText("panePlaceholderScanTitle")).toBeNull();
+  });
+
+  it("returns to the start when the selected Scanner tab is pressed again", async () => {
+    await setWindow(1180, 820);
+    mockParams = {};
+    await renderMobile(<GeneralScannerScreen />);
+    await fireEvent.press(screen.getByText("scan-seven"));
+    await fireEvent.press(screen.getByText("view-people"));
+    expect(await screen.findByText("profile-7-pane")).toBeTruthy();
+
+    await act(async () => emitTabReselect("scan"));
+
+    expect(screen.queryByText("profile-7-pane")).toBeNull();
+    expect(screen.getByText("panePlaceholderScanTitle")).toBeTruthy();
+    expect(screen.queryByText("finder-overlay")).toBeNull();
+    expect(mockSetParams).toHaveBeenCalledWith({
+      personId: undefined,
+      focusLogId: undefined,
+      focusSource: undefined,
+    });
   });
 
   it("pushes the person route in a compact window", async () => {

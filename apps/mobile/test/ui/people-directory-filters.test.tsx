@@ -134,6 +134,28 @@ describe("people directory role filters", () => {
     );
   });
 
+  it("returns the list as the screen's root with automatic insets in the native pane stack", async () => {
+    const view = await renderMobile(
+      <PeopleDirectoryScreen embedded nativeHeader backLabel="scannerBack" />,
+    );
+    await waitFor(() => expect(screen.getByText("Ada")).toBeTruthy());
+    // renderMobile wraps in providers; the first scroll view must be the screen root's child.
+    const insets: unknown[] = [];
+    const walk = (node: unknown) => {
+      if (!node || typeof node !== "object") return;
+      const { props, children } = node as {
+        props?: Record<string, unknown>;
+        children?: unknown[];
+      };
+      if (props && "contentInsetAdjustmentBehavior" in props) {
+        insets.push(props.contentInsetAdjustmentBehavior);
+      }
+      for (const child of children ?? []) walk(child);
+    };
+    walk(view.toJSON());
+    expect(insets).toEqual(["automatic"]);
+  });
+
   it("preserves the activity badge restriction and search within selected roles", async () => {
     mockActivityId = "7";
     await renderMobile(<PeopleDirectoryScreen />);

@@ -9,6 +9,7 @@ import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
+import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
 import { PanePlaceholder } from "@/components/pane-placeholder";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
@@ -22,10 +23,13 @@ import {
 import { isActivitySelected } from "@/lib/activity-pane";
 import { formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
+import { filterMenuBarItem, withBarGaps } from "@/lib/pane-header-items";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
+import { screenTitleElement } from "@/lib/screen-header-options";
+import { useTabReselect } from "@/lib/tab-reselect";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -64,6 +68,13 @@ export function ActivitiesScreen({
   useEffect(() => {
     if (deepLinkId !== null) setSelectedId(deepLinkId);
   }, [deepLinkId, deepLinkNonce]);
+  // iOS two-pane: each column is its own native stack with its own bar; the route's header is hidden.
+  const nativePane = twoPane && NATIVE_PANE_STACK;
+  // Pressing the already-selected tab returns both panes to their start.
+  useTabReselect("activities", () => {
+    setSelectedId(null);
+    if (deepLinkId !== null) router.setParams({ selected: undefined, selectedNonce: undefined });
+  });
   const insets = useSafeAreaInsets();
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
@@ -193,6 +204,13 @@ export function ActivitiesScreen({
   useLayoutEffect(() => {
     const headerRight = () => filterMenu;
 
+    if (twoPane) {
+      // Each pane draws its own bar (native stacks on iOS, in-page bands elsewhere), so the route
+      // has none: a transparent native header over both panes swallowed touches in the pane band.
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
+
     if (!glassAvailable) {
       // Keep the options available to the fallback/native test harness while
       // the actual visible control is LegacyScreenHeader below.
@@ -219,20 +237,8 @@ export function ActivitiesScreen({
       title: "",
       headerShown: true,
       headerLargeTitle: false,
-      // Two panes: each column draws its own top band (below), so the bar paints nothing.
-      headerTransparent: twoPane,
-      ...(twoPane
-        ? {
-            headerBlurEffect: "none" as const,
-            scrollEdgeEffects: {
-              bottom: "hidden" as const,
-              left: "hidden" as const,
-              right: "hidden" as const,
-              top: "hidden" as const,
-            },
-          }
-        : {}),
-      headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
+      headerTransparent: false,
+      headerStyle: { backgroundColor: colors.background },
       headerShadowVisible: false,
       headerTitleAlign: "left",
       headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },
@@ -247,6 +253,48 @@ export function ActivitiesScreen({
       },
     });
   }, [glassAvailable, filterMenu, navigation, t, twoPane]);
+
+  // The list pane's native bar: the shared title plus the filter menu, each its own glass circle,
+  // and the integrated search.
+  const listOptions = useMemo(
+    () => ({
+      headerShadowVisible: false,
+      headerStyle: { backgroundColor: colors.background },
+      headerTransparent: false,
+      title: "",
+      unstable_headerLeftItems: () => [
+        {
+          type: "custom" as const,
+          element: screenTitleElement(t("tabActivities")),
+          hidesSharedBackground: true,
+        },
+      ],
+      unstable_headerRightItems: () =>
+        withBarGaps([
+          filterMenuBarItem({
+            accessibilityLabel: t("scheduleFilter"),
+            active: selectedKinds.length > 0,
+            onSelect: selectKind,
+            // The native menu takes the SF Symbol of each row.
+            rows: filterItems.map((row) => {
+              const icon = "icon" in row ? row.icon : undefined;
+              const symbol = typeof icon === "string" ? icon : icon?.ios;
+              return { id: row.id, label: row.label, selected: row.selected, icon: symbol };
+            }),
+          }),
+        ]),
+      headerSearchBarOptions: {
+        placeholder: t("scannerActivitiesSearchPlaceholder"),
+        autoCapitalize: "none" as const,
+        hideWhenScrolling: true,
+        allowToolbarIntegration: false,
+        placement: "integratedButton" as const,
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setQuery(event.nativeEvent.text),
+      },
+    }),
+    [filterItems, selectKind, selectedKinds.length, t],
+  );
 
   // Forces the FlatList back to the top on focus so the native large-title
   // header re-syncs its collapsed/expanded state with the actual scroll
@@ -294,7 +342,7 @@ export function ActivitiesScreen({
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {glassAvailable ? (
+      {nativePane ? null : glassAvailable ? (
         <>
           {twoPane ? null : (
             <Stack.Toolbar placement="left">
@@ -341,7 +389,7 @@ export function ActivitiesScreen({
       )}
       <View style={{ flex: 1, flexDirection: "row" }}>
         <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? pane.listWidth : undefined }}>
-          {twoPane ? (
+          {twoPane && !nativePane ? (
             // The list's own top band, in the page colour: rows stop at its bottom edge, the way
             // they stop under the bar on a phone.
             <View
@@ -359,79 +407,83 @@ export function ActivitiesScreen({
               </Text>
             </View>
           ) : null}
-          <FlatList
-            ref={listRef}
-            {...trueTop.scrollProps}
-            style={{ flex: 1 }}
-            testID="activities-list"
-            contentInsetAdjustmentBehavior={twoPane ? "never" : "automatic"}
-            contentContainerStyle={{
-              flexGrow: 1,
-              paddingVertical: 16,
-              ...(twoPane ? { paddingHorizontal: screenGutter(pane.listWidth) } : readable.content),
-              paddingBottom: Math.max(32, tabBarBottomInset + 16),
-            }}
-            data={filtered}
-            keyExtractor={(item) => String(item.id)}
-            keyboardDismissMode="on-drag"
-            // Only a pull-to-refresh drives this spinner. Wiring it to `sync.syncing`
-            // made the background 15s tick yank the list open under the header on
-            // its own (H59).
-            refreshControl={
-              <AppRefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />
-            }
-            ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-            ListHeaderComponent={
-              (loadError && scannableDirectory.length > 0) || syncError ? (
-                <View style={{ gap: 8, paddingBottom: 12 }}>
-                  {loadError && scannableDirectory.length > 0 ? (
-                    <RequestFeedback
-                      error={loadError}
-                      message={t("requestError")}
-                      onRetry={() => void refresh()}
-                      retrying={loading || refreshing}
-                    />
-                  ) : null}
-                  {syncError && isSyncConflict(syncError) ? (
-                    <RequestFeedback
-                      error={new Error(syncError.message)}
-                      message={t("scannerSyncRejected")}
-                      onRetry={() => void sync.sync()}
-                      retrying={sync.syncing}
-                    />
-                  ) : null}
-                  {syncError && !isSyncConflict(syncError) ? (
-                    <StaleDataBanner updatedAt={sync.lastSync} />
-                  ) : null}
-                </View>
-              ) : null
-            }
-            ListEmptyComponent={
-              listLoading ? (
-                <RequestFeedback loading />
-              ) : loadError ? (
-                <RequestFeedback
-                  error={loadError}
-                  message={t("requestError")}
-                  onRetry={() => void refresh()}
-                  retrying={loading || refreshing}
-                />
-              ) : filtering ? (
-                <EmptyState
-                  icon="magnifyingglass"
-                  title={t("scannerActivitiesNoMatches")}
-                  description={t("scannerActivitiesNoMatchesBody")}
-                />
-              ) : (
-                <EmptyState
-                  icon="wave.3.right"
-                  title={t("scannerActivitiesEmpty")}
-                  description={t("scannerActivitiesEmptyBody")}
-                />
-              )
-            }
-            renderItem={renderActivityRow}
-          />
+          <PaneNativeStack enabled={nativePane} rootOptions={listOptions}>
+            <FlatList
+              ref={listRef}
+              {...trueTop.scrollProps}
+              style={{ flex: 1 }}
+              testID="activities-list"
+              contentInsetAdjustmentBehavior={twoPane && !nativePane ? "never" : "automatic"}
+              contentContainerStyle={{
+                flexGrow: 1,
+                paddingVertical: 16,
+                ...(twoPane
+                  ? { paddingHorizontal: screenGutter(pane.listWidth) }
+                  : readable.content),
+                paddingBottom: Math.max(32, tabBarBottomInset + 16),
+              }}
+              data={filtered}
+              keyExtractor={(item) => String(item.id)}
+              keyboardDismissMode="on-drag"
+              // Only a pull-to-refresh drives this spinner. Wiring it to `sync.syncing`
+              // made the background 15s tick yank the list open under the header on
+              // its own (H59).
+              refreshControl={
+                <AppRefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />
+              }
+              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+              ListHeaderComponent={
+                (loadError && scannableDirectory.length > 0) || syncError ? (
+                  <View style={{ gap: 8, paddingBottom: 12 }}>
+                    {loadError && scannableDirectory.length > 0 ? (
+                      <RequestFeedback
+                        error={loadError}
+                        message={t("requestError")}
+                        onRetry={() => void refresh()}
+                        retrying={loading || refreshing}
+                      />
+                    ) : null}
+                    {syncError && isSyncConflict(syncError) ? (
+                      <RequestFeedback
+                        error={new Error(syncError.message)}
+                        message={t("scannerSyncRejected")}
+                        onRetry={() => void sync.sync()}
+                        retrying={sync.syncing}
+                      />
+                    ) : null}
+                    {syncError && !isSyncConflict(syncError) ? (
+                      <StaleDataBanner updatedAt={sync.lastSync} />
+                    ) : null}
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                listLoading ? (
+                  <RequestFeedback loading />
+                ) : loadError ? (
+                  <RequestFeedback
+                    error={loadError}
+                    message={t("requestError")}
+                    onRetry={() => void refresh()}
+                    retrying={loading || refreshing}
+                  />
+                ) : filtering ? (
+                  <EmptyState
+                    icon="magnifyingglass"
+                    title={t("scannerActivitiesNoMatches")}
+                    description={t("scannerActivitiesNoMatchesBody")}
+                  />
+                ) : (
+                  <EmptyState
+                    icon="wave.3.right"
+                    title={t("scannerActivitiesEmpty")}
+                    description={t("scannerActivitiesEmptyBody")}
+                  />
+                )
+              }
+              renderItem={renderActivityRow}
+            />
+          </PaneNativeStack>
         </View>
         {twoPane ? (
           <View

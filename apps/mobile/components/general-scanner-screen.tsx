@@ -21,13 +21,13 @@ import { QrCamera } from "@/components/QrCamera";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
-import { SystemBlur } from "@/components/system-blur";
 import { apiFetch } from "@/lib/api";
 import { useBookCrease } from "@/lib/fold-region";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
+import { filterMenuBarItem, queueStatusBarItem, statusShowsLabel } from "@/lib/pane-header-items";
 import { resolveListPaneWidth } from "@/lib/pane-width";
 import {
   ROLE_FILTER_ALL_ICON,
@@ -37,7 +37,6 @@ import {
 } from "@/lib/role-filters";
 import {
   backAction,
-  detailBandOpacity,
   nextSelection,
   peopleDestination,
   type ScanSelection,
@@ -52,16 +51,19 @@ import {
   matchesScannerRole,
   saveScannerRoleFilter,
 } from "@/lib/scanner-group-filter";
+import { scannerQueueHealth } from "@/lib/scanner-state";
 import type { ScannerPerson } from "@/lib/scanner-types";
+import { screenTitleElement } from "@/lib/screen-header-options";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
+import { useTabReselect } from "@/lib/tab-reselect";
 import { useScannerSync } from "@/lib/use-scanner";
 import { listDetailLayout } from "@/lib/window-size";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
-import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
-import { SCAN_DETAIL_MAX_WIDTH } from "@/theme/layout-scan-pane";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, isAccessibilityTextSize } from "@/theme/dynamic-type";
+import { SCAN_DETAIL_MAX_WIDTH, SCAN_DETAIL_TITLE_INSET } from "@/theme/layout-scan-pane";
 import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
-import { SCREEN_TITLE, twoPaneBandHeight } from "@/theme/screen-title";
+import { SCREEN_TITLE, SCREEN_TITLE_CENTER, twoPaneBandHeight } from "@/theme/screen-title";
 
 interface ScannerRoleStat {
   role: ScannerPerson["role"];
@@ -90,10 +92,6 @@ export function GeneralScannerScreen() {
   const detailBand = twoPaneBandHeight(fontScale);
   // Lives above the layout branch (and mirrors the route params) so it survives resize and rotation.
   const [selection, setSelection] = useState<ScanSelection | null>(null);
-  const [detailOffset, setDetailOffset] = useState(0);
-  const selectedKey = selection ? selectionKey(selection) : null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new profile starts at the top.
-  useEffect(() => setDetailOffset(0), [selectedKey]);
   const params = useLocalSearchParams<{
     personId?: string;
     focusLogId?: string;
@@ -126,6 +124,13 @@ export function GeneralScannerScreen() {
       return () => subscription.remove();
     }, [back]),
   );
+  // Pressing the selected Scanner tab again returns to the start: no person, finder closed (the
+  // pane's native stack pops to its root), and no leftover route params to select one again.
+  useTabReselect("scan", () => {
+    setSelection(null);
+    setPeopleOpen(false);
+    router.setParams({ personId: undefined, focusLogId: undefined, focusSource: undefined });
+  });
   const selectFromFinder = useCallback((person: ScannerPerson) => {
     const picked = { userId: person.userId };
     setSelection((current) => nextSelection(current, picked));
@@ -274,6 +279,9 @@ export function GeneralScannerScreen() {
     [router, sync.serverSnapshot, t, twoPane],
   );
 
+  const [queueOpen, setQueueOpen] = useState(false);
+  const [detailTitle, setDetailTitle] = useState("");
+  const hasAttention = scannerQueueHealth(sync.queue).attention > 0;
   const roleFilter = useScannerRoleFilterMenu({
     options: roleOptions,
     groups,
@@ -291,7 +299,11 @@ export function GeneralScannerScreen() {
       clockSkewMs={sync.clockSkewMs}
       fillWidth={false}
       nativeToolbar={glassAvailable && !nativePane}
-      toolbarAccessory={glassAvailable && !nativePane ? roleFilter : undefined}
+      toolbarAccessory={glassAvailable && !nativePane ? roleFilter.menu : undefined}
+      // In the pane's native bar the status is a real bar item; this only holds the queue sheet.
+      triggerless={nativePane}
+      open={nativePane ? queueOpen : undefined}
+      onOpenChange={nativePane ? setQueueOpen : undefined}
     />
   );
   const title = (
@@ -309,11 +321,15 @@ export function GeneralScannerScreen() {
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
       <Stack.Screen options={{ headerShown: glassAvailable && !nativePane, headerTitle: "" }} />
-      {nativePane ? null : glassAvailable ? (
+      {nativePane ? (
+        queueStatus
+      ) : glassAvailable ? (
         <>
           <Stack.Toolbar placement="left">
             {finderCovering ? null : (
-              <Stack.Toolbar.View hidesSharedBackground>{title}</Stack.Toolbar.View>
+              <Stack.Toolbar.View hidesSharedBackground>
+                {screenTitleElement(t("tabScan"))}
+              </Stack.Toolbar.View>
             )}
           </Stack.Toolbar>
           {queueStatus}
@@ -336,7 +352,7 @@ export function GeneralScannerScreen() {
         >
           {finderCovering ? <View /> : title}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {roleFilter}
+            {roleFilter.menu}
             {queueStatus}
           </View>
         </View>
@@ -356,12 +372,15 @@ export function GeneralScannerScreen() {
             onClose={() => setPeopleOpen(false)}
             onSelect={selectFromFinder}
             open={peopleOpen}
-            rootHeaderRight={
-              <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-                {roleFilter}
-                {queueStatus}
-              </View>
-            }
+            rootHeaderRight={[
+              roleFilter.barItem,
+              queueStatusBarItem({
+                hasAttention,
+                label: hasAttention ? t("scannerStateAttention") : t("scannerStateReady"),
+                onPress: () => setQueueOpen(true),
+                showLabel: statusShowsLabel(listWidth, isAccessibilityTextSize(fontScale)),
+              }),
+            ]}
             rootTitle={t("tabScan")}
           >
             <View style={{ flex: 1, marginTop: nativePane ? 0 : insets.top + barHeight + 8 }}>
@@ -464,23 +483,30 @@ export function GeneralScannerScreen() {
                     embedded
                     focusLogId={selection.focusLogId}
                     focusSource={selection.focusSource}
-                    onScrollOffset={setDetailOffset}
+                    onTitle={setDetailTitle}
                     topInset={detailBand}
                     userId={selection.userId}
                   />
-                  {/* The detail's top band: a backing that fades in as the profile scrolls under it. */}
+                  {/* The profile's top band: its name on the same line as the scanner title (no blur). */}
                   <View
                     pointerEvents="none"
                     style={{
                       height: detailBand,
                       left: 0,
-                      opacity: detailBandOpacity(detailOffset),
+                      paddingHorizontal: SCAN_DETAIL_TITLE_INSET,
+                      paddingTop: SCREEN_TITLE_CENTER - SCREEN_TITLE.lineHeight / 2,
                       position: "absolute",
                       right: 0,
                       top: 0,
                     }}
                   >
-                    <SystemBlur />
+                    <Text
+                      accessibilityRole="header"
+                      numberOfLines={1}
+                      style={{ color: colors.label, ...SCREEN_TITLE }}
+                    >
+                      {detailTitle}
+                    </Text>
                   </View>
                 </>
               ) : (
@@ -526,15 +552,24 @@ function useScannerRoleFilterMenu({
     else onToggle(id.slice("role:".length));
   };
 
-  return (
-    <FilterMenu
-      colorScheme="auto"
-      accessibilityLabel={t("scannerFilterGroups")}
-      active={groups.length > 0}
-      items={rows}
-      onSelect={select}
-    />
-  );
+  return {
+    menu: (
+      <FilterMenu
+        colorScheme="auto"
+        accessibilityLabel={t("scannerFilterGroups")}
+        active={groups.length > 0}
+        items={rows}
+        onSelect={select}
+      />
+    ),
+    // The same filter as a real bar item, for the pane's native stack.
+    barItem: filterMenuBarItem({
+      accessibilityLabel: t("scannerFilterGroups"),
+      active: groups.length > 0,
+      onSelect: select,
+      rows,
+    }),
+  };
 }
 
 function ScannerGroupStatistics({

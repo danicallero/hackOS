@@ -25,3 +25,9 @@ export function twoPaneBandHeight(fontScale: number, lines = 1): number {
     Math.ceil(top + SCREEN_TITLE.lineHeight * Math.max(1, fontScale) * lines + bottom),
   );
 }
+
+/**
+ * Horizontal inset of a pane's native stack, so the bar's back circle and trailing items keep
+ * clear of the divider and the window edge, matching on both sides.
+ */
+export const PANE_BAR_INSET = 8;

@@ -31,6 +31,7 @@ import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
 import { safeBack } from "@/lib/navigation";
+import { filterMenuBarItem, withBarGaps } from "@/lib/pane-header-items";
 import {
   ROLE_FILTER_ALL_ICON,
   roleDisplayName,
@@ -159,6 +160,18 @@ export function PeopleDirectoryScreen({
     [filterItems, selectRole, selectedRoles.length, t],
   );
 
+  // The same filter as a real bar item, for the pane's native stack.
+  const filterBarItem = useMemo(
+    () =>
+      filterMenuBarItem({
+        accessibilityLabel: t("scannerFilterGroups"),
+        active: selectedRoles.length > 0,
+        onSelect: selectRole,
+        rows: filterItems,
+      }),
+    [filterItems, selectRole, selectedRoles.length, t],
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -217,7 +230,8 @@ export function PeopleDirectoryScreen({
       navigation.setOptions({
         headerBackTitle: backLabel,
         headerLargeTitle: true,
-        headerRight: () => filterMenu,
+        // Its own bar item: iOS 26 would otherwise merge it with the search into one capsule.
+        unstable_headerRightItems: () => withBarGaps([filterBarItem]),
         headerSearchBarOptions: {
           placeholder: t("scannerPeopleSearchPlaceholder"),
           autoCapitalize: "none",
@@ -262,7 +276,16 @@ export function PeopleDirectoryScreen({
       },
       headerRight: undefined,
     });
-  }, [backLabel, embedded, filterMenu, glassAvailable, nativeHeader, navigation, t, usesListTitle]);
+  }, [
+    backLabel,
+    embedded,
+    filterBarItem,
+    glassAvailable,
+    nativeHeader,
+    navigation,
+    t,
+    usesListTitle,
+  ]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
@@ -462,6 +485,9 @@ export function PeopleDirectoryScreen({
     />
   );
 
+  // In the pane's native stack the list is the screen's own root scroll view (no wrapping View),
+  // so UIKit collapses the large title and draws the scroll-edge blur as it scrolls.
+  if (nativeHeader) return list;
   if (glassAvailable && !embedded)
     return (
       <>
