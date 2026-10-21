@@ -385,6 +385,24 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   navigator the whole window instead: navigation belongs at the display edge,
   not inside a centred reading column. Schedule uses a 420 dp list beside a
   detail pane capped at 760 dp; smaller expanded windows retain the 380 dp list.
+  The Scanner uses the same list/detail rule (`lib/scan-pane.ts`): where
+  `listDetailLayout().enabled`, the reader stays on the left and a scanned badge or QR opens that
+  person's profile (`PersonOperationsScreen` with `embedded`) on the right instead of pushing
+  `scan/person/[id]`; a new scan replaces the person, Android back clears the pane, and the person
+  route hands a deep link or a people-list/history tap to the scanner as `personId` params. Compact
+  windows still push the route.
+  "View people" opens the people finder over the scanner pane only. On iOS the pane is its own
+  native stack (`components/pane-people-stack.ios.tsx`, an independent react-navigation tree):
+  its root bar carries the title, role filter and sync status, `People` is pushed with the native
+  large title, back item, integrated search and filter, and the route's header is hidden
+  (`headerShown: false`) because a native bar over the pane swallows touches on RN chrome drawn
+  under it. Android and web use `PeopleFinderPane`, an RN panel with the same header.
+  `lib/scan-pane.ts` holds the pure rules (`peopleDestination`, `backAction`, `collapseProgress`).
+  An empty detail pane (no scan yet, no activity selected) shows `PanePlaceholder`, a
+  ContentUnavailableView-style symbol, headline and line that fade out when a result replaces them.
+  The scanner surface (`NfcScannerSurface`) never scrolls: it measures its own height and
+  `surfaceFit`/`readerFit` (`theme/layout-screens.ts`) switch to a dense stats line and a row of
+  icon-over-label actions, then shrink and hide the reader symbol, instead.
   Sheets retain their own content cap. The tree is identical at every width, so fold, unfold and window resizing never
   remount the navigator or lose a draft; `test/ui/adaptive-layout.test.tsx` covers it.
 - **Asymmetric safe areas.** On a foldable iPhone the system status indicators and
@@ -1660,6 +1678,21 @@ pauses) keeps its own message with a manual retry action, since that case
 needs a person to look at it rather than wait for reconnection.
 
 ### Activities
+
+**List and scanner panes.** Where `listDetailLayout` is enabled (same helper, book
+crease and `resolveListPaneWidth` as Schedule), the list stays on the left with
+its own title band and the selected activity's scanner opens on the right
+instead of pushing `activities/[id]`: `ActivityScannerScreen` with `embedded`,
+`activityId` and `topInset` draws its title, queue status pill and the scan
+result overlay inside the pane, below the band (`twoPaneBandHeight`). Nothing is
+selected at first, so the pane is empty and no camera or NFC session starts
+unasked. The selection lives in `ActivitiesScreen` above the layout branch (it
+survives rotation and a compact detour) and the scanner is keyed by activity.
+`[id].tsx` in a two-pane window hands its id back to the list
+(`dismissTo` with `selected`/`selectedNonce`), so deep links select the row.
+Compact windows keep pushing the route. Pure helpers: `lib/activity-pane.ts`;
+geometry hook and constants: `theme/layout-activity-pane.ts`. Scan, queue and
+idempotency paths are unchanged.
 
 `components/activities-screen.tsx` (`app/(tabs)/activities/index.tsx`) — the
 operator's list of scannable activities, read straight from the local

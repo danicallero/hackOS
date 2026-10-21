@@ -4,6 +4,7 @@ import {
   type ColorValue,
   Platform,
   Pressable,
+  StyleSheet,
   Switch,
   type SwitchProps,
   Text,
@@ -18,6 +19,8 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
+  type SharedValue,
+  useAnimatedStyle,
   useReducedMotion,
 } from "react-native-reanimated";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
@@ -438,6 +441,8 @@ export function LegacyScreenHeader({
   actions,
   searchEnabled = true,
   showSearchButton = true,
+  inlineTitle = false,
+  titleFade,
 }: {
   topInset: number;
   title: string;
@@ -454,9 +459,15 @@ export function LegacyScreenHeader({
   /** False hides the search button, for a segment the search does not apply to. */
   searchEnabled?: boolean;
   showSearchButton?: boolean;
+  /** A navigation-bar title (17pt) beside the leading item, instead of the 28pt page title. */
+  inlineTitle?: boolean;
+  /** 0..1, driven by the list's scroll: fades the inline title and a bottom hairline in. */
+  titleFade?: SharedValue<number>;
 }) {
   const reducedMotion = useReducedMotion();
   const headerTransition = reducedMotion ? undefined : LinearTransition.duration(180);
+  const titleFadeStyle = useAnimatedStyle(() => ({ opacity: titleFade ? titleFade.get() : 1 }));
+  const hairlineStyle = useAnimatedStyle(() => ({ opacity: titleFade ? titleFade.get() : 0 }));
 
   return (
     <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
@@ -531,7 +542,11 @@ export function LegacyScreenHeader({
           >
             <View style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 4 }}>
               {leading}
-              <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>{title}</Text>
+              {inlineTitle ? null : (
+                <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>
+                  {title}
+                </Text>
+              )}
             </View>
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
               {actions}
@@ -550,9 +565,43 @@ export function LegacyScreenHeader({
                 </GlassView>
               ) : null}
             </View>
+            {inlineTitle ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  {
+                    alignItems: "center",
+                    bottom: 0,
+                    justifyContent: "center",
+                    left: 0,
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  },
+                  titleFadeStyle,
+                ]}
+              >
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={{ ...type.headline, color: colors.label, maxWidth: "50%" }}
+                >
+                  {title}
+                </Text>
+              </Animated.View>
+            ) : null}
           </View>
         )}
       </Animated.View>
+      {titleFade ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            { backgroundColor: colors.separator, height: StyleSheet.hairlineWidth },
+            hairlineStyle,
+          ]}
+        />
+      ) : null}
     </View>
   );
 }

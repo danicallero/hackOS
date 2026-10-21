@@ -23,8 +23,10 @@ export const OPERATOR_SHORT_HEIGHT = 520;
 
 export const READER_SYMBOL_SIZE = { regular: 80, short: 56 } as const;
 
-export type StatBlockLayout = "row" | "stacked" | "list";
-export type ActionLayout = "row" | "column";
+/** `compact` is one dense line, for a pane too short for the regular stat block. */
+export type StatBlockLayout = "row" | "stacked" | "list" | "compact";
+/** `compact` is a row of three icon-over-label buttons, for a pane too short for stacked ones. */
+export type ActionLayout = "row" | "column" | "compact";
 
 export interface OperatorLayoutInput {
   windowWidth: number;
@@ -126,3 +128,62 @@ export function useOperatorListColumn(): ListColumnStyle {
 
 /** The primary count of a scanner stat block. */
 export const STAT_PRIMARY_TYPE = { fontSize: 44, fontWeight: "700" } as const;
+/** The primary count of a dense (compact) stat block. */
+export const STAT_PRIMARY_COMPACT_TYPE = { fontSize: 28, fontWeight: "700" } as const;
+
+/** Natural heights of a scanner surface's parts (regular type), used to decide what fits. */
+export const SURFACE_STATS_HEIGHT = { row: 120, stacked: 190, list: 330, compact: 76 } as const;
+export const SURFACE_ACTIONS_HEIGHT = { column: 192, row: 56, compact: 56 } as const;
+/** Least the reader area keeps for its symbol, caption and padding before anything else gives. */
+export const SURFACE_READER_MIN_HEIGHT = 112;
+/** Chrome around the reader symbol (touch padding, gap, caption, vertical padding). */
+export const READER_CHROME_HEIGHT = 96;
+export const READER_SYMBOL_MIN = 28;
+/** Least reader area that still holds the symbol alone (symbol plus its touch padding). */
+export const READER_SYMBOL_ONLY_MIN_AREA = 52;
+
+export interface SurfaceFit {
+  stats: StatBlockLayout;
+  actions: ActionLayout;
+  /** The pane was too short for the regular stats and actions, so both went dense. */
+  dense: boolean;
+}
+
+/**
+ * What a scanner surface shows in the height it was given (the surface's own measured height,
+ * never the window): the regular stat block and actions while they fit with a reader area, a
+ * dense stats line and one row of icon-over-label actions otherwise. The surface never scrolls.
+ * Accessibility text sizes keep the stacked layouts: the reader area gives way first.
+ */
+export function surfaceFit(
+  layout: Pick<OperatorLayout, "stats" | "actions">,
+  surfaceHeight: number | null,
+  fontScale: number,
+): SurfaceFit {
+  const regular: SurfaceFit = { stats: layout.stats, actions: layout.actions, dense: false };
+  if (surfaceHeight === null || isAccessibilityTextSize(fontScale)) return regular;
+  const textScale = Math.max(1, fontScale);
+  const needed =
+    SURFACE_STATS_HEIGHT[layout.stats] * textScale +
+    SURFACE_ACTIONS_HEIGHT[layout.actions] +
+    SURFACE_READER_MIN_HEIGHT;
+  return surfaceHeight >= needed ? regular : { stats: "compact", actions: "compact", dense: true };
+}
+
+/**
+ * The reader symbol for the measured reader area: full size while there is room, shrinking down
+ * to a minimum, then alone without its caption, then hidden (size 0) when even that cannot fit.
+ */
+export function readerFit(
+  areaHeight: number | null,
+  fontScale: number,
+): { symbolSize: number; showCaption: boolean } {
+  if (areaHeight === null) return { symbolSize: READER_SYMBOL_SIZE.regular, showCaption: true };
+  const chrome = READER_CHROME_HEIGHT + 20 * (Math.min(Math.max(fontScale, 1), 2) - 1);
+  const symbol = Math.min(READER_SYMBOL_SIZE.regular, areaHeight - chrome);
+  if (symbol >= READER_SYMBOL_MIN) return { symbolSize: Math.floor(symbol), showCaption: true };
+  if (areaHeight >= READER_SYMBOL_ONLY_MIN_AREA) {
+    return { symbolSize: READER_SYMBOL_MIN, showCaption: false };
+  }
+  return { symbolSize: 0, showCaption: false };
+}

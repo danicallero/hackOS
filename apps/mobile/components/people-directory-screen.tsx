@@ -8,10 +8,15 @@ import {
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, View } from "react-native";
+import Animated, {
+  useAnimatedScrollHandler,
+  useDerivedValue,
+  useSharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
-import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import {
   EmptyState,
@@ -32,6 +37,7 @@ import {
   roleFilterOptionsFromRoster,
 } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { collapseProgress } from "@/lib/scan-pane";
 import { listScannerPeople } from "@/lib/scanner-db";
 import type { ScannerPerson } from "@/lib/scanner-types";
 import { isPadIdiom } from "@/lib/tabs";
@@ -41,7 +47,32 @@ import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors, radius, type } from "@/theme";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
-export function PeopleDirectoryScreen() {
+/**
+ * The people finder. As a route it owns its native header. `embedded` (inside
+ * `PeopleFinderPane`, over a two-pane scanner) draws the same filter menu and search as the
+ * legacy header in ONE row, led by a back item named `backLabel` that calls `onClose`, and a pick
+ * goes to `onSelect` instead of navigating. `requireBadge` lists only people who hold a badge
+ * (an activity scan can only use a badge).
+ */
+export function PeopleDirectoryScreen({
+  backLabel,
+  embedded = false,
+  headerTopInset = 0,
+  nativeHeader = false,
+  onClose,
+  onSelect,
+  requireBadge = false,
+}: {
+  backLabel?: string;
+  embedded?: boolean;
+  /** Space above the embedded header row. */
+  headerTopInset?: number;
+  /** Inside a native stack (`pane-people-stack.ios.tsx`): the stack's bar is the header. */
+  nativeHeader?: boolean;
+  onClose?: () => void;
+  onSelect?: (person: ScannerPerson) => void;
+  requireBadge?: boolean;
+} = {}) {
   const listColumn = useOperatorListColumn();
   const { activityId, autoSearch } = useLocalSearchParams<{
     activityId?: string;
@@ -69,9 +100,19 @@ export function PeopleDirectoryScreen() {
   const glassAvailable = isRealLiquidGlassAvailable();
   const androidTopInset = useAndroidTopInset();
   const legacyTopInset = process.env.EXPO_OS === "ios" ? insets.top : androidTopInset;
-  const showInlineListTitle = usesListTitle && glassAvailable;
+  // The panel keeps the standalone iPad large title: it scrolls away while the header's inline
+  // title fades in.
+  // Exactly one title: in the pane's native stack the bar's large title (collapsing into the
+  // inline one) is the only provider, so no list-header title is drawn there.
+  const showInlineListTitle = !nativeHeader && (embedded || (usesListTitle && glassAvailable));
+  const ownHeader = !nativeHeader && (embedded || !glassAvailable);
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const listRef = useRef<FlatList<ScannerPerson>>(null);
+  const scrollY = useSharedValue(0);
+  const titleFade = useDerivedValue(() => collapseProgress(scrollY.get()));
+  const scrollHandler = useAnimatedScrollHandler((event) => {
+    scrollY.set(event.contentOffset.y);
+  });
 
   // SQLite is an offline backup. Once an online sync has a response, prefer
   // that snapshot even if the local roster could not be opened or written.
@@ -170,6 +211,30 @@ export function PeopleDirectoryScreen() {
   }
 
   useLayoutEffect(() => {
+    if (nativeHeader) {
+      // The pane's own native stack: the standalone People configuration, with the filter as the
+      // trailing bar item and the back item named after the pane it covers.
+      navigation.setOptions({
+        headerBackTitle: backLabel,
+        headerLargeTitle: true,
+        headerRight: () => filterMenu,
+        headerSearchBarOptions: {
+          placeholder: t("scannerPeopleSearchPlaceholder"),
+          autoCapitalize: "none",
+          hideWhenScrolling: true,
+          allowToolbarIntegration: false,
+          placement: "integratedButton",
+          onChangeText: (event: { nativeEvent: { text: string } }) =>
+            setQuery(event.nativeEvent.text),
+        },
+        headerShadowVisible: false,
+        headerTransparent: true,
+        title: t("scannerPeople"),
+      });
+      return;
+    }
+    // Embedded, the host screen owns the header options.
+    if (embedded) return;
     if (!glassAvailable) {
       navigation.setOptions({ headerShown: false });
       return;
@@ -197,7 +262,7 @@ export function PeopleDirectoryScreen() {
       },
       headerRight: undefined,
     });
-  }, [glassAvailable, navigation, t, usesListTitle]);
+  }, [backLabel, embedded, filterMenu, glassAvailable, nativeHeader, navigation, t, usesListTitle]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
@@ -205,7 +270,7 @@ export function PeopleDirectoryScreen() {
       // An activity scan can only ever be logged against a badge, so this
       // list (unlike the plain scan directory, which lists everyone) only
       // shows people who already have one.
-      if (activityId && !person.badgeId) return false;
+      if ((activityId || requireBadge) && !person.badgeId) return false;
       if (
         selectedRoles.length > 0 &&
         (person.role === null || !selectedRoles.includes(person.role))
@@ -225,7 +290,7 @@ export function PeopleDirectoryScreen() {
         .toLocaleLowerCase()
         .includes(needle);
     });
-  }, [directory, query, selectedRoles, activityId, t]);
+  }, [directory, query, selectedRoles, activityId, requireBadge, t]);
 
   const openPerson = useCallback(
     (person: ScannerPerson) => {
@@ -238,12 +303,16 @@ export function PeopleDirectoryScreen() {
         });
         return;
       }
+      if (embedded && onSelect) {
+        onSelect(person);
+        return;
+      }
       router.push({
         pathname: pathname.includes("/others/") ? "/others/person/[id]" : "/scan/person/[id]",
         params: { id: String(person.userId) },
       });
     },
-    [activityId, pathname, router],
+    [activityId, embedded, onSelect, pathname, router],
   );
 
   const renderPersonRow = useCallback(
@@ -251,25 +320,43 @@ export function PeopleDirectoryScreen() {
     [openPerson],
   );
 
-  const legacyHeader = !glassAvailable ? (
+  const legacyHeader = ownHeader ? (
     <LegacyScreenHeader
       actions={filterMenu}
       cancelLabel={t("cancel")}
       leading={
-        <LegacyHeaderIconButton
-          icon="chevron.left"
-          accessibilityLabel={t("back")}
-          onPress={() =>
-            safeBack(
-              router,
-              pathname.includes("/others/")
-                ? "/(tabs)/others/account"
-                : pathname.includes("/activities/")
-                  ? "/(tabs)/activities"
-                  : "/(tabs)/scan",
-            )
-          }
-        />
+        embedded ? (
+          // The same circular glass chevron as the other legacy headers, closing the panel.
+          <View style={{ alignItems: "center", height: 48, justifyContent: "center", width: 48 }}>
+            <GlassView
+              colorScheme="auto"
+              glassEffectStyle="regular"
+              isInteractive
+              style={{ borderRadius: radius.full, height: 44, width: 44 }}
+            >
+              <LegacyHeaderIconButton
+                icon="chevron.left"
+                accessibilityLabel={backLabel ?? t("back")}
+                onPress={() => onClose?.()}
+              />
+            </GlassView>
+          </View>
+        ) : (
+          <LegacyHeaderIconButton
+            icon="chevron.left"
+            accessibilityLabel={t("back")}
+            onPress={() =>
+              safeBack(
+                router,
+                pathname.includes("/others/")
+                  ? "/(tabs)/others/account"
+                  : pathname.includes("/activities/")
+                    ? "/(tabs)/activities"
+                    : "/(tabs)/scan",
+              )
+            }
+          />
+        )
       }
       onCloseSearch={() => {
         setSearchOpen(false);
@@ -281,17 +368,31 @@ export function PeopleDirectoryScreen() {
       searchOpen={searchOpen}
       searchPlaceholder={t("scannerPeopleSearchPlaceholder")}
       searchQuery={query}
+      inlineTitle={embedded}
+      titleFade={embedded ? titleFade : undefined}
       title={t("scannerPeople")}
-      topInset={legacyTopInset}
+      topInset={embedded ? headerTopInset : legacyTopInset}
     />
   ) : null;
 
+  // Embedded, the list reports its scroll to the UI thread to collapse the large title.
+  const ListComponent = (
+    embedded && !nativeHeader ? Animated.FlatList : FlatList
+  ) as typeof FlatList;
   const list = (
-    <FlatList
+    <ListComponent
       ref={listRef}
       {...trueTop.scrollProps}
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior={embedded && !nativeHeader ? "never" : "automatic"}
       style={{ backgroundColor: colors.background, flex: 1 }}
+      {...(embedded && !nativeHeader
+        ? {
+            keyboardDismissMode: "on-drag" as const,
+            keyboardShouldPersistTaps: "handled" as const,
+            onScroll: scrollHandler,
+            scrollEventThrottle: 16,
+          }
+        : null)}
       contentContainerStyle={{
         ...listColumn,
         flexGrow: 1,
@@ -361,7 +462,7 @@ export function PeopleDirectoryScreen() {
     />
   );
 
-  if (glassAvailable)
+  if (glassAvailable && !embedded)
     return (
       <>
         {list}

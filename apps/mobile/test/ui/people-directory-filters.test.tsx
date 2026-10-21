@@ -124,6 +124,16 @@ describe("people directory role filters", () => {
     expect(mockFilterActive).toBe(false);
   });
 
+  it("has exactly one title in the pane's native stack: the bar's large title", async () => {
+    await renderMobile(<PeopleDirectoryScreen embedded nativeHeader backLabel="scannerBack" />);
+    await waitFor(() => expect(screen.getByText("Ada")).toBeTruthy());
+    // No list-header or band title: the native bar owns it and collapses it on scroll.
+    expect(screen.queryAllByText("scannerPeople")).toHaveLength(0);
+    expect(mockSetOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ headerLargeTitle: true, title: "scannerPeople" }),
+    );
+  });
+
   it("preserves the activity badge restriction and search within selected roles", async () => {
     mockActivityId = "7";
     await renderMobile(<PeopleDirectoryScreen />);

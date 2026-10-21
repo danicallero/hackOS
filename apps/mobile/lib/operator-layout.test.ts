@@ -5,9 +5,14 @@ import {
   operatorLayout,
   operatorListColumn,
   READER_SYMBOL_SIZE,
+  readerFit,
   SCAN_FRAME,
   STAT_ROW_MIN_WIDTH,
+  SURFACE_ACTIONS_HEIGHT,
+  SURFACE_READER_MIN_HEIGHT,
+  SURFACE_STATS_HEIGHT,
   scanFrameSize,
+  surfaceFit,
 } from "@/theme/layout-screens";
 
 const base = { windowWidth: 390, windowHeight: 844, fontScale: 1, columnWidth: null };
@@ -86,5 +91,42 @@ describe("operator layout", () => {
     expect(operatorListColumn(565).paddingHorizontal).toBe(16);
     expect(operatorListColumn(700).paddingHorizontal).toBe(24);
     expect(operatorListColumn(1400)).toMatchObject({ maxWidth: 1400, paddingHorizontal: 32 });
+  });
+
+  it("keeps the regular stats and actions while they fit with a reader area", () => {
+    const layout = { stats: "row", actions: "column" } as const;
+    const needed =
+      SURFACE_STATS_HEIGHT.row + SURFACE_ACTIONS_HEIGHT.column + SURFACE_READER_MIN_HEIGHT;
+    expect(surfaceFit(layout, needed, 1)).toEqual({ ...layout, dense: false });
+    expect(surfaceFit(layout, null, 1).dense).toBe(false);
+  });
+
+  it("goes dense in a short pane instead of scrolling (330pt tall, 440pt wide)", () => {
+    const fit = surfaceFit({ stats: "row", actions: "column" }, 330, 1);
+    expect(fit).toEqual({ stats: "compact", actions: "compact", dense: true });
+    const denseNeeds =
+      SURFACE_STATS_HEIGHT.compact + SURFACE_ACTIONS_HEIGHT.compact + SURFACE_READER_MIN_HEIGHT;
+    expect(denseNeeds).toBeLessThanOrEqual(330);
+  });
+
+  it("keeps stacked layouts at accessibility sizes and lets the reader give way", () => {
+    expect(surfaceFit({ stats: "list", actions: "column" }, 300, 2)).toEqual({
+      stats: "list",
+      actions: "column",
+      dense: false,
+    });
+  });
+
+  it("shrinks, then drops the caption, then hides the reader symbol with its area", () => {
+    expect(readerFit(null, 1)).toEqual({
+      symbolSize: READER_SYMBOL_SIZE.regular,
+      showCaption: true,
+    });
+    expect(readerFit(400, 1).symbolSize).toBe(READER_SYMBOL_SIZE.regular);
+    const small = readerFit(130, 1);
+    expect(small.symbolSize).toBeLessThan(READER_SYMBOL_SIZE.regular);
+    expect(small.showCaption).toBe(true);
+    expect(readerFit(70, 1)).toEqual({ symbolSize: 28, showCaption: false });
+    expect(readerFit(40, 1)).toEqual({ symbolSize: 0, showCaption: false });
   });
 });

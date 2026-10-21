@@ -14,6 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
+import { useAuthFrameExtra } from "@/lib/auth-frame";
 import { colors, radius, space, type } from "@/theme";
 
 export function AuthScreen({
@@ -26,8 +27,13 @@ export function AuthScreen({
   scrollable?: boolean;
 }) {
   const safe = useSafeAreaInsets();
+  const extra = useAuthFrameExtra();
   if (!scrollable) {
-    return <FixedAuthScreen footer={footer}>{children}</FixedAuthScreen>;
+    return (
+      <FixedAuthScreen extra={extra} footer={footer}>
+        {children}
+      </FixedAuthScreen>
+    );
   }
   // The stack already pads the side column; "automatic" would inset the scroll content by the
   // horizontal safe area a second time (a foldable's column pushed the form far off-centre), so
@@ -38,7 +44,8 @@ export function AuthScreen({
       contentInsetAdjustmentBehavior="never"
       contentContainerStyle={{
         flexGrow: 1,
-        paddingHorizontal: 24,
+        paddingLeft: 24 + extra.left,
+        paddingRight: 24 + extra.right,
         paddingTop: safe.top + 56,
         paddingBottom: safe.bottom + 40,
       }}
@@ -69,7 +76,15 @@ export function AuthScreen({
  * safe area is applied here: the stack already pads the side column, and a second horizontal
  * inset pushed the form far off-centre on a foldable.
  */
-function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+function FixedAuthScreen({
+  children,
+  footer,
+  extra,
+}: {
+  children: ReactNode;
+  footer?: ReactNode;
+  extra: { left: number; right: number };
+}) {
   const keyboard = useAnimatedKeyboard();
   const formStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -Math.min(keyboard.height.value * 0.38, 160) }],
@@ -84,7 +99,8 @@ function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: R
             flex: 1,
             maxWidth: 440,
             paddingBottom: 16,
-            paddingHorizontal: 24,
+            paddingLeft: 24 + extra.left,
+            paddingRight: 24 + extra.right,
             paddingTop: 24,
             width: "100%",
           }}

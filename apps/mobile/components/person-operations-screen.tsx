@@ -40,6 +40,7 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { SCAN_DETAIL_TOP_GAP } from "@/theme/layout-scan-pane";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
 interface PersonDetails extends ScannerPerson {
@@ -146,14 +147,35 @@ function personRolePill(
     : { label: roleDisplayName(person.role, t), tone: "accent" };
 }
 
-export function PersonOperationsScreen() {
+/**
+ * One person's operations profile. As a route it owns its native header and reads the person from
+ * the route params; `embedded` (the right pane of the two-pane Scanner) takes the person as props,
+ * leaves the header to the host and clears the host's top band through `topInset`.
+ */
+export function PersonOperationsScreen({
+  embedded = false,
+  focusLogId: focusLogIdProp,
+  focusSource: focusSourceProp,
+  onScrollOffset,
+  topInset = 0,
+  userId: userIdProp,
+}: {
+  embedded?: boolean;
+  focusLogId?: string;
+  focusSource?: string;
+  onScrollOffset?: (offset: number) => void;
+  topInset?: number;
+  userId?: number;
+} = {}) {
   const listColumn = useOperatorListColumn();
-  const { id, focusLogId, focusSource } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     focusLogId?: string;
     focusSource?: string;
   }>();
-  const userId = Number(id);
+  const focusLogId = embedded ? focusLogIdProp : params.focusLogId;
+  const focusSource = embedded ? focusSourceProp : params.focusSource;
+  const userId = embedded && userIdProp !== undefined ? userIdProp : Number(params.id);
   const router = useRouter();
   const navigation = useNavigation();
   const pathname = usePathname();
@@ -171,8 +193,9 @@ export function PersonOperationsScreen() {
   const badgeInputOpen = badgeReaderVisible || badgeCodeMethod !== null || badgeReplacementVisible;
 
   useLayoutEffect(() => {
-    navigation.setOptions(transparentDetailHeaderOptions);
-  }, [navigation]);
+    // Embedded, the host screen owns the header options.
+    if (!embedded) navigation.setOptions(transparentDetailHeaderOptions);
+  }, [embedded, navigation]);
 
   const sideRegion = useSideRegion();
   const trueTop = useTrueTopScroll(scrollRef);
@@ -201,8 +224,11 @@ export function PersonOperationsScreen() {
         if (autoScrolledFocusRef.current === focusSignalKey) return;
         target.measureInWindow((_targetX, targetY) => {
           scrollViewportRef.current?.measureInWindow((_viewportX, viewportY) => {
-            const headerClearance =
-              process.env.EXPO_OS === "ios" ? insets.top + 68 : insets.top + 16;
+            const headerClearance = embedded
+              ? topInset + SCAN_DETAIL_TOP_GAP
+              : process.env.EXPO_OS === "ios"
+                ? insets.top + 68
+                : insets.top + 16;
             const targetOffset = scrollOffsetRef.current + targetY - viewportY - headerClearance;
             scrollRef.current?.scrollTo({
               animated: true,
@@ -213,7 +239,7 @@ export function PersonOperationsScreen() {
         });
       });
     },
-    [focusSignalKey, insets.top],
+    [embedded, focusSignalKey, insets.top, topInset],
   );
   const [person, setPerson] = useState<PersonDetails | null>(null);
   const [loadState, setLoadState] = useState<PersonLoadState>("loading");
@@ -852,8 +878,11 @@ export function PersonOperationsScreen() {
   // The profile owns the visible heading while the transparent native header
   // owns the back action. Android has no `contentInsetAdjustmentBehavior` (an
   // iOS-only prop), so content there has to clear that header itself.
-  const contentPaddingTop =
-    process.env.EXPO_OS === "ios" ? 0 : insets.top + ANDROID_HEADER_CLEARANCE;
+  const contentPaddingTop = embedded
+    ? topInset + SCAN_DETAIL_TOP_GAP
+    : process.env.EXPO_OS === "ios"
+      ? 0
+      : insets.top + ANDROID_HEADER_CLEARANCE;
 
   return (
     <>
@@ -893,7 +922,7 @@ export function PersonOperationsScreen() {
           alwaysBounceVertical
           ref={scrollRef}
           {...trueTop.scrollProps}
-          contentInsetAdjustmentBehavior="automatic"
+          contentInsetAdjustmentBehavior={embedded ? "never" : "automatic"}
           contentContainerStyle={{
             alignSelf: listColumn.alignSelf,
             gap: 22,
@@ -905,6 +934,7 @@ export function PersonOperationsScreen() {
           }}
           onScroll={(event) => {
             scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+            onScrollOffset?.(event.nativeEvent.contentOffset.y);
             trueTop.scrollProps.onScroll(event);
           }}
           style={{ backgroundColor: colors.background, flex: 1 }}
@@ -931,7 +961,7 @@ export function PersonOperationsScreen() {
                 {person.email}
               </Text>
             ) : null}
-            {rolePill && sideRegion.edge ? (
+            {rolePill && (sideRegion.edge || embedded) ? (
               // The overlay below would cover the name beside a side column.
               <View style={{ alignSelf: "flex-start", marginTop: 6 }}>
                 <StatusPill tone={rolePill.tone}>{rolePill.label}</StatusPill>
@@ -1029,7 +1059,7 @@ export function PersonOperationsScreen() {
         </ScrollView>
       </View>
 
-      {rolePill && !sideRegion.edge ? (
+      {rolePill && !sideRegion.edge && !embedded ? (
         <View
           pointerEvents="none"
           style={{

@@ -18,12 +18,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { PeopleFinderPane } from "@/components/people-finder-pane";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
+import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -47,6 +49,12 @@ import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import {
+  PANE_BAND_INSET,
+  PANE_CONTROL_HEIGHT,
+  PANE_CONTROL_TOP,
+  PANE_TOOLBAR_RESERVE,
+} from "@/theme/layout-activity-pane";
 import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
@@ -60,13 +68,32 @@ interface ActivityScanResult {
   wasRepeat?: boolean;
 }
 
-export function ActivityScannerScreen() {
-  const { id, manualBadge, manualNonce } = useLocalSearchParams<{
+/**
+ * One activity's scanner. As a route it owns the native header; `embedded` (the scanner pane of
+ * the two-pane Activities window) takes the activity from `activityId`, draws its own title band
+ * of height `topInset` and keeps the result overlay inside the pane, like the Schedule detail.
+ */
+export function ActivityScannerScreen({
+  activityId: embeddedActivityId,
+  embedded = false,
+  topInset = 0,
+}: {
+  activityId?: number;
+  embedded?: boolean;
+  topInset?: number;
+} = {}) {
+  const params = useLocalSearchParams<{
     id: string;
     manualBadge?: string;
     manualNonce?: string;
   }>();
-  const activityId = Number(id);
+  const activityId = embedded ? (embeddedActivityId ?? Number.NaN) : Number(params.id);
+  // The People picker hands a badge back through route params; a pane has no such route.
+  const manualBadge = embedded ? undefined : params.manualBadge;
+  const manualNonce = embedded ? undefined : params.manualNonce;
+  const [paneHeight, setPaneHeight] = useState<number | null>(null);
+  // Embedded, the people finder covers this activity's pane only; the activity list is untouched.
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const router = useRouter();
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
@@ -357,13 +384,29 @@ export function ActivityScannerScreen() {
       onDelete={(id) => void syncState.discardScan(id)}
       clockSkewMs={syncState.clockSkewMs}
       fillWidth={false}
-      nativeToolbar={glassAvailable}
+      nativeToolbar={glassAvailable && !embedded}
     />
   );
 
   return (
-    <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
+    <View
+      onLayout={
+        embedded
+          ? ({ nativeEvent }) =>
+              setPaneHeight((current) =>
+                current === nativeEvent.layout.height ? current : nativeEvent.layout.height,
+              )
+          : undefined
+      }
+      style={{
+        backgroundColor: colors.background,
+        flex: 1,
+        overflow: embedded ? "hidden" : undefined,
+      }}
+    >
+      {embedded ? null : (
+        <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
+      )}
       <Modal
         visible={cameraVisible}
         animationType="slide"
@@ -397,7 +440,7 @@ export function ActivityScannerScreen() {
           nfcReadSucceeded.current = false;
         }}
       />
-      {glassAvailable ? null : (
+      {glassAvailable || embedded ? null : (
         <AdaptiveBackButton
           top={insets.top}
           colorScheme="auto"
@@ -405,7 +448,39 @@ export function ActivityScannerScreen() {
           onPress={goBack}
         />
       )}
-      {glassAvailable ? (
+      {embedded ? (
+        <View
+          pointerEvents="box-none"
+          style={{
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 12,
+            height: PANE_CONTROL_HEIGHT,
+            left: 0,
+            paddingLeft: PANE_BAND_INSET,
+            paddingRight: PANE_TOOLBAR_RESERVE,
+            position: "absolute",
+            right: 0,
+            top: PANE_CONTROL_TOP,
+            zIndex: 30,
+          }}
+        >
+          {peopleOpen ? (
+            // The finder covers the pane's title line, so the activity name steps aside.
+            <View style={{ flex: 1 }} />
+          ) : (
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              testID={UI_TEST_IDS.scanner.result}
+              style={{ color: colors.label, flex: 1, ...SCREEN_TITLE }}
+            >
+              {activityName}
+            </Text>
+          )}
+          {queueStatus}
+        </View>
+      ) : glassAvailable ? (
         queueStatus
       ) : (
         <View
@@ -415,7 +490,7 @@ export function ActivityScannerScreen() {
           {queueStatus}
         </View>
       )}
-      {glassAvailable ? (
+      {glassAvailable && !embedded ? (
         // Same title treatment as the Scan tab. Back shares this group: a second
         // left toolbar would replace it.
         <Stack.Toolbar placement="left">
@@ -436,7 +511,7 @@ export function ActivityScannerScreen() {
           </Stack.Toolbar.View>
         </Stack.Toolbar>
       ) : null}
-      {glassAvailable ? null : (
+      {glassAvailable || embedded ? null : (
         <View
           testID={UI_TEST_IDS.scanner.result}
           style={{
@@ -460,7 +535,7 @@ export function ActivityScannerScreen() {
           </Text>
         </View>
       )}
-      <View style={{ flex: 1, marginTop: insets.top + 56 }}>
+      <View style={{ flex: 1, marginTop: embedded ? topInset : insets.top + 56 }}>
         <NfcScannerSurface
           header={(layout) => (
             <>
@@ -521,13 +596,15 @@ export function ActivityScannerScreen() {
             </>
           )}
           onOpenPeople={() =>
-            router.push({
-              pathname: "/(tabs)/activities/people",
-              params:
-                process.env.EXPO_OS === "android"
-                  ? { activityId: String(activityId), autoSearch: "1" }
-                  : { activityId: String(activityId) },
-            })
+            embedded
+              ? setPeopleOpen(true)
+              : router.push({
+                  pathname: "/(tabs)/activities/people",
+                  params:
+                    process.env.EXPO_OS === "android"
+                      ? { activityId: String(activityId), autoSearch: "1" }
+                      : { activityId: String(activityId) },
+                })
           }
           onValue={(value) => void scanned(value)}
           nfcActive={nfcRunning && focused && !result && !registering}
@@ -552,6 +629,19 @@ export function ActivityScannerScreen() {
           onManual={stopNfc}
         />
       </View>
+      {embedded ? (
+        <PeopleFinderPane
+          backLabel={t("tabActivities")}
+          onClose={() => setPeopleOpen(false)}
+          onSelect={(person) => {
+            // The same path as the People picker route: the chosen badge is scanned as if read.
+            setPeopleOpen(false);
+            if (person.badgeId) void scanned(person.badgeId);
+          }}
+          open={peopleOpen}
+          requireBadge
+        />
+      ) : null}
       {result ? (
         <ActivityResultPanel
           activity={activity}
@@ -559,6 +649,7 @@ export function ActivityScannerScreen() {
           result={result}
           registering={registering}
           tabBarBottomInset={tabBarBottomInset}
+          pane={embedded ? { height: paneHeight, band: topInset } : null}
           onCancel={() => {
             setResult(null);
             setRegistering(false);
@@ -581,6 +672,7 @@ function ActivityResultPanel({
   registering,
   result,
   tabBarBottomInset,
+  pane,
   onCancel,
   onContinue,
   onRegisterAnother,
@@ -590,6 +682,8 @@ function ActivityResultPanel({
   registering: boolean;
   result: ActivityScanResult;
   tabBarBottomInset: number;
+  /** Set when the result sits inside a pane below its title band instead of over the window. */
+  pane: { height: number | null; band: number } | null;
   onCancel: () => void;
   onContinue: () => void;
   onRegisterAnother: () => void;
@@ -608,7 +702,13 @@ function ActivityResultPanel({
       result.person.notes);
   // Keep the scan feedback centered in the screen. Long dietary
   // details scroll without moving the decision buttons off screen.
-  const cardMaxHeight = windowHeight - insets.top - insets.bottom - tabBarBottomInset - 40;
+  const cardMaxHeight = resultCardMaxHeight({
+    windowHeight,
+    insetsTop: insets.top,
+    insetsBottom: insets.bottom,
+    tabBarBottomInset,
+    pane,
+  });
 
   return (
     <View
@@ -623,7 +723,7 @@ function ActivityResultPanel({
         paddingTop: 20,
         position: "absolute",
         right: 0,
-        top: 0,
+        top: pane?.band ?? 0,
       }}
     >
       <View

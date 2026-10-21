@@ -3,7 +3,11 @@ import { Text, View } from "react-native";
 import { type } from "@/theme";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
-import { STAT_PRIMARY_TYPE, type StatBlockLayout } from "@/theme/layout-screens";
+import {
+  STAT_PRIMARY_COMPACT_TYPE,
+  STAT_PRIMARY_TYPE,
+  type StatBlockLayout,
+} from "@/theme/layout-screens";
 
 export interface ScannerStat {
   label: string;
@@ -29,7 +33,8 @@ export function ScannerStatBlock({
   /** Cap Dynamic Type on the counts (the general scanner caps them; the activity one wraps). */
   capped?: boolean;
 }) {
-  const row = layout === "row";
+  const compact = layout === "compact";
+  const row = layout === "row" || compact;
   const list = layout === "list";
   const cap = capped ? CHROME_MAX_FONT_SIZE_MULTIPLIER : undefined;
   return (
@@ -39,9 +44,9 @@ export function ScannerStatBlock({
         alignItems: row ? "flex-end" : undefined,
         borderBottomWidth: 1,
         flexDirection: row ? "row" : "column",
-        gap: row ? 16 : 24,
-        paddingBottom: 24,
-        paddingTop: 20,
+        gap: compact ? 12 : row ? 16 : 24,
+        paddingBottom: compact ? 8 : 24,
+        paddingTop: compact ? 8 : 20,
       }}
     >
       <View style={{ flex: row ? 1 : undefined, gap: 4 }}>
@@ -51,7 +56,7 @@ export function ScannerStatBlock({
           style={{
             color: colors.label,
             fontVariant: ["tabular-nums"],
-            ...STAT_PRIMARY_TYPE,
+            ...(compact ? STAT_PRIMARY_COMPACT_TYPE : STAT_PRIMARY_TYPE),
           }}
         >
           {primary.value}
@@ -80,7 +85,7 @@ export function ScannerStatBlock({
               selectable
               maxFontSizeMultiplier={cap}
               style={{
-                ...type.title,
+                ...(compact ? type.headline : type.title),
                 color: colors.label,
                 fontVariant: ["tabular-nums"],
                 fontWeight: "600",

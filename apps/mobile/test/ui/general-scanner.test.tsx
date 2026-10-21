@@ -18,7 +18,8 @@ const mockPeople = [
 
 jest.mock("expo-router", () => ({
   usePathname: () => "/scan",
-  useRouter: () => ({ push: jest.fn() }),
+  useLocalSearchParams: () => ({}),
+  useRouter: () => ({ push: jest.fn(), setParams: jest.fn() }),
   useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
 }));
 jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
@@ -36,6 +37,7 @@ jest.mock("@/components/QrCamera", () => ({
     );
   },
 }));
+jest.mock("@/components/person-operations-screen", () => ({ PersonOperationsScreen: () => null }));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/lib/api", () => ({ apiFetch: (...args: unknown[]) => mockApiFetch(...args) }));
