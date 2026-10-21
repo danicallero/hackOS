@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
@@ -25,18 +25,22 @@ export function AuthScreen({
   footer?: ReactNode;
   scrollable?: boolean;
 }) {
+  const safe = useSafeAreaInsets();
   if (!scrollable) {
     return <FixedAuthScreen footer={footer}>{children}</FixedAuthScreen>;
   }
+  // The stack already pads the side column; "automatic" would inset the scroll content by the
+  // horizontal safe area a second time (a foldable's column pushed the form far off-centre), so
+  // only the vertical safe area is added here.
   return (
     <ScrollView
       automaticallyAdjustKeyboardInsets
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior="never"
       contentContainerStyle={{
         flexGrow: 1,
         paddingHorizontal: 24,
-        paddingTop: 56,
-        paddingBottom: 40,
+        paddingTop: safe.top + 56,
+        paddingBottom: safe.bottom + 40,
       }}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"

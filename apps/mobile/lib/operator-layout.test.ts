@@ -76,7 +76,7 @@ describe("operator layout", () => {
     expect(scanFrameSize(1400, 900)).toBe(SCAN_FRAME.large);
   });
 
-  it("centres list content in a bounded column with equal gutters", () => {
+  it("centres list content with equal gutters, filling an expanded window", () => {
     expect(operatorListColumn(390)).toEqual({
       alignSelf: "center",
       maxWidth: 720,
@@ -85,6 +85,6 @@ describe("operator layout", () => {
     });
     expect(operatorListColumn(565).paddingHorizontal).toBe(16);
     expect(operatorListColumn(700).paddingHorizontal).toBe(24);
-    expect(operatorListColumn(1400)).toMatchObject({ maxWidth: 960, paddingHorizontal: 32 });
+    expect(operatorListColumn(1400)).toMatchObject({ maxWidth: 1400, paddingHorizontal: 32 });
   });
 });

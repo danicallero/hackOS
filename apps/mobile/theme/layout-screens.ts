@@ -105,7 +105,7 @@ export interface ListColumnStyle {
 
 /**
  * Content-container style for an operator list or form: the same gutter on both edges and a
- * reading column that stays centred instead of stretching rows across a wide window.
+ * reading column that stays centred; expanded windows use their full width.
  */
 export function operatorListColumn(
   windowWidth: number,
@@ -113,7 +113,8 @@ export function operatorListColumn(
 ): ListColumnStyle {
   return {
     alignSelf: "center",
-    maxWidth: readableContentWidth(windowWidth),
+    maxWidth:
+      windowSizeClass(windowWidth) === "expanded" ? windowWidth : readableContentWidth(windowWidth),
     paddingHorizontal: gutter,
     width: "100%",
   };

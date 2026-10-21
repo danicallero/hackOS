@@ -70,13 +70,14 @@ describe("badgeFitsBesideTitle", () => {
 });
 
 describe("participantLayout", () => {
-  it("uses equal gutters and bounds forms narrower than lists", () => {
+  it("uses equal gutters and bounds forms narrower than lists, which fill an expanded window", () => {
     const form = participantLayout(1000, 1, "form");
     const list = participantLayout(1000, 1, "list");
     expect(form.content.paddingHorizontal).toBe(32);
     expect(form.columnWidth).toBe(624);
-    expect(list.columnWidth).toBe(720);
-    expect(participantLayout(1000, 1, "grid").columnWidth).toBe(960);
+    expect(list.columnWidth).toBe(1000);
+    expect(participantLayout(1000, 1, "grid").columnWidth).toBe(1000);
+    expect(participantLayout(700, 1, "list").columnWidth).toBe(700);
     expect(participantLayout(400, 1, "list").columnWidth).toBe(400);
   });
 

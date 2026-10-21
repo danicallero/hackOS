@@ -5,13 +5,13 @@
  */
 import { useWindowDimensions } from "react-native";
 import { columnCount, FORM_MAX_WIDTH, tileWidth } from "@/lib/pane-width";
-import { MAX_CONTENT_WIDTH } from "@/lib/window-size";
+import { windowSizeClass } from "@/lib/window-size";
 import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { readableContentWidth, screenGutter } from "@/theme/layout";
 
 export type ContentKind = "form" | "list" | "grid";
 
-/** Style for a ScrollView/FlatList `contentContainerStyle`: centred, bounded, equal gutters. */
+/** Style for a ScrollView/FlatList `contentContainerStyle`: centred, bounded (full width when expanded), equal gutters. */
 export interface ReadableContentStyle {
   alignSelf: "center";
   maxWidth: number;
@@ -42,13 +42,13 @@ export function participantLayout(
   kind: ContentKind,
 ): ParticipantLayout {
   const gutter = screenGutter(windowWidth);
-  // Forms are narrowest, grouped row lists stay at the phone-and-tablet column, and only a grid
-  // of tiles uses the expanded window's wider column.
+  // Forms are narrowest; lists and grids use the whole window once it is expanded (a tablet or
+  // Mac window should not leave a third of the screen empty), the readable width before.
   const cap =
     kind === "form"
       ? FORM_MAX_WIDTH + gutter * 2
-      : kind === "list"
-        ? MAX_CONTENT_WIDTH
+      : windowSizeClass(windowWidth) === "expanded"
+        ? windowWidth
         : readableContentWidth(windowWidth);
   const columnWidth = Math.min(windowWidth, cap);
   const innerWidth = columnWidth - gutter * 2;
