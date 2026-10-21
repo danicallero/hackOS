@@ -2,13 +2,14 @@ import { createContext, createElement, type ReactNode, useContext, useMemo } fro
 import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSideRegion } from "@/lib/side-region";
+import { TABLET_TAB_BAR_MIN_WIDTH } from "@/lib/window-size";
 
 /** Visual height occupied by the floating tab bar, including its safe-area gap. */
 export const ROUTER_TAB_BAR_HEIGHT = 64;
 export const ROUTER_TAB_BAR_VERTICAL_PADDING = 8;
 const ROUTER_TAB_BAR_TABLET_HEIGHT = 56;
 const ROUTER_TAB_BAR_TABLET_VERTICAL_PADDING = 6;
-const ROUTER_TAB_BAR_TABLET_BREAKPOINT = 700;
+const ROUTER_TAB_BAR_TABLET_BREAKPOINT = TABLET_TAB_BAR_MIN_WIDTH;
 const ROUTER_TAB_BAR_TABLET_DIRECT_TABS = 6;
 
 export interface RouterTabBarInsets {
@@ -66,6 +67,9 @@ const ROUTER_TAB_BAR_VERTICAL_TOP_RESERVE = 176;
 export function routerTabBarVerticalBudget(
   windowHeight: number,
   bottomPadding: number,
+  windowWidth = 0,
+  /** The labelled tablet rail lists every destination: height is the only limit. */
+  tabletRail = false,
 ): { direct: number; withoutOverflow: number } {
   const room =
     windowHeight -
@@ -73,9 +77,13 @@ export function routerTabBarVerticalBudget(
     bottomPadding -
     ROUTER_TAB_BAR_VERTICAL_GAP;
   const cells = Math.floor(room / (ROUTER_TAB_BAR_VERTICAL_CELL + 4));
+  if (tabletRail) return { direct: Math.max(2, cells), withoutOverflow: Math.max(2, cells) };
   return {
-    direct: Math.min(4, Math.max(2, cells - 1)),
-    withoutOverflow: Math.min(5, Math.max(2, cells)),
+    direct: Math.min(routerTabBarDirectTabsForWidth(windowWidth), Math.max(2, cells - 1)),
+    withoutOverflow: Math.min(
+      routerTabBarMaxTabsWithoutOverflowForWidth(windowWidth),
+      Math.max(2, cells),
+    ),
   };
 }
 

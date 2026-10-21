@@ -1148,12 +1148,45 @@ the rules that bind UI work:
 Wallet button, native confirmations — plus offline-first scanner UX. Full
 architecture: [`mobile.md`](./mobile.md).**
 
+- **One token set, Apple look everywhere.** `apps/mobile/theme` is the only
+  source of visual values; import from `@/theme`. Colours (`colors`) are UIKit
+  semantic colours on iOS and the same palette as fixed light/dark pairs on
+  Android (never Material You, never a Material ripple). `space` (4-pt grid plus
+  the 6/10 UIKit half-steps), `radius` (`control` 12, `container` 14, `sheet` 22,
+  `full` capsule, always with `borderCurve: "continuous"`), `type` (Apple text
+  styles, plus `compact` 14) and `motion` (durations and springs) are in
+  `theme/tokens.ts`. Text is `AppText` (or `type.*` spread into a style); screens
+  do not write font sizes, hex colours or radii. Android colours resolve at read
+  time, so never freeze a `colors.*` value at module scope.
+- **One pressed vocabulary.** `PressableFeedback` (`feedback`: `row` highlight for
+  list cells, `opacity` for text/icon buttons, `scale` for filled buttons and
+  cards, `none` when the control draws its own) replaces ad-hoc
+  `({ pressed }) => opacity` styles. Same springs on both platforms, Reduce Motion
+  swaps the spring for a short fade, disabled is `pressed.disabledOpacity`.
+  Pointer and keyboard (iPad trackpad, Mac, Android mouse): hover washes `row`
+  with `colors.hover` and dims `opacity`/`scale` (`pointer.*` tokens); keyboard
+  focus draws a 2 pt `colors.accent` ring (`focusRadius` matches the control,
+  cleared on press). Touch and disabled never get either; custom controls use
+  `usePointerState()` and `focusRingStyle()`.
+  Navigation stays the custom `RouterTabs` shell with the overflow menu; this
+  system does not change it.
+- **Drift ratchet.** `pnpm check:mobile-tokens` fails when a file gains raw hex
+  colours, `fontSize` or `borderRadius` literals beyond
+  `scripts/mobile-token-baseline.json`. Migrating a file lowers its count; run
+  `node scripts/check-mobile-tokens.mjs --update` to record it. Migrate a screen
+  when you touch it.
 - **Design for width, not for a device.** Layouts answer to the window the app has
   now (compact < 600 dp, medium < 840 dp, expanded from 840 dp), never to a
-  manufacturer, model or fold posture. Content stops growing at 720 dp and is
-  centred (`AdaptiveFrame`, also inside every `Modal` sheet); nothing may remount
-  or reset on a resize, because foldables resize mid-task. Details in
+  manufacturer, model or fold posture. Bound reading content (720 dp on smaller
+  windows, 960 dp on expanded ones), not the entire tablet navigator. In large
+  landscape windows (at least 1100 × 800 dp), `AdaptiveFrame` gives navigation
+  the full display width and panes apply their own reading limits. Sheets keep
+  their content cap. Nothing may remount or reset on a resize, because foldables resize mid-task. Details in
   [`mobile.md`](./mobile.md#foldables-and-large-screens).
+  On iOS, landscape windows at least 600 pt tall use a leading navigation rail;
+  portrait and narrower split-screen windows keep bottom navigation. A system
+  side column takes precedence over the app's leading rail. Content clears the
+  rail and reflows without remounting; iPad retains native horizontal headers.
 - **Tab budget is hard.** Every platform uses the custom Expo Router shell in
   `components/router-tabs.tsx`: iOS 26+ renders Liquid Glass surfaces, while
   earlier iOS and Android use the same geometry with solid surfaces. Five total
@@ -1201,6 +1234,12 @@ architecture: [`mobile.md`](./mobile.md).**
   system `PKAddPassButton` (never custom artwork, per Apple's guidelines);
   destructive actions (delete message, sign out) use native confirmation
   alerts; lists use native section/grouped styling.
+- **Navigation actions follow native chrome.** On iOS with native glass, route
+  close/back actions use toolbar symbols, including title-less screens. A
+  transparent header can own the controls without adding a visible top bar.
+  Let the native scroll inset clear that toolbar once; do not add a second
+  floating-button row. Floating controls remain for camera/modal surfaces and
+  the platform fallback, aligned within their own safe-area coordinate space.
 - Touch and layout: primary targets ≥ 44 pt; safe-area insets respected for
   fixed actions and scanner feedback; critical scan actions never depend on
   small overflow menus.
@@ -1212,10 +1251,18 @@ architecture: [`mobile.md`](./mobile.md).**
   yourself. Header-less Android tab screens draw edge-to-edge under a
   transparent status bar, so they need `AndroidStatusBarScrim` (`native-ui`) to
   keep scrolled rows from sliding behind the clock.
-- **`presentationStyle="pageSheet"` is an iOS presentation.** On Android the
-  same `Modal` is a plain full-screen window with no inset card, so every sheet
-  adds the status-bar inset to its own header padding and floating chrome
-  (`sheetTopInset`) instead of assuming the sheet starts below the status bar.
+- **Sheets, menus, alerts, switches, spinners and pickers are drawn Apple-style
+  on Android, one shared implementation each** (H55, H59). Use `SheetModal`
+  (`app-sheet.tsx`: scrim, 22 pt top corners, grabber, top edge below the status
+  bar; `pageSheet` on iOS) instead of `Modal presentationStyle="pageSheet"`, so
+  sheet content never adds the status-bar inset. Use `MenuView` from
+  `app-menu.tsx` (UIKit menu on iOS, `MenuPopover` on Android) instead of
+  `@expo/ui/community/menu`, `alert()` from `lib/alert.ts` for every dialog
+  (including three-button ones), `AppSwitch`, `AppActivityIndicator`,
+  `AppRefreshControl`, `DateTimeField` (wheel sheet on Android) and never
+  `ToastAndroid`, `elevation`, `android_ripple` or `@expo/ui/jetpack-compose`.
+  Text-cursor and selection colours come from the Android theme
+  (`plugins/withAndroidAppleTheme.js`, needs a native rebuild).
 - **Semantic colors resolve per platform, per scheme.** `theme/colors.ts` is the
   only place that knows which system palette a token comes from: UIKit's dynamic
   colors on iOS, the *same palette as an explicit light/dark pair* on Android.
@@ -1404,3 +1451,6 @@ actions below this navigation: they belong beside the page title in PageHeader.
 The schedule current-time marker uses red as a temporal locator (time badge, dot
 and line), following the calendar convention; event categories retain their own
 colors and are never recolored because they overlap the current time.
+
+
+Account beside a navigation rail follows Contacts: leading native title, trailing Wallet action, matching canvas and no root back button (H55). Wallet credentials use a compact selector and QR in the leading pane with identity/actions in the trailing pane from 720 pt of measured content width; compact windows stack the same mounted groups (H28). Profile avatars collapse within the page when the camera island is lateral rather than in the top band (#935).

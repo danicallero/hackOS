@@ -1,12 +1,10 @@
 import Stack from "expo-router/stack";
-import { Fragment, type ReactNode, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
   type ColorValue,
-  Modal,
   Platform,
   Pressable,
-  ScrollView,
+  StyleSheet,
   Switch,
   type SwitchProps,
   Text,
@@ -21,19 +19,24 @@ import Animated, {
   FadeIn,
   FadeOut,
   LinearTransition,
+  type SharedValue,
+  useAnimatedStyle,
   useReducedMotion,
 } from "react-native-reanimated";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { MenuPopover, useMenuPopover } from "@/components/app-menu";
 import {
   GlassView,
   type GlassViewProps,
   isRealLiquidGlassAvailable,
 } from "@/components/glass-view";
+import { IosSwitch } from "@/components/ios-switch";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
-import { colors } from "@/theme/colors";
-import { isAccessibilityTextSize } from "@/theme/dynamic-type";
+import { colors, isAccessibilityTextSize, radius, space, type } from "@/theme";
 
 export function Section({
   title,
@@ -51,10 +54,10 @@ export function Section({
           selectable
           accessibilityRole="header"
           style={{
+            ...type.footnote,
             color: colors.secondaryLabel,
-            fontSize: 13,
             fontWeight: "600",
-            paddingHorizontal: 16,
+            paddingHorizontal: space.lg,
           }}
         >
           {title}
@@ -64,7 +67,7 @@ export function Section({
         style={{
           backgroundColor: colors.surface,
           borderCurve: "continuous",
-          borderRadius: 14,
+          borderRadius: radius.container,
           overflow: "hidden",
         }}
       >
@@ -74,10 +77,9 @@ export function Section({
         <Text
           selectable
           style={{
+            ...type.footnote,
             color: colors.secondaryLabel,
-            fontSize: 13,
-            lineHeight: 18,
-            paddingHorizontal: 16,
+            paddingHorizontal: space.lg,
           }}
         >
           {footer}
@@ -114,20 +116,12 @@ export function Separator({
 export const SWITCH_IN_ROW_STYLE: ViewStyle = { alignSelf: "center" };
 
 /**
- * The app's one Switch. iOS keeps the native control; Android's Material
- * default is teal/green, so it is recoloured with the accent token (white
- * thumb on an accent track when on, neutral track when off, both themes).
- * Use this instead of react-native's Switch.
+ * The app's one Switch. iOS keeps the native control; Android draws UIKit's
+ * switch (`IosSwitch`) instead of Material's. Use this instead of react-native's Switch.
  */
 export function AppSwitch(props: SwitchProps) {
   if (Platform.OS !== "android") return <Switch {...props} />;
-  return (
-    <Switch
-      thumbColor={colors.accentText}
-      trackColor={{ false: colors.tertiaryLabel, true: colors.accent }}
-      {...props}
-    />
-  );
+  return <IosSwitch {...props} />;
 }
 
 /**
@@ -174,16 +168,11 @@ export function ToggleRow({
       }}
     >
       {onPress ? (
-        <Pressable
+        <PressableFeedback
           accessibilityLabel={detail ? `${label}, ${detail}` : label}
           accessibilityRole="button"
           onPress={onPress}
-          style={({ pressed }) => ({
-            alignSelf: "stretch",
-            flex: 1,
-            flexDirection: "row",
-            opacity: pressed ? 0.6 : 1,
-          })}
+          style={{ alignSelf: "stretch", flex: 1, flexDirection: "row" }}
         >
           {text}
           <SymbolView
@@ -194,7 +183,7 @@ export function ToggleRow({
             accessible={false}
             style={{ alignSelf: "center", marginLeft: 8 }}
           />
-        </Pressable>
+        </PressableFeedback>
       ) : (
         text
       )}
@@ -382,65 +371,49 @@ export function ActionButton({
       : destructive
         ? colors.destructive
         : colors.accent;
+  const filledBackground =
+    variant === "filled"
+      ? destructive
+        ? disabledFilledDestructive
+          ? colors.elevatedSurface
+          : colors.surface
+        : colors.primaryAction
+      : undefined;
   return (
-    <Pressable
+    <PressableFeedback
       testID={testID}
       accessibilityLabel={label}
       accessibilityRole="button"
-      accessibilityState={{ disabled: isDisabled, busy }}
+      accessibilityState={{ busy }}
       disabled={isDisabled}
-      onPress={() => {
-        if (hapticIntent) void haptic(hapticIntent);
-        onPress();
-      }}
-      style={({ pressed }) => [
+      feedback={variant === "plain" ? "opacity" : "scale"}
+      haptic={hapticIntent === false ? undefined : hapticIntent}
+      onPress={onPress}
+      style={[
         {
           alignItems: "center",
-          backgroundColor:
-            variant === "filled"
-              ? destructive
-                ? disabledFilledDestructive
-                  ? colors.elevatedSurface
-                  : pressed
-                    ? colors.destructiveSurface
-                    : colors.surface
-                : colors.primaryAction
-              : undefined,
-          borderColor:
-            variant === "outlined" || filledDestructive
-              ? disabledFilledDestructive
-                ? colors.separator
-                : colors.separator
-              : undefined,
+          backgroundColor: filledBackground,
+          borderColor: variant === "outlined" || filledDestructive ? colors.separator : undefined,
           borderCurve: "continuous",
-          borderRadius: variant === "plain" ? 0 : 12,
+          borderRadius: variant === "plain" ? 0 : radius.control,
           borderWidth: variant === "outlined" || filledDestructive ? 1 : 0,
           flexDirection: "row",
-          gap: 8,
+          gap: space.sm,
           justifyContent: "center",
           minHeight: 50,
-          opacity: disabledFilledDestructive
-            ? 1
-            : busy
-              ? 0.75
-              : disabled
-                ? 0.45
-                : pressed
-                  ? 0.9
-                  : 1,
-          paddingHorizontal: 16,
-          transform: [{ scale: pressed ? 0.96 : 1 }],
+          opacity: busy ? 0.75 : undefined,
+          paddingHorizontal: space.lg,
         },
         style,
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={foreground} />
+        <AppActivityIndicator color={foreground} />
       ) : icon ? (
         <SymbolView name={icon} tintColor={foreground} size={18} accessible={false} />
       ) : null}
-      <Text style={{ color: foreground, fontSize: 16, fontWeight: "600" }}>{label}</Text>
-    </Pressable>
+      <Text style={[type.callout, { color: foreground, fontWeight: "600" }]}>{label}</Text>
+    </PressableFeedback>
   );
 }
 
@@ -468,6 +441,8 @@ export function LegacyScreenHeader({
   actions,
   searchEnabled = true,
   showSearchButton = true,
+  inlineTitle = false,
+  titleFade,
 }: {
   topInset: number;
   title: string;
@@ -484,9 +459,15 @@ export function LegacyScreenHeader({
   /** False hides the search button, for a segment the search does not apply to. */
   searchEnabled?: boolean;
   showSearchButton?: boolean;
+  /** A navigation-bar title (17pt) beside the leading item, instead of the 28pt page title. */
+  inlineTitle?: boolean;
+  /** 0..1, driven by the list's scroll: fades the inline title and a bottom hairline in. */
+  titleFade?: SharedValue<number>;
 }) {
   const reducedMotion = useReducedMotion();
   const headerTransition = reducedMotion ? undefined : LinearTransition.duration(180);
+  const titleFadeStyle = useAnimatedStyle(() => ({ opacity: titleFade ? titleFade.get() : 1 }));
+  const hairlineStyle = useAnimatedStyle(() => ({ opacity: titleFade ? titleFade.get() : 0 }));
 
   return (
     <View style={{ gap: 8, paddingHorizontal: 16, paddingTop: topInset, zIndex: 10 }}>
@@ -561,7 +542,11 @@ export function LegacyScreenHeader({
           >
             <View style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 4 }}>
               {leading}
-              <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>{title}</Text>
+              {inlineTitle ? null : (
+                <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>
+                  {title}
+                </Text>
+              )}
             </View>
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
               {actions}
@@ -580,9 +565,43 @@ export function LegacyScreenHeader({
                 </GlassView>
               ) : null}
             </View>
+            {inlineTitle ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  {
+                    alignItems: "center",
+                    bottom: 0,
+                    justifyContent: "center",
+                    left: 0,
+                    position: "absolute",
+                    right: 0,
+                    top: 0,
+                  },
+                  titleFadeStyle,
+                ]}
+              >
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  style={{ ...type.headline, color: colors.label, maxWidth: "50%" }}
+                >
+                  {title}
+                </Text>
+              </Animated.View>
+            ) : null}
           </View>
         )}
       </Animated.View>
+      {titleFade ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            { backgroundColor: colors.separator, height: StyleSheet.hairlineWidth },
+            hairlineStyle,
+          ]}
+        />
+      ) : null}
     </View>
   );
 }
@@ -612,6 +631,8 @@ export function LegacyHeaderIconButton({
       }}
       style={({ pressed }) => ({
         alignItems: "center",
+        cursor: "pointer",
+        borderRadius: 22,
         height: 44,
         justifyContent: "center",
         opacity: pressed ? 0.6 : 1,
@@ -680,7 +701,8 @@ export function MenuTriggerIcon({
 }
 
 /** Android fallback for H25/H26 roster filtering: native menu triggers are not
- * consistently clickable inside the legacy header's composed glass surface. */
+ * consistently clickable inside the legacy header's composed glass surface.
+ * The popover is the shared iOS-style `MenuPopover` (components/app-menu.tsx). */
 export function AndroidFilterMenu({
   accessibilityLabel,
   items,
@@ -696,116 +718,43 @@ export function AndroidFilterMenu({
   align?: "left" | "right";
   closeOnSelect?: boolean;
 }) {
-  const { t } = useLocale();
-  const [open, setOpen] = useState(false);
-  const trigger = useRef<View>(null);
-  const topInset = useAndroidTopInset();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
-  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
+  const { trigger, visible, anchor, open, close } = useMenuPopover();
 
   return (
     <>
-      <Pressable
-        ref={trigger}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        onPress={() => {
-          trigger.current?.measureInWindow((x, y, width, height) => {
-            const left = align === "left" ? x : x + width - 240;
-            setAnchor({
-              left: Math.max(16, Math.min(windowWidth - 256, left)),
-              top: y + height + 8,
-            });
-          });
-          setOpen(true);
-        }}
-        style={({ pressed }) => ({
-          alignItems: "center",
-          flex: 1,
-          justifyContent: "center",
-          opacity: pressed ? 0.65 : 1,
-        })}
-      >
-        {children ?? (
-          <SymbolView
-            name="line.3.horizontal.decrease"
-            tintColor={
-              items.some((item) => item.selected) && !items[0]?.selected
-                ? colors.accent
-                : colors.label
-            }
-            size={19}
-            weight="semibold"
-          />
-        )}
-      </Pressable>
-      <Modal transparent visible={open} animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable
-          accessibilityLabel={t("close")}
+      <View ref={trigger} collapsable={false} style={{ flex: 1 }}>
+        <PressableFeedback
+          accessibilityLabel={accessibilityLabel}
           accessibilityRole="button"
-          onPress={() => setOpen(false)}
-          style={{ flex: 1 }}
-        />
-        <View
-          style={{
-            backgroundColor: colors.elevatedSurface,
-            borderColor: colors.separator,
-            borderRadius: 14,
-            borderWidth: 1,
-            elevation: 12,
-            overflow: "hidden",
-            position: "absolute",
-            ...(anchor ? { left: anchor.left } : { right: 16 }),
-            top: anchor?.top ?? topInset + 58,
-            width: 240,
-            maxHeight: windowHeight - (anchor?.top ?? topInset + 58) - 16,
-          }}
+          accessibilityState={{ expanded: visible }}
+          onPress={open}
+          style={{ alignItems: "center", flex: 1, justifyContent: "center" }}
         >
-          <ScrollView>
-            {items.map((item, index) => (
-              <Fragment key={item.id}>
-                {item.section && item.section !== items[index - 1]?.section ? (
-                  <Text
-                    accessibilityRole="header"
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: 13,
-                      fontWeight: "600",
-                      paddingHorizontal: 16,
-                      paddingTop: 12,
-                      paddingBottom: 4,
-                    }}
-                  >
-                    {item.section}
-                  </Text>
-                ) : null}
-                <Pressable
-                  accessibilityRole="menuitem"
-                  accessibilityState={{ selected: item.selected }}
-                  key={item.id}
-                  onPress={() => {
-                    onSelect(item.id);
-                    if (closeOnSelect) setOpen(false);
-                  }}
-                  style={({ pressed }) => ({
-                    alignItems: "center",
-                    backgroundColor: pressed ? colors.surface : "transparent",
-                    flexDirection: "row",
-                    minHeight: 48,
-                    paddingHorizontal: 16,
-                  })}
-                >
-                  <Text style={{ color: colors.label, flex: 1, fontSize: 16 }}>{item.label}</Text>
-                  {item.selected ? (
-                    <SymbolView name="checkmark" tintColor={colors.accent} size={16} />
-                  ) : null}
-                </Pressable>
-              </Fragment>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
+          {children ?? (
+            <SymbolView
+              name="line.3.horizontal.decrease"
+              tintColor={
+                items.some((item) => item.selected) && !items[0]?.selected
+                  ? colors.accent
+                  : colors.label
+              }
+              size={19}
+              weight="semibold"
+            />
+          )}
+        </PressableFeedback>
+      </View>
+      <MenuPopover
+        align={align}
+        anchor={anchor}
+        visible={visible}
+        items={items}
+        onClose={close}
+        onSelect={(id) => {
+          onSelect(id);
+          if (closeOnSelect) close();
+        }}
+      />
     </>
   );
 }
@@ -916,6 +865,8 @@ export function FloatingGlassButton({
           alignItems: "center",
           flex: 1,
           justifyContent: "center",
+          cursor: disabled ? "auto" : "pointer",
+          borderRadius: 22,
           opacity: disabled ? 0.4 : 1,
         }}
       >

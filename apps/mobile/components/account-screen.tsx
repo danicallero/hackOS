@@ -1,5 +1,5 @@
-import { type MenuAction, type MenuComponentRef, MenuView } from "@expo/ui/community/menu";
 import {
+  Stack,
   useFocusEffect,
   useLocalSearchParams,
   useNavigation,
@@ -8,11 +8,9 @@ import {
 } from "expo-router";
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
-  Alert,
   type LayoutChangeEvent,
   Platform,
   Pressable,
-  RefreshControl,
   type ScrollView,
   Text,
   useColorScheme,
@@ -32,6 +30,9 @@ import {
   AccountWalletOverlay,
   useAccountWallet,
 } from "@/components/account-wallet";
+import { type MenuAction, type MenuComponentRef, MenuView } from "@/components/app-menu";
+import { AppRefreshControl } from "@/components/app-refresh-control";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import {
   ActionButton,
   AndroidStatusBarScrim,
@@ -41,6 +42,7 @@ import {
   StatusPill,
   ToggleRow,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import {
   ProfileAvatarCollapse,
   ProfileAvatarCollapseAnchor,
@@ -49,6 +51,7 @@ import {
 import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
@@ -67,12 +70,14 @@ import {
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
-import { canManageStands, canViewStaffStatistics } from "@/lib/tabs";
+import { useSideRegion } from "@/lib/side-region";
+import { canManageStands, canViewStaffStatistics, isPadIdiom } from "@/lib/tabs";
 import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useFoodIntolerances } from "@/lib/use-food-intolerances";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const LANGUAGES: Lang[] = ["en", "es", "gl"];
 /** H51: wait for the sheet dismissal + push transition before the visible scroll. */
@@ -85,16 +90,32 @@ export default function AccountScreen() {
   useColorScheme();
   const router = useRouter();
   const { t, language } = useLocale();
+  const readable = useParticipantLayout("list");
   const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
+  const avatarSize = isPadIdiom() ? 144 : 96;
   const wallet = useAccountWallet();
   const navigation = useNavigation();
-  // The wallet overlay is a page of its own: its title replaces "Account" in the native
-  // header instead of "Account" showing above it.
+  const side = useSideRegion();
+  const nativeHeader = isRealLiquidGlassAvailable() && (Boolean(side.edge) || isPadIdiom());
   useEffect(() => {
-    navigation.setOptions({ title: wallet.open ? t("tabWallet") : t("tabAccount") });
-  }, [navigation, wallet.open, t]);
+    navigation.setOptions({
+      title: "",
+      headerTitle: "",
+      headerShown: nativeHeader,
+      headerBackVisible: false,
+      gestureEnabled: !wallet.open,
+      headerLargeTitle: false,
+      headerShadowVisible: false,
+      headerTransparent: true,
+      headerStyle: { backgroundColor: "transparent" },
+      // Content scrolling under the bar and the system indicators is softened by the native
+      // scroll-edge blur, also where the avatar stays a plain part of the page (a foldable's
+      // side-column island, Reduce Motion).
+      scrollEdgeEffects: { top: "soft" },
+    });
+  }, [navigation, nativeHeader, wallet.open]);
   const avatarCollapse = useProfileAvatarCollapse(scrollRef);
   useScrollToTop(avatarCollapse.scrollToTopRef);
   useFocusEffect(avatarCollapse.settleAtRest);
@@ -220,13 +241,13 @@ export default function AccountScreen() {
         ["accredit:scan", "presence:scan", "activity:scan"].includes(capability),
       );
     if (offline && isStaff) {
-      Alert.alert(t("signOutOfflineConfirmTitle"), t("signOutOfflineConfirmBody"), [
+      alert(t("signOutOfflineConfirmTitle"), t("signOutOfflineConfirmBody"), [
         { text: t("cancel"), style: "cancel" },
         { text: t("signOut"), style: "destructive", onPress: () => void endSession() },
       ]);
       return;
     }
-    Alert.alert(t("signOutConfirmTitle"), t("signOutConfirmBody"), [
+    alert(t("signOutConfirmTitle"), t("signOutConfirmBody"), [
       { text: t("cancel"), style: "cancel" },
       { text: t("signOut"), style: "destructive", onPress: () => void endSession() },
     ]);
@@ -240,7 +261,7 @@ export default function AccountScreen() {
     }, 2_000);
     if (developerTapCount.current < 7) return;
     developerTapCount.current = 0;
-    Alert.alert(
+    alert(
       t("apiModeTitle"),
       mode === "development" ? t("apiModeProductionBody") : t("apiModeDevelopmentBody"),
       [
@@ -249,7 +270,7 @@ export default function AccountScreen() {
           text: t("apiModeSwitch"),
           onPress: () => {
             void setMode(mode === "development" ? "production" : "development").catch((error) => {
-              Alert.alert(
+              alert(
                 t("apiModeTitle"),
                 `${t("apiModeSwitchError")}\n${error instanceof Error ? error.message : String(error)}`,
               );
@@ -282,6 +303,18 @@ export default function AccountScreen() {
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
+      {nativeHeader && !wallet.open ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text
+              accessibilityRole="header"
+              style={{ color: colors.label, fontSize: type.title.fontSize, fontWeight: "800" }}
+            >
+              {t("tabAccount")}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
       <Animated.ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -297,12 +330,16 @@ export default function AccountScreen() {
         scrollToOverflowEnabled
         contentContainerStyle={{
           gap: 20,
-          padding: 16,
+          paddingVertical: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
           paddingTop: 16 + androidTopInset,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshingAccount} onRefresh={() => void refreshAccount()} />
+          <AppRefreshControl
+            refreshing={refreshingAccount}
+            onRefresh={() => void refreshAccount()}
+          />
         }
       >
         {/* H28: scrolls away with the content instead of staying pinned. */}
@@ -317,17 +354,30 @@ export default function AccountScreen() {
         ) : null}
 
         <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>
-          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={96}>
-            <ProfilePhotoMenu testID="account-avatar" name={fullName} image={me.image} size={96} />
+          <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
+            <ProfilePhotoMenu
+              testID="account-avatar"
+              name={fullName}
+              image={me.image}
+              size={avatarSize}
+            />
           </ProfileAvatarCollapseAnchor>
           <View onLayout={avatarCollapse.onNameLayout} style={{ alignItems: "center", gap: 5 }}>
             <Text
               selectable
-              style={{ color: colors.label, fontSize: 23, fontWeight: "700", textAlign: "center" }}
+              style={{
+                color: colors.label,
+                fontSize: type.title2.fontSize,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
             >
               {fullName}
             </Text>
-            <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+            <Text
+              selectable
+              style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}
+            >
               {roleDisplayName(me.visibleRoleName, t)}
             </Text>
             <StatusPill tone={me.badgeId ? "success" : "neutral"} style={{ alignSelf: "center" }}>
@@ -379,7 +429,8 @@ export default function AccountScreen() {
           />
           <Separator inset={48} />
           {canEditDietary ? (
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityLabel={t("accountFoodIntolerances")}
               accessibilityRole="button"
               onPress={() =>
@@ -388,7 +439,6 @@ export default function AccountScreen() {
                   params: { tasks: "dietary", edit: "1" },
                 })
               }
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
             >
               <InfoRow
                 label={t("accountFoodIntolerances")}
@@ -396,7 +446,7 @@ export default function AccountScreen() {
                 icon="fork.knife"
                 accessoryIcon="chevron.right"
               />
-            </Pressable>
+            </PressableFeedback>
           ) : (
             <InfoRow label={t("accountFoodIntolerances")} value={dietaryValue} icon="fork.knife" />
           )}
@@ -411,10 +461,13 @@ export default function AccountScreen() {
             <>
               <Separator inset={48} />
               <View style={{ gap: 5, padding: 16 }}>
-                <Text selectable style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                <Text
+                  selectable
+                  style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
+                >
                   {t("accountDietaryNotes")}
                 </Text>
-                <Text selectable style={{ color: colors.label, fontSize: 16 }}>
+                <Text selectable style={{ color: colors.label, fontSize: type.callout.fontSize }}>
                   {me.foodIntoleranceNotes}
                 </Text>
               </View>
@@ -534,29 +587,25 @@ export default function AccountScreen() {
               onRetry={() => void endSession()}
               retrying={signingOut}
             />
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityLabel={t("backToSignIn")}
               accessibilityRole="link"
               onPress={returnToSignIn}
-              style={({ pressed }) => ({
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: 44,
-                opacity: pressed ? 0.7 : 1,
-              })}
+              style={{ alignItems: "center", justifyContent: "center", minHeight: 44 }}
             >
               <Text
                 selectable
                 style={{
                   color: colors.interactiveText,
-                  fontSize: 15,
+                  fontSize: type.subhead.fontSize,
                   fontWeight: "700",
                   textAlign: "center",
                 }}
               >
                 {t("backToSignIn")}
               </Text>
-            </Pressable>
+            </PressableFeedback>
           </>
         ) : null}
         <Section title={t("sessionTitle")} footer={t("sessionActive", { email: me.email })}>
@@ -573,7 +622,9 @@ export default function AccountScreen() {
           onPress={revealDeveloperMode}
           style={{ alignSelf: "center", padding: 8 }}
         >
-          <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>{appVersionLabel}</Text>
+          <Text style={{ color: colors.tertiaryLabel, fontSize: type.caption.fontSize }}>
+            {appVersionLabel}
+          </Text>
         </Pressable>
       </Animated.ScrollView>
       <AndroidStatusBarScrim />
@@ -582,7 +633,7 @@ export default function AccountScreen() {
         image={me.image}
         persist
         name={fullName}
-        size={96}
+        size={avatarSize}
         variant="account"
       />
       <AccountWalletOverlay wallet={wallet} />
@@ -694,14 +745,14 @@ function AccountSubpageRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityLabel={label}
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
       <InfoRow accessoryIcon="chevron.right" icon={icon} label={label} value="" />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -766,7 +817,7 @@ function LanguageRow({
   }
 
   // Material's DropdownMenu aligns its popup to the start edge of the anchor, so a
-  // full-width trigger opens it at the screen's left edge. Keep the whole row
+  // full-width trigger opened it at the screen's left edge. Keep the whole row
   // tappable but anchor the menu to a 1dp strip at the row's trailing edge.
   return (
     <View>

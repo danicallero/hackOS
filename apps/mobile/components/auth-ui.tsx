@@ -1,6 +1,5 @@
 import { type ReactNode, type RefObject, useState } from "react";
 import {
-  ActivityIndicator,
   Keyboard,
   Pressable,
   ScrollView,
@@ -11,11 +10,12 @@ import {
   View,
 } from "react-native";
 import Animated, { useAnimatedKeyboard, useAnimatedStyle } from "react-native-reanimated";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
-
-import { haptic } from "@/lib/haptics";
-import { colors } from "@/theme/colors";
+import { useAuthFrameExtra } from "@/lib/auth-frame";
+import { colors, radius, space, type } from "@/theme";
 
 export function AuthScreen({
   children,
@@ -26,18 +26,28 @@ export function AuthScreen({
   footer?: ReactNode;
   scrollable?: boolean;
 }) {
+  const safe = useSafeAreaInsets();
+  const extra = useAuthFrameExtra();
   if (!scrollable) {
-    return <FixedAuthScreen footer={footer}>{children}</FixedAuthScreen>;
+    return (
+      <FixedAuthScreen extra={extra} footer={footer}>
+        {children}
+      </FixedAuthScreen>
+    );
   }
+  // The stack already pads the side column; "automatic" would inset the scroll content by the
+  // horizontal safe area a second time (a foldable's column pushed the form far off-centre), so
+  // only the vertical safe area is added here.
   return (
     <ScrollView
       automaticallyAdjustKeyboardInsets
-      contentInsetAdjustmentBehavior="automatic"
+      contentInsetAdjustmentBehavior="never"
       contentContainerStyle={{
         flexGrow: 1,
-        paddingHorizontal: 24,
-        paddingTop: 56,
-        paddingBottom: 40,
+        paddingLeft: 24 + extra.left,
+        paddingRight: 24 + extra.right,
+        paddingTop: safe.top + 56,
+        paddingBottom: safe.bottom + 40,
       }}
       keyboardDismissMode="interactive"
       keyboardShouldPersistTaps="handled"
@@ -61,15 +71,27 @@ export function AuthScreen({
   );
 }
 
-/** Moves the centered form on the compositor while keeping the footer fixed. */
-function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+/**
+ * Moves the centered form on the compositor while keeping the footer fixed. Only the vertical
+ * safe area is applied here: the stack already pads the side column, and a second horizontal
+ * inset pushed the form far off-centre on a foldable.
+ */
+function FixedAuthScreen({
+  children,
+  footer,
+  extra,
+}: {
+  children: ReactNode;
+  footer?: ReactNode;
+  extra: { left: number; right: number };
+}) {
   const keyboard = useAnimatedKeyboard();
   const formStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -Math.min(keyboard.height.value * 0.38, 160) }],
   }));
 
   return (
-    <SafeAreaView style={{ backgroundColor: colors.background, flex: 1 }}>
+    <SafeAreaView edges={["top", "bottom"]} style={{ backgroundColor: colors.background, flex: 1 }}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
         <View
           style={{
@@ -77,7 +99,8 @@ function FixedAuthScreen({ children, footer }: { children: ReactNode; footer?: R
             flex: 1,
             maxWidth: 440,
             paddingBottom: 16,
-            paddingHorizontal: 24,
+            paddingLeft: 24 + extra.left,
+            paddingRight: 24 + extra.right,
             paddingTop: 24,
             width: "100%",
           }}
@@ -314,34 +337,31 @@ export function AuthButton({
   testID?: string;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
       accessibilityLabel={label}
       accessibilityRole="button"
-      accessibilityState={{ disabled: disabled || busy, busy }}
+      accessibilityState={{ busy }}
       disabled={disabled || busy}
-      onPress={() => {
-        void haptic("light");
-        onPress();
-      }}
+      feedback="scale"
+      haptic="light"
+      onPress={onPress}
       testID={testID}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         backgroundColor: colors.primaryAction,
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.control,
         flexDirection: "row",
-        gap: 8,
+        gap: space.sm,
         justifyContent: "center",
         minHeight: 52,
-        opacity: disabled || busy ? 0.45 : pressed ? 0.75 : 1,
-        paddingHorizontal: 16,
-        transform: [{ scale: pressed && !disabled && !busy ? 0.96 : 1 }],
-      })}
+        paddingHorizontal: space.lg,
+      }}
     >
-      {busy ? <ActivityIndicator color={colors.primaryActionText} /> : null}
-      <Text style={{ color: colors.primaryActionText, fontSize: 17, fontWeight: "700" }}>
+      {busy ? <AppActivityIndicator color={colors.primaryActionText} /> : null}
+      <Text style={[type.body, { color: colors.primaryActionText, fontWeight: "700" }]}>
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }

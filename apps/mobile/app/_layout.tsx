@@ -11,6 +11,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import "react-native-reanimated";
 
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AlertHost } from "@/components/alert-host";
+import { AppBackGesture } from "@/components/app-back-gesture";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { UpgradeRequiredScreen } from "@/components/upgrade-required-screen";
@@ -39,7 +41,7 @@ import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { useLocalReminders } from "@/lib/use-local-reminders";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { warmWalletCache } from "@/lib/wallet-cache";
-import { colors } from "@/theme/colors";
+import { colors, navigationCanvas, radius, type } from "@/theme";
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -79,6 +81,7 @@ export default function RootLayout() {
       <LocaleProvider>
         <ApiModeProvider>
           <RootLayoutSession />
+          <AlertHost />
         </ApiModeProvider>
       </LocaleProvider>
     </GestureHandlerRootView>
@@ -116,15 +119,17 @@ function RootLayoutSessionContents() {
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <PendingCompanyTagResume authenticated={authenticated} />
       <AdaptiveFrame padSides={false}>
-        <RootLayoutNav
-          authenticated={authenticated}
-          pending={initialSessionPending}
-          me={me}
-          loading={loading}
-          error={error}
-          offlineEntryAvailable={offlineEntryAvailable}
-          enterOffline={enterOffline}
-        />
+        <AppBackGesture>
+          <RootLayoutNav
+            authenticated={authenticated}
+            pending={initialSessionPending}
+            me={me}
+            loading={loading}
+            error={error}
+            offlineEntryAvailable={offlineEntryAvailable}
+            enterOffline={enterOffline}
+          />
+        </AppBackGesture>
       </AdaptiveFrame>
       {mode === "development" ? <DevelopmentIndicator /> : null}
     </View>
@@ -446,7 +451,15 @@ function RootLayoutNav({
   }
 
   return (
-    <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
+    <ThemeProvider
+      value={{
+        ...(colorScheme === "dark" ? DarkTheme : DefaultTheme),
+        colors: {
+          ...(colorScheme === "dark" ? DarkTheme.colors : DefaultTheme.colors),
+          background: navigationCanvas[colorScheme === "dark" ? "dark" : "light"],
+        },
+      }}
+    >
       <Stack
         screenOptions={{
           ...nativeStackScreenOptions,
@@ -521,7 +534,7 @@ function DevelopmentIndicator() {
         alignItems: "center",
         backgroundColor: "#d70015",
         borderCurve: "continuous",
-        borderRadius: 999,
+        borderRadius: radius.full,
         paddingHorizontal: 9,
         paddingVertical: 4,
         position: "absolute",
@@ -536,7 +549,14 @@ function DevelopmentIndicator() {
         zIndex: 10,
       }}
     >
-      <Text style={{ color: "#ffffff", fontSize: 11, fontWeight: "800", letterSpacing: 0.5 }}>
+      <Text
+        style={{
+          color: "#ffffff",
+          fontSize: type.caption.fontSize,
+          fontWeight: "800",
+          letterSpacing: 0.5,
+        }}
+      >
         {/* Safe-area sides, to read what a foldable pose reports (Split View, outer display). */}
         {`DEV ${Math.round(sideInsets.left)}|${Math.round(sideInsets.right)}`}
       </Text>

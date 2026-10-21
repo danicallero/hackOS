@@ -4,6 +4,7 @@ import {
   routerTabBarInsets,
   routerTabBarMaxTabsWithoutOverflowForWidth,
   routerTabBarScrollBottomInset,
+  routerTabBarVerticalBudget,
   routerTabBarVerticalPaddingForWidth,
 } from "./router-tabs-inset";
 
@@ -39,5 +40,28 @@ describe("router tab bar geometry", () => {
 
     expect(routerTabBarScrollBottomInset(insets, "ios")).toBe(56);
     expect(routerTabBarScrollBottomInset(insets, "android")).toBe(90);
+  });
+
+  it("keeps six tablet destinations in the landscape rail when height permits", () => {
+    expect(routerTabBarVerticalBudget(1032, 12, 1366)).toEqual({ direct: 6, withoutOverflow: 6 });
+    expect(routerTabBarVerticalBudget(390, 12, 844)).toEqual({ direct: 3, withoutOverflow: 4 });
+    expect(routerTabBarInsets(20, 1366, true).contentBottomInset).toBe(20);
+  });
+});
+
+describe("tablet breakpoint", () => {
+  it("switches geometry at the shared tablet tab-bar width", () => {
+    expect(routerTabBarHeightForWidth(699)).toBe(64);
+    expect(routerTabBarHeightForWidth(700)).toBe(56);
+  });
+});
+
+describe("tablet rail budget", () => {
+  it("lists every destination up to the height, not the width cap (H55)", () => {
+    const rail = routerTabBarVerticalBudget(1024, 20, 1180, true);
+    const bar = routerTabBarVerticalBudget(1024, 20, 1180);
+    expect(rail.direct).toBe(rail.withoutOverflow);
+    expect(rail.withoutOverflow).toBeGreaterThan(bar.withoutOverflow);
+    expect(rail.withoutOverflow).toBeGreaterThanOrEqual(8);
   });
 });

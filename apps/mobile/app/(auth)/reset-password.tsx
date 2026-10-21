@@ -1,11 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, Text, type TextInput, View } from "react-native";
-
+import { Text, type TextInput, View } from "react-native";
 import { AuthAlert, AuthButton, AuthField, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -67,20 +67,22 @@ export default function ResetPasswordScreen() {
     <AuthScreen
       scrollable={false}
       footer={
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityRole="link"
           onPress={() => router.replace("/(auth)/sign-in")}
-          style={({ pressed }) => ({
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 44,
-            opacity: pressed ? 0.6 : 1,
-          })}
+          style={{ alignItems: "center", justifyContent: "center", minHeight: 44 }}
         >
-          <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: colors.interactiveText,
+              fontSize: type.subhead.fontSize,
+              fontWeight: "600",
+            }}
+          >
             {t("backToSignIn")}
           </Text>
-        </Pressable>
+        </PressableFeedback>
       }
     >
       <AuthHeader

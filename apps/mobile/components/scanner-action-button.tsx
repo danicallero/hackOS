@@ -10,7 +10,8 @@ export interface ScannerActionButtonProps {
   onPress: () => void;
   disabled?: boolean;
   primary?: boolean;
-  size?: "regular" | "large";
+  /** `compact`: icon over a one-line label, three of them side by side in a short pane. */
+  size?: "regular" | "large" | "compact";
   testID?: string;
 }
 
@@ -29,7 +30,7 @@ export function ScannerActionButton({
       isInteractive
       glassEffectStyle="regular"
       style={{
-        borderRadius: size === "regular" ? 24 : 28,
+        borderRadius: size === "regular" ? 24 : size === "compact" ? 20 : 28,
         overflow: "hidden",
         backgroundColor: primary ? colors.primaryAction : undefined,
       }}
@@ -43,13 +44,19 @@ export function ScannerActionButton({
         onPress={onPress}
         style={({ pressed }) => ({
           minHeight: size === "regular" ? 48 : 56,
-          paddingHorizontal: 20,
-          paddingVertical: size === "regular" ? 10 : 14,
+          paddingHorizontal: size === "compact" ? 6 : 20,
+          paddingVertical: size === "regular" ? 10 : size === "compact" ? 6 : 14,
+          justifyContent: "center",
           opacity: disabled ? 0.45 : pressed ? 0.7 : 1,
         })}
       >
         <View
-          style={{ flexDirection: "row", gap: 10, alignItems: "center", justifyContent: "center" }}
+          style={{
+            flexDirection: size === "compact" ? "column" : "row",
+            gap: size === "compact" ? 2 : 10,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           {icon ? (
             <SymbolView
@@ -60,9 +67,12 @@ export function ScannerActionButton({
             />
           ) : null}
           <Text
+            adjustsFontSizeToFit={size === "compact"}
+            minimumFontScale={size === "compact" ? 0.75 : undefined}
+            numberOfLines={size === "compact" ? 1 : undefined}
             style={{
               color: primary ? colors.primaryActionText : colors.label,
-              fontSize: 17,
+              fontSize: size === "compact" ? 13 : 17,
               fontWeight: "600",
               flexShrink: 1,
               textAlign: "center",

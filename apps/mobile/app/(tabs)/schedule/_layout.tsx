@@ -1,7 +1,7 @@
 import { Stack } from "expo-router/stack";
 import { useLocale } from "@/lib/i18n";
 import { useTabStackScreenOptions } from "@/lib/navigation";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 /**
  * Gives the Schedule tab its own native stack so `index.tsx` can drive a real
@@ -22,7 +22,11 @@ export default function ScheduleLayout() {
           headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.background },
           headerTitleAlign: "center",
-          headerTitleStyle: { color: colors.label, fontSize: 17, fontWeight: "600" },
+          headerTitleStyle: {
+            color: colors.label,
+            fontSize: type.body.fontSize,
+            fontWeight: "600",
+          },
           presentation: "modal",
           title: t("tabNotifications"),
         }}

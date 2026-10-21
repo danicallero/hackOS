@@ -15,7 +15,7 @@ export function ScannerActionButton({
   const glass = Number.parseInt(String(Platform.Version), 10) >= 26;
   return (
     <Host
-      style={{ minHeight: size === "regular" ? 48 : 56, width: "100%" }}
+      style={{ minHeight: size === "regular" ? 48 : size === "compact" ? 44 : 56, width: "100%" }}
       matchContents={{ vertical: true }}
     >
       <Button
@@ -31,7 +31,7 @@ export function ScannerActionButton({
                 ? "borderedProminent"
                 : "bordered",
           ),
-          controlSize(size),
+          controlSize(size === "compact" ? "small" : size),
           disabled(isDisabled),
         ]}
       >

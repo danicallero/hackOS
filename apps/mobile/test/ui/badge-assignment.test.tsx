@@ -1,3 +1,10 @@
+jest.mock("@/components/scanner-code-entry", () => ({
+  ScannerCodeEntry: jest.requireActual("@/components/scanner-code-card").ScannerCodeCard,
+}));
+jest.mock("@/lib/alert", () => ({
+  alert: (...args: unknown[]) =>
+    (jest.requireActual("react-native").Alert.alert as (...a: unknown[]) => void)(...args),
+}));
 jest.mock("@/components/scanner-code-entry-actions", () =>
   jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
 );
@@ -13,7 +20,7 @@ import { submitScannerMutation } from "@/lib/scanner-sync";
 import { renderMobile } from "./render";
 
 let mockMenuProps: { onPressAction: (event: { nativeEvent: { event: string } }) => void };
-jest.mock("@expo/ui/community/menu", () => ({
+jest.mock("@/components/app-menu", () => ({
   MenuView: (props: typeof mockMenuProps & { children: unknown }) => {
     mockMenuProps = props;
     return props.children;

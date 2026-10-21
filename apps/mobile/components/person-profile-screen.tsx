@@ -2,9 +2,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
 import Stack from "expo-router/stack";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, RefreshControl, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import Animated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
@@ -16,6 +17,7 @@ import {
   Section,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import {
   ProfileAvatarCollapse,
   ProfileAvatarCollapseAnchor,
@@ -24,6 +26,7 @@ import {
 import { ProfileCard } from "@/components/profile-card";
 import { NoteRow, QuickAction } from "@/components/profile-parts";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
@@ -31,7 +34,9 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
-import { colors } from "@/theme/colors";
+import { isPadIdiom } from "@/lib/tabs";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 type State =
   | { status: "loading" }
@@ -47,10 +52,12 @@ type State =
  * reader's favourite and note.
  */
 export function PersonProfileScreen() {
+  const avatarSize = isPadIdiom() ? 144 : 112;
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const router = useRouter();
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const insets = useSafeAreaInsets();
   // iOS shows the transparent native header, whose height the automatic
   // inset adds above the avatar's true top (#935).
@@ -121,7 +128,7 @@ export function PersonProfileScreen() {
       await action();
     } catch {
       void haptic("error");
-      Alert.alert(t("tabDiary"), t("diaryActionError"));
+      alert(t("tabDiary"), t("diaryActionError"));
     } finally {
       setBusy(null);
     }
@@ -142,7 +149,7 @@ export function PersonProfileScreen() {
 
   function confirmRemove() {
     if (!entry) return;
-    Alert.alert(t("diaryRemoveTitle"), undefined, [
+    alert(t("diaryRemoveTitle"), undefined, [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("remove"),
@@ -179,7 +186,7 @@ export function PersonProfileScreen() {
             colorScheme="auto"
             glassEffectStyle="regular"
             isInteractive
-            style={{ borderRadius: 22, height: 44, width: 44 }}
+            style={{ borderRadius: radius.full, height: 44, width: 44 }}
           >
             <LegacyHeaderIconButton
               accessibilityLabel={t("back")}
@@ -227,11 +234,11 @@ export function PersonProfileScreen() {
           // A short profile still scrolls to the collapsed avatar (#935).
           minHeight: person ? avatarCollapse.contentMinHeight : undefined,
           paddingBottom: Math.max(40, insets.bottom + 24),
-          paddingHorizontal: 16,
+          ...readable.content,
           paddingTop: usesCustomAndroidHeader ? insets.top + 64 : 8,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
         {state.status === "loading" ? (
@@ -246,8 +253,8 @@ export function PersonProfileScreen() {
               data={person}
               onNameLayout={avatarCollapse.onNameLayout}
               avatar={
-                <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={112}>
-                  <PersonAvatar size={112} name={person.displayName} uri={person.photoUrl} />
+                <ProfileAvatarCollapseAnchor controller={avatarCollapse} size={avatarSize}>
+                  <PersonAvatar size={avatarSize} name={person.displayName} uri={person.photoUrl} />
                 </ProfileAvatarCollapseAnchor>
               }
               actions={
@@ -300,41 +307,41 @@ export function PersonProfileScreen() {
 
             {entry ? (
               <Section>
-                <Pressable
+                <PressableFeedback
+                  feedback="row"
                   accessibilityRole="button"
                   accessibilityState={{ disabled: busy !== null, busy: busy === "remove" }}
                   disabled={busy !== null}
                   onPress={confirmRemove}
-                  style={({ pressed }) => ({
+                  style={{
                     alignItems: "center",
-                    backgroundColor: pressed ? colors.elevatedSurface : undefined,
                     minHeight: 50,
                     justifyContent: "center",
                     paddingHorizontal: 16,
-                  })}
+                  }}
                 >
-                  <Text style={{ color: colors.destructive, fontSize: 16 }}>
+                  <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
                     {t("diaryRemoveFromDiary")}
                   </Text>
-                </Pressable>
+                </PressableFeedback>
               </Section>
             ) : null}
             <Section>
-              <Pressable
+              <PressableFeedback
+                feedback="row"
                 accessibilityRole="button"
                 onPress={() => reportContent({ userId }, t)}
-                style={({ pressed }) => ({
+                style={{
                   alignItems: "center",
-                  backgroundColor: pressed ? colors.elevatedSurface : undefined,
                   minHeight: 50,
                   justifyContent: "center",
                   paddingHorizontal: 16,
-                })}
+                }}
               >
-                <Text style={{ color: colors.destructive, fontSize: 16 }}>
+                <Text style={{ color: colors.destructive, fontSize: type.callout.fontSize }}>
                   {t("reportContent")}
                 </Text>
-              </Pressable>
+              </PressableFeedback>
             </Section>
           </>
         )}
@@ -347,7 +354,7 @@ export function PersonProfileScreen() {
           controller={avatarCollapse}
           image={person.photoUrl}
           name={person.displayName}
-          size={112}
+          size={avatarSize}
           variant="person"
         />
       ) : null}

@@ -36,6 +36,34 @@ export interface NativeProject {
   submissionsCloseAt?: string | null;
   files?: ProjectFile[];
 }
+/** H20: reject incomplete payloads before the editor renders collection fields. */
+export function parseNativeProject(value: unknown): NativeProject {
+  if (!value || typeof value !== "object") throw new Error("Invalid project response");
+  const project = value as Partial<NativeProject>;
+  const collections = [
+    project.template,
+    project.sections,
+    project.members,
+    project.challenges,
+    project.presentations,
+  ];
+  if (
+    typeof project.id !== "number" ||
+    typeof project.name !== "string" ||
+    typeof project.revision !== "number" ||
+    !["draft", "submitted"].includes(project.submissionStatus ?? "") ||
+    !project.responses ||
+    typeof project.responses !== "object" ||
+    Array.isArray(project.responses) ||
+    collections.some(
+      (items) => !Array.isArray(items) || items.some((item) => !item || typeof item !== "object"),
+    )
+  ) {
+    throw new Error("Invalid project response");
+  }
+  return project as NativeProject;
+}
+
 export interface ProjectFile {
   objectKey: string;
   url: string;

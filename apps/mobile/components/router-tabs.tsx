@@ -36,6 +36,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
+import { useDockBackGesture } from "@/components/app-back-gesture";
 import {
   ROUTER_TAB_BAR_VERTICAL_CELL,
   ROUTER_TAB_BAR_VERTICAL_WIDTH,
@@ -141,7 +142,7 @@ export interface RouterTabsProps {
   /** Ready-to-render overflow control; it is placed in its own circle. */
   overflow?: ReactNode;
   /** Side effects for ordinary direct-tab presses, such as haptics. */
-  onTabPress?: (tab: RouterTabItem) => void;
+  onTabPress?: (tab: RouterTabItem, wasSelected: boolean) => void;
   /** Side effects after a direct tab release, including a scrub selection. */
   onTabSelect?: (index: number) => void;
   /** Direct-cell budget when `overflow` is present; defaults to four. */
@@ -186,6 +187,14 @@ export function RouterTabs({
   const directTabLimit = overflow ? maxDirectTabs : maxTabsWithoutOverflow;
   const directTabs = tabs.slice(0, directTabLimit);
   const registeredRoutes = routes ?? tabs.map(({ href, name }) => ({ href, name }));
+  const sideRegion = useSideRegion();
+  const tabletSidebar =
+    sideRegion.tabletRail === true || (Platform.OS === "android" && sideRegion.edge !== null);
+  const slotPadding = tabletSidebar
+    ? sideRegion.edge === "right"
+      ? { paddingRight: sideRegion.size }
+      : { paddingLeft: sideRegion.size }
+    : {};
 
   if (__DEV__ && tabs.length > directTabLimit) {
     console.warn(
@@ -197,7 +206,7 @@ export function RouterTabs({
   return (
     <RouterTabBarInsetsProvider>
       <Tabs style={{ flex: 1 }} testID={testID}>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, ...slotPadding }}>
           <TabSlot style={{ flex: 1 }} />
         </View>
         <RouterTabsContent
@@ -225,7 +234,7 @@ interface RouterTabsContentProps {
   colorScheme: RouterTabsColorScheme;
   directTabs: RouterTabItem[];
   liquidGlass: boolean;
-  onTabPress?: (tab: RouterTabItem) => void;
+  onTabPress?: (tab: RouterTabItem, wasSelected: boolean) => void;
   onTabSelect?: (index: number) => void;
   overflow?: ReactNode;
   surfaceComponent: RouterTabsSurfaceComponent;
@@ -294,11 +303,13 @@ function RouterTabsContent({
     [directTabNames, onTabSelect, selectedDirectTabIndex, switchTab],
   );
 
+  const dockBackGesture = useDockBackGesture();
   const tabScrubGesture = useMemo(() => {
     // Let each TabTrigger own ordinary taps. Pan only takes ownership after
     // six points, so tapping an active tab still emits the native tabPress
     // event while a horizontal drag keeps the lens attached to the finger.
     return Gesture.Pan()
+      .requireExternalGestureToFail(...(dockBackGesture ? [dockBackGesture] : []))
       .activeOffsetX([-6, 6])
       .failOffsetY([-14, 14])
       .enabled(directTabCount > 0 && directTabCellWidth > 0)
@@ -330,6 +341,7 @@ function RouterTabsContent({
         runOnJS(setIsScrubbing)(false);
       });
   }, [
+    dockBackGesture,
     commitTabSelection,
     directGroupWidth,
     directTabCellWidth,
@@ -352,6 +364,7 @@ function RouterTabsContent({
         edge={sideEdge}
         size={sideRegion.size}
         surfaceComponent={surfaceComponent}
+        tabletRail={sideRegion.tabletRail === true}
         testID={testID}
         theme={theme}
         bottomPadding={bottomPadding}
@@ -412,7 +425,7 @@ function RouterTabsContent({
                     selectionOffset.value = reducedMotion
                       ? targetOffset
                       : withSpring(targetOffset, TAB_SELECTION_SPRING);
-                    onTabPress?.(tab);
+                    onTabPress?.(tab, index === selectedDirectTabIndex);
                   }}
                   selectedIcon={tab.selectedIcon}
                   itemHeight={tabItemHeight}
@@ -465,6 +478,7 @@ function VerticalTabBar({
   edge,
   size,
   surfaceComponent,
+  tabletRail,
   testID,
   theme,
 }: {
@@ -472,21 +486,22 @@ function VerticalTabBar({
   colorScheme: RouterTabsColorScheme;
   directTabs: RouterTabItem[];
   liquidGlass: boolean;
-  onTabPress?: (tab: RouterTabItem) => void;
+  onTabPress?: (tab: RouterTabItem, wasSelected: boolean) => void;
   overflow?: ReactNode;
   pathname: string;
   reducedMotion: boolean;
   edge: "left" | "right";
   size: number;
   surfaceComponent: RouterTabsSurfaceComponent;
+  tabletRail: boolean;
   testID: string;
   theme: RouterTabsTheme;
 }) {
   const cell = ROUTER_TAB_BAR_VERTICAL_CELL;
   // The system's own column (its back, bell and add controls) is 44 pt wide, 20 pt in from the
   // display's edge. The bar's cells match that, in a pill with a 4 pt rim, centred on the same line.
-  const barWidth = ROUTER_TAB_BAR_VERTICAL_WIDTH;
-  const columnInset = 20 - (barWidth - cell) / 2;
+  const barWidth = tabletRail ? size - 24 : ROUTER_TAB_BAR_VERTICAL_WIDTH;
+  const columnInset = tabletRail ? 12 : 20 - (barWidth - cell) / 2;
   return (
     <View
       pointerEvents="box-none"
@@ -494,7 +509,8 @@ function VerticalTabBar({
         alignItems: edge === "right" ? "flex-end" : "flex-start",
         bottom: 0,
         gap: 8,
-        justifyContent: "flex-end",
+        justifyContent: tabletRail ? "flex-start" : "flex-end",
+        paddingTop: tabletRail ? 88 : 0,
         paddingBottom: bottomPadding,
         ...(edge === "right" ? { paddingRight: columnInset } : { paddingLeft: columnInset }),
         position: "absolute",
@@ -512,9 +528,10 @@ function VerticalTabBar({
         surfaceComponent={surfaceComponent}
         style={{
           alignItems: "center",
-          borderRadius: barWidth / 2,
+          borderRadius: tabletRail ? 20 : barWidth / 2,
           flexDirection: "column",
           gap: 4,
+          paddingHorizontal: tabletRail ? 4 : 0,
           paddingVertical: 4,
           width: barWidth,
         }}
@@ -528,11 +545,12 @@ function VerticalTabBar({
               icon={tab.icon}
               itemHeight={cell}
               label={tab.label}
-              onTabPress={() => onTabPress?.(tab)}
+              onTabPress={() => onTabPress?.(tab, isTabActive(pathname, tab))}
               selectedIcon={tab.selectedIcon}
               testID={tab.testID ?? `${testID}-${tab.name}`}
               theme={theme}
               vertical
+              labelled={tabletRail}
             />
           </TabTrigger>
         ))}
@@ -545,10 +563,10 @@ function VerticalTabBar({
           surfaceComponent={surfaceComponent}
           style={{
             alignItems: "center",
-            borderRadius: barWidth / 2,
-            height: barWidth,
+            borderRadius: ROUTER_TAB_BAR_VERTICAL_WIDTH / 2,
+            height: ROUTER_TAB_BAR_VERTICAL_WIDTH,
             justifyContent: "center",
-            width: barWidth,
+            width: ROUTER_TAB_BAR_VERTICAL_WIDTH,
           }}
           testID={`${testID}-overflow-group`}
           theme={theme}
@@ -601,6 +619,7 @@ type RouterTabButtonProps = Omit<TabTriggerSlotProps, "children"> & {
   theme: RouterTabsTheme;
   /** Symbol only, with its own selection lens: the bar stands in a narrow side column. */
   vertical?: boolean;
+  labelled?: boolean;
 };
 
 const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTabButton(
@@ -618,14 +637,14 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
     selectedIcon,
     theme,
     vertical = false,
+    labelled = false,
     ...props
   },
   ref,
 ) {
   const isFocused = activeOverride ?? triggerFocused;
   if (vertical) {
-    // A vertical bar is fixed in width, so it favours the symbol; the label stays the
-    // accessibility name.
+    // Foldable columns keep symbols; the wider tablet sidebar can show the labels.
     return (
       <Pressable
         ref={ref}
@@ -640,17 +659,36 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
           onPress?.(event);
         }}
         style={({ pressed }) => ({
+          cursor: "pointer",
           alignItems: "center",
           backgroundColor: isFocused ? theme.selectedSurface : theme.transparent,
           borderCurve: "continuous",
-          borderRadius: itemHeight / 2,
-          height: itemHeight,
-          justifyContent: "center",
+          borderRadius: labelled ? 16 : itemHeight / 2,
+          flexDirection: labelled ? "row" : "column",
+          gap: labelled ? 12 : 0,
+          minHeight: itemHeight,
+          justifyContent: labelled ? "flex-start" : "center",
+          paddingHorizontal: labelled ? 12 : 0,
+          paddingVertical: labelled ? 10 : 0,
           opacity: pressed ? 0.65 : 1,
-          width: itemHeight,
+          width: labelled ? "100%" : itemHeight,
         })}
       >
         {isFocused ? (selectedIcon ?? icon) : icon}
+        {labelled ? (
+          <Text
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            numberOfLines={1}
+            style={{
+              color: theme.label,
+              flex: 1,
+              fontSize: 16,
+              fontWeight: isFocused ? "600" : "400",
+            }}
+          >
+            {label}
+          </Text>
+        ) : null}
       </Pressable>
     );
   }
@@ -668,6 +706,7 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
         onPress?.(event);
       }}
       style={({ pressed }) => ({
+        cursor: "pointer",
         alignItems: "center",
         backgroundColor: theme.transparent,
         borderCurve: "continuous",

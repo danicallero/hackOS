@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { collectCompanyTagHref, setPendingCompanyTag } from "@/lib/company-tag-link";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 /**
  * #935 company-tag link `https://<event host>/s/<code>`, opened from a
@@ -46,8 +47,8 @@ export default function CompanyTagLinkScreen() {
         justifyContent: "center",
       }}
     >
-      <ActivityIndicator color={colors.accent} />
-      <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+      <AppActivityIndicator color={colors.accent} />
+      <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
         {t("companyTagCollecting")}
       </Text>
     </View>

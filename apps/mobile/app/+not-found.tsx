@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet } from "react-native";
 
 import { Text } from "@/components/Themed";
 import { useLocale } from "@/lib/i18n";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 export default function NotFoundScreen() {
   const { t } = useLocale();
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   title: {
-    fontSize: 20,
+    fontSize: type.title3.fontSize,
     fontWeight: "bold",
   },
   link: {
@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
   },
   linkText: {
-    fontSize: 14,
+    fontSize: type.compact.fontSize,
     color: colors.accent,
   },
 });

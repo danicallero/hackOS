@@ -1,22 +1,26 @@
 import { useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { type ReactElement, type ReactNode, useEffect, useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { Platform, ScrollView, Text, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { SheetModal } from "@/components/app-sheet";
 import { GlassView } from "@/components/glass-view";
 import { ActionButton, FloatingGlassButton, Section } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { CLOCK_SKEW_TOLERANCE_MS } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
+import { queueStatusPresentation } from "@/lib/pane-header-items";
 import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
 import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
 import { useSideRegion } from "@/lib/side-region";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
 
 function ClockSkewBanner() {
@@ -28,7 +32,7 @@ function ClockSkewBanner() {
         alignItems: "flex-start",
         backgroundColor: colors.warningSurface,
         borderCurve: "continuous",
-        borderRadius: 14,
+        borderRadius: radius.container,
         flexDirection: "row",
         gap: 10,
         padding: 13,
@@ -43,11 +47,14 @@ function ClockSkewBanner() {
       <View style={{ flex: 1, gap: 3 }}>
         <Text
           selectable
-          style={{ color: colors.onWarningSurface, fontSize: 15, fontWeight: "700" }}
+          style={{ ...type.subhead, color: colors.onWarningSurface, fontWeight: "700" }}
         >
           {t("clockSkewTitle")}
         </Text>
-        <Text selectable style={{ color: colors.onWarningSurface, fontSize: 13, lineHeight: 18 }}>
+        <Text
+          selectable
+          style={{ ...type.footnote, color: colors.onWarningSurface, lineHeight: 18 }}
+        >
           {t("clockSkewBody")}
         </Text>
       </View>
@@ -412,7 +419,7 @@ export function ManualLogDetails({
   return (
     <View style={{ gap: 8 }}>
       {showHint ? (
-        <Text style={{ color: colors.secondaryLabel, fontSize: 12, lineHeight: 16 }}>
+        <Text style={{ ...type.caption, color: colors.secondaryLabel, lineHeight: 16 }}>
           {t("scannerManualLogHint")}
         </Text>
       ) : null}
@@ -420,7 +427,7 @@ export function ManualLogDetails({
         style={{
           backgroundColor: colors.background,
           borderCurve: "continuous",
-          borderRadius: 10,
+          borderRadius: radius.chip,
           overflow: "hidden",
         }}
       >
@@ -436,12 +443,12 @@ export function ManualLogDetails({
               paddingVertical: 8,
             }}
           >
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13, width: 88 }}>
+            <Text style={{ ...type.footnote, color: colors.secondaryLabel, width: 88 }}>
               {detail.label}
             </Text>
             <Text
               selectable
-              style={{ color: colors.label, flex: 1, fontSize: 13, fontWeight: "600" }}
+              style={{ ...type.footnote, color: colors.label, flex: 1, fontWeight: "600" }}
             >
               {detail.value}
             </Text>
@@ -469,31 +476,31 @@ function DeleteRevealAction({
   const style = useAnimatedStyle(() => ({ opacity: progress.value }));
   return (
     <Animated.View style={[{ justifyContent: "center", marginLeft: 8 }, style]}>
-      <Pressable
+      <PressableFeedback
+        feedback="scale"
         accessibilityRole="button"
         accessibilityLabel={t("scannerDeleteScan")}
         onPress={() => {
           void haptic("warning");
           onDelete();
         }}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.destructive,
           borderCurve: "continuous",
-          borderRadius: 14,
+          borderRadius: radius.container,
           flexDirection: "row",
           gap: 6,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 18,
-        })}
+        }}
       >
         <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>
+        <Text style={{ ...type.compact, color: "white", fontWeight: "700" }}>
           {t("scannerDeleteScan")}
         </Text>
-      </Pressable>
+      </PressableFeedback>
     </Animated.View>
   );
 }
@@ -566,7 +573,7 @@ export function ScannerTransactionStatus({
               alignItems: "center",
               backgroundColor: colors.surface,
               borderCurve: "continuous",
-              borderRadius: 14,
+              borderRadius: radius.container,
               flexDirection: "row",
               gap: 10,
               minHeight: 50,
@@ -591,19 +598,13 @@ export function ScannerTransactionStatus({
           {presentation.label}
         </Text>
         {scan?.lastError ? (
-          <Text
-            selectable
-            style={{
-              color: colors.secondaryLabel,
-              fontSize: 13,
-            }}
-          >
+          <Text selectable style={{ ...type.footnote, color: colors.secondaryLabel }}>
             {scan.status === "failed"
               ? `${t("scannerBusinessRejected")}: ${scan.lastError}`
               : t("scannerOfflineWaiting")}
           </Text>
         ) : state === "saved" ? (
-          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+          <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
             {t("scannerAwaitingAcknowledgement")}
           </Text>
         ) : null}
@@ -623,6 +624,9 @@ export function ScannerQueueStatus({
   fillWidth = false,
   nativeToolbar = false,
   toolbarAccessory,
+  open: controlledOpen,
+  onOpenChange,
+  triggerless = false,
 }: {
   queue: PendingScan[];
   syncing: boolean;
@@ -634,15 +638,19 @@ export function ScannerQueueStatus({
   fillWidth?: boolean;
   nativeToolbar?: boolean;
   toolbarAccessory?: ReactElement;
+  /** The queue sheet's state, owned by the caller (a pane header item opens it). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** Render only the sheet: the caller draws the trigger as a native bar item. */
+  triggerless?: boolean;
 }) {
   const { t } = useLocale();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  // Android has no page-sheet presentation: the modal is full-screen, so its
-  // chrome has to clear the status bar itself.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const sideRegion = useSideRegion();
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
   const health = scannerQueueHealth(queue);
@@ -654,33 +662,34 @@ export function ScannerQueueStatus({
   }, [open]);
   const hasAttention = health.attention > 0;
   const label = hasAttention ? t("scannerStateAttention") : t("scannerStateReady");
+  const statusSymbol = queueStatusPresentation(hasAttention);
   const trigger = (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={() => setOpen(true)}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         flexDirection: "row",
         gap: 8,
         justifyContent: "center",
         minHeight: 44,
-        opacity: pressed ? 0.65 : 1,
         paddingHorizontal: 14,
-      })}
+      }}
     >
       <SymbolView
         accessible={false}
-        name={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+        name={statusSymbol.icon}
         size={16}
-        tintColor={hasAttention ? colors.destructive : colors.label}
+        tintColor={statusSymbol.tint ?? colors.label}
       />
-      <Text style={{ color: colors.label, fontSize: 14, fontWeight: "700" }}>{label}</Text>
-    </Pressable>
+      <Text style={{ ...type.compact, color: colors.label, fontWeight: "700" }}>{label}</Text>
+    </PressableFeedback>
   );
   return (
     <>
-      {nativeToolbar ? (
+      {triggerless ? null : nativeToolbar ? (
         <Stack.Toolbar placement="right">
           {toolbarAccessory ? (
             <Stack.Toolbar.View hidesSharedBackground>{toolbarAccessory}</Stack.Toolbar.View>
@@ -690,9 +699,9 @@ export function ScannerQueueStatus({
             // A symbol-only item can join the system's vertical bar; the labelled pill cannot.
             <Stack.Toolbar.Button
               accessibilityLabel={label}
-              icon={hasAttention ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath"}
+              icon={statusSymbol.icon}
               onPress={() => setOpen(true)}
-              tintColor={hasAttention ? colors.destructive : undefined}
+              tintColor={statusSymbol.tint}
             />
           ) : (
             <Stack.Toolbar.View>{trigger}</Stack.Toolbar.View>
@@ -705,7 +714,7 @@ export function ScannerQueueStatus({
           isInteractive
           style={{
             alignSelf: fillWidth ? "stretch" : "center",
-            borderRadius: 999,
+            borderRadius: radius.full,
             minHeight: 44,
             overflow: "hidden",
           }}
@@ -713,12 +722,7 @@ export function ScannerQueueStatus({
           {trigger}
         </GlassView>
       )}
-      <Modal
-        animationType="slide"
-        onRequestClose={() => setOpen(false)}
-        presentationStyle="pageSheet"
-        visible={open}
-      >
+      <SheetModal animationType="slide" onRequestClose={() => setOpen(false)} visible={open}>
         <AdaptiveFrame>
           <ScrollView
             alwaysBounceVertical
@@ -727,15 +731,16 @@ export function ScannerQueueStatus({
               gap: 22,
               padding: 16,
               paddingBottom: Math.max(32, insets.bottom + 16),
-              paddingTop: 16 + sheetTopInset,
+              paddingTop: 16,
             }}
           >
             <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
               <Text
                 selectable
                 style={{
+                  ...type.title3,
                   color: colors.label,
-                  fontSize: 20,
+
                   fontWeight: "700",
                   textAlign: "center",
                 }}
@@ -744,8 +749,9 @@ export function ScannerQueueStatus({
               </Text>
               <Text
                 style={{
+                  ...type.compact,
                   color: colors.secondaryLabel,
-                  fontSize: 14,
+
                   paddingTop: 4,
                   textAlign: "center",
                 }}
@@ -763,8 +769,9 @@ export function ScannerQueueStatus({
             <Text
               selectable
               style={{
+                ...type.footnote,
                 color: colors.secondaryLabel,
-                fontSize: 13,
+
                 fontWeight: "600",
                 paddingHorizontal: 16,
               }}
@@ -807,7 +814,7 @@ export function ScannerQueueStatus({
                           style={{
                             backgroundColor: colors.surface,
                             borderCurve: "continuous",
-                            borderRadius: 14,
+                            borderRadius: radius.container,
                             gap: 3,
                             padding: 13,
                           }}
@@ -816,19 +823,20 @@ export function ScannerQueueStatus({
                             <Text
                               numberOfLines={1}
                               style={{
+                                ...type.compact,
                                 color: colors.label,
                                 flex: 1,
-                                fontSize: 14,
+
                                 fontWeight: "700",
                               }}
                             >
                               {subject ?? scannerOperationLabel(scan, t)}
                             </Text>
-                            <Text style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+                            <Text style={{ ...type.caption, color: colors.secondaryLabel }}>
                               {new Date(scan.createdAt).toLocaleTimeString()}
                             </Text>
                           </View>
-                          <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                          <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                             {scannerOperationLabel(scan, t)} · {detailLabel(scan, activities, t)}
                             {scan.attempts > 1
                               ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
@@ -856,25 +864,25 @@ export function ScannerQueueStatus({
                                   a single entry instead: a retry that doesn't wait for
                                   "Retry rejected scans" to sweep every failed scan in the
                                   queue. */}
-                              <Pressable
+                              <PressableFeedback
+                                feedback="scale"
                                 accessibilityRole="button"
                                 accessibilityLabel={t("retry")}
                                 onPress={() => {
                                   void haptic("light");
                                   onRetryOne(scan.id);
                                 }}
-                                style={({ pressed }) => ({
+                                style={{
                                   alignItems: "center",
                                   alignSelf: "flex-end",
                                   backgroundColor: colors.accent,
                                   borderCurve: "continuous",
-                                  borderRadius: 10,
+                                  borderRadius: radius.chip,
                                   flexDirection: "row",
                                   gap: 6,
                                   minHeight: 34,
-                                  opacity: pressed ? 0.75 : 1,
                                   paddingHorizontal: 14,
-                                })}
+                                }}
                               >
                                 <SymbolView
                                   accessible={false}
@@ -884,14 +892,15 @@ export function ScannerQueueStatus({
                                 />
                                 <Text
                                   style={{
+                                    ...type.footnote,
                                     color: "white",
-                                    fontSize: 13,
+
                                     fontWeight: "700",
                                   }}
                                 >
                                   {t("retry")}
                                 </Text>
-                              </Pressable>
+                              </PressableFeedback>
                             </View>
                           ) : (
                             <ScannerTransactionStatus scan={scan} bare />
@@ -919,14 +928,14 @@ export function ScannerQueueStatus({
           </ScrollView>
 
           <FloatingGlassButton
-            top={16 + sheetTopInset}
+            top={16}
             side="left"
             icon="xmark"
             accessibilityLabel={t("close")}
             onPress={() => setOpen(false)}
           />
           <FloatingGlassButton
-            top={16 + sheetTopInset}
+            top={16}
             side="right"
             icon={hasAttention ? "exclamationmark.arrow.circlepath" : "arrow.triangle.2.circlepath"}
             tintColor={hasAttention ? colors.destructive : colors.accent}
@@ -939,7 +948,7 @@ export function ScannerQueueStatus({
             }}
           />
         </AdaptiveFrame>
-      </Modal>
+      </SheetModal>
     </>
   );
 }

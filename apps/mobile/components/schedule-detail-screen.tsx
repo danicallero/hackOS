@@ -1,8 +1,9 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { EmptyState, LegacyHeaderIconButton } from "@/components/native-ui";
@@ -37,7 +38,8 @@ import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const CONTENT_PADDING = 20;
 const noTextShadow = {
@@ -48,7 +50,7 @@ const noTextShadow = {
 
 const sectionHeaderStyle = {
   color: colors.secondaryLabel,
-  fontSize: 13,
+  fontSize: type.footnote.fontSize,
   fontWeight: "600" as const,
   ...noTextShadow,
   textTransform: "uppercase" as const,
@@ -82,6 +84,7 @@ export function ScheduleDetailScreen({
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
+  const readable = useParticipantLayout("form");
   const canManage = canManageSchedule(me?.capabilities ?? []);
   const canReadFull = canReadFullSchedule(me?.capabilities ?? []);
   const focusedRef = useRef(false);
@@ -223,7 +226,7 @@ export function ScheduleDetailScreen({
             colorScheme="auto"
             glassEffectStyle="regular"
             isInteractive
-            style={{ borderRadius: 22, height: 44, width: 44 }}
+            style={{ borderRadius: radius.full, height: 44, width: 44 }}
           >
             <LegacyHeaderIconButton
               accessibilityLabel={t("back")}
@@ -241,7 +244,7 @@ export function ScheduleDetailScreen({
                 color: colors.label,
                 flex: 1,
                 flexBasis: 0,
-                fontSize: 24,
+                fontSize: type.title2.fontSize,
                 fontWeight: "800",
                 flexShrink: 1,
                 height: 30,
@@ -260,7 +263,7 @@ export function ScheduleDetailScreen({
               colorScheme="auto"
               glassEffectStyle="regular"
               isInteractive
-              style={{ borderRadius: 22, height: 44, width: 44 }}
+              style={{ borderRadius: radius.full, height: 44, width: 44 }}
             >
               <LegacyHeaderIconButton
                 accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
@@ -351,12 +354,13 @@ export function ScheduleDetailScreen({
         }
         scrollEventThrottle={16}
         refreshControl={
-          <RefreshControl onRefresh={() => void onRefresh()} refreshing={refreshing} />
+          <AppRefreshControl onRefresh={() => void onRefresh()} refreshing={refreshing} />
         }
         contentContainerStyle={{
           flexGrow: 1,
           paddingBottom: 40,
-          paddingHorizontal: CONTENT_PADDING,
+          // Embedded in the two-pane layout the pane already bounds the column.
+          ...(embedded ? { paddingHorizontal: CONTENT_PADDING } : readable.content),
           paddingTop: embedded ? topInset + 8 : usesCustomAndroidHeader ? insets.top + 76 : 0,
         }}
         style={{ backgroundColor: colors.background, flex: 1 }}
@@ -392,7 +396,10 @@ export function ScheduleDetailScreen({
                 <Text style={sectionHeaderStyle}>{t("scheduleDescription")}</Text>
                 <Text
                   selectable
-                  style={[noTextShadow, { color: colors.label, fontSize: 16, lineHeight: 24 }]}
+                  style={[
+                    noTextShadow,
+                    { color: colors.label, fontSize: type.callout.fontSize, lineHeight: 24 },
+                  ]}
                 >
                   {collapseBlankLines(detailItem.description)}
                 </Text>
@@ -405,7 +412,7 @@ export function ScheduleDetailScreen({
                 style={{
                   backgroundColor: colors.surface,
                   borderCurve: "continuous",
-                  borderRadius: 14,
+                  borderRadius: radius.container,
                   paddingHorizontal: 16,
                 }}
               >
@@ -430,7 +437,7 @@ export function ScheduleDetailScreen({
                     style={{
                       backgroundColor: colors.surface,
                       borderCurve: "continuous",
-                      borderRadius: 14,
+                      borderRadius: radius.container,
                       paddingHorizontal: 16,
                     }}
                   >
@@ -469,7 +476,12 @@ export function ScheduleDetailScreen({
                       />
                     ) : null}
                   </View>
-                  <Text style={[noTextShadow, { color: colors.secondaryLabel, fontSize: 13 }]}>
+                  <Text
+                    style={[
+                      noTextShadow,
+                      { color: colors.secondaryLabel, fontSize: type.footnote.fontSize },
+                    ]}
+                  >
                     {t("scheduleStaffSeeAllHint")}
                   </Text>
                 </View>
@@ -495,7 +507,10 @@ export function ScheduleDetailScreen({
                 <Text style={sectionHeaderStyle}>{t("scheduleOwnersLabel")}</Text>
                 <Text
                   selectable
-                  style={[noTextShadow, { color: colors.label, fontSize: 16, lineHeight: 24 }]}
+                  style={[
+                    noTextShadow,
+                    { color: colors.label, fontSize: type.callout.fontSize, lineHeight: 24 },
+                  ]}
                 >
                   {detailItem.owners.length > 0
                     ? detailItem.owners.map(ownerDisplayName).join(", ")
@@ -512,7 +527,7 @@ export function ScheduleDetailScreen({
           glassEffectStyle="regular"
           isInteractive
           style={{
-            borderRadius: 26,
+            borderRadius: radius.full,
             bottom: Math.max(16, insets.bottom),
             height: 52,
             position: "absolute",
@@ -590,7 +605,10 @@ function DetailTextSection({ label, value }: { label: string; value: string }) {
       <Text style={sectionHeaderStyle}>{label}</Text>
       <Text
         selectable
-        style={[noTextShadow, { color: colors.label, fontSize: 16, lineHeight: 24 }]}
+        style={[
+          noTextShadow,
+          { color: colors.label, fontSize: type.callout.fontSize, lineHeight: 24 },
+        ]}
       >
         {collapseBlankLines(value)}
       </Text>
@@ -620,14 +638,22 @@ function PlainInfoRow({
         paddingVertical: 14,
       }}
     >
-      <Text selectable style={[noTextShadow, { color: colors.secondaryLabel, fontSize: 16 }]}>
+      <Text
+        selectable
+        style={[noTextShadow, { color: colors.secondaryLabel, fontSize: type.callout.fontSize }]}
+      >
         {label}
       </Text>
       <Text
         selectable
         style={[
           noTextShadow,
-          { color: colors.label, flexShrink: 1, fontSize: 16, textAlign: "right" },
+          {
+            color: colors.label,
+            flexShrink: 1,
+            fontSize: type.callout.fontSize,
+            textAlign: "right",
+          },
         ]}
       >
         {value}

@@ -1,11 +1,10 @@
 import { EVENTS, type SseEnvelope } from "@hackos/shared/events";
 import { useFocusEffect } from "expo-router";
+import { Stack } from "expo-router/stack";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
-  Pressable,
-  RefreshControl,
   ScrollView,
   Text,
   useColorScheme,
@@ -21,8 +20,10 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, StatusPill } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -37,7 +38,8 @@ import { isServerEventConnected, subscribeToServerEvent } from "@/lib/server-eve
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 interface QueueRoom {
   id: number;
@@ -59,8 +61,9 @@ interface QueueEntry {
 const POLL_MS = 15_000;
 
 /** Live participant queue, matching the web read model and SSE events. */
-export default function QueueScreen() {
+export default function QueueScreen({ embedded = false }: { embedded?: boolean } = {}) {
   useColorScheme();
+  const readable = useParticipantLayout("list");
   const { t } = useLocale();
   const { me } = useMeContext();
   const userId = me?.id ?? null;
@@ -172,7 +175,17 @@ export default function QueueScreen() {
 
   return (
     <>
-      <EntryBackToolbar fallback="/(tabs)/queue" />
+      {embedded ? null : (
+        <Stack.Screen
+          options={{
+            title: "",
+            headerTitle: "",
+            headerLargeTitle: false,
+            headerShadowVisible: false,
+          }}
+        />
+      )}
+      {embedded ? null : <EntryBackToolbar fallback="/(tabs)/queue" />}
       <FlatList
         ref={listRef}
         {...trueTop.scrollProps}
@@ -182,11 +195,12 @@ export default function QueueScreen() {
         contentContainerStyle={{
           flexGrow: 1,
           gap: 12,
-          padding: 16,
+          ...readable.content,
           paddingBottom: tabBarBottomInset + 16,
-          paddingTop: 16 + androidTopInset,
+          // Embedded under My Projects' own header, the bar already clears the status bar.
+          paddingTop: embedded ? 16 : 16 + androidTopInset,
         }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<AppRefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
             <StaleDataBanner updatedAt={staleSince} />
@@ -206,7 +220,7 @@ export default function QueueScreen() {
                 accessibilityRole="header"
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 17,
+                  fontSize: type.body.fontSize,
                   fontWeight: "600",
                   textAlign: "center",
                 }}
@@ -216,7 +230,7 @@ export default function QueueScreen() {
               <Text
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 15,
+                  fontSize: type.subhead.fontSize,
                   lineHeight: 21,
                   textAlign: "center",
                 }}
@@ -241,7 +255,8 @@ export default function QueueScreen() {
 function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
   const { t } = useLocale();
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityHint={t("queueHowItWorksRevisitHint")}
       accessibilityLabel={t("queueHowItWorksTitle")}
       accessibilityRole="button"
@@ -250,16 +265,15 @@ function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
         onPress();
       }}
       testID="queue-tutorial-open"
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         backgroundColor: colors.surface,
-        borderRadius: 12,
+        borderRadius: radius.control,
         flexDirection: "row",
         gap: 12,
         minHeight: 50,
-        opacity: pressed ? 0.6 : 1,
         paddingHorizontal: 16,
-      })}
+      }}
     >
       <SymbolView
         accessible={false}
@@ -267,7 +281,7 @@ function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
         size={22}
         tintColor={colors.accent}
       />
-      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+      <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
         {t("queueHowItWorksTitle")}
       </Text>
       <SymbolView
@@ -276,7 +290,7 @@ function QueueTutorialTrigger({ onPress }: { onPress: () => void }) {
         size={14}
         tintColor={colors.tertiaryLabel}
       />
-    </Pressable>
+    </PressableFeedback>
   );
 }
 
@@ -401,7 +415,7 @@ export function QueueTutorial({
                 selectable
                 style={{
                   color: colors.label,
-                  fontSize: 28,
+                  fontSize: type.title.fontSize,
                   fontWeight: "800",
                   textAlign: "center",
                 }}
@@ -412,7 +426,7 @@ export function QueueTutorial({
                 selectable
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 16,
+                  fontSize: type.callout.fontSize,
                   lineHeight: 23,
                   textAlign: "center",
                 }}
@@ -457,7 +471,7 @@ export function QueueTutorial({
                   style={{
                     alignItems: "center",
                     backgroundColor: colors.accentSurface,
-                    borderRadius: 32,
+                    borderRadius: radius.full,
                     height: 64,
                     justifyContent: "center",
                     width: 64,
@@ -475,7 +489,7 @@ export function QueueTutorial({
                   selectable
                   style={{
                     color: colors.label,
-                    fontSize: 22,
+                    fontSize: type.title2.fontSize,
                     fontWeight: "800",
                     textAlign: "center",
                   }}
@@ -490,7 +504,7 @@ export function QueueTutorial({
                       style={{
                         color:
                           paragraph === bodyParagraphs[0] ? colors.label : colors.secondaryLabel,
-                        fontSize: 16,
+                        fontSize: type.callout.fontSize,
                         fontWeight: paragraph === bodyParagraphs[0] ? "600" : "400",
                         lineHeight: 24,
                         textAlign: "center",
@@ -524,7 +538,7 @@ export function QueueTutorial({
                       style={{
                         color: colors.secondaryLabel,
                         flex: 1,
-                        fontSize: 15,
+                        fontSize: type.subhead.fontSize,
                         lineHeight: 22,
                       }}
                     >
@@ -545,7 +559,8 @@ export function QueueTutorial({
             paddingTop: 4,
           }}
         >
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityLabel={t("queueHowItWorksSkip")}
             accessibilityRole="button"
             hitSlop={8}
@@ -553,19 +568,20 @@ export function QueueTutorial({
               void haptic("light");
               onDismiss();
             }}
-            style={({ pressed }) => ({
+            style={{
               alignItems: "center",
               alignSelf: "center",
               justifyContent: "center",
               minHeight: 44,
-              opacity: pressed ? 0.6 : 1,
               paddingHorizontal: 12,
-            })}
+            }}
           >
-            <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+            <Text
+              style={{ color: colors.accent, fontSize: type.subhead.fontSize, fontWeight: "600" }}
+            >
               {t("queueHowItWorksSkip")}
             </Text>
-          </Pressable>
+          </PressableFeedback>
           <View
             style={{
               alignSelf: "center",
@@ -634,7 +650,7 @@ const QueueCard = memo(function QueueCard({
       style={{
         backgroundColor: colors.surface,
         borderCurve: "continuous",
-        borderRadius: 16,
+        borderRadius: radius.container,
         gap: judged ? 0 : 14,
         opacity: judged ? 0.6 : 1,
         padding: 16,
@@ -642,10 +658,16 @@ const QueueCard = memo(function QueueCard({
     >
       <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 10 }}>
         <View style={{ flex: 1, gap: 3 }}>
-          <Text selectable style={{ color: colors.label, fontSize: 18, fontWeight: "700" }}>
+          <Text
+            selectable
+            style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "700" }}
+          >
             {item.challengeTitle}
           </Text>
-          <Text selectable style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          <Text
+            selectable
+            style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
+          >
             {item.repoName}
           </Text>
         </View>
@@ -658,7 +680,7 @@ const QueueCard = memo(function QueueCard({
           style={{
             backgroundColor: colors.successSurface,
             borderCurve: "continuous",
-            borderRadius: 12,
+            borderRadius: radius.control,
             gap: 7,
             padding: 14,
           }}
@@ -672,7 +694,12 @@ const QueueCard = memo(function QueueCard({
             />
             <Text
               selectable
-              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
+              style={{
+                color: colors.onSuccessSurface,
+                flex: 1,
+                fontSize: type.body.fontSize,
+                fontWeight: "800",
+              }}
             >
               {item.room ? `${t("queueBeInRoom")} · ${item.room.name}` : t("queueBeInRoom")}
             </Text>
@@ -680,7 +707,11 @@ const QueueCard = memo(function QueueCard({
           {item.room?.location ? (
             <Text
               selectable
-              style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}
+              style={{
+                color: colors.onSuccessSurface,
+                fontSize: type.compact.fontSize,
+                paddingLeft: 30,
+              }}
             >
               {item.room.location}
             </Text>
@@ -692,7 +723,7 @@ const QueueCard = memo(function QueueCard({
           style={{
             backgroundColor: colors.successSurface,
             borderCurve: "continuous",
-            borderRadius: 12,
+            borderRadius: radius.control,
             gap: 7,
             padding: 14,
           }}
@@ -706,7 +737,12 @@ const QueueCard = memo(function QueueCard({
             />
             <Text
               selectable
-              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
+              style={{
+                color: colors.onSuccessSurface,
+                flex: 1,
+                fontSize: type.body.fontSize,
+                fontWeight: "800",
+              }}
             >
               {t("queueCalled", { room: calledRoom.name })}
             </Text>
@@ -714,7 +750,11 @@ const QueueCard = memo(function QueueCard({
           {calledRoom.location ? (
             <Text
               selectable
-              style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}
+              style={{
+                color: colors.onSuccessSurface,
+                fontSize: type.compact.fontSize,
+                paddingLeft: 30,
+              }}
             >
               {calledRoom.location}
             </Text>
@@ -728,7 +768,7 @@ const QueueCard = memo(function QueueCard({
               style={{
                 backgroundColor: colors.warningSurface,
                 borderCurve: "continuous",
-                borderRadius: 12,
+                borderRadius: radius.control,
                 flexDirection: "row",
                 gap: 8,
                 padding: 12,
@@ -742,7 +782,12 @@ const QueueCard = memo(function QueueCard({
               />
               <Text
                 selectable
-                style={{ color: colors.onWarningSurface, flex: 1, fontSize: 15, fontWeight: "700" }}
+                style={{
+                  color: colors.onWarningSurface,
+                  flex: 1,
+                  fontSize: type.subhead.fontSize,
+                  fontWeight: "700",
+                }}
               >
                 {t("queuePrecalled")}
               </Text>
@@ -767,7 +812,11 @@ const QueueCard = memo(function QueueCard({
                 />
                 <Text
                   selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 13, fontWeight: "600" }}
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: type.footnote.fontSize,
+                    fontWeight: "600",
+                  }}
                 >
                   {t("queuePossibleRoomsLabel")}
                 </Text>
@@ -799,7 +848,7 @@ function QueueMetric({
       style={{
         backgroundColor: colors.background,
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.control,
         flex: 1,
         gap: 5,
         padding: 12,
@@ -807,7 +856,14 @@ function QueueMetric({
     >
       <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
         <SymbolView name={icon} tintColor={colors.secondaryLabel} size={15} accessible={false} />
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "600" }}>
+        <Text
+          selectable
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: type.caption.fontSize,
+            fontWeight: "600",
+          }}
+        >
           {label}
         </Text>
       </View>
@@ -815,7 +871,7 @@ function QueueMetric({
         selectable
         style={{
           color: colors.label,
-          fontSize: 20,
+          fontSize: type.title3.fontSize,
           fontVariant: ["tabular-nums"],
           fontWeight: "700",
         }}
@@ -833,18 +889,21 @@ function RoomChip({ room }: { room: QueueRoom }) {
         alignItems: "baseline",
         backgroundColor: colors.background,
         borderCurve: "continuous",
-        borderRadius: 9,
+        borderRadius: radius.chip,
         flexDirection: "row",
         gap: 5,
         paddingHorizontal: 10,
         paddingVertical: 7,
       }}
     >
-      <Text selectable style={{ color: colors.label, fontSize: 13, fontWeight: "600" }}>
+      <Text
+        selectable
+        style={{ color: colors.label, fontSize: type.footnote.fontSize, fontWeight: "600" }}
+      >
         {room.name}
       </Text>
       {room.location ? (
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 12 }}>
+        <Text selectable style={{ color: colors.secondaryLabel, fontSize: type.caption.fontSize }}>
           {room.location}
         </Text>
       ) : null}

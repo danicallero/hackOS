@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import type { NativeGesture } from "react-native-gesture-handler";
 import Swipeable, { type SwipeableProps } from "react-native-gesture-handler/ReanimatedSwipeable";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView } from "@/components/symbol";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 // RNGH's default horizontal activation threshold (10px, see
 // `dragOffsetFromRight`) is easy to false-trigger from the slight horizontal
@@ -91,41 +92,49 @@ function RevealActions({
   return (
     <View style={{ flexDirection: "row", height: "100%" }}>
       {onEdit && editLabel ? (
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityLabel={editLabel}
           accessibilityRole="button"
           onPress={onEdit}
-          style={({ pressed }) => ({
+          style={{
             alignItems: "center",
             backgroundColor: colors.accent,
             gap: 4,
             height: "100%",
             justifyContent: "center",
-            opacity: pressed ? 0.75 : 1,
             paddingHorizontal: 16,
-          })}
+          }}
         >
-          <SymbolView name="pencil" tintColor="white" size={16} accessible={false} />
-          <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>{editLabel}</Text>
-        </Pressable>
+          <SymbolView name="pencil" tintColor={colors.accentText} size={16} accessible={false} />
+          <Text
+            style={{ color: colors.accentText, fontSize: type.caption.fontSize, fontWeight: "700" }}
+          >
+            {editLabel}
+          </Text>
+        </PressableFeedback>
       ) : null}
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityLabel={deleteLabel}
         accessibilityRole="button"
         onPress={onDelete}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.destructive,
           gap: 4,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 16,
-        })}
+        }}
       >
-        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 12, fontWeight: "700" }}>{deleteLabel}</Text>
-      </Pressable>
+        <SymbolView name="trash.fill" tintColor={colors.accentText} size={16} accessible={false} />
+        <Text
+          style={{ color: colors.accentText, fontSize: type.caption.fontSize, fontWeight: "700" }}
+        >
+          {deleteLabel}
+        </Text>
+      </PressableFeedback>
     </View>
   );
 }

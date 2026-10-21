@@ -1,13 +1,14 @@
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, AppState, Linking, Pressable, Text, View } from "react-native";
-
+import { AppState, Linking, Text, View } from "react-native";
 import {
   AuthCredentialField,
   type AuthCredentialFieldHandle,
 } from "@/components/auth-credential-field";
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
@@ -21,7 +22,7 @@ import {
   readAccountRemovalProgress,
 } from "@/lib/removal-progress";
 import type { PublicEvent } from "@/lib/types";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -96,7 +97,7 @@ export default function SignInScreen() {
     // Consume the route signal before opening the native dialog so a later
     // remount cannot announce the same access denial twice.
     router.setParams({ accessDenied: "" });
-    Alert.alert(
+    alert(
       t("mobileAccessDeniedTitle"),
       t("mobileAccessDenied", { website: EVENT_WEBSITE_DISPLAY }),
       [{ text: t("close") }],
@@ -169,7 +170,7 @@ export default function SignInScreen() {
     }, 2_000);
     if (developerTapCount.current < 7) return;
     developerTapCount.current = 0;
-    Alert.alert(
+    alert(
       t("apiModeTitle"),
       mode === "development" ? t("apiModeProductionBody") : t("apiModeDevelopmentBody"),
       [
@@ -178,7 +179,7 @@ export default function SignInScreen() {
           text: t("apiModeSwitch"),
           onPress: () => {
             void setMode(mode === "development" ? "production" : "development").catch((error) => {
-              Alert.alert(
+              alert(
                 t("apiModeTitle"),
                 `${t("apiModeSwitchError")}\n${error instanceof Error ? error.message : String(error)}`,
               );
@@ -196,7 +197,12 @@ export default function SignInScreen() {
         <View style={{ alignItems: "center", gap: 4 }}>
           <Text
             selectable
-            style={{ color: colors.label, fontSize: 15, fontWeight: "600", lineHeight: 20 }}
+            style={{
+              color: colors.label,
+              fontSize: type.subhead.fontSize,
+              fontWeight: "600",
+              lineHeight: 20,
+            }}
           >
             {t("eventAccessTitle")}
           </Text>
@@ -204,7 +210,7 @@ export default function SignInScreen() {
             selectable
             style={{
               color: colors.secondaryLabel,
-              fontSize: 14,
+              fontSize: type.compact.fontSize,
               lineHeight: 20,
               textAlign: "center",
             }}
@@ -212,47 +218,54 @@ export default function SignInScreen() {
             {t("eventAccessNotice", { website: EVENT_WEBSITE_DISPLAY })}
           </Text>
           <View style={{ flexDirection: "row", gap: 12, marginTop: 4 }}>
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityRole="link"
               onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/terms`)}
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
             >
               <Text
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 13,
+                  fontSize: type.footnote.fontSize,
                   textDecorationLine: "underline",
                 }}
               >
                 {t("accountTerms")}
               </Text>
-            </Pressable>
-            <Pressable
+            </PressableFeedback>
+            <PressableFeedback
+              feedback="opacity"
               accessibilityRole="link"
               onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
             >
               <Text
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 13,
+                  fontSize: type.footnote.fontSize,
                   textDecorationLine: "underline",
                 }}
               >
                 {t("accountPrivacyPolicy")}
               </Text>
-            </Pressable>
+            </PressableFeedback>
           </View>
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityLabel={appVersionLabel}
             hitSlop={10}
             onPress={revealDeveloperMode}
-            style={({ pressed }) => ({ marginTop: 2, opacity: pressed ? 0.6 : 1, padding: 4 })}
+            style={{ marginTop: 2, padding: 4 }}
           >
-            <Text style={{ color: colors.tertiaryLabel, fontSize: 12, lineHeight: 18 }}>
+            <Text
+              style={{
+                color: colors.tertiaryLabel,
+                fontSize: type.caption.fontSize,
+                lineHeight: 18,
+              }}
+            >
               {appVersionLabel}
             </Text>
-          </Pressable>
+          </PressableFeedback>
         </View>
       }
     >
@@ -271,36 +284,36 @@ export default function SignInScreen() {
               }
             />
             <View style={{ alignItems: "center", flexDirection: "row", gap: 16 }}>
-              <Pressable
+              <PressableFeedback
+                feedback="opacity"
                 accessibilityRole="link"
                 onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
               >
                 <Text
                   style={{
                     color: colors.interactiveText,
-                    fontSize: 13,
+                    fontSize: type.footnote.fontSize,
                     textDecorationLine: "underline",
                   }}
                 >
                   {t("accountPrivacyPolicy")}
                 </Text>
-              </Pressable>
-              <Pressable
+              </PressableFeedback>
+              <PressableFeedback
+                feedback="opacity"
                 accessibilityRole="button"
                 onPress={() => void dismissRemovalProgress()}
-                style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
               >
                 <Text
                   style={{
                     color: colors.secondaryLabel,
-                    fontSize: 13,
+                    fontSize: type.footnote.fontSize,
                     textDecorationLine: "underline",
                   }}
                 >
                   {t("dismiss")}
                 </Text>
-              </Pressable>
+              </PressableFeedback>
             </View>
           </View>
         ) : null}
@@ -344,7 +357,8 @@ export default function SignInScreen() {
           />
         </View>
 
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityRole="link"
           onPress={() =>
             router.push({
@@ -352,18 +366,23 @@ export default function SignInScreen() {
               params: { email: (emailRef.current?.getText() ?? email).trim() },
             })
           }
-          style={({ pressed }) => ({
+          style={{
             alignSelf: "flex-start",
             justifyContent: "center",
             minHeight: 44,
-            opacity: pressed ? 0.6 : 1,
             paddingHorizontal: 4,
-          })}
+          }}
         >
-          <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: colors.interactiveText,
+              fontSize: type.subhead.fontSize,
+              fontWeight: "600",
+            }}
+          >
             {t("forgotPassword")}
           </Text>
-        </Pressable>
+        </PressableFeedback>
 
         <AuthButton
           label={t("signInButton")}

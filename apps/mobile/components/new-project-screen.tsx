@@ -1,54 +1,23 @@
-import { useNavigation, useRouter } from "expo-router";
+import { Stack, useNavigation, useRouter } from "expo-router";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, TextInput, View } from "react-native";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { Section } from "@/components/native-ui";
+import { CircleButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { projectMutation } from "@/lib/projects";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const NAME_MAX = 80;
-
-function BarButton({
-  label,
-  onPress,
-  disabled = false,
-  bold = false,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  bold?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      hitSlop={8}
-      onPress={onPress}
-      style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 4 }}
-    >
-      <Text
-        style={{
-          color: colors.accent,
-          fontSize: 17,
-          fontWeight: bold ? "600" : "400",
-          opacity: disabled ? 0.4 : 1,
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 /** H19: a modal sheet with the Cancel / Create pattern; the name field is focused on open. */
 export function NewProjectScreen() {
   const { t } = useLocale();
+  const readable = useParticipantLayout("form");
   const router = useRouter();
   const navigation = useNavigation();
   const [name, setName] = useState("");
@@ -60,6 +29,7 @@ export function NewProjectScreen() {
       .then((result) => setCanCreate(result.canCreate))
       .catch(() => {});
   }, []);
+  const glass = isRealLiquidGlassAvailable();
   const valid = name.trim().length > 0 && canCreate && !busy;
   async function create() {
     if (!valid) return;
@@ -79,42 +49,74 @@ export function NewProjectScreen() {
   }
   useLayoutEffect(() => {
     navigation.setOptions({
-      headerLeft: () => <BarButton label={t("cancel")} onPress={() => router.back()} />,
-      headerRight: () => (
-        <BarButton
-          label={t("projectCreate")}
-          bold
-          disabled={!valid}
-          onPress={() => void create()}
-        />
-      ),
+      headerStyle: { backgroundColor: colors.background },
+      headerShadowVisible: false,
+      headerLeft: glass
+        ? undefined
+        : () => <CircleButton icon="xmark" label={t("cancel")} onPress={() => router.back()} />,
+      headerRight: glass
+        ? undefined
+        : () => (
+            <CircleButton
+              icon="checkmark"
+              label={t("projectCreate")}
+              disabled={!valid}
+              onPress={() => void create()}
+            />
+          ),
     });
   });
   return (
-    <ScrollView
-      alwaysBounceVertical
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ gap: 16, padding: 16 }}
-      style={{ backgroundColor: colors.background }}
-    >
-      <Section footer={!canCreate ? t("projectLocked") : undefined}>
-        <View style={{ minHeight: 56, justifyContent: "center", paddingHorizontal: 16 }}>
-          <TextInput
-            accessibilityLabel={t("projectName")}
-            autoFocus
-            editable={!busy && canCreate}
-            maxLength={NAME_MAX}
-            onChangeText={setName}
-            onSubmitEditing={() => void create()}
-            placeholder={t("projectName")}
-            placeholderTextColor={colors.tertiaryLabel}
-            returnKeyType="done"
-            style={{ color: colors.label, fontSize: 17, minHeight: 44, padding: 0 }}
-            value={name}
-          />
-        </View>
-      </Section>
-      {error ? <RequestFeedback error={error} /> : null}
-    </ScrollView>
+    <>
+      {glass ? (
+        <>
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.Button
+              icon="xmark"
+              accessibilityLabel={t("cancel")}
+              onPress={() => router.back()}
+            />
+          </Stack.Toolbar>
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              icon="checkmark"
+              accessibilityLabel={t("projectCreate")}
+              disabled={!valid}
+              onPress={() => void create()}
+            />
+          </Stack.Toolbar>
+        </>
+      ) : null}
+      <ScrollView
+        alwaysBounceVertical
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 16, paddingVertical: 16, ...readable.content }}
+        style={{ backgroundColor: colors.background }}
+      >
+        <Section footer={!canCreate ? t("projectLocked") : undefined}>
+          <View style={{ minHeight: 56, justifyContent: "center", paddingHorizontal: 16 }}>
+            <TextInput
+              accessibilityLabel={t("projectName")}
+              autoFocus
+              editable={!busy && canCreate}
+              maxLength={NAME_MAX}
+              onChangeText={setName}
+              onSubmitEditing={() => void create()}
+              placeholder={t("projectName")}
+              placeholderTextColor={colors.tertiaryLabel}
+              returnKeyType="done"
+              style={{
+                color: colors.label,
+                fontSize: type.body.fontSize,
+                minHeight: 44,
+                padding: 0,
+              }}
+              value={name}
+            />
+          </View>
+        </Section>
+        {error ? <RequestFeedback error={error} /> : null}
+      </ScrollView>
+    </>
   );
 }

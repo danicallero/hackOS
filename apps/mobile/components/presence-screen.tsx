@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PresenceManagement } from "@/components/presence-management";
 import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import { findPersonById } from "@/lib/scanner-db";
+import { type } from "@/theme";
 import { colors } from "@/theme/colors";
 
 const CONTENT_PADDING = 16;
@@ -76,7 +77,7 @@ export function PresenceScreen() {
         <Text
           selectable
           accessibilityRole="header"
-          style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}
+          style={{ ...type.title, color: colors.label, fontWeight: "800" }}
         >
           {personName}
         </Text>

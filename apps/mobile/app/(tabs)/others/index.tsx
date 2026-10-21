@@ -1,7 +1,8 @@
 import { Redirect } from "expo-router";
 import { OthersHubScreen } from "@/components/others-hub-screen";
 import { useMeContext } from "@/lib/me-context";
-import { isPadIdiom, shouldUseOverflowMenu } from "@/lib/tabs";
+import { useTabPresentation } from "@/lib/tab-presentation";
+import { isPadIdiom } from "@/lib/tabs";
 
 /**
  * Normal overflow selections open their pseudo-tab directly from the custom
@@ -11,6 +12,9 @@ import { isPadIdiom, shouldUseOverflowMenu } from "@/lib/tabs";
  */
 export default function OthersMenuScreen() {
   const { me } = useMeContext();
-  if (shouldUseOverflowMenu(me?.capabilities ?? []) && isPadIdiom()) return <OthersHubScreen />;
+  const presentation = useTabPresentation(me?.capabilities ?? [], {
+    hasQueueItems: me?.hasQueueItems ?? false,
+  });
+  if (presentation.overflow.length > 0 && isPadIdiom()) return <OthersHubScreen />;
   return <Redirect href="/(tabs)/others/account" />;
 }

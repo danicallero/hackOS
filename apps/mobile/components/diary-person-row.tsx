@@ -1,10 +1,11 @@
-import { MenuView } from "@expo/ui/community/menu";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { MenuView } from "@/components/app-menu";
 import { FavouriteStar } from "@/components/favourite-star";
 import { MenuTriggerIcon } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { useLocale } from "@/lib/i18n";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 export const PERSON_ROW_TEXT_INSET = 76;
 /** Star + menu; a row with only the menu needs one target. */
@@ -58,14 +59,17 @@ export function DiaryPersonRow({
           numberOfLines={1}
           style={{
             color: available ? colors.label : colors.secondaryLabel,
-            fontSize: 17,
+            fontSize: type.body.fontSize,
             fontWeight: available ? "600" : "400",
           }}
         >
           {name}
         </Text>
         {headline ? (
-          <Text numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          <Text
+            numberOfLines={1}
+            style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
+          >
             {headline}
           </Text>
         ) : null}
@@ -75,7 +79,7 @@ export function DiaryPersonRow({
             numberOfLines={detailIsNote ? 2 : 1}
             style={{
               color: detailIsNote ? colors.label : colors.secondaryLabel,
-              fontSize: 14,
+              fontSize: type.compact.fontSize,
               fontStyle: detailIsNote ? "italic" : "normal",
             }}
           >
@@ -98,17 +102,15 @@ export function DiaryPersonRow({
   return (
     <View testID={testID} style={{ position: "relative" }}>
       {onOpen ? (
-        <Pressable
+        <PressableFeedback
+          feedback="row"
           accessibilityRole="button"
           accessibilityLabel={[name, ...lines].join(", ")}
           onPress={onOpen}
-          style={({ pressed }) => [
-            rowStyle,
-            { backgroundColor: pressed ? colors.elevatedSurface : undefined },
-          ]}
+          style={rowStyle}
         >
           {body}
-        </Pressable>
+        </PressableFeedback>
       ) : (
         <View accessible accessibilityLabel={name} style={rowStyle}>
           {body}
@@ -128,23 +130,18 @@ export function DiaryPersonRow({
         }}
       >
         {onToggleStar ? (
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityRole="button"
             accessibilityLabel={`${t(starred ? "diaryUnfavourite" : "diaryFavourite")}, ${name}`}
             accessibilityState={{ disabled: busy, selected: starred }}
             disabled={busy}
             hitSlop={4}
             onPress={onToggleStar}
-            style={({ pressed }) => ({
-              alignItems: "center",
-              height: 44,
-              justifyContent: "center",
-              opacity: busy ? 0.45 : pressed ? 0.6 : 1,
-              width: 44,
-            })}
+            style={{ alignItems: "center", height: 44, justifyContent: "center", width: 44 }}
           >
             <FavouriteStar on={starred} />
-          </Pressable>
+          </PressableFeedback>
         ) : null}
         <MenuView
           shouldOpenOnLongPress={false}

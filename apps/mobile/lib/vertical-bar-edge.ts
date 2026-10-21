@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Dimensions } from "react-native";
+import { Dimensions, Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { effectiveSideInsets } from "@/lib/side-region";
+import { POSE_POLL_MS } from "@/lib/fold-region";
+import { isTabletRailWindow, navigationSideInsets } from "@/lib/side-region";
 import FoldRegion from "@/modules/fold-region";
 
 function readEdge(): "left" | "right" | null {
@@ -12,7 +13,7 @@ function readEdge(): "left" | "right" | null {
   }
 }
 
-/** The edge the system puts its vertical bar on, re-read when the pose or window changes. */
+/** The edge the system puts its vertical bar on, re-read when the pose or window changes (a hinge move is polled). */
 export function useVerticalBarEdge(): "left" | "right" | null {
   const [edge, setEdge] = useState(readEdge);
   useEffect(() => {
@@ -21,9 +22,11 @@ export function useVerticalBarEdge(): "left" | "right" | null {
     const native = FoldRegion?.addListener?.("onChange", (event) =>
       setEdge(event.barEdge ?? readEdge()),
     );
+    const poll = FoldRegion ? setInterval(() => setEdge(readEdge()), POSE_POLL_MS) : null;
     return () => {
       resize.remove();
       native?.remove();
+      if (poll) clearInterval(poll);
     };
   }, []);
   return edge;
@@ -33,5 +36,14 @@ export function useVerticalBarEdge(): "left" | "right" | null {
 export function useSideInsets(): { left: number; right: number } {
   const insets = useSafeAreaInsets();
   const edge = useVerticalBarEdge();
-  return effectiveSideInsets(insets, edge);
+  const window = useWindowDimensions();
+  return navigationSideInsets(insets, edge, window, Platform.OS);
+}
+
+/** Whether the root navigator stands in the labelled tablet rail rather than a symbol column. */
+export function useTabletRail(): boolean {
+  const insets = useSafeAreaInsets();
+  const edge = useVerticalBarEdge();
+  const window = useWindowDimensions();
+  return isTabletRailWindow(insets, edge, window, Platform.OS);
 }

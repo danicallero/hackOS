@@ -1,13 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Alert,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Text,
-  type TextStyle,
-  View,
-} from "react-native";
+import { ScrollView, Text, type TextStyle, View } from "react-native";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import {
   ActionButton,
@@ -17,6 +10,7 @@ import {
   Separator,
   StatusPill,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   buildPeopleIndex,
@@ -28,6 +22,7 @@ import {
 } from "@/components/scanner-transaction-status";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { scanFailureText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -43,12 +38,15 @@ import type {
 import { canViewStaffStatistics, isOperator } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { useOperatorListColumn } from "@/theme/layout-screens";
 
 type QueueFilter = "all" | "errors" | "waiting" | "confirmed";
 
 /** Full local reconciliation and replay-error history for scanner staff. */
 export default function SyncQueueScreen() {
+  const listColumn = useOperatorListColumn();
   const { t } = useLocale();
   const { me, loading, error, refetch } = useMeContext();
   const sync = useScannerSync();
@@ -110,7 +108,7 @@ export default function SyncQueueScreen() {
 
   const discard = useCallback(
     (id: string) => {
-      Alert.alert(t("scannerDiscardScanTitle"), t("scannerDiscardScanBody"), [
+      alert(t("scannerDiscardScanTitle"), t("scannerDiscardScanBody"), [
         { text: t("cancel"), style: "cancel" },
         {
           text: t("scannerDiscardScan"),
@@ -160,14 +158,22 @@ export default function SyncQueueScreen() {
       {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
+        ...listColumn,
         gap: 22,
-        padding: 16,
+        paddingTop: 16,
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />}
+      refreshControl={
+        <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+      }
     >
       <Text
-        style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, paddingHorizontal: 4 }}
+        style={{
+          ...type.subhead,
+          color: colors.secondaryLabel,
+          lineHeight: 21,
+          paddingHorizontal: 4,
+        }}
       >
         {t("scannerSyncQueueDescription")}
       </Text>
@@ -243,8 +249,9 @@ export default function SyncQueueScreen() {
         <Text
           accessibilityRole="header"
           style={{
+            ...type.footnote,
             color: colors.secondaryLabel,
-            fontSize: 13,
+
             fontWeight: "600",
             paddingHorizontal: 16,
           }}
@@ -317,7 +324,9 @@ export default function SyncQueueScreen() {
 
       <Section title={t("scannerErrorHistoryTitle")} footer={t("scannerErrorHistoryFooter")}>
         {sync.errorHistory.length === 0 ? (
-          <Text style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 19, padding: 16 }}>
+          <Text
+            style={{ ...type.compact, color: colors.secondaryLabel, lineHeight: 19, padding: 16 }}
+          >
             {t("scannerNoSyncErrorsDescription")}
           </Text>
         ) : (
@@ -386,19 +395,22 @@ const QueueRow = memo(function QueueRow({
       <View style={{ alignItems: "center", flexDirection: "row", gap: 10 }}>
         <SymbolView name={status.icon} tintColor={status.color} size={19} accessible={false} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 15, fontWeight: "700" }}>
+          <Text
+            numberOfLines={1}
+            style={{ ...type.subhead, color: colors.label, fontWeight: "700" }}
+          >
             {subject ?? scannerOperationLabel(scan, t)}
           </Text>
           <Text
             numberOfLines={2}
-            style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}
+            style={{ ...type.footnote, color: colors.secondaryLabel, lineHeight: 18 }}
           >
             {scannerOperationLabel(scan, t)} · {detailLabel(scan, activitiesById, t)}
           </Text>
         </View>
         <StatusPill tone={status.tone}>{status.label}</StatusPill>
       </View>
-      <Text style={{ color: colors.tertiaryLabel, fontSize: 12, paddingLeft: 29 }}>
+      <Text style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 29 }}>
         {formatDateTime(scan.createdAt, "")}
         {scan.attempts > 0
           ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
@@ -408,14 +420,14 @@ const QueueRow = memo(function QueueRow({
         <Text
           accessibilityRole="alert"
           selectable
-          style={{ color: colors.destructive, fontSize: 13, lineHeight: 18, paddingLeft: 29 }}
+          style={{ ...type.footnote, color: colors.destructive, lineHeight: 18, paddingLeft: 29 }}
         >
           {scan.status === "failed" ? scan.lastError : t("scannerOfflineWaiting")}
         </Text>
       ) : null}
       {scan.status === "failed" || scan.lastError ? (
         <View style={{ gap: 6, marginTop: 4, paddingLeft: 29 }}>
-          <Text style={{ color: colors.secondaryLabel, fontSize: 12, fontWeight: "700" }}>
+          <Text style={{ ...type.caption, color: colors.secondaryLabel, fontWeight: "700" }}>
             {t("scannerReconciliationDetails")}
           </Text>
           <ManualLogDetails activities={activities} people={people} scan={scan} showHint={false} />
@@ -464,27 +476,27 @@ const ErrorHistoryRow = memo(function ErrorHistoryRow({
           size={17}
           tintColor={entry.type === "rejected" ? colors.destructive : colors.warning}
         />
-        <Text style={{ color: colors.label, flex: 1, fontSize: 14, fontWeight: "700" }}>
+        <Text style={{ ...type.compact, color: colors.label, flex: 1, fontWeight: "700" }}>
           {t(entry.type === "rejected" ? "scannerErrorRejected" : "scannerErrorRetryable")}
         </Text>
-        <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+        <Text style={{ ...type.caption, color: colors.tertiaryLabel }}>
           {formatDateTime(entry.occurredAt, "")}
         </Text>
       </View>
       <Text
         selectable
-        style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18, paddingLeft: 25 }}
+        style={{ ...type.footnote, color: colors.secondaryLabel, lineHeight: 18, paddingLeft: 25 }}
       >
         {scanFailureText(entry.message, t)}
       </Text>
       {context ? (
         <Text
-          style={{ color: colors.tertiaryLabel, fontSize: 12, lineHeight: 17, paddingLeft: 25 }}
+          style={{ ...type.caption, color: colors.tertiaryLabel, lineHeight: 17, paddingLeft: 25 }}
         >
           {context}
         </Text>
       ) : null}
-      <Text style={{ color: colors.tertiaryLabel, fontSize: 12, paddingLeft: 25 }}>
+      <Text style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 25 }}>
         {t("scannerErrorScanId", { id: entry.scanId })}
       </Text>
     </View>
@@ -503,25 +515,25 @@ function CompactAction({
   destructive?: boolean;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="opacity"
       accessibilityLabel={label}
       accessibilityRole="button"
       onPress={() => {
         void haptic("light");
         onPress();
       }}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
         borderColor: destructive ? colors.destructive : colors.separator,
         borderCurve: "continuous",
-        borderRadius: 9,
+        borderRadius: radius.chip,
         borderWidth: 1,
         flexDirection: "row",
         gap: 5,
         minHeight: 40,
-        opacity: pressed ? 0.6 : 1,
         paddingHorizontal: 12,
-      })}
+      }}
     >
       <SymbolView
         name={icon}
@@ -531,14 +543,15 @@ function CompactAction({
       />
       <Text
         style={{
+          ...type.footnote,
           color: destructive ? colors.destructive : colors.accent,
-          fontSize: 13,
+
           fontWeight: "600",
         }}
       >
         {label}
       </Text>
-    </Pressable>
+    </PressableFeedback>
   );
 }
 

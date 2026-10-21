@@ -5,7 +5,7 @@ import { Section, Separator } from "@/components/native-ui";
 import { DetailRow, VisibilityToggle } from "@/components/profile-parts";
 import { type DirectoryEntry, displayUrl, socialLabel } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
 
 const ROW_ICON_INSET = 52;
 
@@ -95,7 +95,12 @@ export function ProfileCard({
               onChangeText={edit.onLocationNote}
               placeholder={t("networkingLocationPlaceholder")}
               placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: 16, lineHeight: 22, padding: 0 }}
+              style={{
+                color: colors.label,
+                fontSize: type.callout.fontSize,
+                lineHeight: 22,
+                padding: 0,
+              }}
               value={edit.locationNote}
             />
           ) : undefined
@@ -196,7 +201,12 @@ export function ProfileCard({
             <Text
               selectable
               accessibilityRole="header"
-              style={{ color: colors.label, fontSize: 26, fontWeight: "700", textAlign: "center" }}
+              style={{
+                color: colors.label,
+                fontSize: type.title.fontSize,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
             >
               {data.displayName}
             </Text>
@@ -217,7 +227,7 @@ export function ProfileCard({
               placeholderTextColor={colors.tertiaryLabel}
               style={{
                 color: colors.secondaryLabel,
-                fontSize: 16,
+                fontSize: type.callout.fontSize,
                 lineHeight: 21,
                 minWidth: 160,
                 textAlign: "center",
@@ -229,7 +239,7 @@ export function ProfileCard({
               selectable
               style={{
                 color: colors.secondaryLabel,
-                fontSize: 16,
+                fontSize: type.callout.fontSize,
                 lineHeight: 21,
                 textAlign: "center",
               }}
@@ -254,7 +264,7 @@ export function ProfileCard({
               placeholderTextColor={colors.tertiaryLabel}
               style={{
                 color: colors.label,
-                fontSize: 16,
+                fontSize: type.callout.fontSize,
                 lineHeight: 23,
                 minHeight: 96,
                 paddingHorizontal: 16,
@@ -268,7 +278,7 @@ export function ProfileCard({
               selectable
               style={{
                 color: colors.label,
-                fontSize: 16,
+                fontSize: type.callout.fontSize,
                 lineHeight: 23,
                 paddingHorizontal: 16,
                 paddingVertical: 14,

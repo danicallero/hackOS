@@ -1,6 +1,6 @@
-import { MenuView } from "@expo/ui/community/menu";
 import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { View } from "react-native";
+import { MenuView } from "@/components/app-menu";
 import { GlassView } from "@/components/glass-view";
 import { ActionButton, MenuTriggerIcon } from "@/components/native-ui";
 import { type MessageKey, useLocale } from "@/lib/i18n";

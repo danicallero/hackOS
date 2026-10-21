@@ -1,16 +1,24 @@
-import { foldPanes } from "./fold-region";
+import { bookCrease, sameRegion } from "./fold-region";
 
-describe("foldPanes", () => {
-  it("splits the window above and below a horizontal fold", () => {
-    expect(foldPanes({ x: 0, y: 420, width: 466, height: 40 }, 840)).toEqual({
-      top: { y: 0, height: 420 },
-      bottom: { y: 460, height: 380 },
-    });
+describe("sameRegion", () => {
+  it("treats equal rectangles as unchanged so polling does not rerender", () => {
+    const fold = { x: 0, y: 420, width: 466, height: 40 };
+    expect(sameRegion(fold, { ...fold })).toBe(true);
+    expect(sameRegion(null, null)).toBe(true);
   });
 
-  it("does not split for a vertical fold, no fold, or panes too small to use", () => {
-    expect(foldPanes({ x: 400, y: 0, width: 40, height: 840 }, 840)).toBeNull();
-    expect(foldPanes(null, 840)).toBeNull();
-    expect(foldPanes({ x: 0, y: 60, width: 466, height: 40 }, 840)).toBeNull();
+  it("reports a pose change, including a fold appearing or disappearing", () => {
+    const fold = { x: 0, y: 420, width: 466, height: 40 };
+    expect(sameRegion(fold, { ...fold, y: 430 })).toBe(false);
+    expect(sameRegion(fold, null)).toBe(false);
+    expect(sameRegion(null, fold)).toBe(false);
+  });
+});
+
+describe("bookCrease", () => {
+  it("reports a fold running top to bottom and ignores a horizontal one", () => {
+    expect(bookCrease({ x: 470, y: 0, width: 12, height: 669 })).toEqual({ x: 470, width: 12 });
+    expect(bookCrease({ x: 0, y: 420, width: 466, height: 40 })).toBeNull();
+    expect(bookCrease(null)).toBeNull();
   });
 });

@@ -19,8 +19,10 @@ import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
+import { useBookCrease } from "@/lib/fold-region";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { resolveListPaneWidth } from "@/lib/pane-width";
 import {
   fetchChallengeCatalogue,
   type GalleryPage,
@@ -28,8 +30,9 @@ import {
   type NativeProject,
 } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
-import { windowSizeClass } from "@/lib/window-size";
-import { colors } from "@/theme/colors";
+import { listDetailLayout } from "@/lib/window-size";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
 export function galleryClosedNotice(
@@ -149,13 +152,22 @@ export function ProjectGalleryScreen() {
     />
   );
 
-  const { width: windowWidth } = useWindowDimensions();
-  const twoPane = windowSizeClass(windowWidth) === "expanded";
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const crease = useBookCrease();
+  const paneLayout = listDetailLayout(windowWidth, windowHeight, Platform.OS, crease);
+  const twoPane = paneLayout.enabled;
+  const listWidth = resolveListPaneWidth(windowWidth, paneLayout, crease);
+  const readable = useParticipantLayout("list");
   useLayoutEffect(() => {
     navigation.setOptions({
       title: t("gallery"),
       headerShown: true,
-      headerLargeTitle: true,
+      headerLargeTitle: Platform.OS === "ios",
+      headerBlurEffect: "none",
+      // Android has no large-title bar or content inset: a transparent header there floats over the list.
+      headerTransparent: Platform.OS === "ios",
+      headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : colors.background },
+      scrollEdgeEffects: { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" },
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
@@ -298,6 +310,8 @@ export function ProjectGalleryScreen() {
     [router, twoPane],
   );
   const closed = galleryClosedNotice(error, t, language);
+  const showDetailPane = twoPane && projects.length > 0;
+  const empty = !loading && projects.length === 0;
   return (
     <>
       <EntryBackToolbar fallback="/(tabs)/queue" />
@@ -307,11 +321,24 @@ export function ProjectGalleryScreen() {
         </Stack.Toolbar>
       ) : null}
       <View style={{ flex: 1, flexDirection: "row" }}>
-        <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? 380 : undefined }}>
+        <View
+          style={{
+            flex: showDetailPane ? 0 : 1,
+            width: showDetailPane ? listWidth : undefined,
+          }}
+        >
           <ScrollView
             contentInsetAdjustmentBehavior="automatic"
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: 32 }}
+            contentContainerStyle={{
+              paddingVertical: 16,
+              // Beside a detail, the pane is the column; alone, the readable column.
+              ...(showDetailPane ? { paddingHorizontal: 16 } : readable.content),
+              gap: 20,
+              paddingBottom: empty ? 96 : 32,
+              flexGrow: 1,
+              justifyContent: empty ? "center" : undefined,
+            }}
           >
             {Platform.OS !== "ios" ? (
               <TextInput
@@ -324,9 +351,9 @@ export function ProjectGalleryScreen() {
                   color: colors.label,
                   padding: 12,
                   minHeight: 44,
-                  fontSize: 17,
+                  fontSize: type.body.fontSize,
                   backgroundColor: colors.surface,
-                  borderRadius: 8,
+                  borderRadius: radius.control,
                 }}
               />
             ) : null}
@@ -365,18 +392,21 @@ export function ProjectGalleryScreen() {
             ) : null}
           </ScrollView>
         </View>
-        {twoPane ? (
+        {showDetailPane ? (
           <View
             style={{
               borderLeftColor: colors.separator,
               borderLeftWidth: StyleSheet.hairlineWidth,
               flex: 1,
+              paddingLeft: paneLayout.gutter,
             }}
           >
             {selectedId !== null ? (
               <ProjectDetailScreen embedded gallery="1" id={String(selectedId)} />
             ) : (
-              <EmptyState icon="hammer" title={t("gallery")} />
+              <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
+                <EmptyState icon="hammer" title={t("gallery")} />
+              </View>
             )}
           </View>
         ) : null}

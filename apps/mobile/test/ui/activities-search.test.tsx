@@ -16,6 +16,7 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush }),
   useScrollToTop: () => {},
 }));
+jest.mock("@/components/activity-scanner-screen", () => ({ ActivityScannerScreen: () => null }));
 jest.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children }: { children: unknown }) => {
     const ReactLib = require("react");

@@ -1,8 +1,9 @@
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, Linking, Pressable, Text, useWindowDimensions, View } from "react-native";
-
+import { Linking, Text, useWindowDimensions, View } from "react-native";
 import { AuthAlert, AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
+import { alert } from "@/lib/alert";
 import { ApiError } from "@/lib/api";
 import { errorText } from "@/lib/api-error-reason";
 import { forceLocalSignOut, signOut } from "@/lib/auth-client";
@@ -11,7 +12,7 @@ import { useLocale } from "@/lib/i18n";
 import { clearAccountRemovalProgress } from "@/lib/removal-progress";
 import { cancelPendingAnonymization } from "@/lib/self-service";
 import type { Me } from "@/lib/types";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 type RemovalState = Exclude<Me["removal"], null>;
 
@@ -86,7 +87,7 @@ export function PendingRemovalScreen({
   }, [refresh]);
 
   function confirmCancel() {
-    Alert.alert(t("accountRemovalCancelTitle"), t("accountRemovalCancelBody"), [
+    alert(t("accountRemovalCancelTitle"), t("accountRemovalCancelBody"), [
       { text: t("keepAnonymization"), style: "cancel" },
       { text: t("accountRemovalCancel"), style: "destructive", onPress: () => void cancel() },
     ]);
@@ -155,51 +156,47 @@ export function PendingRemovalScreen({
             style={{
               backgroundColor: colors.surface,
               borderColor: colors.separator,
-              borderRadius: 12,
+              borderRadius: radius.control,
               borderWidth: 1,
               gap: 4,
               padding: 14,
             }}
           >
-            <Text style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+            <Text style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}>
               {t("accountRemovalExpiryLabel")}
             </Text>
             <Text
               accessibilityRole="timer"
-              style={{ color: colors.label, fontSize: 24, fontWeight: "800" }}
+              style={{ color: colors.label, fontSize: type.title2.fontSize, fontWeight: "800" }}
             >
               {countdown}
             </Text>
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+            <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
               {t("accountRemovalExpiryHint")}
             </Text>
           </View>
         ) : null}
         {error ? <AuthAlert message={error} /> : null}
         {signOutFailed ? (
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityLabel={t("backToSignIn")}
             accessibilityRole="link"
             onPress={returnToSignIn}
-            style={({ pressed }) => ({
-              alignItems: "center",
-              justifyContent: "center",
-              minHeight: 44,
-              opacity: pressed ? 0.7 : 1,
-            })}
+            style={{ alignItems: "center", justifyContent: "center", minHeight: 44 }}
           >
             <Text
               selectable
               style={{
                 color: colors.interactiveText,
-                fontSize: 15,
+                fontSize: type.subhead.fontSize,
                 fontWeight: "700",
                 textAlign: "center",
               }}
             >
               {t("backToSignIn")}
             </Text>
-          </Pressable>
+          </PressableFeedback>
         ) : null}
         {refreshError || refreshFailure ? (
           <AuthAlert
@@ -223,33 +220,40 @@ export function PendingRemovalScreen({
             busy={cancelling}
           />
         ) : null}
-        <Pressable
+        <PressableFeedback
+          feedback="opacity"
           accessibilityRole="button"
           accessibilityState={{ busy: signingOut, disabled: signingOut }}
           disabled={signingOut}
           onPress={() => void endSession()}
-          style={({ pressed }) => ({
-            alignItems: "center",
-            justifyContent: "center",
-            minHeight: 44,
-            opacity: signingOut ? 0.45 : pressed ? 0.6 : 1,
-          })}
-        >
-          <Text style={{ color: colors.interactiveText, fontSize: 15, fontWeight: "600" }}>
-            {t("signOut")}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="link"
-          onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
-          style={({ pressed }) => ({ alignSelf: "center", opacity: pressed ? 0.6 : 1 })}
+          style={{ alignItems: "center", justifyContent: "center", minHeight: 44 }}
         >
           <Text
-            style={{ color: colors.secondaryLabel, fontSize: 13, textDecorationLine: "underline" }}
+            style={{
+              color: colors.interactiveText,
+              fontSize: type.subhead.fontSize,
+              fontWeight: "600",
+            }}
+          >
+            {t("signOut")}
+          </Text>
+        </PressableFeedback>
+        <PressableFeedback
+          feedback="opacity"
+          accessibilityRole="link"
+          onPress={() => void Linking.openURL(`${EVENT_WEBSITE_URL}/privacy`)}
+          style={{ alignSelf: "center" }}
+        >
+          <Text
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: type.footnote.fontSize,
+              textDecorationLine: "underline",
+            }}
           >
             {t("accountPrivacyPolicy")}
           </Text>
-        </Pressable>
+        </PressableFeedback>
       </View>
     </AuthScreen>
   );

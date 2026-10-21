@@ -1,10 +1,12 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { Alert, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { AnnouncementFormModal, announcementToForm } from "@/components/announcement-form-modal";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { EmptyState, Section, Separator, StatusPill } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
 import { StaleDataBanner } from "@/components/stale-data-banner";
+import { alert } from "@/lib/alert";
 import {
   type AdminAnnouncement,
   type AnnouncementInput,
@@ -18,7 +20,8 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useCachedApi } from "@/lib/use-cached-api";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 type AnnouncementStatus = "scheduled" | "live" | "expired";
 
@@ -70,6 +73,7 @@ export function ManageAnnouncementsView({
   formOpen: "create" | number | null;
   onFormOpenChange: (next: "create" | number | null) => void;
 }) {
+  const readable = useParticipantLayout("list");
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const [refreshing, setRefreshing] = useState(false);
@@ -127,13 +131,13 @@ export function ManageAnnouncementsView({
       await deleteAnnouncement(item.id);
       await load();
     } catch {
-      Alert.alert(t("announcementDeleteError"));
+      alert(t("announcementDeleteError"));
     }
   }
 
   function confirmDelete(item: AdminAnnouncement) {
     void haptic("warning");
-    Alert.alert(t("announcementDeleteConfirmTitle"), t("announcementDeleteConfirmMessage"), [
+    alert(t("announcementDeleteConfirmTitle"), t("announcementDeleteConfirmMessage"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("announcementDelete"),
@@ -149,12 +153,13 @@ export function ManageAnnouncementsView({
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 16,
-          padding: 16,
+          paddingVertical: 16,
+          ...readable.content,
           paddingBottom: 32,
           paddingTop: 16 + androidTopInset,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
         {tabSwitcher}
@@ -198,7 +203,12 @@ export function ManageAnnouncementsView({
                         <Text
                           selectable
                           numberOfLines={1}
-                          style={{ color: colors.label, flex: 1, fontSize: 16, fontWeight: "600" }}
+                          style={{
+                            color: colors.label,
+                            flex: 1,
+                            fontSize: type.callout.fontSize,
+                            fontWeight: "600",
+                          }}
                         >
                           {item.title}
                         </Text>
@@ -207,11 +217,13 @@ export function ManageAnnouncementsView({
                       <Text
                         selectable
                         numberOfLines={2}
-                        style={{ color: colors.secondaryLabel, fontSize: 14 }}
+                        style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
                       >
                         {item.body}
                       </Text>
-                      <Text style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+                      <Text
+                        style={{ color: colors.tertiaryLabel, fontSize: type.caption.fontSize }}
+                      >
                         {new Date(item.created_at).toLocaleDateString(language, {
                           day: "numeric",
                           month: "short",

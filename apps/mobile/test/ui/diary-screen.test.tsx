@@ -1,3 +1,6 @@
+jest.mock("@/components/scanner-code-entry", () => ({
+  ScannerCodeEntry: jest.requireActual("@/components/scanner-code-card").ScannerCodeCard,
+}));
 jest.mock("@/components/scanner-code-entry-actions", () =>
   jest.requireActual("@/components/scanner-code-entry-actions.tsx"),
 );

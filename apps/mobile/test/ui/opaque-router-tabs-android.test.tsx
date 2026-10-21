@@ -77,6 +77,7 @@ jest.mock("react-native-gesture-handler", () => {
   const chainable = (): Record<string, () => unknown> => {
     const handler: Record<string, () => unknown> = {};
     const methods = [
+      "requireExternalGestureToFail",
       "activeOffsetX",
       "failOffsetY",
       "enabled",

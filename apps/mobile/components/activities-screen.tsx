@@ -2,11 +2,15 @@ import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, RefreshControl, Text, useColorScheme, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
+import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
+import { PanePlaceholder } from "@/components/pane-placeholder";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
@@ -16,27 +20,61 @@ import {
   filterActivities,
   sameActivities,
 } from "@/lib/activity-list";
+import { isActivitySelected } from "@/lib/activity-pane";
 import { formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
+import { filterMenuBarItem, withBarGaps } from "@/lib/pane-header-items";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
+import { screenTitleElement } from "@/lib/screen-header-options";
+import { useTabReselect } from "@/lib/tab-reselect";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
-import { SCREEN_TITLE } from "@/theme/screen-title";
+import { screenGutter } from "@/theme/layout";
+import { PANE_TITLE_TOP, useActivityPaneLayout } from "@/theme/layout-activity-pane";
+import { useParticipantLayout } from "@/theme/layout-participant";
+import { SCREEN_TITLE, TWO_PANE_BAND } from "@/theme/screen-title";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
 
-export function ActivitiesScreen() {
+/**
+ * Activities directory. A window with room for two panes (`useActivityPaneLayout`) keeps the list
+ * on the left and the selected activity's scanner on the right; narrower windows push the scanner
+ * route. `deepLink` selects an activity named by a route, `nonce` making a repeat select again.
+ */
+export function ActivitiesScreen({
+  deepLink,
+}: {
+  deepLink?: { id: number | null; nonce?: string };
+} = {}) {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const navigation = useNavigation();
   const { language, t } = useLocale();
+  const readable = useParticipantLayout("list");
+  const pane = useActivityPaneLayout();
+  const twoPane = pane.twoPane;
+  // Above the layout branch: folding, rotating or resizing never loses the open scanner (R028).
+  const [selectedId, setSelectedId] = useState<number | null>(deepLink?.id ?? null);
+  const deepLinkId = deepLink?.id ?? null;
+  const deepLinkNonce = deepLink?.nonce;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new nonce re-selects the same id.
+  useEffect(() => {
+    if (deepLinkId !== null) setSelectedId(deepLinkId);
+  }, [deepLinkId, deepLinkNonce]);
+  // iOS two-pane: each column is its own native stack with its own bar; the route's header is hidden.
+  const nativePane = twoPane && NATIVE_PANE_STACK;
+  // Pressing the already-selected tab returns both panes to their start.
+  useTabReselect("activities", () => {
+    setSelectedId(null);
+    if (deepLinkId !== null) router.setParams({ selected: undefined, selectedNonce: undefined });
+  });
   const insets = useSafeAreaInsets();
   const sync = useScannerSync();
   const [items, setItems] = useState<ScannerActivity[]>([]);
@@ -166,6 +204,13 @@ export function ActivitiesScreen() {
   useLayoutEffect(() => {
     const headerRight = () => filterMenu;
 
+    if (twoPane) {
+      // Each pane draws its own bar (native stacks on iOS, in-page bands elsewhere), so the route
+      // has none: a transparent native header over both panes swallowed touches in the pane band.
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
+
     if (!glassAvailable) {
       // Keep the options available to the fallback/native test harness while
       // the actual visible control is LegacyScreenHeader below.
@@ -207,7 +252,49 @@ export function ActivitiesScreen() {
           setQuery(event.nativeEvent.text),
       },
     });
-  }, [glassAvailable, filterMenu, navigation, t]);
+  }, [glassAvailable, filterMenu, navigation, t, twoPane]);
+
+  // The list pane's native bar: the shared title plus the filter menu, each its own glass circle,
+  // and the integrated search.
+  const listOptions = useMemo(
+    () => ({
+      headerShadowVisible: false,
+      headerStyle: { backgroundColor: colors.background },
+      headerTransparent: false,
+      title: "",
+      unstable_headerLeftItems: () => [
+        {
+          type: "custom" as const,
+          element: screenTitleElement(t("tabActivities")),
+          hidesSharedBackground: true,
+        },
+      ],
+      unstable_headerRightItems: () =>
+        withBarGaps([
+          filterMenuBarItem({
+            accessibilityLabel: t("scheduleFilter"),
+            active: selectedKinds.length > 0,
+            onSelect: selectKind,
+            // The native menu takes the SF Symbol of each row.
+            rows: filterItems.map((row) => {
+              const icon = "icon" in row ? row.icon : undefined;
+              const symbol = typeof icon === "string" ? icon : icon?.ios;
+              return { id: row.id, label: row.label, selected: row.selected, icon: symbol };
+            }),
+          }),
+        ]),
+      headerSearchBarOptions: {
+        placeholder: t("scannerActivitiesSearchPlaceholder"),
+        autoCapitalize: "none" as const,
+        hideWhenScrolling: true,
+        allowToolbarIntegration: false,
+        placement: "integratedButton" as const,
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setQuery(event.nativeEvent.text),
+      },
+    }),
+    [filterItems, selectKind, selectedKinds.length, t],
+  );
 
   // Forces the FlatList back to the top on focus so the native large-title
   // header re-syncs its collapsed/expanded state with the actual scroll
@@ -226,13 +313,17 @@ export function ActivitiesScreen() {
 
   const onActivityPress = useCallback(
     (item: ScannerActivity) => {
+      if (twoPane) {
+        setSelectedId(item.id);
+        return;
+      }
       returningFromScanner.current = true;
       router.push({
         pathname: "/activities/[id]",
         params: { id: String(item.id) },
       });
     },
-    [router],
+    [router, twoPane],
   );
 
   const renderActivityRow = useCallback(
@@ -241,35 +332,38 @@ export function ActivitiesScreen() {
         item={item}
         language={language}
         marker={marker?.id === item.id ? (marker.running ? "now" : "next") : null}
+        selected={isActivitySelected(twoPane, selectedId, item.id)}
         t={t}
         onPress={onActivityPress}
       />
     ),
-    [language, marker, onActivityPress, t],
+    [language, marker, onActivityPress, selectedId, t, twoPane],
   );
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {glassAvailable ? (
+      {nativePane ? null : glassAvailable ? (
         <>
-          <Stack.Toolbar placement="left">
-            <Stack.Toolbar.View hidesSharedBackground>
-              <Text
-                accessibilityRole="header"
-                maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-                style={{
-                  // A fixed colour, not the dynamic label: iOS 26 flips a bar
-                  // item's light/dark appearance with what scrolls behind it,
-                  // which turned the title white for a moment.
-                  color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                  fontSize: 28,
-                  fontWeight: "800",
-                }}
-              >
-                {t("tabActivities")}
-              </Text>
-            </Stack.Toolbar.View>
-          </Stack.Toolbar>
+          {twoPane ? null : (
+            <Stack.Toolbar placement="left">
+              <Stack.Toolbar.View hidesSharedBackground>
+                <Text
+                  accessibilityRole="header"
+                  maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                  style={{
+                    // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                    // item's light/dark appearance with what scrolls behind it,
+                    // which turned the title white for a moment.
+                    color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                    fontSize: 28,
+                    fontWeight: "800",
+                  }}
+                >
+                  {t("tabActivities")}
+                </Text>
+              </Stack.Toolbar.View>
+            </Stack.Toolbar>
+          )}
           <Stack.Toolbar placement="right">
             <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
           </Stack.Toolbar>
@@ -288,80 +382,136 @@ export function ActivitiesScreen() {
           searchOpen={searchOpen}
           searchPlaceholder={t("scannerActivitiesSearchPlaceholder")}
           searchQuery={query}
-          title={t("tabActivities")}
+          // Two panes draw their own titles in each column's band.
+          title={twoPane ? "" : t("tabActivities")}
           topInset={legacyTopInset}
         />
       )}
-      <FlatList
-        ref={listRef}
-        {...trueTop.scrollProps}
-        style={{ flex: 1 }}
-        testID="activities-list"
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{
-          flexGrow: 1,
-          padding: 16,
-          paddingBottom: Math.max(32, tabBarBottomInset + 16),
-        }}
-        data={filtered}
-        keyExtractor={(item) => String(item.id)}
-        keyboardDismissMode="on-drag"
-        // Only a pull-to-refresh drives this spinner. Wiring it to `sync.syncing`
-        // made the background 15s tick yank the list open under the header on
-        // its own (H59).
-        refreshControl={<RefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />}
-        ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
-        ListHeaderComponent={
-          (loadError && scannableDirectory.length > 0) || syncError ? (
-            <View style={{ gap: 8, paddingBottom: 12 }}>
-              {loadError && scannableDirectory.length > 0 ? (
-                <RequestFeedback
-                  error={loadError}
-                  message={t("requestError")}
-                  onRetry={() => void refresh()}
-                  retrying={loading || refreshing}
-                />
-              ) : null}
-              {syncError && isSyncConflict(syncError) ? (
-                <RequestFeedback
-                  error={new Error(syncError.message)}
-                  message={t("scannerSyncRejected")}
-                  onRetry={() => void sync.sync()}
-                  retrying={sync.syncing}
-                />
-              ) : null}
-              {syncError && !isSyncConflict(syncError) ? (
-                <StaleDataBanner updatedAt={sync.lastSync} />
-              ) : null}
+      <View style={{ flex: 1, flexDirection: "row" }}>
+        <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? pane.listWidth : undefined }}>
+          {twoPane && !nativePane ? (
+            // The list's own top band, in the page colour: rows stop at its bottom edge, the way
+            // they stop under the bar on a phone.
+            <View
+              pointerEvents="none"
+              style={{
+                backgroundColor: colors.background,
+                minHeight: TWO_PANE_BAND,
+                paddingBottom: 7.5,
+                paddingHorizontal: screenGutter(pane.listWidth),
+                paddingTop: PANE_TITLE_TOP,
+              }}
+            >
+              <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+                {t("tabActivities")}
+              </Text>
             </View>
-          ) : null
-        }
-        ListEmptyComponent={
-          listLoading ? (
-            <RequestFeedback loading />
-          ) : loadError ? (
-            <RequestFeedback
-              error={loadError}
-              message={t("requestError")}
-              onRetry={() => void refresh()}
-              retrying={loading || refreshing}
+          ) : null}
+          <PaneNativeStack enabled={nativePane} rootOptions={listOptions}>
+            <FlatList
+              ref={listRef}
+              {...trueTop.scrollProps}
+              style={{ flex: 1 }}
+              testID="activities-list"
+              contentInsetAdjustmentBehavior={twoPane && !nativePane ? "never" : "automatic"}
+              contentContainerStyle={{
+                flexGrow: 1,
+                paddingVertical: 16,
+                ...(twoPane
+                  ? { paddingHorizontal: screenGutter(pane.listWidth) }
+                  : readable.content),
+                paddingBottom: Math.max(32, tabBarBottomInset + 16),
+              }}
+              data={filtered}
+              keyExtractor={(item) => String(item.id)}
+              keyboardDismissMode="on-drag"
+              // Only a pull-to-refresh drives this spinner. Wiring it to `sync.syncing`
+              // made the background 15s tick yank the list open under the header on
+              // its own (H59).
+              refreshControl={
+                <AppRefreshControl onRefresh={() => void refresh()} refreshing={refreshing} />
+              }
+              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+              ListHeaderComponent={
+                (loadError && scannableDirectory.length > 0) || syncError ? (
+                  <View style={{ gap: 8, paddingBottom: 12 }}>
+                    {loadError && scannableDirectory.length > 0 ? (
+                      <RequestFeedback
+                        error={loadError}
+                        message={t("requestError")}
+                        onRetry={() => void refresh()}
+                        retrying={loading || refreshing}
+                      />
+                    ) : null}
+                    {syncError && isSyncConflict(syncError) ? (
+                      <RequestFeedback
+                        error={new Error(syncError.message)}
+                        message={t("scannerSyncRejected")}
+                        onRetry={() => void sync.sync()}
+                        retrying={sync.syncing}
+                      />
+                    ) : null}
+                    {syncError && !isSyncConflict(syncError) ? (
+                      <StaleDataBanner updatedAt={sync.lastSync} />
+                    ) : null}
+                  </View>
+                ) : null
+              }
+              ListEmptyComponent={
+                listLoading ? (
+                  <RequestFeedback loading />
+                ) : loadError ? (
+                  <RequestFeedback
+                    error={loadError}
+                    message={t("requestError")}
+                    onRetry={() => void refresh()}
+                    retrying={loading || refreshing}
+                  />
+                ) : filtering ? (
+                  <EmptyState
+                    icon="magnifyingglass"
+                    title={t("scannerActivitiesNoMatches")}
+                    description={t("scannerActivitiesNoMatchesBody")}
+                  />
+                ) : (
+                  <EmptyState
+                    icon="wave.3.right"
+                    title={t("scannerActivitiesEmpty")}
+                    description={t("scannerActivitiesEmptyBody")}
+                  />
+                )
+              }
+              renderItem={renderActivityRow}
             />
-          ) : filtering ? (
-            <EmptyState
-              icon="magnifyingglass"
-              title={t("scannerActivitiesNoMatches")}
-              description={t("scannerActivitiesNoMatchesBody")}
-            />
-          ) : (
-            <EmptyState
-              icon="wave.3.right"
-              title={t("scannerActivitiesEmpty")}
-              description={t("scannerActivitiesEmptyBody")}
-            />
-          )
-        }
-        renderItem={renderActivityRow}
-      />
+          </PaneNativeStack>
+        </View>
+        {twoPane ? (
+          <View
+            style={{
+              borderLeftColor: colors.separator,
+              borderLeftWidth: StyleSheet.hairlineWidth,
+              flex: 1,
+              paddingLeft: pane.gutter,
+            }}
+          >
+            {selectedId !== null ? (
+              // One scanner per activity: its result, NFC session and queue belong to it.
+              <ActivityScannerScreen
+                key={selectedId}
+                activityId={selectedId}
+                embedded
+                topInset={pane.band}
+              />
+            ) : (
+              <PanePlaceholder
+                body={t("panePlaceholderActivityBody")}
+                icon="viewfinder"
+                title={t("panePlaceholderActivityTitle")}
+              />
+            )}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -371,6 +521,7 @@ const ActivityRow = memo(function ActivityRow({
   language,
   marker,
   onPress,
+  selected,
   t,
 }: {
   item: ScannerActivity;
@@ -378,6 +529,8 @@ const ActivityRow = memo(function ActivityRow({
   /** "now" on the activity currently running, "next" on the one about to start. */
   marker: "now" | "next" | null;
   onPress: (item: ScannerActivity) => void;
+  /** The activity whose scanner is open in the pane beside the list. */
+  selected: boolean;
   t: ReturnType<typeof useLocale>["t"];
 }) {
   useEventTimeZone();
@@ -385,14 +538,15 @@ const ActivityRow = memo(function ActivityRow({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ selected }}
       onPress={() => onPress(item)}
       style={({ pressed }) => ({
         alignItems: "center",
         backgroundColor: colors.elevatedSurface,
-        borderColor: marker ? colors.accent : colors.transparent,
+        borderColor: marker || selected ? colors.accent : colors.transparent,
         borderCurve: "continuous",
         borderRadius: 999,
-        borderWidth: marker ? 1.5 : 0,
+        borderWidth: selected ? 2 : marker ? 1.5 : 0,
         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
         flexDirection: "row",
         gap: 12,

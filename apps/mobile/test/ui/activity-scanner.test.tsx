@@ -427,3 +427,18 @@ it("starts Android activity NFC on entry without a session button or overlay", a
     Platform.OS = originalOS;
   }
 });
+
+describe("embedded scanner pane (H22, H55)", () => {
+  it("scans the activity it is given, ignoring route parameters, and keeps the result in the pane", async () => {
+    const originalParams = mockParams;
+    mockParams = { id: "99", manualBadge: "IGNORED", manualNonce: "9" };
+    try {
+      await renderMobile(<ActivityScannerScreen embedded activityId={7} topInset={72} />);
+      expect(await screen.findByText("Workshop")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+      expect(jest.mocked(findPersonByBadge)).not.toHaveBeenCalledWith("IGNORED");
+    } finally {
+      mockParams = originalParams;
+    }
+  });
+});

@@ -4,17 +4,22 @@ import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Pressable, RefreshControl, ScrollView, Text, TextInput, View } from "react-native";
+import { HeaderHeightContext } from "expo-router/react-navigation";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ScrollViewMarker } from "react-native-screens/experimental";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { DynamicForm } from "@/components/dynamic-form";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
 import { FieldRow, GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
@@ -22,13 +27,15 @@ import { createIdempotencyKey } from "@/lib/idempotency-key";
 import {
   type NativeProject,
   type ProjectFile,
+  parseNativeProject,
   projectMutation,
   settleProjectDrafts,
   trackProjectTask,
 } from "@/lib/projects";
 import { reportContent } from "@/lib/reports";
 import { useProjectDraft } from "@/lib/use-project-draft";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 /**
@@ -65,8 +72,8 @@ export function ProjectDetailScreen({
     // H20: saves and uploads from a previous visit land before the reload.
     if (!gallery) await settleProjectDrafts(Number(id));
     setProject(
-      await apiFetch<NativeProject>(
-        `${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`,
+      parseNativeProject(
+        await apiFetch<unknown>(`${gallery ? "/api/public/projects" : "/api/me/projects"}/${id}`),
       ),
     );
     setEpoch((current) => current + 1);
@@ -125,86 +132,103 @@ export function ProjectReadView({
   titleHeader?: boolean;
 }) {
   const { t } = useLocale();
+  const readable = useParticipantLayout("list");
   const router = useRouter();
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [refreshing, setRefreshing] = useState(false);
   return (
-    <ScrollView
-      refreshControl={
-        onRefresh ? (
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              void onRefresh()
-                .catch(() => {})
-                .finally(() => setRefreshing(false));
-            }}
-          />
-        ) : undefined
+    <ScrollViewMarker
+      style={{ flex: 1 }}
+      scrollEdgeEffects={
+        titleHeader
+          ? { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" }
+          : undefined
       }
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
-      style={{ backgroundColor: colors.background }}
     >
-      {titleHeader ? (
-        <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
-          {project.name}
-        </Text>
-      ) : null}
-      {project.winners?.length ? (
-        <Section>
-          {project.winners.map((winner, index) => (
-            <View key={`${winner.challengeId}:${winner.rank}`}>
-              {index > 0 ? <Separator /> : null}
-              <InfoRow
-                icon="trophy.fill"
-                label={t("projectWinner")}
-                value={winner.challengeTitle ?? String(winner.rank)}
-              />
-            </View>
-          ))}
+      <ScrollView
+        refreshControl={
+          onRefresh ? (
+            <AppRefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void onRefresh()
+                  .catch(() => {})
+                  .finally(() => setRefreshing(false));
+              }}
+            />
+          ) : undefined
+        }
+        contentInsetAdjustmentBehavior={titleHeader ? "never" : "automatic"}
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: 32,
+          paddingTop: titleHeader ? Math.max(16, headerHeight - 52) : 16,
+        }}
+        style={{ backgroundColor: colors.background }}
+      >
+        {titleHeader ? (
+          <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+            {project.name}
+          </Text>
+        ) : null}
+        {project.winners?.length ? (
+          <Section>
+            {project.winners.map((winner, index) => (
+              <View key={`${winner.challengeId}:${winner.rank}`}>
+                {index > 0 ? <Separator /> : null}
+                <InfoRow
+                  icon="trophy.fill"
+                  label={t("projectWinner")}
+                  value={winner.challengeTitle ?? String(winner.rank)}
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        <DynamicForm
+          template={project.template}
+          sections={project.sections}
+          responses={project.responses}
+          readOnly
+          files={project.files}
+        />
+        {project.githubUrl ? <ProjectRepoRow url={project.githubUrl} /> : null}
+        <Section title={t("projectTeam")}>
+          <ProjectMembers project={project} />
         </Section>
-      ) : null}
-      <DynamicForm
-        template={project.template}
-        sections={project.sections}
-        responses={project.responses}
-        readOnly
-        files={project.files}
-      />
-      {project.githubUrl ? <ProjectRepoRow url={project.githubUrl} /> : null}
-      <Section title={t("projectTeam")}>
-        <ProjectMembers project={project} />
-      </Section>
-      {project.challenges.length ? (
-        <Section title={t("projectChallenges")}>
-          {project.challenges.map((challenge, index) => (
-            <View key={challenge.id}>
-              {index > 0 ? <Separator /> : null}
-              <NavRow
-                title={challenge.title}
-                onPress={() =>
-                  router.push({
-                    pathname: "/projects/challenge",
-                    params: { challengeId: String(challenge.id) },
-                  })
-                }
-              />
-            </View>
-          ))}
-        </Section>
-      ) : null}
-      {project.isMember ? null : (
-        <Section>
-          <ActionButton
-            label={t("reportContent")}
-            icon="flag"
-            destructive
-            onPress={() => reportContent({ projectId: project.id }, t)}
-          />
-        </Section>
-      )}
-    </ScrollView>
+        {project.challenges.length ? (
+          <Section title={t("projectChallenges")}>
+            {project.challenges.map((challenge, index) => (
+              <View key={challenge.id}>
+                {index > 0 ? <Separator /> : null}
+                <NavRow
+                  title={challenge.title}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/projects/challenge",
+                      params: { challengeId: String(challenge.id) },
+                    })
+                  }
+                />
+              </View>
+            ))}
+          </Section>
+        ) : null}
+        {project.isMember ? null : (
+          <Section>
+            <ActionButton
+              label={t("reportContent")}
+              icon="flag"
+              destructive
+              onPress={() => reportContent({ projectId: project.id }, t)}
+            />
+          </Section>
+        )}
+      </ScrollView>
+    </ScrollViewMarker>
   );
 }
 
@@ -226,9 +250,11 @@ function ProjectMembers({ project }: { project: NativeProject }) {
             }}
           >
             <PersonAvatar size={40} name={member.name ?? "?"} uri={member.photoUrl ?? null} />
-            <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{member.name}</Text>
+            <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
+              {member.name}
+            </Text>
             {member.status && member.status !== "active" ? (
-              <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>
+              <Text style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize }}>
                 {t(member.status === "invited" ? "projectInvited" : "projectDeclined")}
               </Text>
             ) : null}
@@ -250,25 +276,25 @@ function AddRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable
+    <PressableFeedback
+      feedback="row"
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => ({
+      style={{
         alignItems: "center",
-        backgroundColor: pressed ? colors.elevatedSurface : "transparent",
         flexDirection: "row",
         gap: 12,
         minHeight: 50,
         opacity: disabled ? 0.5 : 1,
         paddingHorizontal: 16,
-      })}
+      }}
     >
       <SymbolView name="plus.circle.fill" tintColor={colors.accent} size={22} accessible={false} />
-      <Text style={{ color: colors.accent, flex: 1, fontSize: 17 }}>{label}</Text>
-    </Pressable>
+      <Text style={{ color: colors.accent, flex: 1, fontSize: type.body.fontSize }}>{label}</Text>
+    </PressableFeedback>
   );
 }
 
@@ -318,6 +344,7 @@ export function ProjectEditor({
   embedded?: boolean;
 }) {
   const { t, language } = useLocale();
+  const readable = useParticipantLayout("form");
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const draft = useProjectDraft(project);
@@ -471,11 +498,12 @@ export function ProjectEditor({
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} />
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void pullRefresh()} />
         }
         contentContainerStyle={{
           gap: 24,
-          padding: 16,
+          paddingVertical: 16,
+          ...readable.content,
           paddingBottom: showSubmit ? 96 + insets.bottom : Math.max(32, insets.bottom + 16),
         }}
       >
@@ -490,7 +518,12 @@ export function ProjectEditor({
               onEndEditing={() => void saveName(name).catch((cause) => setError(cause as Error))}
               editable={!blocked}
               returnKeyType="done"
-              style={{ color: colors.label, fontSize: 17, minHeight: 28, padding: 0 }}
+              style={{
+                color: colors.label,
+                fontSize: type.body.fontSize,
+                minHeight: 28,
+                padding: 0,
+              }}
             />
           </FieldRow>
         </Section>
@@ -563,7 +596,7 @@ export function ProjectEditor({
             destructive
             disabled={busy}
             onPress={() =>
-              Alert.alert(t("projectLeave"), t("projectLeaveConfirm"), [
+              alert(t("projectLeave"), t("projectLeaveConfirm"), [
                 { text: t("cancel"), style: "cancel" },
                 {
                   text: t("projectLeave"),
@@ -596,7 +629,7 @@ export function ProjectEditor({
               disabled={busy}
               busy={busy}
               onPress={() =>
-                Alert.alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
+                alert(t("projectWithdrawTitle"), t("projectWithdrawConfirm"), [
                   { text: t("cancel"), style: "cancel" },
                   {
                     text: t("projectWithdraw"),

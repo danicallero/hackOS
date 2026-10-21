@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { SheetModal } from "@/components/app-sheet";
 import { FloatingGlassButton, Separator } from "@/components/native-ui";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -27,9 +27,7 @@ export function FieldLibraryPicker({
   disabled?: boolean;
 }) {
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
-  const top = Platform.OS === "android" ? insets.top : 0;
   const [items, setItems] = useState<{ id: number; name: string }[]>([]);
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
@@ -113,12 +111,7 @@ export function FieldLibraryPicker({
           />
         )}
       </Pressable>
-      <Modal
-        visible={open}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setOpen(false)}
-      >
+      <SheetModal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
         <View style={{ backgroundColor: colors.background, flex: 1 }}>
           <ScrollView
             alwaysBounceVertical
@@ -128,7 +121,7 @@ export function FieldLibraryPicker({
               gap: 16,
               padding: 16,
               paddingBottom: 32,
-              paddingTop: 76 + top,
+              paddingTop: 76,
             }}
           >
             <Text
@@ -224,14 +217,14 @@ export function FieldLibraryPicker({
             )}
           </ScrollView>
           <FloatingGlassButton
-            top={16 + top}
+            top={16}
             side="right"
             icon="checkmark"
             accessibilityLabel={t("close")}
             onPress={() => setOpen(false)}
           />
         </View>
-      </Modal>
+      </SheetModal>
     </>
   );
 }

@@ -1,7 +1,8 @@
 import { useIsFocused } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, AppState, Modal, Platform, Pressable, Text, View } from "react-native";
+import { AppState, Modal, Platform, Pressable, Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { useLocale } from "@/lib/i18n";
 import { startNfcRead } from "@/lib/nfc-reader";
 import { colors } from "@/theme/colors";
@@ -62,7 +63,7 @@ export function NfcReader({
           key === "scannerNfcInvalidTag"
             ? key
             : "scannerNfcError";
-        Alert.alert(t("scannerNfcScan"), t(errorKey));
+        alert(t("scannerNfcScan"), t(errorKey));
         callbacks.current.onClose();
       });
     return () => {

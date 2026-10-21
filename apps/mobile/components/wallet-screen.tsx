@@ -4,16 +4,7 @@ import * as Device from "expo-device";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Linking, Platform, ScrollView, Text, useColorScheme, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import QRCode from "react-native-qrcode-svg";
 import Animated, {
@@ -23,12 +14,14 @@ import Animated, {
   SlideOutLeft,
   SlideOutRight,
 } from "react-native-reanimated";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { ActionButton, EmptyState, InfoRow, Section, Separator } from "@/components/native-ui";
 import { NetworkingInvite } from "@/components/networking-invite";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
@@ -49,7 +42,8 @@ import {
   supportsAppleWalletButton,
   supportsAppleWalletFileHandoff,
 } from "@/lib/wallet-platform";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 // Roughly the full ticket/badge card's own height (QR + labels + padding).
 // The empty state shown before a badge is assigned is much shorter than
@@ -73,6 +67,9 @@ export default function WalletScreen({
 }) {
   useColorScheme();
   const { language, t } = useLocale();
+  const [availableWidth, setAvailableWidth] = useState(0);
+  const readable = useParticipantLayout("grid");
+  const wide = availableWidth >= 720;
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { me, refetch: refetchMe } = useMeContext();
   const [selectedIndex, setSelectedIndex] = useState(initialPurpose === "badge" ? 1 : 0);
@@ -244,7 +241,7 @@ export default function WalletScreen({
   }
 
   function confirmDeclineSpot(responseId: number) {
-    Alert.alert(t("walletDeclineSpotTitle"), t("walletDeclineSpotDescription"), [
+    alert(t("walletDeclineSpotTitle"), t("walletDeclineSpotDescription"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("walletDeclineSpotAction"),
@@ -298,16 +295,17 @@ export default function WalletScreen({
     <GestureDetector gesture={scrollNativeGesture}>
       <ScrollView
         ref={scrollRef}
+        onLayout={(event) => setAvailableWidth(event.nativeEvent.layout.width)}
         {...trueTop.scrollProps}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 20,
-          padding: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, tabBarBottomInset + 16),
           paddingTop: 16 + contentTopInset,
         }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
         <StaleDataBanner updatedAt={staleSince} />
@@ -328,7 +326,7 @@ export default function WalletScreen({
             style={{
               backgroundColor: colors.successSurface,
               borderCurve: "continuous",
-              borderRadius: 12,
+              borderRadius: radius.control,
               flexDirection: "row",
               gap: 9,
               padding: 14,
@@ -342,7 +340,12 @@ export default function WalletScreen({
             />
             <Text
               selectable
-              style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 15, lineHeight: 21 }}
+              style={{
+                color: colors.onSuccessSurface,
+                flex: 1,
+                fontSize: type.subhead.fontSize,
+                lineHeight: 21,
+              }}
             >
               {t("walletSpotConfirmed")}
             </Text>
@@ -355,13 +358,17 @@ export default function WalletScreen({
             style={{
               backgroundColor: colors.warningSurface,
               borderCurve: "continuous",
-              borderRadius: 12,
+              borderRadius: radius.control,
               padding: 14,
             }}
           >
             <Text
               selectable
-              style={{ color: colors.onWarningSurface, fontSize: 15, lineHeight: 21 }}
+              style={{
+                color: colors.onWarningSurface,
+                fontSize: type.subhead.fontSize,
+                lineHeight: 21,
+              }}
             >
               {t("walletSpotDeclined")}
             </Text>
@@ -382,12 +389,19 @@ export default function WalletScreen({
           >
             <View style={{ gap: 12, padding: 16 }}>
               <View style={{ gap: 4 }}>
-                <Text selectable style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                <Text
+                  selectable
+                  style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+                >
                   {spot.applicationName}
                 </Text>
                 <Text
                   selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                  style={{
+                    color: colors.secondaryLabel,
+                    fontSize: type.compact.fontSize,
+                    lineHeight: 20,
+                  }}
                 >
                   {t("walletConfirmSpotDescription")}
                 </Text>
@@ -398,13 +412,17 @@ export default function WalletScreen({
                   style={{
                     backgroundColor: colors.warningSurface,
                     borderCurve: "continuous",
-                    borderRadius: 10,
+                    borderRadius: radius.chip,
                     padding: 12,
                   }}
                 >
                   <Text
                     selectable
-                    style={{ color: colors.onWarningSurface, fontSize: 14, lineHeight: 20 }}
+                    style={{
+                      color: colors.onWarningSurface,
+                      fontSize: type.compact.fontSize,
+                      lineHeight: 20,
+                    }}
                   >
                     {t("walletSpotExpired")}
                   </Text>
@@ -431,193 +449,232 @@ export default function WalletScreen({
           </Section>
         ))}
 
-        <SegmentedControl
-          label={t("tabWallet")}
-          values={[t("ticketLabel"), t("badgeLabel")]}
-          selectedIndex={selectedIndex}
-          onChange={goToPurpose}
-        />
+        <View
+          style={{
+            alignSelf: "center",
+            width: "100%",
+            flexDirection: wide ? "row" : "column",
+            gap: 24,
+            alignItems: wide ? "flex-start" : "stretch",
+          }}
+        >
+          <View style={{ flex: wide ? 1 : undefined, gap: 20 }}>
+            <View
+              style={{
+                alignSelf: wide ? "center" : "stretch",
+                width: wide ? 320 : undefined,
+                maxWidth: "100%",
+              }}
+            >
+              <SegmentedControl
+                label={t("tabWallet")}
+                values={[t("ticketLabel"), t("badgeLabel")]}
+                selectedIndex={selectedIndex}
+                onChange={goToPurpose}
+              />
+            </View>
 
-        <GestureDetector gesture={walletSwipeGesture}>
-          {/* A single host View child, not the raw ternary — GestureDetector
+            <GestureDetector gesture={walletSwipeGesture}>
+              {/* A single host View child, not the raw ternary — GestureDetector
             needs to attach to one component that forwards a native ref, and
             `EmptyState` (the other branch) doesn't. `minHeight` keeps that
             host the same size regardless of which branch is showing, so a
             badge that isn't assigned yet (the much shorter `EmptyState`)
             doesn't shrink the swipeable area down to a sliver of the space
             the full ticket/badge card occupies. */}
-          <View style={{ justifyContent: "center", minHeight: WALLET_CARD_MIN_HEIGHT }}>
-            {/* Keyed on the index so switching sides remounts this node —
+              <View style={{ justifyContent: "center", minHeight: WALLET_CARD_MIN_HEIGHT }}>
+                {/* Keyed on the index so switching sides remounts this node —
                 that's what lets `entering`/`exiting` run: the outgoing card
                 plays `exiting` while the incoming one plays `entering`,
                 simultaneously, in the direction the card just moved. */}
-            <Animated.View
-              key={selectedIndex}
-              // Each card has a fixed side, ticket left and badge right, so
-              // its slide follows from its own index. A direction kept in
-              // state would reach the outgoing card one render late, sending
-              // it out on the side the new one comes in from.
-              entering={selectedIndex === 1 ? SlideInRight : SlideInLeft}
-              exiting={selectedIndex === 0 ? SlideOutLeft : SlideOutRight}
-            >
-              {value ? (
-                <View
-                  style={{
-                    alignItems: "center",
-                    backgroundColor: colors.surface,
-                    borderCurve: "continuous",
-                    borderRadius: 20,
-                    gap: 16,
-                    padding: 18,
-                  }}
+                <Animated.View
+                  key={selectedIndex}
+                  // Each card has a fixed side, ticket left and badge right, so
+                  // its slide follows from its own index. A direction kept in
+                  // state would reach the outgoing card one render late, sending
+                  // it out on the side the new one comes in from.
+                  entering={selectedIndex === 1 ? SlideInRight : SlideInLeft}
+                  exiting={selectedIndex === 0 ? SlideOutLeft : SlideOutRight}
                 >
-                  <View style={{ alignItems: "center", gap: 5 }}>
-                    <SymbolView
-                      name={purpose === "ticket" ? "ticket.fill" : "key.card.fill"}
-                      tintColor={colors.accent}
-                      size={28}
-                      accessible={false}
-                    />
-                    <Text
-                      selectable
-                      style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}
-                    >
-                      {label}
-                    </Text>
-                    <Text
-                      selectable
-                      style={{ color: colors.secondaryLabel, fontSize: 14, textAlign: "center" }}
-                    >
-                      {t("walletScanHint")}
-                    </Text>
-                  </View>
-                  <View
-                    accessibilityLabel={t("walletQrCode", { label })}
-                    accessibilityRole="image"
-                    accessible
-                    style={{
-                      backgroundColor: colors.qrBackground,
-                      borderCurve: "continuous",
-                      borderRadius: 16,
-                      maxWidth: "100%",
-                      padding: 16,
-                    }}
-                  >
-                    <QRCode value={value} size={196} />
-                  </View>
-                  {purpose === "badge" ? (
-                    <Text
-                      selectable
+                  {value ? (
+                    <View
                       style={{
-                        color: colors.secondaryLabel,
-                        fontFamily: "SpaceMono",
-                        fontSize: 13,
+                        alignItems: "center",
+                        backgroundColor: colors.surface,
+                        borderCurve: "continuous",
+                        borderRadius: radius.container,
+                        gap: 16,
+                        padding: 18,
                       }}
                     >
-                      {ticket.badgeId}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : (
-                <EmptyState
-                  icon="key.card"
-                  title={purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")}
-                  description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
-                />
-              )}
-            </Animated.View>
+                      <View style={{ alignItems: "center", gap: 5 }}>
+                        <SymbolView
+                          name={purpose === "ticket" ? "ticket.fill" : "key.card.fill"}
+                          tintColor={colors.accent}
+                          size={28}
+                          accessible={false}
+                        />
+                        <Text
+                          selectable
+                          style={{
+                            color: colors.label,
+                            fontSize: type.title2.fontSize,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {label}
+                        </Text>
+                        <Text
+                          selectable
+                          style={{
+                            color: colors.secondaryLabel,
+                            fontSize: type.compact.fontSize,
+                            textAlign: "center",
+                          }}
+                        >
+                          {t("walletScanHint")}
+                        </Text>
+                      </View>
+                      <View
+                        accessibilityLabel={t("walletQrCode", { label })}
+                        accessibilityRole="image"
+                        accessible
+                        style={{
+                          backgroundColor: colors.qrBackground,
+                          borderCurve: "continuous",
+                          borderRadius: radius.container,
+                          maxWidth: "100%",
+                          padding: 16,
+                        }}
+                      >
+                        <QRCode value={value} size={196} />
+                      </View>
+                      {purpose === "badge" ? (
+                        <Text
+                          selectable
+                          style={{
+                            color: colors.secondaryLabel,
+                            fontFamily: "SpaceMono",
+                            fontSize: type.footnote.fontSize,
+                          }}
+                        >
+                          {ticket.badgeId}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : (
+                    <EmptyState
+                      icon="key.card"
+                      title={
+                        purpose === "ticket" ? t("ticketNotReadyTitle") : t("badgeNotReadyTitle")
+                      }
+                      description={purpose === "ticket" ? t("noTicketYet") : t("noBadgeYet")}
+                    />
+                  )}
+                </Animated.View>
+              </View>
+            </GestureDetector>
           </View>
-        </GestureDetector>
-
-        {/*
+          <View style={{ flex: wide ? 1 : undefined, gap: 20, paddingTop: wide ? 52 : 0 }}>
+            {/*
         Readable identity info alongside the QR — useful for anyone who isn't
         adding this to Apple/Google Wallet and just wants to confirm it's
         their own pass at a glance.
       */}
-        {value && me ? (
-          <Section title={t("walletHolder")}>
-            <InfoRow
-              icon="person"
-              label={t("walletHolderName")}
-              value={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
-            />
-            <Separator />
-            <InfoRow
-              icon="checkmark.seal"
-              label={t("walletHolderRole")}
-              value={roleLabel(me.visibleRoleName, t)}
-            />
-          </Section>
-        ) : null}
+            {value && me ? (
+              <Section title={t("walletHolder")}>
+                <InfoRow
+                  icon="person"
+                  label={t("walletHolderName")}
+                  value={[me.name, me.surname].filter(Boolean).join(" ") || me.email}
+                />
+                <Separator />
+                <InfoRow
+                  icon="checkmark.seal"
+                  label={t("walletHolderRole")}
+                  value={roleLabel(me.visibleRoleName, t)}
+                />
+              </Section>
+            ) : null}
 
-        {value &&
-        (showAppleWalletButton || showAppleWalletFileHandoff || Platform.OS === "android") ? (
-          <Section title={t("walletAddPass")} footer={t("walletAddPassHint")}>
-            {showAppleWalletButton ? (
-              <View style={{ padding: 16 }}>
-                {/*
+            {value &&
+            (showAppleWalletButton || showAppleWalletFileHandoff || Platform.OS === "android") ? (
+              <Section title={t("walletAddPass")} footer={t("walletAddPassHint")}>
+                {showAppleWalletButton ? (
+                  <View style={{ padding: 16 }}>
+                    {/*
                 Apple's Add to Apple Wallet guidelines require apps to use
                 the system PKAddPassButton control rather than custom badge
                 artwork or a styled button; the system picks one- or
                 two-line text layout based on the width available.
               */}
-                <RNWalletView
-                  buttonStyle={ButtonStyle.BLACK}
-                  onPress={() => {
-                    if (!actionBusy)
-                      void runAction(() => addToAppleWallet(purpose), `wallet:${purpose}`);
-                  }}
-                  style={{ height: 44, opacity: actionBusy ? 0.5 : 1, width: "100%" }}
-                />
-              </View>
-            ) : null}
-            {showAppleWalletButton ? <Separator /> : null}
-            {showAppleWalletFileHandoff ? (
-              <View style={{ padding: 16 }}>
-                <ActionButton
-                  label={t("addToAppleWallet")}
-                  icon="arrow.down.circle"
-                  busy={busyAction === `wallet:${purpose}`}
-                  onPress={() => void runAction(() => downloadPkpass(purpose), `wallet:${purpose}`)}
-                />
-              </View>
-            ) : null}
-            {Platform.OS === "android" ? (
-              <View style={{ alignItems: "center", padding: 16 }}>
-                {/*
+                    <RNWalletView
+                      buttonStyle={ButtonStyle.BLACK}
+                      onPress={() => {
+                        if (!actionBusy)
+                          void runAction(() => addToAppleWallet(purpose), `wallet:${purpose}`);
+                      }}
+                      style={{ height: 44, opacity: actionBusy ? 0.5 : 1, width: "100%" }}
+                    />
+                  </View>
+                ) : null}
+                {showAppleWalletButton ? <Separator /> : null}
+                {showAppleWalletFileHandoff ? (
+                  <View style={{ padding: 16 }}>
+                    <ActionButton
+                      label={t("addToAppleWallet")}
+                      icon="arrow.down.circle"
+                      busy={busyAction === `wallet:${purpose}`}
+                      onPress={() =>
+                        void runAction(() => downloadPkpass(purpose), `wallet:${purpose}`)
+                      }
+                    />
+                  </View>
+                ) : null}
+                {Platform.OS === "android" ? (
+                  <View style={{ alignItems: "center", padding: 16 }}>
+                    {/*
                 Google's Add to Google Wallet brand guidelines require the
                 official button asset (bundled natively by this library) —
                 no custom button, recoloring, or free-scaling.
               */}
-                <RNWalletView
-                  buttonType={ButtonType.PRIMARY}
-                  onPress={() => {
-                    if (!actionBusy)
-                      void runAction(() => addToGoogleWallet(purpose), `wallet:${purpose}`);
-                  }}
-                  style={{ opacity: actionBusy ? 0.5 : 1 }}
-                />
-              </View>
+                    <RNWalletView
+                      buttonType={ButtonType.PRIMARY}
+                      onPress={() => {
+                        if (!actionBusy)
+                          void runAction(() => addToGoogleWallet(purpose), `wallet:${purpose}`);
+                      }}
+                      style={{ opacity: actionBusy ? 0.5 : 1 }}
+                    />
+                  </View>
+                ) : null}
+                {Platform.OS === "android" ? <Separator /> : null}
+                {Platform.OS === "android" ? (
+                  <View style={{ padding: 16 }}>
+                    <ActionButton
+                      label={t("walletDownloadPkpass")}
+                      icon="arrow.down.circle"
+                      busy={busyAction === `wallet:${purpose}`}
+                      onPress={() =>
+                        void runAction(() => downloadPkpass(purpose), `wallet:${purpose}`)
+                      }
+                    />
+                    <Text
+                      selectable
+                      style={{
+                        color: colors.secondaryLabel,
+                        fontSize: type.footnote.fontSize,
+                        paddingTop: 4,
+                      }}
+                    >
+                      {t("walletDownloadPkpassHint")}
+                    </Text>
+                  </View>
+                ) : null}
+              </Section>
             ) : null}
-            {Platform.OS === "android" ? <Separator /> : null}
-            {Platform.OS === "android" ? (
-              <View style={{ padding: 16 }}>
-                <ActionButton
-                  label={t("walletDownloadPkpass")}
-                  icon="arrow.down.circle"
-                  busy={busyAction === `wallet:${purpose}`}
-                  onPress={() => void runAction(() => downloadPkpass(purpose), `wallet:${purpose}`)}
-                />
-                <Text
-                  selectable
-                  style={{ color: colors.secondaryLabel, fontSize: 13, paddingTop: 4 }}
-                >
-                  {t("walletDownloadPkpassHint")}
-                </Text>
-              </View>
-            ) : null}
-          </Section>
-        ) : null}
+          </View>
+        </View>
       </ScrollView>
     </GestureDetector>
   );

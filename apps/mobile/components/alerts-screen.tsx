@@ -11,13 +11,10 @@ import {
   useState,
 } from "react";
 import {
-  Alert,
   AppState,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   Platform,
-  Pressable,
-  RefreshControl,
   type ScrollView,
   Text,
   useColorScheme,
@@ -42,11 +39,14 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EmptyState, LegacyHeaderIconButton, Section, Separator } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -59,7 +59,8 @@ import {
 import type { NotificationChannel } from "@/lib/notification-preferences";
 import { subscribeToServerEvent } from "@/lib/server-events";
 import { useCachedApi } from "@/lib/use-cached-api";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -198,6 +199,7 @@ export default function AlertsScreen() {
 
 const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: boolean }) {
   const { t, language } = useLocale();
+  const readable = useParticipantLayout("list");
   const { me } = useMeContext();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
@@ -372,7 +374,7 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
   }
 
   function confirmDelete(item: InboxItem) {
-    Alert.alert(t("notificationsDeleteTitle"), t("notificationsDeleteBody"), [
+    alert(t("notificationsDeleteTitle"), t("notificationsDeleteBody"), [
       { text: t("cancel"), style: "cancel" },
       {
         text: t("delete"),
@@ -542,13 +544,13 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
           gap: 16,
-          padding: 16,
+          ...readable.content,
           paddingBottom: Math.max(32, bottomInset + 16),
           paddingTop: 16,
         }}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
+          <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
         onScroll={Platform.OS === "ios" ? scrollHandler : undefined}
         onScrollEndDrag={Platform.OS === "android" ? loadMoreAtAndroidEnd : undefined}
@@ -603,7 +605,11 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
             <Text
               selectable
               accessibilityLiveRegion="polite"
-              style={{ color: colors.secondaryLabel, fontSize: 13, textAlign: "center" }}
+              style={{
+                color: colors.secondaryLabel,
+                fontSize: type.footnote.fontSize,
+                textAlign: "center",
+              }}
             >
               {t("notificationsShowingLatest", {
                 count: String(data.items.length),
@@ -612,23 +618,23 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
             </Text>
             {data.items.length < data.total ? (
               Platform.OS === "android" ? (
-                <Pressable
+                <PressableFeedback
+                  feedback="opacity"
                   accessibilityLabel={t("notificationsPullToLoadMore")}
                   accessibilityRole="button"
                   accessibilityState={{ busy: loadingMore, disabled: loadingMore }}
                   disabled={loadingMore}
                   onPress={() => void loadMoreRef.current()}
-                  style={({ pressed }) => ({
+                  style={{
                     alignItems: "center",
                     height: 44,
                     justifyContent: "center",
-                    opacity: loadingMore ? 0.55 : pressed ? 0.65 : 1,
                     position: "relative",
                     width: "100%",
-                  })}
+                  }}
                 >
                   {loadMoreIndicator}
-                </Pressable>
+                </PressableFeedback>
               ) : (
                 <View
                   style={{
@@ -670,7 +676,10 @@ function PullHintText({
   }));
   return (
     <Animated.View style={[style, hintStyle]}>
-      <Text selectable={false} style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+      <Text
+        selectable={false}
+        style={{ color: colors.tertiaryLabel, fontSize: type.caption.fontSize }}
+      >
         {label}
       </Text>
     </Animated.View>
@@ -780,11 +789,12 @@ function DeleteRevealAction({
   const style = useAnimatedStyle(() => ({ opacity: progress.value }));
   return (
     <Animated.View style={[{ justifyContent: "center", marginLeft: 8 }, style]}>
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={t("notificationsDelete")}
         onPress={onDelete}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.destructive,
           borderCurve: "continuous",
@@ -792,15 +802,16 @@ function DeleteRevealAction({
           gap: 6,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 18,
-        })}
+        }}
       >
-        <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>
+        <SymbolView name="trash.fill" tintColor={colors.accentText} size={16} accessible={false} />
+        <Text
+          style={{ color: colors.accentText, fontSize: type.compact.fontSize, fontWeight: "700" }}
+        >
           {t("notificationsDelete")}
         </Text>
-      </Pressable>
+      </PressableFeedback>
     </Animated.View>
   );
 }
@@ -820,11 +831,12 @@ function ReadRevealAction({
   const label = unread ? t("alertsMarkRead") : t("alertsMarkUnread");
   return (
     <Animated.View style={[{ justifyContent: "center", marginRight: 8 }, style]}>
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={onPress}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           backgroundColor: colors.accent,
           borderCurve: "continuous",
@@ -832,18 +844,21 @@ function ReadRevealAction({
           gap: 6,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 18,
-        })}
+        }}
       >
         <SymbolView
           name={unread ? "envelope" : "envelope.badge.fill"}
-          tintColor="white"
+          tintColor={colors.accentText}
           size={16}
           accessible={false}
         />
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
-      </Pressable>
+        <Text
+          style={{ color: colors.accentText, fontSize: type.compact.fontSize, fontWeight: "700" }}
+        >
+          {label}
+        </Text>
+      </PressableFeedback>
     </Animated.View>
   );
 }
@@ -915,20 +930,21 @@ function NotificationRow({
       onSwipeableWillOpen={stopSwiping}
       onSwipeableWillClose={stopSwiping}
     >
-      <Pressable
+      <PressableFeedback
         accessibilityRole="button"
         accessibilityState={{ busy: busy || deleting, expanded }}
+        feedback="row"
         onPress={() => {
           if (swiping.current || busy || deleting) return;
           void haptic("light");
           onPress();
         }}
-        style={({ pressed }) => ({
-          backgroundColor: pressed ? colors.elevatedSurface : colors.surface,
+        style={{
+          backgroundColor: colors.surface,
           gap: 9,
           paddingHorizontal: 16,
           paddingVertical: 14,
-        })}
+        }}
       >
         <View style={{ alignItems: "flex-start", flexDirection: "row", gap: 10 }}>
           <View
@@ -937,7 +953,7 @@ function NotificationRow({
             testID={unread ? "notification-unread-dot" : undefined}
             style={{
               backgroundColor: unread ? colors.accent : colors.transparent,
-              borderRadius: 4,
+              borderRadius: radius.full,
               height: 8,
               marginTop: 6,
               width: 8,
@@ -950,7 +966,7 @@ function NotificationRow({
                 style={{
                   color: colors.label,
                   flex: 1,
-                  fontSize: 16,
+                  fontSize: type.callout.fontSize,
                   fontWeight: unread ? "700" : "500",
                 }}
               >
@@ -958,7 +974,11 @@ function NotificationRow({
               </Text>
               <Text
                 selectable
-                style={{ color: colors.tertiaryLabel, fontSize: 12, fontVariant: ["tabular-nums"] }}
+                style={{
+                  color: colors.tertiaryLabel,
+                  fontSize: type.caption.fontSize,
+                  fontVariant: ["tabular-nums"],
+                }}
               >
                 {new Date(item.created_at).toLocaleDateString(language, {
                   month: "short",
@@ -970,7 +990,11 @@ function NotificationRow({
               <Text
                 selectable
                 numberOfLines={expanded ? undefined : 2}
-                style={{ color: colors.secondaryLabel, fontSize: 14, lineHeight: 20 }}
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: type.compact.fontSize,
+                  lineHeight: 20,
+                }}
               >
                 {body}
               </Text>
@@ -980,7 +1004,7 @@ function NotificationRow({
                 style={{
                   backgroundColor: colors.background,
                   borderCurve: "continuous",
-                  borderRadius: 10,
+                  borderRadius: radius.chip,
                   gap: 7,
                   padding: 10,
                 }}
@@ -993,12 +1017,15 @@ function NotificationRow({
                         color: colors.secondaryLabel,
                         flexBasis: 90,
                         flexShrink: 1,
-                        fontSize: 12,
+                        fontSize: type.caption.fontSize,
                       }}
                     >
                       {detail.key}
                     </Text>
-                    <Text selectable style={{ color: colors.label, flex: 1, fontSize: 12 }}>
+                    <Text
+                      selectable
+                      style={{ color: colors.label, flex: 1, fontSize: type.caption.fontSize }}
+                    >
                       {detail.value}
                     </Text>
                   </View>
@@ -1013,7 +1040,7 @@ function NotificationRow({
             accessible={false}
           />
         </View>
-      </Pressable>
+      </PressableFeedback>
     </Swipeable>
   );
 }

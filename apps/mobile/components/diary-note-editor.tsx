@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAvoidingView, Text, TextInput, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { SheetModal } from "@/components/app-sheet";
 import { FloatingGlassButton } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
-import { colors } from "@/theme/colors";
+import { colors, radius, type } from "@/theme";
 
 const NOTE_MAX_LENGTH = 500;
 const HEADER_HEIGHT = 76;
@@ -30,35 +30,25 @@ export function DiaryNoteEditor({
   onSave: (note: string) => void;
 }) {
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
-  // A pageSheet on iOS starts below the status bar; on Android the same
-  // Modal is full screen, so its chrome clears the status bar itself.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [note, setNote] = useState("");
   useEffect(() => {
     if (visible) setNote(initialNote ?? "");
   }, [visible, initialNote]);
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
+    <SheetModal visible={visible} animationType="slide" onRequestClose={onClose}>
       <AdaptiveFrame>
         <View
           style={{
             alignItems: "center",
-            height: HEADER_HEIGHT + sheetTopInset,
+            height: HEADER_HEIGHT,
             justifyContent: "center",
             paddingHorizontal: 72,
-            paddingTop: sheetTopInset,
           }}
         >
           <Text
             accessibilityRole="header"
             numberOfLines={1}
-            style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+            style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
           >
             {t("diaryNote")}
           </Text>
@@ -78,10 +68,10 @@ export function DiaryNoteEditor({
             style={{
               backgroundColor: colors.surface,
               borderCurve: "continuous",
-              borderRadius: 12,
+              borderRadius: radius.control,
               color: colors.label,
               flex: 1,
-              fontSize: 17,
+              fontSize: type.body.fontSize,
               lineHeight: 23,
               maxHeight: 320,
               paddingHorizontal: 16,
@@ -92,14 +82,14 @@ export function DiaryNoteEditor({
           />
         </KeyboardAvoidingView>
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="left"
           icon="xmark"
           accessibilityLabel={t("cancel")}
           onPress={onClose}
         />
         <FloatingGlassButton
-          top={16 + sheetTopInset}
+          top={16}
           side="right"
           icon="checkmark"
           tintColor={colors.accent}
@@ -107,6 +97,6 @@ export function DiaryNoteEditor({
           onPress={() => onSave(note)}
         />
       </AdaptiveFrame>
-    </Modal>
+    </SheetModal>
   );
 }

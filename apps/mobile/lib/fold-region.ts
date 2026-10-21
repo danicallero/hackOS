@@ -1,29 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dimensions } from "react-native";
 
 import FoldRegion, { type DivisionRegion } from "@/modules/fold-region";
 
-/** The two areas either side of a horizontal fold, in window points; null when none applies. */
-export type FoldPanes = {
-  top: { y: number; height: number };
-  bottom: { y: number; height: number };
-};
+/** How often the pose is re-read; a hinge move changes neither the window size nor the traits. */
+export const POSE_POLL_MS = 400;
 
-/**
- * Splits the window at a fold that runs across it (a "laptop" or "tabletop" pose). A
- * vertical fold (book pose) is not split here: the display is then wider than tall and
- * the side-by-side layout is the system's own two-region layout.
- */
-export function foldPanes(region: DivisionRegion | null, windowHeight: number): FoldPanes | null {
-  if (!region || region.width <= region.height) return null;
-  const topHeight = Math.max(0, region.y);
-  const bottomY = region.y + region.height;
-  const bottomHeight = Math.max(0, windowHeight - bottomY);
-  if (topHeight < 120 || bottomHeight < 120) return null;
-  return {
-    top: { y: 0, height: topHeight },
-    bottom: { y: bottomY, height: bottomHeight },
-  };
+export function sameRegion(a: DivisionRegion | null, b: DivisionRegion | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 function readRegion(): DivisionRegion | null {
@@ -34,19 +20,37 @@ function readRegion(): DivisionRegion | null {
   }
 }
 
-/** The fold, re-read when the pose changes (the native module reports it) or the window resizes. */
+/**
+ * The fold, re-read when the window resizes, the native module reports a change, and on a short
+ * poll: moving the hinge between flat and a laptop pose reaches the app as neither, so without
+ * the poll the layout kept the previous pose until the app was relaunched.
+ */
 export function useDivisionRegion(): DivisionRegion | null {
   const [region, setRegion] = useState<DivisionRegion | null>(readRegion);
   useEffect(() => {
-    setRegion(readRegion());
-    const resize = Dimensions.addEventListener("change", () => setRegion(readRegion()));
-    const native = FoldRegion?.addListener?.("onChange", (event) =>
-      setRegion(event.region ?? null),
-    );
+    const refresh = (next: DivisionRegion | null) =>
+      setRegion((current) => (sameRegion(current, next) ? current : next));
+    refresh(readRegion());
+    const resize = Dimensions.addEventListener("change", () => refresh(readRegion()));
+    const native = FoldRegion?.addListener?.("onChange", (event) => refresh(event.region ?? null));
+    const poll = FoldRegion ? setInterval(() => refresh(readRegion()), POSE_POLL_MS) : null;
     return () => {
       resize.remove();
       native?.remove();
+      if (poll) clearInterval(poll);
     };
   }, []);
   return region;
+}
+
+/** The crease of a book pose (running top to bottom), in window points; null otherwise. */
+export function bookCrease(region: DivisionRegion | null): { x: number; width: number } | null {
+  if (!region || region.height <= region.width) return null;
+  return { x: region.x, width: region.width };
+}
+
+/** The book-pose crease, for screens that put a list and its detail on either page. */
+export function useBookCrease(): { x: number; width: number } | null {
+  const region = useDivisionRegion();
+  return useMemo(() => bookCrease(region), [region]);
 }

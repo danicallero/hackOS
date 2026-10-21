@@ -65,6 +65,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "expo-status-bar",
       "expo-web-browser",
       "./plugins/withAndroidResConfigs.js",
+      "./plugins/withAndroidAppleTheme.js",
       "./plugins/withAndroidNfcTagClaim.js",
       "./plugins/withWidgetBundleVersion.js",
       // #935: company-tag links https://<event host>/s/<code> open the app.

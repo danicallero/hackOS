@@ -25,7 +25,7 @@ export default function OthersLayout() {
   const headerShown = isPadIdiom();
 
   return (
-    <Stack screenOptions={{ ...stackScreenOptions, headerShown: false }}>
+    <Stack initialRouteName="account" screenOptions={{ ...stackScreenOptions, headerShown: false }}>
       <Stack.Screen
         name="index"
         options={{ headerShown, headerLargeTitle: true, title: t("tabOthers") }}

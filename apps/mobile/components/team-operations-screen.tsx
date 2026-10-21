@@ -2,10 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   Linking,
-  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -17,6 +14,8 @@ import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { interpolate, type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { AppActivityIndicator } from "@/components/app-activity-indicator";
+import { SheetModal } from "@/components/app-sheet";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import {
   EmptyState,
@@ -26,13 +25,17 @@ import {
   Separator,
   StatusPill,
 } from "@/components/native-ui";
+import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { isPadIdiom } from "@/lib/tabs";
+import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { useOperatorListColumn } from "@/theme/layout-screens";
 
 interface TeamMember {
   userId: number | null;
@@ -205,15 +208,13 @@ function useMemberCandidateSearch(t: ReturnType<typeof useLocale>["t"], enabled 
 
 /** H29/H31 operator team detail: the participant's own queue card, with the extra context an operator needs. */
 export function TeamOperationsScreen() {
+  const listColumn = useOperatorListColumn();
   useColorScheme();
   const { entryId, roomId } = useLocalSearchParams<{ entryId: string; roomId: string }>();
   const headerNavigation = useNavigation(isPadIdiom() ? "/(tabs)/others" : undefined);
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
-  // Android has no page-sheet presentation: these modals are full-screen, so
-  // their chrome has to clear the status bar itself.
-  const sheetTopInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const [entry, setEntry] = useState<TeamEntry | null>(null);
   const [room, setRoom] = useState<RoomView["room"] | null>(null);
   const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
@@ -337,7 +338,7 @@ export function TeamOperationsScreen() {
       const name = memberDisplayName(member);
       const description = t("teamDetailRemoveMemberConfirm", { name });
       const actionLabel = t("teamDetailRemoveMember");
-      Alert.alert(actionLabel, description, [
+      alert(actionLabel, description, [
         { text: t("cancel"), style: "cancel" },
         {
           text: actionLabel,
@@ -427,7 +428,7 @@ export function TeamOperationsScreen() {
     (qc: RepoChallenge) => {
       if (!entry) return;
       const teamName = entry.repo_name ?? t("queueOpsUnnamedTeam");
-      Alert.alert(
+      alert(
         t("teamDetailRemoveFromQueue"),
         t("teamDetailRemoveFromQueueConfirm", { team: teamName, challenge: qc.title }),
         [
@@ -520,7 +521,7 @@ export function TeamOperationsScreen() {
       <EntryBackToolbar fallback="/(tabs)/others" />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ gap: 22, padding: 16, paddingBottom: 40 }}
+        contentContainerStyle={{ ...listColumn, gap: 22, paddingBottom: 40, paddingTop: 16 }}
         style={{ backgroundColor: colors.background }}
       >
         {entry.status === "called" ? (
@@ -529,7 +530,7 @@ export function TeamOperationsScreen() {
             style={{
               backgroundColor: colors.successSurface,
               borderCurve: "continuous",
-              borderRadius: 12,
+              borderRadius: radius.control,
               gap: 7,
               padding: 14,
             }}
@@ -542,13 +543,13 @@ export function TeamOperationsScreen() {
                 accessible={false}
               />
               <Text
-                style={{ color: colors.onSuccessSurface, flex: 1, fontSize: 17, fontWeight: "800" }}
+                style={{ ...type.body, color: colors.onSuccessSurface, flex: 1, fontWeight: "800" }}
               >
                 {t("teamDetailAtDoor", { room: room.name })}
               </Text>
             </View>
             {room.location ? (
-              <Text style={{ color: colors.onSuccessSurface, fontSize: 14, paddingLeft: 30 }}>
+              <Text style={{ ...type.compact, color: colors.onSuccessSurface, paddingLeft: 30 }}>
                 {room.location}
               </Text>
             ) : null}
@@ -579,14 +580,14 @@ export function TeamOperationsScreen() {
                     <Text
                       selectable
                       numberOfLines={1}
-                      style={{ color: colors.label, fontSize: 17 }}
+                      style={{ ...type.body, color: colors.label }}
                     >
                       {memberDisplayName(member)}
                     </Text>
                     <Text
                       selectable
                       numberOfLines={1}
-                      style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                      style={{ ...type.subhead, color: colors.secondaryLabel }}
                     >
                       {member.email}
                     </Text>
@@ -599,10 +600,10 @@ export function TeamOperationsScreen() {
             <>
               {members.length ? <Separator /> : null}
               <View style={{ gap: 8, padding: 16 }}>
-                <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
+                <Text style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}>
                   {t("teamDetailAddMember")}
                 </Text>
-                <Text style={{ color: colors.secondaryLabel, fontSize: 13, lineHeight: 18 }}>
+                <Text style={{ ...type.footnote, color: colors.secondaryLabel, lineHeight: 18 }}>
                   {t("teamDetailAddMemberHint")}
                 </Text>
                 <View
@@ -610,7 +611,7 @@ export function TeamOperationsScreen() {
                     alignItems: "center",
                     backgroundColor: colors.elevatedSurface,
                     borderCurve: "continuous",
-                    borderRadius: 10,
+                    borderRadius: radius.chip,
                     flexDirection: "row",
                     gap: 8,
                     minHeight: 36,
@@ -640,9 +641,10 @@ export function TeamOperationsScreen() {
                     returnKeyType="search"
                     value={memberSearch.query}
                     style={{
+                      ...type.body,
                       color: colors.label,
                       flex: 1,
-                      fontSize: 17,
+
                       minHeight: 36,
                     }}
                   />
@@ -694,22 +696,23 @@ export function TeamOperationsScreen() {
                         <Text
                           selectable
                           numberOfLines={1}
-                          style={{ color: colors.label, fontSize: 17 }}
+                          style={{ ...type.body, color: colors.label }}
                         >
                           {memberCandidateName(candidate)}
                         </Text>
                         <Text
                           selectable
                           numberOfLines={1}
-                          style={{ color: colors.secondaryLabel, fontSize: 15 }}
+                          style={{ ...type.subhead, color: colors.secondaryLabel }}
                         >
                           {candidate.email}
                         </Text>
                       </View>
                       {memberMutation === `add:${candidate.id}` ? (
-                        <ActivityIndicator size="small" color={colors.accent} />
+                        <AppActivityIndicator size="small" color={colors.accent} />
                       ) : (
-                        <Pressable
+                        <PressableFeedback
+                          feedback="opacity"
                           accessibilityRole="button"
                           accessibilityLabel={t("teamDetailAddCandidate", {
                             name: memberCandidateName(candidate),
@@ -717,16 +720,15 @@ export function TeamOperationsScreen() {
                           disabled={memberMutation !== null}
                           onPress={() => void addMember(candidate.id)}
                           hitSlop={8}
-                          style={({ pressed }) => ({
+                          style={{
                             minHeight: 44,
                             minWidth: 44,
                             alignItems: "center",
                             justifyContent: "center",
-                            opacity: pressed ? 0.5 : 1,
-                          })}
+                          }}
                         >
-                          <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
-                        </Pressable>
+                          <Text style={{ ...type.body, color: colors.accent }}>{t("add")}</Text>
+                        </PressableFeedback>
                       )}
                     </View>
                   </View>
@@ -737,8 +739,9 @@ export function TeamOperationsScreen() {
                   <Text
                     selectable
                     style={{
+                      ...type.footnote,
                       color: colors.secondaryLabel,
-                      fontSize: 13,
+
                       paddingTop: 4,
                       textAlign: "center",
                     }}
@@ -756,10 +759,11 @@ export function TeamOperationsScreen() {
             {links.map((link, index) => (
               <View key={link.label}>
                 {index > 0 ? <Separator /> : null}
-                <Pressable
+                <PressableFeedback
+                  feedback="opacity"
                   accessibilityRole="link"
                   onPress={() => void Linking.openURL(link.url!)}
-                  style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+                  style={{}}
                 >
                   <InfoRow
                     label={link.label}
@@ -767,7 +771,7 @@ export function TeamOperationsScreen() {
                     icon={link.icon}
                     accessoryIcon="chevron.right"
                   />
-                </Pressable>
+                </PressableFeedback>
               </View>
             ))}
           </Section>
@@ -806,11 +810,7 @@ export function TeamOperationsScreen() {
         )}
 
         {showAddChallenge ? (
-          <Modal
-            animationType="slide"
-            onRequestClose={closeAddChallenge}
-            presentationStyle="pageSheet"
-          >
+          <SheetModal animationType="slide" onRequestClose={closeAddChallenge}>
             <AdaptiveFrame>
               <ScrollView
                 alwaysBounceVertical
@@ -820,15 +820,16 @@ export function TeamOperationsScreen() {
                   gap: 22,
                   padding: 16,
                   paddingBottom: Math.max(32, insets.bottom + 16),
-                  paddingTop: 16 + sheetTopInset,
+                  paddingTop: 16,
                 }}
               >
                 <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
                   <Text
                     selectable
                     style={{
+                      ...type.title3,
                       color: colors.label,
-                      fontSize: 20,
+
                       fontWeight: "700",
                       textAlign: "center",
                     }}
@@ -839,7 +840,7 @@ export function TeamOperationsScreen() {
 
                 <Section>
                   <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 10 }}>
-                    <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                    <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                       {t("teamDetailSelectChallenge")}
                     </Text>
                   </View>
@@ -847,7 +848,7 @@ export function TeamOperationsScreen() {
 
                 {availableChallengesLoading ? (
                   <View style={{ paddingVertical: 24 }}>
-                    <ActivityIndicator size="small" color={colors.accent} />
+                    <AppActivityIndicator size="small" color={colors.accent} />
                   </View>
                 ) : availableChallenges.length > 0 ? (
                   <Section>
@@ -865,29 +866,29 @@ export function TeamOperationsScreen() {
                           }}
                         >
                           <View style={{ flex: 1 }}>
-                            <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17 }}>
+                            <Text numberOfLines={1} style={{ ...type.body, color: colors.label }}>
                               {ch.title}
                             </Text>
                           </View>
                           {enrolling === ch.id ? (
-                            <ActivityIndicator size="small" color={colors.accent} />
+                            <AppActivityIndicator size="small" color={colors.accent} />
                           ) : (
-                            <Pressable
+                            <PressableFeedback
+                              feedback="opacity"
                               accessibilityRole="button"
                               accessibilityLabel={t("teamDetailAddQueue")}
                               disabled={enrolling !== null}
                               onPress={() => void enrollChallenge(ch.id)}
                               hitSlop={8}
-                              style={({ pressed }) => ({
+                              style={{
                                 minHeight: 44,
                                 minWidth: 44,
                                 alignItems: "center",
                                 justifyContent: "center",
-                                opacity: pressed ? 0.5 : 1,
-                              })}
+                              }}
                             >
-                              <Text style={{ color: colors.accent, fontSize: 17 }}>{t("add")}</Text>
-                            </Pressable>
+                              <Text style={{ ...type.body, color: colors.accent }}>{t("add")}</Text>
+                            </PressableFeedback>
                           )}
                         </View>
                       </View>
@@ -897,8 +898,9 @@ export function TeamOperationsScreen() {
                   <Text
                     selectable
                     style={{
+                      ...type.footnote,
                       color: colors.secondaryLabel,
-                      fontSize: 13,
+
                       paddingTop: 4,
                       textAlign: "center",
                     }}
@@ -909,14 +911,14 @@ export function TeamOperationsScreen() {
               </ScrollView>
 
               <FloatingGlassButton
-                top={16 + sheetTopInset}
+                top={16}
                 side="left"
                 icon="xmark"
                 accessibilityLabel={t("cancel")}
                 onPress={closeAddChallenge}
               />
             </AdaptiveFrame>
-          </Modal>
+          </SheetModal>
         ) : null}
       </ScrollView>
     </>
@@ -950,31 +952,31 @@ function DeleteMemberRevealAction({
         {
           alignItems: "center",
           backgroundColor: colors.destructive,
-          borderBottomLeftRadius: 14,
-          borderTopLeftRadius: 14,
+          borderBottomLeftRadius: radius.container,
+          borderTopLeftRadius: radius.container,
           justifyContent: "center",
           minWidth: 140,
         },
         animatedStyle,
       ]}
     >
-      <Pressable
+      <PressableFeedback
+        feedback="opacity"
         accessibilityRole="button"
         accessibilityLabel={label}
         onPress={onPress}
-        style={({ pressed }) => ({
+        style={{
           alignItems: "center",
           flexDirection: "row",
           gap: 6,
           height: "100%",
           justifyContent: "center",
-          opacity: pressed ? 0.75 : 1,
           paddingHorizontal: 18,
-        })}
+        }}
       >
         <SymbolView name="trash.fill" tintColor="white" size={16} accessible={false} />
-        <Text style={{ color: "white", fontSize: 14, fontWeight: "700" }}>{label}</Text>
-      </Pressable>
+        <Text style={{ ...type.compact, color: "white", fontWeight: "700" }}>{label}</Text>
+      </PressableFeedback>
     </Animated.View>
   );
 }
@@ -1072,57 +1074,58 @@ function QueueTabBar({
         {challenges.map((qc, index) => {
           const selected = index === selectedIndex;
           return (
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               key={`${qc.id}-${qc.room_id ?? "none"}`}
               accessibilityRole="tab"
               accessibilityState={{ selected }}
               accessibilityLabel={qc.title}
               onPress={() => onSelect(index)}
-              style={({ pressed }) => ({
+              style={{
                 alignItems: "center",
                 borderBottomWidth: 2,
                 borderBottomColor: selected ? colors.accent : "transparent",
                 gap: 2,
-                opacity: pressed ? 0.7 : 1,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
-              })}
+              }}
             >
               <Text
                 numberOfLines={1}
                 style={{
+                  ...type.subhead,
                   color: selected ? colors.accent : colors.secondaryLabel,
-                  fontSize: 15,
+
                   fontWeight: selected ? "600" : "400",
                 }}
               >
                 {qc.title}
               </Text>
               {qc.room_name ? (
-                <Text numberOfLines={1} style={{ color: colors.tertiaryLabel, fontSize: 12 }}>
+                <Text numberOfLines={1} style={{ ...type.caption, color: colors.tertiaryLabel }}>
                   {qc.room_name}
                 </Text>
               ) : null}
-            </Pressable>
+            </PressableFeedback>
           );
         })}
         {canEdit ? (
-          <Pressable
+          <PressableFeedback
+            feedback="opacity"
             accessibilityRole="button"
             accessibilityLabel={t("teamDetailAddQueue")}
             onPress={onAdd}
-            style={({ pressed }) => ({
+            style={{
               alignItems: "center",
               borderBottomWidth: 2,
               borderBottomColor: "transparent",
               justifyContent: "center",
-              opacity: pressed ? 0.7 : 1,
               paddingHorizontal: 12,
               paddingVertical: 10,
-            })}
+            }}
           >
             <SymbolView name="plus" tintColor={colors.tertiaryLabel} size={15} accessible={false} />
-          </Pressable>
+          </PressableFeedback>
         ) : null}
       </ScrollView>
     </View>
@@ -1157,10 +1160,10 @@ function QueueDetailView({
           }}
         >
           <View style={{ flex: 1 }}>
-            <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+            <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
               {t("teamDetailChallenge")}
             </Text>
-            <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600", marginTop: 2 }}>
+            <Text style={{ ...type.body, color: colors.label, fontWeight: "600", marginTop: 2 }}>
               {queue.title}
             </Text>
           </View>
@@ -1187,7 +1190,9 @@ function QueueDetailView({
                 size={16}
                 accessible={false}
               />
-              <Text style={{ color: colors.secondaryLabel, fontSize: 15 }}>{queue.room_name}</Text>
+              <Text style={{ ...type.subhead, color: colors.secondaryLabel }}>
+                {queue.room_name}
+              </Text>
             </View>
           </>
         ) : null}
@@ -1204,10 +1209,10 @@ function QueueDetailView({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15, flex: 1 }}>
+                  <Text style={{ ...type.subhead, color: colors.secondaryLabel, flex: 1 }}>
                     {t("queuePositionLabel")}
                   </Text>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                  <Text style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
                     {queue.position}
                   </Text>
                 </View>
@@ -1220,10 +1225,10 @@ function QueueDetailView({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15, flex: 1 }}>
+                  <Text style={{ ...type.subhead, color: colors.secondaryLabel, flex: 1 }}>
                     {t("queueWaitLabel")}
                   </Text>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                  <Text style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
                     {formatEta(queue.eta_minutes, t("queueAnyMoment"))}
                   </Text>
                 </View>
@@ -1236,10 +1241,10 @@ function QueueDetailView({
                     size={16}
                     accessible={false}
                   />
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 15, flex: 1 }}>
+                  <Text style={{ ...type.subhead, color: colors.secondaryLabel, flex: 1 }}>
                     {t("teamDetailCallCount")}
                   </Text>
-                  <Text style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+                  <Text style={{ ...type.body, color: colors.label, fontWeight: "600" }}>
                     {queue.call_count}
                   </Text>
                 </View>
@@ -1251,24 +1256,24 @@ function QueueDetailView({
         {canEdit ? (
           <>
             <Separator inset={16} />
-            <Pressable
+            <PressableFeedback
+              feedback="opacity"
               accessibilityRole="button"
               accessibilityLabel={t("teamDetailRemoveFromQueue")}
               disabled={removing === queue.id}
               onPress={() => onRemove(queue)}
-              style={({ pressed }) => ({
+              style={{
                 alignItems: "center",
                 flexDirection: "row",
                 gap: 8,
                 justifyContent: "center",
                 minHeight: 44,
-                opacity: pressed ? 0.6 : 1,
                 paddingHorizontal: 16,
                 paddingVertical: 12,
-              })}
+              }}
             >
               {removing === queue.id ? (
-                <ActivityIndicator size="small" color={colors.destructive} />
+                <AppActivityIndicator size="small" color={colors.destructive} />
               ) : (
                 <SymbolView
                   name="trash"
@@ -1277,10 +1282,10 @@ function QueueDetailView({
                   accessible={false}
                 />
               )}
-              <Text style={{ color: colors.destructive, fontSize: 15, fontWeight: "600" }}>
+              <Text style={{ ...type.subhead, color: colors.destructive, fontWeight: "600" }}>
                 {t("teamDetailRemoveFromQueue")}
               </Text>
-            </Pressable>
+            </PressableFeedback>
           </>
         ) : null}
       </Section>
@@ -1295,15 +1300,17 @@ function QueueDetailView({
               <View key={row.id}>
                 {index > 0 ? <Separator /> : null}
                 <View style={{ gap: 2, paddingHorizontal: 16, paddingVertical: 10 }}>
-                  <Text style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
+                  <Text style={{ ...type.subhead, color: colors.label, fontWeight: "600" }}>
                     {historyActionLabel(row, t)}
                   </Text>
-                  <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>
+                  <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                     {[row.actor_name, row.actor_surname].filter(Boolean).join(" ") || "—"} ·{" "}
                     {new Date(row.created_at).toLocaleString()}
                   </Text>
                   {row.reason ? (
-                    <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>{row.reason}</Text>
+                    <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
+                      {row.reason}
+                    </Text>
                   ) : null}
                 </View>
               </View>

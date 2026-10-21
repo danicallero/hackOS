@@ -9,7 +9,7 @@ jest.mock("@/components/scanner-action-button", () =>
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { StyleSheet } from "react-native";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
-import { ScannerCodeEntry } from "@/components/scanner-code-entry";
+import { ScannerCodeCard as ScannerCodeEntry } from "@/components/scanner-code-card";
 
 let mockNfcSupported = true;
 beforeEach(() => {

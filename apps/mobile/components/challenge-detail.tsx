@@ -1,8 +1,8 @@
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { Linking, Modal, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Linking, ScrollView, Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { SheetModal } from "@/components/app-sheet";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { NavRow } from "@/components/project-ui";
@@ -11,7 +11,8 @@ import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ChallengeDetail, fetchChallengeDetail, type GalleryPage } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
-import { colors } from "@/theme/colors";
+import { colors, type } from "@/theme";
+import { useParticipantLayout } from "@/theme/layout-participant";
 
 function Prose({ text }: { text: string }) {
   return (
@@ -19,7 +20,7 @@ function Prose({ text }: { text: string }) {
       selectable
       style={{
         color: colors.label,
-        fontSize: 16,
+        fontSize: type.callout.fontSize,
         lineHeight: 23,
         paddingHorizontal: 16,
         paddingVertical: 14,
@@ -90,7 +91,12 @@ export function ChallengeDetailBody({
       {showTitle ? (
         <Text
           accessibilityRole="header"
-          style={{ color: colors.label, fontSize: 28, fontWeight: "700", paddingHorizontal: 4 }}
+          style={{
+            color: colors.label,
+            fontSize: type.title.fontSize,
+            fontWeight: "700",
+            paddingHorizontal: 4,
+          }}
         >
           {challenge.title}
         </Text>
@@ -108,7 +114,14 @@ export function ChallengeDetailBody({
             }}
           >
             <PersonAvatar size={40} name={company.name} uri={company.logoUrl} kind="sponsor" />
-            <Text style={{ color: colors.label, flex: 1, fontSize: 17, fontWeight: "600" }}>
+            <Text
+              style={{
+                color: colors.label,
+                flex: 1,
+                fontSize: type.body.fontSize,
+                fontWeight: "600",
+              }}
+            >
               {company.name}
             </Text>
           </View>
@@ -142,7 +155,7 @@ export function ChallengeDetailBody({
               <Text
                 style={{
                   color: colors.label,
-                  fontSize: 17,
+                  fontSize: type.body.fontSize,
                   paddingHorizontal: 16,
                   paddingVertical: 14,
                 }}
@@ -164,6 +177,7 @@ export function ChallengeDetailBody({
 
 /** Route `/projects/challenge?challengeId=…`, pushed from a project's challenge rows. */
 export function ChallengeDetailScreen() {
+  const readable = useParticipantLayout("form");
   const { challengeId } = useLocalSearchParams<{ challengeId: string }>();
   const id = Number(challengeId);
   const { t } = useLocale();
@@ -188,7 +202,12 @@ export function ChallengeDetailScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{ gap: 24, padding: 16, paddingBottom: 32 }}
+      contentContainerStyle={{
+        gap: 24,
+        paddingVertical: 16,
+        ...readable.content,
+        paddingBottom: 32,
+      }}
       style={{ backgroundColor: colors.background }}
     >
       <ChallengeDetailBody challenge={challenge} onOpenProjects={openProjects} />
@@ -205,14 +224,13 @@ export function ChallengeSheet({
   onClose: () => void;
 }) {
   const { t } = useLocale();
-  const insets = useSafeAreaInsets();
+  const readable = useParticipantLayout("form");
   const { challenge, error, load } = useChallenge(challengeId);
-  const top = process.env.EXPO_OS === "android" ? insets.top : 0;
   return (
-    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+    <SheetModal visible animationType="slide" onRequestClose={onClose}>
       <AdaptiveFrame>
         {error ? (
-          <View style={{ paddingTop: 76 + top }}>
+          <View style={{ paddingTop: 76 }}>
             <RequestFeedback error={error} onRetry={() => void load()} />
           </View>
         ) : challenge === undefined ? (
@@ -224,22 +242,23 @@ export function ChallengeSheet({
             alwaysBounceVertical
             contentContainerStyle={{
               gap: 24,
-              padding: 16,
+              paddingVertical: 16,
+              ...readable.content,
               paddingBottom: 32,
-              paddingTop: 76 + top,
+              paddingTop: 76,
             }}
           >
             <ChallengeDetailBody challenge={challenge} showTitle />
           </ScrollView>
         )}
         <FloatingGlassButton
-          top={16 + top}
+          top={16}
           side="right"
           icon="xmark"
           accessibilityLabel={t("close")}
           onPress={onClose}
         />
       </AdaptiveFrame>
-    </Modal>
+    </SheetModal>
   );
 }
