@@ -3632,5 +3632,14 @@
   "couldNotCloseReport": "Non se puido pechar a denuncia.",
   "couldNotLoadReports": "Non se puideron cargar as denuncias.",
   "toastReports": "Denuncias",
-  "noReportsTitle": "Sen denuncias"
+  "noReportsTitle": "Sen denuncias",
+  "certificateVerifyTitle": "Verificación de certificado",
+  "certificateStatusValid": "Certificado válido",
+  "certificateStatusRevoked": "Certificado revogado",
+  "certificateNotFound": "Este código non corresponde a ningún certificado.",
+  "certificateHolder": "Emitido a",
+  "certificateEvent": "Evento",
+  "certificateHours": "Horas verificadas no recinto",
+  "certificateIssuedBy": "Emitido por",
+  "certificateIssuedOn": "Data de emisión"
 }

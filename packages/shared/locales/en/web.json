@@ -3632,5 +3632,14 @@
   "couldNotCloseReport": "Could not close the report.",
   "couldNotLoadReports": "Could not load the reports.",
   "toastReports": "Reports",
-  "noReportsTitle": "No reports"
+  "noReportsTitle": "No reports",
+  "certificateVerifyTitle": "Certificate verification",
+  "certificateStatusValid": "Valid certificate",
+  "certificateStatusRevoked": "Revoked certificate",
+  "certificateNotFound": "This code does not match any certificate.",
+  "certificateHolder": "Issued to",
+  "certificateEvent": "Event",
+  "certificateHours": "Verified hours at the venue",
+  "certificateIssuedBy": "Issued by",
+  "certificateIssuedOn": "Issued on"
 }

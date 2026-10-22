@@ -13,12 +13,12 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(467);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(28);
+    expect(rows).toHaveLength(478);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(29);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(13);
     // #992 and #1016: match the current inventory enforced by scripts/route-policy-audit.ts.
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(98);
-    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(244);
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(101);
+    expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(251);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(84);
     expect(app.routePolicyExemptions).toEqual([
       { url: "/api/auth/*", exemption: "better-auth-generated" },
@@ -34,6 +34,7 @@ describe("final route-policy ledger", () => {
       "GET /api/public/activities",
       "GET /api/public/applications",
       "GET /api/public/applications/:id",
+      "GET /api/public/certificates/:code",
       "GET /api/public/challenges",
       "GET /api/public/challenges/:id/winners",
       "GET /api/public/degrees",

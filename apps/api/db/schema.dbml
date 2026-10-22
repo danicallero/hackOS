@@ -271,6 +271,24 @@ Table attempt_review_versions {
   previous jsonb
 }
 
+Table attendance_certificates {
+  code text [unique, not null]
+  id integer [pk, increment, not null]
+  issued_at "timestamp with time zone" [not null, default: `now()`]
+  issued_by integer
+  locale text [not null]
+  override_reason text
+  revoked_at "timestamp with time zone"
+  revoked_by integer
+  revoked_reason text
+  snapshot jsonb [not null, note: '#1083 name, event, dates, venue, issuer, verified hours and attended activities as issued; cleared on account removal (H54).']
+  source text [not null]
+  user_id integer [not null]
+  variant text [not null]
+
+  Note: '#1083 issued attendance certificates; rendered on demand from snapshot, verified publicly by code. DNI is never stored here.'
+}
+
 Table audit_log {
   action text [not null]
   actor_id integer
@@ -294,6 +312,16 @@ Table capability_grant_quarantine {
   reason text [not null]
 
   Note: 'H8/H53 repair queue for grants outside packages/shared/src/capabilities.ts; these grants never participate in authorization.'
+}
+
+Table certificate_settings {
+  id integer [pk, not null, default: `1`]
+  issuer_name text [not null, default: `'Asociación Universitaria Grupo de Programadores e Usuarios de Linux (GPUL)'::text`]
+  min_hours "numeric(5,2)"
+  requires_demo boolean [not null, default: `false`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: '#1083 single-row policy: hour threshold (NULL = no automatic issue), demo requirement and issuer name printed on certificates.'
 }
 
 Table challenge_versions {
@@ -1459,6 +1487,9 @@ Ref: application_responses.user_id > users.id
 Ref: attempt_review.attempt_id > queue_entries.id
 Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id
+Ref: attendance_certificates.issued_by > users.id
+Ref: attendance_certificates.revoked_by > users.id
+Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
 Ref: challenge_versions.editor_id > users.id
