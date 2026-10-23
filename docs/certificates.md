@@ -38,8 +38,8 @@ The participant picks one when requesting; each is a separate certificate.
   (`activity_logs`).
 
 Languages: es, gl and en. The text is fixed per language in `pdf.ts`. The
-organisation's logo is optional: put a PNG at `apps/api/assets/certificate/logo.png`
-and it is drawn top right (the Docker image already copies `assets/`). The PDF
+GPUL logo is `apps/api/assets/certificate/logo.png` (rasterised from the
+organisation's `default.svg`); it is drawn top right (the Docker image already copies `assets/`). The PDF
 uses the standard Helvetica fonts, which viewers substitute rather than embed.
 
 ## Document and verification
@@ -48,7 +48,7 @@ The PDF is rendered on demand from `attendance_certificates.snapshot` (name,
 event, dates, venue, issuer, hours, activities as issued). The DNI/NIE is the
 exception: it is read live from `users.dni`, printed only when the account has
 one, and never stored on the certificate or shown by verification. Each
-certificate has a QR and a code pointing to `{WEB_URL}/verify/{code}`;
+certificate has a QR and a code pointing to `{WEB_URL}/verify/{code}` (`https://os.hackudc.com` in deploy, derived from `WEB_DOMAIN`);
 `GET /api/public/certificates/:code` returns valid or revoked, the name, event,
 dates and, for the hours variant only, the hours.
 
