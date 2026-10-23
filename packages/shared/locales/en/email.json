@@ -15,8 +15,8 @@
     },
     "auth": {
       "verify": {
-        "subject": "Verify your hackOS email",
-        "body": "Hi {{name}},\n\nWelcome to hackOS! Confirm your email address to continue with your application:\n\n[Verify email]({{verifyUrl}})\n\nIf you didn't request this, ignore this message."
+        "subject": "Confirm your email for hackOS",
+        "body": "Hi {{name}},\n\nYou created a hackOS account with this address. Confirm it to continue with your application:\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for one hour. If it has expired, you can request a new one from hackOS."
       },
       "reset": {
         "subject": "Reset your hackOS password",

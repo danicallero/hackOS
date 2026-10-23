@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ApiError, api } from "@/lib/api";
+import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
@@ -85,6 +86,10 @@ function VerifyEmailInner() {
   const rawNext = params.get("next");
   const next = safeReturnPath(rawNext, "/event");
   const [cooldown, setCooldown] = useState(0);
+  // The emailed link lands here with the token instead of hitting the API:
+  // link scanners GET every URL in a message, so verification only happens on
+  // an explicit click (a navigation, which scanners never perform).
+  const token = params.get("token");
 
   const form = useForm<Values>({
     mode: "onBlur",
@@ -125,6 +130,29 @@ function VerifyEmailInner() {
       console.error("[auth:resend-verification] request failed", err);
       form.setError("root", { message: t("couldNotSendVerificationEmail") });
     }
+  }
+
+  if (token && !errorInfo && !verified) {
+    const callback = safeReturnPath(params.get("callback"), "/verify-email?verified=1");
+    const confirmUrl = `${API_URL}/api/auth/verify-email?${new URLSearchParams({
+      token,
+      callbackURL: `${window.location.origin}${callback}`,
+    })}`;
+    return (
+      <Card>
+        <CardHeader className="items-center justify-items-center text-center">
+          <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
+            <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
+          </div>
+          <CardTitle>{t("verifyEmail")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button className="w-full" onClick={() => window.location.assign(confirmUrl)}>
+            {t("confirmEmail")}
+          </Button>
+        </CardContent>
+      </Card>
+    );
   }
 
   if (verified) {
