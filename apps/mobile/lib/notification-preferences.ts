@@ -9,6 +9,9 @@ export interface NotificationPreferenceOverride {
 export interface NotificationPreferences {
   channels: NotificationChannel[];
   mandatoryCategories: string[];
+  /** Categories whose email is off while a mobile device is registered (H51). */
+  emailOptInCategories?: string[];
+  hasPushDevice?: boolean;
   overrides: NotificationPreferenceOverride[];
 }
 

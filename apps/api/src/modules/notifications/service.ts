@@ -1,5 +1,7 @@
+import { CHALLENGE_CATEGORY, EMAIL_OPT_IN_CATEGORIES } from "@hackos/shared/notification-channels";
 import type { Queryable } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { hasEventAccess } from "../identity/role.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./templates.js";
 
@@ -16,8 +18,8 @@ import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./tem
  * a convenience wrapper over the same table, not a required entry point.
  *
  * Category 'queue' is the one operational exception (H51: "los avisos
- * operativos de mi turno de cola no son opcionales") — it bypasses
- * notification_preferences entirely and always gets every requested channel.
+ * operativos de mi turno de cola no son opcionales") — in-app and push always
+ * fire, and email follows EMAIL_OPT_IN_CATEGORIES (always on without a device).
  */
 
 export type NotificationChannel = "in_app" | "email" | "push";
@@ -46,15 +48,30 @@ export interface NotifyOptions {
   fixtureMarker?: boolean;
 }
 
-/** Expands `candidates` per H51 preferences: no explicit row = default enabled; explicit row governs. */
+export { CHALLENGE_CATEGORY, EMAIL_OPT_IN_CATEGORIES };
+
+/** True when this person has at least one registered push device (mobile app signed in). */
+export async function hasPushDevice(db: Queryable, userId: number): Promise<boolean> {
+  const { rows } = await db.query(
+    `SELECT EXISTS (SELECT 1 FROM push_tokens WHERE user_id = $1) AS present`,
+    [userId],
+  );
+  return rows[0]?.present === true;
+}
+
+/**
+ * Expands `candidates` per H51 preferences: no explicit row = default enabled;
+ * explicit row governs. Email-opt-in categories (see EMAIL_OPT_IN_CATEGORIES)
+ * default email to "only without a push device"; the mandatory `queue`
+ * category additionally never leaves someone unreachable: without a push
+ * device its email cannot be switched off, so the notice always has a channel.
+ */
 export async function resolveChannels(
   db: Queryable,
   userId: number,
   category: string,
   candidates: NotificationChannel[],
 ): Promise<NotificationChannel[]> {
-  if (category === QUEUE_CATEGORY) return candidates;
-
   const { rows } = await db.query(
     `SELECT channel, enabled FROM notification_preferences WHERE user_id = $1 AND category = $2`,
     [userId, category],
@@ -62,7 +79,17 @@ export async function resolveChannels(
   const overrides = new Map<string, boolean>(
     rows.map((r: { channel: string; enabled: boolean }) => [r.channel, r.enabled]),
   );
-  return candidates.filter((channel) => overrides.get(channel) ?? true);
+  const emailOptIn = EMAIL_OPT_IN_CATEGORIES.includes(category);
+  const noDevice = emailOptIn && !(await hasPushDevice(db, userId));
+  return candidates.filter((channel) => {
+    if (category === QUEUE_CATEGORY && channel !== "email") return true;
+    if (channel === "email" && emailOptIn) {
+      // Queue notices must always reach someone: without a device, email can't be switched off.
+      if (category === QUEUE_CATEGORY && noDevice) return true;
+      return overrides.get("email") ?? noDevice;
+    }
+    return overrides.get(channel) ?? true;
+  });
 }
 
 /**
@@ -147,6 +174,7 @@ export const STATIC_CATEGORIES = [
   "announcements",
   "application",
   "project",
+  CHALLENGE_CATEGORY,
   REMINDER_CHANNEL_CATEGORY,
 ];
 
@@ -156,17 +184,45 @@ export async function getPreferences(
 ): Promise<{
   channels: NotificationChannel[];
   mandatoryCategories: string[];
+  emailOptInCategories: string[];
+  hasPushDevice: boolean;
+  onboardingRequired: boolean;
   overrides: PreferenceRow[];
 }> {
   const { rows } = await db.query(
     `SELECT category, channel, enabled FROM notification_preferences WHERE user_id = $1 ORDER BY category, channel`,
     [userId],
   );
+  const { rows: userRows } = await db.query(
+    `SELECT notification_onboarded_at IS NULL AS pending FROM users WHERE id = $1`,
+    [userId],
+  );
   return {
     channels: ALL_CHANNELS,
     mandatoryCategories: [QUEUE_CATEGORY],
+    emailOptInCategories: EMAIL_OPT_IN_CATEGORIES,
+    hasPushDevice: await hasPushDevice(db, userId),
+    onboardingRequired: userRows[0]?.pending === true && (await hasEventAccess(db, userId)),
     overrides: rows,
   };
+}
+
+/**
+ * Stores the channel choices from the first-run prompt and stamps the user as
+ * onboarded so no device asks again. Idempotent: a repeat call keeps the
+ * first timestamp.
+ */
+export async function completeNotificationOnboarding(
+  db: Queryable,
+  userId: number,
+  items: PreferenceRow[],
+): Promise<void> {
+  await setPreferences(db, userId, items);
+  await db.query(
+    `UPDATE users SET notification_onboarded_at = COALESCE(notification_onboarded_at, now())
+      WHERE id = $1`,
+    [userId],
+  );
 }
 
 export async function setPreferences(
@@ -182,9 +238,9 @@ export async function setPreferences(
   );
   if (!activeRows[0]) throw new NotFoundError("User not found", { userId });
   for (const item of items) {
-    if (item.category === QUEUE_CATEGORY) {
+    if (item.category === QUEUE_CATEGORY && item.channel !== "email") {
       throw new BadRequestError(
-        `Category "${QUEUE_CATEGORY}" is mandatory (H51) and cannot be overridden`,
+        `Category "${QUEUE_CATEGORY}" is mandatory (H51); only its email can be chosen`,
       );
     }
     if (item.category === QUEUE_STAFF_CATEGORY && item.channel !== "push") {

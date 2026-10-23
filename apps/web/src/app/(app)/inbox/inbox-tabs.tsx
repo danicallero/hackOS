@@ -16,10 +16,10 @@ import {
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
+import { channelEnabled, emailLocked } from "@hackos/shared/notification-channels";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
-import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
@@ -63,6 +63,7 @@ const PERSONAL_STREAM = REALTIME_SCOPES.PERSONAL;
 function categoryLabelMap(t: Translate): Record<string, string> {
   return {
     queue: t("categoryQueueCalls"),
+    challenge: t("challenges"),
     announcements: t("announcements"),
     announcement: t("announcements"),
     application: t("categoryApplicationUpdates"),
@@ -573,8 +574,8 @@ export function PreferencesTab() {
     (state) => state === "queued" || state === "removing",
   ).length;
 
-  function overrideFor(category: string, channel: NotificationChannel) {
-    return prefs?.overrides.find((o) => o.category === category && o.channel === channel);
+  function enabledFor(category: string, channel: NotificationChannel) {
+    return prefs ? channelEnabled(prefs, category, channel) : true;
   }
 
   const rows: { category: string; label: string; mandatory?: boolean }[] = [
@@ -594,9 +595,13 @@ export function PreferencesTab() {
       <SectionCard variant="plain" title={t("notificationChannels")}>
         <div className="divide-y divide-border/60">
           {rows.map((row) => {
-            const enabledChannels = prefs.channels.filter(
-              (channel) => row.mandatory || (overrideFor(row.category, channel)?.enabled ?? true),
+            const enabledChannels = prefs.channels.filter((channel) =>
+              enabledFor(row.category, channel),
             );
+            // Queue notices keep in-app and push; only their email can change.
+            const choosableChannels = row.mandatory
+              ? prefs.channels.filter((channel) => channel === "email")
+              : prefs.channels;
             return (
               <div
                 key={row.category}
@@ -608,45 +613,40 @@ export function PreferencesTab() {
                     <span className="text-xs text-muted-foreground">{t("alwaysOn")}</span>
                   )}
                 </div>
-                {row.mandatory ? (
-                  <span className="inline-flex min-h-(--control-height-default) max-w-full items-center gap-2 px-4 text-sm text-muted-foreground">
-                    <span className="min-w-0 text-end">
-                      {enabledChannels.map((channel) => channelLabels[channel]).join(", ")}
-                    </span>
-                    <LockIcon className="size-4 shrink-0" aria-hidden="true" />
-                  </span>
-                ) : (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        disabled={busy || pendingRemovalCount > 0}
-                        className="max-w-full justify-between text-muted-foreground"
-                        aria-label={t("notificationChannelsFor", { label: row.label })}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      disabled={busy || pendingRemovalCount > 0}
+                      className="max-w-full justify-between text-muted-foreground"
+                      aria-label={t("notificationChannelsFor", { label: row.label })}
+                    >
+                      <span className="min-w-0 whitespace-normal text-end">
+                        {enabledChannels.length > 0
+                          ? enabledChannels.map((channel) => channelLabels[channel]).join(", ")
+                          : t("notificationsOff")}
+                      </span>
+                      <CaretDownIcon className="size-4 shrink-0" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {choosableChannels.map((channel) => (
+                      <DropdownMenuCheckboxItem
+                        key={channel}
+                        checked={enabledFor(row.category, channel)}
+                        disabled={
+                          busy ||
+                          pendingRemovalCount > 0 ||
+                          (channel === "email" && emailLocked(prefs, row.category))
+                        }
+                        onSelect={(event) => event.preventDefault()}
+                        onCheckedChange={(enabled) => toggle(row.category, channel, enabled)}
                       >
-                        <span className="min-w-0 whitespace-normal text-end">
-                          {enabledChannels.length > 0
-                            ? enabledChannels.map((channel) => channelLabels[channel]).join(", ")
-                            : t("notificationsOff")}
-                        </span>
-                        <CaretDownIcon className="size-4 shrink-0" aria-hidden="true" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {prefs.channels.map((channel) => (
-                        <DropdownMenuCheckboxItem
-                          key={channel}
-                          checked={overrideFor(row.category, channel)?.enabled ?? true}
-                          disabled={busy || pendingRemovalCount > 0}
-                          onSelect={(event) => event.preventDefault()}
-                          onCheckedChange={(enabled) => toggle(row.category, channel, enabled)}
-                        >
-                          {channelLabels[channel]}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
+                        {channelLabels[channel]}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             );
           })}

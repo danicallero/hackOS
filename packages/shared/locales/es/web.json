@@ -3636,5 +3636,8 @@
   "noReportsTitle": "Sin denuncias",
   "sendEmail": "Enviar correo",
   "testEmailSent": "Correo enviado a {to}",
-  "couldNotSendTestEmail": "No se pudo enviar el correo"
+  "couldNotSendTestEmail": "No se pudo enviar el correo",
+  "notificationOnboardingTitle": "Elige cómo avisarte",
+  "notificationOnboardingWithApp": "Con la app móvil iniciada, estos avisos llegan a ella y no al correo. Activa el correo si lo quieres también.",
+  "notificationOnboardingNoApp": "Sin la app móvil, las llamadas de la cola te llegan siempre por correo, y también los recordatorios de actividades y los retos salvo que desactives el correo."
 }

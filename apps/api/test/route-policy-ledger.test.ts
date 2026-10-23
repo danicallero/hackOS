@@ -13,11 +13,11 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(468);
+    expect(rows).toHaveLength(470);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(28);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(13);
     // #992 and #1016: match the current inventory enforced by scripts/route-policy-audit.ts.
-    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(98);
+    expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(100);
     expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(245);
     expect(rows.filter((row) => row.policy.kind === "contextual")).toHaveLength(84);
     expect(app.routePolicyExemptions).toEqual([

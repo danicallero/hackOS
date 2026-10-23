@@ -116,6 +116,38 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+### Email is opt-in for queue, reminders and challenges (H51, H52)
+
+`queue`, `schedule` (activity reminders) and `challenge` are high-volume, so
+their email is off by default (`EMAIL_OPT_IN_CATEGORIES` in
+`packages/shared/src/notification-channels.ts`, shared by the API and both
+clients). `resolveChannels` applies one rule:
+
+- **No mobile device** (no row in `push_tokens`): email is on, because it is the
+  only way to reach the person outside the web app.
+- **A device is registered**: push replaces it; email is sent only if the person
+  chose it (explicit `notification_preferences` row).
+- **`queue` always reaches someone**: in-app and push cannot be switched off,
+  and without a device its email cannot be switched off either. With a device
+  the person may still add email. `PUT /api/me/notification-preferences`
+  accepts only the email channel for `queue`.
+
+Signing out of the mobile app removes its token
+(`POST /api/me/push-tokens/unregister`), so notices fall back to email; a
+`DeviceNotRegistered` receipt does the same for uninstalled apps.
+
+### First-run onboarding (H51)
+
+People with event access are asked once which of those three categories they
+also want by email. `GET /api/me` carries `notificationOnboardingRequired`
+(`users.notification_onboarded_at IS NULL` and event access); web shows a
+dialog after the profile prompt and mobile a sheet (`/notification-onboarding`)
+after it, never over a scanner. Nothing is pre-selected: the switches show how
+things are today (email on without a device, locked on for queue calls). Saving
+calls `POST /api/me/notification-preferences/onboarding`, which stores only the
+choices that differ from the default and stamps the account, so no other device
+asks again. Closing the prompt defers it until the next session.
+
 Application re-accepts (`POST /api/responses/:responseId/re-accept`, H14/H15)
 use this same pipeline with category `application` and the candidate channels
 `in_app`, `email`, and `push`. The user's preferences still filter those

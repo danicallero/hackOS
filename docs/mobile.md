@@ -97,6 +97,13 @@ below.
 - `POST /api/me/push-tokens` (`apps/api/src/modules/notifications/routes/push-tokens.ts`)
   — upserts the caller's Expo push token; re-registering the same
   token (app restart, re-login) reassigns it rather than duplicating rows.
+  Sign-out calls `POST /api/me/push-tokens/unregister` (`lib/push.ts`, a
+  sign-out listener) so queue calls, activity reminders and challenges fall back
+  to email for someone with no device. Those categories' email is opt-in while a
+  device is registered (see `docs/notifications.md`); the first-run sheet
+  `/notification-onboarding` (`components/notification-onboarding-screen.tsx`,
+  prompted from the root layout) asks once, and Account → Notifications has a
+  row for queue calls (email only) and challenges.
 - `expo()` plugin on the Better Auth instance
   (`apps/api/src/modules/identity/auth.ts`), paired with the client's
   `expoClient()` (`apps/mobile/lib/auth-client.ts`) — overrides the Origin

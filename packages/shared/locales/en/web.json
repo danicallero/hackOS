@@ -3636,5 +3636,8 @@
   "noReportsTitle": "No reports",
   "sendEmail": "Send email",
   "testEmailSent": "Email sent to {to}",
-  "couldNotSendTestEmail": "Could not send the email"
+  "couldNotSendTestEmail": "Could not send the email",
+  "notificationOnboardingTitle": "Choose how we reach you",
+  "notificationOnboardingWithApp": "With the mobile app signed in, these notices arrive there instead of email. Turn email on if you want it as well.",
+  "notificationOnboardingNoApp": "Without the mobile app, queue calls always reach you by email; activity reminders and challenges do too unless you turn email off."
 }
