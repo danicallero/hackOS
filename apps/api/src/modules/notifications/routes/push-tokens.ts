@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { config } from "../../../config.js";
-import { withTransaction } from "../../../db/pool.js";
+import { pool, withTransaction } from "../../../db/pool.js";
 import { requireAuth } from "../../../lib/capabilities.js";
 import { NotFoundError } from "../../../lib/errors.js";
 import { routeAccessOption as routeAccess } from "../../../lib/route-policy.js";
@@ -71,6 +71,28 @@ export function registerPushTokenRoutes(app: FastifyInstance): void {
           tokenHint: pushTokenHint(token),
         });
       }
+      return { status: true as const };
+    },
+  );
+
+  api.post(
+    "/api/me/push-tokens/unregister",
+    {
+      ...routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      preHandler: requireAuth,
+      schema: {
+        summary: "Unregister an Expo push token",
+        description:
+          "Removes the caller's push token when the mobile app signs out, so notices that default to email for people without a device (queue, activity reminders, challenges) go back to email instead of a phone that is no longer signed in. Idempotent; only the caller's own token is removed.",
+        body: registerPushTokenBodySchema.pick({ token: true }),
+        response: { 200: z.object({ status: z.literal(true) }) },
+      },
+    },
+    async (req) => {
+      await pool.query(`DELETE FROM push_tokens WHERE token = $1 AND user_id = $2`, [
+        req.body.token,
+        req.userId as number,
+      ]);
       return { status: true as const };
     },
   );

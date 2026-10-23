@@ -45,6 +45,9 @@ describe("notification preferences (H51)", () => {
     expect(res.json()).toEqual({
       channels: ["in_app", "email", "push"],
       mandatoryCategories: ["queue"],
+      emailOptInCategories: ["queue", "schedule", "challenge"],
+      hasPushDevice: false,
+      onboardingRequired: false,
       overrides: [],
     });
   });
