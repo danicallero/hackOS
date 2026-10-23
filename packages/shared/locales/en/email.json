@@ -1,6 +1,6 @@
 {
   "mail": {
-    "footer": "If you were not expecting this email, you can ignore it and avoid following any links.\n\nThis is an automated message. Please do not reply: this address does not receive incoming messages.\nTo contact the organizers, email hackudc@gpul.org.",
+    "footer": "If you were not expecting this email, you can ignore it and avoid following any links.\n\nThis is an automated message.\nTo contact the organizers, email {{contactEmail}}.",
     "event": {
       "reminder": {
         "subject": "See you at {{eventName}}!",

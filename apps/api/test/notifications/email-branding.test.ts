@@ -42,11 +42,28 @@ async function waitForMessage() {
 }
 
 describe("layout", () => {
-  it("shows the cream logo on a navy band and never the red one", () => {
+  it("swaps the navy and cream logo with the color scheme and never uses the red one", () => {
     const { html } = renderEmailTemplate({ template: "generic", subject: "s", body: "b" }, "en");
+    expect(html).toContain("/email/hackudc-2027-navy.png");
     expect(html).toContain("/email/hackudc-2027-dark.png");
     expect(html).not.toContain("/email/hackudc-2027.png");
-    expect(html).toMatch(/class="email-head"[^>]*bgcolor="#030846"/);
+    expect(html).toContain("[data-ogsc] .email-logo-light");
+  });
+
+  it("uses an ink button and renders a security PIN as a code", () => {
+    const { html } = renderEmailTemplate(
+      {
+        template: "auth.accountRemovalPin",
+        vars: { name: "Ana", pin: "250932", expiresMinutes: 10 },
+      },
+      "en",
+    );
+    expect(html).toContain('class="email-code"');
+    const verify = renderEmailTemplate(
+      { template: "auth.verify", vars: { name: "Ana", verifyUrl: "https://x.test/v" } },
+      "en",
+    );
+    expect(verify.html).toMatch(/class="email-btn"[\s\S]*background:#030846/);
   });
 });
 
