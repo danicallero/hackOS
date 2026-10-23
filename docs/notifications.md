@@ -395,8 +395,9 @@ webfonts retain readable system typography. Narrow layouts reduce padding and
 expand action links, including long verification labels. The document language
 and automated-message footer follow the recipient's es/gl/en language. The
 footer warns recipients to ignore unexpected messages and avoid following
-links, says the sender does not receive incoming messages, and links to the
-organization at `hackudc@gpul.org`. This footer also appears in the outgoing
+links, says the message is automated, and links to the contact address: the
+configured `MAIL_REPLY_TO` (the same address as the `Reply-To` header), falling
+back to `hackudc@gpul.org` when it is unset. This footer also appears in the outgoing
 plain-text MIME part; inbox and push message bodies retain just the message.
 Subject, preheader, escaping and action URLs are preserved.
 These are transactional messages: campaign tracking and unsubscribe controls

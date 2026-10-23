@@ -78,7 +78,7 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     expect(detail.Text).toContain("If you were not expecting this email");
     expect(detail.HTML).toContain("If you were not expecting this email");
     expect(detail.Text).toContain("hackudc@gpul.org");
-    expect(detail.HTML).toContain("this address does not receive incoming messages");
+    expect(detail.HTML).toContain("This is an automated message");
     expect(detail.HTML).toContain('href="mailto:hackudc@gpul.org"');
   });
 

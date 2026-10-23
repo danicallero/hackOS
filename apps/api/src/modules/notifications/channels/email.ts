@@ -1,9 +1,8 @@
 import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
-import { translateEmail } from "../../../lib/i18n.js";
 import { prepareEventReminder } from "../../event/reminder-email.js";
 import type { EmailPayload } from "../templates.js";
-import { normalizeLanguage, renderEmailTemplate } from "../templates.js";
+import { normalizeLanguage, renderEmailFooter, renderEmailTemplate } from "../templates.js";
 import { sendViaSmtp } from "./email-adapters/smtp.js";
 
 export interface MailMessage {
@@ -90,7 +89,7 @@ export async function sendNoticeEmail(
     from: senderFor(mail, undefined),
     subject: rendered.subject,
     html: rendered.html,
-    text: `${rendered.text}\n\n${translateEmail("mail.footer", language, {})}`,
+    text: `${rendered.text}\n\n${renderEmailFooter(language)}`,
   });
 }
 
@@ -128,7 +127,7 @@ export async function sendEmail(
     ...(reminder ? { attachments: [reminder.attachment] } : {}),
     subject: rendered.subject,
     html: rendered.html,
-    text: `${rendered.text}\n\n${translateEmail("mail.footer", language, {})}`,
+    text: `${rendered.text}\n\n${renderEmailFooter(language)}`,
   };
 
   return sendViaSmtp(mail, message);

@@ -45,12 +45,23 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Where recipients write to: the configured Reply-To, else the organizers' address. */
+function contactEmail(): string {
+  return config.MAIL_REPLY_TO || "hackudc@gpul.org";
+}
+
+/** The automated-message footer in `language`, shared by the HTML and plain-text parts. */
+export function renderEmailFooter(language: Language): string {
+  return translateEmail("mail.footer", language, { contactEmail: contactEmail() });
+}
+
 function footerTextToHtml(text: string): string {
+  const address = contactEmail();
   return escapeHtml(text)
     .replace(/\n/g, "<br/>")
     .replace(
-      "hackudc@gpul.org",
-      `<a href="mailto:hackudc@gpul.org" style="color:inherit;text-decoration:underline;">hackudc@gpul.org</a>`,
+      escapeHtml(address),
+      `<a href="mailto:${escapeHtml(address)}" style="color:inherit;text-decoration:underline;">${escapeHtml(address)}</a>`,
     );
 }
 
@@ -169,7 +180,7 @@ function brandWrapHtml(
             <tr>
               <td class="email-rule email-muted" style="padding:24px 0 0;border-top:1px solid ${EMAIL_HAIRLINE};color:${EMAIL_MUTED_TEXT};font-size:13px;line-height:1.6;text-align:left;">
                 <div style="font-weight:600;margin-bottom:4px;">${EMAIL_BRAND_NAME}</div>
-                <div>${footerTextToHtml(translateEmail("mail.footer", language, {}))}</div>
+                <div>${footerTextToHtml(renderEmailFooter(language))}</div>
               </td>
             </tr>
           </table>
