@@ -1,6 +1,6 @@
 {
   "mail": {
-    "footer": "Se non esperabas este correo, podes ignoralo e non premer ningunha ligazón.\n\nEsta é unha mensaxe automática. Non respondas: este enderezo non recibe mensaxes.\nPara contactar coa organización, escribe a hackudc@gpul.org.",
+    "footer": "Se non esperabas este correo, podes ignoralo e non premer ningunha ligazón.\n\nEsta é unha mensaxe automática.\nPara contactar coa organización, escribe a {{contactEmail}}.",
     "event": {
       "reminder": {
         "subject": "Vémonos en {{eventName}}!",
