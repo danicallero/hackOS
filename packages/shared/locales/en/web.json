@@ -142,6 +142,7 @@
   "continueToDestination": "Continue",
   "differentAccount": "Sign in with a different account",
   "verifyEmail": "Verify your email",
+  "confirmEmail": "Confirm email",
   "verificationInstructions": "Follow the link we emailed you. Didn't get it? Send it again.",
   "verifyLinkExpiredTitle": "That link expired",
   "verifyLinkExpiredDesc": "Request a new one.",

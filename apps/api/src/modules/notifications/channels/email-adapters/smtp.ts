@@ -60,6 +60,9 @@ export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promi
     html: message.html,
     text: message.text,
     attachments: message.attachments,
+    // Marks the message as machine-generated: gateways such as Exchange Online
+    // treat it as transactional and mail loops/auto-replies are suppressed.
+    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" },
   });
   if (info.accepted.length === 0 && info.rejected.length > 0) {
     throw new PermanentDispatchError("SMTP relay rejected the recipient");

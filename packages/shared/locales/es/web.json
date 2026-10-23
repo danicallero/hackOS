@@ -142,6 +142,7 @@
   "continueToDestination": "Continuar",
   "differentAccount": "Iniciar sesión con otra cuenta",
   "verifyEmail": "Verifica tu correo",
+  "confirmEmail": "Confirmar correo",
   "verificationInstructions": "Sigue el enlace que te enviamos por correo. Si no lo encuentras, puedes reenviarlo.",
   "verifyLinkExpiredTitle": "El enlace ha caducado",
   "verifyLinkExpiredDesc": "Pide un enlace nuevo.",
