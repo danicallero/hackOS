@@ -52,6 +52,8 @@ export interface Me {
   isSponsorRep?: boolean;
   /** #933: profile data to ask for on next entry. */
   pendingProfileTasks?: ProfileTask[];
+  /** H51: first-run prompt to choose notification channels (people with event access). */
+  notificationOnboardingRequired?: boolean;
 }
 
 export type ProfileTask = "dietary" | "meal_plan";

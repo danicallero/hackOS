@@ -26,6 +26,11 @@ export const setPreferencesBodySchema = z.object({
   preferences: z.array(preferenceItemSchema).min(1),
 });
 
+/** First-run channel prompt: may be empty (the person kept every default). */
+export const notificationOnboardingBodySchema = z.object({
+  preferences: z.array(preferenceItemSchema).max(20),
+});
+
 export const inboxQuerySchema = z.object({
   unread: z
     .enum(["true", "false"])

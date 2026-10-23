@@ -1,9 +1,10 @@
 import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import { apiFetch } from "./api";
+import { apiFetch, getCurrentSessionCookie } from "./api";
+import { registerSignOutListener } from "./sign-out-events";
 
-let registeredToken: { token: string; userId: number } | null = null;
+let registeredToken: { token: string; userId: number; sessionCookie: string } | null = null;
 
 /** The Expo push token this device registered for the signed-in account, if any. */
 export function getRegisteredPushToken(userId: number): string | null {
@@ -50,5 +51,23 @@ async function registerToken(userId: number): Promise<void> {
       platform: Platform.OS === "ios" ? "ios" : Platform.OS === "android" ? "android" : undefined,
     }),
   });
-  registeredToken = { token, userId };
+  registeredToken = { token, userId, sessionCookie: getCurrentSessionCookie() };
 }
+
+/**
+ * Sign-out removes this device's token so notices that default to email for
+ * people without a device (queue calls above all) go back to email instead of
+ * a phone nobody is signed in on. Goes out with the session that registered
+ * it, before the sign-out flow revokes that session.
+ */
+registerSignOutListener(async () => {
+  const current = registeredToken;
+  registeredToken = null;
+  if (!current) return;
+  await apiFetch("/api/me/push-tokens/unregister", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: current.token }),
+    ...(current.sessionCookie ? { sessionCookie: current.sessionCookie } : {}),
+  }).catch(() => undefined);
+});

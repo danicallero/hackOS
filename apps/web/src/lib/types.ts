@@ -61,6 +61,8 @@ export interface Me {
   dietaryConfirmedAt: string | null;
   /** #933: next-entry prompt steps, in display order. */
   pendingProfileTasks: ("dietary" | "meal_plan")[];
+  /** H51: first-run prompt to choose notification channels (people with event access). */
+  notificationOnboardingRequired: boolean;
 }
 
 export type Language = "en" | "es" | "gl";

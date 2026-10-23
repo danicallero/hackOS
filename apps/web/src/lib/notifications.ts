@@ -66,11 +66,15 @@ export interface PreferenceOverride {
 export interface PreferencesResponse {
   channels: NotificationChannel[];
   mandatoryCategories: string[];
+  /** Categories whose email is off while a mobile device is registered (H51). */
+  emailOptInCategories: string[];
+  hasPushDevice: boolean;
+  onboardingRequired: boolean;
   overrides: PreferenceOverride[];
 }
 
 /** Categories every user sees in the matrix even with zero override rows (mirrors service.ts STATIC_CATEGORIES). "schedule" is the shared channel config for all activity reminders (H51 rework). */
-export const STATIC_CATEGORIES = ["announcements", "application", "schedule"];
+export const STATIC_CATEGORIES = ["announcements", "application", "challenge", "schedule"];
 
 export interface AuditRow {
   id: number;
@@ -142,6 +146,10 @@ export const notificationsApi = {
   getPreferences: () => api.get<PreferencesResponse>("/api/me/notification-preferences"),
   setPreferences: (items: PreferenceOverride[]) =>
     api.put<PreferencesResponse>("/api/me/notification-preferences", { preferences: items }),
+  completeOnboarding: (items: PreferenceOverride[]) =>
+    api.post<PreferencesResponse>("/api/me/notification-preferences/onboarding", {
+      preferences: items,
+    }),
 
   queryAudit: (filters: AuditFilters) =>
     api.get<{ items: AuditRow[]; total: number }>("/api/audit", { query: { ...filters } }),
