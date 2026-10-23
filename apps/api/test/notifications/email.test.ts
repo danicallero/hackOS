@@ -234,7 +234,7 @@ describe("SMTP via Mailpit (default dev provider)", () => {
     await drainOutboxOnce();
     const messages = await waitForMailpit(1);
     expect(messages[0]!.To[0]!.Address).toBe("secondary@test.local");
-    expect(messages[0]!.Subject).toBe("Verifica tu correo de hackOS"); // es, not en
+    expect(messages[0]!.Subject).toBe("Confirma tu correo para hackOS"); // es, not en
     const detail = await getMailpitMessage(messages[0]!.ID);
     expect(detail.Text).toContain("http://verify");
   });
