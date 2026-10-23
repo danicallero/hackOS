@@ -221,6 +221,7 @@ interface UserRow {
   food_intolerance_notes: string | null;
   dietary_data_state: (typeof DIETARY_DATA_STATES)[number];
   dietary_confirmed_at: Date | null;
+  notification_onboarded_at: Date | null;
   shirt_size: string | null;
   university_id: number | null;
   notes: string | null;
@@ -511,6 +512,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             hasStatisticsPanels: z.boolean(),
             // #933: profile data the client should ask for on next entry.
             pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
+            // H51: people with event access are asked once, on web and mobile,
+            // which channels reach them (email is opt-in for queue, reminders
+            // and challenges); false once answered on any device.
+            notificationOnboardingRequired: z.boolean(),
             // H45/H47: the event's IANA timezone. Every datetime web and mobile
             // show or accept is this wall clock, never the device's; readable by
             // any signed-in account (no capability), unlike GET /api/event.
@@ -597,6 +602,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           dietaryLocked,
           hasStatisticsPanels,
           pendingProfileTasks,
+          notificationOnboardingRequired: eventAccess && row.notification_onboarded_at === null,
           eventTimezone,
         };
       });

@@ -116,6 +116,38 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+### Email is opt-in for queue, reminders and challenges (H51, H52)
+
+`queue`, `schedule` (activity reminders) and `challenge` are high-volume, so
+their email is off by default (`EMAIL_OPT_IN_CATEGORIES` in
+`packages/shared/src/notification-channels.ts`, shared by the API and both
+clients). `resolveChannels` applies one rule:
+
+- **No mobile device** (no row in `push_tokens`): email is on, because it is the
+  only way to reach the person outside the web app.
+- **A device is registered**: push replaces it; email is sent only if the person
+  chose it (explicit `notification_preferences` row).
+- **`queue` always reaches someone**: in-app and push cannot be switched off,
+  and without a device its email cannot be switched off either. With a device
+  the person may still add email. `PUT /api/me/notification-preferences`
+  accepts only the email channel for `queue`.
+
+Signing out of the mobile app removes its token
+(`POST /api/me/push-tokens/unregister`), so notices fall back to email; a
+`DeviceNotRegistered` receipt does the same for uninstalled apps.
+
+### First-run onboarding (H51)
+
+People with event access are asked once which of those three categories they
+also want by email. `GET /api/me` carries `notificationOnboardingRequired`
+(`users.notification_onboarded_at IS NULL` and event access); web shows a
+dialog after the profile prompt and mobile a sheet (`/notification-onboarding`)
+after it, never over a scanner. Nothing is pre-selected: the switches show how
+things are today (email on without a device, locked on for queue calls). Saving
+calls `POST /api/me/notification-preferences/onboarding`, which stores only the
+choices that differ from the default and stamps the account, so no other device
+asks again. Closing the prompt defers it until the next session.
+
 Application re-accepts (`POST /api/responses/:responseId/re-accept`, H14/H15)
 use this same pipeline with category `application` and the candidate channels
 `in_app`, `email`, and `push`. The user's preferences still filter those
@@ -306,7 +338,10 @@ everyone, role/dietary filters, or specific people so exclusivity is visible
 in the UI, channel checkboxes, and a publication
 section whose fields change shape depending on `screenPlacement`/targeting
 mode). There are no dedicated `/announcements/new` or `/announcements/[id]`
-routes.
+routes. People with `notifications:send` also get a **Send email** action that
+posts to `POST /api/notifications/test-email`: one branded notice from the
+notifications sender to any address, sent straight through the relay (not the
+outbox) so a relay failure is visible, and audited without the body.
 
 ## Mobile admin UI
 
@@ -336,13 +371,16 @@ resolved colors rather than CSS variables: light mail uses a blue-tinted shell,
 cream card, ink text, subtle borders and 8px surfaces. Primary actions
 are red/cream pills in both themes; dark canvas, card, footer and borders
 mirror the web's semantic pairs.
-The header shares the card surface in both schemes, without a decorative top
-rule. Its centered, responsive HackUDC 2027 marketing wordmark comes from the
-supplied edition SVGs: red `logo_h-white.svg` for
-light mail and cream `logo_h-white (4).svg` for supported dark-mode clients.
-Original vectors and 720px-wide transparent PNG exports are hosted under
-`public/email/hackudc-2027{,-dark}.{svg,png}`. PNGs preserve compatibility;
-clients without dark-mode CSS use the red logo. The previous `brand-mark.png`
+Colors follow the [brand page](https://hackudc.com/en/brand/): navy text, sky-blue
+tints for page and footer, red for emphasis and actions, and red 45% for
+actions on the dark theme. The header is a fixed navy band carrying the
+centered, responsive HackUDC 2027 wordmark in its cream variant (the pairing
+the brand allows on navy). The band does not change with the color scheme, so
+clients that force their own dark mode and ignore `prefers-color-scheme` never
+show the red logo, which the brand reserves for white or light-blue
+backgrounds. The vectors and 720px-wide transparent PNG exports are hosted
+under `public/email/hackudc-2027{,-dark}.{svg,png}`; only the cream
+`-dark` export is used in mail. The previous `brand-mark.png`
 stays available for images in already-sent messages. The footer retains hackOS as the sending
 platform. Edition red is the action accent, independent of admission outcome.
 

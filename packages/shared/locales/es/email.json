@@ -15,8 +15,8 @@
     },
     "auth": {
       "verify": {
-        "subject": "Verifica tu correo de hackOS",
-        "body": "Hola {{name}},\n\n¡Bienvenido a hackOS! Confirma tu dirección de correo para continuar con tu solicitud:\n\n[Verificar correo]({{verifyUrl}})\n\nSi no lo has pedido tú, ignora este mensaje."
+        "subject": "Confirma tu correo para hackOS",
+        "body": "Hola {{name}},\n\nHas creado una cuenta de hackOS con esta dirección. Confírmala para continuar con tu solicitud:\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante una hora. Si ha caducado, puedes pedir uno nuevo desde hackOS."
       },
       "reset": {
         "subject": "Restablece tu contraseña de hackOS",

@@ -304,7 +304,6 @@
   "walletConfirmSpotDeadline": "Confirm before {date}.",
   "walletDownloadPkpass": "Download .pkpass",
   "walletDownloadPkpassHint": "For wallet apps that can import a .pkpass file directly.",
-  "notificationsMandatoryHint": "Queue-call notices are always sent — they aren't optional.",
   "notificationsMessages": "Messages",
   "notificationsPreferences": "Preferences",
   "notificationsManage": "Manage",
@@ -367,7 +366,6 @@
   "notificationsPullToLoadMore": "Pull down to load more messages",
   "notificationsRequired": "Required",
   "queueCalls": "Queue calls",
-  "notificationsAlwaysOn": "Always on",
   "liveActivities": "Live Activities",
   "liveUpdates": "Live updates",
   "liveActivityKindActivity": "Meal and activity scanning",
@@ -985,5 +983,10 @@
   "reportSent": "Report sent",
   "reportSentBody": "The organisers will review it.",
   "reportFailed": "Could not send the report",
-  "reportTooMany": "You have too many open reports"
+  "reportTooMany": "You have too many open reports",
+  "notificationsChallenges": "Challenges",
+  "notificationOnboardingTitle": "Choose how we reach you",
+  "notificationOnboardingWithApp": "With this app signed in, these notices arrive here instead of email. Turn email on if you want it as well.",
+  "notificationOnboardingNoApp": "Without the app signed in, queue calls always reach you by email; activity reminders and challenges do too unless you turn email off.",
+  "notificationsMandatoryHint": "Queue calls always arrive in the app. Email is optional while this phone is signed in; without it, they reach you by email."
 }

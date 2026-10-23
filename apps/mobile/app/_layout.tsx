@@ -26,6 +26,10 @@ import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
 import { setNfcShield } from "@/lib/nfc-reader";
+import {
+  NOTIFICATION_ONBOARDING_PATH,
+  shouldPresentNotificationOnboarding,
+} from "@/lib/notification-onboarding";
 import { setupNotificationListeners } from "@/lib/notifications-setup";
 import {
   PROFILE_TASKS_PATH,
@@ -117,6 +121,10 @@ function RootLayoutSessionContents() {
       <MobileAccessGate authenticated={authenticated} />
       <PersonalEventStream authenticated={authenticated} />
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
+      <NotificationOnboardingPrompt
+        authenticated={authenticated}
+        sessionPending={initialSessionPending}
+      />
       <PendingCompanyTagResume authenticated={authenticated} />
       <AdaptiveFrame padSides={false}>
         <AppBackGesture>
@@ -338,6 +346,49 @@ function ProfileTasksPrompt({
 }
 
 /**
+ * H51: opens the first-run notification channel sheet once per session, after
+ * the profile sheet and never over a scanner.
+ */
+function NotificationOnboardingPrompt({
+  authenticated,
+  sessionPending,
+}: {
+  authenticated: boolean;
+  sessionPending: boolean;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { me, offline } = useMeContext();
+  const navigationState = useRootNavigationState();
+  const base = {
+    me,
+    offline,
+    navigationReady: Boolean(navigationState?.key),
+    sessionPending,
+    pathname,
+  };
+  const present =
+    authenticated &&
+    shouldPresentNotificationOnboarding({
+      ...base,
+      profileTasksPending: shouldPresentProfileTasks(base),
+    });
+  const requestedFrom = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!present || requestedFrom.current === pathname) return;
+    requestedFrom.current = pathname;
+    router.push(NOTIFICATION_ONBOARDING_PATH);
+  }, [pathname, present, router]);
+
+  useEffect(() => {
+    if (requestedFrom.current !== pathname) requestedFrom.current = null;
+  }, [pathname]);
+
+  return null;
+}
+
+/**
  * #935: a company-tag link opened while signed out (`app/s/[code].tsx`) is
  * collected once the account may enter the app.
  */
@@ -508,6 +559,10 @@ function RootLayoutNav({
           />
           <Stack.Screen
             name="profile-tasks"
+            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
+          />
+          <Stack.Screen
+            name="notification-onboarding"
             options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
           />
           <Stack.Screen

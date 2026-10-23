@@ -125,13 +125,7 @@ documentation retirement notes, generated output and the guard's own definition
 and tests are outside this runtime check. Ordinary scanner or Live Activity
 reconciliation remains supported.
 
-Until #1016 removes secondary email, only the exact existing `en`, `es` and `gl`
-values at `web.json:devpostEmailPlaceholder`, `web.json:willUseToMatchDevpost`
-and `email.json:mail.auth.verifySecondaryEmail.body` are temporarily exempt.
-The guard pins each path/key/value digest, so another key, file or edited value
-cannot reuse the exception. Remove these nine exceptions and their dedicated
-test when #1016 lands; no project import capability or compatibility export
-remains.
+No project import capability or compatibility export remains.
 
 ## Teams, invitations and challenge intent
 

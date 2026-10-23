@@ -304,7 +304,6 @@
   "walletConfirmSpotDeadline": "Confirma antes do {date}.",
   "walletDownloadPkpass": "Descargar .pkpass",
   "walletDownloadPkpassHint": "Para apps de carteira que poden importar un ficheiro .pkpass directamente.",
-  "notificationsMandatoryHint": "Os avisos de quenda de cola sempre se envían — non son opcionais.",
   "notificationsMessages": "Mensaxes",
   "notificationsPreferences": "Preferencias",
   "notificationsManage": "Xestionar",
@@ -367,7 +366,6 @@
   "notificationsPullToLoadMore": "Tira cara abaixo para cargar máis mensaxes",
   "notificationsRequired": "Obrigatorias",
   "queueCalls": "Avisos de quenda",
-  "notificationsAlwaysOn": "Sempre activo",
   "liveActivities": "Actividades en directo",
   "liveUpdates": "Actualizacións en directo",
   "liveActivityKindActivity": "Escaneo de comidas e actividades",
@@ -985,5 +983,10 @@
   "reportSent": "Denuncia enviada",
   "reportSentBody": "A organización revisarana.",
   "reportFailed": "Non se puido enviar a denuncia",
-  "reportTooMany": "Tes demasiadas denuncias abertas"
+  "reportTooMany": "Tes demasiadas denuncias abertas",
+  "notificationsChallenges": "Retos",
+  "notificationOnboardingTitle": "Escolle como avisarte",
+  "notificationOnboardingWithApp": "Con esta app iniciada, estes avisos chegan aquí e non ao correo. Activa o correo se o queres tamén.",
+  "notificationOnboardingNoApp": "Sen a app iniciada, as chamadas da cola chégante sempre por correo, e tamén os recordatorios de actividades e os retos salvo que desactives o correo.",
+  "notificationsMandatoryHint": "Os avisos de quenda sempre chegan á app. O correo é opcional mentres este móbil teña a sesión iniciada; sen ela, chégante por correo."
 }

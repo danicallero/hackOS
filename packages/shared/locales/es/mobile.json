@@ -304,7 +304,6 @@
   "walletConfirmSpotDeadline": "Confirma antes del {date}.",
   "walletDownloadPkpass": "Descargar .pkpass",
   "walletDownloadPkpassHint": "Para apps de cartera que pueden importar un archivo .pkpass directamente.",
-  "notificationsMandatoryHint": "Los avisos de turno de cola siempre se envían — no son opcionales.",
   "notificationsMessages": "Mensajes",
   "notificationsPreferences": "Preferencias",
   "notificationsManage": "Gestionar",
@@ -367,7 +366,6 @@
   "notificationsPullToLoadMore": "Tira hacia abajo para cargar más mensajes",
   "notificationsRequired": "Obligatorias",
   "queueCalls": "Avisos de turno",
-  "notificationsAlwaysOn": "Siempre activo",
   "liveActivities": "Actividades en directo",
   "liveUpdates": "Actualizaciones en directo",
   "liveActivityKindActivity": "Escaneo de comidas y actividades",
@@ -985,5 +983,10 @@
   "reportSent": "Denuncia enviada",
   "reportSentBody": "La organización la revisará.",
   "reportFailed": "No se pudo enviar la denuncia",
-  "reportTooMany": "Tienes demasiadas denuncias abiertas"
+  "reportTooMany": "Tienes demasiadas denuncias abiertas",
+  "notificationsChallenges": "Retos",
+  "notificationOnboardingTitle": "Elige cómo avisarte",
+  "notificationOnboardingWithApp": "Con esta app iniciada, estos avisos llegan aquí y no al correo. Activa el correo si lo quieres también.",
+  "notificationOnboardingNoApp": "Sin la app iniciada, las llamadas de la cola te llegan siempre por correo, y también los recordatorios de actividades y los retos salvo que desactives el correo.",
+  "notificationsMandatoryHint": "Los avisos de turno siempre llegan a la app. El correo es opcional mientras este móvil tenga la sesión iniciada; sin ella, te llegan por correo."
 }

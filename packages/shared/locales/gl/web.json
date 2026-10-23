@@ -142,6 +142,7 @@
   "continueToDestination": "Continuar",
   "differentAccount": "Iniciar sesión con outra conta",
   "verifyEmail": "Verifica o teu correo",
+  "confirmEmail": "Confirmar correo",
   "verificationInstructions": "Segue a ligazón que che enviamos por correo. Se non a atopas, podes reenviala.",
   "verifyLinkExpiredTitle": "A ligazón caducou",
   "verifyLinkExpiredDesc": "Pide unha ligazón nova.",
@@ -3560,8 +3561,6 @@
   "projectWinnersPublished": "Gañadores publicados",
   "myProjectEmptyDesc": "Crea un proxecto e invita o teu equipo.",
   "resetJudgingDataDeletesProjects": "Elimina proxectos, equipos e datos de avaliación.",
-  "devpostEmailPlaceholder": "teu@correo-devpost.com",
-  "willUseToMatchDevpost": "Usarémolo para vincular os teus proxectos de Devpost ao importalos.",
   "capabilityDescriptionProjectsRead": "Ler proxectos",
   "capabilityDescriptionProjectsEdit": "Editar proxectos",
   "galleryNotOpen": "A galería aínda non está aberta",
@@ -3634,5 +3633,11 @@
   "couldNotCloseReport": "Non se puido pechar a denuncia.",
   "couldNotLoadReports": "Non se puideron cargar as denuncias.",
   "toastReports": "Denuncias",
-  "noReportsTitle": "Sen denuncias"
+  "noReportsTitle": "Sen denuncias",
+  "sendEmail": "Enviar correo",
+  "testEmailSent": "Correo enviado a {to}",
+  "couldNotSendTestEmail": "Non se puido enviar o correo",
+  "notificationOnboardingTitle": "Escolle como avisarte",
+  "notificationOnboardingWithApp": "Coa app móbil iniciada, estes avisos chegan a ela e non ao correo. Activa o correo se o queres tamén.",
+  "notificationOnboardingNoApp": "Sen a app móbil, as chamadas da cola chégante sempre por correo, e tamén os recordatorios de actividades e os retos salvo que desactives o correo."
 }

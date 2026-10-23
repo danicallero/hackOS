@@ -142,6 +142,7 @@
   "continueToDestination": "Continue",
   "differentAccount": "Sign in with a different account",
   "verifyEmail": "Verify your email",
+  "confirmEmail": "Confirm email",
   "verificationInstructions": "Follow the link we emailed you. Didn't get it? Send it again.",
   "verifyLinkExpiredTitle": "That link expired",
   "verifyLinkExpiredDesc": "Request a new one.",
@@ -3560,8 +3561,6 @@
   "projectWinnersPublished": "Winners published",
   "myProjectEmptyDesc": "Create a project and invite your team.",
   "resetJudgingDataDeletesProjects": "Deletes projects, teams and judging data.",
-  "devpostEmailPlaceholder": "you@devpost-email.com",
-  "willUseToMatchDevpost": "We'll use it to match your Devpost projects on import.",
   "capabilityDescriptionProjectsRead": "Read projects",
   "capabilityDescriptionProjectsEdit": "Edit projects",
   "galleryNotOpen": "The gallery isn't open yet",
@@ -3634,5 +3633,11 @@
   "couldNotCloseReport": "Could not close the report.",
   "couldNotLoadReports": "Could not load the reports.",
   "toastReports": "Reports",
-  "noReportsTitle": "No reports"
+  "noReportsTitle": "No reports",
+  "sendEmail": "Send email",
+  "testEmailSent": "Email sent to {to}",
+  "couldNotSendTestEmail": "Could not send the email",
+  "notificationOnboardingTitle": "Choose how we reach you",
+  "notificationOnboardingWithApp": "With the mobile app signed in, these notices arrive there instead of email. Turn email on if you want it as well.",
+  "notificationOnboardingNoApp": "Without the mobile app, queue calls always reach you by email; activity reminders and challenges do too unless you turn email off."
 }

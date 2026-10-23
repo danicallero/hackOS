@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
+import { channelEnabled, emailLocked } from "@hackos/shared/notification-channels";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch } from "./api";
 import { haptic } from "./haptics";
 import { useMeContext } from "./me-context";
@@ -63,15 +63,34 @@ export function useNotificationPreferences() {
 
   useEffect(() => subscribeToNotificationPreferenceChanges((next) => setData(next)), [setData]);
 
+  // Older cached payloads lack the device fields: assume a device, so email stays an opt-in.
+  const channelState = useMemo(
+    () => ({
+      mandatoryCategories: prefs?.mandatoryCategories ?? [],
+      emailOptInCategories: prefs?.emailOptInCategories ?? [],
+      hasPushDevice: prefs?.hasPushDevice ?? true,
+      overrides: prefs?.overrides ?? [],
+    }),
+    [prefs],
+  );
+
   const enabledFor = useCallback(
     (category: string, channel: NotificationChannel): boolean => {
-      const override = prefs?.overrides.find(
-        (row) => row.category === category && row.channel === channel,
-      );
-      // Queue staff alerts are opt-in; every other category defaults on.
-      return override ? override.enabled : category !== "queue.staff";
+      // Queue staff alerts are opt-in; every other category follows the shared rule.
+      if (category === "queue.staff") {
+        return (
+          channelState.overrides.find((row) => row.category === category && row.channel === channel)
+            ?.enabled ?? false
+        );
+      }
+      return channelEnabled(channelState, category, channel);
     },
-    [prefs],
+    [channelState],
+  );
+
+  const emailLockedFor = useCallback(
+    (category: string) => emailLocked(channelState, category),
+    [channelState],
   );
 
   async function toggle(category: string, channel: NotificationChannel, enabled: boolean) {
@@ -105,6 +124,7 @@ export function useNotificationPreferences() {
     staleSince,
     load,
     enabledFor,
+    emailLockedFor,
     toggle,
     savingKey,
     actionError,

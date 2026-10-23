@@ -108,9 +108,11 @@ const trustedOrigins = [
  * in trustedOrigins above).
  */
 function withFrontendCallback(token: string, path: string): string {
-  const callbackURL = `${WEB_URL}${path}`;
-  const params = new URLSearchParams({ token, callbackURL });
-  return `${config.BETTER_AUTH_URL}/api/auth/verify-email?${params.toString()}`;
+  // The emailed link opens a web page that asks for a click before calling the
+  // API: link scanners (Microsoft Safe Links, antivirus gateways) GET every URL
+  // in a message, and a direct GET to the API verified accounts on their own.
+  const params = new URLSearchParams({ token, callback: path });
+  return `${WEB_URL}/verify-email?${params.toString()}`;
 }
 
 /**
