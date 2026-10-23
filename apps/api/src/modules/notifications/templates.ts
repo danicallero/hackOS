@@ -54,16 +54,19 @@ function footerTextToHtml(text: string): string {
     );
 }
 
-// H52: email-safe values mirror docs/DESIGN.md §2 and the active edition in
-// apps/web/src/styles/theme.css. Inline hex fallbacks work without CSS variables.
+// H52: email-safe values follow the brand page (hackudc.com/en/brand): navy for
+// text, cream as the logo colour on navy, red for emphasis, sky-blue tints for
+// backgrounds. Inline hex values work without CSS variables.
 const EMAIL_BRAND_NAME = "hackOS";
-const EMAIL_ACCENT_COLOR = "#bf2100";
-const EMAIL_BACKGROUND_COLOR = "#e6f0fb"; // --hackos-shell: blue 12% + cream
-const EMAIL_CARD_COLOR = "#fafafa";
-const EMAIL_CARD_BORDER_COLOR = "#c9cad6"; // --border: ink 20% + cream
-const EMAIL_TEXT_COLOR = "#030846";
-const EMAIL_MUTED_TEXT_COLOR = "#484c78"; // --muted-foreground: ink 72% + cream
-const EMAIL_FOOTER_BACKGROUND_COLOR = "#edf4fb"; // --muted: blue 15% + cream
+const EMAIL_NAVY = "#030846";
+const EMAIL_CREAM = "#FAFAFA";
+const EMAIL_ACCENT_COLOR = "#BF2100"; // brand red: emphasis
+const EMAIL_BACKGROUND_COLOR = "#F0F6FB"; // sky blue 12%: page backgrounds
+const EMAIL_CARD_COLOR = EMAIL_CREAM;
+const EMAIL_CARD_BORDER_COLOR = "#DCEDFC"; // sky blue 35%
+const EMAIL_TEXT_COLOR = EMAIL_NAVY;
+const EMAIL_MUTED_TEXT_COLOR = "#484C78"; // navy 72%: secondary text on light backgrounds
+const EMAIL_FOOTER_BACKGROUND_COLOR = "#EDF4FB"; // sky blue 15%: secondary backgrounds
 const EMAIL_CARD_RADIUS = 8;
 const EMAIL_BUTTON_RADIUS = 999;
 const EMAIL_MAX_WIDTH = 560;
@@ -76,25 +79,27 @@ const EMAIL_FONT_STACK =
   "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 const EMAIL_DISPLAY_FONT_STACK = "'Rockwell',Georgia,'Times New Roman',serif";
 
-const EMAIL_DARK_BG = "#0b0d14";
-const EMAIL_DARK_CARD = "#171a23";
-const EMAIL_DARK_FOOTER = "#242833";
-const EMAIL_DARK_BORDER = "#292d37";
-const EMAIL_DARK_TEXT = "#fafafa";
-const EMAIL_DARK_MUTED = "#a3aab8";
-const EMAIL_DARK_BUTTON_BG = EMAIL_ACCENT_COLOR;
-const EMAIL_DARK_BUTTON_TEXT = "#fafafa";
+// Dark mode keeps the brand navy (cream logo on navy is the sanctioned pairing)
+// and uses red 45% for actions on dark backgrounds.
+const EMAIL_DARK_BG = EMAIL_NAVY;
+const EMAIL_DARK_CARD = "#0A1156";
+const EMAIL_DARK_FOOTER = "#070D4D";
+const EMAIL_DARK_BORDER = "#1B2370";
+const EMAIL_DARK_TEXT = EMAIL_CREAM;
+const EMAIL_DARK_MUTED = "#A3D5FF"; // sky blue
+const EMAIL_DARK_LINK = "#A3D5FF";
+const EMAIL_DARK_BUTTON_BG = "#DF988A"; // red 45%
+const EMAIL_DARK_BUTTON_TEXT = EMAIL_NAVY;
 
-// H52: PNG exports of the supplied edition SVGs keep logos email-compatible.
+// H52: the logo always sits on a navy band in its cream variant. A fixed navy
+// background keeps it correct in every client: ones that follow
+// prefers-color-scheme, and ones that force their own dark mode and ignore
+// media queries (which used to show the red logo, a variant reserved for
+// light backgrounds). PNG export of the supplied SVG keeps it email-compatible.
 function headerMarkup(): string {
   const imageStyle =
-    "display:block;width:360px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;";
-  return `<img class="email-logo-light" src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027.png`)}" alt="HackUDC 2027" width="360" style="${imageStyle}" />
-                <!--[if !mso]><!-->
-                <div class="email-logo-dark" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
-                  <img src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027-dark.png`)}" alt="HackUDC 2027" width="360" style="${imageStyle}" />
-                </div>
-                <!--<![endif]-->`;
+    "display:block;width:320px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;";
+  return `<img src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027-dark.png`)}" alt="HackUDC 2027" width="320" style="${imageStyle}" />`;
 }
 
 /** First ~140 chars of the plain-text body, shown by inbox clients next to the subject. */
@@ -110,7 +115,7 @@ function brandWrapHtml(
   language: Language,
   heading: string,
 ): string {
-  // H52: the header shares the message surface in both themes. Edition red
+  // H52: the navy header carries the cream logo in both themes. Brand red
   // identifies correspondence and actions, rather than an admission status.
   return `<!doctype html>
 <html lang="${language}">
@@ -136,11 +141,8 @@ function brandWrapHtml(
       .email-body, .email-title { color:${EMAIL_TEXT_COLOR}; }
       .email-foot-brand, .email-foot-text { color:${EMAIL_MUTED_TEXT_COLOR}; }
       .email-btn td, .email-btn a { background:${EMAIL_ACCENT_COLOR}; color:${EMAIL_CARD_COLOR}; }
-      .email-head { background:${EMAIL_CARD_COLOR}; }
+      .email-head { background:${EMAIL_NAVY}; }
       @media (prefers-color-scheme: dark) {
-        .email-logo-light { display:none !important; }
-        .email-logo-dark { display:block !important; max-height:none !important; overflow:visible !important; }
-        .email-head { background:${EMAIL_DARK_CARD} !important; }
         body, .email-page { background:${EMAIL_DARK_BG} !important; }
         .email-card, .email-body { background:${EMAIL_DARK_CARD} !important; }
         .email-foot { background:${EMAIL_DARK_FOOTER} !important; }
@@ -148,12 +150,12 @@ function brandWrapHtml(
         .email-foot { border-top-color:${EMAIL_DARK_BORDER} !important; }
         .email-body, .email-title { color:${EMAIL_DARK_TEXT} !important; }
         .email-foot-brand, .email-foot-text { color:${EMAIL_DARK_MUTED} !important; }
-        .email-body a { color:${EMAIL_DARK_TEXT} !important; text-decoration:underline; }
+        .email-body a { color:${EMAIL_DARK_LINK} !important; text-decoration:underline; }
         .email-btn td, .email-btn a { background:${EMAIL_DARK_BUTTON_BG} !important; color:${EMAIL_DARK_BUTTON_TEXT} !important; }
       }
       @media only screen and (max-width:600px) {
         .email-pad { padding:24px !important; }
-        .email-head { padding:24px 24px 0 !important; }
+        .email-head { padding:24px !important; }
         .email-foot { padding:16px 24px !important; }
         .email-title { font-size:24px !important; }
         .email-btn { width:100% !important; }
@@ -169,7 +171,7 @@ function brandWrapHtml(
         <td align="center" style="padding:32px 12px;">
           <table role="presentation" width="${EMAIL_MAX_WIDTH}" cellpadding="0" cellspacing="0" class="email-card" style="width:100%;max-width:${EMAIL_MAX_WIDTH}px;background:${EMAIL_CARD_COLOR};border-radius:${EMAIL_CARD_RADIUS}px;overflow:hidden;border:1px solid ${EMAIL_CARD_BORDER_COLOR};">
             <tr>
-              <td class="email-head" align="center" bgcolor="${EMAIL_CARD_COLOR}" style="background:${EMAIL_CARD_COLOR};padding:24px 32px 0;">
+              <td class="email-head" align="center" bgcolor="${EMAIL_NAVY}" style="background:${EMAIL_NAVY};padding:28px 32px;">
                 ${headerMarkup()}
               </td>
             </tr>

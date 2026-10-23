@@ -38,6 +38,7 @@ import {
   announcementToForm,
   EMPTY_ANNOUNCEMENT_FORM,
 } from "./announcement-form";
+import { TestEmailModal } from "./test-email-modal";
 
 type AnnouncementStatus = "scheduled" | "live" | "expired";
 
@@ -83,6 +84,7 @@ function deliveryLabel(state: DeliveryState, t: Translate): string {
 export default function AnnouncementsPage() {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
+  const canSendEmail = useCan(CAPABILITIES.NOTIFICATIONS_SEND);
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
@@ -218,6 +220,7 @@ export default function AnnouncementsPage() {
       {stale && <StaleDataNotice onRetry={() => void load()} />}
       <PageHeader
         title={t("announcements")}
+        secondaryActions={canSendEmail ? <TestEmailModal /> : undefined}
         primaryAction={
           <Button onClick={() => setCreateOpen(true)}>
             <PlusIcon aria-hidden="true" className="size-4" />
