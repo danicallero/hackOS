@@ -306,7 +306,10 @@ everyone, role/dietary filters, or specific people so exclusivity is visible
 in the UI, channel checkboxes, and a publication
 section whose fields change shape depending on `screenPlacement`/targeting
 mode). There are no dedicated `/announcements/new` or `/announcements/[id]`
-routes.
+routes. People with `notifications:send` also get a **Send email** action that
+posts to `POST /api/notifications/test-email`: one branded notice from the
+notifications sender to any address, sent straight through the relay (not the
+outbox) so a relay failure is visible, and audited without the body.
 
 ## Mobile admin UI
 
@@ -336,13 +339,16 @@ resolved colors rather than CSS variables: light mail uses a blue-tinted shell,
 cream card, ink text, subtle borders and 8px surfaces. Primary actions
 are red/cream pills in both themes; dark canvas, card, footer and borders
 mirror the web's semantic pairs.
-The header shares the card surface in both schemes, without a decorative top
-rule. Its centered, responsive HackUDC 2027 marketing wordmark comes from the
-supplied edition SVGs: red `logo_h-white.svg` for
-light mail and cream `logo_h-white (4).svg` for supported dark-mode clients.
-Original vectors and 720px-wide transparent PNG exports are hosted under
-`public/email/hackudc-2027{,-dark}.{svg,png}`. PNGs preserve compatibility;
-clients without dark-mode CSS use the red logo. The previous `brand-mark.png`
+Colors follow the [brand page](https://hackudc.com/en/brand/): navy text, sky-blue
+tints for page and footer, red for emphasis and actions, and red 45% for
+actions on the dark theme. The header is a fixed navy band carrying the
+centered, responsive HackUDC 2027 wordmark in its cream variant (the pairing
+the brand allows on navy). The band does not change with the color scheme, so
+clients that force their own dark mode and ignore `prefers-color-scheme` never
+show the red logo, which the brand reserves for white or light-blue
+backgrounds. The vectors and 720px-wide transparent PNG exports are hosted
+under `public/email/hackudc-2027{,-dark}.{svg,png}`; only the cream
+`-dark` export is used in mail. The previous `brand-mark.png`
 stays available for images in already-sent messages. The footer retains hackOS as the sending
 platform. Edition red is the action accent, independent of admission outcome.
 

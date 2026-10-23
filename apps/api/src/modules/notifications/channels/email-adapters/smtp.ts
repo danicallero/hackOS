@@ -53,8 +53,10 @@ function transportFor(mail: MailConfig) {
 }
 
 export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promise<void> {
+  const from = message.from ?? { address: mail.fromAddress, name: mail.fromName };
   const info = await transportFor(mail).sendMail({
-    from: `${mail.fromName} <${mail.fromAddress}>`,
+    from: `${from.name} <${from.address}>`,
+    ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
     to: message.to,
     subject: message.subject,
     html: message.html,
@@ -62,7 +64,11 @@ export async function sendViaSmtp(mail: MailConfig, message: MailMessage): Promi
     attachments: message.attachments,
     // Marks the message as machine-generated: gateways such as Exchange Online
     // treat it as transactional and mail loops/auto-replies are suppressed.
-    headers: { "Auto-Submitted": "auto-generated", "X-Auto-Response-Suppress": "All" },
+    headers: {
+      "Auto-Submitted": "auto-generated",
+      "X-Auto-Response-Suppress": "All",
+      ...(mail.sesConfigurationSet ? { "X-SES-CONFIGURATION-SET": mail.sesConfigurationSet } : {}),
+    },
   });
   if (info.accepted.length === 0 && info.rejected.length > 0) {
     throw new PermanentDispatchError("SMTP relay rejected the recipient");

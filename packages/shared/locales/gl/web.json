@@ -3633,5 +3633,8 @@
   "couldNotCloseReport": "Non se puido pechar a denuncia.",
   "couldNotLoadReports": "Non se puideron cargar as denuncias.",
   "toastReports": "Denuncias",
-  "noReportsTitle": "Sen denuncias"
+  "noReportsTitle": "Sen denuncias",
+  "sendEmail": "Enviar correo",
+  "testEmailSent": "Correo enviado a {to}",
+  "couldNotSendTestEmail": "Non se puido enviar o correo"
 }

@@ -3633,5 +3633,8 @@
   "couldNotCloseReport": "Could not close the report.",
   "couldNotLoadReports": "Could not load the reports.",
   "toastReports": "Reports",
-  "noReportsTitle": "No reports"
+  "noReportsTitle": "No reports",
+  "sendEmail": "Send email",
+  "testEmailSent": "Email sent to {to}",
+  "couldNotSendTestEmail": "Could not send the email"
 }
