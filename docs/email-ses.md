@@ -11,7 +11,7 @@ Dos subdominios dedicados, uno por tipo de correo:
 | Tipo | Plantillas | Remitente |
 |---|---|---|
 | Cuenta | `auth.*` (verificar correo, restablecer contraseña, invitaciones, PIN de baja) | `no-reply@auth.hackudc.com` |
-| Notificaciones | todo lo demás (cola, avisos, decisiones, recordatorios) | `no-reply@notify.hackudc.com` |
+| Notificaciones | todo lo demás (cola, avisos, decisiones, recordatorios) | `no-reply@updates.hackudc.com` |
 
 Por qué:
 
@@ -30,14 +30,14 @@ todo sale por el remitente normal.
 
 ## 1. Identidades en SES
 
-Región: una de la UE (por ejemplo `eu-west-1`). Hazlo dos veces, una por
-subdominio (`auth.hackudc.com`, `notify.hackudc.com`).
+Región: Estocolmo (`eu-north-1`), que es la de la cuenta; cámbiala en los registros MX y en `SMTP_HOST` si usas otra. Hazlo dos veces, una por
+subdominio (`auth.hackudc.com`, `updates.hackudc.com`).
 
 1. **SES → Configuration → Identities → Create identity → Domain.**
 2. Escribe el subdominio (no `hackudc.com`).
 3. **Easy DKIM** con RSA_2048 y DKIM signatures activadas.
 4. Marca **Use a custom MAIL FROM domain** con `bounce.auth.hackudc.com`
-   (`bounce.notify.hackudc.com` para el otro) y **Reject message** si falla el
+   (`bounce.updates.hackudc.com` para el otro) y **Reject message** si falla el
    MX. Esto alinea SPF con el dominio visible, que es lo que exige DMARC.
 5. Crea la identidad. SES muestra los registros DNS que necesitas.
 
@@ -51,11 +51,11 @@ only)**; un registro proxied rompe la verificación.
 | CNAME | `<token1>._domainkey.auth` | `<token1>.dkim.amazonses.com` | |
 | CNAME | `<token2>._domainkey.auth` | `<token2>.dkim.amazonses.com` | |
 | CNAME | `<token3>._domainkey.auth` | `<token3>.dkim.amazonses.com` | |
-| MX | `bounce.auth` | `feedback-smtp.eu-west-1.amazonses.com` | 10 |
+| MX | `bounce.auth` | `feedback-smtp.eu-north-1.amazonses.com` | 10 |
 | TXT | `bounce.auth` | `v=spf1 include:amazonses.com ~all` | |
 | TXT | `_dmarc.auth` | `v=DMARC1; p=none; rua=mailto:dmarc@hackudc.com` | |
 
-Repite con `notify` en lugar de `auth` (otros tres tokens DKIM). Los tokens
+Repite con `updates` en lugar de `auth` (otros tres tokens DKIM). Los tokens
 exactos y la región del MX salen de la pantalla de la identidad. Cloudflare
 añade el dominio solo al nombre: escribe `x._domainkey.auth`, no el nombre
 completo.
@@ -69,7 +69,7 @@ Notas:
   `p=quarantine`. `dmarc@hackudc.com` debe ser un buzón que lea alguien.
 - Comprueba con `dig TXT _dmarc.hackudc.com` si el apex ya tiene DMARC: los
   subdominios sin registro propio lo heredan; los registros `_dmarc.auth` y
-  `_dmarc.notify` lo sustituyen para ellos.
+  `_dmarc.updates` lo sustituyen para ellos.
 - La identidad pasa a *Verified* en minutos. Si no, revisa que los CNAME no
   estén proxied.
 
@@ -104,7 +104,7 @@ SES suspende cuentas con rebotes por encima del ~5 % o quejas por encima del
    muestra una sola vez el usuario y la contraseña SMTP.
 2. Restringe su política a `ses:SendRawEmail` sobre las dos identidades y el
    configuration set, no a `*`.
-3. Endpoint: `email-smtp.eu-west-1.amazonaws.com`, puerto `587` (STARTTLS), que
+3. Endpoint: `email-smtp.eu-north-1.amazonaws.com`, puerto `587` (STARTTLS), que
    es lo que ya hace la app por defecto.
 
 ## 6. Variables de producción
@@ -113,13 +113,13 @@ En el fichero de entorno de producción (`deploy/.env.example` documenta cada
 una; `SMTP_PASS` es secreto):
 
 ```
-MAIL_FROM_ADDRESS=no-reply@notify.hackudc.com
+MAIL_FROM_ADDRESS=no-reply@updates.hackudc.com
 MAIL_FROM_NAME=HackUDC
 MAIL_AUTH_FROM_ADDRESS=no-reply@auth.hackudc.com
 MAIL_AUTH_FROM_NAME=HackUDC
 MAIL_REPLY_TO=hackudc@gpul.org
 MAIL_SES_CONFIGURATION_SET=hackos-production
-SMTP_HOST=email-smtp.eu-west-1.amazonaws.com
+SMTP_HOST=email-smtp.eu-north-1.amazonaws.com
 SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_REQUIRE_TLS=true
@@ -140,12 +140,12 @@ En staging no definas `MAIL_AUTH_*`, `MAIL_REPLY_TO` ni
    manda un aviso individual desde el remitente de notificaciones a cualquier
    dirección. Es la herramienta para estas pruebas.
 2. A una cuenta de Gmail: **Mostrar original** debe indicar `SPF: PASS`,
-   `DKIM: PASS` con `d=notify.hackudc.com` y `DMARC: PASS`.
+   `DKIM: PASS` con `d=updates.hackudc.com` y `DMARC: PASS`.
 3. Provoca un correo de cuenta (reenviar verificación) y comprueba que sale de
    `auth.hackudc.com`.
 4. Prueba con [mail-tester.com](https://www.mail-tester.com) y con una cuenta
    `@udc.es`. Los correos de UDC pasan por Exchange Online: si no llegan,
-   pide a su informática que añada `auth.hackudc.com` y `notify.hackudc.com` a
+   pide a su informática que añada `auth.hackudc.com` y `updates.hackudc.com` a
    la lista de remitentes permitidos y un *message trace*.
 
 ## 8. Arranque y vigilancia
