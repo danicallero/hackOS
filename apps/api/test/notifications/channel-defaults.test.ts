@@ -146,6 +146,10 @@ describe("first-run onboarding", () => {
         url: "/api/me/notification-preferences",
         headers: asUser(id),
       });
+    const me = (id: number) =>
+      app.inject({ method: "GET", url: "/api/me", headers: asUser(id) }).then((r) => r.json());
+    expect((await me(plain)).notificationOnboardingRequired).toBe(false);
+    expect((await me(attendee)).notificationOnboardingRequired).toBe(true);
     expect((await get(plain)).json().onboardingRequired).toBe(false);
     const before = (await get(attendee)).json();
     expect(before.onboardingRequired).toBe(true);
@@ -170,5 +174,6 @@ describe("first-run onboarding", () => {
     });
     expect(again.statusCode).toBe(200);
     expect((await get(attendee)).json().onboardingRequired).toBe(false);
+    expect((await me(attendee)).notificationOnboardingRequired).toBe(false);
   });
 });

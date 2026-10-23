@@ -3633,5 +3633,8 @@
   "couldNotCloseReport": "Could not close the report.",
   "couldNotLoadReports": "Could not load the reports.",
   "toastReports": "Reports",
-  "noReportsTitle": "No reports"
+  "noReportsTitle": "No reports",
+  "notificationOnboardingTitle": "Choose how we reach you",
+  "notificationOnboardingWithApp": "With the mobile app signed in, these notices arrive there instead of email. Turn email on if you want it as well.",
+  "notificationOnboardingNoApp": "Without the mobile app, queue calls always reach you by email; activity reminders and challenges do too unless you turn email off."
 }

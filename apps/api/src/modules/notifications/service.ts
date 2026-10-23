@@ -1,3 +1,4 @@
+import { CHALLENGE_CATEGORY, EMAIL_OPT_IN_CATEGORIES } from "@hackos/shared/notification-channels";
 import type { Queryable } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
@@ -47,19 +48,7 @@ export interface NotifyOptions {
   fixtureMarker?: boolean;
 }
 
-/** Challenge notices are a category of their own so their email can be opted into. */
-export const CHALLENGE_CATEGORY = "challenge";
-/**
- * High-volume categories where email is an opt-in: by default it only goes to
- * people with no mobile device registered (they have no other way to be
- * reached outside the web app). Once a device registers, push replaces it
- * unless the person chose email explicitly.
- */
-export const EMAIL_OPT_IN_CATEGORIES = [
-  QUEUE_CATEGORY,
-  REMINDER_CHANNEL_CATEGORY,
-  CHALLENGE_CATEGORY,
-];
+export { CHALLENGE_CATEGORY, EMAIL_OPT_IN_CATEGORIES };
 
 /** True when this person has at least one registered push device (mobile app signed in). */
 export async function hasPushDevice(db: Queryable, userId: number): Promise<boolean> {

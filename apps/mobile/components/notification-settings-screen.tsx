@@ -32,21 +32,36 @@ import { useParticipantLayout } from "@/theme/layout-participant";
 type Translate = ReturnType<typeof useLocale>["t"];
 
 /** Editable notification categories, in display order (H51). */
-export type NotificationCategory = "announcements" | "schedule" | "queue.staff";
+export type NotificationCategory =
+  | "announcements"
+  | "schedule"
+  | "queue"
+  | "challenge"
+  | "queue.staff";
 
 const CATEGORY_ICON: Record<NotificationCategory, SymbolViewProps["name"]> = {
   announcements: "megaphone.fill",
   schedule: "calendar.badge.clock",
+  queue: "bell",
+  challenge: "flag",
   "queue.staff": "door.left.hand.open",
 };
 
 export function isNotificationCategory(value: string): value is NotificationCategory {
-  return value === "announcements" || value === "schedule" || value === "queue.staff";
+  return (
+    value === "announcements" ||
+    value === "schedule" ||
+    value === "queue" ||
+    value === "challenge" ||
+    value === "queue.staff"
+  );
 }
 
 export function categoryTitle(category: NotificationCategory, t: Translate): string {
   if (category === "announcements") return t("notificationsAnnouncements");
   if (category === "schedule") return t("notificationsActivityReminders");
+  if (category === "queue") return t("queueCalls");
+  if (category === "challenge") return t("notificationsChallenges");
   return t("notificationsQueueStaff");
 }
 
@@ -68,9 +83,11 @@ function canReceiveQueueStaffAlerts(capabilities: string[]) {
   );
 }
 
-/** Queue staff alerts are push-only; the other categories offer every channel. */
+/** Queue staff alerts are push-only and queue calls only let you pick email; the rest offer every channel. */
 function categoryChannels(category: NotificationCategory, channels: NotificationChannel[]) {
-  return category === "queue.staff" ? channels.filter((channel) => channel === "push") : channels;
+  if (category === "queue.staff") return channels.filter((channel) => channel === "push");
+  if (category === "queue") return channels.filter((channel) => channel === "email");
+  return channels;
 }
 
 function useScrollContentStyle() {
@@ -140,6 +157,8 @@ export function NotificationSettingsScreen() {
   const categories: NotificationCategory[] = [
     "announcements",
     "schedule",
+    "queue",
+    "challenge",
     ...(canReceiveQueueStaffAlerts(capabilities) ? (["queue.staff"] as const) : []),
   ];
   const canManageAnnouncements = has(capabilities, CAPABILITIES.ANNOUNCEMENTS_MANAGE);
@@ -200,10 +219,6 @@ export function NotificationSettingsScreen() {
                 />
               </View>
             ))}
-          </Section>
-
-          <Section footer={t("notificationsMandatoryHint")}>
-            <NavigationRow label={t("queueCalls")} value={t("notificationsAlwaysOn")} icon="bell" />
           </Section>
 
           {liveActivities.available ? (
@@ -298,7 +313,13 @@ export function NotificationCategoryScreen({ category }: { category: Notificatio
       ) : (
         <Section
           title={t("alertsChannels")}
-          footer={category === "queue.staff" ? t("notificationsQueueStaffHint") : undefined}
+          footer={
+            category === "queue.staff"
+              ? t("notificationsQueueStaffHint")
+              : category === "queue"
+                ? t("notificationsMandatoryHint")
+                : undefined
+          }
         >
           {channels.map((channel, index) => (
             <View key={channel}>
@@ -308,6 +329,7 @@ export function NotificationCategoryScreen({ category }: { category: Notificatio
                 accessibilityLabel={`${title}, ${channelLabel(channel, t)}`}
                 busy={preferences.savingKey === `${category}:${channel}`}
                 value={preferences.enabledFor(category, channel)}
+                disabled={channel === "email" && preferences.emailLockedFor(category)}
                 onChange={(enabled) => void preferences.toggle(category, channel, enabled)}
               />
             </View>
