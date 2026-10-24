@@ -1,3 +1,4 @@
+import { deflateSync } from "node:zlib";
 import { PDFDocument, type PDFFont, rgb, StandardFonts } from "pdf-lib";
 import QRCode from "qrcode";
 
@@ -69,6 +70,57 @@ export function wrap(font: PDFFont, text: string, size: number, width: number): 
   return lines;
 }
 
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const body = Buffer.concat([Buffer.from(type, "latin1"), data]);
+  let crc = 0xffffffff;
+  for (const byte of body) crc = (CRC_TABLE[(crc ^ byte) & 0xff] as number) ^ (crc >>> 8);
+  const frame = Buffer.alloc(12 + data.length);
+  frame.writeUInt32BE(data.length, 0);
+  body.copy(frame, 4);
+  frame.writeUInt32BE((crc ^ 0xffffffff) >>> 0, 8 + data.length);
+  return frame;
+}
+
+/** A QR code as a 1-bit PNG (about 1 KB; the library's RGBA export is twice that or more). */
+function qrPng(text: string, scale = 6, margin = 1): Buffer {
+  const qr = QRCode.create(text, { errorCorrectionLevel: "M" });
+  const side = (qr.modules.size + margin * 2) * scale;
+  const rowBytes = Math.ceil(side / 8);
+  const raw = Buffer.alloc((rowBytes + 1) * side, 0);
+  for (let y = 0; y < side; y++) {
+    const row = y * (rowBytes + 1);
+    raw[row] = 0;
+    for (let x = 0; x < side; x++) {
+      const mx = Math.floor(x / scale) - margin;
+      const my = Math.floor(y / scale) - margin;
+      const dark =
+        mx >= 0 &&
+        my >= 0 &&
+        mx < qr.modules.size &&
+        my < qr.modules.size &&
+        qr.modules.get(mx, my);
+      // 1-bit grayscale: 0 is black, 1 is white.
+      if (!dark) raw[row + 1 + (x >> 3)] = (raw[row + 1 + (x >> 3)] as number) | (0x80 >> (x & 7));
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(side, 0);
+  header.writeUInt32BE(side, 4);
+  header.set([1, 0, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", header),
+    pngChunk("IDAT", deflateSync(raw, { level: 9 })),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
 export interface CopyFooterInput {
   issuer: string;
   /** The verification code printed as CSV and resolved by `verifyUrl`. */
@@ -82,8 +134,8 @@ export interface CopyFooterInput {
 /**
  * #1083: stamps the "copy with verification code" footer (QR, print date, page
  * count, CSV and how to validate) on every page, as the Spanish administration
- * does on electronic copies. The original is untouched on disk: only the copy
- * handed to a participant carries it.
+ * does on electronic copies. Applied once, when the certificate's single stored
+ * copy is generated.
  */
 export async function stampCopyFooter(
   source: Uint8Array,
@@ -92,9 +144,7 @@ export async function stampCopyFooter(
   const copy = COPY[input.locale];
   const pdf = await PDFDocument.load(source);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
-  const qr = await pdf.embedPng(
-    await QRCode.toBuffer(input.verifyUrl, { margin: 1, width: 240, errorCorrectionLevel: "M" }),
-  );
+  const qr = await pdf.embedPng(qrPng(input.verifyUrl));
   const printed = new Intl.DateTimeFormat(input.locale, {
     dateStyle: "short",
     timeStyle: "short",

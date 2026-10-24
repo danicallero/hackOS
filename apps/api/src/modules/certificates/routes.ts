@@ -39,7 +39,6 @@ const settingsSchema = z.object({
   minHours: z.number().nullable(),
   minReviewHours: z.number().nullable(),
   awardHours: z.number().nullable(),
-  requiresDemo: z.boolean(),
   issuerName: z.string(),
 });
 const eligibilitySchema = z.object({
@@ -54,9 +53,8 @@ const eligibilitySchema = z.object({
       approvedAt: z.string(),
     })
     .nullable(),
-  demoed: z.boolean(),
   eligible: z.boolean(),
-  reason: z.enum(["not_available", "hours_not_met", "demo_required", "review_required"]).nullable(),
+  reason: z.enum(["not_available", "hours_not_met", "review_required"]).nullable(),
 });
 const certificateSchema = z.object({
   id: z.number(),
@@ -73,6 +71,8 @@ const certificateSchema = z.object({
   issuedAt: z.string(),
   revokedAt: z.string().nullable(),
   revokedReason: z.string().nullable(),
+  supersededAt: z.string().nullable(),
+  outdated: z.boolean(),
 });
 
 /**
@@ -100,10 +100,9 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   const sendPdf = async (
     reply: { header(name: string, value: string): unknown },
     id: number,
-    copy: boolean,
     disposition: "attachment" | "inline" = "attachment",
   ): Promise<Buffer> => {
-    const { pdf, filename } = await renderCertificate(id, { copy });
+    const { pdf, filename } = await renderCertificate(id);
     reply.header("content-type", "application/pdf");
     reply.header("content-disposition", `${disposition}; filename="${filename}"`);
     reply.header("cache-control", "private, no-store");
@@ -216,7 +215,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My certificate eligibility and certificates",
         description:
-          "The caller's secured venue hours, whether their team presented a project, whether they meet the certificate policy (and why not) and the certificates already issued to them (#1083).",
+          "The caller's secured venue hours, whether they meet the certificate policy (and why not), which certificate types are available to them now (and the reason when not) and the certificates already issued to them (#1083).",
         response: {
           200: z.object({
             settings: settingsSchema,
@@ -252,7 +251,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         body: z.object({ variant, locale }),
         summary: "Issue my certificate",
         description:
-          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met or the policy requires a presented project (#1083, H53).",
+          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met, the policy requires a presented project or an activities certificate has no attended activities to list (#1083, H53).",
         response: { 200: certificateSchema },
       },
     },
@@ -268,14 +267,14 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         params: idParams,
         summary: "Download my certificate",
         description:
-          "The certificate as a PDF issued by the organisation, with a footer carrying a verification QR, the CSV code and the print date on every page. Only its owner can download it; a revoked certificate answers 409 (#1083).",
+          "The certificate's single PDF copy, with a footer carrying a verification QR, the CSV code and the generation date on every page. The first download generates it; every later download returns the same file. Only its owner can download it; a revoked certificate answers 409 (#1083).",
       },
     },
     async (req, reply) => {
       if ((await certificateOwner(req.params.id)) !== req.userId) {
         throw new ForbiddenError("Not your certificate");
       }
-      return sendPdf(reply, req.params.id, true);
+      return sendPdf(reply, req.params.id);
     },
   );
 
@@ -287,7 +286,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Certificate policy",
         description:
-          "Automatic and review hours thresholds (null disables each path), whether a presented project is required, and the issuer name printed on certificates (#1083).",
+          "Automatic and review hours thresholds (null disables each path) and the issuer name printed on certificates. Project-presentation and event-end requirements are set per certificate type (#1083).",
         response: { 200: settingsSchema },
       },
     },
@@ -305,13 +304,12 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
             minHours: z.number().min(0).max(999).nullable().optional(),
             minReviewHours: z.number().min(0).max(999).nullable().optional(),
             awardHours: z.number().positive().max(999).nullable().optional(),
-            requiresDemo: z.boolean().optional(),
             issuerName: z.string().trim().min(1).max(200).optional(),
           })
           .strict(),
         summary: "Update the certificate policy",
         description:
-          "Changes the optional certified-hours award, automatic/review hours thresholds, the presented-project requirement or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
+          "Changes the optional certified-hours award, automatic/review hours thresholds or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
         response: { 200: settingsSchema },
       },
     },
@@ -410,13 +408,12 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       preHandler: staff,
       schema: {
         params: idParams,
-        querystring: z.object({ copy: z.coerce.boolean().default(false) }),
         summary: "Download anyone's certificate",
         description:
-          "Staff download of a person's certificate PDF. By default it has no CSV footer; `copy=true` returns what the participant gets, with the footer. A revoked certificate answers 409 (#1083).",
+          "Staff download of a certificate's single PDF copy, the same file the recipient and the public viewer get. Generated on first use. A revoked certificate answers 409 (#1083).",
       },
     },
-    async (req, reply) => sendPdf(reply, req.params.id, req.query.copy),
+    async (req, reply) => sendPdf(reply, req.params.id),
   );
 
   r.get(
@@ -428,7 +425,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         params: z.object({ code: z.string().min(16).max(64) }),
         summary: "Verify a certificate",
         description:
-          "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, and the hours only for the hours variant. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code, 429 past 60 requests a minute from one address (#1083).",
+          "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, the hours only for documents that state them (the Attendance hours variant or an awarded custom type) and the SHA-256 and generation time of the stored copy, so a third party can compare the file they hold. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code, 429 past 60 requests a minute from one address (#1083).",
         response: {
           200: z.object({
             status: z.enum(["valid", "revoked"]),
@@ -441,6 +438,9 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
             eventStartsAt: z.string().nullable(),
             eventEndsAt: z.string().nullable(),
             hours: z.number().nullable(),
+            sha256: z.string().nullable(),
+            generatedAt: z.string().nullable(),
+            supersededAt: z.string().nullable(),
           }),
         },
       },
@@ -457,10 +457,9 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         params: z.object({ code: z.string().min(16).max(64) }),
         summary: "View the official certificate",
         description:
-          "The certificate PDF itself, with the CSV footer, for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code, 409 once revoked and 429 past 60 requests a minute from one address (#1083).",
+          "The certificate PDF itself (the same stored copy, with the CSV footer), for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code, 409 once revoked and 429 past 60 requests a minute from one address (#1083).",
       },
     },
-    async (req, reply) =>
-      sendPdf(reply, await certificateIdByCode(req.params.code), true, "inline"),
+    async (req, reply) => sendPdf(reply, await certificateIdByCode(req.params.code), "inline"),
   );
 }

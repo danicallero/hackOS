@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type pg from "pg";
@@ -6,7 +6,13 @@ import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { recordsToCsv, toCsv } from "../../lib/csv.js";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  AppError,
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "../../lib/errors.js";
 import { stampCopyFooter } from "../../lib/pdf-copy-footer.js";
 import { hasEventAccess } from "../identity/role.js";
 import { allHours, userHours } from "../logistics/presence.js";
@@ -16,9 +22,12 @@ import {
   type CertificateSnapshot,
   type CertificateVariant,
   renderCertificatePdf,
+  statesHours,
 } from "./pdf.js";
 import {
   assertTypeRecipient,
+  type CertificateType,
+  isExemptRecipient,
   listCertificateTypes,
   readCertificateType,
   recipientMatchesType,
@@ -30,8 +39,6 @@ export interface CertificateSettings {
   minHours: number | null;
   minReviewHours: number | null;
   awardHours: number | null;
-  /** Only people whose team presented a project are eligible. */
-  requiresDemo: boolean;
   issuerName: string;
 }
 
@@ -39,14 +46,13 @@ export async function readSettings(
   db: pg.Pool | pg.PoolClient = pool,
 ): Promise<CertificateSettings> {
   const { rows } = await db.query(
-    `SELECT min_hours, min_review_hours, award_hours, requires_demo, issuer_name FROM certificate_settings WHERE id = 1`,
+    `SELECT min_hours, min_review_hours, award_hours, issuer_name FROM certificate_settings WHERE id = 1`,
   );
   const row = rows[0];
   return {
     minHours: row.min_hours == null ? null : Number(row.min_hours),
     minReviewHours: row.min_review_hours == null ? null : Number(row.min_review_hours),
     awardHours: row.award_hours == null ? null : Number(row.award_hours),
-    requiresDemo: row.requires_demo,
     issuerName: row.issuer_name,
   };
 }
@@ -67,8 +73,8 @@ export async function updateSettings(
       throw new BadRequestError("The review threshold must not exceed the automatic threshold");
     }
     await client.query(
-      `UPDATE certificate_settings SET min_hours = $1, requires_demo = $2, issuer_name = $3, min_review_hours = $4, award_hours = $5 WHERE id = 1`,
-      [next.minHours, next.requiresDemo, next.issuerName, next.minReviewHours, next.awardHours],
+      `UPDATE certificate_settings SET min_hours = $1, issuer_name = $2, min_review_hours = $3, award_hours = $4 WHERE id = 1`,
+      [next.minHours, next.issuerName, next.minReviewHours, next.awardHours],
     );
     if (next.awardHours !== before.awardHours) {
       const { rows } = await client.query(
@@ -98,18 +104,20 @@ export async function updateSettings(
   });
 }
 
-export type EligibilityReason =
-  | "not_available"
-  | "hours_not_met"
+export type EligibilityReason = "not_available" | "hours_not_met" | "review_required";
+
+/** Why a type cannot be issued to this person now, beyond the shared hours policy. */
+export type GateReason =
+  | EligibilityReason
+  | "event_not_ended"
   | "demo_required"
-  | "review_required";
+  | "demo_jury_required";
 
 export interface Eligibility {
   hours: number;
   certifiedHours: number | null;
   reviewRequired: boolean;
   approval: CertificateApproval | null;
-  demoed: boolean;
   eligible: boolean;
   /** Why not, when not eligible. */
   reason: EligibilityReason | null;
@@ -144,7 +152,6 @@ async function readApproval(
 function evaluate(
   settings: CertificateSettings,
   hours: number,
-  demoed: boolean,
   approval: CertificateApproval | null = null,
 ): Eligibility {
   let reason: EligibilityReason | null = null;
@@ -153,12 +160,10 @@ function evaluate(
   if (!approval) {
     if (settings.minHours == null) reason = "not_available";
     else if (hours < settings.minHours || hours <= 0) reason = "hours_not_met";
-    else if (settings.requiresDemo && !demoed) reason = "demo_required";
     if (reason && reviewRequired) reason = "review_required";
   }
   return {
     hours,
-    demoed,
     eligible: reason === null,
     reason,
     reviewRequired: reason === "review_required",
@@ -229,31 +234,79 @@ export async function approveCertificateHours(
   return eligibilityFor(userId);
 }
 
-/** Teams that presented: their queue entry started or finished a presentation. */
-const DEMOED_SQL = `
-  SELECT DISTINCT s.user_id
-    FROM submissions s
-    JOIN queue_entries q ON q.repo_id = s.repo_id
-   WHERE s.status = 'active'
-     AND (q.completed_at IS NOT NULL OR q.presentation_started_at IS NOT NULL)
-     AND ($1::int[] IS NULL OR s.user_id = ANY($1))`;
+/** What the person's team has presented: any jury, a mandatory challenge, or these challenges. */
+interface Presentations {
+  any: boolean;
+  mandatory: boolean;
+  challengeIds: Set<number>;
+}
 
-async function demoedUsers(userIds: number[] | null): Promise<Set<number>> {
-  const { rows } = await pool.query<{ user_id: number }>(DEMOED_SQL, [userIds]);
-  return new Set(rows.map((row) => row.user_id));
+/** Teams that presented: their queue entry started or finished a presentation. */
+async function presentationsOf(
+  userId: number,
+  db: pg.Pool | pg.PoolClient = pool,
+): Promise<Presentations> {
+  const { rows } = await db.query<{ challenge_id: number; mandatory: boolean }>(
+    `SELECT DISTINCT q.challenge_id, c.mandatory
+       FROM submissions s
+       JOIN queue_entries q ON q.repo_id = s.repo_id
+       JOIN challenges c ON c.id = q.challenge_id
+      WHERE s.status = 'active' AND s.user_id = $1
+        AND (q.completed_at IS NOT NULL OR q.presentation_started_at IS NOT NULL)`,
+    [userId],
+  );
+  return {
+    any: rows.length > 0,
+    mandatory: rows.some((row) => row.mandatory),
+    challengeIds: new Set(rows.map((row) => row.challenge_id)),
+  };
+}
+
+/**
+ * Requirements a type adds to the shared hours policy, for someone who is not
+ * exempt: wait for the event to end, then presenting to the required jury. A
+ * manual award (staff decided) stands in for the presentation, not for the wait.
+ */
+async function typeGate(
+  definition: CertificateType,
+  userId: number,
+  db: pg.Pool | pg.PoolClient,
+  approved: boolean,
+): Promise<GateReason | null> {
+  if (definition.requiresEventEnd) {
+    const { rows } = await db.query(`SELECT event_ends_at FROM event_config WHERE id = 1`);
+    const ends = rows[0]?.event_ends_at as Date | null | undefined;
+    if (!ends || ends.getTime() > Date.now()) return "event_not_ended";
+  }
+  if (definition.demoRequirement === "none" || approved) return null;
+  const presented = await presentationsOf(userId, db);
+  if (definition.demoRequirement === "any") return presented.any ? null : "demo_required";
+  const met =
+    definition.demoRequirement === "mandatory"
+      ? presented.mandatory
+      : definition.demoChallengeId != null &&
+        presented.challengeIds.has(definition.demoChallengeId);
+  return met ? null : "demo_jury_required";
 }
 
 export async function eligibilityFor(userId: number): Promise<Eligibility> {
-  const [settings, { hours }, demoed, approval] = await Promise.all([
+  const [settings, { hours }, approval] = await Promise.all([
     readSettings(),
     userHours(userId, undefined, undefined, { verifiedOnly: true }),
-    demoedUsers([userId]),
     readApproval(userId),
   ]);
-  return evaluate(settings, hours, demoed.has(userId), approval);
+  return evaluate(settings, hours, approval);
 }
 
-function reasonError(reason: EligibilityReason): ConflictError {
+function reasonError(reason: GateReason): ConflictError {
+  if (reason === "event_not_ended")
+    return new ConflictError("This certificate is available once the event has ended", {
+      code: ERROR_REASONS.CERTIFICATE_EVENT_NOT_ENDED,
+    });
+  if (reason === "demo_jury_required")
+    return new ConflictError("This certificate requires having presented to the required jury", {
+      code: ERROR_REASONS.CERTIFICATE_DEMO_JURY_REQUIRED,
+    });
   if (reason === "review_required")
     return new ConflictError("Your attendance is awaiting staff review", {
       code: ERROR_REASONS.CERTIFICATE_REVIEW_REQUIRED,
@@ -305,15 +358,7 @@ async function buildSnapshot(
       code: ERROR_REASONS.CERTIFICATE_NOT_AVAILABLE,
     });
   }
-  // Meals are not activities a certificate should list.
-  const { rows: activities } = await db.query(
-    `SELECT COALESCE(a.name_i18n ->> $2, a.name) AS name, min(l.logged_at) AS at
-       FROM activity_logs l JOIN activities a ON a.id = l.activity_id
-      WHERE l.user_id = $1 AND NOT (a.category = ANY($3::text[]))
-      GROUP BY a.id, a.name, a.name_i18n
-      ORDER BY min(l.logged_at), a.id`,
-    [userId, locale, [...MEAL_ACTIVITY_KINDS]],
-  );
+  const activities = await attendedActivities(db, userId, locale);
   return {
     name: person.name ?? "",
     surname: person.surname ?? null,
@@ -324,10 +369,7 @@ async function buildSnapshot(
     eventEndsAt: (person.event_ends_at as Date).toISOString(),
     issuerName,
     hours,
-    activities: activities.map((row) => ({
-      name: String(row.name),
-      at: (row.at as Date).toISOString(),
-    })),
+    activities,
   };
 }
 
@@ -346,6 +388,10 @@ export interface CertificateRow {
   issuedAt: string;
   revokedAt: string | null;
   revokedReason: string | null;
+  /** Replaced by a newer certificate; still valid as issued. */
+  supersededAt: string | null;
+  /** Attendance changed since this one was issued (only computed when listing a person's documents). */
+  outdated: boolean;
 }
 
 function toRow(row: Record<string, unknown>): CertificateRow {
@@ -364,12 +410,14 @@ function toRow(row: Record<string, unknown>): CertificateRow {
     issuedAt: (row.issued_at as Date).toISOString(),
     revokedAt: row.revoked_at ? (row.revoked_at as Date).toISOString() : null,
     revokedReason: (row.revoked_reason as string | null) ?? null,
+    supersededAt: row.superseded_at ? (row.superseded_at as Date).toISOString() : null,
+    outdated: false,
   };
 }
 
 const COLUMNS = `id, code, user_id, type_id, snapshot->>'typeName' AS type_name,
                  COALESCE(snapshot->>'name','') || COALESCE(' ' || (snapshot->>'surname'),'') AS recipient_name_display, activity_name, variant, locale, source, override_reason, issued_at,
-                 revoked_at, revoked_reason`;
+                 revoked_at, revoked_reason, superseded_at`;
 
 interface IssueOptions {
   userId: number | null;
@@ -386,6 +434,41 @@ interface IssueOptions {
   documentKind?: "dni_nie" | "passport";
   documentNumber?: string;
   includeIdentification?: boolean;
+  /** Replace the current certificate when what it states has changed. */
+  refresh?: boolean;
+}
+
+/** What a legacy attendance variant states: hours for `hours`, the list for `activities`. */
+function sameStatedFacts(
+  before: Partial<CertificateSnapshot>,
+  after: CertificateSnapshot,
+  variant: CertificateVariant,
+): boolean {
+  if (variant === "hours") return Number(before.hours) === after.hours;
+  if (variant === "activities")
+    return (
+      JSON.stringify((before.activities ?? []).map((a) => a.name)) ===
+      JSON.stringify(after.activities.map((a) => a.name))
+    );
+  return true;
+}
+
+/** Non-meal activities the person has a scan for, named in the document's language. */
+async function attendedActivities(
+  db: pg.Pool | pg.PoolClient,
+  userId: number | null,
+  locale: CertificateLocale,
+): Promise<{ name: string; at: string }[]> {
+  // Meals are not activities a certificate should list.
+  const { rows } = await db.query(
+    `SELECT COALESCE(a.name_i18n ->> $2, a.name) AS name, min(l.logged_at) AS at
+       FROM activity_logs l JOIN activities a ON a.id = l.activity_id
+      WHERE l.user_id = $1 AND NOT (a.category = ANY($3::text[]))
+      GROUP BY a.id, a.name, a.name_i18n
+      ORDER BY min(l.logged_at), a.id`,
+    [userId, locale, [...MEAL_ACTIVITY_KINDS]],
+  );
+  return rows.map((row) => ({ name: String(row.name), at: (row.at as Date).toISOString() }));
 }
 
 /**
@@ -438,15 +521,26 @@ async function insertCertificate(
       definition.attendancePolicy && opts.userId != null
         ? await readApproval(opts.userId, client)
         : null;
+    const exempt =
+      opts.userId != null && (await isExemptRecipient(definition, opts.userId, client));
     let certificateHours = opts.hours;
     if (definition.attendancePolicy && opts.userId != null) {
-      const [{ hours }, demoed] = await Promise.all([
-        userHours(opts.userId, undefined, undefined, { verifiedOnly: true }),
-        demoedUsers([opts.userId]),
-      ]);
-      const eligibility = evaluate(settings, hours, demoed.has(opts.userId), approval);
-      if (!eligibility.eligible && eligibility.reason) throw reasonError(eligibility.reason);
-      certificateHours = eligibility.certifiedHours ?? hours;
+      const { hours } = await userHours(opts.userId, undefined, undefined, { verifiedOnly: true });
+      const eligibility = evaluate(settings, hours, approval);
+      if (exempt) {
+        certificateHours = approval?.certifiedHours ?? settings.awardHours ?? hours;
+        // An exempt person still needs a number to state when the document says hours.
+        if (definition.legacyVariant === "hours" && !(certificateHours > 0))
+          throw reasonError("hours_not_met");
+      } else {
+        if (!eligibility.eligible && eligibility.reason) throw reasonError(eligibility.reason);
+        certificateHours = eligibility.certifiedHours ?? hours;
+      }
+    }
+    if (opts.userId != null && !exempt) {
+      const gate = await typeGate(definition, opts.userId, client, approval != null);
+      // Staff may skip these requirements for one person by giving a reason.
+      if (gate && !(opts.source === "staff" && opts.overrideReason)) throw reasonError(gate);
     }
     const snapshot = await buildSnapshot(
       client,
@@ -456,6 +550,10 @@ async function insertCertificate(
       settings.issuerName,
       opts.guestName,
     );
+    if (definition.legacyVariant === "activities" && snapshot.activities.length === 0)
+      throw new ConflictError("There are no attended activities to list", {
+        code: ERROR_REASONS.CERTIFICATE_NO_ACTIVITIES,
+      });
     if (approval || (definition.attendancePolicy && opts.userId == null))
       snapshot.manuallyCertified = true;
     if (definition.attendancePolicy && settings.awardHours != null) snapshot.certifiedAward = true;
@@ -488,11 +586,39 @@ async function insertCertificate(
       );
     }
     if (!definition.attendancePolicy && opts.hours > 0) snapshot.certifiedAward = true;
+    if (opts.refresh && opts.userId != null) {
+      const { rows: current } = await client.query(
+        `SELECT id, variant, snapshot FROM attendance_certificates
+          WHERE user_id=$1 AND type_id=$2 AND locale=$3 AND activity_name=$4
+            AND revoked_at IS NULL AND superseded_at IS NULL FOR UPDATE`,
+        [opts.userId, definition.id, opts.locale, activityName],
+      );
+      const live = current[0];
+      if (live && sameStatedFacts(live.snapshot, snapshot, live.variant)) {
+        const { rows: same } = await client.query(
+          `SELECT ${COLUMNS} FROM attendance_certificates WHERE id=$1`,
+          [live.id],
+        );
+        return { ...toRow(same[0]), created: false };
+      }
+      if (live) {
+        await client.query(`UPDATE attendance_certificates SET superseded_at=now() WHERE id=$1`, [
+          live.id,
+        ]);
+        await audit(client, {
+          actorId: opts.actorId,
+          entityType: "attendance_certificate",
+          entityId: live.id,
+          action: "certificate.supersede",
+          reason: "attendance_changed",
+        });
+      }
+    }
     const { rows } = await client.query(
       `INSERT INTO attendance_certificates
          (code, user_id, variant, locale, source, override_reason, issued_by, snapshot, type_id, activity_name, recipient_name, recipient_document_kind, recipient_document_number)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-       ON CONFLICT (user_id, type_id, locale, activity_name) WHERE revoked_at IS NULL DO NOTHING
+       ON CONFLICT (user_id, type_id, locale, activity_name) WHERE revoked_at IS NULL AND superseded_at IS NULL DO NOTHING
        RETURNING ${COLUMNS}`,
       [
         randomBytes(18).toString("base64url"),
@@ -529,7 +655,7 @@ async function insertCertificate(
     }
     const { rows: live } = await client.query(
       `SELECT ${COLUMNS} FROM attendance_certificates
-        WHERE user_id = $1 AND type_id = $2 AND locale = $3 AND activity_name=$4 AND revoked_at IS NULL`,
+        WHERE user_id = $1 AND type_id = $2 AND locale = $3 AND activity_name=$4 AND revoked_at IS NULL AND superseded_at IS NULL`,
       [opts.userId, definition.id, opts.locale, activityName],
     );
     return { ...toRow(live[0]), created: false };
@@ -542,15 +668,14 @@ export async function issueForSelf(
   variant: CertificateVariant,
   locale: CertificateLocale,
   typeId?: number,
+  refresh = false,
 ): Promise<CertificateRow> {
   const definition = await readCertificateType(typeId, variant);
   await assertTypeRecipient(definition, userId, pool, true);
   if (definition.audienceRoleIds == null && !(await hasEventAccess(pool, userId))) {
     throw new ForbiddenError("Certificates are only available to event attendees");
   }
-  const eligibility = definition.attendancePolicy ? await eligibilityFor(userId) : null;
-  if (eligibility && !eligibility.eligible && eligibility.reason)
-    throw reasonError(eligibility.reason);
+  // The type's requirements are enforced inside the issuing transaction.
   return insertCertificate({
     userId,
     variant: definition.legacyVariant === "accepted_spot" ? "participation" : variant,
@@ -558,7 +683,8 @@ export async function issueForSelf(
     typeId: definition.id,
     source: "self",
     actorId: userId,
-    hours: eligibility?.hours ?? 0,
+    hours: 0,
+    refresh,
   });
 }
 
@@ -602,6 +728,14 @@ export async function issueForStaff(
   });
 }
 
+/** Reasons that leave one person out of a bulk run without stopping it. */
+const SKIPPED_IN_BULK = new Set<string>([
+  ERROR_REASONS.CERTIFICATE_NO_ACTIVITIES,
+  ERROR_REASONS.CERTIFICATE_EVENT_NOT_ENDED,
+  ERROR_REASONS.CERTIFICATE_DEMO_REQUIRED,
+  ERROR_REASONS.CERTIFICATE_DEMO_JURY_REQUIRED,
+]);
+
 /** Issues the variant to everyone who meets the policy; already issued ones are skipped. */
 export async function issueInBulk(
   actorId: number,
@@ -619,16 +753,25 @@ export async function issueInBulk(
       skipped++;
       continue;
     }
-    const result = await insertCertificate({
-      userId: person.userId,
-      variant,
-      locale,
-      source: "bulk",
-      actorId,
-      hours: person.eligibility.certifiedHours ?? person.eligibility.hours,
-    });
-    if (result.created) issued++;
-    else existing++;
+    try {
+      const result = await insertCertificate({
+        userId: person.userId,
+        variant,
+        locale,
+        source: "bulk",
+        actorId,
+        hours: person.eligibility.certifiedHours ?? person.eligibility.hours,
+      });
+      if (result.created) issued++;
+      else existing++;
+    } catch (err) {
+      // Not available to this person yet; the rest of the batch still goes out.
+      if (err instanceof ConflictError && SKIPPED_IN_BULK.has(err.details?.code as string)) {
+        skipped++;
+        continue;
+      }
+      throw err;
+    }
   }
   return { issued, existing, skipped };
 }
@@ -667,10 +810,34 @@ export async function revokeCertificate(
 
 export async function listForUser(userId: number): Promise<CertificateRow[]> {
   const { rows } = await pool.query(
-    `SELECT ${COLUMNS} FROM attendance_certificates WHERE user_id = $1 ORDER BY issued_at DESC, id DESC`,
+    `SELECT ${COLUMNS}, snapshot FROM attendance_certificates WHERE user_id = $1 ORDER BY issued_at DESC, id DESC`,
     [userId],
   );
-  return rows.map(toRow);
+  const certificates = rows.map(toRow);
+  // Flag current attendance documents whose stated hours or activities no longer match.
+  const candidates = rows.filter(
+    (row) =>
+      !row.revoked_at &&
+      !row.superseded_at &&
+      row.snapshot?.attendancePolicy === true &&
+      row.snapshot?.templateBody == null &&
+      (row.variant === "hours" || row.variant === "activities"),
+  );
+  if (candidates.length > 0) {
+    const eligibility = await eligibilityFor(userId);
+    for (const row of candidates) {
+      const current = certificates.find((cert) => cert.id === row.id);
+      if (!current || !eligibility.eligible) continue;
+      const snapshot = row.snapshot as CertificateSnapshot;
+      const fresh = {
+        ...snapshot,
+        hours: eligibility.certifiedHours ?? eligibility.hours,
+        activities: await attendedActivities(pool, userId, row.locale),
+      };
+      current.outdated = !sameStatedFacts(snapshot, fresh, row.variant);
+    }
+  }
+  return certificates;
 }
 
 /** The id behind a verification code. */
@@ -693,42 +860,75 @@ export async function certificateOwner(id: number): Promise<number | null> {
   return rows[0].user_id;
 }
 
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
 /**
- * The certificate PDF. `copy` stamps the CSV footer (QR, code, print date) for participants;
- * without it staff get the bare document to sign (#1083).
+ * The certificate's single PDF copy (#1083). The first request renders it,
+ * stamps the verification footer and stores it with its SHA-256; every later
+ * request, owner, staff or public viewer, receives the same bytes. A copy that
+ * no longer matches its hash is never served. Revocation drops the copy (trigger).
  */
 export async function renderCertificate(
   id: number,
-  opts: { copy: boolean },
 ): Promise<{ pdf: Uint8Array; filename: string }> {
-  const { rows } = await pool.query(
-    `SELECT c.code, c.variant, c.locale, c.issued_at, c.revoked_at, c.snapshot, COALESCE(c.recipient_document_number,u.dni) AS dni
-       FROM attendance_certificates c LEFT JOIN users u ON u.id = c.user_id
-      WHERE c.id = $1`,
+  const columns = `c.code, c.variant, c.locale, c.issued_at, c.revoked_at, c.snapshot, c.pdf, c.pdf_sha256`;
+  const stored = (row: { pdf: Buffer; pdf_sha256: string; variant: string }) => {
+    if (sha256(row.pdf) !== row.pdf_sha256)
+      throw new AppError(
+        500,
+        "certificate_copy_corrupt",
+        "The stored certificate copy is corrupt",
+        {
+          code: ERROR_REASONS.CERTIFICATE_COPY_CORRUPT,
+        },
+      );
+    return { pdf: row.pdf, filename: `certificate-${row.variant}-${id}.pdf` };
+  };
+  const { rows: first } = await pool.query(
+    `SELECT ${columns} FROM attendance_certificates c WHERE c.id = $1`,
     [id],
   );
-  const row = rows[0];
-  if (!row) throw new NotFoundError("Certificate not found");
-  if (row.revoked_at) throw new ConflictError("The certificate was revoked");
-  const snapshot = row.snapshot as CertificateSnapshot;
-  let pdf = await renderCertificatePdf({
-    snapshot,
-    variant: row.variant,
-    locale: row.locale,
-    issuedAt: row.issued_at,
-    dni: snapshot.identityPolicy === "none" ? null : (row.dni ?? null),
+  if (!first[0]) throw new NotFoundError("Certificate not found");
+  if (first[0].revoked_at) throw new ConflictError("The certificate was revoked");
+  if (first[0].pdf) return stored(first[0]);
+
+  return withTransaction(async (client) => {
+    // Concurrent first downloads converge on one generated copy.
+    const { rows } = await client.query(
+      `SELECT ${columns}, COALESCE(c.recipient_document_number,u.dni) AS dni
+         FROM attendance_certificates c LEFT JOIN users u ON u.id = c.user_id
+        WHERE c.id = $1 FOR UPDATE OF c`,
+      [id],
+    );
+    const row = rows[0];
+    if (!row) throw new NotFoundError("Certificate not found");
+    if (row.revoked_at) throw new ConflictError("The certificate was revoked");
+    if (row.pdf) return stored(row);
+    const snapshot = row.snapshot as CertificateSnapshot;
+    const generatedAt = new Date();
+    const pdf = await stampCopyFooter(
+      await renderCertificatePdf({
+        snapshot,
+        variant: row.variant,
+        locale: row.locale,
+        issuedAt: row.issued_at,
+        dni: snapshot.identityPolicy === "none" ? null : (row.dni ?? null),
+      }),
+      {
+        issuer: snapshot.issuerName,
+        code: row.code,
+        verifyUrl: `${config.WEB_URL.replace(/\/$/, "")}/verify/${row.code}`,
+        locale: row.locale,
+        printedAt: generatedAt,
+        timezone: snapshot.timezone,
+      },
+    );
+    await client.query(
+      `UPDATE attendance_certificates SET pdf=$2, pdf_sha256=$3, pdf_generated_at=$4 WHERE id=$1`,
+      [id, Buffer.from(pdf), sha256(pdf), generatedAt],
+    );
+    return { pdf, filename: `certificate-${row.variant}-${id}.pdf` };
   });
-  if (opts.copy) {
-    pdf = await stampCopyFooter(pdf, {
-      issuer: snapshot.issuerName,
-      code: row.code,
-      verifyUrl: `${config.WEB_URL.replace(/\/$/, "")}/verify/${row.code}`,
-      locale: row.locale,
-      printedAt: new Date(),
-      timezone: snapshot.timezone,
-    });
-  }
-  return { pdf, filename: `certificate-${row.variant}-${id}.pdf` };
 }
 
 export interface Verification {
@@ -741,14 +941,19 @@ export interface Verification {
   eventName: string | null;
   eventStartsAt: string | null;
   eventEndsAt: string | null;
-  /** Hours variants and manually awarded documents state certified hours. */
+  /** Only documents that state certified hours (see `statesHours`) expose them. */
   hours: number | null;
+  /** SHA-256 and generation time of the stored copy; null until it is first downloaded or once revoked. */
+  sha256: string | null;
+  generatedAt: string | null;
+  /** A newer certificate replaced this one; it remains valid as issued. */
+  supersededAt: string | null;
 }
 
 /** Public verification by code: never the DNI, and no personal data once revoked. */
 export async function verifyCode(code: string): Promise<Verification> {
   const { rows } = await pool.query(
-    `SELECT variant, issued_at, revoked_at, snapshot FROM attendance_certificates WHERE code = $1`,
+    `SELECT variant, issued_at, revoked_at, snapshot, pdf_sha256, pdf_generated_at, superseded_at FROM attendance_certificates WHERE code = $1`,
     [code],
   );
   const row = rows[0];
@@ -765,10 +970,10 @@ export async function verifyCode(code: string): Promise<Verification> {
     eventName: snapshot.eventName ?? null,
     eventStartsAt: snapshot.eventStartsAt ?? null,
     eventEndsAt: snapshot.eventEndsAt ?? null,
-    hours:
-      !revoked && (row.variant === "hours" || snapshot.manuallyCertified || snapshot.certifiedAward)
-        ? (snapshot.hours ?? null)
-        : null,
+    hours: !revoked && statesHours(snapshot, row.variant) ? (snapshot.hours ?? null) : null,
+    supersededAt: row.superseded_at ? (row.superseded_at as Date).toISOString() : null,
+    sha256: row.pdf_sha256 ?? null,
+    generatedAt: row.pdf_generated_at ? (row.pdf_generated_at as Date).toISOString() : null,
   };
 }
 
@@ -797,10 +1002,9 @@ export async function certificateParticipants(
     ORDER BY u.surname NULLS LAST, u.name, u.id`,
     [universityId ?? null],
   );
-  const [settings, hours, demoed, approvals] = await Promise.all([
+  const [settings, hours, approvals] = await Promise.all([
     readSettings(),
     allHours(undefined, actorId, { verifiedOnly: true }),
-    demoedUsers(null),
     pool.query(
       `SELECT user_id, certified_hours, reason, approved_by, approved_at FROM certificate_approvals`,
     ),
@@ -824,12 +1028,7 @@ export async function certificateParticipants(
     universityId: row.university_id,
     universityName: row.university_name,
     hasAttendanceEvidence: byUser.has(row.id),
-    eligibility: evaluate(
-      settings,
-      byUser.get(row.id) ?? 0,
-      demoed.has(row.id),
-      awards.get(row.id) ?? null,
-    ),
+    eligibility: evaluate(settings, byUser.get(row.id) ?? 0, awards.get(row.id) ?? null),
   }));
 }
 
@@ -930,6 +1129,7 @@ export async function exportCertificateParticipants(
   return csv;
 }
 
+/** The types this person can be issued, each with why not yet (null when available now). */
 export async function availableCertificateTypes(userId: number, self: boolean) {
   const types = await listCertificateTypes();
   const matches = await Promise.all(
@@ -937,7 +1137,20 @@ export async function availableCertificateTypes(userId: number, self: boolean) {
       (await recipientMatchesType(type, userId, pool, self)) ? type : null,
     ),
   );
-  return matches.filter((type) => type != null);
+  const eligibility = await eligibilityFor(userId);
+  return Promise.all(
+    matches
+      .filter((type) => type != null)
+      .map(async (type) => {
+        let availability: GateReason | null = null;
+        if (!(await isExemptRecipient(type, userId, pool))) {
+          availability =
+            (await typeGate(type, userId, pool, eligibility.approval != null)) ??
+            (type.attendancePolicy && !eligibility.eligible ? eligibility.reason : null);
+        }
+        return { ...type, availability };
+      }),
+  );
 }
 
 export interface ConfiguredIssueInput {
@@ -951,6 +1164,7 @@ export interface ConfiguredIssueInput {
   activityName?: string;
   certifiedHours?: number;
   overrideReason?: string;
+  refresh?: boolean;
 }
 
 export async function issueConfiguredCertificate(
@@ -975,7 +1189,7 @@ export async function issueConfiguredCertificate(
   if (input.userId != null) {
     await assertFixtureSubjectScope(pool, actorId, input.userId);
     await assertTypeRecipient(definition, input.userId);
-    if (definition.attendancePolicy) {
+    if (definition.attendancePolicy && !(await isExemptRecipient(definition, input.userId))) {
       const eligibility = await eligibilityFor(input.userId);
       if (!eligibility.eligible && !(input.overrideReason && input.certifiedHours != null))
         throw reasonError(eligibility.reason ?? "not_available");
@@ -1005,6 +1219,7 @@ export async function issueConfiguredCertificate(
     includeIdentification: input.includeIdentification,
     activityName: input.activityName,
     overrideReason: input.overrideReason,
+    refresh: input.refresh,
   });
 }
 

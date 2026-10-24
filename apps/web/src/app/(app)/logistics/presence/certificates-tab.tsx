@@ -35,7 +35,7 @@ export function AttendanceCertificatesTab() {
   const canExport = useCan(CAPABILITIES.LOGISTICS_STATS);
   const roster = useServerResource(["certificate-participants"], certificatesApi.participants);
   const [university, setUniversity] = useState("");
-  const [status, setStatus] = useState("review");
+  const [chosenStatus, setStatus] = useState<string | null>(null);
   const [person, setPerson] = useState<CertificateParticipant | null>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +50,12 @@ export function AttendanceCertificatesTab() {
         ]),
     ).values(),
   ];
+  // Pending reviews come first; with none waiting, show the people instead of an empty queue.
+  const status =
+    chosenStatus ??
+    (people.some((p) => p.eligibility.reviewRequired) || roster.loading
+      ? "review"
+      : "participated");
   const filtered = people.filter(
     (p) =>
       (!university || p.universityId === Number(university)) &&
@@ -184,13 +190,16 @@ export function AttendanceCertificatesTab() {
         title={person ? [person.name, person.surname].filter(Boolean).join(" ") : t("certificates")}
       >
         {person && (
-          <div className="space-y-6">
+          // Evidence scrolls on the left while the award and documents stay beside it.
+          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
             <CertificateEvidence key={person.userId} userId={person.userId} />
-            <CertificatesPanel
-              key={`award-${person.userId}`}
-              staffUserId={person.userId}
-              onChanged={roster.reload}
-            />
+            <div className="lg:sticky lg:top-0">
+              <CertificatesPanel
+                key={`award-${person.userId}`}
+                staffUserId={person.userId}
+                onChanged={roster.reload}
+              />
+            </div>
           </div>
         )}
       </Modal>

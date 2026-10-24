@@ -119,9 +119,24 @@ export interface RenderInput {
 }
 
 /**
+ * Whether the document states certified hours: only the Attendance hours
+ * variant among the original three (awarded hours never leak onto the plain
+ * Attendance or Activities documents), and custom-wording types that carry an
+ * award. Shared with public verification so both say the same thing.
+ */
+export function statesHours(
+  snapshot: Partial<CertificateSnapshot>,
+  variant: CertificateVariant,
+): boolean {
+  if (snapshot.templateBody != null)
+    return Boolean(snapshot.manuallyCertified || snapshot.certifiedAward);
+  return variant === "hours";
+}
+
+/**
  * #1083: the certificate PDF. One A4 page (a second only for a long activity
  * list), issued by the organisation: no personal signature. The QR and code are
- * added to copies at download (`stampCopyFooter`).
+ * stamped once when the copy is generated (`stampCopyFooter`).
  */
 export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Array> {
   const { snapshot, variant, locale, issuedAt, dni } = input;
@@ -214,7 +229,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
         12,
         14,
       );
-    if (snapshot.manuallyCertified || snapshot.certifiedAward)
+    if (statesHours(snapshot, variant))
       paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
     paragraph(
       copy.issued(formatDate(issuedAt.toISOString(), locale, snapshot.timezone)),
@@ -239,10 +254,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   );
 
   if (variant === "participation") paragraph(copy.participation, regular, 12, 14);
-  if (variant === "hours") {
-    paragraph(copy.participation, regular, 12, 10);
-    paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
-  }
+  if (variant === "hours") paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
   if (variant === "activities") {
     paragraph(copy.activities, bold, 12, 6);
     for (const activity of snapshot.activities) {
@@ -251,9 +263,6 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     }
     y -= 12;
   }
-
-  if ((snapshot.manuallyCertified || snapshot.certifiedAward) && variant !== "hours")
-    paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
 
   paragraph(copy.closing, regular, 12, 8);
   paragraph(

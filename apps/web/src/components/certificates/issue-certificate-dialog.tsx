@@ -265,7 +265,9 @@ function IssueForm({
             />
           </div>
         )}
-        {selected?.attendancePolicy && hours.trim() && (
+        {((selected?.attendancePolicy && hours.trim()) ||
+          selected?.requiresEventEnd ||
+          (selected && selected.demoRequirement !== "none")) && (
           <div className="space-y-2">
             <Label htmlFor="issue-certificate-reason">{t("certificateOverrideReason")}</Label>
             <Input
@@ -273,7 +275,7 @@ function IssueForm({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               maxLength={2000}
-              required
+              required={Boolean(hours.trim())}
             />
           </div>
         )}

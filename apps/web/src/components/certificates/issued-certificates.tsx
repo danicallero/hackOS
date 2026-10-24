@@ -1,13 +1,21 @@
 "use client";
 
 import { CertificateIcon } from "@phosphor-icons/react/dist/csr/Certificate";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -29,7 +37,7 @@ export function IssuedCertificates() {
   const { t, language } = useLocale();
   const issued = useServerResource(["issued-certificates"], certificateTypesApi.issued);
   const [status, setStatus] = useState("all");
-  const [scope, setScope] = useState("guests");
+  const [scope, setScope] = useState("all");
   const [pending, setPending] = useState(false);
   const [revoking, setRevoking] = useState<Certificate | null>(null);
   const [reason, setReason] = useState("");
@@ -129,40 +137,43 @@ export function IssuedCertificates() {
         }
         rowActions={(c) =>
           c.revokedAt ? null : (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex items-center justify-end gap-1">
               <Button
                 variant="outline"
                 size="sm"
                 disabled={pending}
-                onClick={() => void run(() => certificatesApi.download(c.id, true))}
+                onClick={() => void run(() => certificatesApi.download(c.id))}
               >
                 <DownloadSimpleIcon />
-                {t("certificateDownloadCopy")}
+                {t("certificateDownload")}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pending}
-                onClick={() => void run(() => certificatesApi.download(c.id, false))}
-              >
-                {t("certificateDownloadNoCsv")}
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href={`/verify/${encodeURIComponent(c.code)}`} target="_blank" rel="noreferrer">
-                  {t("certificateVerifyTitle")}
-                </a>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pending}
-                onClick={() => {
-                  setReason("");
-                  setRevoking(c);
-                }}
-              >
-                {t("certificateRevoke")}
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <IconButton variant="ghost" label={c.recipientName}>
+                    <DotsThreeIcon />
+                  </IconButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <a
+                      href={`/verify/${encodeURIComponent(c.code)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {t("certificateVerifyTitle")}
+                    </a>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => {
+                      setReason("");
+                      setRevoking(c);
+                    }}
+                  >
+                    {t("certificateRevoke")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )
         }

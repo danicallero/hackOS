@@ -27,9 +27,21 @@ export const typeInputSchema = z
     allowGuests: z.boolean(),
     identityPolicy: z.enum(["none", "optional", "required"]),
     requiresActivity: z.boolean(),
+    /** Self-service and bulk issue wait until the event has ended. */
+    requiresEventEnd: z.boolean(),
+    demoRequirement: z.enum(["none", "any", "mandatory", "challenge"]),
+    demoChallengeId: z.number().int().positive().nullable(),
+    /** Holders of these roles skip every requirement of this type. */
+    exemptRoleIds: z.array(z.number().int().positive()).max(200).nullable(),
   })
   .strict()
   .superRefine((v, ctx) => {
+    if ((v.demoRequirement === "challenge") !== (v.demoChallengeId !== null))
+      ctx.addIssue({
+        code: "custom",
+        path: ["demoChallengeId"],
+        message: "Choose a challenge exactly when the requirement is a specific jury",
+      });
     if (v.selfService && v.requiresActivity)
       ctx.addIssue({
         code: "custom",
@@ -71,6 +83,10 @@ function rowType(r: Record<string, unknown>): CertificateType {
     allowGuests: r.allow_guests as boolean,
     identityPolicy: r.identity_policy as CertificateType["identityPolicy"],
     requiresActivity: r.requires_activity as boolean,
+    requiresEventEnd: r.requires_event_end as boolean,
+    demoRequirement: r.demo_requirement as CertificateType["demoRequirement"],
+    demoChallengeId: r.demo_challenge_id as number | null,
+    exemptRoleIds: r.exempt_role_ids as number[] | null,
   };
 }
 export async function listCertificateTypes(
@@ -108,6 +124,19 @@ export async function recipientMatchesType(
   );
   return Boolean(rowCount);
 }
+/** Holders of an exempt role skip this type's attendance, event-end and presentation requirements. */
+export async function isExemptRecipient(
+  type: CertificateType,
+  userId: number,
+  db: pg.Pool | pg.PoolClient = pool,
+): Promise<boolean> {
+  if (!type.exemptRoleIds?.length) return false;
+  const { rowCount } = await db.query(
+    `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL LIMIT 1`,
+    [userId, type.exemptRoleIds],
+  );
+  return Boolean(rowCount);
+}
 export async function assertTypeRecipient(
   type: CertificateType,
   userId: number,
@@ -142,6 +171,9 @@ export async function saveCertificateType(
         input.audienceRoleIds !== null ||
         input.allowGuests ||
         input.requiresActivity ||
+        input.requiresEventEnd ||
+        input.demoRequirement !== "none" ||
+        input.exemptRoleIds !== null ||
         input.body == null)
     )
       throw new BadRequestError("Accepted spot certificates are for everyone with event access");
@@ -155,6 +187,20 @@ export async function saveCertificateType(
       if (rows.length !== new Set(input.audienceRoleIds).size)
         throw new BadRequestError("One of the recipient roles no longer exists");
     }
+    if (input.exemptRoleIds?.length) {
+      const { rows } = await client.query(
+        `SELECT id FROM roles WHERE id=ANY($1::int[]) AND deleted_at IS NULL`,
+        [input.exemptRoleIds],
+      );
+      if (rows.length !== new Set(input.exemptRoleIds).size)
+        throw new BadRequestError("One of the exempt roles no longer exists");
+    }
+    if (input.demoChallengeId != null) {
+      const { rowCount } = await client.query(`SELECT 1 FROM challenges WHERE id=$1`, [
+        input.demoChallengeId,
+      ]);
+      if (!rowCount) throw new BadRequestError("The required challenge no longer exists");
+    }
     const params = [
       JSON.stringify(input.name),
       JSON.stringify(input.title),
@@ -166,15 +212,19 @@ export async function saveCertificateType(
       input.allowGuests,
       input.identityPolicy,
       input.requiresActivity,
+      input.requiresEventEnd,
+      input.demoRequirement,
+      input.demoChallengeId,
+      input.exemptRoleIds,
     ];
     const { rows } =
       id == null
         ? await client.query(
-            `INSERT INTO certificate_types(name_i18n,title_i18n,body_i18n,enabled,attendance_policy,self_service,audience_role_ids,allow_guests,identity_policy,requires_activity) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+            `INSERT INTO certificate_types(name_i18n,title_i18n,body_i18n,enabled,attendance_policy,self_service,audience_role_ids,allow_guests,identity_policy,requires_activity,requires_event_end,demo_requirement,demo_challenge_id,exempt_role_ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
             params,
           )
         : await client.query(
-            `UPDATE certificate_types SET name_i18n=$1,title_i18n=$2,body_i18n=$3,enabled=$4,attendance_policy=$5,self_service=$6,audience_role_ids=$7,allow_guests=$8,identity_policy=$9,requires_activity=$10,revision=revision+1 WHERE id=$11 RETURNING *`,
+            `UPDATE certificate_types SET name_i18n=$1,title_i18n=$2,body_i18n=$3,enabled=$4,attendance_policy=$5,self_service=$6,audience_role_ids=$7,allow_guests=$8,identity_policy=$9,requires_activity=$10,requires_event_end=$11,demo_requirement=$12,demo_challenge_id=$13,exempt_role_ids=$14,revision=revision+1 WHERE id=$15 RETURNING *`,
             [...params, id],
           );
     const after = rowType(rows[0]);
