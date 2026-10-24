@@ -4,15 +4,11 @@
 // eligibility decision; this component only explains and confirms that
 // decision, then clears browser-held data after the authenticated operation.
 
-import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
-import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
-import { SectionCard } from "@/components/common/section-card";
 import { clearOfflineQueue } from "@/components/logistics/offline-queue";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, api } from "@/lib/api";
@@ -30,12 +26,12 @@ import {
 import { useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
-export function DangerZoneCard({ embedded = false }: { embedded?: boolean } = {}) {
+/** The profile's Danger zone section owns the heading; this is its body. */
+export function DangerZone() {
   const { t } = useLocale();
   const me = useMe();
   const [loading, setLoading] = useState(true);
   const [eligibility, setEligibility] = useState<AccountRemovalEligibility | null>(null);
-  const [open, setOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [pinSent, setPinSent] = useState(false);
@@ -233,95 +229,78 @@ export function DangerZoneCard({ embedded = false }: { embedded?: boolean } = {}
   const canConfirm = eligibility !== null;
 
   return (
-    <SectionCard
-      variant={embedded ? "plain" : "surface"}
-      footerClassName="justify-start"
-      icon={embedded ? undefined : WarningIcon}
-      title={embedded ? undefined : t("dangerZone")}
-    >
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="text-muted-foreground -ml-2">
-            <CaretDownIcon aria-hidden className={open ? "size-4 rotate-180" : "size-4"} />
-            {open ? t("hideDangerZone") : t("showDangerZone")}
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-3 pt-3">
-          {loading ? (
-            <p className="text-muted-foreground text-sm">{t("checkingRemovalEligibility")}</p>
-          ) : eligibility?.action === "delete" ? (
-            <div className="space-y-2">
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("deleteMyAccountDesc")}
-              </p>
-              {eligibility.requiresVenueExit && (
-                <p role="alert" className="text-destructive text-pretty text-sm">
-                  {t("accountRemovalExitRequired")}
-                </p>
-              )}
-              {eligibility.integrityWarning && (
-                <p role="alert" className="text-destructive text-pretty text-sm">
-                  {t("accountRemovalIntegrityWarning")}
-                </p>
-              )}
-              <p className="text-muted-foreground text-sm">
-                <Link href="/privacy" className="underline underline-offset-2">
-                  {t("privacyPolicy")}
-                </Link>
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-destructive"
-                onClick={() => setConfirmOpen(true)}
-              >
-                {t("deleteMyAccount")}
-              </Button>
-            </div>
-          ) : eligibility ? (
-            <div className="space-y-3">
-              <p className="text-muted-foreground text-pretty text-sm">
-                {t("accountAnonymizeDescription")}
-              </p>
-              {eligibility.activeEventConsequences && (
-                <p role="alert" className="text-destructive text-pretty text-sm">
-                  {t("accountAnonymizeActiveEvent")}
-                </p>
-              )}
-              {eligibility.requiresVenueExit && (
-                <p role="alert" className="text-destructive text-pretty text-sm">
-                  {t("accountAnonymizeExitRequired")}
-                </p>
-              )}
-              {eligibility.integrityWarning && (
-                <p role="alert" className="text-destructive text-pretty text-sm">
-                  {t("accountRemovalIntegrityWarning")}
-                </p>
-              )}
-              <p className="text-muted-foreground text-sm">
-                <Link href="/privacy" className="underline underline-offset-2">
-                  {t("privacyPolicy")}
-                </Link>
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="text-destructive"
-                disabled={!canConfirm}
-                onClick={() => setConfirmOpen(true)}
-              >
-                {t("accountAnonymizeAction")}
-              </Button>
-            </div>
-          ) : (
+    <div className="space-y-3">
+      {loading ? (
+        <p className="text-muted-foreground text-sm">{t("checkingRemovalEligibility")}</p>
+      ) : eligibility?.action === "delete" ? (
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-pretty text-sm">{t("deleteMyAccountDesc")}</p>
+          {eligibility.requiresVenueExit && (
             <p role="alert" className="text-destructive text-pretty text-sm">
-              {t("removalEligibilityUnavailable")}
+              {t("accountRemovalExitRequired")}
             </p>
           )}
-        </CollapsibleContent>
-      </Collapsible>
+          {eligibility.integrityWarning && (
+            <p role="alert" className="text-destructive text-pretty text-sm">
+              {t("accountRemovalIntegrityWarning")}
+            </p>
+          )}
+          <p className="text-muted-foreground text-sm">
+            <Link href="/privacy" className="underline underline-offset-2">
+              {t("privacyPolicy")}
+            </Link>
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-destructive"
+            onClick={() => setConfirmOpen(true)}
+          >
+            {t("deleteMyAccount")}
+          </Button>
+        </div>
+      ) : eligibility ? (
+        <div className="space-y-3">
+          <p className="text-muted-foreground text-pretty text-sm">
+            {t("accountAnonymizeDescription")}
+          </p>
+          {eligibility.activeEventConsequences && (
+            <p role="alert" className="text-destructive text-pretty text-sm">
+              {t("accountAnonymizeActiveEvent")}
+            </p>
+          )}
+          {eligibility.requiresVenueExit && (
+            <p role="alert" className="text-destructive text-pretty text-sm">
+              {t("accountAnonymizeExitRequired")}
+            </p>
+          )}
+          {eligibility.integrityWarning && (
+            <p role="alert" className="text-destructive text-pretty text-sm">
+              {t("accountRemovalIntegrityWarning")}
+            </p>
+          )}
+          <p className="text-muted-foreground text-sm">
+            <Link href="/privacy" className="underline underline-offset-2">
+              {t("privacyPolicy")}
+            </Link>
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="text-destructive"
+            disabled={!canConfirm}
+            onClick={() => setConfirmOpen(true)}
+          >
+            {t("accountAnonymizeAction")}
+          </Button>
+        </div>
+      ) : (
+        <p role="alert" className="text-destructive text-pretty text-sm">
+          {t("removalEligibilityUnavailable")}
+        </p>
+      )}
       {eligibility && (
         <AlertModal
           open={confirmOpen}
@@ -465,6 +444,6 @@ export function DangerZoneCard({ embedded = false }: { embedded?: boolean } = {}
           )}
         </AlertModal>
       )}
-    </SectionCard>
+    </div>
   );
 }

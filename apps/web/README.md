@@ -221,7 +221,7 @@ src/
       login, signup, forgot-password, reset-password, verify-email,
       claim-account, applications (public application form)
     (app)/             authenticated shell — sidebar + workspace bar, AuthGuard
-      personal area (my-applications, my-project, my-queue, wallet, inbox,
+      personal area (my-applications, my-project, my-queue, inbox,
       schedule, settings/profile — Home is the event overview and sign-in
       landing destination) · staff workspaces (applications, projects,
       challenges, enterprises, queue, judging, logistics, announcements,

@@ -45,7 +45,7 @@ it("consumes a Google Wallet email action once and leaves the badges available a
   const { logisticsApi } = await import("@/lib/logistics");
   const { toast } = await import("@/lib/toast");
   vi.mocked(logisticsApi.googleWalletSaveUrl).mockRejectedValueOnce(new Error("Unavailable"));
-  window.history.replaceState(null, "", "/wallet?add=google");
+  window.history.replaceState(null, "", "/settings/profile?tab=wallet&add=google");
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -54,7 +54,7 @@ it("consumes a Google Wallet email action once and leaves the badges available a
       root.render(<WalletButtons purpose="ticket" />);
     });
     expect(logisticsApi.googleWalletSaveUrl).toHaveBeenCalledWith("ticket");
-    expect(window.location.search).toBe("");
+    expect(window.location.search).toBe("?tab=wallet");
     expect(toast.error).toHaveBeenCalledWith("walletGoogleSaveFailed", "toastWalletSettings");
     expect(container.querySelector("button img")?.getAttribute("src")).toBe(
       "/wallet-badges/google-wallet-button-en.svg",
