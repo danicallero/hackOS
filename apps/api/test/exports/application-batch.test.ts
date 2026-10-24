@@ -1,6 +1,7 @@
 import "./env.js";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { parse } from "csv-parse/sync";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import yauzl from "yauzl";
 import type { App } from "../../src/app.js";
@@ -147,11 +148,82 @@ describe("batch application export (H56)", () => {
     const entries = await readZipEntries(response.rawPayload);
     const csv = entries["applications.csv"]?.toString();
     expect(csv).toBeDefined();
-    expect(csv).toContain("Nombre,Apellidos,Correo electrónico,Estado,Main form — Por qué");
+    expect(csv?.split("\r\n")[0]).toBe("\uFEFFname,surname,email,status,motivation");
     expect(csv).toContain("Accepted,,accepted@test.local,accepted,accepted answer");
     expect(csv).toContain("Confirmed,,confirmed@test.local,confirmed,confirmed answer");
     expect(csv).not.toContain("rejected@test.local");
     expect(Object.keys(entries)).toEqual(["applications.csv"]);
+  });
+
+  it("uses escaped field keys regardless of labels or language and disambiguates repeated keys", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const key = 'consent,"mlh"';
+    const template = [
+      {
+        key,
+        label: {
+          en: "Consent, terms",
+          es: "Consentimiento, términos",
+          gl: "Consentimento, termos",
+        },
+        kind: "text" as const,
+        required: false,
+      },
+    ];
+    const first = await createApplication({ name: "First, form", template });
+    const second = await createApplication({ name: "Second form", template });
+    const applicant = await createUser();
+    await createResponse(applicant, first, {
+      status: "accepted",
+      responses: { [key]: "value, with commas" },
+    });
+    for (const language of ["es", "gl", "en"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/exports/applications.zip",
+        headers: asUser(staff),
+        payload: {
+          statuses: ["accepted"],
+          fields: [
+            { source: "profile", key: "email" },
+            { source: "answer", application_id: first, key },
+            { source: "answer", application_id: second, key },
+          ],
+          language,
+          documents: "none",
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      const entries = await readZipEntries(response.rawPayload);
+      const rows = parse(entries["applications.csv"]!, { bom: true });
+      expect(rows[0]).toEqual(["email", key, `${key} (2)`]);
+      expect(rows[1]).toHaveLength(rows[0]!.length);
+      expect(rows[1]![1]).toBe("value, with commas");
+    }
+  });
+
+  it("omits university_id from profile export fields and rejects it when requested", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.EXPORTS_RUN]);
+    const catalog = await app.inject({
+      method: "GET",
+      url: "/api/exports/applications/catalog",
+      headers: asUser(staff),
+    });
+    expect(catalog.statusCode).toBe(200);
+    expect(catalog.json().profile).not.toContainEqual(
+      expect.objectContaining({ key: "university_id" }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/exports/applications.zip",
+      headers: asUser(staff),
+      payload: {
+        statuses: ["accepted"],
+        fields: [{ source: "profile", key: "university_id" }],
+        documents: "none",
+      },
+    });
+    expect(response.statusCode).toBe(400);
   });
 
   it("exports names rather than IDs for university and degree library answers", async () => {
