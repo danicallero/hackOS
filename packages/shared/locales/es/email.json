@@ -20,7 +20,7 @@
       },
       "reset": {
         "subject": "Restablece tu contraseña de hackOS",
-        "body": "Hola {{name}},\n\nPuedes elegir una contraseña nueva aquí:\n\n[Restablecer contraseña]({{resetUrl}})\n\nSi no lo has pedido tú, puedes ignorar este correo — tu contraseña no ha cambiado."
+        "body": "Hola {{name}},\n\nPuedes elegir una contraseña nueva aquí:\n\n[Restablecer contraseña]({{resetUrl}})\n\nSi no lo has pedido tú, puedes ignorar este correo. Tu contraseña no ha cambiado."
       },
       "accountRemovalPin": {
         "subject": "Confirma la eliminación de tu cuenta de hackOS",

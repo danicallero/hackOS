@@ -20,7 +20,7 @@
       },
       "reset": {
         "subject": "Reset your hackOS password",
-        "body": "Hi {{name}},\n\nYou can choose a new password here:\n\n[Reset password]({{resetUrl}})\n\nIf you didn't request this, you can safely ignore this email — your password hasn't changed."
+        "body": "Hi {{name}},\n\nYou can choose a new password here:\n\n[Reset password]({{resetUrl}})\n\nIf you didn't request this, you can safely ignore this email. Your password hasn't changed."
       },
       "accountRemovalPin": {
         "subject": "Confirm your hackOS account removal",

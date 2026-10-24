@@ -24,7 +24,6 @@ import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionS
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
 import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
-import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
 
 export interface NavItem {
   title: import("./i18n").MessageKey;
@@ -156,10 +155,6 @@ export const PERSONAL_NAV: NavItem[] = [
     icon: FolderSimpleIcon,
     activePaths: ["/gallery"],
   },
-  // Entrance ticket is exposed only while a role grants current event access
-  // (the historical tickets row remains for audit/idempotency).
-  { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
-
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
