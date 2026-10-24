@@ -25,6 +25,8 @@ const latestStory = Math.max(...storyNumbers);
 const failures = [];
 
 function walk(dir) {
+  // H55: CNG output includes third-party Pods/Gradle sources, not project stories.
+  if (dir === "apps/mobile/ios" || dir === "apps/mobile/android") return;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) walk(join(dir, entry.name));

@@ -21,7 +21,7 @@ module.exports = {
       // No CODE_SIGNING_ALLOWED=NO: without entitlements expo-secure-store
       // throws "A required entitlement isn't present" as soon as the app reads
       // the stored session, which kills every flow past sign-in.
-      build: `APP_VARIANT=development DEV_CLIENT_DEFAULT_LAUNCHER_URL=\${DETOX_METRO_URL:-http://localhost:8081} pnpm --filter @hackos/mobile exec expo prebuild --clean && xcodebuild -workspace apps/mobile/ios/hackOSDebug.xcworkspace -scheme hackOSDebug -configuration Debug -sdk iphonesimulator -derivedDataPath apps/mobile/ios/build`,
+      build: `APP_VARIANT=development DEV_CLIENT_DEFAULT_LAUNCHER_URL=\${DETOX_METRO_URL:-http://localhost:8081} pnpm --filter @hackos/mobile exec expo prebuild --clean && xcodebuild -workspace apps/mobile/ios/hackOSDebug.xcworkspace -scheme hackOSDebug -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath apps/mobile/ios/build ARCHS=$(uname -m) ONLY_ACTIVE_ARCH=YES`,
     },
     "android.debug": {
       type: "android.apk",
@@ -35,7 +35,7 @@ module.exports = {
     simulator: {
       type: "ios.simulator",
       device: {
-        type: process.env.DETOX_IOS_DEVICE ?? "iPhone 15",
+        type: process.env.DETOX_IOS_DEVICE ?? "iPhone 17 Pro",
       },
     },
     emulator: {
