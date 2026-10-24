@@ -18,9 +18,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      // Nothing is indexed: pages, icons, logos and generated images included.
+      // Nothing is indexed except the public pages listed in app/robots.ts; icons, logos
+      // and generated images included.
       {
-        source: "/:path*",
+        source: "/:path((?!horario|privacy|terms|gallery|llms\\.txt).+)",
         headers: [
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex" },
         ],

@@ -33,14 +33,20 @@ for the contract, bounds, revocation and migration behavior.
 
 ## Indexing
 
-Nothing in the web app is indexed: the root layout sets `robots` metadata,
-`next.config.ts` sends `X-Robots-Tag: noindex` on every route (static icons and
-generated images included), `app/robots.ts` disallows everything, and the API
+Only public information is indexed: home (`/`), `/horario`, `/privacy`, `/terms`
+and the public gallery (`/gallery`, open to anonymous viewers while the gallery
+audience is public), plus `/llms.txt` (`app/llms.txt/route.ts`) describing them
+and the read-only public JSON for assistants. Everything else is out: the root
+layout sets `robots` metadata, `next.config.ts` sends `X-Robots-Tag: noindex`
+on every route outside that list (static icons and generated images included),
+`app/robots.ts` disallows all but the list, and the API
 sends the same header on every response (photos, CVs, project files, wallet
 images, certificates). Whatever is served from the public S3 host (company logos,
 and any future public prefix such as gallery images) never passes through the API,
 so the Caddy block of that host adds the header (`deploy/README.md`).
-Keep it that way when adding a public page: do not set `index: true`.
+Images are never indexed (`noimageindex`). Adding a public page to the index means
+updating the three places together: `robots.ts`, the `headers()` pattern and the page's
+`INDEXABLE_ROBOTS` metadata.
 
 ## Edition theme
 
