@@ -136,6 +136,9 @@ function IssueForm({
               setGuest(false);
               setDocumentNumber("");
               setIncludeId(false);
+              setHours("");
+              setReason("");
+              setActivity("");
             }}
             getId={(type) => type.id}
             getLabel={(type) => type.name[language]}
@@ -247,19 +250,21 @@ function IssueForm({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="issue-certificate-hours">{t("certificateCertifiedHours")}</Label>
-          <Input
-            id="issue-certificate-hours"
-            type="number"
-            min={0.01}
-            max={999}
-            step={0.01}
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            className="max-w-48 tabular-nums"
-          />
-        </div>
+        {selected?.legacyVariant !== "accepted_spot" && (
+          <div className="space-y-2">
+            <Label htmlFor="issue-certificate-hours">{t("certificateCertifiedHours")}</Label>
+            <Input
+              id="issue-certificate-hours"
+              type="number"
+              min={0.01}
+              max={999}
+              step={0.01}
+              value={hours}
+              onChange={(e) => setHours(e.target.value)}
+              className="max-w-48 tabular-nums"
+            />
+          </div>
+        )}
         {selected?.attendancePolicy && hours.trim() && (
           <div className="space-y-2">
             <Label htmlFor="issue-certificate-reason">{t("certificateOverrideReason")}</Label>

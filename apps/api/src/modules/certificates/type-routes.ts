@@ -133,14 +133,16 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
         body: z.object({ typeId: z.number().int().positive(), locale: z.enum(["es", "gl", "en"]) }),
         summary: "Obtain an eligible configured certificate",
         description:
-          "Only enabled self-service definitions matching the caller's assigned roles and attendance policy can be obtained. Speaker/activity-specific certificates must be issued by staff (#1083).",
+          "Enabled self-service definitions require event access and matching recipient criteria. Accepted spot is predefined for everyone with event access, without hours or demo requirements. Attendance types additionally enforce the attendance policy. Speaker/activity-specific certificates must be issued by staff (#1083).",
       },
     },
     async (req) => {
       const type = await readCertificateType(req.body.typeId);
       return issueForSelf(
         req.userId as number,
-        type.legacyVariant ?? "participation",
+        type.legacyVariant === "accepted_spot"
+          ? "participation"
+          : (type.legacyVariant ?? "participation"),
         req.body.locale,
         type.id,
       );

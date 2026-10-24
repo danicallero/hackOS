@@ -92,11 +92,15 @@ dates, as in the template's Marzo example; hours are numeric and use the manual
 award when present. Thus an approved 30-hour award is 30 on both the certificate
 and university CSV, while the general CSV still exposes the measured time.
 
-## Variants
+## Predefined certificates
 
-The participant picks one when requesting; each is a separate certificate.
+Attendance, Hours and Accepted spot are predefined in the catalogue; the original Activities variant is also retained. Organisers can edit their wording. The participant picks a type and language; each is a separate document.
 
-- `participation`: took part and completed the program from the event start to
+Accepted spot is available to **everyone with event access**, including staff, sponsors, mentors and custom event-access roles. It requires no attendance hours, project presentation or accepted application record. Its audience cannot be restricted to selected roles, turned into an attendance policy or opened to unlinked guests; enabled recipients obtain it directly from their profile. It certifies the accepted place, not attendance or hours.
+
+The original attendance PDF variants are:
+
+- `participation` (Attendance): took part and completed the program from the event start to
   its end date.
 - `hours`: the same plus the certified hours at issue time.
 - `activities`: lists every non-meal activity with a scan record
@@ -126,10 +130,11 @@ Select actual stored recipient roles (staff, participants, sponsors, mentors
 or any event-defined role), or all accounts. These are recipient criteria;
 management authorization still uses capabilities. A type may allow guests
 without accounts, require a talk/activity name, and choose name-only, optional
-identification or mandatory identification. Only types using the shared
-attendance policy and not requiring an activity can offer self-service.
-Types without the attendance policy are manually issued, without attendance
-thresholds; their optional hours are entered explicitly.
+identification or mandatory identification. Self-service types require event access and cannot require an activity.
+Attendance-policy types additionally enforce the shared attendance requirements.
+Other manually issued types have no attendance threshold; their optional hours
+are entered explicitly. The predefined Accepted spot type always follows event
+access, independently of the shared attendance policy.
 
 Staff issue from settings, the attendance reviewer or an account's certificate
 panel. `POST /api/certificates/issue` accepts exactly one account ID or guest

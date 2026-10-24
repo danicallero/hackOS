@@ -5,8 +5,10 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import {
+  assignRole,
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   truncateAll,
@@ -33,7 +35,10 @@ beforeEach(async () => {
   );
   await pool.query(`DELETE FROM certificate_types WHERE legacy_variant IS NULL`);
   await pool.query(
-    `UPDATE certificate_types SET enabled=true, attendance_policy=true, self_service=true, audience_role_ids=NULL, allow_guests=false, identity_policy='optional', requires_activity=false, body_i18n=NULL WHERE legacy_variant IS NOT NULL`,
+    `UPDATE certificate_types SET enabled=true, attendance_policy=true, self_service=true, audience_role_ids=NULL, allow_guests=false, identity_policy='optional', requires_activity=false, body_i18n=NULL WHERE legacy_variant IN ('participation','hours','activities')`,
+  );
+  await pool.query(
+    `UPDATE certificate_types SET enabled=true WHERE legacy_variant='accepted_spot'`,
   );
   staff = await createUserWithCapabilities([CAPABILITIES.PRESENCE_MANAGE]);
   person = await createUser({ name: "Ada" });
@@ -1019,6 +1024,84 @@ describe("configured types and the durable guest register", () => {
       issued.json().id,
     ]);
     expect(rows[0].snapshot).toMatchObject({ hours: 27.5, manuallyCertified: true });
+  });
+
+  it("predefines accepted spot for all event-access roles without attendance, demo or accepted application", async () => {
+    await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { minHours: null, requiresDemo: true },
+    });
+    const catalog = await app.inject({
+      method: "GET",
+      url: "/api/certificates/types",
+      headers: asUser(staff),
+    });
+    expect(catalog.json().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          legacyVariant: "participation",
+          name: expect.objectContaining({ en: "Attendance" }),
+        }),
+        expect.objectContaining({ legacyVariant: "hours" }),
+        expect.objectContaining({
+          legacyVariant: "accepted_spot",
+          attendancePolicy: false,
+          selfService: true,
+          audienceRoleIds: null,
+        }),
+      ]),
+    );
+    const accepted = catalog
+      .json()
+      .items.find((item: { legacyVariant: string }) => item.legacyVariant === "accepted_spot");
+    for (const name of ["Staff", "Sponsor", "Mentor", "Another custom role"]) {
+      const userId = await createUser({ name });
+      const roleId = await createRole([], { name: `Certificate ${name}`, eventAccess: true });
+      await assignRole(userId, roleId);
+      const overview = await app.inject({
+        method: "GET",
+        url: "/api/me/certificates",
+        headers: asUser(userId),
+      });
+      expect(overview.json().eligibility.eligible).toBe(false);
+      expect(overview.json().types).toContainEqual(expect.objectContaining({ id: accepted.id }));
+      const issue = () =>
+        app.inject({
+          method: "POST",
+          url: "/api/me/certificates/issue",
+          headers: asUser(userId),
+          payload: { typeId: accepted.id, locale: "en" },
+        });
+      const cert = await issue();
+      expect(cert.statusCode, cert.body).toBe(200);
+      expect((await issue()).json().id).toBe(cert.json().id);
+      const pdf = await app.inject({
+        method: "GET",
+        url: `/api/me/certificates/${cert.json().id}/pdf`,
+        headers: asUser(userId),
+      });
+      expect(pdf.statusCode).toBe(200);
+      await pool.query("DELETE FROM user_roles WHERE user_id=$1", [userId]);
+      expect((await issue()).statusCode).toBe(403);
+    }
+    const outsider = await createUser();
+    const denied = await app.inject({
+      method: "POST",
+      url: "/api/me/certificates/issue",
+      headers: asUser(outsider),
+      payload: { typeId: accepted.id, locale: "en" },
+    });
+    expect(denied.statusCode).toBe(403);
+    const { id: _id, revision, legacyVariant: _legacy, ...definition } = accepted;
+    const restricted = await app.inject({
+      method: "PUT",
+      url: `/api/certificates/types/${accepted.id}`,
+      headers: asUser(staff),
+      payload: { revision, definition: { ...definition, audienceRoleIds: [] } },
+    });
+    expect(restricted.statusCode).toBe(400);
   });
 
   it("denies certificate management without the capability", async () => {

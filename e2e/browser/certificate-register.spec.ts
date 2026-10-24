@@ -226,3 +226,104 @@ test("edits trilingual wording and recipient rules for a certificate type", asyn
     },
   });
 });
+
+// #1083: accepted spot follows event access, not attendance eligibility.
+test("downloads the predefined accepted spot certificate without any attendance hours", async ({
+  page,
+}) => {
+  const tr = (text: string) => ({ en: text, es: text, gl: text });
+  const types = [
+    {
+      id: 1,
+      legacyVariant: "participation",
+      name: tr("Attendance"),
+      attendancePolicy: true,
+      selfService: true,
+      requiresActivity: false,
+    },
+    {
+      id: 2,
+      legacyVariant: "hours",
+      name: tr("Hours"),
+      attendancePolicy: true,
+      selfService: true,
+      requiresActivity: false,
+    },
+    {
+      id: 4,
+      legacyVariant: "accepted_spot",
+      name: tr("Accepted spot"),
+      attendancePolicy: false,
+      selfService: true,
+      requiresActivity: false,
+    },
+  ];
+  const records: Record<string, unknown>[] = [];
+  let request: unknown;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me/public-profile") return route.fallback();
+    let body: unknown = { items: [], total: 0 };
+    if (path === "/api/me") body = { ...shellUser, capabilities: [], hasEventAccess: true };
+    if (path === "/api/me/certificates")
+      body = {
+        settings: {
+          minHours: null,
+          minReviewHours: null,
+          awardHours: null,
+          requiresDemo: true,
+          issuerName: "GPUL",
+        },
+        eligibility: {
+          hours: 0,
+          certifiedHours: null,
+          eligible: false,
+          reviewRequired: false,
+          reason: "not_available",
+          demoed: false,
+          approval: null,
+        },
+        types,
+        certificates: records,
+      };
+    if (path === "/api/public/food-intolerances") body = { intolerances: [] };
+    if (path === "/api/me/removal-eligibility") body = { action: "delete" };
+    if (path === "/api/me/certificates/issue") {
+      request = route.request().postDataJSON();
+      records.push({
+        id: 104,
+        typeId: 4,
+        typeName: "Accepted spot",
+        userId: shellUser.id,
+        recipientName: shellUser.name,
+        activityName: "",
+        variant: "participation",
+        locale: "en",
+        code: "abcdefghijklmnopqrstuvwx",
+        issuedAt: "2026-10-24T12:00:00Z",
+        revokedAt: null,
+      });
+      body = records[0];
+    }
+    await route.fulfill({ json: body });
+  });
+  await page.goto("/settings/profile?tab=wallet");
+  const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
+  await expect(cookies).toBeVisible();
+  await cookies.locator("button").first().click();
+  await page.getByRole("combobox", { name: webEn.certificateType, exact: true }).click();
+  await page.getByRole("option", { name: "Accepted spot", exact: true }).click();
+  const get = page.getByRole("button", { name: webEn.certificateGet, exact: true });
+  await expect(get).toBeEnabled();
+  await get.click();
+  await expect.poll(() => request).toEqual({ typeId: 4, locale: "en" });
+  await expect(page.getByText("Accepted spot", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: webEn.certificateDownload, exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: `artifacts/settings/certificate-accepted-spot-${test.info().project.name}.png`,
+    fullPage: true,
+    animations: "disabled",
+  });
+});

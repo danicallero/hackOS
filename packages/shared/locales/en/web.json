@@ -3733,5 +3733,6 @@
   "certificateSelfService": "Allow download from profile",
   "certificateAllowGuests": "Allow guests without accounts",
   "certificateRequiresTalk": "Require a talk or activity",
-  "certificateNoRecipientRoles": "No account roles selected"
+  "certificateNoRecipientRoles": "No account roles selected",
+  "certificateAllEventAccess": "Everyone with event access"
 }

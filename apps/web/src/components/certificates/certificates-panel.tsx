@@ -112,12 +112,15 @@ export function CertificatesPanel({
   }
 
   const definitions =
-    data.types?.filter((type) => type.attendancePolicy && !type.requiresActivity) ?? [];
+    data.types?.filter(
+      (type) => (type.attendancePolicy || type.selfService) && !type.requiresActivity,
+    ) ?? [];
   const selectedDefinition =
     definitions.find((type) => String(type.id) === selectedTypeId) ?? definitions[0];
   const awardInput =
     certifiedHours ?? (data.settings?.awardHours == null ? "" : String(data.settings.awardHours));
-  const below = staff && !data.eligibility.eligible;
+  const needsAttendance = selectedDefinition?.attendancePolicy ?? true;
+  const below = staff && needsAttendance && !data.eligibility.eligible;
   const dateFormat = new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" });
 
   const body = (
@@ -264,7 +267,7 @@ export function CertificatesPanel({
             pending={pending}
             disabled={
               (data.types !== undefined && !selectedDefinition) ||
-              (staff ? below : !data.eligibility.eligible)
+              (staff ? below : needsAttendance && !data.eligibility.eligible)
             }
             onClick={() =>
               void run(
@@ -292,7 +295,7 @@ export function CertificatesPanel({
             {t("certificateHoursSoFar", { hours: String(data.eligibility.hours) })}
           </p>
         ) : null}
-        {!staff && !data.eligibility.eligible && (
+        {!staff && needsAttendance && !data.eligibility.eligible && (
           <p className="mt-3 text-sm text-muted-foreground">
             {t(
               data.eligibility.reviewRequired
@@ -301,7 +304,7 @@ export function CertificatesPanel({
             )}
           </p>
         )}
-        {data.eligibility.certifiedHours != null && (
+        {needsAttendance && data.eligibility.certifiedHours != null && (
           <p className="mt-3 text-sm tabular-nums">
             {t("certificateAwardedHours", { hours: String(data.eligibility.certifiedHours) })}
           </p>

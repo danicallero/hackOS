@@ -30,11 +30,11 @@ export const typeInputSchema = z
   })
   .strict()
   .superRefine((v, ctx) => {
-    if (v.selfService && (!v.attendancePolicy || v.requiresActivity))
+    if (v.selfService && v.requiresActivity)
       ctx.addIssue({
         code: "custom",
         path: ["selfService"],
-        message: "Self-service needs the attendance policy and cannot require a speaker activity",
+        message: "Self-service cannot require a speaker activity",
       });
     for (const body of Object.values(v.body ?? {})) {
       for (const token of body.matchAll(/\{([^{}]+)\}/g))
@@ -54,7 +54,7 @@ export type CertificateTypeInput = z.infer<typeof typeInputSchema>;
 export interface CertificateType extends CertificateTypeInput {
   id: number;
   revision: number;
-  legacyVariant: "participation" | "hours" | "activities" | null;
+  legacyVariant: "participation" | "hours" | "activities" | "accepted_spot" | null;
 }
 function rowType(r: Record<string, unknown>): CertificateType {
   return {
@@ -99,7 +99,9 @@ export async function recipientMatchesType(
   self = false,
 ): Promise<boolean> {
   if (!type.enabled || (self && !type.selfService)) return false;
-  if (type.audienceRoleIds == null) return !self || hasEventAccess(db, userId);
+  if ((self || type.legacyVariant === "accepted_spot") && !(await hasEventAccess(db, userId)))
+    return false;
+  if (type.audienceRoleIds == null) return true;
   const { rowCount } = await db.query(
     `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL LIMIT 1`,
     [userId, type.audienceRoleIds],
@@ -133,6 +135,16 @@ export async function saveCertificateType(
       if (revision !== before.revision)
         throw new ConflictError("This certificate type changed; reload before saving");
     }
+    if (
+      before?.legacyVariant === "accepted_spot" &&
+      (input.attendancePolicy ||
+        !input.selfService ||
+        input.audienceRoleIds !== null ||
+        input.allowGuests ||
+        input.requiresActivity ||
+        input.body == null)
+    )
+      throw new BadRequestError("Accepted spot certificates are for everyone with event access");
     if (!before?.legacyVariant && input.body == null)
       throw new BadRequestError("Custom certificates require text in every language");
     if (input.audienceRoleIds?.length) {

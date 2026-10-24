@@ -548,16 +548,17 @@ export async function issueForSelf(
   if (definition.audienceRoleIds == null && !(await hasEventAccess(pool, userId))) {
     throw new ForbiddenError("Certificates are only available to event attendees");
   }
-  const eligibility = await eligibilityFor(userId);
-  if (!eligibility.eligible && eligibility.reason) throw reasonError(eligibility.reason);
+  const eligibility = definition.attendancePolicy ? await eligibilityFor(userId) : null;
+  if (eligibility && !eligibility.eligible && eligibility.reason)
+    throw reasonError(eligibility.reason);
   return insertCertificate({
     userId,
-    variant,
+    variant: definition.legacyVariant === "accepted_spot" ? "participation" : variant,
     locale,
     typeId: definition.id,
     source: "self",
     actorId: userId,
-    hours: eligibility.hours,
+    hours: eligibility?.hours ?? 0,
   });
 }
 
@@ -959,6 +960,8 @@ export async function issueConfiguredCertificate(
   const definition = await readCertificateType(input.typeId);
   if ((input.userId == null) === !input.guestName?.trim())
     throw new BadRequestError("Choose an account or enter a guest name");
+  if (definition.legacyVariant === "accepted_spot" && input.certifiedHours != null)
+    throw new BadRequestError("Accepted spot certificates do not award attendance hours");
   let hours = input.certifiedHours ?? 0;
   let approval: IssueOptions["approval"];
   if (
@@ -987,7 +990,10 @@ export async function issueConfiguredCertificate(
   return insertCertificate({
     userId: input.userId ?? null,
     typeId: definition.id,
-    variant: definition.legacyVariant ?? "participation",
+    variant:
+      definition.legacyVariant === "accepted_spot"
+        ? "participation"
+        : (definition.legacyVariant ?? "participation"),
     locale: input.locale,
     source: "staff",
     actorId,

@@ -3733,5 +3733,6 @@
   "certificateSelfService": "Permitir descarga desde o perfil",
   "certificateAllowGuests": "Permitir persoas sen conta",
   "certificateRequiresTalk": "Esixir unha charla ou actividade",
-  "certificateNoRecipientRoles": "Sen roles seleccionados"
+  "certificateNoRecipientRoles": "Sen roles seleccionados",
+  "certificateAllEventAccess": "Todas as persoas con acceso ao evento"
 }

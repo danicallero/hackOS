@@ -24,7 +24,7 @@ CREATE TRIGGER certificate_settings_set_updated_at
 
 CREATE TABLE certificate_types (
   id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  legacy_variant text UNIQUE CHECK (legacy_variant IN ('participation','hours','activities')),
+  legacy_variant text UNIQUE CHECK (legacy_variant IN ('participation','hours','activities','accepted_spot')),
   name_i18n jsonb NOT NULL,
   title_i18n jsonb NOT NULL,
   body_i18n jsonb,
@@ -37,15 +37,24 @@ CREATE TABLE certificate_types (
   requires_activity boolean NOT NULL DEFAULT false,
   revision integer NOT NULL DEFAULT 1,
   updated_at timestamptz NOT NULL DEFAULT now(),
-  CHECK (NOT self_service OR (attendance_policy AND NOT requires_activity))
+  CHECK (NOT self_service OR NOT requires_activity),
+  CHECK (legacy_variant IS DISTINCT FROM 'accepted_spot' OR
+    (NOT attendance_policy AND self_service AND audience_role_ids IS NULL AND NOT allow_guests AND NOT requires_activity AND body_i18n IS NOT NULL))
 );
 CREATE TRIGGER certificate_types_set_updated_at BEFORE UPDATE ON certificate_types
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 INSERT INTO certificate_types(legacy_variant,name_i18n,title_i18n,attendance_policy,self_service)
 VALUES
- ('participation','{"es":"Participación","gl":"Participación","en":"Participation"}','{"es":"CERTIFICADO DE PARTICIPACIÓN","gl":"CERTIFICADO DE PARTICIPACIÓN","en":"CERTIFICATE OF PARTICIPATION"}',true,true),
+ ('participation','{"es":"Asistencia","gl":"Asistencia","en":"Attendance"}','{"es":"CERTIFICADO DE ASISTENCIA","gl":"CERTIFICADO DE ASISTENCIA","en":"CERTIFICATE OF ATTENDANCE"}',true,true),
  ('hours','{"es":"Horas de asistencia","gl":"Horas de asistencia","en":"Attendance hours"}','{"es":"CERTIFICADO DE ASISTENCIA","gl":"CERTIFICADO DE ASISTENCIA","en":"CERTIFICATE OF ATTENDANCE"}',true,true),
  ('activities','{"es":"Actividades","gl":"Actividades","en":"Activities"}','{"es":"CERTIFICADO DE ACTIVIDADES","gl":"CERTIFICADO DE ACTIVIDADES","en":"ACTIVITY CERTIFICATE"}',true,true);
+
+-- Accepted spot certifies event access, independently of attendance or roles.
+INSERT INTO certificate_types(legacy_variant,name_i18n,title_i18n,body_i18n,self_service)
+VALUES ('accepted_spot',
+  '{"es":"Plaza aceptada","gl":"Praza aceptada","en":"Accepted spot"}',
+  '{"es":"CERTIFICADO DE PLAZA ACEPTADA","gl":"CERTIFICADO DE PRAZA ACEPTADA","en":"CERTIFICATE OF ACCEPTED SPOT"}',
+  '{"es":"Se certifica que {recipient} tiene una plaza aceptada para el evento {event}, con fechas {dates} en {venue}.","gl":"Certifícase que {recipient} ten unha praza aceptada para o evento {event}, nas datas {dates} en {venue}.","en":"This certifies that {recipient} has an accepted spot at {event}, taking place on {dates} at {venue}."}',true);
 
 CREATE TABLE certificate_approvals (
   user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

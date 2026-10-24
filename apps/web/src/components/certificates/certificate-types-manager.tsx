@@ -72,12 +72,14 @@ export function CertificateTypesManager() {
       id: "recipients",
       header: t("certificateRecipients"),
       cell: (type) =>
-        type.audienceRoleIds == null
-          ? t("certificateAllAccounts")
-          : type.audienceRoleIds
-              .map((id) => catalog.data?.roles.find((r) => r.id === id)?.name)
-              .filter(Boolean)
-              .join(", ") || t("certificateNoRecipientRoles"),
+        type.legacyVariant === "accepted_spot"
+          ? t("certificateAllEventAccess")
+          : type.audienceRoleIds == null
+            ? t("certificateAllAccounts")
+            : type.audienceRoleIds
+                .map((id) => catalog.data?.roles.find((r) => r.id === id)?.name)
+                .filter(Boolean)
+                .join(", ") || t("certificateNoRecipientRoles"),
     },
     {
       id: "status",
@@ -153,6 +155,7 @@ function DefinitionEditor({
   const [draft, setDraft] = useState<CertificateTypeInput>(
     original ? { ...original } : newDefinition(),
   );
+  const acceptedSpot = original?.legacyVariant === "accepted_spot";
   const [locale, setLocale] = useState<Language>(language);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -215,14 +218,13 @@ function DefinitionEditor({
       <Checkbox
         id={`type-${key}`}
         checked={draft[key]}
-        disabled={key === "selfService" && (!draft.attendancePolicy || draft.requiresActivity)}
+        disabled={
+          (acceptedSpot && key !== "enabled") || (key === "selfService" && draft.requiresActivity)
+        }
         onCheckedChange={(value) =>
           patch({
             [key]: value === true,
-            ...((key === "attendancePolicy" && value !== true) ||
-            (key === "requiresActivity" && value === true)
-              ? { selfService: false }
-              : {}),
+            ...(key === "requiresActivity" && value === true ? { selfService: false } : {}),
           })
         }
       />
@@ -268,7 +270,7 @@ function DefinitionEditor({
             required
           />
         </div>
-        {original?.legacyVariant && (
+        {original?.legacyVariant && !acceptedSpot && (
           <div className="flex items-center gap-2">
             <Checkbox
               id="type-custom-text"
@@ -320,14 +322,17 @@ function DefinitionEditor({
         {toggle("enabled", "certificateTypeEnabled")}
         {toggle("attendancePolicy", "certificateUseAttendancePolicy")}
         {toggle("selfService", "certificateSelfService")}
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="type-all-accounts"
-            checked={draft.audienceRoleIds === null}
-            onCheckedChange={(v) => patch({ audienceRoleIds: v === true ? null : [] })}
-          />
-          <Label htmlFor="type-all-accounts">{t("certificateAllAccounts")}</Label>
-        </div>
+        {acceptedSpot && <p className="text-sm">{t("certificateAllEventAccess")}</p>}
+        {!acceptedSpot && (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="type-all-accounts"
+              checked={draft.audienceRoleIds === null}
+              onCheckedChange={(v) => patch({ audienceRoleIds: v === true ? null : [] })}
+            />
+            <Label htmlFor="type-all-accounts">{t("certificateAllAccounts")}</Label>
+          </div>
+        )}
         {draft.audienceRoleIds !== null && (
           <div className="space-y-2">
             <Label htmlFor="type-role-ids">{t("certificateRecipientRoles")}</Label>

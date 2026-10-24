@@ -112,7 +112,7 @@ export interface CertificateTypeInput {
 export interface CertificateType extends CertificateTypeInput {
   id: number;
   revision: number;
-  legacyVariant: CertificateVariant | null;
+  legacyVariant: CertificateVariant | "accepted_spot" | null;
 }
 export interface CertificateIssueInput {
   typeId: number;
