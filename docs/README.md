@@ -150,6 +150,8 @@ Frontend (web & mobile):
   (signing, push, Wallet certs), and
   [store release](./mobile-store-release.md) (artwork, privacy declarations,
   submission, release checklist).
+- [Test coverage and execution](./testing.md) — suite inventory, behavioral
+  coverage map, audit corrections, runtime policy and verification limits.
 - [UI testing](./ui-testing.md) — the shared browser/native selector contract,
   Playwright browser projects, fast React Native screen tests, optional
   Detox simulator/device runs, and the screenshot-on-UI-PRs rule.

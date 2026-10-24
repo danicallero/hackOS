@@ -30,6 +30,12 @@ jobs:
       - name: Run lint
         run: pnpm lint
 
+      - name: Run shared contract tests
+        run: pnpm --filter @hackos/shared test
+
+      - name: Test memory collector
+        run: go test deploy/metrics/main.go deploy/metrics/main_test.go
+
       - name: Test deployment script release-tag handling
         run: bash deploy/test-services-image-tags.sh
 
@@ -127,12 +133,6 @@ jobs:
           docker logs hackos-ci-s3mock
           exit 1
 
-      - name: Create S3 test bucket
-        run: |
-          for shard in 0 1 2 3; do
-            curl --fail --silent --show-error --request PUT "http://127.0.0.1:9000/hackos-shard-${shard}/"
-          done
-
       - name: Run API integration tests
         run: pnpm --filter @hackos/api test
 
@@ -189,4 +189,15 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mobile unit tests
-        run: pnpm --filter @hackos/mobile test
+        run: pnpm --filter @hackos/mobile exec jest --maxWorkers=2
+
+  container-test:
+    name: memory collector container runtime
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Verify real cgroup limits and collector privileges
+        run: bash deploy/metrics/test-runtime.sh

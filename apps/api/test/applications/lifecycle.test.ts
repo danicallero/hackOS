@@ -13,6 +13,7 @@ import {
 } from "../helpers.js";
 import {
   createApplication,
+  createResponse,
   expireConfirmationWindow,
   getResponse,
   getUserSensitive,
@@ -93,6 +94,102 @@ async function toAcceptedSent(appId: number): Promise<{ userId: number; response
   });
   return { userId, responseId };
 }
+
+describe("read-only decision access (H57)", () => {
+  it("shows internal and sent decisions while denying all decision mutations without side effects", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const internalId = await createResponse(await createUser(), appId, {
+      status: "accepted_internal",
+    });
+    const sentId = await createResponse(await createUser(), appId, {
+      status: "accepted",
+      decision_sent_at: new Date().toISOString(),
+    });
+    const headers = asUser(reviewer);
+    const poolRead = await a.inject({
+      method: "GET",
+      url: `/api/applications/${appId}/decision-pool`,
+      headers,
+    });
+    expect(poolRead.statusCode).toBe(200);
+    expect(poolRead.json().accepted.unsent.map((row: { id: number }) => row.id)).toEqual([
+      internalId,
+    ]);
+    expect(poolRead.json().accepted.sent.map((row: { id: number }) => row.id)).toEqual([sentId]);
+    for (const [status, id] of [
+      ["accepted_internal", internalId],
+      ["accepted", sentId],
+    ] as const) {
+      const list = await a.inject({
+        method: "GET",
+        url: `/api/applications/${appId}/responses?status=${status}`,
+        headers,
+      });
+      expect(list.statusCode).toBe(200);
+      expect(list.json().responses.map((row: { id: number }) => row.id)).toEqual([id]);
+    }
+    const before = await pool.query("SELECT * FROM application_responses ORDER BY id");
+    const effects = async () =>
+      (
+        await pool.query(`SELECT
+      (SELECT count(*) FROM audit_log) AS audits,
+      (SELECT count(*) FROM notification_outbox) AS notifications,
+      (SELECT count(*) FROM email_verification_tokens) AS tokens`)
+      ).rows;
+    const beforeEffects = await effects();
+    const actions = [
+      "decide",
+      "send-decision",
+      "resend-decision",
+      "revert-decision",
+      "re-accept",
+      "revoke-spot",
+    ];
+    for (const action of actions) {
+      const payload =
+        action === "decide"
+          ? { decision: "accepted" }
+          : action === "revert-decision"
+            ? { decision: "review" }
+            : {};
+      const single = await a.inject({
+        method: "POST",
+        url: `/api/responses/${sentId}/${action}`,
+        headers,
+        payload,
+      });
+      expect(single.statusCode, action).toBe(403);
+      const batch = await a.inject({
+        method: "POST",
+        url: `/api/responses/batch/${action}`,
+        headers,
+        payload: { ...payload, response_ids: [internalId, sentId] },
+      });
+      expect(batch.statusCode, `batch ${action}`).toBe(403);
+    }
+    for (const action of ["confirm", "decline"]) {
+      const result = await a.inject({
+        method: "POST",
+        url: `/api/responses/${sentId}/${action}`,
+        headers,
+        payload: {},
+      });
+      expect(result.statusCode, action).toBe(403);
+    }
+    const sendAll = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/send-decisions`,
+      headers,
+      payload: {},
+    });
+    expect(sendAll.statusCode).toBe(403);
+    expect((await pool.query("SELECT * FROM application_responses ORDER BY id")).rows).toEqual(
+      before.rows,
+    );
+    expect(await effects()).toEqual(beforeEffects);
+  });
+});
 
 describe("review + decide (H13, H14)", () => {
   it("lets reviewers review and decision-makers read the pool, but only decision-makers publish", async () => {

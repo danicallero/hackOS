@@ -763,3 +763,11 @@ attendance signifies consent to capture and use images by organisers, sponsor
 representatives, other participants and participating entities for promotional,
 social-media, commercial or other purposes. Keep this wording consistent in the
 terms and privacy policy in all three languages.
+
+## Unit test environments
+
+`pnpm --filter @hackos/web test` runs pure `.test.ts` suites in Node and
+component `.test.tsx` suites in jsdom. Browser-state suites written as `.test.ts`
+(nav, privacy removal, URL tabs and the offline queue) are listed explicitly in
+`vitest.config.ts` so they retain their browser environment. Keep browser-only
+coverage in that project when adding suites that use DOM or storage APIs.
