@@ -23,6 +23,7 @@ component implementation details.
 
 - [Test layers](#test-layers)
 - [Browser tests](#browser-tests)
+- [Demo data for local screenshots](#demo-data-for-local-screenshots)
 - [Native mobile tests](#native-mobile-tests)
 - [Adding a flow](#adding-a-flow)
 - [Screenshots on UI PRs](#screenshots-on-ui-prs)
@@ -61,7 +62,8 @@ so they do not replace that state with an empty response and accidentally open
 the onboarding screen. Onboarding scenarios explicitly override the profile
 route to exercise incomplete, hidden, shared and deferred states.
 
-The Chromium project is the required pull-request smoke subset. It includes
+The Chromium project is the required pull-request smoke subset. CI uses two
+isolated browser workers so independent scenarios can overlap. It includes
 the judging-room transition scenario, whose API read model and SSE connection
 are deterministic in-process fixtures. Firefox, WebKit, and mobile Chromium
 remain local/release coverage; scenarios wait for observable UI state rather
@@ -90,11 +92,15 @@ The bootstrap user has no password credentials: use the normal authentication
 setup before opening the queue and judging pages.
 
 The API integration suite runs `seed` and `seed:mock` against a fresh migrated
-database, repeats the mock seed, and checks roster, form-version, eligibility
+schema in the isolated test database, repeats the mock seed, and checks roster, form-version, eligibility
 and room ownership consistency. Run it alone with
 `pnpm --filter @hackos/api test:serial test/seed-mock.test.ts`.
 
 ## Native mobile tests
+
+Mobile discovery includes both `.test.ts` and `.test.tsx` under `lib/` and
+`test/`, including the native header contract tests. CI runs the complete Jest
+suite with two workers; the default local command stays serial.
 
 Fast native UI tests run with the existing mobile Jest command and are included
 in the root `pnpm test:ui` command:
@@ -124,7 +130,8 @@ DETOX_CONFIGURATION=android.emu.debug pnpm test:ui:native
 
 The iOS build is an expo-dev-client, which by default stops at the dev
 launcher's server list and floats a dev-menu button over the app — neither of
-which a spec can tap past. The Detox build therefore sets
+which a spec can tap past. The Detox build targets the host simulator
+architecture rather than compiling both arm64 and x86_64. The Detox build therefore sets
 `DEV_CLIENT_DEFAULT_LAUNCHER_URL` (default `http://localhost:8081`, override
 with `DETOX_METRO_URL`), which `app.config.ts` turns into Info.plist keys that
 boot straight into Metro and suppress the dev menu. Those keys are only
@@ -136,16 +143,17 @@ reads its stored session.
 
 Generated `apps/mobile/ios` and `apps/mobile/android` directories stay ignored
 by CNG. Override the default simulator/device with `DETOX_IOS_DEVICE` or
-`DETOX_ANDROID_AVD` — the `iPhone 15` default no longer exists on recent Xcode
-installs, so pass e.g. `DETOX_IOS_DEVICE="iPhone 17 Pro"`. Native-device acceptance remains separate from the
-default UI command because it needs host-specific hardware and can take much
-longer than the deterministic component suite.
+`DETOX_ANDROID_AVD`; the default iOS device is `iPhone 17 Pro`. Native-device
+acceptance remains separate from the default UI command because it needs
+host-specific hardware and can take much longer than the component suite.
 
 CI runs the hardware-free browser smoke and mobile component suite. Before a
 pilot, run the complete critical-flow gate against a disposable seeded
 environment:
 
 ```sh
+export E2E_API_URL=http://127.0.0.1:3005
+export E2E_API_UPSTREAM_URL=http://127.0.0.1:3000
 export E2E_OPERATOR_EMAIL=operator@example.test
 export E2E_OPERATOR_PASSWORD='fixture password'
 export E2E_PERSON_ID=101
@@ -157,7 +165,22 @@ pnpm test:ui:native:build
 pnpm test:ui:critical
 ```
 
-Seed exactly one verified operator with `accredit:scan` and `activity:scan`;
+For the dedicated iOS test simulator, turn off **Settings → General → AutoFill
+& Passwords → AutoFill Passwords and Passkeys** before running the gate
+([Apple instructions](https://support.apple.com/guide/iphone/automatically-fill-in-strong-passwords-iphf9219d8c9/ios)).
+The password-save sheet is hosted outside the app; it can intercept scanner
+input while remaining absent from Detox’s app hierarchy. The fixture login
+uses native typing because direct replacement does not exercise the credential
+field’s change events.
+
+Start the fixture API at `E2E_API_UPSTREAM_URL` and point Metro’s
+`EXPO_PUBLIC_API_URL` at `E2E_API_URL`. Leave that proxy port free: the critical
+flow suite owns it and forwards to the real fixture API. For a headless
+simulator, append `--headless` to the native test command.
+
+Seed exactly one verified operator with `accredit:scan` and `activity:scan`,
+English UI language, completed notification/profile onboarding and confirmed
+dietary/meal preferences;
 one confirmed, unaccredited person (`E2E_PERSON_ID`); one
 separate already-accredited person with `E2E_BADGE_ID`; and two currently
 scannable activities, one meal and one non-meal recordable activity. Reset the
@@ -167,10 +190,12 @@ contract; never point the suite at production. Run only the native auth smoke
 with `pnpm test:ui:native:smoke`.
 
 The meal scenario performs the same badge twice and waits for the explicit
-repeat-confirmation state. The recordable-activity scenario blocks its write,
-restarts the process, restores the network, and verifies that the encrypted
-SQLite queue replays the persisted scan exactly once: scanning the badge again
-must reach repeat confirmation. Scanner writes reuse the durable local scan ID
+repeat-confirmation state. The recordable-activity scenario rejects its write
+through the test proxy with a retryable 503 and verifies that the upstream has not acknowledged it. It
+restarts the process, restores forwarding, and verifies that the encrypted
+SQLite queue replays the same idempotency key with exactly one acknowledgement:
+scanning the badge again must reach repeat confirmation. SSE connections are
+excluded only from Detox idle synchronization; the blacklist does not simulate a network outage. Scanner writes reuse the durable local scan ID
 as their idempotency key, so this covers transient failure, recovery, and the
 no-duplicate boundary on a device.
 

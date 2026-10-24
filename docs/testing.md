@@ -119,7 +119,9 @@ real download fixture and SVG hover coordinates, all 12 affected cases passed
 across the four profiles.
 
 The host-architecture iOS build, native sign-in smoke and seven Android
-Live Updates unit tests passed. Native accreditation passed against the real API. The meal and recordable
-activity device scenarios remain blocked: their iOS manual-entry controls do
-not expose a text prompt to Detox on this simulator. Restart/replay acceptance
-is therefore still unverified; follow-up fixture repairs remain local. Container runtime checks require Docker, unavailable on this host.
+Live Updates unit tests passed, including the typed email and secure-password
+value assertions. Native accreditation passed against the real API. The meal and
+recordable-activity device scenarios remain blocked: tapping the SwiftUI
+"Enter code manually" button shows no text prompt to Detox on this simulator
+(a repeated tap did not help). Restart/replay acceptance and the 503-proxy
+plumbing are therefore unverified. Container runtime checks require Docker, unavailable on this host.

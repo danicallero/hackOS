@@ -4,7 +4,8 @@ const AUTH_IDS = require("../../packages/shared/src/ui-test-ids.json").auth;
 // because the Detox build bakes DEV_CLIENT_DEFAULT_LAUNCHER_URL into the
 // Info.plist; bundling still takes a while on the first launch.
 describe("native sign-in UI contract", () => {
-  beforeEach(async () => {
+  beforeAll(async () => {
+    if (device.getPlatform() === "ios") await device.clearKeychain();
     await device.launchApp({ delete: true, newInstance: true });
     await waitFor(element(by.id(AUTH_IDS.email)))
       .toBeVisible()
@@ -23,6 +24,8 @@ describe("native sign-in UI contract", () => {
     await element(by.id(AUTH_IDS.password)).tap();
     await element(by.id(AUTH_IDS.password)).typeText("secret");
 
+    await expect(element(by.id(AUTH_IDS.email))).toHaveText("person@example.com");
+    await expect(element(by.id(AUTH_IDS.password))).toHaveText("secret");
     await expect(element(by.id(AUTH_IDS.submit))).toBeVisible();
   });
 });
