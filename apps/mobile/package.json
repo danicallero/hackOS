@@ -103,8 +103,13 @@
       "./jest.setup.js"
     ],
     "testMatch": [
-      "**/lib/**/*.test.ts",
-      "**/test/**/*.test.tsx"
+      "<rootDir>/lib/**/*.test.{ts,tsx}",
+      "<rootDir>/test/**/*.test.{ts,tsx}"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/ios/",
+      "<rootDir>/android/",
+      "<rootDir>/.expo/"
     ]
   }
 }

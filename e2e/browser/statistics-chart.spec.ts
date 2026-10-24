@@ -3,6 +3,7 @@ import { expect, shellUser, test } from "./fixtures";
 
 // H27: native legend linkage and theme changes must preserve chart paint.
 test("statistics legends show counts and follow the active theme", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.route("**/api/**", async (route) => {
     if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
@@ -51,7 +52,19 @@ test("statistics legends show counts and follow the active theme", async ({ page
       "fill",
       theme === "dark" ? "rgb(250,250,250)" : "rgb(3,8,70)",
     );
-    await legend.hover();
+    // H27: hover the painted SVG text, using its own coordinate transform.
+    // WebKit's actionability quad can overlap the adjacent legend marker.
+    const legendPoint = await legend.evaluate((element) => {
+      const text = element as SVGGraphicsElement;
+      const box = text.getBBox();
+      const matrix = text.getScreenCTM();
+      if (!matrix) throw new Error("Legend is not painted");
+      const point = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2).matrixTransform(
+        matrix,
+      );
+      return { x: point.x, y: point.y };
+    });
+    await page.mouse.move(legendPoint.x, legendPoint.y);
     await expect(chart.locator("div").filter({ hasText: /^10$/ }).last()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath(`statistics-${theme}-legend.png`) });
     await page.mouse.move(10, 10);

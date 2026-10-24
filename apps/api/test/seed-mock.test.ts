@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
 import pg from "pg";
 import { expect, it } from "vitest";
@@ -8,22 +7,17 @@ import { TEST_DATABASE_URL } from "./test-env.js";
 
 const exec = promisify(execFile);
 
-it("seeds a fresh migrated database and preserves complete fixtures on rerun (#1021)", async () => {
-  const databaseName = `hackos_mock_${randomUUID().replaceAll("-", "")}`;
-  const databaseUrl = new URL(TEST_DATABASE_URL);
-  databaseUrl.pathname = `/${databaseName}`;
-  const adminUrl = new URL(TEST_DATABASE_URL);
-  adminUrl.pathname = "/postgres";
-  const admin = new pg.Client({ connectionString: adminUrl.toString() });
-  await admin.connect();
-  const client = new pg.Client({ connectionString: databaseUrl.toString() });
+it("seeds a freshly migrated schema and preserves complete fixtures on rerun (#1021)", async () => {
+  // #1021: files run serially within an isolated test database. Reset its schema
+  // like global setup, avoiding an extra CREATE/DROP DATABASE checkpoint cycle.
+  const client = new pg.Client({ connectionString: TEST_DATABASE_URL });
+  await client.connect();
   try {
-    await admin.query(`CREATE DATABASE "${databaseName}"`);
-    await migrate(databaseUrl.toString());
-    await client.connect();
+    await client.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
+    await migrate(TEST_DATABASE_URL);
     const run = (script: string) =>
       exec("pnpm", ["run", script], {
-        env: { ...process.env, DATABASE_URL: databaseUrl.toString() },
+        env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
         timeout: 30_000,
       });
     // The command must also succeed before the optional bootstrap admin exists.
@@ -69,7 +63,5 @@ it("seeds a fresh migrated database and preserves complete fixtures on rerun (#1
     ).toBe(first.responses);
   } finally {
     await client.end();
-    await admin.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
-    await admin.end();
   }
 }, 90_000);

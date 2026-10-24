@@ -33,10 +33,17 @@ beforeEach(() => {
   mockStops.domain = jest.fn();
   mockStops.publicContent = jest.fn();
   mockListeners.length = 0;
+  jest.useFakeTimers();
+  jest.spyOn(Math, "random").mockReturnValue(0.5);
 });
+afterEach(() => {
+  jest.useRealTimers();
+  jest.restoreAllMocks();
+});
+
 const wait = (ms: number) =>
   act(async () => {
-    await new Promise<void>((resolve) => setTimeout(resolve, ms));
+    await jest.advanceTimersByTimeAsync(ms);
   });
 
 function Probe({
@@ -47,7 +54,8 @@ function Probe({
   refresh: () => void;
   onStreamDown?: (streamDown: () => boolean) => void;
 } & Parameters<typeof useStreamRefresh>[1]) {
-  onStreamDown?.(useStreamRefresh(refresh, options));
+  const streamDown = useStreamRefresh(refresh, options);
+  onStreamDown?.(streamDown);
   return null;
 }
 
@@ -70,7 +78,7 @@ it("refreshes once per burst of stream signals and reports a down stream", async
   ]);
   expect(streamDown?.()).toBe(true);
 
-  act(() => {
+  await act(async () => {
     for (const listener of mockListeners) listener.callback();
     mockOnResync.publicContent?.();
   });
@@ -78,4 +86,46 @@ it("refreshes once per burst of stream signals and reports a down stream", async
   expect(refresh).toHaveBeenCalledTimes(1);
   await wait(60);
   expect(refresh).toHaveBeenCalledTimes(1);
+});
+
+it("cancels a queued refresh and unsubscribes when the reader unmounts", async () => {
+  const refresh = jest.fn();
+  const view = await render(
+    <Probe refresh={refresh} publicContent domains={["projects"]} jitterMs={20} />,
+  );
+  await act(async () => {});
+  expect(mockListeners).toHaveLength(2);
+  await act(async () => {
+    for (const listener of mockListeners) listener.callback();
+  });
+  await view.unmount();
+  await wait(60);
+  expect(refresh).not.toHaveBeenCalled();
+  expect(mockListeners).toHaveLength(0);
+  expect(mockStops.publicContent).toHaveBeenCalledTimes(1);
+  expect(mockStops.domain).toHaveBeenCalledTimes(1);
+});
+
+it("uses the newest refresh callback when a pending signal fires after a rerender", async () => {
+  const previous = jest.fn();
+  const latest = jest.fn();
+  const view = await render(<Probe refresh={previous} publicContent jitterMs={20} />);
+  await act(async () => {});
+  expect(mockListeners).toHaveLength(1);
+  await act(async () => {
+    mockListeners[0]?.callback();
+  });
+  await view.rerender(<Probe refresh={latest} publicContent jitterMs={20} />);
+  await wait(60);
+  expect(previous).not.toHaveBeenCalled();
+  expect(latest).toHaveBeenCalledTimes(1);
+  expect(mockListeners).toHaveLength(1);
+});
+
+it("does not subscribe or refresh while disabled", async () => {
+  const refresh = jest.fn();
+  await render(<Probe refresh={refresh} publicContent domains={["projects"]} enabled={false} />);
+  await wait(60);
+  expect(mockListeners).toHaveLength(0);
+  expect(refresh).not.toHaveBeenCalled();
 });
