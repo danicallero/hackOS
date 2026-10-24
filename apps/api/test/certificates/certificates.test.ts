@@ -348,3 +348,22 @@ describe("CSV footer", () => {
     expect((await PDFDocument.load(mine.rawPayload)).getPageCount()).toBe(1);
   });
 });
+
+describe("public verification rate limit", () => {
+  it("answers 429 to a client iterating over codes", async () => {
+    const codes = Array.from({ length: 70 }, (_, i) => String(i).padStart(24, "x"));
+    const statuses: number[] = [];
+    // The counter lives in Valkey for a minute: a fresh address per run.
+    const address = `198.51.100.${1 + Math.floor(Math.random() * 250)}`;
+    for (const code of codes) {
+      const res = await app.inject({
+        method: "GET",
+        url: `/api/public/certificates/${code}`,
+        remoteAddress: address,
+      });
+      statuses.push(res.statusCode);
+    }
+    expect(statuses.slice(0, 60).every((s) => s === 404)).toBe(true);
+    expect(statuses.slice(60).every((s) => s === 429)).toBe(true);
+  });
+});

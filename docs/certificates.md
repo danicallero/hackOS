@@ -57,7 +57,8 @@ from `lib/pdf-copy-footer.ts` (QR, "Copy of the document - issuer", print date,
 page n of N, `CSV: <code>` and how to validate), the way the Spanish
 administration marks electronic copies. The QR and code point to
 `{WEB_URL}/verify/{code}` (`https://os.hackudc.com` in deploy, derived from
-`WEB_DOMAIN`); `GET /api/public/certificates/:code` returns valid or revoked,
+`WEB_DOMAIN`); `GET /api/public/certificates/:code` (and `/pdf`, 60 requests a minute per address,
+then 429) returns valid or revoked,
 the name, event, dates and, for the hours variant only, the hours. The body of
 the PDF reserves `COPY_FOOTER_RESERVE` points at the bottom for it. Any new
 participant-facing PDF should be stamped with `stampCopyFooter` the same way.

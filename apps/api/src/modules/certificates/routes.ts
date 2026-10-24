@@ -1,10 +1,11 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { ForbiddenError } from "../../lib/errors.js";
+import { ForbiddenError, TooManyRequestsError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { consumeRateLimit } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import {
   certificateIdByCode,
@@ -48,6 +49,20 @@ const certificateSchema = z.object({
   revokedAt: z.string().nullable(),
   revokedReason: z.string().nullable(),
 });
+
+/**
+ * #1083: the public routes answer by code. Codes are 24 random characters, so guessing is
+ * hopeless; the limit per client address still stops anyone from iterating at speed.
+ */
+async function limitVerification(req: FastifyRequest): Promise<void> {
+  const result = await consumeRateLimit("certificate-verify", req.ip, {
+    windowSeconds: 60,
+    max: 60,
+  });
+  if (!result.allowed) {
+    throw new TooManyRequestsError("Too many requests, try again later.", result.retryAfterSeconds);
+  }
+}
 
 /** #1083: attendance certificates. Staff routes need `presence:manage`, the capability behind verified hours. */
 export function registerCertificateRoutes(app: FastifyInstance): void {
@@ -271,11 +286,12 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
     "/api/public/certificates/:code",
     {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-content" } },
+      preHandler: limitVerification,
       schema: {
         params: z.object({ code: z.string().min(16).max(64) }),
         summary: "Verify a certificate",
         description:
-          "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, and the hours only for the hours variant. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code (#1083).",
+          "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, and the hours only for the hours variant. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code, 429 past 60 requests a minute from one address (#1083).",
         response: {
           200: z.object({
             status: z.enum(["valid", "revoked"]),
@@ -299,11 +315,12 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
     "/api/public/certificates/:code/pdf",
     {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-content" } },
+      preHandler: limitVerification,
       schema: {
         params: z.object({ code: z.string().min(16).max(64) }),
         summary: "View the official certificate",
         description:
-          "The certificate PDF itself, with the CSV footer, for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code and 409 once revoked (#1083).",
+          "The certificate PDF itself, with the CSV footer, for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code, 409 once revoked and 429 past 60 requests a minute from one address (#1083).",
       },
     },
     async (req, reply) =>

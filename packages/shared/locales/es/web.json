@@ -3657,5 +3657,7 @@
   "toastCertificate": "Certificado",
   "certificateIssuedToast": "Certificado emitido",
   "certificateRevokedToast": "Certificado revocado",
-  "couldNotUseCertificate": "No se pudo completar la acción."
+  "couldNotUseCertificate": "No se pudo completar la acción.",
+  "certificateCodeLabel": "Código de verificación (CSV)",
+  "certificateVerifyAction": "Verificar"
 }
