@@ -757,3 +757,7 @@ revokes access before asynchronous cleanup, and does not retain identity
 merely to preserve certificates or implementation convenience. The remaining
 high risks are deliberately visible rather than hidden behind a success
 response.
+
+Certificate review awards (#1083) are deleted during the removal scrub; issued
+documents are revoked and their snapshots cleared. No certified-hours approval
+remains linked to the anonymized person.

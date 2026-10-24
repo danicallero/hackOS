@@ -251,7 +251,11 @@ export const WORKSPACES: Workspace[] = [
         title: "accreditationAndPresence",
         href: "/logistics/presence",
         icon: SealCheckIcon,
-        anyCapability: [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.PRESENCE_SCAN],
+        anyCapability: [
+          CAPABILITIES.ACCREDIT_SCAN,
+          CAPABILITIES.PRESENCE_SCAN,
+          CAPABILITIES.PRESENCE_MANAGE,
+        ],
       },
       {
         // Meals and activities share one station/page (unified scanner with

@@ -92,5 +92,6 @@
   "apiErrorForbidden": "Non tes permiso para facer isto.",
   "apiErrorRateLimited": "Demasiados intentos. Agarda un momento e téntao de novo.",
   "apiErrorServer": "Algo fallou da nosa parte. Téntao de novo ou avisa ao staff se persiste.",
-  "apiError_review_field_lease_required": "O teu bloqueo de edición caducou ou pertence a outro xurado."
+  "apiError_review_field_lease_required": "O teu bloqueo de edición caducou ou pertence a outro xurado.",
+  "apiError_certificate_review_required": "Pendente de revisión de asistencia"
 }

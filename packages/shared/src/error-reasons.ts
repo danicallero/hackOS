@@ -26,6 +26,7 @@ export const ERROR_REASONS = {
   /** 409: certificates are not offered, or the participant is below the venue-hours threshold (#1083). */
   CERTIFICATE_NOT_AVAILABLE: "certificate_not_available",
   /** 409: the participant has not presented a project, which the certificate requires (#1083). */
+  CERTIFICATE_REVIEW_REQUIRED: "certificate_review_required",
   CERTIFICATE_DEMO_REQUIRED: "certificate_demo_required",
   /** 409: the participant has no verified venue time yet (#1083). */
   CERTIFICATE_HOURS_NOT_MET: "certificate_hours_not_met",

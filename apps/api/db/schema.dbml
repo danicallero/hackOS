@@ -314,10 +314,21 @@ Table capability_grant_quarantine {
   Note: 'H8/H53 repair queue for grants outside packages/shared/src/capabilities.ts; these grants never participate in authorization.'
 }
 
+Table certificate_approvals {
+  approved_at "timestamp with time zone" [not null, default: `now()`]
+  approved_by integer
+  certified_hours "numeric(5,2)" [not null]
+  reason text [not null]
+  user_id integer [pk, not null]
+
+  Note: '#1083 manual attendance awards: certified hours feed certificates and university exports; raw presence signals remain unchanged. Cleared on account removal (H54).'
+}
+
 Table certificate_settings {
   id integer [pk, not null, default: `1`]
   issuer_name text [not null, default: `'Asociación Universitaria Grupo de Programadores e Usuarios de Linux (GPUL)'::text`]
   min_hours "numeric(5,2)"
+  min_review_hours "numeric(5,2)"
   requires_demo boolean [not null, default: `false`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
@@ -1492,6 +1503,8 @@ Ref: attendance_certificates.issued_by > users.id
 Ref: attendance_certificates.revoked_by > users.id
 Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
+Ref: certificate_approvals.approved_by > users.id
+Ref: certificate_approvals.user_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
 Ref: challenge_versions.editor_id > users.id
 Ref: challenge_winners.challenge_id > challenges.id

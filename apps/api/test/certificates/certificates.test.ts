@@ -29,7 +29,7 @@ beforeEach(async () => {
        event_starts_at = '2026-02-27T09:00:00Z', event_ends_at = '2026-03-01T17:00:00Z'`,
   );
   await pool.query(
-    `UPDATE certificate_settings SET min_hours = 10, requires_demo = false, issuer_name = DEFAULT`,
+    `UPDATE certificate_settings SET min_hours = 10, min_review_hours = NULL, requires_demo = false, issuer_name = DEFAULT`,
   );
   staff = await createUserWithCapabilities([CAPABILITIES.PRESENCE_MANAGE]);
   person = await createUser({ name: "Ada" });
@@ -118,6 +118,55 @@ describe("self-service issue", () => {
     expect(new Set(results.map((r) => r.json().id)).size).toBe(1);
   });
 
+  it("does not issue from provisional hours, individually or in bulk", async () => {
+    await pool.query(`UPDATE certificate_settings SET min_hours = 1`);
+    await pool.query(
+      `INSERT INTO time_logs (user_id, kind, scanned_at)
+       VALUES ($1, 'in', now() - interval '2 hours')`,
+      [person],
+    );
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/me/certificates",
+      headers: asUser(person),
+    });
+    expect(overview.json().eligibility).toMatchObject({ hours: 0, eligible: false });
+    expect((await issue(person)).statusCode).toBe(409);
+    const bulk = await app.inject({
+      method: "POST",
+      url: "/api/certificates/bulk",
+      headers: asUser(staff),
+      payload: { variant: "hours", locale: "en" },
+    });
+    expect(bulk.json()).toEqual({ issued: 0, existing: 0, skipped: 1 });
+    await pool.query(`INSERT INTO time_logs (user_id, kind) VALUES ($1, 'out')`, [person]);
+    const secured = await issue(person, { variant: "hours" });
+    expect(secured.statusCode).toBe(200);
+    const verified = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${secured.json().code}`,
+    });
+    expect(verified.json().hours).toBeGreaterThanOrEqual(2);
+  });
+
+  it("keeps independent live documents in each language and converges per language", async () => {
+    await presence(person, 12);
+    const results = await Promise.all(
+      ["es", "en", "gl", "en"].map((locale) => issue(person, { locale })),
+    );
+    expect(results.every((r) => r.statusCode === 200)).toBe(true);
+    expect(results.map((r) => r.json().locale)).toEqual(["es", "en", "gl", "en"]);
+    expect(new Set(results.map((r) => r.json().code)).size).toBe(3);
+    expect(results[1]!.json().id).toBe(results[3]!.json().id);
+    const bulk = await app.inject({
+      method: "POST",
+      url: "/api/certificates/bulk",
+      headers: asUser(staff),
+      payload: { variant: "participation", locale: "gl" },
+    });
+    expect(bulk.json()).toEqual({ issued: 0, existing: 1, skipped: 0 });
+  });
+
   it("is limited to attendees", async () => {
     const outsider = await createUser();
     await presence(outsider, 12);
@@ -198,6 +247,7 @@ describe("staff", () => {
         variant: "participation",
         locale: "es",
         overrideReason: "Left early for a flight",
+        certifiedHours: 30,
       },
     });
     expect(issued.statusCode).toBe(200);
@@ -277,6 +327,46 @@ describe("staff", () => {
     expect((await issue(person)).json().id).not.toBe(cert.id);
   });
 
+  it("serializes concurrent policy patches without losing either edit", async () => {
+    const { updateSettings, readSettings } = await import(
+      "../../src/modules/certificates/service.js"
+    );
+    const blocker = await pool.connect();
+    let pending: Promise<unknown>[] = [];
+    try {
+      await blocker.query("BEGIN");
+      await blocker.query("SELECT id FROM certificate_settings WHERE id = 1 FOR UPDATE");
+      pending = [
+        updateSettings(staff, { minHours: 20 }),
+        updateSettings(staff, { requiresDemo: true }),
+      ];
+      const deadline = Date.now() + 5000;
+      let waiting = 0;
+      while (waiting < 2 && Date.now() < deadline) {
+        const { rows } = await pool.query(
+          `SELECT count(*)::int AS n FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'
+             AND query LIKE '%certificate_settings%'`,
+        );
+        waiting = rows[0].n;
+        if (waiting < 2) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting).toBe(2);
+      await blocker.query("COMMIT");
+      await Promise.all(pending);
+      expect(await readSettings()).toMatchObject({ minHours: 20, requiresDemo: true });
+      const { rows } = await pool.query(
+        `SELECT before, after FROM audit_log WHERE action = 'certificate_settings.update' ORDER BY id`,
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows[1].before).toEqual(rows[0].after);
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+      await Promise.allSettled(pending);
+    }
+  });
+
   it("needs the presence capability and lets staff change the policy", async () => {
     expect(
       (
@@ -298,6 +388,221 @@ describe("staff", () => {
       `SELECT 1 FROM audit_log WHERE action = 'certificate_settings.update'`,
     );
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("attendance review and university awards (#1083)", () => {
+  const approve = (userId: number, certifiedHours = 30) =>
+    app.inject({
+      method: "POST",
+      url: `/api/users/${userId}/certificate-approval`,
+      headers: asUser(staff),
+      payload: {
+        certifiedHours,
+        reason: "Dinner and midnight workshop confirm participation despite missing breakfast",
+      },
+    });
+
+  it("opens review at the lower threshold and requires an explicit hours award", async () => {
+    await presence(person, 12);
+    await pool.query(`UPDATE certificate_settings SET min_hours=30, min_review_hours=10`);
+    const waiting = await issue(person, { variant: "hours" });
+    expect(waiting.statusCode).toBe(409);
+    expect(waiting.json().error.details.code).toBe("certificate_review_required");
+    const missingHours = await app.inject({
+      method: "POST",
+      url: `/api/users/${person}/certificate-approval`,
+      headers: asUser(staff),
+      payload: { reason: "Review" },
+    });
+    expect(missingHours.statusCode).toBe(400);
+    const decision = await approve(person);
+    expect(decision.statusCode).toBe(200);
+    expect(decision.json()).toMatchObject({
+      hours: 12,
+      certifiedHours: 30,
+      eligible: true,
+      reviewRequired: false,
+    });
+    const cert = (await issue(person, { variant: "hours" })).json();
+    const verified = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${cert.code}`,
+    });
+    expect(verified.json().hours).toBe(30);
+    const { rows } = await pool.query(`SELECT snapshot FROM attendance_certificates WHERE id=$1`, [
+      cert.id,
+    ]);
+    expect(rows[0].snapshot.hours).toBe(30);
+    expect(
+      (await pool.query(`SELECT count(*)::int AS n FROM time_logs WHERE user_id=$1`, [person]))
+        .rows[0].n,
+    ).toBe(2);
+    expect(
+      (await pool.query(`SELECT after FROM audit_log WHERE action='certificate.approve'`)).rows[0]
+        .after.certifiedHours,
+    ).toBe(30);
+  });
+
+  it("keeps automatic eligibility above its threshold and queues only the review band", async () => {
+    await pool.query(`UPDATE certificate_settings SET min_hours=10, min_review_hours=5`);
+    await presence(person, 11);
+    expect((await issue(person)).statusCode).toBe(200);
+    const low = await createUser();
+    await admitParticipant(low);
+    await presence(low, 3);
+    const lowResult = await issue(low);
+    expect(lowResult.json().error.details.code).toBe("certificate_hours_not_met");
+    const roster = await app.inject({
+      method: "GET",
+      url: "/api/certificates/participants",
+      headers: asUser(staff),
+    });
+    expect(roster.statusCode).toBe(200);
+    expect(
+      roster.json().items.find((p: { userId: number }) => p.userId === person).eligibility,
+    ).toMatchObject({ certifiedHours: 11, eligible: true });
+    expect(
+      roster.json().items.find((p: { userId: number }) => p.userId === low).eligibility
+        .reviewRequired,
+    ).toBe(false);
+  });
+
+  it("revokes documents with obsolete hours when an award changes", async () => {
+    await presence(person, 12);
+    const previous = (await issue(person, { variant: "hours" })).json();
+    await approve(person, 30);
+    const oldCode = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${previous.code}`,
+    });
+    expect(oldCode.json().status).toBe("revoked");
+    const next = (await issue(person, { variant: "hours" })).json();
+    expect(next.id).not.toBe(previous.id);
+    await approve(person, 30);
+    expect((await issue(person, { variant: "hours" })).json().id).toBe(next.id);
+  });
+
+  it("exports measured versus certified time and matches UDC columns, scoped by university", async () => {
+    await presence(person, 12);
+    await approve(person);
+    const other = await createUser({ name: "Other university" });
+    await admitParticipant(other);
+    await presence(other, 15);
+    const uni = await pool.query(
+      `INSERT INTO universities(name) VALUES ('Universidade da Coruña') RETURNING id`,
+    );
+    await pool.query(`UPDATE users SET university_id=$2 WHERE id=$1`, [person, uni.rows[0].id]);
+    const exporter = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const url = `/api/certificates/participants/export.csv?universityId=${uni.rows[0].id}`;
+    const general = await app.inject({ method: "GET", url, headers: asUser(exporter) });
+    expect(general.statusCode).toBe(200);
+    expect(general.body).toContain("measured_hours,certified_hours,status");
+    expect(general.body).toContain(",12,30,approved");
+    expect(general.body).not.toContain("Other university");
+    const udc = await app.inject({
+      method: "GET",
+      url: `${url}&format=udc`,
+      headers: asUser(exporter),
+    });
+    expect(udc.statusCode).toBe(200);
+    expect(udc.body).toContain(
+      "Nome Asociación,Nome e apelidos,DNI,Nome da actividade,Data da actividade,Lugar de realización,Nº de horas realizadas,Observacións",
+    );
+    expect(udc.body).toContain("Ada Lovelace,12345678Z,HackUDC");
+    expect(udc.body).toContain(",30,");
+    expect(udc.body).not.toContain("Other university");
+    expect(udc.headers["cache-control"]).toContain("no-store");
+    expect(
+      (
+        await pool.query(
+          `SELECT count(*)::int AS n FROM audit_log WHERE entity_type='certificate_export'`,
+        )
+      ).rows[0].n,
+    ).toBe(2);
+  });
+
+  it("never exports an unapproved review candidate as a UDC award", async () => {
+    await presence(person, 12);
+    await pool.query(`UPDATE certificate_settings SET min_hours=30, min_review_hours=10`);
+    const exporter = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const udc = await app.inject({
+      method: "GET",
+      url: "/api/certificates/participants/export.csv?format=udc",
+      headers: asUser(exporter),
+    });
+    expect(udc.body).not.toContain("Ada");
+    expect((await approve(person, 0)).statusCode).toBe(400);
+    const unauthorized = await app.inject({
+      method: "POST",
+      url: `/api/users/${person}/certificate-approval`,
+      headers: asUser(person),
+      payload: { certifiedHours: 30, reason: "Self" },
+    });
+    expect(unauthorized.statusCode).toBe(403);
+  });
+
+  it("shows meals and late-night activity evidence to reviewers", async () => {
+    const { createActivity, createMeal } = await import("../logistics/fixtures.js");
+    const dinner = await createMeal("Dinner");
+    const workshop = await createActivity({ name: "Midnight workshop", requiresScan: true });
+    await pool.query(
+      `INSERT INTO activity_logs(user_id,activity_id,logged_at) VALUES
+      ($1,$2,'2026-02-28T20:00:00Z'),($1,$3,'2026-02-28T23:00:00Z')`,
+      [person, dinner, workshop],
+    );
+    const evidence = await app.inject({
+      method: "GET",
+      url: `/api/users/${person}/certificate-evidence`,
+      headers: asUser(staff),
+    });
+    expect(evidence.statusCode).toBe(200);
+    expect(
+      evidence.json().signals.map((signal: { activityName: string }) => signal.activityName),
+    ).toEqual(["Dinner", "Midnight workshop"]);
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/users/${person}/certificate-evidence`,
+          headers: asUser(person),
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+
+  it("serializes changing awards with concurrent certificate issuance", async () => {
+    await presence(person, 12);
+    await approve(person, 25);
+    const results = await Promise.all([
+      approve(person, 30),
+      issue(person, { variant: "hours" }),
+      approve(person, 35),
+      issue(person, { variant: "participation" }),
+    ]);
+    expect(results.every((r) => r.statusCode === 200)).toBe(true);
+    await issue(person, { variant: "hours" });
+    const { rows } = await pool.query(
+      `SELECT (c.snapshot->>'hours')::numeric = a.certified_hours AS matches
+      FROM attendance_certificates c JOIN certificate_approvals a ON a.user_id=c.user_id WHERE c.user_id=$1 AND c.revoked_at IS NULL`,
+      [person],
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.matches)).toBe(true);
+  });
+
+  it("validates the two thresholds together", async () => {
+    const result = await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { minHours: 10, minReviewHours: 20 },
+    });
+    expect(result.statusCode).toBe(400);
+    expect(
+      (await pool.query(`SELECT min_review_hours FROM certificate_settings`)).rows[0]
+        .min_review_hours,
+    ).toBeNull();
   });
 });
 

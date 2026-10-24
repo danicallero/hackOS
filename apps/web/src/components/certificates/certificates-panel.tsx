@@ -1,5 +1,6 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
@@ -35,6 +36,7 @@ import {
   certificatesApi,
 } from "@/lib/certificates";
 import { LANGS, LOCALE_CODES, languageName, type MessageKey, useLocale } from "@/lib/i18n";
+import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 
@@ -49,13 +51,21 @@ const VARIANT_LABEL: Record<CertificateVariant, MessageKey> = {
  * `staff` is one person's, with issue, revoke and downloads
  * with and without the CSV footer.
  */
-export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
+export function CertificatesPanel({
+  staffUserId,
+  onChanged,
+}: {
+  staffUserId?: number;
+  onChanged?: () => void;
+}) {
   const { t, language } = useLocale();
   const staff = staffUserId !== undefined;
+  const canExport = useCan(CAPABILITIES.LOGISTICS_STATS);
   const [data, setData] = useState<CertificateOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [variant, setVariant] = useState<CertificateVariant>("participation");
   const [locale, setLocale] = useState<Language>(language);
+  const [certifiedHours, setCertifiedHours] = useState("");
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [revoking, setRevoking] = useState<Certificate | null>(null);
@@ -81,6 +91,7 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
       await action();
       if (done) toast.success(done, { compactTitle: t("toastCertificate") });
       await load();
+      onChanged?.();
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotUseCertificate")), t("toastCertificate"));
     } finally {
@@ -102,6 +113,16 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
 
   const body = (
     <div className="space-y-5">
+      {staff && canExport && (
+        <Button
+          variant="outline"
+          disabled={pending}
+          onClick={() => void run(() => certificatesApi.downloadEvidence(staffUserId))}
+        >
+          <DownloadSimpleIcon />
+          {t("certificatePersonEvidenceCsv")}
+        </Button>
+      )}
       {data.certificates.length === 0 ? (
         staff ? (
           <p className="text-muted-foreground text-sm">{t("certificatesNone")}</p>
@@ -211,12 +232,12 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
           </div>
           <SubmitButton
             pending={pending}
-            disabled={below && !reason.trim()}
+            disabled={staff ? below : !data.eligibility.eligible}
             onClick={() =>
               void run(
                 () =>
                   staff
-                    ? certificatesApi.issueFor(staffUserId, variant, locale, reason.trim())
+                    ? certificatesApi.issueFor(staffUserId, variant, locale)
                     : certificatesApi.issueMine(variant, locale),
                 t("certificateIssuedToast"),
               )
@@ -230,17 +251,69 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
             {t("certificateHoursSoFar", { hours: String(data.eligibility.hours) })}
           </p>
         ) : null}
-        {below ? (
-          <div className="mt-3 space-y-2">
-            <Label htmlFor="certificate-override">{t("certificateOverrideReason")}</Label>
-            <Input
-              id="certificate-override"
-              value={reason}
-              maxLength={500}
-              onChange={(e) => setReason(e.target.value)}
-            />
+        {!staff && !data.eligibility.eligible && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {t(
+              data.eligibility.reviewRequired
+                ? "certificateAwaitingReview"
+                : "certificateUnavailableByPolicy",
+            )}
+          </p>
+        )}
+        {data.eligibility.certifiedHours != null && (
+          <p className="mt-3 text-sm tabular-nums">
+            {t("certificateAwardedHours", { hours: String(data.eligibility.certifiedHours) })}
+          </p>
+        )}
+        {staff && (
+          <div className="mt-5 space-y-3 border-t pt-5">
+            {data.eligibility.approval && (
+              <p className="text-sm text-muted-foreground">{data.eligibility.approval.reason}</p>
+            )}
+            <p className="text-sm text-muted-foreground">{t("certificateAwardHelp")}</p>
+            <div className="space-y-2">
+              <Label htmlFor="certificate-award-hours">{t("certificateCertifiedHours")}</Label>
+              <Input
+                id="certificate-award-hours"
+                type="number"
+                min={0.01}
+                max={999}
+                step={0.01}
+                value={certifiedHours}
+                onChange={(e) => setCertifiedHours(e.target.value)}
+                disabled={pending}
+                className="max-w-48 tabular-nums"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="certificate-override">{t("certificateOverrideReason")}</Label>
+              <Input
+                id="certificate-override"
+                value={reason}
+                maxLength={2000}
+                onChange={(e) => setReason(e.target.value)}
+                disabled={pending}
+              />
+            </div>
+            <SubmitButton
+              pending={pending}
+              disabled={
+                !reason.trim() ||
+                !Number.isFinite(Number(certifiedHours)) ||
+                Number(certifiedHours) <= 0 ||
+                Number(certifiedHours) > 999
+              }
+              onClick={() =>
+                void run(
+                  () => certificatesApi.approve(staffUserId, Number(certifiedHours), reason.trim()),
+                  t("certificateApprovedToast"),
+                )
+              }
+            >
+              {t("certificateApproveHours")}
+            </SubmitButton>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
@@ -255,45 +328,43 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
         body
       )}
       {staff ? (
-        <>
-          <Modal
-            open={revoking !== null}
-            onOpenChange={(open) => !open && setRevoking(null)}
-            title={t("certificateRevokeTitle")}
-            footer={
-              <>
-                <Button variant="outline" onClick={() => setRevoking(null)}>
-                  {t("cancel")}
-                </Button>
-                <SubmitButton
-                  pending={pending}
-                  disabled={!revokeReason.trim()}
-                  onClick={() => {
-                    const target = revoking;
-                    if (!target) return;
-                    setRevoking(null);
-                    void run(
-                      () => certificatesApi.revoke(target.id, revokeReason.trim()),
-                      t("certificateRevokedToast"),
-                    );
-                  }}
-                >
-                  {t("certificateRevoke")}
-                </SubmitButton>
-              </>
-            }
-          >
-            <div className="space-y-2">
-              <Label htmlFor="certificate-revoke-reason">{t("reasonLabel")}</Label>
-              <Input
-                id="certificate-revoke-reason"
-                value={revokeReason}
-                maxLength={500}
-                onChange={(e) => setRevokeReason(e.target.value)}
-              />
-            </div>
-          </Modal>
-        </>
+        <Modal
+          open={revoking !== null}
+          onOpenChange={(open) => !open && setRevoking(null)}
+          title={t("certificateRevokeTitle")}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setRevoking(null)}>
+                {t("cancel")}
+              </Button>
+              <SubmitButton
+                pending={pending}
+                disabled={!revokeReason.trim()}
+                onClick={() => {
+                  const target = revoking;
+                  if (!target) return;
+                  setRevoking(null);
+                  void run(
+                    () => certificatesApi.revoke(target.id, revokeReason.trim()),
+                    t("certificateRevokedToast"),
+                  );
+                }}
+              >
+                {t("certificateRevoke")}
+              </SubmitButton>
+            </>
+          }
+        >
+          <div className="space-y-2">
+            <Label htmlFor="certificate-revoke-reason">{t("reasonLabel")}</Label>
+            <Input
+              id="certificate-revoke-reason"
+              value={revokeReason}
+              maxLength={500}
+              onChange={(e) => setRevokeReason(e.target.value)}
+            />
+          </div>
+        </Modal>
       ) : null}
     </>
   );

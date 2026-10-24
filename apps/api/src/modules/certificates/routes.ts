@@ -2,15 +2,22 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError, TooManyRequestsError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { consumeRateLimit } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
+import { presenceTimeline } from "../logistics/presence.js";
+import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import {
+  approveCertificateHours,
   certificateIdByCode,
   certificateOwner,
+  certificateParticipants,
   eligibilityFor,
+  exportCertificateParticipants,
   issueForSelf,
   issueForStaff,
   issueInBulk,
@@ -28,14 +35,25 @@ const idParams = z.object({ id: z.coerce.number().int().positive() });
 
 const settingsSchema = z.object({
   minHours: z.number().nullable(),
+  minReviewHours: z.number().nullable(),
   requiresDemo: z.boolean(),
   issuerName: z.string(),
 });
 const eligibilitySchema = z.object({
   hours: z.number(),
+  certifiedHours: z.number().nullable(),
+  reviewRequired: z.boolean(),
+  approval: z
+    .object({
+      certifiedHours: z.number(),
+      reason: z.string(),
+      approvedBy: z.number().nullable(),
+      approvedAt: z.string(),
+    })
+    .nullable(),
   demoed: z.boolean(),
   eligible: z.boolean(),
-  reason: z.enum(["not_available", "hours_not_met", "demo_required"]).nullable(),
+  reason: z.enum(["not_available", "hours_not_met", "demo_required", "review_required"]).nullable(),
 });
 const certificateSchema = z.object({
   id: z.number(),
@@ -85,6 +103,104 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   };
 
   r.get(
+    "/api/certificates/participants",
+    {
+      ...routeAccess(staffPolicy),
+      preHandler: staff,
+      schema: {
+        summary: "Attendance certificate review roster",
+        description:
+          "Event attendees with university, secured attendance, automatic eligibility, review candidacy and the awarded hours. Raw scans are preserved (#1083).",
+        querystring: z.object({ universityId: z.coerce.number().int().positive().optional() }),
+        response: {
+          200: z.object({
+            items: z.array(
+              z.object({
+                userId: z.number(),
+                name: z.string(),
+                surname: z.string().nullable(),
+                universityId: z.number().nullable(),
+                universityName: z.string().nullable(),
+                eligibility: eligibilitySchema,
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => ({
+      items: await certificateParticipants(req.userId as number, req.query.universityId),
+    }),
+  );
+
+  r.get(
+    "/api/certificates/participants/export.csv",
+    {
+      ...routeAccess({ kind: "capability", capability: CAPABILITIES.LOGISTICS_STATS }),
+      preHandler: requireCapability(CAPABILITIES.LOGISTICS_STATS),
+      schema: {
+        summary: "Export participant attendance and certified hours",
+        description:
+          "CSV of attendees with secured time or a manual award, optionally filtered by university. General format separates measured and certified hours. UDC format matches Modelo Rexistro Actividades and includes only automatic/approved awards; its hours are exactly those used on certificates. Audited and never cached (#1083, H54).",
+        querystring: z.object({
+          universityId: z.coerce.number().int().positive().optional(),
+          format: z.enum(["general", "udc"]).default("general"),
+        }),
+      },
+    },
+    async (req, reply) =>
+      sendCsv(
+        reply,
+        `certificate-attendance-${req.query.format}.csv`,
+        await exportCertificateParticipants(req.userId as number, req.query),
+      ),
+  );
+
+  r.post(
+    "/api/users/:id/certificate-approval",
+    {
+      ...routeAccess(staffPolicy),
+      preHandler: [staff, idempotencyGuard],
+      schema: {
+        params: idParams,
+        body: z.object({
+          certifiedHours: z.number().positive().max(999),
+          reason: z.string().trim().min(1).max(2000),
+        }),
+        summary: "Approve a participant's certified hours",
+        description:
+          "Records a case-by-case attendance award with explicit hours and reason, without changing presence scans. The award unlocks self-service certificates and feeds university CSVs. Existing documents with different hours are revoked so their public codes cannot verify an obsolete award. Audited and serialized with issuance and account removal (#1083, H53, H54).",
+        response: { 200: eligibilitySchema },
+      },
+    },
+    async (req) =>
+      approveCertificateHours(
+        req.userId as number,
+        req.params.id,
+        req.body.certifiedHours,
+        req.body.reason,
+      ),
+  );
+
+  r.get(
+    "/api/users/:id/certificate-evidence",
+    {
+      ...routeAccess(staffPolicy),
+      preHandler: staff,
+      schema: {
+        params: idParams,
+        summary: "Review attendance evidence for certificates",
+        description:
+          "All door and activity signals, including meals, in the existing presence timeline. Staff assess activity context before recording certified hours. Does not change the measured attendance (#1083).",
+      },
+    },
+    async (req) => {
+      await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
+      return presenceTimeline(req.params.id, undefined, req.userId as number);
+    },
+  );
+
+  r.get(
     "/api/me/certificates",
     {
       config: own,
@@ -92,7 +208,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       schema: {
         summary: "My certificate eligibility and certificates",
         description:
-          "The caller's verified venue hours, whether their team presented a project, whether they meet the certificate policy (and why not) and the certificates already issued to them (#1083).",
+          "The caller's secured venue hours, whether their team presented a project, whether they meet the certificate policy (and why not) and the certificates already issued to them (#1083).",
         response: {
           200: z.object({
             settings: settingsSchema,
@@ -122,7 +238,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         body: z.object({ variant, locale }),
         summary: "Issue my certificate",
         description:
-          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued. 409 with a reason when certificates are off, the venue-hours threshold is not met or the policy requires a presented project (#1083, H53).",
+          "Issues the caller's certificate in the chosen variant (participation, hours or activities) and language, or returns the one already issued in that language. 409 with a reason when certificates are off, the venue-hours threshold is not met or the policy requires a presented project (#1083, H53).",
         response: { 200: certificateSchema },
       },
     },
@@ -157,7 +273,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Certificate policy",
         description:
-          "Hours threshold for automatic issue (null switches it off), whether a presented project is required, and the issuer name printed on certificates (#1083).",
+          "Automatic and review hours thresholds (null disables each path), whether a presented project is required, and the issuer name printed on certificates (#1083).",
         response: { 200: settingsSchema },
       },
     },
@@ -173,13 +289,14 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         body: z
           .object({
             minHours: z.number().min(0).max(999).nullable().optional(),
+            minReviewHours: z.number().min(0).max(999).nullable().optional(),
             requiresDemo: z.boolean().optional(),
             issuerName: z.string().trim().min(1).max(200).optional(),
           })
           .strict(),
         summary: "Update the certificate policy",
         description:
-          "Changes the hours threshold, the presented-project requirement or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
+          "Changes the automatic/review hours thresholds, the presented-project requirement or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
         response: { 200: settingsSchema },
       },
     },
@@ -221,10 +338,11 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
           variant,
           locale,
           overrideReason: z.string().trim().min(1).max(500).nullish(),
+          certifiedHours: z.number().positive().max(999).optional(),
         }),
         summary: "Issue a certificate to a person",
         description:
-          "Issues a certificate to one person. Below the policy it needs `overrideReason`, recorded on the certificate and in the audit log; without it the request answers 409 with the unmet rule. Returns the existing certificate when one is already live (#1083, H53).",
+          "Issues a certificate to one person. Below the policy it needs explicit `certifiedHours` and `overrideReason`, recorded on the certificate and in the audit log; without it the request answers 409 with the unmet rule. Returns the existing certificate when one is already live in that language (#1083, H53).",
         response: { 200: certificateSchema },
       },
     },
@@ -240,7 +358,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         body: z.object({ variant, locale }),
         summary: "Issue certificates to everyone eligible",
         description:
-          "Issues the variant to every attendee who meets the policy. People who already hold a live certificate of that variant are counted as `existing`, everyone else as `skipped`. 409 when automatic issue is off (#1083, H53).",
+          "Issues the variant to every attendee who meets the policy. People who already hold a live certificate of that variant and language are counted as `existing`, everyone else as `skipped`. Manual awards remain eligible when automatic issue is off (#1083, H53).",
         response: {
           200: z.object({ issued: z.number(), existing: z.number(), skipped: z.number() }),
         },

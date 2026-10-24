@@ -10,6 +10,14 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
 (rendering). Mobile: `apps/mobile/lib/tabs.ts` (data) +
 `apps/mobile/app/(tabs)/_layout.tsx` (rendering).
 
+Certificate policy (#1083) is available at **Event settings → Certificates**
+(`/settings/event?tab=certificates`) to organisers with `presence:manage`.
+The section owns one Save for automatic/review thresholds, presentation
+requirement and issuer name. **Attendance → Certificates**
+(`/logistics/presence?tab=certificates`, `presence:manage`) provides the review
+queue, full evidence timeline, explicit certified-hour awards and university
+filters. CSV exports require `logistics:stats`.
+
 ## Contents
 
 - [Principle](#principle)

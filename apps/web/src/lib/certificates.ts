@@ -3,6 +3,13 @@ import type { Language } from "@/lib/types";
 
 export type CertificateVariant = "participation" | "hours" | "activities";
 
+export interface CertificateSettings {
+  minHours: number | null;
+  minReviewHours: number | null;
+  requiresDemo: boolean;
+  issuerName: string;
+}
+
 export interface Certificate {
   id: number;
   code: string;
@@ -15,8 +22,16 @@ export interface Certificate {
 
 export interface CertificateEligibility {
   hours: number;
+  certifiedHours: number | null;
+  reviewRequired: boolean;
+  approval: {
+    certifiedHours: number;
+    reason: string;
+    approvedBy: number | null;
+    approvedAt: string;
+  } | null;
   eligible: boolean;
-  reason: "not_available" | "hours_not_met" | "demo_required" | null;
+  reason: "not_available" | "hours_not_met" | "demo_required" | "review_required" | null;
 }
 
 export const CERTIFICATE_VARIANTS: CertificateVariant[] = ["participation", "hours", "activities"];
@@ -26,8 +41,29 @@ export interface CertificateOverview {
   certificates: Certificate[];
 }
 
+export interface CertificateParticipant {
+  userId: number;
+  name: string;
+  surname: string | null;
+  universityId: number | null;
+  universityName: string | null;
+  eligibility: CertificateEligibility;
+}
+
 /** #1083: attendance certificates, as the participant and as staff. */
 export const certificatesApi = {
+  downloadEvidence: (userId: number) =>
+    apiDownload(
+      `/api/presence/hours/${userId}/export.csv?format=full`,
+      `attendance-evidence-${userId}.csv`,
+    ),
+  participants: () =>
+    api.get<{ items: CertificateParticipant[] }>("/api/certificates/participants"),
+  approve: (userId: number, certifiedHours: number, reason: string) =>
+    api.post<CertificateEligibility>(`/api/users/${userId}/certificate-approval`, {
+      certifiedHours,
+      reason,
+    }),
   mine: () => api.get<CertificateOverview>("/api/me/certificates"),
   issueMine: (variant: CertificateVariant, locale: Language) =>
     api.post<Certificate>("/api/me/certificates", { variant, locale }),

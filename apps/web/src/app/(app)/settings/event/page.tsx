@@ -19,6 +19,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimpl
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { UserCheckIcon } from "@phosphor-icons/react/dist/csr/UserCheck";
 import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
@@ -36,6 +37,7 @@ import { useCan } from "@/lib/session";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { ProjectFormSection } from "../../projects/form/project-form-section";
 import { JudgingWindowTab } from "../../queue/rooms/judging-window-tab";
+import { CertificatesTab } from "./certificates-tab";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
 import { InvitesTab } from "./invites-tab";
@@ -56,7 +58,7 @@ const GROUPS = [
     categories: ["schedule", "projects", "judging", "presence"],
   },
   { id: "forms", label: "settingsGroupForms", categories: ["projectForm"] },
-  { id: "access", label: "settingsGroupAccess", categories: ["invites", "wallet"] },
+  { id: "access", label: "settingsGroupAccess", categories: ["invites", "wallet", "certificates"] },
   {
     id: "messaging",
     label: "settingsGroupMessaging",
@@ -75,6 +77,7 @@ const CATEGORY_ICONS = {
   venue: MapPinIcon,
   wallet: WalletIcon,
   presence: UserCheckIcon,
+  certificates: SealCheckIcon,
   invites: EnvelopeSimpleIcon,
   judging: ClockIcon,
   liveActivities: DeviceMobileIcon,
@@ -90,6 +93,7 @@ const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => Re
   projectForm: (onDirtyChange) => <ProjectFormSection onDirtyChange={onDirtyChange} />,
   venue: (onDirtyChange) => <VenueTab onDirtyChange={onDirtyChange} />,
   wallet: (onDirtyChange) => <WalletTab onDirtyChange={onDirtyChange} />,
+  certificates: (onDirtyChange) => <CertificatesTab onDirtyChange={onDirtyChange} />,
   presence: (onDirtyChange) => <PresenceTab onDirtyChange={onDirtyChange} />,
   invites: (onDirtyChange) => <InvitesTab onDirtyChange={onDirtyChange} />,
   judging: (onDirtyChange) => <JudgingWindowTab onDirtyChange={onDirtyChange} />,
@@ -123,6 +127,7 @@ export default function EventSettingsPage() {
     venue: canVenue,
     wallet: canWallet,
     presence: canPresence,
+    certificates: canPresence,
     invites: canInvites,
     judging: canJudging,
     liveActivities: canEvent,
@@ -142,6 +147,7 @@ export default function EventSettingsPage() {
     venue: t("venueSectionTitle"),
     wallet: t("walletPassSectionTitle"),
     presence: t("presencePolicyTitle"),
+    certificates: t("certificates"),
     invites: t("invitesSectionTitle"),
     judging: t("judgingWindowTitle"),
     liveActivities: t("liveActivitiesTitle"),

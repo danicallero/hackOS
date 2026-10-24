@@ -1419,6 +1419,7 @@ async function scrubRelationships(
   await client.query(`DELETE FROM content_reports WHERE reporter_id = $1 OR target_user_id = $1`, [
     userId,
   ]);
+  await client.query(`DELETE FROM certificate_approvals WHERE user_id = $1`, [userId]);
   // #1083: certificates stay verifiable as revoked, without the person's data.
   await client.query(
     `UPDATE attendance_certificates

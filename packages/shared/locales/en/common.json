@@ -92,5 +92,6 @@
   "apiErrorForbidden": "You don't have permission to do this.",
   "apiErrorRateLimited": "Too many attempts. Wait a moment and try again.",
   "apiErrorServer": "Something went wrong on our side. Try again, or contact staff if it persists.",
-  "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge."
+  "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge.",
+  "apiError_certificate_review_required": "Awaiting attendance review"
 }
