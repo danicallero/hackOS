@@ -63,7 +63,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/certificates` | capability:presence:manage + email-verification:caller |
 | GET | `/api/certificates/:id/pdf` | capability:presence:manage |
 | POST | `/api/certificates/:id/revoke` | capability:presence:manage + email-verification:caller |
-| PUT | `/api/certificates/:id/signed` | capability:presence:manage + email-verification:caller |
+| POST | `/api/certificates/:id/signed` | capability:presence:manage + email-verification:caller |
 | POST | `/api/certificates/bulk` | capability:presence:manage + email-verification:caller |
 | GET | `/api/certificates/settings` | capability:presence:manage |
 | PUT | `/api/certificates/settings` | capability:presence:manage + email-verification:caller |

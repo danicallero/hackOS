@@ -315,7 +315,7 @@ describe("signed original and CSV footer", () => {
   function putSigned(id: number, bytes: Buffer, key: string) {
     const boundary = `----hackos-${key}`;
     return app.inject({
-      method: "PUT",
+      method: "POST",
       url: `/api/certificates/${id}/signed`,
       headers: {
         ...asUser(staff),

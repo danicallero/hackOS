@@ -6,7 +6,7 @@ association does not issue one). Trust comes from the issuer named on the PDF
 plus an unguessable code that a public page resolves. Anything that needs a
 real signature is signed outside hackOS: staff download the PDF without the CSV
 footer (`GET /api/certificates/:id/pdf`), sign it, and upload the result
-(`PUT /api/certificates/:id/signed`).
+(`POST /api/certificates/:id/signed`).
 
 Code: `apps/api/src/modules/certificates/` (`service.ts` policy and issue,
 `pdf.ts` rendering, `routes.ts`). Migration: `0503_attendance_certificates.sql`.
@@ -64,13 +64,21 @@ participant-facing PDF should be stamped with `stampCopyFooter` the same way.
 
 Staff download without the footer (`GET /api/certificates/:id/pdf`, or
 `?copy=true` to see what the participant gets), sign it digitally and upload the
-signed PDF (`PUT /api/certificates/:id/signed`, multipart, 10 MB, audited as
+signed PDF (`POST /api/certificates/:id/signed`, multipart, 10 MB, audited as
 `certificate.sign_upload`). From then on every download, staff or participant,
 is based on the signed file, and copies get the footer stamped on it. The
 original stays in object storage (`certificates/{id}/...`) and is deleted on
 account removal (H54). Stamping rewrites the PDF, so a copy does not carry the
 digital signature itself: the CSV is what proves it matches the signed original
 held by the organisation. Uploading again replaces the signed file.
+
+## Web
+
+Participants use `/certificates` (nav item under Wallet): pick a variant and
+language, get the certificate, download copies. Staff with `presence:manage` get
+the same panel for a person in their profile's Attendance tab, plus override
+reason, revoke, download without CSV, download copy and upload the signed PDF.
+Mobile screens are not built yet.
 
 ## Lifecycle
 

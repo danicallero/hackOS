@@ -268,7 +268,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
     async (req, reply) => sendPdf(reply, req.params.id, req.query.copy),
   );
 
-  r.put(
+  r.post(
     "/api/certificates/:id/signed",
     {
       ...routeAccess(staffPolicy),
