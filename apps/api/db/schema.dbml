@@ -402,7 +402,7 @@ Table challenges {
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture queue marker; ordinary event operations exclude marked rows.']
   judging_panel_criteria jsonb
-  mandatory boolean [not null, default: `false`, note: 'When true, every project is enrolled regardless of Devpost tags or manual selection (issue #851).']
+  mandatory boolean [not null, default: `false`, note: 'When true, every project is enrolled regardless of manual challenge selection (issue #851).']
   max_in_waiting_area integer [not null, default: `2`]
   max_presentation_seconds integer
   preparation_seconds integer [not null, default: `120`]
