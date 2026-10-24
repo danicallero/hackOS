@@ -170,7 +170,7 @@ export function MultiSelect({
         <div
           ref={boxRef}
           className={cn(
-            "relative flex min-h-[var(--control-height-default)] w-full items-center gap-2 rounded-control border bg-background",
+            "relative flex min-h-[var(--control-height-default)] w-full min-w-0 items-center gap-2 rounded-control border bg-background",
             value.length > 0 && "px-2 py-1",
             disabled && "opacity-50",
             className,
@@ -218,7 +218,8 @@ export function MultiSelect({
               aria-invalid={ariaInvalid}
               className={cn(
                 buttonVariants({ variant: "ghost", size: "default" }),
-                "min-w-0 flex-1 rounded-control px-1 text-left font-normal",
+                // The button variant never shrinks; a long placeholder must truncate, not overflow.
+                "min-w-0 flex-1 shrink rounded-control px-1 text-left font-normal",
                 // With badges the label is sr-only, so the chevron is the only
                 // visible child: pin it to the far edge of the control instead
                 // of leaving it floating where the label used to start.

@@ -178,8 +178,9 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
           ))}
         </ul>
       )}
-      <div>
-        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      {/* Follows the panel's own width: it sits in the profile column and on user detail. */}
+      <div className="@container">
+        <div className="grid gap-4 @lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @lg:items-end">
           <div className="space-y-2">
             <Select value={variant} onValueChange={(v) => setVariant(v as CertificateVariant)}>
               <SelectTrigger aria-label={t("certificates")} className="w-full">

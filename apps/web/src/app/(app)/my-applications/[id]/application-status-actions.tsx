@@ -80,7 +80,7 @@ export function ApplicationStatusActions({
         <SectionCard icon={CheckCircleIcon} title={t("placeConfirmed")}>
           <div className="flex flex-wrap gap-2">
             <Button asChild className="w-full sm:w-auto">
-              <Link href="/wallet">
+              <Link href="/settings/profile?tab=wallet">
                 <WalletIcon aria-hidden="true" />
                 {t("viewTicket")}
               </Link>
