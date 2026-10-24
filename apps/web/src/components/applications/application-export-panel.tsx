@@ -1,6 +1,8 @@
 "use client";
 
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { MinusIcon } from "@phosphor-icons/react/dist/csr/Minus";
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -126,6 +128,7 @@ export function ApplicationExportPanel({
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [documents, setDocuments] = useState<DocumentScope>("none");
   const [fieldSearch, setFieldSearch] = useState("");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [exportError, setExportError] = useState<string | null>(null);
   const [missingFiles, setMissingFiles] = useState<MissingFileReport | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -193,7 +196,7 @@ export function ApplicationExportPanel({
         };
         options.push({
           id: fieldId(selection),
-          label: `${application.name} — ${pickText(field.label, language)}`,
+          label: pickText(field.label, language),
           description: field.key,
           group: "answer",
           selection,
@@ -215,13 +218,15 @@ export function ApplicationExportPanel({
         label: t("applicationExportMetadataFields"),
         options: fieldOptions.filter((option) => option.group === "metadata"),
       },
-      {
-        key: "answer" as const,
-        label: t("applicationExportAnswerFields"),
-        options: fieldOptions.filter((option) => option.group === "answer"),
-      },
+      ...(catalog?.applications ?? []).map((application) => ({
+        key: `application-${application.id}`,
+        label: application.name,
+        options: fieldOptions.filter(
+          (option) => option.selection.application_id === application.id,
+        ),
+      })),
     ],
-    [fieldOptions, t],
+    [catalog, fieldOptions, t],
   );
 
   const filteredGroups = useMemo(() => {
@@ -230,7 +235,7 @@ export function ApplicationExportPanel({
     return fieldGroups.map((group) => ({
       ...group,
       options: group.options.filter((option) =>
-        `${option.label} ${option.description}`.toLocaleLowerCase().includes(query),
+        `${group.label} ${option.label} ${option.description}`.toLocaleLowerCase().includes(query),
       ),
     }));
   }, [fieldGroups, fieldSearch]);
@@ -490,47 +495,119 @@ export function ApplicationExportPanel({
                   placeholder={t("applicationExportFieldSearch")}
                 />
               </div>
-              <div className="max-h-80 space-y-4 overflow-y-auto rounded-control border border-border p-3">
+              <div className="divide-y divide-border" data-export-fields>
                 {filteredGroups.every((group) => group.options.length === 0) ? (
-                  <p className="text-muted-foreground text-sm">
+                  <p className="text-muted-foreground py-3 text-sm">
                     {t("applicationExportNoMatchingFields")}
                   </p>
                 ) : (
-                  filteredGroups.map((group) =>
-                    group.options.length > 0 ? (
-                      <fieldset key={group.key} className="space-y-2">
-                        <legend className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-                          {group.label}
-                        </legend>
-                        <div className="grid gap-1">
-                          {group.options.map((option) => {
-                            const checkboxId = `application-export-${option.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-                            return (
-                              <label
-                                key={option.id}
-                                htmlFor={checkboxId}
-                                className="flex min-h-10 items-start gap-2 rounded-control px-2 py-2 hover:bg-muted/50"
-                              >
-                                <Checkbox
-                                  id={checkboxId}
-                                  checked={selectedFields.includes(option.id)}
-                                  onCheckedChange={(checked) =>
-                                    toggleField(option.id, checked === true)
-                                  }
+                  filteredGroups.map((group) => {
+                    if (group.options.length === 0) return null;
+                    const selectedCount = group.options.filter((option) =>
+                      selectedFields.includes(option.id),
+                    ).length;
+                    const expanded = fieldSearch.trim().length > 0 || expandedGroups.has(group.key);
+                    const groupId = `application-export-group-${group.key}`;
+                    return (
+                      <div key={group.key} className="py-2">
+                        <div className="flex items-center gap-2">
+                          <label
+                            htmlFor={`${groupId}-select`}
+                            className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-control px-2 hover:bg-muted/50"
+                          >
+                            <span className="relative flex shrink-0 items-center justify-center">
+                              <Checkbox
+                                id={`${groupId}-select`}
+                                checked={
+                                  selectedCount === group.options.length
+                                    ? true
+                                    : selectedCount > 0
+                                      ? "indeterminate"
+                                      : false
+                                }
+                                className="[&[data-state=indeterminate]_svg]:invisible data-[state=indeterminate]:border-primary data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground"
+                                onCheckedChange={(checked) => {
+                                  const ids = new Set(group.options.map((option) => option.id));
+                                  setSelectedFields((current) =>
+                                    checked === true
+                                      ? [...new Set([...current, ...ids])]
+                                      : current.filter((id) => !ids.has(id)),
+                                  );
+                                }}
+                              />
+                              {selectedCount > 0 && selectedCount < group.options.length && (
+                                <MinusIcon
+                                  aria-hidden="true"
+                                  className="pointer-events-none absolute size-3.5 text-primary-foreground"
                                 />
-                                <span className="min-w-0">
-                                  <span className="block break-words text-sm">{option.label}</span>
-                                  <span className="text-muted-foreground block break-all text-xs">
-                                    {option.description}
-                                  </span>
-                                </span>
-                              </label>
-                            );
-                          })}
+                              )}
+                            </span>
+                            <span className="min-w-0 break-words text-sm font-medium">
+                              {group.label}
+                            </span>
+                            <span className="ms-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+                              {selectedCount}/{group.options.length}
+                            </span>
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="min-h-11 shrink-0"
+                            aria-expanded={expanded}
+                            aria-controls={groupId}
+                            aria-label={`${t("applicationExportChooseFields")}: ${group.label}`}
+                            disabled={fieldSearch.trim().length > 0}
+                            onClick={(event) => {
+                              const button = event.currentTarget;
+                              const scrollContainer = button.closest("form")?.parentElement;
+                              const top = button.getBoundingClientRect().top;
+                              setExpandedGroups((current) => {
+                                const next = new Set(current);
+                                if (expanded) next.delete(group.key);
+                                else next.add(group.key);
+                                return next;
+                              });
+                              requestAnimationFrame(() => {
+                                if (scrollContainer)
+                                  scrollContainer.scrollTop +=
+                                    button.getBoundingClientRect().top - top;
+                              });
+                            }}
+                          >
+                            {t("applicationExportChooseFields")}
+                            <CaretDownIcon
+                              aria-hidden="true"
+                              className={expanded ? "rotate-180" : ""}
+                            />
+                          </Button>
                         </div>
-                      </fieldset>
-                    ) : null,
-                  )
+                        <div id={groupId} hidden={!expanded} className="ps-6 pb-2">
+                          {group.options.map((option) => (
+                            <label
+                              key={option.id}
+                              htmlFor={`application-export-field-${encodeURIComponent(option.id)}`}
+                              className="flex min-h-10 cursor-pointer items-start gap-3 rounded-control px-2 py-2 hover:bg-muted/50"
+                            >
+                              <Checkbox
+                                id={`application-export-field-${encodeURIComponent(option.id)}`}
+                                checked={selectedFields.includes(option.id)}
+                                onCheckedChange={(checked) =>
+                                  toggleField(option.id, checked === true)
+                                }
+                              />
+                              <span className="min-w-0">
+                                <span className="block break-words text-sm">{option.label}</span>
+                                <span className="text-muted-foreground block break-all text-xs">
+                                  {option.description}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </fieldset>

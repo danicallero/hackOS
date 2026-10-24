@@ -440,7 +440,11 @@ meals, applications, staff scan stats and activity attendance) remain gated by
   with subject contact fields, operator and notes. The existing
   `/api/presence/hours/export.csv` remains the reduced/full hours export.
 
-The ZIP always contains the selected CSV columns. `documents=all` includes
+The ZIP always contains the selected CSV columns. Headers use field keys rather
+than translated question text or application names; repeated keys receive
+numeric suffixes in selection order (`key`, `key (2)`). The profile catalog
+excludes `university_id`: select the university form answer to export its
+catalogue name. `documents=all` includes
 every saved file found in each response's immutable form snapshot;
 `documents=shared` additionally requires the field's
 `shareable_with_sponsors` policy and the applicant's explicit
@@ -457,7 +461,10 @@ application exports in Applications, attendance and presence exports in their
 Logistics workspaces, aggregate statistics in Statistics, judging exports in
 the judging queue, and a role-filterable user roster in Users. Each opens in
 the shared editor side panel so scope and output columns are chosen before the
-download begins; there is no standalone export-centre route.
+download begins; there is no standalone export-centre route. Application export
+fields are grouped by profile, response metadata and individual form. Each group
+can be selected or cleared at once and expanded to adjust individual fields;
+search reveals matching fields and group selection affects only those matches.
 
 ## Cross-cutting conventions
 
