@@ -142,6 +142,7 @@
   "continueToDestination": "Continuar",
   "differentAccount": "Iniciar sesión con outra conta",
   "verifyEmail": "Verifica o teu correo",
+  "confirmEmail": "Confirmar correo",
   "verificationInstructions": "Segue a ligazón que che enviamos por correo. Se non a atopas, podes reenviala.",
   "verifyLinkExpiredTitle": "A ligazón caducou",
   "verifyLinkExpiredDesc": "Pide unha ligazón nova.",
@@ -3641,5 +3642,11 @@
   "certificateEvent": "Evento",
   "certificateHours": "Horas verificadas no recinto",
   "certificateIssuedBy": "Emitido por",
-  "certificateIssuedOn": "Data de emisión"
+  "certificateIssuedOn": "Data de emisión",
+  "sendEmail": "Enviar correo",
+  "testEmailSent": "Correo enviado a {to}",
+  "couldNotSendTestEmail": "Non se puido enviar o correo",
+  "notificationOnboardingTitle": "Escolle como avisarte",
+  "notificationOnboardingWithApp": "Coa app móbil iniciada, estes avisos chegan a ela e non ao correo. Activa o correo se o queres tamén.",
+  "notificationOnboardingNoApp": "Sen a app móbil, as chamadas da cola chégante sempre por correo, e tamén os recordatorios de actividades e os retos salvo que desactives o correo."
 }

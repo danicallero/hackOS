@@ -77,6 +77,9 @@ test.beforeEach(async ({ page }) => {
       body = {
         channels: ["in_app", "email", "push"],
         mandatoryCategories: ["queue"],
+        emailOptInCategories: ["queue", "schedule", "challenge"],
+        hasPushDevice: false,
+        onboardingRequired: false,
         overrides:
           route.request().method() === "PUT" ? route.request().postDataJSON().preferences : [],
       };
@@ -110,7 +113,7 @@ test("opens password fields on demand and clears dismissed secrets", async ({ pa
   });
 });
 
-test("changes optional channels while queue calls stay mandatory", async ({ page }) => {
+test("changes optional channels while queue email stays on without a device", async ({ page }) => {
   await page.goto("/inbox?tab=preferences");
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   await expect(cookies).toBeVisible();
@@ -126,9 +129,13 @@ test("changes optional channels while queue calls stay mandatory", async ({ page
   await page.screenshot({ path: `artifacts/settings/channels-${test.info().project.name}.png` });
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: /Notification channels for Queue/i })).toHaveCount(
-    0,
-  );
+  // Queue calls only offer email, locked on while no mobile device is registered (H51).
+  await page.getByRole("button", { name: /Notification channels for Queue/i }).click();
+  const queueEmail = page.getByRole("menuitemcheckbox", { name: "Email", exact: true });
+  await expect(page.getByRole("menuitemcheckbox")).toHaveCount(1);
+  await expect(queueEmail).toBeChecked();
+  await expect(queueEmail).toBeDisabled();
+  await page.keyboard.press("Escape");
   await page.screenshot({
     path: `artifacts/settings/preferences-${test.info().project.name}.png`,
     fullPage: true,

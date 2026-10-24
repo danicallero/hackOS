@@ -99,6 +99,18 @@ const envSchema = z.object({
   MAIL_PROVIDER: z.literal("smtp").default("smtp"),
   MAIL_FROM_ADDRESS: z.string().default("noreply@hackos.local"),
   MAIL_FROM_NAME: z.string().default("hackOS"),
+  /**
+   * Sender for account emails (`auth.*` templates: verification, password
+   * reset, invites, removal PIN). Defaults to MAIL_FROM_*; production sets a
+   * different subdomain so account mail and notifications build their own
+   * sender reputation.
+   */
+  MAIL_AUTH_FROM_ADDRESS: z.string().optional(),
+  MAIL_AUTH_FROM_NAME: z.string().optional(),
+  /** Optional Reply-To for every email (a monitored mailbox; the From is no-reply). */
+  MAIL_REPLY_TO: z.string().optional(),
+  /** Amazon SES configuration set: routes bounce/complaint events. Ignored by other relays. */
+  MAIL_SES_CONFIGURATION_SET: z.string().optional(),
   SMTP_HOST: z.string().default("localhost"),
   /** TLS server name when the relay is reached through a private IP. */
   SMTP_TLS_SERVERNAME: z.string().optional(),

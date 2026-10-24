@@ -17,9 +17,19 @@ export async function listMailpitMessages(): Promise<MailpitMessageSummary[]> {
   return data.messages ?? [];
 }
 
-export async function getMailpitMessage(
-  id: string,
-): Promise<{ Subject: string; Text: string; HTML: string }> {
+export async function getMailpitMessage(id: string): Promise<{
+  Subject: string;
+  Text: string;
+  HTML: string;
+  From: { Address: string; Name: string };
+  ReplyTo: { Address: string }[];
+}> {
   const res = await fetch(`${MAILPIT_BASE}/api/v1/message/${id}`);
-  return (await res.json()) as { Subject: string; Text: string; HTML: string };
+  return (await res.json()) as {
+    Subject: string;
+    Text: string;
+    HTML: string;
+    From: { Address: string; Name: string };
+    ReplyTo: { Address: string }[];
+  };
 }

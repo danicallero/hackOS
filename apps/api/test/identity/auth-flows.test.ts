@@ -122,7 +122,10 @@ describe("H1 sign-up", () => {
     expect(rows[0].category).toBe("auth");
     expect(rows[0].status).toBe("queued");
     expect(rows[0].payload.template).toBe("auth.verify");
-    expect(rows[0].payload.vars.verifyUrl).toContain("/api/auth/verify-email?token=");
+    // The link opens a web confirmation page; it must not hit the API directly,
+    // or link scanners would verify the account on their own.
+    expect(rows[0].payload.vars.verifyUrl).toContain("/verify-email?token=");
+    expect(rows[0].payload.vars.verifyUrl).not.toContain("/api/auth/");
   });
 
   it("does not reveal whether an email already exists (H1)", async () => {
@@ -772,7 +775,7 @@ describe("#188 return-path continuity", () => {
       ["next-signup@example.com"],
     );
     const verifyUrl = new URL(rows[0].payload.vars.verifyUrl as string);
-    const callbackURL = verifyUrl.searchParams.get("callbackURL") as string;
+    const callbackURL = verifyUrl.searchParams.get("callback") as string;
     expect(callbackURL).toContain("/verify-email?verified=1&next=%2Fmy-applications%2F5");
   });
 
@@ -790,7 +793,7 @@ describe("#188 return-path continuity", () => {
       ["evil-signup@example.com"],
     );
     const verifyUrl = new URL(rows[0].payload.vars.verifyUrl as string);
-    const callbackURL = verifyUrl.searchParams.get("callbackURL") as string;
+    const callbackURL = verifyUrl.searchParams.get("callback") as string;
     expect(callbackURL).not.toContain("evil.example.com");
     expect(callbackURL).toContain("/verify-email?verified=1");
   });
@@ -816,7 +819,7 @@ describe("#188 return-path continuity", () => {
       ["next-resend@example.com"],
     );
     const verifyUrl = new URL(rows[0].payload.vars.verifyUrl as string);
-    expect(verifyUrl.searchParams.get("callbackURL")).toContain(
+    expect(verifyUrl.searchParams.get("callback")).toContain(
       "/verify-email?verified=1&next=%2Fmy-applications",
     );
   });

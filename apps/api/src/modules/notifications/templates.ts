@@ -45,28 +45,37 @@ function escapeHtml(str: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Where recipients write to: the configured Reply-To, else the organizers' address. */
+function contactEmail(): string {
+  return config.MAIL_REPLY_TO || "hackudc@gpul.org";
+}
+
+/** The automated-message footer in `language`, shared by the HTML and plain-text parts. */
+export function renderEmailFooter(language: Language): string {
+  return translateEmail("mail.footer", language, { contactEmail: contactEmail() });
+}
+
 function footerTextToHtml(text: string): string {
+  const address = contactEmail();
   return escapeHtml(text)
     .replace(/\n/g, "<br/>")
     .replace(
-      "hackudc@gpul.org",
-      `<a href="mailto:hackudc@gpul.org" style="color:inherit;text-decoration:underline;">hackudc@gpul.org</a>`,
+      escapeHtml(address),
+      `<a href="mailto:${escapeHtml(address)}" style="color:inherit;text-decoration:underline;">${escapeHtml(address)}</a>`,
     );
 }
 
-// H52: email-safe values mirror docs/DESIGN.md §2 and the active edition in
-// apps/web/src/styles/theme.css. Inline hex fallbacks work without CSS variables.
+// H52: email-safe values follow the brand rulebook (hackudc.com/en/brand):
+// cream is the default surface and ink the default text; ink is also the
+// primary action; red stays an accent. One flat surface per scheme, no cards,
+// bands or gradients. Inline hex values work without CSS variables.
 const EMAIL_BRAND_NAME = "hackOS";
-const EMAIL_ACCENT_COLOR = "#bf2100";
-const EMAIL_BACKGROUND_COLOR = "#e6f0fb"; // --hackos-shell: blue 12% + cream
-const EMAIL_CARD_COLOR = "#fafafa";
-const EMAIL_CARD_BORDER_COLOR = "#c9cad6"; // --border: ink 20% + cream
-const EMAIL_TEXT_COLOR = "#030846";
-const EMAIL_MUTED_TEXT_COLOR = "#484c78"; // --muted-foreground: ink 72% + cream
-const EMAIL_FOOTER_BACKGROUND_COLOR = "#edf4fb"; // --muted: blue 15% + cream
-const EMAIL_CARD_RADIUS = 8;
-const EMAIL_BUTTON_RADIUS = 999;
-const EMAIL_MAX_WIDTH = 560;
+const EMAIL_INK = "#030846";
+const EMAIL_CREAM = "#FAFAFA";
+const EMAIL_MUTED_TEXT = "#484C78"; // ink 72% on cream: secondary text
+const EMAIL_HAIRLINE = "#DCDDE4"; // ink 12% on cream: dividers and frames
+const EMAIL_COLUMN_WIDTH = 520;
+const EMAIL_BUTTON_RADIUS = 8;
 
 // H52: reuse the edition's self-hosted display face where email clients allow
 // webfonts. Body text uses Inter when available and email-safe sans fallbacks.
@@ -75,24 +84,27 @@ const EMAIL_FONT_FACES = `
 const EMAIL_FONT_STACK =
   "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 const EMAIL_DISPLAY_FONT_STACK = "'Rockwell',Georgia,'Times New Roman',serif";
+const EMAIL_MONO_FONT_STACK =
+  "ui-monospace,SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace";
 
-const EMAIL_DARK_BG = "#0b0d14";
-const EMAIL_DARK_CARD = "#171a23";
-const EMAIL_DARK_FOOTER = "#242833";
-const EMAIL_DARK_BORDER = "#292d37";
-const EMAIL_DARK_TEXT = "#fafafa";
-const EMAIL_DARK_MUTED = "#a3aab8";
-const EMAIL_DARK_BUTTON_BG = EMAIL_ACCENT_COLOR;
-const EMAIL_DARK_BUTTON_TEXT = "#fafafa";
+// Dark mode is a neutral near-black, not navy: cream logo and cream text on
+// black is a sanctioned pairing, and the action inverts to a cream button.
+const EMAIL_DARK_BG = "#0E0F11";
+const EMAIL_DARK_TEXT = EMAIL_CREAM;
+const EMAIL_DARK_MUTED = "#A7A9B3";
+const EMAIL_DARK_HAIRLINE = "#2B2D33";
 
-// H52: PNG exports of the supplied edition SVGs keep logos email-compatible.
+// H52: the navy logo is the default mark on cream; the cream one replaces it
+// for dark mode. The swap uses prefers-color-scheme plus Outlook.com's
+// dark-mode attributes; a client that darkens the page without telling the
+// email keeps the navy mark, which the red one used to get wrong. PNG exports
+// of the supplied SVGs keep it email-compatible.
 function headerMarkup(): string {
-  const imageStyle =
-    "display:block;width:360px;max-width:100%;height:auto;margin:0 auto;border:0;outline:none;";
-  return `<img class="email-logo-light" src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027.png`)}" alt="HackUDC 2027" width="360" style="${imageStyle}" />
+  const imageStyle = "display:block;width:176px;max-width:100%;height:auto;border:0;outline:none;";
+  return `<img class="email-logo-light" src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027-navy.png`)}" alt="HackUDC 2027" width="176" style="${imageStyle}" />
                 <!--[if !mso]><!-->
                 <div class="email-logo-dark" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
-                  <img src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027-dark.png`)}" alt="HackUDC 2027" width="360" style="${imageStyle}" />
+                  <img src="${escapeHtml(`${config.WEB_URL}/email/hackudc-2027-dark.png`)}" alt="HackUDC 2027" width="176" style="${imageStyle}" />
                 </div>
                 <!--<![endif]-->`;
 }
@@ -110,8 +122,6 @@ function brandWrapHtml(
   language: Language,
   heading: string,
 ): string {
-  // H52: the header shares the message surface in both themes. Edition red
-  // identifies correspondence and actions, rather than an admission status.
   return `<!doctype html>
 <html lang="${language}">
   <head>
@@ -127,62 +137,50 @@ function brandWrapHtml(
       ${EMAIL_FONT_FACES}
       body { margin:0; padding:0; width:100% !important; }
       table { border-collapse:collapse; border-spacing:0; }
-      a { color:${EMAIL_ACCENT_COLOR}; }
+      a { color:${EMAIL_INK}; }
       .email-body a { word-break:break-word; }
-      .email-page, .email-card, .email-body, .email-foot { background:${EMAIL_CARD_COLOR}; }
-      .email-page { background:${EMAIL_BACKGROUND_COLOR}; }
-      .email-card { background:${EMAIL_CARD_COLOR}; border-collapse:separate; }
-      .email-foot { background:${EMAIL_FOOTER_BACKGROUND_COLOR}; }
-      .email-body, .email-title { color:${EMAIL_TEXT_COLOR}; }
-      .email-foot-brand, .email-foot-text { color:${EMAIL_MUTED_TEXT_COLOR}; }
-      .email-btn td, .email-btn a { background:${EMAIL_ACCENT_COLOR}; color:${EMAIL_CARD_COLOR}; }
-      .email-head { background:${EMAIL_CARD_COLOR}; }
       @media (prefers-color-scheme: dark) {
+        body, .email-page { background:${EMAIL_DARK_BG} !important; }
         .email-logo-light { display:none !important; }
         .email-logo-dark { display:block !important; max-height:none !important; overflow:visible !important; }
-        .email-head { background:${EMAIL_DARK_CARD} !important; }
-        body, .email-page { background:${EMAIL_DARK_BG} !important; }
-        .email-card, .email-body { background:${EMAIL_DARK_CARD} !important; }
-        .email-foot { background:${EMAIL_DARK_FOOTER} !important; }
-        .email-card { border-color:${EMAIL_DARK_BORDER} !important; }
-        .email-foot { border-top-color:${EMAIL_DARK_BORDER} !important; }
-        .email-body, .email-title { color:${EMAIL_DARK_TEXT} !important; }
-        .email-foot-brand, .email-foot-text { color:${EMAIL_DARK_MUTED} !important; }
-        .email-body a { color:${EMAIL_DARK_TEXT} !important; text-decoration:underline; }
-        .email-btn td, .email-btn a { background:${EMAIL_DARK_BUTTON_BG} !important; color:${EMAIL_DARK_BUTTON_TEXT} !important; }
+        .email-text, .email-title, .email-body a { color:${EMAIL_DARK_TEXT} !important; }
+        .email-muted, .email-muted a { color:${EMAIL_DARK_MUTED} !important; }
+        .email-rule { border-color:${EMAIL_DARK_HAIRLINE} !important; }
+        .email-btn td, .email-btn a { background:${EMAIL_CREAM} !important; color:${EMAIL_INK} !important; }
+        .email-code { border-color:${EMAIL_DARK_HAIRLINE} !important; color:${EMAIL_DARK_TEXT} !important; }
       }
+      [data-ogsc] .email-logo-light { display:none !important; }
+      [data-ogsc] .email-logo-dark { display:block !important; max-height:none !important; overflow:visible !important; }
       @media only screen and (max-width:600px) {
-        .email-pad { padding:24px !important; }
-        .email-head { padding:24px 24px 0 !important; }
-        .email-foot { padding:16px 24px !important; }
-        .email-title { font-size:24px !important; }
+        .email-pad { padding:32px 24px !important; }
+        .email-title { font-size:25px !important; }
         .email-btn { width:100% !important; }
         .email-btn a { display:block !important; text-align:center !important; }
       }
     </style>
   </head>
-    <body style="margin:0;padding:0;background:${EMAIL_BACKGROUND_COLOR};font-family:${EMAIL_FONT_STACK};-webkit-text-size-adjust:100%;">
+  <body style="margin:0;padding:0;background:${EMAIL_CREAM};font-family:${EMAIL_FONT_STACK};-webkit-text-size-adjust:100%;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${escapeHtml(preheader)}</div>
     <div style="display:none;max-height:0;overflow:hidden;">&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;&#8199;&zwnj;&nbsp;</div>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-page" style="background:${EMAIL_BACKGROUND_COLOR};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="email-page" style="background:${EMAIL_CREAM};">
       <tr>
-        <td align="center" style="padding:32px 12px;">
-          <table role="presentation" width="${EMAIL_MAX_WIDTH}" cellpadding="0" cellspacing="0" class="email-card" style="width:100%;max-width:${EMAIL_MAX_WIDTH}px;background:${EMAIL_CARD_COLOR};border-radius:${EMAIL_CARD_RADIUS}px;overflow:hidden;border:1px solid ${EMAIL_CARD_BORDER_COLOR};">
+        <td align="center" class="email-pad" style="padding:48px 24px;">
+          <table role="presentation" width="${EMAIL_COLUMN_WIDTH}" cellpadding="0" cellspacing="0" style="width:100%;max-width:${EMAIL_COLUMN_WIDTH}px;">
             <tr>
-              <td class="email-head" align="center" bgcolor="${EMAIL_CARD_COLOR}" style="background:${EMAIL_CARD_COLOR};padding:24px 32px 0;">
+              <td align="left" style="padding:0 0 40px;">
                 ${headerMarkup()}
               </td>
             </tr>
             <tr>
-              <td class="email-body email-pad" style="padding:32px;color:${EMAIL_TEXT_COLOR};font-size:15px;line-height:1.6;word-break:break-word;">
-                <h1 class="email-title" style="font-family:${EMAIL_DISPLAY_FONT_STACK};font-size:24px;line-height:1.333;font-weight:400;margin:0 0 24px;color:${EMAIL_TEXT_COLOR};">${escapeHtml(heading)}</h1>
+              <td class="email-body email-text" style="color:${EMAIL_INK};font-size:16px;line-height:1.65;word-break:break-word;text-align:left;">
+                <h1 class="email-title" style="font-family:${EMAIL_DISPLAY_FONT_STACK};font-size:28px;line-height:1.2;font-weight:400;margin:0 0 24px;color:${EMAIL_INK};">${escapeHtml(heading)}</h1>
                 ${bodyHtml}
               </td>
             </tr>
             <tr>
-              <td class="email-foot" style="padding:24px 32px;color:${EMAIL_MUTED_TEXT_COLOR};font-size:12px;line-height:1.5;background:${EMAIL_FOOTER_BACKGROUND_COLOR};border-top:1px solid ${EMAIL_CARD_BORDER_COLOR};">
-                <div class="email-foot-brand" style="font-weight:600;margin-bottom:4px;">${EMAIL_BRAND_NAME}</div>
-                <div class="email-foot-text">${footerTextToHtml(translateEmail("mail.footer", language, {}))}</div>
+              <td class="email-rule email-muted" style="padding:24px 0 0;border-top:1px solid ${EMAIL_HAIRLINE};color:${EMAIL_MUTED_TEXT};font-size:13px;line-height:1.6;text-align:left;">
+                <div style="font-weight:600;margin-bottom:4px;">${EMAIL_BRAND_NAME}</div>
+                <div>${footerTextToHtml(renderEmailFooter(language))}</div>
               </td>
             </tr>
           </table>
@@ -200,13 +198,20 @@ const LABELED_LINK_LINE = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/;
 function ctaButton(url: string, label: string): string {
   // H15/H52: declining remains available without competing with confirmation.
   if (/^https?:\/\/[^/?#]+\/applications\/decline(?:[?#]|$)/.test(url)) {
-    return `<p style="margin:0 0 24px;"><a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:${EMAIL_TEXT_COLOR};font-size:14px;text-decoration:underline;">${escapeHtml(label)}</a></p>`;
+    return `<p style="margin:0 0 24px;"><a class="email-muted" href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:${EMAIL_MUTED_TEXT};font-size:14px;text-decoration:underline;">${escapeHtml(label)}</a></p>`;
   }
-  return `<table role="presentation" cellpadding="0" cellspacing="0" class="email-btn" style="margin:8px 0 24px;max-width:100%;">
-  <tr><td bgcolor="${EMAIL_ACCENT_COLOR}" style="border-radius:${EMAIL_BUTTON_RADIUS}px;background:${EMAIL_ACCENT_COLOR};">
-    <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:inline-block;padding:12px 24px;line-height:1.5;color:${EMAIL_CARD_COLOR};font-size:15px;font-weight:600;text-decoration:none;border-radius:${EMAIL_BUTTON_RADIUS}px;">${escapeHtml(label)}</a>
+  return `<table role="presentation" cellpadding="0" cellspacing="0" class="email-btn" style="margin:8px 0 28px;max-width:100%;">
+  <tr><td bgcolor="${EMAIL_INK}" style="border-radius:${EMAIL_BUTTON_RADIUS}px;background:${EMAIL_INK};">
+    <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="display:inline-block;padding:13px 22px;line-height:1.4;color:${EMAIL_CREAM};font-size:15px;font-weight:600;text-decoration:none;border-radius:${EMAIL_BUTTON_RADIUS}px;">${escapeHtml(label)}</a>
   </td></tr>
 </table>`;
+}
+
+// A line that is only a short numeric code (security PIN) reads as a code, not a sentence.
+const CODE_LINE = /^\d{4,8}$/;
+
+function codeBlock(code: string): string {
+  return `<p style="margin:4px 0 24px;"><span class="email-code" style="display:inline-block;padding:14px 20px;border:1px solid ${EMAIL_HAIRLINE};border-radius:${EMAIL_BUTTON_RADIUS}px;font-family:${EMAIL_MONO_FONT_STACK};font-size:28px;line-height:1;font-weight:600;letter-spacing:0.28em;color:${EMAIL_INK};">${escapeHtml(code)}</span></p>`;
 }
 
 /**
@@ -227,7 +232,7 @@ function renderBodyHtml(
       let buffer: string[] = [];
       const flush = () => {
         if (buffer.length > 0) {
-          out += `<p style="margin:0 0 16px;">${buffer.join("<br/>")}</p>`;
+          out += `<p style="margin:0 0 18px;">${buffer.join("<br/>")}</p>`;
           buffer = [];
         }
       };
@@ -235,7 +240,10 @@ function renderBodyHtml(
         const line = rawLine.trim();
         const labeled = line.match(LABELED_LINK_LINE);
         const bare = line.match(BARE_URL_LINE);
-        if (labeled) {
+        if (CODE_LINE.test(line)) {
+          flush();
+          out += codeBlock(line);
+        } else if (labeled) {
           flush();
           const walletBrand =
             wallet && labeled[2] === wallet.appleUrl

@@ -45,6 +45,7 @@ jest.mock("@/lib/use-notification-preferences", () => ({
     prefs: { overrides: [] },
     channels: ["in_app", "email", "push"],
     enabledFor: () => true,
+    emailLockedFor: (category: string) => category === "queue",
     toggle: jest.fn(),
     load: jest.fn().mockResolvedValue(undefined),
     retry: jest.fn(),
@@ -121,6 +122,14 @@ describe("Activity reminders settings (H59)", () => {
 
     await typeSearch("zzz");
     expect(screen.getByText("No results")).toBeTruthy();
+  });
+
+  it("offers only email for queue calls, locked while no device is registered (H51)", async () => {
+    await renderMobile(<NotificationCategoryScreen category="queue" />);
+    const email = await screen.findByLabelText("Queue calls, Email");
+    expect(email.props.accessibilityState?.disabled ?? email.props.disabled).toBeTruthy();
+    expect(screen.queryByLabelText("Queue calls, Push")).toBeNull();
+    expect(screen.queryByLabelText("Queue calls, In-app")).toBeNull();
   });
 
   it("does not add search to other notification types", async () => {

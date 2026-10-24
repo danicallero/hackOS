@@ -1345,6 +1345,7 @@ Table users {
   meal_plan_confirmed_at "timestamp with time zone" [note: '#933: first time the sponsor submitted their meal plan.']
   name text
   notes text
+  notification_onboarded_at "timestamp with time zone"
   photo_key text [note: '#934: private object key of the account photo (profiles/<id>/photo/…); never a public URL.']
   photo_updated_at "timestamp with time zone"
   removal_action text [note: 'H54 action selected while the user row is locked; retries cannot change the mode.']

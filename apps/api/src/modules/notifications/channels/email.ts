@@ -1,13 +1,14 @@
 import { config } from "../../../config.js";
 import type { Queryable } from "../../../db/pool.js";
-import { translateEmail } from "../../../lib/i18n.js";
 import { prepareEventReminder } from "../../event/reminder-email.js";
 import type { EmailPayload } from "../templates.js";
-import { normalizeLanguage, renderEmailTemplate } from "../templates.js";
+import { normalizeLanguage, renderEmailFooter, renderEmailTemplate } from "../templates.js";
 import { sendViaSmtp } from "./email-adapters/smtp.js";
 
 export interface MailMessage {
   to: string;
+  /** Overrides MailConfig.fromAddress/fromName for this message (account emails). */
+  from?: { address: string; name: string };
   subject: string;
   html: string;
   text: string;
@@ -27,6 +28,11 @@ export interface MailConfig {
   provider: "smtp";
   fromAddress: string;
   fromName: string;
+  /** Sender of `auth.*` emails; falls back to fromAddress/fromName. */
+  authFromAddress?: string;
+  authFromName?: string;
+  replyTo?: string;
+  sesConfigurationSet?: string;
   smtpHost: string;
   smtpTlsServername?: string;
   smtpPort: number;
@@ -41,6 +47,10 @@ export function mailConfigFromEnv(): MailConfig {
     provider: config.MAIL_PROVIDER,
     fromAddress: config.MAIL_FROM_ADDRESS,
     fromName: config.MAIL_FROM_NAME,
+    authFromAddress: config.MAIL_AUTH_FROM_ADDRESS,
+    authFromName: config.MAIL_AUTH_FROM_NAME,
+    replyTo: config.MAIL_REPLY_TO,
+    sesConfigurationSet: config.MAIL_SES_CONFIGURATION_SET,
     smtpHost: config.SMTP_HOST,
     smtpTlsServername: config.SMTP_TLS_SERVERNAME,
     smtpPort: config.SMTP_PORT,
@@ -49,6 +59,38 @@ export function mailConfigFromEnv(): MailConfig {
     smtpSecure: config.smtpSecure,
     smtpRequireTls: config.smtpRequireTls,
   };
+}
+
+/** Account emails (`auth.*`) use their own sender so they build reputation apart from notifications. */
+function senderFor(mail: MailConfig, template: string | undefined) {
+  if (template?.startsWith("auth.") && mail.authFromAddress) {
+    return { address: mail.authFromAddress, name: mail.authFromName ?? mail.fromName };
+  }
+  return { address: mail.fromAddress, name: mail.fromName };
+}
+
+/**
+ * Sends one free-form notice to an address, straight through the relay and
+ * from the notifications sender, so organizers can check delivery and
+ * rendering. Not queued: the caller sees the relay's answer.
+ */
+export async function sendNoticeEmail(
+  to: string,
+  notice: { subject: string; body: string; language?: string },
+  mail: MailConfig = mailConfigFromEnv(),
+): Promise<void> {
+  const language = normalizeLanguage(notice.language);
+  const rendered = renderEmailTemplate(
+    { template: "generic", subject: notice.subject, body: notice.body },
+    language,
+  );
+  await sendViaSmtp(mail, {
+    to,
+    from: senderFor(mail, undefined),
+    subject: rendered.subject,
+    html: rendered.html,
+    text: `${rendered.text}\n\n${renderEmailFooter(language)}`,
+  });
 }
 
 /**
@@ -81,10 +123,11 @@ export async function sendEmail(
   const rendered = renderEmailTemplate(reminder?.payload ?? payload, language);
   const message: MailMessage = {
     to,
+    from: senderFor(mail, payload.template),
     ...(reminder ? { attachments: [reminder.attachment] } : {}),
     subject: rendered.subject,
     html: rendered.html,
-    text: `${rendered.text}\n\n${translateEmail("mail.footer", language, {})}`,
+    text: `${rendered.text}\n\n${renderEmailFooter(language)}`,
   };
 
   return sendViaSmtp(mail, message);

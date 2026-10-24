@@ -116,6 +116,38 @@ itself. Two background workers do the actual work:
 their preferences matrix even with zero override rows; `queue` is the one
 mandatory (non-optional) category (H51).
 
+### Email is opt-in for queue, reminders and challenges (H51, H52)
+
+`queue`, `schedule` (activity reminders) and `challenge` are high-volume, so
+their email is off by default (`EMAIL_OPT_IN_CATEGORIES` in
+`packages/shared/src/notification-channels.ts`, shared by the API and both
+clients). `resolveChannels` applies one rule:
+
+- **No mobile device** (no row in `push_tokens`): email is on, because it is the
+  only way to reach the person outside the web app.
+- **A device is registered**: push replaces it; email is sent only if the person
+  chose it (explicit `notification_preferences` row).
+- **`queue` always reaches someone**: in-app and push cannot be switched off,
+  and without a device its email cannot be switched off either. With a device
+  the person may still add email. `PUT /api/me/notification-preferences`
+  accepts only the email channel for `queue`.
+
+Signing out of the mobile app removes its token
+(`POST /api/me/push-tokens/unregister`), so notices fall back to email; a
+`DeviceNotRegistered` receipt does the same for uninstalled apps.
+
+### First-run onboarding (H51)
+
+People with event access are asked once which of those three categories they
+also want by email. `GET /api/me` carries `notificationOnboardingRequired`
+(`users.notification_onboarded_at IS NULL` and event access); web shows a
+dialog after the profile prompt and mobile a sheet (`/notification-onboarding`)
+after it, never over a scanner. Nothing is pre-selected: the switches show how
+things are today (email on without a device, locked on for queue calls). Saving
+calls `POST /api/me/notification-preferences/onboarding`, which stores only the
+choices that differ from the default and stamps the account, so no other device
+asks again. Closing the prompt defers it until the next session.
+
 Application re-accepts (`POST /api/responses/:responseId/re-accept`, H14/H15)
 use this same pipeline with category `application` and the candidate channels
 `in_app`, `email`, and `push`. The user's preferences still filter those
@@ -306,7 +338,10 @@ everyone, role/dietary filters, or specific people so exclusivity is visible
 in the UI, channel checkboxes, and a publication
 section whose fields change shape depending on `screenPlacement`/targeting
 mode). There are no dedicated `/announcements/new` or `/announcements/[id]`
-routes.
+routes. People with `notifications:send` also get a **Send email** action that
+posts to `POST /api/notifications/test-email`: one branded notice from the
+notifications sender to any address, sent straight through the relay (not the
+outbox) so a relay failure is visible, and audited without the body.
 
 ## Mobile admin UI
 
@@ -329,31 +364,40 @@ so the chain stops there rather than trying to jump languages.
 
 ## Transactional email theme (H7, H52)
 
-Every email uses the common wrapper in `notifications/templates.ts`, aligned
-with the active edition in `apps/web/src/styles/theme.css` and
-[`DESIGN.md` §2](./DESIGN.md#2-foundation-tokens). Email clients need inline,
-resolved colors rather than CSS variables: light mail uses a blue-tinted shell,
-cream card, ink text, subtle borders and 8px surfaces. Primary actions
-are red/cream pills in both themes; dark canvas, card, footer and borders
-mirror the web's semantic pairs.
-The header shares the card surface in both schemes, without a decorative top
-rule. Its centered, responsive HackUDC 2027 marketing wordmark comes from the
-supplied edition SVGs: red `logo_h-white.svg` for
-light mail and cream `logo_h-white (4).svg` for supported dark-mode clients.
-Original vectors and 720px-wide transparent PNG exports are hosted under
-`public/email/hackudc-2027{,-dark}.{svg,png}`. PNGs preserve compatibility;
-clients without dark-mode CSS use the red logo. The previous `brand-mark.png`
-stays available for images in already-sent messages. The footer retains hackOS as the sending
-platform. Edition red is the action accent, independent of admission outcome.
+Every email uses the common wrapper in `notifications/templates.ts`, built
+from the [brand rulebook](https://hackudc.com/en/brand/): one flat surface per
+color scheme and no cards, bands, shadows or gradients. Email clients need
+inline, resolved colors rather than CSS variables.
 
-Body text uses an Inter/system sans stack; 24px regular Rockwell headings load
+- **Light:** cream `#FAFAFA` page, ink `#030846` text, a single left-aligned
+  column (520px) with the navy logo on top, a hairline (ink 12%) above the
+  footer and soft navy `#484C78` for secondary text.
+- **Dark:** neutral near-black `#0E0F11`, cream text and logo. Not navy: a full
+  navy canvas was heavy to read. The action inverts to a cream button.
+- **Actions:** ink button with cream text (the brand's primary action), 8px
+  radius. Red is not used for actions. The decline link of an acceptance stays
+  a quiet underlined link.
+- **Codes:** a line that is only 4–8 digits (the account-removal PIN) renders as
+  a framed monospace code instead of a sentence.
+
+The logo is the navy mark in light mail and the cream mark in dark mail, swapped
+with `prefers-color-scheme` and Outlook.com's `data-ogsc` attribute. The red
+mark is never used. A client that darkens the page without telling the email
+(for example Gmail's app) keeps the navy mark. The vectors and 720px-wide
+transparent PNG exports are hosted under
+`public/email/hackudc-2027{-navy,-dark}.{svg,png}`; `hackudc-2027.png` (red)
+and `brand-mark.png` stay available for images in already-sent messages. The
+footer retains hackOS as the sending platform.
+
+Body text uses an Inter/system sans stack; 28px regular Rockwell headings load
 from the web's existing font asset and fall back to Georgia. Clients that block
 webfonts retain readable system typography. Narrow layouts reduce padding and
 expand action links, including long verification labels. The document language
 and automated-message footer follow the recipient's es/gl/en language. The
 footer warns recipients to ignore unexpected messages and avoid following
-links, says the sender does not receive incoming messages, and links to the
-organization at `hackudc@gpul.org`. This footer also appears in the outgoing
+links, says the message is automated, and links to the contact address: the
+configured `MAIL_REPLY_TO` (the same address as the `Reply-To` header), falling
+back to `hackudc@gpul.org` when it is unset. This footer also appears in the outgoing
 plain-text MIME part; inbox and push message bodies retain just the message.
 Subject, preheader, escaping and action URLs are preserved.
 These are transactional messages: campaign tracking and unsubscribe controls

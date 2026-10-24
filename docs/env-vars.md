@@ -78,6 +78,9 @@ siguiente especifica cada variable individualmente.
 | `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
 | `MAIL_FROM_ADDRESS` | configuración | sí | Remitente de los correos. |
 | `MAIL_FROM_NAME` | configuración | no | Nombre del remitente, por defecto `hackOS`. |
+| `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME` | configuración | no | Remitente de los correos de cuenta (`auth.*`: verificación, contraseña, invitaciones). Si están vacíos se usa `MAIL_FROM_*`. En producción usa otro subdominio que las notificaciones; ver [`email-ses.md`](./email-ses.md). |
+| `MAIL_REPLY_TO` | configuración | no | Buzón vigilado para el `Reply-To` de todos los correos. |
+| `MAIL_SES_CONFIGURATION_SET` | configuración | no | Conjunto de configuración de Amazon SES (cabecera `X-SES-CONFIGURATION-SET`) que encamina rebotes y quejas. |
 | `SMTP_HOST`, `SMTP_PORT` | configuración | sí para SMTP | Host y puerto del relay SMTP. Por defecto usa `587` con STARTTLS; Amazon SES se configura aquí mediante su interfaz SMTP. |
 | `SMTP_TLS_SERVERNAME` | configuración | no | Nombre del certificado TLS cuando `SMTP_HOST` es una IP privada o un nombre interno; mantiene la validación del certificado del relay. |
 | `SMTP_USER`, `SMTP_PASS` | secreto | no | Credenciales opcionales del relay SMTP; se dejan vacías si el relay no autentica. |
@@ -219,7 +222,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 |---|---|
 | Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG`, `METRICS_PORT=9464` |
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
-| Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
+| Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME`, `MAIL_REPLY_TO`, `MAIL_SES_CONFIGURATION_SET`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |
 | Live Activities | El mismo bloque que API: el worker `live-activities` envía los pushes de APNs y Android. |
 

@@ -215,6 +215,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | PUT | `/api/me/meal-plan` | authenticated + email-verification:none |
 | GET | `/api/me/notification-preferences` | authenticated |
 | PUT | `/api/me/notification-preferences` | authenticated + email-verification:none |
+| POST | `/api/me/notification-preferences/onboarding` | authenticated + email-verification:none |
 | GET | `/api/me/notifications` | authenticated |
 | DELETE | `/api/me/notifications/:id` | authenticated + email-verification:none |
 | POST | `/api/me/notifications/:id/read` | authenticated + email-verification:none |
@@ -250,6 +251,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/me/public-profile/cv` | authenticated |
 | POST | `/api/me/public-profile/cv` | authenticated + email-verification:caller |
 | POST | `/api/me/push-tokens` | authenticated + email-verification:none |
+| POST | `/api/me/push-tokens/unregister` | authenticated + email-verification:none |
 | GET | `/api/me/reminder-settings` | authenticated |
 | GET | `/api/me/removal-eligibility` | authenticated |
 | POST | `/api/me/removal-pin` | authenticated + email-verification:none |
@@ -263,6 +265,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/me/wallet/google/:purpose` | authenticated |
 | GET | `/api/notifications/automation` | capability:event:manage |
 | PUT | `/api/notifications/automation` | capability:event:manage + email-verification:caller |
+| POST | `/api/notifications/test-email` | capability:notifications:send + email-verification:caller |
 | DELETE | `/api/presence/activity-logs/:id` | capability:presence:scan + email-verification:caller |
 | PATCH | `/api/presence/activity-logs/:id` | capability:presence:scan + email-verification:caller |
 | GET | `/api/presence/estimate` | capability:anyOf(presence:scan,logistics:stats) |

@@ -8,6 +8,7 @@ import { registerInboxRoutes } from "./routes/inbox.js";
 import { registerLocalReminderRoutes } from "./routes/local-reminders.js";
 import { registerPreferenceRoutes } from "./routes/preferences.js";
 import { registerPushTokenRoutes } from "./routes/push-tokens.js";
+import { registerTestEmailRoutes } from "./routes/test-email.js";
 import { scheduleActivityReminders } from "./schedule-reminders.js";
 
 /**
@@ -25,6 +26,7 @@ export async function registerNotificationsModule(app: FastifyInstance): Promise
   registerAnnouncementRoutes(app);
   registerAuditRoutes(app);
   registerAutomationRoutes(app);
+  registerTestEmailRoutes(app);
 
   await scheduleOutboxDispatcher();
   await scheduleAnnouncementsPublisher();
