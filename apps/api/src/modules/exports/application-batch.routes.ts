@@ -69,7 +69,6 @@ interface ApplicationExportRow {
   food_intolerances: string | null;
   food_intolerance_notes: string | null;
   dietary_data_state: string;
-  university_id: number | null;
   language: string;
   user_notes: string | null;
   response_template: unknown;
@@ -140,10 +139,6 @@ const PROFILE_FIELDS: StaticFieldDefinition[] = [
       es: "Estado de datos alimentarios",
       gl: "Estado dos datos alimentarios",
     },
-  },
-  {
-    key: "university_id",
-    label: { en: "University ID", es: "ID de universidad", gl: "ID da universidade" },
   },
   { key: "language", label: { en: "Language", es: "Idioma", gl: "Idioma" } },
   { key: "notes", label: { en: "Profile notes", es: "Notas del perfil", gl: "Notas do perfil" } },
@@ -236,8 +231,6 @@ function fieldValueForProfile(row: ApplicationExportRow, key: string): unknown {
       return row.food_intolerance_notes;
     case "dietary_data_state":
       return row.dietary_data_state;
-    case "university_id":
-      return row.university_id;
     case "language":
       return row.language;
     case "notes":
@@ -434,7 +427,6 @@ function catalogField(field: TemplateField): CatalogField {
 function normalizeFields(
   requestedFields: ApplicationExportField[],
   applications: ApplicationDefinition[],
-  language: ExportLanguage,
 ): NormalizedField[] {
   const seen = new Set<string>();
   const applicationById = new Map(applications.map((application) => [application.id, application]));
@@ -453,7 +445,7 @@ function normalizeFields(
       return {
         ...requested,
         label: definition.label,
-        header: pickText(definition.label, language),
+        header: requested.key,
       };
     }
 
@@ -466,7 +458,7 @@ function normalizeFields(
       return {
         ...requested,
         label: definition.label,
-        header: pickText(definition.label, language),
+        header: requested.key,
       };
     }
 
@@ -480,14 +472,13 @@ function normalizeFields(
         `Unknown answer field '${requested.key}' for application ${requested.application_id}`,
       );
     }
-    const label = pickText(definition.label, language);
     return {
       ...requested,
       applicationId: application.id,
       applicationName: application.name,
       label: definition.label,
       definition,
-      header: `${application.name} — ${label}`,
+      header: requested.key,
     };
   });
 
@@ -527,7 +518,6 @@ async function loadApplicationRows(
                         JOIN food_intolerances fi ON fi.id = intolerance.id), '') AS food_intolerances,
             u.food_intolerance_notes,
             u.dietary_data_state,
-            u.university_id,
             u.language,
             u.notes AS user_notes,
             fv.template AS response_template,
@@ -620,7 +610,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       schema: {
         summary: "List fields available to the batch application export",
         description:
-          "Returns profile, response metadata, and every field from the current or immutable historical form versions. Pass application_id to list one form's columns. The endpoint is gated by exports:run because it exposes the export shape, including fields whose files may be shareable with sponsors (H54/H56).",
+          "Returns profile fields (excluding university_id; use the university form answer), response metadata, and every field from the current or immutable historical form versions. Pass application_id to list one form's columns. The endpoint is gated by exports:run because it exposes the export shape, including fields whose files may be shareable with sponsors (H54/H56).",
         querystring: applicationExportCatalogQuery,
       },
     },
@@ -647,7 +637,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       schema: {
         summary: "Export selected application responses and documents",
         description:
-          "Streams a ZIP containing applications.csv with the requested statuses and columns. Library-backed university and degree answers are exported as their catalogue names, not stored IDs. `documents=all` includes every saved file from each response's immutable form snapshot. `documents=shared` includes only file fields marked shareable_with_sponsors where the applicant explicitly consented with the corresponding sponsor-share response value (H13/H14/H54/H56). Missing objects are omitted, audited per response, and reported in x-export-file-failures.",
+          "Streams a ZIP containing applications.csv with the requested statuses and columns. CSV headers use field keys, with numeric suffixes for repeated keys in selection order. Library-backed university and degree answers are exported as their catalogue names, not stored IDs. `documents=all` includes every saved file from each response's immutable form snapshot. `documents=shared` includes only file fields marked shareable_with_sponsors where the applicant explicitly consented with the corresponding sponsor-share response value (H13/H14/H54/H56). Missing objects are omitted, audited per response, and reported in x-export-file-failures.",
         body: applicationExportBody,
       },
     },
@@ -668,7 +658,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       }
 
       const applications = await loadApplicationDefinitions(applicationIds);
-      const fields = normalizeFields(body.fields, applications, body.language);
+      const fields = normalizeFields(body.fields, applications);
       const rows = await loadApplicationRows(uniqueStatuses, body.language, applicationIds);
       const csvRows = await buildRows(rows, fields, body.language, body.documents);
       const headers = fields.map((field) => field.header);
@@ -731,7 +721,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       const archive = new ZipArchive({ zlib: { level: 9 } });
       const sent = reply.send(archive);
       try {
-        const csv = `\uFEFF${[headers.join(","), ...csvRows.map((row) => row.map(csvCell).join(","))].join("\r\n")}\r\n`;
+        const csv = `\uFEFF${[headers.map(csvCell).join(","), ...csvRows.map((row) => row.map(csvCell).join(","))].join("\r\n")}\r\n`;
         archive.append(csv, { name: "applications.csv" });
         for (const document of readableDocuments) {
           try {
@@ -757,6 +747,6 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
 function csvCell(value: unknown): string {
   if (value === null || value === undefined) return "";
   const text = value instanceof Date ? value.toISOString() : String(value);
-  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
 }
