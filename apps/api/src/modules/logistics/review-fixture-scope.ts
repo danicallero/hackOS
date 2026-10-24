@@ -240,9 +240,40 @@ export async function inspectFixtureRoomScopes(
   );
 }
 
+/**
+ * Classify every room serving one queue group with a single query (the group's
+ * room ids are resolved inside the statement, so callers need no prior round
+ * trip). Same per-room verdict as {@link inspectFixtureRoomScopes}; a serving
+ * link whose room row is missing reports `exists: false`.
+ */
+export async function inspectFixtureRoomScopesOfQueueGroup(
+  db: Queryable,
+  queueGroupId: number,
+): Promise<FixtureRoomScope[]> {
+  const { rows } = await db.query<FixtureRoomScope>(
+    `${ROOM_MARKERS_CTE}
+     SELECT (r.id IS NOT NULL) AS exists,
+            true AS has_graph,
+            COALESCE(bool_or(rm.marker IS TRUE), false) AS has_synthetic,
+            COALESCE(bool_or(rm.marker IS NOT TRUE) FILTER (WHERE rm.room_id IS NOT NULL), false)
+              AS has_real
+       FROM room_queue_groups rqg
+       LEFT JOIN rooms r ON r.id = rqg.room_id
+       LEFT JOIN room_markers rm ON rm.room_id = rqg.room_id
+      WHERE rqg.queue_group_id = $1
+      GROUP BY rqg.room_id, r.id`,
+    [queueGroupId],
+  );
+  return rows;
+}
+
 /** Return only rooms in the authenticated operator's fixture boundary. */
-export async function fixtureRoomIds(db: Queryable, actorId: number): Promise<number[]> {
-  const actorIsSynthetic = await isSyntheticOperator(db, actorId);
+export async function fixtureRoomIds(
+  db: Queryable,
+  actorId: number,
+  actorIsSyntheticHint?: boolean | Promise<boolean>,
+): Promise<number[]> {
+  const actorIsSynthetic = await (actorIsSyntheticHint ?? isSyntheticOperator(db, actorId));
   const { rows } = await db.query<{ room_id: number }>(
     `${ROOM_MARKERS_CTE}, room_graphs AS (
        SELECT room_id FROM room_enterprises
@@ -292,6 +323,29 @@ export async function inspectFixtureEnterpriseScope(
        FROM enterprise_markers
       WHERE enterprise_id = $1`,
     [enterpriseId],
+  );
+  return rows[0] ?? { exists: false, has_synthetic: false, has_real: false };
+}
+
+/**
+ * {@link inspectFixtureEnterpriseScope} for the enterprise that owns a queue
+ * group, resolved inside the statement so it can run beside the group's own
+ * marker query. Returns an absent enterprise when the group does not exist.
+ */
+export async function inspectFixtureEnterpriseScopeOfQueueGroup(
+  db: Queryable,
+  queueGroupId: number,
+): Promise<FixtureEnterpriseScope> {
+  const { rows } = await db.query<FixtureEnterpriseScope>(
+    `${ENTERPRISE_MARKERS_CTE}
+     SELECT EXISTS (SELECT 1 FROM enterprises WHERE id = qg.enterprise_id) AS exists,
+            COALESCE(bool_or(em.marker IS TRUE), false) AS has_synthetic,
+            COALESCE(bool_or(em.marker IS NOT TRUE), false) AS has_real
+       FROM queue_groups qg
+       LEFT JOIN enterprise_markers em ON em.enterprise_id = qg.enterprise_id
+      WHERE qg.id = $1
+      GROUP BY qg.id`,
+    [queueGroupId],
   );
   return rows[0] ?? { exists: false, has_synthetic: false, has_real: false };
 }
@@ -483,7 +537,7 @@ function roomSynthetic(marker: FixtureRoomScope, resourceId: number): boolean {
   return marker.has_synthetic;
 }
 
-function assertActorSide(isSynthetic: boolean, actorIsSynthetic: boolean): void {
+export function assertActorSide(isSynthetic: boolean, actorIsSynthetic: boolean): void {
   if (isSynthetic !== actorIsSynthetic) {
     if (actorIsSynthetic) {
       throw new ForbiddenError("Synthetic operators may only access synthetic queue data.", {
@@ -505,7 +559,15 @@ export async function assertFixtureQueueScope(
   actorId: number,
   resource: FixtureQueueResource,
   resourceId: number,
+  actorIsSyntheticHint?: boolean | Promise<boolean>,
 ): Promise<void> {
+  // The actor marker is independent of the resource lookup, so read it beside
+  // it (or reuse the request's memoized read). Verdict order is unchanged:
+  // resource-graph errors still surface before the actor-side check.
+  const actorIsSynthetic = Promise.resolve(
+    actorIsSyntheticHint ?? isSyntheticOperator(db, actorId),
+  );
+  actorIsSynthetic.catch(() => undefined);
   let isSynthetic = false;
   if (resource === "challenge" || resource === "repo") {
     const table = resource === "challenge" ? "challenges" : "repos";
@@ -538,7 +600,7 @@ export async function assertFixtureQueueScope(
   } else {
     isSynthetic = roomSynthetic(await inspectFixtureRoomScope(db, resourceId), resourceId);
   }
-  assertActorSide(isSynthetic, await isSyntheticOperator(db, actorId));
+  assertActorSide(isSynthetic, await actorIsSynthetic);
 }
 
 /**

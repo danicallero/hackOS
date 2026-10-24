@@ -41,7 +41,7 @@ queue no matter how many times scheduling runs (idempotent scheduling).
 | `notifications-outbox` | `notifications/dispatcher.ts` | **5 s** | `notification_outbox` rows that are `queued AND next_attempt_at <= now()` → renders + sends via the channel adapter |
 | `announcements-publisher` | `notifications/announcements-publisher.ts` | **15 s** | announcements whose `publish_at` has passed → reveals their configured screen placement and, when selected, fans out inbox/email/push through each recipient's preferences exactly once |
 | `applications-expirer` | `applications/expirer.ts` | **60 s** | accepted responses whose confirmation window elapsed → `expired` (`expireDueConfirmations`), then scoped wallet tokens dead for over a day (`purgeExpiredWalletAccessTokens`, issue #369), then expired `idempotency_keys` rows in 1000-row batches (`purgeExpiredIdempotencyKeys`, issue #994; window in [idempotency-matrix](idempotency-matrix.md#retention)) |
-| `queue-pump` | `queue/pump.ts` | repeatable | discovers each active room, then tops up its live judging queue (`topUpRoom` → one transactional `callNextForRoom` per slot) and emits pre-call warnings through a separately locked group/repo claim |
+| `queue-pump` | `queue/pump.ts` | repeatable | discovers the rooms that can take a call (not paused, below their waiting-area cap, a waiting team in the queue they serve), tops each up (`fillRoom` → one transactional `callNextForRoom` per slot) and emits pre-call warnings through one locked claim transaction per queue group |
 | `presence-event-end-closer` | `logistics/presence-closer.ts` | **60 s** | once `event_config.event_ends_at` passes, force-closes every still-open door session with an audited `out` at that instant (`scanned_by NULL` = system actor), and finalizes pending account removals after that valid event-end exit or after the latest accrued H24 certainty window expires. An `out` outside the certainty window credits no hours; it restores the in/out invariant while the expiry path preserves only already-guaranteed minutes. |
 | `event-email-reminders` | `event/reminders.ts` | **15 s** | claims the pending pre-event email schedule, fans out to active real event-access holders, then records its queued recipient count; expired events are skipped |
 | `schedule-reminders` | `notifications/schedule-reminders.ts` | **15 s** | finds opted-in recipients for activities starting within the reminder lead time (event setting, default 15 min; the job is a no-op while the event switches reminders off, both under Event settings → Notifications) and records `reminded_at` after processing each due item, even when no channel is currently enabled |
@@ -138,16 +138,28 @@ the dead-letter queue.
   discovers active rooms, `topUpRoom` checks the live window, and each
   `callNextForRoom` owns its own `withTransaction` and row/advisory locks; a
   later slot can therefore refill independently if an earlier call loses a
-  race. Pre-call discovery is also deliberately outside a transaction, while
-  `claimPreCall` reacquires the queue-group lock, locks its entries, validates
-  the fixture marker, and atomically claims one logical repo cycle before
-  notifying. These are the transaction boundaries that preserve the
-  "exactly one winner per transition" invariant (`plan/07`). Discovery ranks
-  each group's waiting teams in one lock-free query and only claims the teams
-  already inside the ETA threshold and not yet warned, so a long queue does
-  not run a lock-holding transaction per waiting team every tick.
-- Queue actions answer once the transactional write commits. Realtime echoes
-  (the entry/room SSE event, member `user.queue_called` pushes, the Live
+  race. `pumpTick` selects only rooms that can actually take a call (below
+  `max_in_waiting_area` with a waiting team in the queue they serve) in one
+  query, so full or idle rooms no longer cost a transaction every tick.
+  Pre-call discovery is also deliberately outside a transaction;
+  `claimPreCallsForGroup` then opens ONE transaction per queue group that has a
+  due team: it locks the group row, the serving room states and every entry (id
+  order), re-validates the fixture marker, recomputes the due set (true rank x
+  pace <= threshold, not yet warned), checks H30 eligibility/occupancy for all
+  due repos in one pass (`findBusyMemberRepoIds`, repo locks then member locks
+  in ascending order), claims every waiting sibling with one set-based UPDATE
+  and enqueues all notifications with one `notifyMany`
+  (`prepareTeamPreCalls`). The member SSE push runs after commit. Overlapping
+  ticks serialize on the group lock; the loser finds the teams already warned.
+  These are the transaction boundaries that preserve the "exactly one winner
+  per transition" invariant (`plan/07`). Each due team used to cost its own
+  transaction of ~40 queries; a group now costs ~33 queries in one transaction
+  however many teams are due.
+- Queue actions answer once the transactional write commits. The post-commit
+  operator broadcast reuses the fixture marker the transaction already verified
+  (`assertQueue*Scope` result, passed to `broadcastQueueEventWithMarker`), so
+  no marker lookup runs after commit; no verified marker means no broadcast.
+  Realtime echoes (the entry/room SSE event, member `user.queue_called` pushes, the Live
   Activity kick and the debounced participant invalidation) run after commit
   through `afterCommit` (`lib/after-commit.ts`): fire-and-forget with error
   logging in production, awaited under test. Notification rows

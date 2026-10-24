@@ -7,7 +7,7 @@ import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notifyMany, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
-import { broadcastQueueEvent, queueFixtureMarker } from "./broadcast.js";
+import { broadcastQueueEventWithMarker, queueFixtureMarker } from "./broadcast.js";
 import { anyEvaluationStarted, lockQueueGroupForEntry } from "./evaluation-lock.js";
 import {
   assertQueueChallengeScope,
@@ -89,7 +89,35 @@ async function assertEntryFixtureScope(
   actorId: number,
   entryId: number,
 ): Promise<boolean> {
-  return assertQueueEntryScope(client, actorId, entryId);
+  const marker = await assertQueueEntryScope(client, actorId, entryId);
+  scopeMarkers.set(client, marker);
+  return marker;
+}
+
+/**
+ * Marker verified by `assertEntryFixtureScope` on a transaction's client. It
+ * equals the entry's challenge, repo and queue-group marker (the assertion
+ * fails otherwise), so the post-commit broadcast needs no marker re-lookup.
+ */
+const scopeMarkers = new WeakMap<pg.PoolClient, boolean>();
+
+/**
+ * Run an entry transition and publish its realtime signal after commit with
+ * the marker the transaction already verified. No scope assertion in the
+ * callback means a null marker, which fails closed (no operator broadcast).
+ */
+async function transitionEntry(
+  work: (client: pg.PoolClient) => Promise<QueueEntryRow>,
+): Promise<QueueEntryRow> {
+  let marker: boolean | null = null;
+  const entry = await withTransaction(async (client) => {
+    scopeMarkers.delete(client);
+    const result = await work(client);
+    marker = scopeMarkers.get(client) ?? null;
+    scopeMarkers.delete(client);
+    return result;
+  });
+  return broadcastEntry(entry, marker);
 }
 
 /**
@@ -98,10 +126,13 @@ async function assertEntryFixtureScope(
  * debounced participant-invalidation enqueue are several Valkey round trips
  * the caller does not need to wait for.
  */
-async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
+async function broadcastEntry(
+  entry: QueueEntryRow,
+  marker: boolean | null,
+): Promise<QueueEntryRow> {
   await afterCommit(`queue entry ${entry.id} broadcast`, () =>
     Promise.all([
-      broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry),
+      broadcastQueueEventWithMarker(marker, EVENTS.QUEUE_ENTRY_CHANGED, entry),
       notifyChallengeQueueChanged(pool, entry.challenge_id),
     ]),
   );
@@ -333,6 +364,7 @@ export async function callNextForRoom(
         roomId,
         roomName: room.name,
         roomLocation: room.location,
+        fixtureMarker,
       });
       return entry;
     }
@@ -350,100 +382,103 @@ export async function callNextForRoom(
 // ── H31: notify_enter (no status transition) ────────────────────────────────
 
 export async function notifyEnter(entryId: number, actorId: number): Promise<QueueEntryRow> {
-  const { entry, memberIds, eventPayload } = await withTransaction(async (client) => {
-    const entry = await lockEntry(client, entryId);
-    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
-    assertFrom(entry, ["called"], "notify_enter");
-    await writeQueueHistory(client, {
-      entryId,
-      actorId,
-      previousStatus: entry.status,
-      newStatus: entry.status,
-      action: "notify_enter",
-    });
+  const { entry, memberIds, eventPayload, fixtureMarker } = await withTransaction(
+    async (client) => {
+      const entry = await lockEntry(client, entryId);
+      const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+      assertFrom(entry, ["called"], "notify_enter");
+      await writeQueueHistory(client, {
+        entryId,
+        actorId,
+        previousStatus: entry.status,
+        newStatus: entry.status,
+        action: "notify_enter",
+      });
 
-    const memberIds = await repoMemberIds(client, entry.repo_id, fixtureMarker);
-    const { rows: ctxRows } = await client.query(
-      `SELECT c.title AS challenge_name, r.name AS room_name, r.location AS room_location,
+      const memberIds = await repoMemberIds(client, entry.repo_id, fixtureMarker);
+      const { rows: ctxRows } = await client.query(
+        `SELECT c.title AS challenge_name, r.name AS room_name, r.location AS room_location,
               (SELECT name FROM repos WHERE id = $3) AS team_name
          FROM challenges c, rooms r
         WHERE c.id = $1 AND r.id = $2`,
-      [entry.challenge_id, entry.assigned_room_id, entry.repo_id],
-    );
-    const challengeName: string = ctxRows[0]?.challenge_name ?? "";
-    const roomName: string = ctxRows[0]?.room_name ?? "";
-    const roomLocation: string | null = ctxRows[0]?.room_location ?? null;
-    const teamName: string = ctxRows[0]?.team_name ?? `#${entry.repo_id}`;
+        [entry.challenge_id, entry.assigned_room_id, entry.repo_id],
+      );
+      const challengeName: string = ctxRows[0]?.challenge_name ?? "";
+      const roomName: string = ctxRows[0]?.room_name ?? "";
+      const roomLocation: string | null = ctxRows[0]?.room_location ?? null;
+      const teamName: string = ctxRows[0]?.team_name ?? `#${entry.repo_id}`;
 
-    const { rows: userRows } = await client.query(
-      `SELECT id, name FROM users
+      const { rows: userRows } = await client.query(
+        `SELECT id, name FROM users
         WHERE id = ANY($1)
           AND account_state = 'active' AND anonymized_at IS NULL`,
-      [memberIds],
-    );
-    const nameById = new Map<number, string | null>(
-      userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
-    );
+        [memberIds],
+      );
+      const nameById = new Map<number, string | null>(
+        userRows.map((u: { id: number; name: string | null }) => [u.id, u.name]),
+      );
 
-    // H31: "que entre" — routed through notify() (H51/H53) so it lands in the
-    // inbox and every configured channel, same as the initial call (H29/H38).
-    await notifyMany(
-      client,
-      memberIds.map((userId) => ({
-        userId,
-        category: "queue",
-        payload: {
-          entryId,
-          type: "notify_enter",
-          roomId: entry.assigned_room_id,
-          roomName,
-          roomLocation,
-          template: "queue.enter",
-          vars: { name: nameById.get(userId) ?? "", challengeName, roomName },
-        },
-        fixtureMarker,
-      })),
-    );
-    const { rows: staffRows } = await client.query(
-      `SELECT DISTINCT np.user_id
+      // H31: "que entre" — routed through notify() (H51/H53) so it lands in the
+      // inbox and every configured channel, same as the initial call (H29/H38).
+      await notifyMany(
+        client,
+        memberIds.map((userId) => ({
+          userId,
+          category: "queue",
+          payload: {
+            entryId,
+            type: "notify_enter",
+            roomId: entry.assigned_room_id,
+            roomName,
+            roomLocation,
+            template: "queue.enter",
+            vars: { name: nameById.get(userId) ?? "", challengeName, roomName },
+          },
+          fixtureMarker,
+        })),
+      );
+      const { rows: staffRows } = await client.query(
+        `SELECT DISTINCT np.user_id
          FROM notification_preferences np
          JOIN users u ON u.id = np.user_id
         WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
           AND u.account_state = 'active' AND u.anonymized_at IS NULL
           AND u.is_test_account = $2`,
-      [QUEUE_STAFF_CATEGORY, fixtureMarker],
-    );
-    await notifyMany(
-      client,
-      (staffRows as { user_id: number }[]).map((row) => ({
-        userId: row.user_id,
-        category: QUEUE_STAFF_CATEGORY,
-        channels: ["push" as const],
-        payload: {
-          entryId,
-          roomId: entry.assigned_room_id,
-          template: "queue.staff.enter",
-          vars: { teamName, challengeName, roomName },
-        },
+        [QUEUE_STAFF_CATEGORY, fixtureMarker],
+      );
+      await notifyMany(
+        client,
+        (staffRows as { user_id: number }[]).map((row) => ({
+          userId: row.user_id,
+          category: QUEUE_STAFF_CATEGORY,
+          channels: ["push" as const],
+          payload: {
+            entryId,
+            roomId: entry.assigned_room_id,
+            template: "queue.staff.enter",
+            vars: { teamName, challengeName, roomName },
+          },
+          fixtureMarker,
+        })),
+      );
+      return {
+        entry,
+        memberIds,
         fixtureMarker,
-      })),
-    );
-    return {
-      entry,
-      memberIds,
-      eventPayload: {
-        ...entry,
-        team_name: teamName,
-        challenge_name: challengeName,
-        room_name: roomName,
-        room_location: roomLocation,
-      },
-    };
-  });
+        eventPayload: {
+          ...entry,
+          team_name: teamName,
+          challenge_name: challengeName,
+          room_name: roomName,
+          room_location: roomLocation,
+        },
+      };
+    },
+  );
 
   await afterCommit(`notify_enter ${entry.id} broadcast`, () =>
     Promise.all([
-      broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload),
+      broadcastQueueEventWithMarker(fixtureMarker, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload),
       ...memberIds.map((userId) =>
         broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
           entryId: entry.id,
@@ -460,7 +495,7 @@ export async function remindWaitingRoom(entryId: number, actorId: number): Promi
   let publish: (() => Promise<void>) | null = null;
   const entry = await withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
-    await assertEntryFixtureScope(client, actorId, entryId);
+    const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["called"], "remind_waiting_room");
     if (entry.assigned_room_id == null) {
       throw new ConflictError("Called team has no waiting room", { entryId });
@@ -488,6 +523,7 @@ export async function remindWaitingRoom(entryId: number, actorId: number): Promi
       roomId: entry.assigned_room_id,
       roomName: room.name,
       roomLocation: room.location,
+      fixtureMarker,
     });
     return entry;
   });
@@ -499,7 +535,7 @@ export async function remindWaitingRoom(entryId: number, actorId: number): Promi
 // ── H32: bring_in / start / complete ────────────────────────────────────────
 
 export async function bringIn(entryId: number, actorId: number): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["called"], "bring_in");
@@ -531,7 +567,7 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
       action: "bring_in",
     });
     return updated;
-  }).then(broadcastEntry);
+  });
 }
 
 export async function startPresentation(entryId: number, actorId: number): Promise<QueueEntryRow> {
@@ -557,7 +593,7 @@ export async function startPresentation(entryId: number, actorId: number): Promi
         .then((pace) => Math.round(pace.effectiveMinutesPerTeam * 60))
         .catch(() => null)
     : null;
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room"], "start");
@@ -602,7 +638,7 @@ export async function startPresentation(entryId: number, actorId: number): Promi
       },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 // #926: timer pause is independent of the H35 room pause and keeps occupancy.
@@ -611,7 +647,7 @@ export async function setPresentationPaused(
   actorId: number,
   paused: boolean,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["presenting"], paused ? "pause_timer" : "resume_timer");
@@ -647,14 +683,14 @@ export async function setPresentationPaused(
       after: { paused },
     });
     return rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 export async function completePresentation(
   entryId: number,
   actorId: number,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     // Manual completion is also an evaluation boundary. Match structural
     // queue edits' group-then-entry lock order before setting `completed`.
     await lockQueueGroupForEntry(client, entryId);
@@ -677,7 +713,7 @@ export async function completePresentation(
       action: "complete",
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 // ── H33: send_back_to_waiting / requeue / re_enter ──────────────────────────
@@ -688,7 +724,7 @@ export async function sendBackToWaiting(
   actorId: number,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["in_room", "presenting"], "send_back_to_waiting");
@@ -711,7 +747,7 @@ export async function sendBackToWaiting(
       metadata: { position: "top" },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 /** called -> waiting, position top|bottom (plan/07 §4). */
@@ -721,7 +757,7 @@ export async function requeue(
   position: RequeuePosition,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
@@ -745,7 +781,7 @@ export async function requeue(
       metadata: { position },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 const RE_ENTER_FROM = ["completed", "cancelled", "disqualified"];
@@ -757,7 +793,7 @@ export async function reEnter(
   position: RequeuePosition,
   reason: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, RE_ENTER_FROM, "re_enter");
@@ -790,7 +826,7 @@ export async function reEnter(
       reason,
     });
     return updated;
-  }).then(broadcastEntry);
+  });
 }
 
 // ── H34: no_show (human decision) / skip (no penalty) ───────────────────────
@@ -803,7 +839,7 @@ export async function markNoShow(
   actorId: number,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, NO_SHOW_FROM, "no_show");
@@ -826,7 +862,7 @@ export async function markNoShow(
       metadata: { position: "bottom", callCount: entry.call_count + 1 },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 const MOVE_TO_POSITION_FROM = ["waiting", "called"];
@@ -845,7 +881,7 @@ export async function moveToPosition(
   rank: number,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
@@ -869,7 +905,7 @@ export async function moveToPosition(
       metadata: { position, requestedRank: rank },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 const SKIP_FROM = ["waiting", "called"];
@@ -880,7 +916,7 @@ export async function skipToEnd(
   actorId: number,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
@@ -904,7 +940,7 @@ export async function skipToEnd(
       metadata: { position: "bottom" },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 const MOVE_TOP_FROM = ["waiting", "called"];
@@ -958,7 +994,7 @@ export async function moveToTop(
   actorId: number,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
@@ -987,7 +1023,7 @@ export async function moveToTop(
       metadata: { position: entry.status === "called" ? "behind_head" : "top" },
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 const DISQUALIFY_FROM = ["waiting", "called", "in_room", "presenting"];
@@ -998,7 +1034,7 @@ export async function disqualify(
   actorId: number,
   reason: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, DISQUALIFY_FROM, "disqualify");
@@ -1024,7 +1060,7 @@ export async function disqualify(
       reason,
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 /** Admin cleanup (repo withdrawn, duplicate, etc). Not one of the H29-H40 actions but low-risk to expose. */
@@ -1033,7 +1069,7 @@ export async function cancelEntry(
   actorId: number,
   reason?: string,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  return transitionEntry(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["waiting", "called"], "cancel");
@@ -1059,7 +1095,7 @@ export async function cancelEntry(
       reason,
     });
     return res.rows[0];
-  }).then(broadcastEntry);
+  });
 }
 
 // ── manual call (any team, any position, H37 search-and-bring-in) ──────────
@@ -1072,6 +1108,7 @@ export async function manualCall(
   reason: string | undefined,
 ): Promise<QueueEntryRow> {
   let publishCalled: (() => Promise<void>) | null = null;
+  let scopedMarker: boolean | null = null;
   const result = await withTransaction(async (client) => {
     // Match structural queue mutations: lock the queue group before its
     // entries so a concurrent merge cannot move the challenge between the
@@ -1079,6 +1116,7 @@ export async function manualCall(
     await lockQueueGroupForEntry(client, entryId);
     const entry = await lockEntry(client, entryId);
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
+    scopedMarker = fixtureMarker;
     await assertQueueRoomScope(client, actorId, roomId);
     const entryGroup = await client.query<{ queue_group_id: number }>(
       `SELECT queue_group_id
@@ -1211,6 +1249,7 @@ export async function manualCall(
         roomId,
         roomName: room.name,
         roomLocation: room.location,
+        fixtureMarker,
       });
     }
     return updated;
@@ -1221,7 +1260,7 @@ export async function manualCall(
   const publish = publishCalled as (() => Promise<void>) | null;
   if (publish) await afterCommit(`manual_call ${entryId} publish`, publish);
   if (result.status === "called") return signalChallengeQueueChanged(result);
-  return broadcastEntry(result);
+  return broadcastEntry(result, scopedMarker);
 }
 
 // ── enqueue (admin) ──────────────────────────────────────────────────────────
@@ -1395,6 +1434,7 @@ export async function enqueueChallenge(
   actorId: number,
   repoIds?: number[],
 ): Promise<{ inserted: number[]; alreadyQueued: number[] }> {
+  let scopedMarker: boolean | null = null;
   const result = await withTransaction(async (client) => {
     // H54: this endpoint accepts caller-supplied challenge/repo ids, so the
     // capability check alone is not enough to keep synthetic queue graphs
@@ -1402,6 +1442,7 @@ export async function enqueueChallenge(
     // repo before creating any entry; the same transaction also covers the
     // prize-derived repo list used when the body omits repoIds.
     const fixtureMarker = await assertQueueChallengeScope(client, actorId, challengeId);
+    scopedMarker = fixtureMarker;
     let ids = repoIds;
     if (!ids || ids.length === 0) {
       ids = await challengeProjectIds(client, challengeId, fixtureMarker);
@@ -1421,7 +1462,7 @@ export async function enqueueChallenge(
   });
 
   for (const { entry } of result.inserted) {
-    await broadcastEntry(entry);
+    await broadcastEntry(entry, scopedMarker);
   }
   return { inserted: result.inserted.map((i) => i.entry.id), alreadyQueued: result.alreadyQueued };
 }
@@ -1445,6 +1486,7 @@ export async function enqueueQueueGroup(
   revived: number;
   alreadyQueued: number;
 }> {
+  let scopedMarker: boolean | null = null;
   const result = await withTransaction(async (client) => {
     const group = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
       queueGroupId,
@@ -1453,6 +1495,7 @@ export async function enqueueQueueGroup(
       throw new NotFoundError("Queue group not found", { queueGroupId });
     }
     const fixtureMarker = await assertQueueGroupScope(client, actorId, queueGroupId);
+    scopedMarker = fixtureMarker;
     const { rows: challenges } = await client.query(
       `SELECT c.id FROM queue_group_challenges qgc
         JOIN challenges c ON c.id = qgc.challenge_id
@@ -1523,7 +1566,7 @@ export async function enqueueQueueGroup(
     return { changed, perChallenge };
   });
 
-  for (const entry of result.changed) await broadcastEntry(entry);
+  for (const entry of result.changed) await broadcastEntry(entry, scopedMarker);
   return {
     challenges: result.perChallenge,
     inserted: result.perChallenge.reduce((sum, row) => sum + row.inserted, 0),
@@ -1537,6 +1580,7 @@ export async function clearQueueGroup(
   queueGroupId: number,
   actorId: number,
 ): Promise<{ cleared: number }> {
+  let scopedMarker: boolean | null = null;
   const result = await withTransaction(async (client) => {
     const group = await client.query(`SELECT id FROM queue_groups WHERE id = $1 FOR UPDATE`, [
       queueGroupId,
@@ -1545,6 +1589,7 @@ export async function clearQueueGroup(
       throw new NotFoundError("Queue group not found", { queueGroupId });
     }
     const fixtureMarker = await assertQueueGroupScope(client, actorId, queueGroupId);
+    scopedMarker = fixtureMarker;
     const { rows: challenges } = await client.query(
       `SELECT challenge_id FROM queue_group_challenges WHERE queue_group_id = $1 ORDER BY challenge_id`,
       [queueGroupId],
@@ -1606,7 +1651,7 @@ export async function clearQueueGroup(
     return cleared;
   });
 
-  for (const entry of result) await broadcastEntry(entry);
+  for (const entry of result) await broadcastEntry(entry, scopedMarker);
   return { cleared: result.length };
 }
 
@@ -1620,6 +1665,7 @@ export async function clearQueueGroup(
  * penalty (this is the org's fault, not the team's).
  */
 export async function pauseRoom(roomId: number, actorId: number): Promise<void> {
+  let scopedMarker: boolean | null = null;
   await withTransaction(async (client) => {
     const stateRes = await client.query(
       `SELECT * FROM room_queue_state WHERE room_id = $1 FOR UPDATE`,
@@ -1627,6 +1673,7 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     );
     if (stateRes.rowCount === 0) throw new NotFoundError("Room not found", { roomId });
     const fixtureMarker = await assertQueueRoomScope(client, actorId, roomId);
+    scopedMarker = fixtureMarker;
     if (stateRes.rows[0].is_paused) return; // idempotent no-op
 
     await client.query(`UPDATE room_queue_state SET is_paused = true WHERE room_id = $1`, [roomId]);
@@ -1692,23 +1739,24 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
 
   await afterCommit(`room ${roomId} pause broadcast`, () =>
     Promise.all([
-      broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
+      broadcastQueueEventWithMarker(scopedMarker, EVENTS.QUEUE_ROOM_CHANGED, {
         roomId,
         isPaused: true,
       }),
-      notifyRoomQueueChanged(pool, roomId),
+      notifyRoomQueueChanged(pool, roomId, scopedMarker),
     ]),
   );
 }
 
 export async function resumeRoom(roomId: number, actorId: number): Promise<void> {
+  let scopedMarker: boolean | null = null;
   await withTransaction(async (client) => {
     const stateRes = await client.query(
       `SELECT * FROM room_queue_state WHERE room_id = $1 FOR UPDATE`,
       [roomId],
     );
     if (stateRes.rowCount === 0) throw new NotFoundError("Room not found", { roomId });
-    await assertQueueRoomScope(client, actorId, roomId);
+    scopedMarker = await assertQueueRoomScope(client, actorId, roomId);
     await client.query(
       `UPDATE room_queue_state SET is_paused = false, started_at = COALESCE(started_at, now()) WHERE room_id = $1`,
       [roomId],
@@ -1716,11 +1764,11 @@ export async function resumeRoom(roomId: number, actorId: number): Promise<void>
   });
   await afterCommit(`room ${roomId} resume broadcast`, () =>
     Promise.all([
-      broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
+      broadcastQueueEventWithMarker(scopedMarker, EVENTS.QUEUE_ROOM_CHANGED, {
         roomId,
         isPaused: false,
       }),
-      notifyRoomQueueChanged(pool, roomId),
+      notifyRoomQueueChanged(pool, roomId, scopedMarker),
     ]),
   );
 }

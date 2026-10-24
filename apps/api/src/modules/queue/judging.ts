@@ -5,7 +5,7 @@ import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { broadcastQueueEvent } from "./broadcast.js";
+import { broadcastQueueEventWithMarker } from "./broadcast.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
 import { lockQueueGroupForEntry } from "./evaluation-lock.js";
 import { assertQueueChallengeReadScope } from "./fixture-scope.js";
@@ -275,13 +275,10 @@ export async function upsertAttemptReview(
   if (completedEntry) {
     await afterCommit(`review ${entryId} completion broadcast`, () =>
       Promise.all([
-        broadcastQueueEvent(
-          pool,
-          "entry",
-          completedEntry.id,
-          EVENTS.QUEUE_ENTRY_CHANGED,
-          completedEntry,
-        ),
+        // The transaction only ever touches real (non-fixture) entries: its
+        // entry lookup is filtered on is_test_account = false, so the marker
+        // is known without a post-commit graph lookup.
+        broadcastQueueEventWithMarker(false, EVENTS.QUEUE_ENTRY_CHANGED, completedEntry),
         notifyChallengeQueueChanged(pool, completedEntry.challenge_id),
       ]),
     );

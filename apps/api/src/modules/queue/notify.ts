@@ -63,7 +63,6 @@ type QueueNotificationEntry = {
   repo_id: number;
   status: string;
   assigned_room_id: number | null;
-  precalled_at: Date | string | null;
 };
 
 type ParticipantInvalidationJobData = {
@@ -138,11 +137,10 @@ async function lockNotificationEntry(
   client: Queryable,
   params: { entryId: number; challengeId: number; repoId: number },
   expectedStatus: string,
-  requirePrecall = false,
   expectedRoomId?: number,
 ): Promise<QueueNotificationEntry | null> {
   const { rows } = await client.query<QueueNotificationEntry>(
-    `SELECT challenge_id, repo_id, status, assigned_room_id, precalled_at
+    `SELECT challenge_id, repo_id, status, assigned_room_id
        FROM queue_entries
       WHERE id = $1
       FOR UPDATE`,
@@ -154,7 +152,6 @@ async function lockNotificationEntry(
     Number(entry.challenge_id) !== params.challengeId ||
     Number(entry.repo_id) !== params.repoId ||
     entry.status !== expectedStatus ||
-    (requirePrecall && entry.precalled_at == null) ||
     (expectedRoomId !== undefined &&
       (entry.assigned_room_id == null || Number(entry.assigned_room_id) !== expectedRoomId))
   ) {
@@ -183,6 +180,8 @@ type TeamCalledParams = {
   roomId: number;
   roomName: string;
   roomLocation?: string | null;
+  /** Marker already verified in the caller's transaction; skips the entry-graph lookup. */
+  fixtureMarker?: boolean;
 };
 
 /**
@@ -198,10 +197,11 @@ export async function prepareTeamCalled(
   params: TeamCalledParams,
 ): Promise<() => Promise<void>> {
   const nothing = async () => {};
-  if (!(await lockNotificationEntry(client, params, "called", false, params.roomId))) {
+  if (!(await lockNotificationEntry(client, params, "called", params.roomId))) {
     return nothing;
   }
-  const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
+  const fixtureMarker =
+    params.fixtureMarker ?? (await queueFixtureMarker(client, "entry", params.entryId));
   if (fixtureMarker === null) return nothing;
   const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
   if (memberIds.length === 0) return nothing;
@@ -282,54 +282,122 @@ export async function prepareTeamCalled(
   };
 }
 
-/** H38 pre-aviso: estimated wait <= queue_settings.pre_call_notification_eta_minutes. */
-export async function notifyTeamPreCall(
+/** One team's pre-call warning, as claimed by the pump (H38). */
+export type PreCallNotification = {
+  entryId: number;
+  challengeId: number;
+  repoId: number;
+  etaMinutes: number;
+};
+
+/**
+ * H38 pre-aviso for every team the pump claimed in one queue group: one
+ * member lookup, one context lookup and one `notifyMany` for the whole batch.
+ * The caller already holds the group/entry locks and has just claimed these
+ * waiting entries, so no per-entry re-lock is needed. Returns the member SSE
+ * push as a thunk to run AFTER the transaction commits.
+ */
+export async function prepareTeamPreCalls(
   client: Queryable,
-  params: { entryId: number; challengeId: number; repoId: number; etaMinutes: number },
-): Promise<void> {
-  if (!(await lockNotificationEntry(client, params, "waiting", true))) return;
-  const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
-  if (fixtureMarker === null) return;
-  const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
-  if (memberIds.length === 0) return;
-
-  const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
-    challengeId: params.challengeId,
-    repoId: params.repoId,
-    memberIds,
+  requested: readonly PreCallNotification[],
+  fixtureMarker: boolean,
+): Promise<() => Promise<void>> {
+  const nothing = async () => {};
+  let teams = requested;
+  if (teams.length === 0) return nothing;
+  // Never describe a row that has already moved on: only entries still
+  // waiting with their warning marker set may produce a notification.
+  const { rows: liveRows } = await client.query<{
+    id: number;
+    challenge_id: number;
+    repo_id: number;
+  }>(
+    `SELECT id, challenge_id, repo_id
+       FROM queue_entries
+      WHERE id = ANY($1::int[]) AND status = 'waiting' AND precalled_at IS NOT NULL`,
+    [teams.map((team) => team.entryId)],
+  );
+  const live = new Map(liveRows.map((row) => [Number(row.id), row]));
+  teams = teams.filter((team) => {
+    const row = live.get(team.entryId);
+    return (
+      row !== undefined &&
+      Number(row.challenge_id) === team.challengeId &&
+      Number(row.repo_id) === team.repoId
+    );
   });
+  if (teams.length === 0) return nothing;
+  const repoIds = [...new Set(teams.map((team) => team.repoId))];
+  const { rows: memberRows } = await client.query<{ repo_id: number; user_id: number }>(
+    `SELECT DISTINCT m.repo_id, m.user_id
+       FROM (${REPO_MEMBER_RELATION_SQL}) m
+       JOIN users u ON u.id = m.user_id
+      WHERE m.repo_id = ANY($1::int[]) AND u.is_test_account = $2`,
+    [repoIds, fixtureMarker],
+  );
+  if (memberRows.length === 0) return nothing;
+  const membersByRepo = new Map<number, number[]>();
+  for (const row of memberRows) {
+    const list = membersByRepo.get(Number(row.repo_id)) ?? [];
+    list.push(Number(row.user_id));
+    membersByRepo.set(Number(row.repo_id), list);
+  }
 
-  const payload = {
-    entryId: params.entryId,
-    challengeId: params.challengeId,
-    etaMinutes: params.etaMinutes,
-  };
-  // Goes through notifyMany() (not a raw INSERT) so it gets a real rendered
-  // template like queue.called does — "queue" is the mandatory category so
-  // every configured channel still fires regardless of preference.
-  await notifyMany(
-    client,
-    memberIds.map((userId) => ({
-      userId,
-      category: "queue",
-      payload: {
-        ...payload,
-        template: "queue.precall",
-        vars: {
-          name: nameById.get(userId) ?? "",
-          teamName,
-          challengeName,
-          etaMinutes: String(params.etaMinutes),
-        },
-      },
-      fixtureMarker,
-    })),
-  );
-  await Promise.all(
-    memberIds.map((userId) =>
-      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload),
+  const [{ rows: challengeRows }, { rows: repoRows }, { rows: userRows }] = await Promise.all([
+    client.query<{ id: number; title: string }>(
+      `SELECT id, title FROM challenges WHERE id = ANY($1::int[])`,
+      [[...new Set(teams.map((team) => team.challengeId))]],
     ),
+    client.query<{ id: number; name: string }>(
+      `SELECT id, name FROM repos WHERE id = ANY($1::int[])`,
+      [repoIds],
+    ),
+    client.query<{ id: number; name: string | null }>(
+      `SELECT id, name FROM users
+        WHERE id = ANY($1::int[]) AND account_state = 'active' AND anonymized_at IS NULL`,
+      [[...new Set(memberRows.map((row) => Number(row.user_id)))]],
+    ),
+  ]);
+  const challengeName = new Map(challengeRows.map((row) => [Number(row.id), row.title]));
+  const teamName = new Map(repoRows.map((row) => [Number(row.id), row.name]));
+  const userName = new Map(userRows.map((row) => [Number(row.id), row.name]));
+
+  const pushes: { userId: number; payload: Record<string, unknown> }[] = [];
+  const items = teams.flatMap((team) =>
+    (membersByRepo.get(team.repoId) ?? []).map((userId) => {
+      const payload = {
+        entryId: team.entryId,
+        challengeId: team.challengeId,
+        etaMinutes: team.etaMinutes,
+      };
+      pushes.push({ userId, payload });
+      return {
+        userId,
+        category: "queue",
+        payload: {
+          ...payload,
+          template: "queue.precall",
+          vars: {
+            name: userName.get(userId) ?? "",
+            teamName: teamName.get(team.repoId) ?? "",
+            challengeName: challengeName.get(team.challengeId) ?? "",
+            etaMinutes: String(team.etaMinutes),
+          },
+        },
+        fixtureMarker,
+      };
+    }),
   );
+  // "queue" is the mandatory category, so every configured channel fires
+  // regardless of preference (same contract as queue.called).
+  await notifyMany(client, items);
+  return async () => {
+    await Promise.all(
+      pushes.map(({ userId, payload }) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload),
+      ),
+    );
+  };
 }
 
 /**
@@ -659,9 +727,12 @@ export async function notifyTeamMessage(
     repoId: number;
     senderName: string;
     message: string;
+    /** Marker already verified in the caller's scope check. */
+    fixtureMarker?: boolean;
   },
 ): Promise<number> {
-  const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
+  const fixtureMarker =
+    params.fixtureMarker ?? (await queueFixtureMarker(client, "entry", params.entryId));
   if (fixtureMarker === null) return 0;
   const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
   if (memberIds.length === 0) return 0;
@@ -706,10 +777,16 @@ export async function notifyTeamMessage(
 }
 
 /** Notify participants whose queues are affected by a room-level change. */
-export async function notifyRoomQueueChanged(client: Queryable, roomId: number): Promise<void> {
+export async function notifyRoomQueueChanged(
+  client: Queryable,
+  roomId: number,
+  knownMarker?: boolean | null,
+): Promise<void> {
   // H46: a room serves a queue_group, so a room-level change affects every
   // challenge feeding that group — one today, 1..N once groups are merged.
-  const fixtureMarker = await queueFixtureMarker(client, "room", roomId);
+  // `knownMarker` is the marker the caller's transaction already verified.
+  const fixtureMarker =
+    knownMarker === undefined ? await queueFixtureMarker(client, "room", roomId) : knownMarker;
   if (fixtureMarker === null) return;
   const challengeIds = await roomChallengeIds(client, roomId, fixtureMarker);
   await Promise.all(challengeIds.map((id) => notifyChallengeQueueChanged(client, id)));
