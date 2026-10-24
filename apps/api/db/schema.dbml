@@ -325,6 +325,7 @@ Table certificate_approvals {
 }
 
 Table certificate_settings {
+  award_hours "numeric(5,2)" [note: '#1083 optional configured certificate/university award; NULL uses confirmed attendance. No preset value.']
   id integer [pk, not null, default: `1`]
   issuer_name text [not null, default: `'Asociación Universitaria Grupo de Programadores e Usuarios de Linux (GPUL)'::text`]
   min_hours "numeric(5,2)"

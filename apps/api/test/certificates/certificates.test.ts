@@ -29,7 +29,7 @@ beforeEach(async () => {
        event_starts_at = '2026-02-27T09:00:00Z', event_ends_at = '2026-03-01T17:00:00Z'`,
   );
   await pool.query(
-    `UPDATE certificate_settings SET min_hours = 10, min_review_hours = NULL, requires_demo = false, issuer_name = DEFAULT`,
+    `UPDATE certificate_settings SET min_hours = 10, min_review_hours = NULL, award_hours = NULL, requires_demo = false, issuer_name = DEFAULT`,
   );
   staff = await createUserWithCapabilities([CAPABILITIES.PRESENCE_MANAGE]);
   person = await createUser({ name: "Ada" });
@@ -589,6 +589,82 @@ describe("attendance review and university awards (#1083)", () => {
     );
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.matches)).toBe(true);
+  });
+
+  it("uses editable policy hours and lets an individual review override them", async () => {
+    await presence(person, 12);
+    const initial = await app.inject({
+      method: "GET",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+    });
+    expect(initial.json().awardHours).toBeNull();
+    const policy = await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { awardHours: 37.5 },
+    });
+    expect(policy.json().awardHours).toBe(37.5);
+    const cert = (await issue(person)).json();
+    expect(
+      (await app.inject({ method: "GET", url: `/api/public/certificates/${cert.code}` })).json()
+        .hours,
+    ).toBe(37.5);
+    const overview = await app.inject({
+      method: "GET",
+      url: `/api/users/${person}/certificates`,
+      headers: asUser(staff),
+    });
+    expect(overview.json().settings.awardHours).toBe(37.5);
+    await approve(person, 22.5);
+    const reviewed = (await issue(person)).json();
+    expect(
+      (await app.inject({ method: "GET", url: `/api/public/certificates/${reviewed.code}` })).json()
+        .hours,
+    ).toBe(22.5);
+    const exporter = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const csv = await app.inject({
+      method: "GET",
+      url: "/api/certificates/participants/export.csv?format=udc",
+      headers: asUser(exporter),
+    });
+    expect(csv.body).toContain(",22.5,");
+  });
+
+  it("invalidates old automatic policy awards but preserves individual decisions", async () => {
+    await presence(person, 12);
+    const auto = (await issue(person, { variant: "hours" })).json();
+    const other = await createUser();
+    await admitParticipant(other);
+    await presence(other, 11);
+    await approve(other, 19);
+    const manual = (await issue(other, { variant: "hours" })).json();
+    const change = await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { awardHours: 41 },
+    });
+    expect(change.statusCode).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: `/api/public/certificates/${auto.code}` })).json()
+        .status,
+    ).toBe("revoked");
+    expect(
+      (await app.inject({ method: "GET", url: `/api/public/certificates/${manual.code}` })).json(),
+    ).toMatchObject({ status: "valid", hours: 19 });
+    await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { awardHours: null },
+    });
+    const reset = (await issue(person, { variant: "hours" })).json();
+    expect(
+      (await app.inject({ method: "GET", url: `/api/public/certificates/${reset.code}` })).json()
+        .hours,
+    ).toBe(12);
   });
 
   it("validates the two thresholds together", async () => {

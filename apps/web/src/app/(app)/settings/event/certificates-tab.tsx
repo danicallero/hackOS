@@ -28,28 +28,46 @@ import { toast } from "@/lib/toast";
 import { useCategorySaveState } from "./use-category-save-state";
 
 const schema = (t: Translate) =>
-  z.object({
-    automatic: z.boolean(),
-    minReviewHours: z
-      .string()
-      .refine(
-        (value) =>
-          value.trim() === "" ||
-          (Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 999),
-        t("fieldMustBeNumber"),
-      ),
-    minHours: z
-      .number({ error: t("fieldMustBeNumber") })
-      .min(0, t("tooSmall"))
-      .max(999, t("tooLarge")),
-    requiresDemo: z.boolean(),
-    issuerName: z.string().trim().min(1, t("required")).max(200, t("tooLong")),
-  });
+  z
+    .object({
+      automatic: z.boolean(),
+      minReviewHours: z
+        .string()
+        .refine(
+          (value) =>
+            value.trim() === "" ||
+            (Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 999),
+          t("fieldMustBeNumber"),
+        ),
+      minHours: z
+        .string()
+        .refine(
+          (value) =>
+            value.trim() === "" ||
+            (Number.isFinite(Number(value)) && Number(value) >= 0 && Number(value) <= 999),
+          t("fieldMustBeNumber"),
+        ),
+      awardHours: z
+        .string()
+        .refine(
+          (value) =>
+            value.trim() === "" ||
+            (Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 999),
+          t("fieldMustBeNumber"),
+        ),
+      requiresDemo: z.boolean(),
+      issuerName: z.string().trim().min(1, t("required")).max(200, t("tooLong")),
+    })
+    .superRefine((values, ctx) => {
+      if (values.automatic && values.minHours.trim() === "")
+        ctx.addIssue({ code: "custom", path: ["minHours"], message: t("required") });
+    });
 type Values = z.infer<ReturnType<typeof schema>>;
 const fromSettings = (settings: CertificateSettings): Values => ({
   automatic: settings.minHours !== null,
   minReviewHours: settings.minReviewHours == null ? "" : String(settings.minReviewHours),
-  minHours: settings.minHours ?? 10,
+  minHours: settings.minHours == null ? "" : String(settings.minHours),
+  awardHours: settings.awardHours == null ? "" : String(settings.awardHours),
   requiresDemo: settings.requiresDemo,
   issuerName: settings.issuerName,
 });
@@ -108,11 +126,14 @@ function CertificatePolicyForm({
       const dirty = form.formState.dirtyFields;
       const next = await api.put<CertificateSettings>("/api/certificates/settings", {
         ...((dirty.automatic || dirty.minHours) && {
-          minHours: values.automatic ? values.minHours : null,
+          minHours: values.automatic ? Number(values.minHours) : null,
         }),
         ...(dirty.minReviewHours && {
           minReviewHours:
             values.minReviewHours.trim() === "" ? null : Number(values.minReviewHours),
+        }),
+        ...(dirty.awardHours && {
+          awardHours: values.awardHours.trim() === "" ? null : Number(values.awardHours),
         }),
         ...(dirty.requiresDemo && { requiresDemo: values.requiresDemo }),
         ...(dirty.issuerName && { issuerName: values.issuerName }),
@@ -173,7 +194,6 @@ function CertificatePolicyForm({
                         max={999}
                         step={0.01}
                         className="max-w-48 tabular-nums"
-                        onChange={(event) => field.onChange(event.target.valueAsNumber)}
                       />
                     </FormControl>
                     <FormDescription>{t("certificateConfirmedHoursHelp")}</FormDescription>
@@ -199,6 +219,27 @@ function CertificatePolicyForm({
                     />
                   </FormControl>
                   <FormDescription>{t("certificateReviewThresholdHelp")}</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="awardHours"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t("certificatePolicyAwardHours")}</FormLabel>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      type="number"
+                      min={0.01}
+                      max={999}
+                      step={0.01}
+                      className="max-w-48 tabular-nums"
+                    />
+                  </FormControl>
+                  <FormDescription>{t("certificatePolicyAwardHoursHelp")}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}

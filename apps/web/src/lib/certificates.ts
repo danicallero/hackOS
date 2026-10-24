@@ -6,6 +6,7 @@ export type CertificateVariant = "participation" | "hours" | "activities";
 export interface CertificateSettings {
   minHours: number | null;
   minReviewHours: number | null;
+  awardHours: number | null;
   requiresDemo: boolean;
   issuerName: string;
 }
@@ -37,6 +38,7 @@ export interface CertificateEligibility {
 export const CERTIFICATE_VARIANTS: CertificateVariant[] = ["participation", "hours", "activities"];
 
 export interface CertificateOverview {
+  settings?: CertificateSettings;
   eligibility: CertificateEligibility;
   certificates: Certificate[];
 }

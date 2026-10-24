@@ -23,6 +23,7 @@ export interface CertificateSettings {
   /** Verified venue hours needed for automatic issue; null switches it off. */
   minHours: number | null;
   minReviewHours: number | null;
+  awardHours: number | null;
   /** Only people whose team presented a project are eligible. */
   requiresDemo: boolean;
   issuerName: string;
@@ -32,12 +33,13 @@ export async function readSettings(
   db: pg.Pool | pg.PoolClient = pool,
 ): Promise<CertificateSettings> {
   const { rows } = await db.query(
-    `SELECT min_hours, min_review_hours, requires_demo, issuer_name FROM certificate_settings WHERE id = 1`,
+    `SELECT min_hours, min_review_hours, award_hours, requires_demo, issuer_name FROM certificate_settings WHERE id = 1`,
   );
   const row = rows[0];
   return {
     minHours: row.min_hours == null ? null : Number(row.min_hours),
     minReviewHours: row.min_review_hours == null ? null : Number(row.min_review_hours),
+    awardHours: row.award_hours == null ? null : Number(row.award_hours),
     requiresDemo: row.requires_demo,
     issuerName: row.issuer_name,
   };
@@ -59,9 +61,25 @@ export async function updateSettings(
       throw new BadRequestError("The review threshold must not exceed the automatic threshold");
     }
     await client.query(
-      `UPDATE certificate_settings SET min_hours = $1, requires_demo = $2, issuer_name = $3, min_review_hours = $4 WHERE id = 1`,
-      [next.minHours, next.requiresDemo, next.issuerName, next.minReviewHours],
+      `UPDATE certificate_settings SET min_hours = $1, requires_demo = $2, issuer_name = $3, min_review_hours = $4, award_hours = $5 WHERE id = 1`,
+      [next.minHours, next.requiresDemo, next.issuerName, next.minReviewHours, next.awardHours],
     );
+    if (next.awardHours !== before.awardHours) {
+      const { rows } = await client.query(
+        `UPDATE attendance_certificates
+        SET revoked_at=now(), revoked_by=$1, revoked_reason='certificate_award_policy_changed'
+        WHERE revoked_at IS NULL AND snapshot->>'manuallyCertified' IS DISTINCT FROM 'true' RETURNING id`,
+        [actorId],
+      );
+      for (const row of rows)
+        await audit(client, {
+          actorId,
+          entityType: "attendance_certificate",
+          entityId: row.id,
+          action: "certificate.revoke",
+          reason: "certificate_award_policy_changed",
+        });
+    }
     await audit(client, {
       actorId,
       entityType: "certificate_settings",
@@ -138,7 +156,8 @@ function evaluate(
     eligible: reason === null,
     reason,
     reviewRequired: reason === "review_required",
-    certifiedHours: approval?.certifiedHours ?? (reason === null ? hours : null),
+    certifiedHours:
+      approval?.certifiedHours ?? (reason === null ? (settings.awardHours ?? hours) : null),
     approval,
   };
 }
@@ -348,8 +367,9 @@ interface IssueOptions {
 async function insertCertificate(
   opts: IssueOptions,
 ): Promise<CertificateRow & { created: boolean }> {
-  const settings = await readSettings();
   return withTransaction(async (client) => {
+    await client.query(`SELECT id FROM certificate_settings WHERE id=1 FOR SHARE`);
+    const settings = await readSettings(client);
     await lockPerson(client, opts.userId);
     if (opts.approval && opts.actorId != null)
       await recordApproval(
@@ -364,10 +384,11 @@ async function insertCertificate(
       client,
       opts.userId,
       opts.locale,
-      approval?.certifiedHours ?? opts.hours,
+      approval?.certifiedHours ?? settings.awardHours ?? opts.hours,
       settings.issuerName,
     );
     if (approval) snapshot.manuallyCertified = true;
+    if (settings.awardHours != null) snapshot.certifiedAward = true;
     const { rows } = await client.query(
       `INSERT INTO attendance_certificates
          (code, user_id, variant, locale, source, override_reason, issued_by, snapshot)
@@ -631,7 +652,7 @@ export async function verifyCode(code: string): Promise<Verification> {
     eventStartsAt: snapshot.eventStartsAt ?? null,
     eventEndsAt: snapshot.eventEndsAt ?? null,
     hours:
-      !revoked && (row.variant === "hours" || snapshot.manuallyCertified)
+      !revoked && (row.variant === "hours" || snapshot.manuallyCertified || snapshot.certifiedAward)
         ? (snapshot.hours ?? null)
         : null,
   };

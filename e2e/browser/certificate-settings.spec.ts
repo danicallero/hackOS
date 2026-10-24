@@ -7,6 +7,7 @@ test("saves the certificate policy and disables automatic issuance", async ({ pa
   let policy = {
     minHours: null as number | null,
     minReviewHours: null as number | null,
+    awardHours: null as number | null,
     requiresDemo: false,
     issuerName: "GPUL",
   };
@@ -52,14 +53,19 @@ test("saves the certificate policy and disables automatic issuance", async ({ pa
   await expect(automatic).not.toBeChecked();
   await expect(hours).toHaveCount(0);
   await automatic.click();
-  await hours.fill("30");
+  await expect(hours).toHaveValue("");
+  const awardHours = page.getByRole("spinbutton", { name: webEn.certificatePolicyAwardHours });
+  await expect(awardHours).toHaveValue("");
+  await hours.fill("42");
+  await awardHours.fill("36.5");
   await page.getByRole("spinbutton", { name: webEn.certificateMinReviewHours }).fill("10");
   await page.getByRole("switch", { name: webEn.certificateRequiresDemo }).click();
   await page.getByRole("textbox", { name: webEn.certificateIssuerName }).fill("GPUL association");
   await page.getByRole("button", { name: webEn.saveChanges, exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
   expect(writes[0]).toEqual({
-    minHours: 30,
+    minHours: 42,
+    awardHours: 36.5,
     minReviewHours: 10,
     requiresDemo: true,
     issuerName: "GPUL association",

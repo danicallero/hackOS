@@ -15,6 +15,7 @@ export interface CertificateSnapshot {
   issuerName: string;
   hours: number;
   manuallyCertified?: boolean;
+  certifiedAward?: boolean;
   activities: { name: string; at: string }[];
 }
 
@@ -219,7 +220,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     y -= 12;
   }
 
-  if (snapshot.manuallyCertified && variant !== "hours")
+  if ((snapshot.manuallyCertified || snapshot.certifiedAward) && variant !== "hours")
     paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
 
   paragraph(copy.closing, regular, 12, 8);

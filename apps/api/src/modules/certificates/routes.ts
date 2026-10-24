@@ -36,6 +36,7 @@ const idParams = z.object({ id: z.coerce.number().int().positive() });
 const settingsSchema = z.object({
   minHours: z.number().nullable(),
   minReviewHours: z.number().nullable(),
+  awardHours: z.number().nullable(),
   requiresDemo: z.boolean(),
   issuerName: z.string(),
 });
@@ -290,13 +291,14 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
           .object({
             minHours: z.number().min(0).max(999).nullable().optional(),
             minReviewHours: z.number().min(0).max(999).nullable().optional(),
+            awardHours: z.number().positive().max(999).nullable().optional(),
             requiresDemo: z.boolean().optional(),
             issuerName: z.string().trim().min(1).max(200).optional(),
           })
           .strict(),
         summary: "Update the certificate policy",
         description:
-          "Changes the automatic/review hours thresholds, the presented-project requirement or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
+          "Changes the optional certified-hours award, automatic/review hours thresholds, the presented-project requirement or the issuer name. Already issued certificates keep what they were issued with. Audited as `certificate_settings.update` (#1083, H53).",
         response: { 200: settingsSchema },
       },
     },
@@ -315,6 +317,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
           "Staff view of one person: their hours, whether they meet the policy and every certificate issued to them, revoked ones included (#1083).",
         response: {
           200: z.object({
+            settings: settingsSchema,
             eligibility: eligibilitySchema,
             certificates: z.array(certificateSchema),
           }),
@@ -322,6 +325,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => ({
+      settings: await readSettings(),
       eligibility: await eligibilityFor(req.params.id),
       certificates: await listForUser(req.params.id),
     }),

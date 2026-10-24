@@ -65,7 +65,7 @@ export function CertificatesPanel({
   const [error, setError] = useState<string | null>(null);
   const [variant, setVariant] = useState<CertificateVariant>("participation");
   const [locale, setLocale] = useState<Language>(language);
-  const [certifiedHours, setCertifiedHours] = useState("");
+  const [certifiedHours, setCertifiedHours] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [revoking, setRevoking] = useState<Certificate | null>(null);
@@ -108,6 +108,8 @@ export function CertificatesPanel({
     );
   }
 
+  const awardInput =
+    certifiedHours ?? (data.settings?.awardHours == null ? "" : String(data.settings.awardHours));
   const below = staff && !data.eligibility.eligible;
   const dateFormat = new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" });
 
@@ -279,7 +281,7 @@ export function CertificatesPanel({
                 min={0.01}
                 max={999}
                 step={0.01}
-                value={certifiedHours}
+                value={awardInput}
                 onChange={(e) => setCertifiedHours(e.target.value)}
                 disabled={pending}
                 className="max-w-48 tabular-nums"
@@ -299,13 +301,13 @@ export function CertificatesPanel({
               pending={pending}
               disabled={
                 !reason.trim() ||
-                !Number.isFinite(Number(certifiedHours)) ||
-                Number(certifiedHours) <= 0 ||
-                Number(certifiedHours) > 999
+                !Number.isFinite(Number(awardInput)) ||
+                Number(awardInput) <= 0 ||
+                Number(awardInput) > 999
               }
               onClick={() =>
                 void run(
-                  () => certificatesApi.approve(staffUserId, Number(certifiedHours), reason.trim()),
+                  () => certificatesApi.approve(staffUserId, Number(awardInput), reason.trim()),
                   t("certificateApprovedToast"),
                 )
               }

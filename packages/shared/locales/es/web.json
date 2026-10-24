@@ -3686,5 +3686,7 @@
   "certificateUdcCsv": "CSV para la UDC",
   "certificateExportScope": "Las exportaciones incluyen los participantes de la universidad seleccionada en todos los estados de revisión. El archivo UDC solo incluye participantes elegibles o aprobados.",
   "certificateReviewAttendance": "Revisar asistencia",
-  "certificatePersonEvidenceCsv": "CSV de asistencia del participante"
+  "certificatePersonEvidenceCsv": "CSV de asistencia del participante",
+  "certificatePolicyAwardHours": "Horas que figuran en los certificados",
+  "certificatePolicyAwardHoursHelp": "Déjalo vacío para usar la asistencia confirmada. También establece las horas sugeridas para la revisión; se pueden cambiar por persona. Cambiar este ajuste revoca los documentos automáticos anteriores."
 }

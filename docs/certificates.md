@@ -10,13 +10,16 @@ download the PDF of any certificate (`GET /api/certificates/:id/pdf`).
 Code: `apps/api/src/modules/certificates/` (`service.ts` policy and issue,
 `pdf.ts` rendering, `routes.ts`). Migrations:
 `0503_attendance_certificates.sql`, `0504_certificate_languages.sql`,
-`0505_certificate_review.sql`.
+`0505_certificate_review.sql`, `0506_certificate_award_hours.sql`.
 
 ## Policy
 
 Configure **Event settings → Certificates** (`/settings/event?tab=certificates`):
 set the automatic minimum and a lower review minimum, optionally require
-a project presentation for automatic issue, and set the issuer. One Save applies the whole policy.
+a project presentation for automatic issue, and set the issuer. One Save applies the whole policy. No minimum or awarded-hour value is prefilled
+unless it has been saved in settings. Changing `awardHours` revokes automatic
+documents issued under the previous policy; individual reviewed awards remain
+unchanged.
 
 One row in `certificate_settings`, edited with `PUT /api/certificates/settings`
 (`presence:manage`, audited). Concurrent policy edits lock the singleton row
@@ -26,6 +29,7 @@ before merging changes, so unrelated patches preserve each other:
 |---|---|
 | `minHours` | Secured venue hours (H24 `guaranteedPresenceMs`; open provisional time does not count) needed for automatic issue. `null` turns automatic issue off. |
 | `minReviewHours` | Lower secured-hours threshold that opens case-by-case review. `null` disables the review queue; cannot exceed `minHours` when both are set. |
+| `awardHours` | Optional hours stated on automatic certificates and university exports, also suggested in the reviewer. No preset: `null` uses confirmed attendance and leaves review awards blank. A reviewer can enter a different value per person. |
 | `requiresDemo` | Only people whose team started or finished a presentation in the queue (`queue_entries.presentation_started_at` / `completed_at`). |
 | `issuerName` | The organisation printed on the document. |
 

@@ -50,7 +50,18 @@ test("reviews the full timeline and awards certified hours without changing meas
           },
         ],
       };
-    if (path === "/api/users/7/certificates") body = { eligibility, certificates: [] };
+    if (path === "/api/users/7/certificates")
+      body = {
+        eligibility,
+        certificates: [],
+        settings: {
+          minHours: 42,
+          minReviewHours: 10,
+          awardHours: 36.5,
+          requiresDemo: false,
+          issuerName: "GPUL",
+        },
+      };
     if (path === "/api/users/7/certificate-evidence")
       body = {
         certaintyWindowMinutes: 720,
@@ -86,12 +97,12 @@ test("reviews the full timeline and awards certified hours without changing meas
       award = route.request().postDataJSON();
       eligibility = {
         ...eligibility,
-        certifiedHours: 30,
+        certifiedHours: 27.5,
         eligible: true,
         reviewRequired: false,
         reason: null,
         approval: {
-          certifiedHours: 30,
+          certifiedHours: 27.5,
           reason: "Reviewed dinner and midnight workshop",
           approvedBy: 1,
           approvedAt: new Date().toISOString(),
@@ -103,7 +114,7 @@ test("reviews the full timeline and awards certified hours without changing meas
       return route.fulfill({
         contentType: "text/csv",
         headers: { "content-disposition": 'attachment; filename="udc.csv"' },
-        body: "certified_hours\r\n30\r\n",
+        body: "certified_hours\r\n27.5\r\n",
       });
     if (path === "/api/exports/activities/catalog") body = { activities: [] };
     await route.fulfill({ json: body });
@@ -126,15 +137,18 @@ test("reviews the full timeline and awards certified hours without changing meas
   await expect(
     page.getByRole("button", { name: webEn.certificatePersonEvidenceCsv }),
   ).toBeVisible();
-  await page.getByRole("spinbutton", { name: webEn.certificateCertifiedHours }).fill("30");
+  await expect(page.getByRole("spinbutton", { name: webEn.certificateCertifiedHours })).toHaveValue(
+    "36.5",
+  );
+  await page.getByRole("spinbutton", { name: webEn.certificateCertifiedHours }).fill("27.5");
   await page
     .getByRole("textbox", { name: webEn.certificateOverrideReason })
     .fill("Reviewed dinner and midnight workshop");
   await page.getByRole("button", { name: webEn.certificateApproveHours }).click();
   await expect
     .poll(() => award)
-    .toEqual({ certifiedHours: 30, reason: "Reviewed dinner and midnight workshop" });
-  await expect(page.getByText("Certified hours: 30", { exact: true })).toBeVisible();
+    .toEqual({ certifiedHours: 27.5, reason: "Reviewed dinner and midnight workshop" });
+  await expect(page.getByText("Certified hours: 27.5", { exact: true })).toBeVisible();
   await expect(page.locator("[data-sileo-toast]")).toHaveCount(0);
   await page.getByRole("button", { name: webEn.certificateApproveHours }).scrollIntoViewIfNeeded();
   await page.screenshot({

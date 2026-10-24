@@ -3686,5 +3686,7 @@
   "certificateUdcCsv": "UDC CSV",
   "certificateExportScope": "Exports include participants from the selected university across all review states. The UDC file includes only eligible or approved participants.",
   "certificateReviewAttendance": "Review attendance",
-  "certificatePersonEvidenceCsv": "Participant attendance CSV"
+  "certificatePersonEvidenceCsv": "Participant attendance CSV",
+  "certificatePolicyAwardHours": "Hours stated on certificates",
+  "certificatePolicyAwardHoursHelp": "Leave blank to use confirmed attendance. This also sets the suggested review award; reviewers can change it per person. Changing this setting revokes previous automatic documents."
 }
