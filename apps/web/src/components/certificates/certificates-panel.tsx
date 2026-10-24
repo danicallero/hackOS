@@ -96,7 +96,10 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
 
   return (
     <div className="space-y-6">
-      <SectionCard title={t("certificates")} icon={SealCheckIcon}>
+      <SectionCard
+        title={staff ? t("certificates") : undefined}
+        icon={staff ? SealCheckIcon : undefined}
+      >
         <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <div className="space-y-2">
             <Select value={variant} onValueChange={(v) => setVariant(v as CertificateVariant)}>
