@@ -27,6 +27,7 @@ import {
   renderCertificate,
   revokeCertificate,
   updateSettings,
+  verifyByHash,
   verifyCode,
 } from "./service.js";
 import { registerCertificateTypeRoutes } from "./type-routes.js";
@@ -34,6 +35,22 @@ import { registerCertificateTypeRoutes } from "./type-routes.js";
 const variant = z.enum(["participation", "hours", "activities"]);
 const locale = z.enum(["es", "gl", "en"]);
 const idParams = z.object({ id: z.coerce.number().int().positive() });
+
+const verificationSchema = z.object({
+  status: z.enum(["valid", "revoked"]),
+  variant,
+  issuedAt: z.string(),
+  issuerName: z.string().nullable(),
+  name: z.string().nullable(),
+  surname: z.string().nullable(),
+  eventName: z.string().nullable(),
+  eventStartsAt: z.string().nullable(),
+  eventEndsAt: z.string().nullable(),
+  hours: z.number().nullable(),
+  sha256: z.string().nullable(),
+  generatedAt: z.string().nullable(),
+  supersededAt: z.string().nullable(),
+});
 
 const settingsSchema = z.object({
   minHours: z.number().nullable(),
@@ -427,25 +444,27 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         description:
           "Public check of a certificate by the code printed on it: whether it is valid or revoked, who it was issued to, the event and its dates, the hours only for documents that state them (the Attendance hours variant or an awarded custom type) and the SHA-256 and generation time of the stored copy, so a third party can compare the file they hold. Never returns a DNI/NIE; a revoked certificate shows no personal data. 404 for an unknown code, 429 past 60 requests a minute from one address (#1083).",
         response: {
-          200: z.object({
-            status: z.enum(["valid", "revoked"]),
-            variant,
-            issuedAt: z.string(),
-            issuerName: z.string().nullable(),
-            name: z.string().nullable(),
-            surname: z.string().nullable(),
-            eventName: z.string().nullable(),
-            eventStartsAt: z.string().nullable(),
-            eventEndsAt: z.string().nullable(),
-            hours: z.number().nullable(),
-            sha256: z.string().nullable(),
-            generatedAt: z.string().nullable(),
-            supersededAt: z.string().nullable(),
-          }),
+          200: verificationSchema,
         },
       },
     },
     async (req) => verifyCode(req.params.code),
+  );
+
+  r.get(
+    "/api/public/certificates/by-hash/:sha256",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-content" } },
+      preHandler: limitVerification,
+      schema: {
+        params: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+        summary: "Find the certificate a PDF file belongs to",
+        description:
+          "Looks up a SHA-256 (lowercase hex) of a downloaded PDF among the stored copies of live certificates and answers like the verification by code, plus the code. The file is hashed in the browser, never uploaded. 404 when no live copy has that fingerprint, including revoked certificates, and 429 past 60 requests a minute from one address (#1083).",
+        response: { 200: verificationSchema.extend({ code: z.string() }) },
+      },
+    },
+    async (req) => verifyByHash(req.params.sha256),
   );
 
   r.get(
@@ -455,11 +474,17 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       preHandler: limitVerification,
       schema: {
         params: z.object({ code: z.string().min(16).max(64) }),
+        querystring: z.object({ download: z.literal("1").optional() }),
         summary: "View the official certificate",
         description:
-          "The certificate PDF itself (the same stored copy, with the CSV footer), for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code, 409 once revoked and 429 past 60 requests a minute from one address (#1083).",
+          "The certificate PDF itself (the same stored copy, with the CSV footer), shown inline or, with `download=1`, as an attachment (browsers such as iOS Safari cannot save an embedded PDF), for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code, 409 once revoked and 429 past 60 requests a minute from one address (#1083).",
       },
     },
-    async (req, reply) => sendPdf(reply, await certificateIdByCode(req.params.code), "inline"),
+    async (req, reply) =>
+      sendPdf(
+        reply,
+        await certificateIdByCode(req.params.code),
+        req.query.download ? "attachment" : "inline",
+      ),
   );
 }

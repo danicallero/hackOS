@@ -218,8 +218,11 @@ There is no "without footer" download any more.
 ## Web
 
 `/verify/{code}` shows the official PDF and, under it, the SHA-256 of the stored copy with a
-"Check a PDF" control that hashes a file in the browser (nothing is uploaded) and says whether it
-is identical; the same `sha256` and `generatedAt` are in the public JSON, null once revoked
+"Check a PDF" control that hashes a file in the browser (only the hash is sent to
+`GET /api/public/certificates/by-hash/:sha256`, which matches live stored copies) and says whether it is
+that certificate, another one or unknown; the bar is collapsed by default and has a Download button
+(`/pdf?download=1`, an attachment, because iOS Safari cannot save an embedded PDF). `/verify` offers the same check
+without a code, and verifying a valid certificate generates its stored copy; the same `sha256` and `generatedAt` are in the public JSON, null once revoked
 (hackOS branding in the header) and is never indexed: `noindex` metadata and `X-Robots-Tag` on the page
 (`next.config.ts`), `X-Robots-Tag` on every API response, no Referer.
 

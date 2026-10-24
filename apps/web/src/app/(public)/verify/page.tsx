@@ -4,6 +4,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PdfCheck } from "@/components/certificates/pdf-check";
 import { Brand } from "@/components/common/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,6 +57,9 @@ export default function VerifyRootPage() {
             <Button type="submit" disabled={code.length < MIN_CODE_LENGTH}>
               {t("certificateVerifyAction")}
             </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
+            <PdfCheck />
           </div>
         </form>
       </main>

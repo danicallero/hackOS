@@ -976,6 +976,13 @@ describe("single stored copy", () => {
     expect(mine.rawPayload.length).toBeLessThan(20_000);
     const verified = (await get(`/api/public/certificates/${cert.code}`)).json();
     expect(verified.sha256).toBe(sha(mine.rawPayload));
+    const byHash = (hex: string) =>
+      app.inject({ method: "GET", url: `/api/public/certificates/by-hash/${hex}` });
+    const found = await byHash(sha(mine.rawPayload));
+    expect(found.statusCode).toBe(200);
+    expect(found.json()).toMatchObject({ code: cert.code, status: "valid" });
+    expect((await byHash("0".repeat(64))).statusCode).toBe(404);
+    expect((await byHash("xyz")).statusCode).toBe(400);
     expect(verified.generatedAt).toEqual(expect.any(String));
     // Later changes to the account do not alter the issued copy.
     await pool.query(`UPDATE users SET dni='99999999R' WHERE id=$1`, [person]);
@@ -1007,6 +1014,14 @@ describe("single stored copy", () => {
       [cert.id],
     );
     expect(rows[0]).toEqual({ pdf: null, pdf_sha256: null, pdf_generated_at: null });
+    expect(
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/public/certificates/by-hash/${"0".repeat(64)}`,
+        })
+      ).statusCode,
+    ).toBe(404);
     expect((await get(`/api/public/certificates/${cert.code}`)).json()).toMatchObject({
       status: "revoked",
       sha256: null,
