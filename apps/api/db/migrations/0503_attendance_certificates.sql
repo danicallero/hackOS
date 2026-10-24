@@ -43,14 +43,6 @@ CREATE TABLE attendance_certificates (
   revoked_at timestamptz,
   revoked_by integer REFERENCES users(id) ON DELETE SET NULL,
   revoked_reason text,
-  -- Signed original uploaded by staff; copies downloaded with the CSV footer are
-  -- stamped on it instead of the rendered PDF. The object holds personal data and
-  -- is deleted on account removal (H54).
-  signed_key text,
-  signed_at timestamptz,
-  signed_by integer REFERENCES users(id) ON DELETE SET NULL,
-  CONSTRAINT attendance_certificates_signed
-    CHECK ((signed_key IS NULL) = (signed_at IS NULL)),
   CONSTRAINT attendance_certificates_revocation
     CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL))
 );

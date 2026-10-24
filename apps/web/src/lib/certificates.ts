@@ -1,4 +1,4 @@
-import { api, apiDownload, apiUpload } from "@/lib/api";
+import { api, apiDownload } from "@/lib/api";
 import type { Language } from "@/lib/types";
 
 export type CertificateVariant = "participation" | "hours" | "activities";
@@ -11,7 +11,6 @@ export interface Certificate {
   locale: Language;
   issuedAt: string;
   revokedAt: string | null;
-  signedAt: string | null;
 }
 
 export interface CertificateEligibility {
@@ -52,9 +51,4 @@ export const certificatesApi = {
   /** Without the CSV footer, to be signed; `copy` is what the participant gets. */
   download: (id: number, copy: boolean) =>
     apiDownload(`/api/certificates/${id}/pdf${copy ? "?copy=true" : ""}`, `certificate-${id}.pdf`),
-  uploadSigned: (id: number, file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    return apiUpload<Certificate>(`/api/certificates/${id}/signed`, body);
-  },
 };

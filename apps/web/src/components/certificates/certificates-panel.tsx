@@ -1,9 +1,8 @@
 "use client";
 
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { FileArrowUpIcon } from "@phosphor-icons/react/dist/csr/FileArrowUp";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
@@ -55,8 +54,6 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
   const [pending, setPending] = useState(false);
   const [revoking, setRevoking] = useState<Certificate | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
-  const uploadFor = useRef<number | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -179,8 +176,6 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
                 </span>
                 {cert.revokedAt ? (
                   <StatusBadge tone="danger">{t("certificateRevoked")}</StatusBadge>
-                ) : cert.signedAt ? (
-                  <StatusBadge tone="success">{t("certificateSigned")}</StatusBadge>
                 ) : null}
               </div>
               {cert.revokedAt ? null : (
@@ -204,18 +199,6 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
                       >
                         <DownloadSimpleIcon />
                         {t("certificateDownloadCopy")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => {
-                          uploadFor.current = cert.id;
-                          fileInput.current?.click();
-                        }}
-                      >
-                        <FileArrowUpIcon />
-                        {t("certificateUploadSigned")}
                       </Button>
                       <Button
                         variant="outline"
@@ -249,20 +232,6 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
 
       {staff ? (
         <>
-          <input
-            ref={fileInput}
-            type="file"
-            accept="application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              const id = uploadFor.current;
-              e.target.value = "";
-              if (file && id !== null) {
-                void run(() => certificatesApi.uploadSigned(id, file), t("certificateSignedToast"));
-              }
-            }}
-          />
           <Modal
             open={revoking !== null}
             onOpenChange={(open) => !open && setRevoking(null)}

@@ -3660,8 +3660,6 @@
   "certificateDownload": "Descargar",
   "certificateDownloadNoCsv": "Descargar sin CSV",
   "certificateDownloadCopy": "Descargar copia con CSV",
-  "certificateUploadSigned": "Subir firmado",
-  "certificateSigned": "Firmado",
   "certificateRevoked": "Revocado",
   "certificateRevoke": "Revocar",
   "certificateRevokeTitle": "Revocar certificado",
@@ -3670,6 +3668,5 @@
   "toastCertificate": "Certificado",
   "certificateIssuedToast": "Certificado emitido",
   "certificateRevokedToast": "Certificado revocado",
-  "certificateSignedToast": "Certificado firmado subido",
   "couldNotUseCertificate": "No se pudo completar la acción."
 }

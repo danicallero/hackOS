@@ -569,8 +569,7 @@ async function collectStorageKeys(client: pg.PoolClient, userId: number): Promis
        FROM data_subject_requests
       WHERE subject_user_id = $1 AND storage_key IS NOT NULL
  UNION SELECT object_key FROM project_files WHERE uploaded_by=$1
- UNION SELECT thumbnail_key FROM project_files WHERE uploaded_by=$1 AND thumbnail_key IS NOT NULL
- UNION SELECT signed_key FROM attendance_certificates WHERE user_id=$1 AND signed_key IS NOT NULL`,
+ UNION SELECT thumbnail_key FROM project_files WHERE uploaded_by=$1 AND thumbnail_key IS NOT NULL`,
     [userId],
   );
   return [...new Set(rows.map((row) => row.storage_key).filter(Boolean))];
@@ -1423,7 +1422,7 @@ async function scrubRelationships(
   // #1083: certificates stay verifiable as revoked, without the person's data.
   await client.query(
     `UPDATE attendance_certificates
-        SET snapshot = '{}'::jsonb, signed_key = NULL, signed_at = NULL, revoked_at = COALESCE(revoked_at, now()),
+        SET snapshot = '{}'::jsonb, revoked_at = COALESCE(revoked_at, now()),
             revoked_reason = COALESCE(revoked_reason, 'account_removed')
       WHERE user_id = $1`,
     [userId],

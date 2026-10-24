@@ -1,14 +1,12 @@
 import { randomBytes } from "node:crypto";
 import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
-import { PDFDocument } from "pdf-lib";
 import type pg from "pg";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { stampCopyFooter } from "../../lib/pdf-copy-footer.js";
-import { deleteObject, getObject, putObject } from "../../lib/storage.js";
 import { hasEventAccess } from "../identity/role.js";
 import { allHours, userHours } from "../logistics/presence.js";
 import {
@@ -183,8 +181,6 @@ export interface CertificateRow {
   issuedAt: string;
   revokedAt: string | null;
   revokedReason: string | null;
-  /** A staff-signed original replaces the rendered PDF in copies. */
-  signedAt: string | null;
 }
 
 function toRow(row: Record<string, unknown>): CertificateRow {
@@ -199,12 +195,11 @@ function toRow(row: Record<string, unknown>): CertificateRow {
     issuedAt: (row.issued_at as Date).toISOString(),
     revokedAt: row.revoked_at ? (row.revoked_at as Date).toISOString() : null,
     revokedReason: (row.revoked_reason as string | null) ?? null,
-    signedAt: row.signed_at ? (row.signed_at as Date).toISOString() : null,
   };
 }
 
 const COLUMNS = `id, code, user_id, variant, locale, source, override_reason, issued_at,
-                 revoked_at, revoked_reason, signed_at`;
+                 revoked_at, revoked_reason`;
 
 interface IssueOptions {
   userId: number;
@@ -404,8 +399,7 @@ export async function certificateOwner(id: number): Promise<number> {
 }
 
 /**
- * The certificate PDF. The signed original staff uploaded wins over the rendered
- * one. `copy` stamps the CSV footer (QR, code, print date) for participants;
+ * The certificate PDF. `copy` stamps the CSV footer (QR, code, print date) for participants;
  * without it staff get the bare document to sign (#1083).
  */
 export async function renderCertificate(
@@ -413,7 +407,7 @@ export async function renderCertificate(
   opts: { copy: boolean },
 ): Promise<{ pdf: Uint8Array; filename: string }> {
   const { rows } = await pool.query(
-    `SELECT c.code, c.variant, c.locale, c.issued_at, c.revoked_at, c.snapshot, c.signed_key, u.dni
+    `SELECT c.code, c.variant, c.locale, c.issued_at, c.revoked_at, c.snapshot, u.dni
        FROM attendance_certificates c JOIN users u ON u.id = c.user_id
       WHERE c.id = $1`,
     [id],
@@ -422,19 +416,13 @@ export async function renderCertificate(
   if (!row) throw new NotFoundError("Certificate not found");
   if (row.revoked_at) throw new ConflictError("The certificate was revoked");
   const snapshot = row.snapshot as CertificateSnapshot;
-  let pdf: Uint8Array;
-  if (row.signed_key) {
-    const object = await getObject(row.signed_key);
-    pdf = (await object.Body?.transformToByteArray()) ?? new Uint8Array();
-  } else {
-    pdf = await renderCertificatePdf({
-      snapshot,
-      variant: row.variant,
-      locale: row.locale,
-      issuedAt: row.issued_at,
-      dni: row.dni ?? null,
-    });
-  }
+  let pdf = await renderCertificatePdf({
+    snapshot,
+    variant: row.variant,
+    locale: row.locale,
+    issuedAt: row.issued_at,
+    dni: row.dni ?? null,
+  });
   if (opts.copy) {
     pdf = await stampCopyFooter(pdf, {
       issuer: snapshot.issuerName,
@@ -446,57 +434,6 @@ export async function renderCertificate(
     });
   }
   return { pdf, filename: `certificate-${row.variant}-${id}.pdf` };
-}
-
-const MAX_SIGNED_BYTES = 10 * 1024 * 1024;
-
-/**
- * Staff upload the signed original of a certificate. From then on copies with
- * the CSV footer are stamped on it. Uploading again replaces it (#1083, H53).
- */
-export async function attachSigned(
-  actorId: number,
-  id: number,
-  bytes: Buffer,
-  operation: string,
-): Promise<CertificateRow> {
-  if (bytes.length > MAX_SIGNED_BYTES) throw new BadRequestError("File exceeds size limit");
-  if (bytes.subarray(0, 5).toString("latin1") !== "%PDF-") {
-    throw new BadRequestError("The signed document must be a PDF");
-  }
-  try {
-    await PDFDocument.load(bytes);
-  } catch {
-    throw new BadRequestError("The signed document could not be read");
-  }
-  // Keyed by the request so a retried upload overwrites the same object.
-  const key = `certificates/${id}/${operation}.pdf`;
-  return withTransaction(async (client) => {
-    const { rows: current } = await client.query(
-      `SELECT revoked_at, signed_key FROM attendance_certificates WHERE id = $1 FOR UPDATE`,
-      [id],
-    );
-    if (!current[0]) throw new NotFoundError("Certificate not found");
-    if (current[0].revoked_at) throw new ConflictError("The certificate was revoked");
-    await putObject(key, bytes, "application/pdf");
-    const { rows } = await client.query(
-      `UPDATE attendance_certificates SET signed_key = $2, signed_at = now(), signed_by = $3
-        WHERE id = $1 RETURNING ${COLUMNS}`,
-      [id, key, actorId],
-    );
-    await audit(client, {
-      actorId,
-      entityType: "attendance_certificate",
-      entityId: id,
-      action: "certificate.sign_upload",
-      before: { signed: current[0].signed_key != null },
-      after: { signed: true },
-    });
-    if (current[0].signed_key && current[0].signed_key !== key) {
-      await deleteObject(current[0].signed_key).catch(() => undefined);
-    }
-    return toRow(rows[0]);
-  });
 }
 
 export interface Verification {
