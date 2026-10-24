@@ -22,6 +22,10 @@ test("issues a guest talk certificate and searches, downloads and revokes it in 
     allowGuests: true,
     identityPolicy: "optional",
     requiresActivity: true,
+    requiresEventEnd: false,
+    demoRequirement: "none",
+    demoChallengeId: null,
+    exemptRoleIds: null,
   };
   const records: Record<string, unknown>[] = [];
   let issueBody: Record<string, unknown> | undefined;
@@ -38,10 +42,9 @@ test("issues a guest talk certificate and searches, downloads and revokes it in 
         minHours: null,
         minReviewHours: null,
         awardHours: null,
-        requiresDemo: false,
         issuerName: "GPUL",
       };
-    if (path === "/api/certificates/types") body = { items: [type], roles: [] };
+    if (path === "/api/certificates/types") body = { items: [type], roles: [], challenges: [] };
     if (path === "/api/certificates/issued") body = { items: records };
     if (path === "/api/certificates/issue") {
       issueBody = route.request().postDataJSON();
@@ -79,7 +82,6 @@ test("issues a guest talk certificate and searches, downloads and revokes it in 
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
-  await expect(page.getByText("Speaker", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: webEn.certificateIssueConfigured, exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: webEn.certificateType, exact: true }).click();
@@ -110,16 +112,15 @@ test("issues a guest talk certificate and searches, downloads and revokes it in 
   await expect(page.getByText("Grace Hopper", { exact: true })).toHaveCount(0);
   await search.fill("Compilers");
   await expect(page.getByText("Grace Hopper", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: webEn.certificateDownloadCopy, exact: true }).click();
+  await page.getByRole("button", { name: webEn.certificateDownload, exact: true }).click();
   await expect.poll(() => downloads).toBe(1);
-  await page.getByRole("button", { name: webEn.certificateDownloadNoCsv, exact: true }).click();
-  await expect.poll(() => downloads).toBe(2);
   await page.screenshot({
     path: `artifacts/settings/certificate-guest-register-${test.info().project.name}.png`,
     fullPage: true,
     animations: "disabled",
   });
-  await page.getByRole("button", { name: webEn.certificateRevoke, exact: true }).click();
+  await page.getByRole("button", { name: "Grace Hopper", exact: true }).click();
+  await page.getByRole("menuitem", { name: webEn.certificateRevoke, exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("textbox", { name: webEn.reasonLabel })
@@ -131,7 +132,7 @@ test("issues a guest talk certificate and searches, downloads and revokes it in 
   await expect.poll(() => revokeBody).toEqual({ reason: "Wrong talk" });
   await expect(page.getByText(webEn.certificateRevoked, { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: webEn.certificateDownloadCopy, exact: true }),
+    page.getByRole("button", { name: webEn.certificateDownload, exact: true }),
   ).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
@@ -160,6 +161,10 @@ test("edits trilingual wording and recipient rules for a certificate type", asyn
     allowGuests: false,
     identityPolicy: "optional",
     requiresActivity: false,
+    requiresEventEnd: false,
+    demoRequirement: "none",
+    demoChallengeId: null,
+    exemptRoleIds: null,
   };
   let saved: Record<string, unknown> | undefined;
   await page.route("**/api/**", async (route) => {
@@ -173,11 +178,10 @@ test("edits trilingual wording and recipient rules for a certificate type", asyn
         minHours: null,
         minReviewHours: null,
         awardHours: null,
-        requiresDemo: false,
         issuerName: "GPUL",
       };
     if (path === "/api/certificates/types")
-      body = { items: [type], roles: [{ id: 7, name: "Mentor" }] };
+      body = { items: [type], roles: [{ id: 7, name: "Mentor" }], challenges: [] };
     if (path === "/api/certificates/types/4") {
       saved = route.request().postDataJSON();
       body = { ...type, ...(saved?.definition as object), revision: 2 };
@@ -188,6 +192,7 @@ test("edits trilingual wording and recipient rules for a certificate type", asyn
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
+  await page.getByRole("tab", { name: webEn.certificateTypes, exact: true }).click();
   await page.getByRole("button", { name: commonEn.edit, exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog
@@ -260,6 +265,7 @@ test("downloads the predefined accepted spot certificate without any attendance 
   ];
   const records: Record<string, unknown>[] = [];
   let request: unknown;
+  let downloaded = 0;
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/me/public-profile") return route.fallback();
@@ -271,7 +277,6 @@ test("downloads the predefined accepted spot certificate without any attendance 
           minHours: null,
           minReviewHours: null,
           awardHours: null,
-          requiresDemo: true,
           issuerName: "GPUL",
         },
         eligibility: {
@@ -280,7 +285,6 @@ test("downloads the predefined accepted spot certificate without any attendance 
           eligible: false,
           reviewRequired: false,
           reason: "not_available",
-          demoed: false,
           approval: null,
         },
         types,
@@ -288,6 +292,14 @@ test("downloads the predefined accepted spot certificate without any attendance 
       };
     if (path === "/api/public/food-intolerances") body = { intolerances: [] };
     if (path === "/api/me/removal-eligibility") body = { action: "delete" };
+    if (path === "/api/me/certificates/104/pdf") {
+      downloaded++;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: "%PDF-1.7 fixture",
+      });
+    }
     if (path === "/api/me/certificates/issue") {
       request = route.request().postDataJSON();
       records.push({
@@ -302,6 +314,8 @@ test("downloads the predefined accepted spot certificate without any attendance 
         code: "abcdefghijklmnopqrstuvwx",
         issuedAt: "2026-10-24T12:00:00Z",
         revokedAt: null,
+        supersededAt: null,
+        outdated: false,
       });
       body = records[0];
     }
@@ -311,15 +325,14 @@ test("downloads the predefined accepted spot certificate without any attendance 
   const cookies = page.locator('aside[aria-labelledby="cookie-notice-title"]');
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
-  await page.getByRole("combobox", { name: webEn.certificateType, exact: true }).click();
-  await page.getByRole("option", { name: "Accepted spot", exact: true }).click();
-  const get = page.getByRole("button", { name: webEn.certificateGet, exact: true });
-  await expect(get).toBeEnabled();
-  await get.click();
-  await expect.poll(() => request).toEqual({ typeId: 4, locale: "en" });
-  await expect(page.getByText("Accepted spot", { exact: true }).first()).toBeVisible();
+  const row = page.getByRole("listitem").filter({ hasText: "Accepted spot" });
+  const download = row.getByRole("button", { name: webEn.certificateDownload, exact: true });
+  await expect(download).toBeEnabled();
+  await download.click();
+  await expect.poll(() => request).toEqual({ typeId: 4, locale: "en", refresh: false });
+  await expect.poll(() => downloaded).toBe(1);
   await expect(
-    page.getByRole("button", { name: webEn.certificateDownload, exact: true }),
+    row.getByRole("button", { name: webEn.certificateDownload, exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: `artifacts/settings/certificate-accepted-spot-${test.info().project.name}.png`,

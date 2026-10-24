@@ -8,7 +8,6 @@ test("saves the certificate policy and disables automatic issuance", async ({ pa
     minHours: null as number | null,
     minReviewHours: null as number | null,
     awardHours: null as number | null,
-    requiresDemo: false,
     issuerName: "GPUL",
   };
   const writes: unknown[] = [];
@@ -48,6 +47,7 @@ test("saves the certificate policy and disables automatic issuance", async ({ pa
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
   await page.getByRole("link", { name: webEn.certificates, exact: true }).click();
+  await page.getByRole("tab", { name: webEn.certificatePolicy, exact: true }).click();
   const automatic = page.getByRole("switch", { name: webEn.certificateAutomaticIssue });
   const hours = page.getByRole("spinbutton", { name: webEn.certificateMinConfirmedHours });
   await expect(automatic).not.toBeChecked();
@@ -59,7 +59,6 @@ test("saves the certificate policy and disables automatic issuance", async ({ pa
   await hours.fill("42");
   await awardHours.fill("36.5");
   await page.getByRole("spinbutton", { name: webEn.certificateMinReviewHours }).fill("10");
-  await page.getByRole("switch", { name: webEn.certificateRequiresDemo }).click();
   await page.getByRole("textbox", { name: webEn.certificateIssuerName }).fill("GPUL association");
   await page.getByRole("button", { name: webEn.saveChanges, exact: true }).click();
   await expect.poll(() => writes.length).toBe(1);
@@ -67,7 +66,6 @@ test("saves the certificate policy and disables automatic issuance", async ({ pa
     minHours: 42,
     awardHours: 36.5,
     minReviewHours: 10,
-    requiresDemo: true,
     issuerName: "GPUL association",
   });
   await expect(page.getByRole("button", { name: webEn.saveChanges, exact: true })).toBeDisabled();
