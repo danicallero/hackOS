@@ -5,7 +5,7 @@ import {
   assertFixtureSubjectScope,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
-import { type NotificationChannel, notify } from "./service.js";
+import { type NotificationChannel, notifyMany } from "./service.js";
 import type { Language } from "./translate/index.js";
 
 /**
@@ -663,21 +663,24 @@ export async function fanOutAnnouncement(db: Queryable, announcement: Announceme
     announcement.id,
   );
   const recipients = await resolveRecipients(db, announcement);
-  for (const recipient of recipients) {
-    const content = translatedContent(announcement, recipient.language);
-    await notify(db, {
-      userId: recipient.id,
-      category: "announcements",
-      channels: announcement.channels,
-      fixtureMarker,
-      payload: {
-        template: "generic",
-        subject: content.title,
-        body: content.body,
-        vars: { announcementId: announcement.id },
-      },
-    });
-  }
+  await notifyMany(
+    db,
+    recipients.map((recipient) => {
+      const content = translatedContent(announcement, recipient.language);
+      return {
+        userId: recipient.id,
+        category: "announcements",
+        channels: announcement.channels,
+        fixtureMarker,
+        payload: {
+          template: "generic",
+          subject: content.title,
+          body: content.body,
+          vars: { announcementId: announcement.id },
+        },
+      };
+    }),
+  );
   const { rows } = await db.query(
     `UPDATE announcements SET fanned_out_at = now() WHERE id = $1 RETURNING fanned_out_at`,
     [announcement.id],

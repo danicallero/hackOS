@@ -1,7 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
@@ -232,15 +232,16 @@ export async function setEnterprisesVisibility(
         RETURNING id`,
       [ids, visibility],
     );
-    for (const row of rows) {
-      await audit(client, {
+    await auditMany(
+      client,
+      rows.map((row) => ({
         actorId,
         entityType: "enterprise",
         entityId: Number(row.id),
         action: "updated",
         after: { visibility },
-      });
-    }
+      })),
+    );
     return { updated: rows.map((r) => Number(r.id)) };
   });
 }

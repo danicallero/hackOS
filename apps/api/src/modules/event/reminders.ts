@@ -72,10 +72,12 @@ export async function runEventRemindersOnce(): Promise<number> {
       "SELECT id FROM event_email_reminders WHERE status = 'scheduled' AND scheduled_at <= now() FOR UPDATE SKIP LOCKED",
     );
     let recipients = 0;
+    if (rows.length === 0) return recipients;
+    // now() is fixed for the transaction, so one read serves every reminder.
+    const event = await client.query(
+      "SELECT name, event_starts_at > now() AS upcoming FROM event_config WHERE id = 1",
+    );
     for (const reminder of rows) {
-      const event = await client.query(
-        "SELECT name, event_starts_at > now() AS upcoming FROM event_config WHERE id = 1",
-      );
       if (!event.rows[0]?.name?.trim() || !event.rows[0]?.upcoming) {
         await client.query("UPDATE event_email_reminders SET status = 'expired' WHERE id = $1", [
           reminder.id,

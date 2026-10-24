@@ -168,21 +168,23 @@ export async function enrollReposInMandatoryChallenges(
       ORDER BY id FOR SHARE`,
     onlyChallengeIds ? [fixtureMarker, onlyChallengeIds] : [fixtureMarker],
   );
+  const { rows: submittedRows } = await client.query(
+    `SELECT id FROM repos WHERE id=ANY($1::int[]) AND submission_status='submitted'`,
+    [uniqueRepoIds],
+  );
+  const submittedRepoIds = new Set<number>(submittedRows.map((r: { id: number }) => Number(r.id)));
   const outcomes: EnqueueOutcome[] = [];
   for (const row of rows as Array<{ id: number; mandatory: boolean }>) {
     if (row.mandatory !== true) continue;
     const challengeId = Number(row.id);
     let nextPosition = await nextBottomPosition(client, challengeId);
     const allocatePosition = async () => nextPosition++;
+    await client.query(
+      `INSERT INTO project_challenges(repo_id,challenge_id) SELECT r,$2 FROM unnest($1::int[]) AS r ON CONFLICT DO NOTHING`,
+      [uniqueRepoIds, challengeId],
+    );
     for (const repoId of uniqueRepoIds) {
-      await client.query(
-        `INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
-        [repoId, challengeId],
-      );
-      const project = await client.query(`SELECT submission_status FROM repos WHERE id=$1`, [
-        repoId,
-      ]);
-      if (project.rows[0]?.submission_status !== "submitted") continue;
+      if (!submittedRepoIds.has(repoId)) continue;
       const outcome = await enqueueRepoOnChallenge(
         client,
         actorId,
@@ -778,20 +780,20 @@ export async function createRepoNative(
     const descriptionAnswer = descriptionField ? responses[descriptionField.key] : undefined;
     const description =
       typeof descriptionAnswer === "string" ? descriptionAnswer.trim() : input.description;
-    for (const userId of new Set(input.memberUserIds)) {
-      const user = await db.query(
-        `SELECT id FROM users WHERE id=$1 AND account_state='active' AND anonymized_at IS NULL AND is_test_account=$2`,
-        [userId, marker],
-      );
-      if (!user.rowCount) throw new NotFoundError("Project member not found");
-    }
-    for (const challengeId of new Set(input.challengeIds)) {
-      const challenge = await db.query(
-        `SELECT id FROM challenges WHERE id=$1 AND is_test_account=$2`,
-        [challengeId, marker],
-      );
-      if (!challenge.rowCount) throw new NotFoundError("Challenge not found");
-    }
+    const memberUserIds = [...new Set(input.memberUserIds)];
+    const users = await db.query(
+      `SELECT id FROM users WHERE id=ANY($1::int[]) AND account_state='active' AND anonymized_at IS NULL AND is_test_account=$2`,
+      [memberUserIds, marker],
+    );
+    if (users.rowCount !== memberUserIds.length)
+      throw new NotFoundError("Project member not found");
+    const requestedChallengeIds = [...new Set(input.challengeIds)];
+    const challenges = await db.query(
+      `SELECT id FROM challenges WHERE id=ANY($1::int[]) AND is_test_account=$2`,
+      [requestedChallengeIds, marker],
+    );
+    if (challenges.rowCount !== requestedChallengeIds.length)
+      throw new NotFoundError("Challenge not found");
     const { rows } = await db.query(
       `INSERT INTO repos(name,description,github_url,demo_url,created_by,submission_status,submitted_via,submitted_at,is_test_account,responses) VALUES($1,$2,$3,$4,$5,'submitted','admin',now(),$6,$7) RETURNING id`,
       [
@@ -805,11 +807,11 @@ export async function createRepoNative(
       ],
     );
     const id = rows[0].id;
-    for (const userId of new Set(input.memberUserIds))
-      await db.query(`INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active')`, [
-        id,
-        userId,
-      ]);
+    if (memberUserIds.length > 0)
+      await db.query(
+        `INSERT INTO submissions(repo_id,user_id,status) SELECT $1::int,u,'active' FROM unnest($2::int[]) AS u`,
+        [id, memberUserIds],
+      );
     const challengeIds = new Set(input.challengeIds);
     const mandatory = await db.query(
       `SELECT id FROM challenges WHERE mandatory AND is_test_account=$1`,
@@ -817,11 +819,12 @@ export async function createRepoNative(
     );
     for (const row of mandatory.rows) challengeIds.add(row.id);
     const outcomes: EnqueueOutcome[] = [];
+    if (challengeIds.size > 0)
+      await db.query(
+        `INSERT INTO project_challenges(repo_id,challenge_id) SELECT $1::int,c FROM unnest($2::int[]) AS c`,
+        [id, [...challengeIds]],
+      );
     for (const challengeId of challengeIds) {
-      await db.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
-        id,
-        challengeId,
-      ]);
       const outcome = await enqueueRepoOnChallenge(db, actorId, id, challengeId, "admin");
       if (outcome) outcomes.push(outcome);
     }
@@ -891,8 +894,10 @@ export async function deleteRepo(actorId: number, id: number, participant = fals
       await broadcast(`${SSE_TOPICS.USER_PREFIX}${memberId}`, EVENTS.USER_QUEUE_CHANGED, {
         challengeId: entry.challenge_id,
       });
-    await notifyChallengeQueueChanged(pool, entry.challenge_id);
   }
+  // Several entries on one challenge need a single refresh.
+  for (const challengeId of new Set(deleted.entries.map((entry) => entry.challenge_id)))
+    await notifyChallengeQueueChanged(pool, challengeId);
   return { deleted: true };
 }
 export async function deleteMyProject(userId: number, id: number) {

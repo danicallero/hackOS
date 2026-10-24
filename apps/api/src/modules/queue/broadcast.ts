@@ -1,7 +1,11 @@
 import { SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { broadcast } from "../../lib/sse.js";
-import { inspectFixtureRoomScope } from "../logistics/review-fixture-scope.js";
+import {
+  type FixtureRoomScope,
+  inspectFixtureRoomScope,
+  inspectFixtureRoomScopes,
+} from "../logistics/review-fixture-scope.js";
 import { queueGroupFixtureMarker } from "./fixture-scope.js";
 
 /** Queue resources whose marker determines the operator SSE topic. */
@@ -75,7 +79,10 @@ export async function queueFixtureMarker(
     }
   }
 
-  const row = await inspectFixtureRoomScope(db, resourceId);
+  return roomMarkerFromScope(await inspectFixtureRoomScope(db, resourceId));
+}
+
+function roomMarkerFromScope(row: FixtureRoomScope): boolean | null {
   if (!row.exists) return null;
   // An unassigned room is part of the real operator surface, preserving the
   // existing pause/resume behavior for rooms with no queue yet.
@@ -85,6 +92,28 @@ export async function queueFixtureMarker(
   }
   return row.has_synthetic;
 }
+
+/**
+ * Set-based `queueFixtureMarker(db, "room", id)`: one query for many rooms,
+ * identical fail-closed semantics (missing, mixed or marker-less graphs map
+ * to null). Every requested id is present in the result.
+ */
+export async function queueRoomFixtureMarkers(
+  db: Queryable,
+  roomIds: readonly number[],
+): Promise<Map<number, boolean | null>> {
+  const scopes = await inspectFixtureRoomScopes(db, roomIds);
+  return new Map(
+    roomIds.map((id) => [id, roomMarkerFromScope(scopes.get(id) ?? MISSING_ROOM_SCOPE)]),
+  );
+}
+
+const MISSING_ROOM_SCOPE: FixtureRoomScope = {
+  exists: false,
+  has_graph: false,
+  has_synthetic: false,
+  has_real: false,
+};
 
 /**
  * Publish one queue event on the marker-scoped operator topic. Marker lookup

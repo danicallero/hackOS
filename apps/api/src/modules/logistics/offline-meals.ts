@@ -86,28 +86,26 @@ export async function enqueueMealScanBatch(
     );
     const batchId = b.rows[0].id as number;
 
-    let accepted = 0;
-    let duplicate = 0;
-    for (const scan of input.scans) {
-      const r = await client.query(
-        `INSERT INTO meal_scan_batch_items
-           (batch_id, activity_id, device_id, client_scan_id, badge_id, allow_repeat, scanned_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (device_id, client_scan_id) DO NOTHING
-         RETURNING id`,
-        [
-          batchId,
-          activityId,
-          input.deviceId,
-          scan.clientScanId,
-          scan.badgeId,
-          scan.allowRepeat,
-          scan.scannedAt ?? null,
-        ],
-      );
-      if (r.rowCount === 1) accepted += 1;
-      else duplicate += 1;
-    }
+    const inserted = await client.query(
+      `INSERT INTO meal_scan_batch_items
+         (batch_id, activity_id, device_id, client_scan_id, badge_id, allow_repeat, scanned_at)
+       SELECT $1::int, $2::int, $3::text, t.client_scan_id, t.badge_id, t.allow_repeat, t.scanned_at
+         FROM unnest($4::text[], $5::text[], $6::boolean[], $7::timestamptz[])
+              WITH ORDINALITY AS t(client_scan_id, badge_id, allow_repeat, scanned_at, ord)
+        ORDER BY t.ord
+       ON CONFLICT (device_id, client_scan_id) DO NOTHING`,
+      [
+        batchId,
+        activityId,
+        input.deviceId,
+        input.scans.map((scan) => scan.clientScanId),
+        input.scans.map((scan) => scan.badgeId),
+        input.scans.map((scan) => scan.allowRepeat),
+        input.scans.map((scan) => scan.scannedAt ?? null),
+      ],
+    );
+    const accepted = inserted.rowCount ?? 0;
+    const duplicate = input.scans.length - accepted;
 
     return { batchId, accepted, duplicate };
   });

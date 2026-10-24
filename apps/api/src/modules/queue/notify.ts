@@ -6,7 +6,7 @@ import { observeParticipantInvalidation } from "../../lib/metrics.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { requestLiveActivitySync } from "../live-activities/kick.js";
-import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { notifyMany, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
 import { broadcastQueueEventWithMarker, queueFixtureMarker } from "./broadcast.js";
 import { roomChallengeIds } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
@@ -203,8 +203,9 @@ export async function notifyTeamCalled(
     roomName: params.roomName,
     roomLocation: params.roomLocation ?? null,
   };
-  for (const userId of memberIds) {
-    await notify(client, {
+  await notifyMany(
+    client,
+    memberIds.map((userId) => ({
       userId,
       category: "queue",
       payload: {
@@ -218,8 +219,8 @@ export async function notifyTeamCalled(
         },
       },
       fixtureMarker,
-    });
-  }
+    })),
+  );
   // Broadcast after the rows are durably queued but still inside the caller's
   // transaction boundary is fine — SSE has no rollback semantics either way,
   // and callers only reach here once the domain write already validated.
@@ -247,11 +248,12 @@ export async function notifyTeamCalled(
         AND u.is_test_account = $2`,
     [QUEUE_STAFF_CATEGORY, fixtureMarker],
   );
-  for (const row of staffRows as { user_id: number }[]) {
-    await notify(client, {
+  await notifyMany(
+    client,
+    (staffRows as { user_id: number }[]).map((row) => ({
       userId: row.user_id,
       category: QUEUE_STAFF_CATEGORY,
-      channels: ["push"],
+      channels: ["push" as const],
       payload: {
         entryId: params.entryId,
         roomId: params.roomId,
@@ -259,8 +261,8 @@ export async function notifyTeamCalled(
         vars: { teamName, challengeName, roomName: params.roomName },
       },
       fixtureMarker,
-    });
-  }
+    })),
+  );
 }
 
 /** H38 pre-aviso: estimated wait <= queue_settings.pre_call_notification_eta_minutes. */
@@ -285,11 +287,12 @@ export async function notifyTeamPreCall(
     challengeId: params.challengeId,
     etaMinutes: params.etaMinutes,
   };
-  for (const userId of memberIds) {
-    // Goes through notify() (not a raw INSERT) so it gets a real rendered
-    // template like queue.called does — "queue" is the mandatory category so
-    // every configured channel still fires regardless of preference.
-    await notify(client, {
+  // Goes through notifyMany() (not a raw INSERT) so it gets a real rendered
+  // template like queue.called does — "queue" is the mandatory category so
+  // every configured channel still fires regardless of preference.
+  await notifyMany(
+    client,
+    memberIds.map((userId) => ({
       userId,
       category: "queue",
       payload: {
@@ -303,7 +306,9 @@ export async function notifyTeamPreCall(
         },
       },
       fixtureMarker,
-    });
+    })),
+  );
+  for (const userId of memberIds) {
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload);
   }
 }
@@ -654,8 +659,9 @@ export async function notifyTeamMessage(
     message: params.message,
     senderName: params.senderName,
   };
-  for (const userId of memberIds) {
-    await notify(client, {
+  await notifyMany(
+    client,
+    memberIds.map((userId) => ({
       userId,
       category: "queue",
       payload: {
@@ -670,7 +676,9 @@ export async function notifyTeamMessage(
         },
       },
       fixtureMarker,
-    });
+    })),
+  );
+  for (const userId of memberIds) {
     await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_MESSAGE, payload);
   }
   return memberIds.length;

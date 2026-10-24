@@ -31,10 +31,6 @@ import { colors } from "@/theme/colors";
 
 const JUST_CALLED_HIGHLIGHT_MS = 12_000;
 
-interface RoomListItem {
-  id: number;
-}
-
 const POLL_MS = 10_000;
 
 function actionErrorMessage(cause: unknown, t: ReturnType<typeof useLocale>["t"]): string {
@@ -72,10 +68,7 @@ export function QueueOperationsScreen() {
   const columns = width >= 1_100 ? 3 : width >= 680 ? 2 : 1;
   const usesListTitle = isPadIdiom();
 
-  const fetchRooms = useCallback(async () => {
-    const rooms = await apiFetch<RoomListItem[]>("/api/queue/rooms");
-    return Promise.all(rooms.map(({ id }) => apiFetch<RoomView>(`/api/queue/rooms/${id}/view`)));
-  }, []);
+  const fetchRooms = useCallback(() => apiFetch<RoomView[]>("/api/queue/rooms/views"), []);
   const { data, loading, error, staleSince, load } = useCachedApi(
     `user:${me?.id ?? "unknown"}:queue-operations`,
     fetchRooms,

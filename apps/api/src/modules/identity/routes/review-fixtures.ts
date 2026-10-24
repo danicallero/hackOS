@@ -190,10 +190,11 @@ async function configureFixtureRole(
   const roleId = rows[0]?.id;
   if (!roleId) throw new Error(`Review fixture role ${role.name} was not created`);
   await client.query(`DELETE FROM role_capabilities WHERE role_id = $1`, [roleId]);
-  for (const capability of role.capabilities) {
+  if (role.capabilities.length > 0) {
     await client.query(
-      `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, 'allow')`,
-      [roleId, capability],
+      `INSERT INTO role_capabilities (role_id, capability, state)
+       SELECT $1::int, capability, 'allow' FROM unnest($2::text[]) AS t(capability)`,
+      [roleId, [...role.capabilities]],
     );
   }
   return roleId;
@@ -550,25 +551,26 @@ async function configureFixtureExplorer(
     { slot: "team-lumen", repoId: lumen, entryId: entries.lumen },
     { slot: "team-orbit", repoId: orbit, entryId: entries.orbit },
   ];
-  for (const pointer of pointers) {
-    await client.query(
-      `INSERT INTO review_fixture_queues
-         (fixture_key, slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id,
-          room_id, generation)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        key,
-        pointer.slot,
-        pointer.shared ? enterpriseId : null,
-        pointer.shared ? sponsorId : null,
-        pointer.challengeId ?? null,
-        pointer.repoId ?? null,
-        pointer.entryId ?? null,
-        pointer.roomId ?? null,
-        generation,
-      ],
-    );
-  }
+  await client.query(
+    `INSERT INTO review_fixture_queues
+       (fixture_key, slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id,
+        room_id, generation)
+     SELECT $1::text, t.slot, t.enterprise_id, t.sponsor_id, t.challenge_id, t.repo_id, t.queue_entry_id,
+            t.room_id, $9::int
+       FROM unnest($2::text[], $3::int[], $4::int[], $5::int[], $6::int[], $7::int[], $8::int[])
+            AS t(slot, enterprise_id, sponsor_id, challenge_id, repo_id, queue_entry_id, room_id)`,
+    [
+      key,
+      pointers.map((pointer) => pointer.slot),
+      pointers.map((pointer) => (pointer.shared ? enterpriseId : null)),
+      pointers.map((pointer) => (pointer.shared ? sponsorId : null)),
+      pointers.map((pointer) => pointer.challengeId ?? null),
+      pointers.map((pointer) => pointer.repoId ?? null),
+      pointers.map((pointer) => pointer.entryId ?? null),
+      pointers.map((pointer) => pointer.roomId ?? null),
+      generation,
+    ],
+  );
 }
 
 async function cleanupFailedFixtureUsers(userIds: number[]): Promise<void> {

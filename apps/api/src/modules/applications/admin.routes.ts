@@ -12,8 +12,7 @@ import { syncFieldLibraries } from "../form-libraries/service.js";
 import {
   lockRoleGraph,
   type RoleGraphClient,
-  requireCapabilityPossessionForAssignment,
-  requireRoleMutationAuthority,
+  requireRoleAssignmentAuthorityMany,
 } from "../identity/role-authority.js";
 import type { TemplateField } from "./schemas.js";
 import {
@@ -60,10 +59,14 @@ async function assertActorCanGrantRoles(
   const { rows } = await client.query(`SELECT id, position FROM roles WHERE id = ANY($1)`, [
     unique,
   ]);
-  for (const { id, position } of rows as { id: number; position: number }[]) {
-    await requireRoleMutationAuthority(client, actorId, Number(position));
-    await requireCapabilityPossessionForAssignment(client, actorId, id);
-  }
+  await requireRoleAssignmentAuthorityMany(
+    client,
+    actorId,
+    (rows as { id: number; position: number }[]).map((row) => ({
+      id: Number(row.id),
+      position: Number(row.position),
+    })),
+  );
 }
 
 /** H8/H11: replaces the full set of roles a form grants on confirmation. */
@@ -158,16 +161,23 @@ export function registerAdminRoutes(app: FastifyInstance): void {
     async (req) => {
       const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications`);
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
-      const open = [];
-      for (const form of rows) {
-        if (
-          isWindowOpen(form) ||
-          invited ||
-          (await hasReturnedDraftAccess(Number(form.id), req.userId))
-        ) {
-          open.push(form);
+      // One lookup for every closed form instead of one per form.
+      const returnedDraftIds = new Set<number>();
+      if (req.userId != null && !invited) {
+        const closedIds = rows.filter((form) => !isWindowOpen(form)).map((form) => Number(form.id));
+        if (closedIds.length > 0) {
+          const { rows: drafts } = await pool.query(
+            `SELECT DISTINCT application_id FROM application_responses
+              WHERE application_id = ANY($1::int[]) AND user_id = $2 AND status = 'draft'
+                AND allow_resubmit_after_close = true`,
+            [closedIds, req.userId],
+          );
+          for (const draft of drafts) returnedDraftIds.add(Number(draft.application_id));
         }
       }
+      const open = rows.filter(
+        (form) => isWindowOpen(form) || invited || returnedDraftIds.has(Number(form.id)),
+      );
       return { applications: open };
     },
   );
@@ -442,25 +452,39 @@ export function registerAdminRoutes(app: FastifyInstance): void {
               seenSources.add(rename.from);
               seenTargets.add(rename.to);
             }
-            for (const rename of renames) {
-              await client.query(
-                `UPDATE application_responses
-                    SET responses = responses ||
-                      CASE WHEN responses ? $3 THEN '{}'::jsonb
-                           ELSE jsonb_build_object($3, responses -> $2) END ||
-                      CASE WHEN responses ? $5 THEN '{}'::jsonb
-                           ELSE jsonb_build_object($5, responses -> $4) END
-                  WHERE application_id = $1
-                    AND (responses ? $2 OR responses ? $4)`,
-                [
-                  req.params.id,
-                  rename.from,
-                  rename.to,
-                  sponsorShareKey(rename.from),
-                  sponsorShareKey(rename.to),
-                ],
-              );
-            }
+            // Sources and targets are disjoint (validated above), so every
+            // rename can be applied to a response in one statement.
+            await client.query(
+              `WITH renames AS (
+                 SELECT * FROM unnest($2::text[], $3::text[], $4::text[], $5::text[])
+                   AS t(from_key, to_key, from_share, to_share)
+               )
+               UPDATE application_responses ar
+                  SET responses = ar.responses || COALESCE((
+                    SELECT jsonb_object_agg(patch.key, patch.value)
+                      FROM renames rn
+                      CROSS JOIN LATERAL (
+                        SELECT rn.to_key AS key, ar.responses -> rn.from_key AS value
+                         WHERE NOT ar.responses ? rn.to_key
+                        UNION ALL
+                        SELECT rn.to_share, ar.responses -> rn.from_share
+                         WHERE NOT ar.responses ? rn.to_share
+                      ) patch
+                     WHERE ar.responses ? rn.from_key OR ar.responses ? rn.from_share
+                  ), '{}'::jsonb)
+                WHERE ar.application_id = $1
+                  AND EXISTS (
+                    SELECT 1 FROM renames rn
+                     WHERE ar.responses ? rn.from_key OR ar.responses ? rn.from_share
+                  )`,
+              [
+                req.params.id,
+                renames.map((rename) => rename.from),
+                renames.map((rename) => rename.to),
+                renames.map((rename) => sponsorShareKey(rename.from)),
+                renames.map((rename) => sponsorShareKey(rename.to)),
+              ],
+            );
           }
           const { rows: versionRows } = await client.query<{ id: number }>(
             `INSERT INTO application_form_versions

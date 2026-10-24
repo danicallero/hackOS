@@ -117,6 +117,7 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
     }
   }
 
+  const unregistered: Array<{ passId: number; device: string }> = [];
   for (const pass of rows as PassRow[]) {
     if (pass.platform === "apple") {
       const devices = devicesByPassId.get(pass.id) ?? [];
@@ -125,10 +126,7 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
           await sendApplePush(device.push_token, PASS_TYPE_IDENTIFIER);
         } catch (err) {
           if (err instanceof ApplePushUnregisteredError) {
-            await pool.query(
-              `DELETE FROM wallet_pass_devices WHERE pass_id = $1 AND device_library_identifier = $2`,
-              [pass.id, device.device_library_identifier],
-            );
+            unregistered.push({ passId: pass.id, device: device.device_library_identifier });
             continue;
           }
           failures.push(err);
@@ -154,6 +152,14 @@ export async function processWalletSync(job: { data: SyncJobData }): Promise<voi
         failures.push(err);
       }
     }
+  }
+  if (unregistered.length > 0) {
+    await pool.query(
+      `DELETE FROM wallet_pass_devices d
+        USING unnest($1::int[], $2::text[]) AS u(pass_id, device)
+        WHERE d.pass_id = u.pass_id AND d.device_library_identifier = u.device`,
+      [unregistered.map((u) => u.passId), unregistered.map((u) => u.device)],
+    );
   }
   // H28: finish the fan-out before failing so one provider/device cannot
   // block the others. BullMQ retries transient failures with backoff.

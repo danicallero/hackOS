@@ -3,7 +3,7 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import type { Job } from "bullmq";
 import type pg from "pg";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import {
   BadRequestError,
   ConflictError,
@@ -1595,8 +1595,9 @@ async function scrubRelationships(
         FOR UPDATE`,
       [userId],
     );
-    for (const request of syntheticRequestRows) {
-      await audit(client, {
+    await auditMany(
+      client,
+      syntheticRequestRows.map((request) => ({
         actorId: null,
         entityType: "data_subject_request",
         entityId: request.id,
@@ -1605,8 +1606,8 @@ async function scrubRelationships(
         after: { is_test_account: true },
         ip: null,
         userAgent: null,
-      });
-    }
+      })),
+    );
   }
 
   const { rows: completedDeletionRequests } = await client.query<{ id: number }>(
@@ -1624,8 +1625,9 @@ async function scrubRelationships(
   // request row has already lost its subject/requester/reason, and the audit
   // payload contains only its own opaque request id plus the terminal state;
   // it cannot be used as an anonymous-participant mapping.
-  for (const request of completedDeletionRequests) {
-    await audit(client, {
+  await auditMany(
+    client,
+    completedDeletionRequests.map((request) => ({
       actorId: null,
       entityType: "data_subject_request",
       entityId: request.id,
@@ -1634,8 +1636,8 @@ async function scrubRelationships(
       after: { status: "completed" },
       ip: null,
       userAgent: null,
-    });
-  }
+    })),
+  );
   await client.query(
     `UPDATE data_subject_requests
         SET subject_user_id = NULL, requested_by = NULL,
@@ -1918,20 +1920,25 @@ export async function finalizeAccountRemoval(
        VALUES ($1, $2, $3)`,
       [anonymousId, guaranteedMinutes, user.is_test_account],
     );
-    for (const field of retainedApplicationFields) {
+    if (retainedApplicationFields.length > 0) {
       await client.query(
         `INSERT INTO anonymous_participant_fields
            (anonymous_participant_id, application_id, application_form_version,
             field_key, anonymous_audit_dimension, field_kind, value)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+         SELECT $1::uuid, t.application_id, t.form_version, t.field_key, t.dimension,
+                t.field_kind, t.value
+           FROM unnest($2::int[], $3::int[], $4::text[], $5::text[], $6::text[], $7::jsonb[])
+                WITH ORDINALITY AS t(application_id, form_version, field_key, dimension,
+                                     field_kind, value, ord)
+          ORDER BY t.ord`,
         [
           anonymousId,
-          field.applicationId,
-          field.applicationFormVersion,
-          field.fieldKey,
-          field.dimension,
-          field.fieldKind,
-          JSON.stringify(field.value),
+          retainedApplicationFields.map((field) => field.applicationId),
+          retainedApplicationFields.map((field) => field.applicationFormVersion),
+          retainedApplicationFields.map((field) => field.fieldKey),
+          retainedApplicationFields.map((field) => field.dimension),
+          retainedApplicationFields.map((field) => field.fieldKind),
+          retainedApplicationFields.map((field) => JSON.stringify(field.value)),
         ],
       );
     }

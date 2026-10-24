@@ -158,6 +158,46 @@ export async function inspectFixtureRoomScope(
   return rows[0] ?? { exists: false, has_graph: false, has_synthetic: false, has_real: false };
 }
 
+/**
+ * Set-based {@link inspectFixtureRoomScope}: classify many rooms with one
+ * query. Rooms that do not exist are absent from the result.
+ */
+export async function inspectFixtureRoomScopes(
+  db: Queryable,
+  roomIds: readonly number[],
+): Promise<Map<number, FixtureRoomScope>> {
+  if (roomIds.length === 0) return new Map();
+  const { rows } = await db.query<FixtureRoomScope & { room_id: number }>(
+    `${ROOM_MARKERS_CTE}
+     SELECT r.id AS room_id,
+            true AS exists,
+            EXISTS (
+              SELECT 1 FROM room_enterprises WHERE room_id = r.id
+              UNION ALL
+              SELECT 1 FROM room_queue_groups WHERE room_id = r.id
+            ) AS has_graph,
+            COALESCE(bool_or(rm.marker IS TRUE), false) AS has_synthetic,
+            COALESCE(bool_or(rm.marker IS NOT TRUE) FILTER (WHERE rm.room_id IS NOT NULL), false)
+              AS has_real
+       FROM rooms r
+       LEFT JOIN room_markers rm ON rm.room_id = r.id
+      WHERE r.id = ANY($1::int[])
+      GROUP BY r.id`,
+    [roomIds],
+  );
+  return new Map(
+    rows.map((row) => [
+      Number(row.room_id),
+      {
+        exists: true,
+        has_graph: row.has_graph,
+        has_synthetic: row.has_synthetic,
+        has_real: row.has_real,
+      },
+    ]),
+  );
+}
+
 /** Return only rooms in the authenticated operator's fixture boundary. */
 export async function fixtureRoomIds(db: Queryable, actorId: number): Promise<number[]> {
   const actorIsSynthetic = await isSyntheticOperator(db, actorId);

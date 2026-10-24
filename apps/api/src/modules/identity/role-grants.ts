@@ -1,5 +1,5 @@
 import type pg from "pg";
-import { audit } from "../../lib/audit.js";
+import { type AuditEntry, auditMany } from "../../lib/audit.js";
 
 /**
  * Optional context a trigger event fired FOR — today, just the enterprise a
@@ -44,41 +44,48 @@ export async function applyRoleGrantRule(
         AND (enterprise_id IS NULL OR enterprise_id = $2)`,
     [triggerEvent, context.enterpriseId ?? null],
   );
-  for (const rule of rows as { id: number; role_id: number; action: "grant" | "revoke" }[]) {
-    if (rule.action === "grant") {
-      const { rowCount } = await client.query(
-        `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT DO NOTHING`,
-        [userId, rule.role_id, actorId, triggerEvent],
-      );
-      if (rowCount && rowCount > 0) {
-        await audit(client, {
-          actorId,
-          entityType: "role",
-          entityId: rule.role_id,
-          action: "assign_user",
-          source: "system",
-          after: { userId, triggerEvent },
-        });
-      }
-    } else {
-      const { rowCount } = await client.query(
-        `DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`,
-        [userId, rule.role_id],
-      );
-      if (rowCount && rowCount > 0) {
-        await audit(client, {
-          actorId,
-          entityType: "role",
-          entityId: rule.role_id,
-          action: "remove_user",
-          source: "system",
-          before: { userId, triggerEvent },
-        });
-      }
+  const rules = rows as { id: number; role_id: number; action: "grant" | "revoke" }[];
+  const grantRoleIds = rules.filter((rule) => rule.action === "grant").map((rule) => rule.role_id);
+  const revokeRoleIds = rules
+    .filter((rule) => rule.action === "revoke")
+    .map((rule) => rule.role_id);
+  const entries: AuditEntry[] = [];
+  if (grantRoleIds.length > 0) {
+    const { rows: granted } = await client.query(
+      `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
+       SELECT $1::int, role_id, $3::int, $4::text FROM unnest($2::int[]) AS t(role_id)
+       ON CONFLICT DO NOTHING
+       RETURNING role_id`,
+      [userId, grantRoleIds, actorId, triggerEvent],
+    );
+    for (const row of granted as { role_id: number }[]) {
+      entries.push({
+        actorId,
+        entityType: "role",
+        entityId: row.role_id,
+        action: "assign_user",
+        source: "system",
+        after: { userId, triggerEvent },
+      });
     }
   }
+  if (revokeRoleIds.length > 0) {
+    const { rows: revoked } = await client.query(
+      `DELETE FROM user_roles WHERE user_id = $1 AND role_id = ANY($2::int[]) RETURNING role_id`,
+      [userId, revokeRoleIds],
+    );
+    for (const row of revoked as { role_id: number }[]) {
+      entries.push({
+        actorId,
+        entityType: "role",
+        entityId: row.role_id,
+        action: "remove_user",
+        source: "system",
+        before: { userId, triggerEvent },
+      });
+    }
+  }
+  await auditMany(client, entries);
 }
 
 /**
@@ -109,24 +116,30 @@ export async function applyRoleAssignmentGrantRules(
       WHERE source_role_id = $1 AND action = 'grant' AND enabled = true`,
     [assignedRoleId],
   );
-  for (const rule of rows as { id: number; role_id: number }[]) {
-    const { rowCount } = await client.query(
-      `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT DO NOTHING`,
-      [userId, rule.role_id, actorId, `role_assigned:${assignedRoleId}`],
-    );
-    if (rowCount && rowCount > 0) {
-      await audit(client, {
-        actorId,
-        entityType: "role",
-        entityId: rule.role_id,
-        action: "assign_user",
-        source: "system",
-        after: { userId, sourceRoleId: assignedRoleId },
-      });
-    }
-  }
+  if (rows.length === 0) return;
+  const { rows: granted } = await client.query(
+    `INSERT INTO user_roles (user_id, role_id, assigned_by, source)
+     SELECT $1::int, role_id, $3::int, $4::text FROM unnest($2::int[]) AS t(role_id)
+     ON CONFLICT DO NOTHING
+     RETURNING role_id`,
+    [
+      userId,
+      (rows as { role_id: number }[]).map((rule) => rule.role_id),
+      actorId,
+      `role_assigned:${assignedRoleId}`,
+    ],
+  );
+  await auditMany(
+    client,
+    (granted as { role_id: number }[]).map((row) => ({
+      actorId,
+      entityType: "role",
+      entityId: row.role_id,
+      action: "assign_user",
+      source: "system",
+      after: { userId, sourceRoleId: assignedRoleId },
+    })),
+  );
 }
 
 /**
@@ -154,40 +167,36 @@ export async function applyRoleAssignmentRevokeRules(
       WHERE source_role_id = $1 AND action = 'revoke' AND enabled = true`,
     [removedRoleId],
   );
-  for (const rule of rows as { id: number; role_id: number }[]) {
-    const targetRoleId = rule.role_id;
-    const { rows: existing } = await client.query(
-      `SELECT source FROM user_roles WHERE user_id = $1 AND role_id = $2`,
-      [userId, targetRoleId],
-    );
-    if (existing.length === 0) continue; // Already doesn't hold it.
-    if (existing[0].source === "manual") continue; // Held for an unrelated, admin-granted reason.
-    const { rows: stillJustified } = await client.query(
-      `SELECT 1
-         FROM user_roles ur
-         JOIN role_grant_rules rr ON rr.source_role_id = ur.role_id
-        WHERE ur.user_id = $1
-          AND ur.role_id <> $2
-          AND rr.role_id = $3
-          AND rr.action = 'grant'
-          AND rr.enabled = true
-        LIMIT 1`,
-      [userId, removedRoleId, targetRoleId],
-    );
-    if (stillJustified.length > 0) continue; // Another held role still implies it.
-    const { rowCount } = await client.query(
-      `DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2`,
-      [userId, targetRoleId],
-    );
-    if (rowCount && rowCount > 0) {
-      await audit(client, {
-        actorId,
-        entityType: "role",
-        entityId: targetRoleId,
-        action: "remove_user",
-        source: "system",
-        before: { userId, sourceRoleId: removedRoleId },
-      });
-    }
-  }
+  if (rows.length === 0) return;
+  // One DELETE applies the per-target guards: not held manually, and no other
+  // held role still carries an enabled grant rule for the same target.
+  const { rows: revoked } = await client.query(
+    `DELETE FROM user_roles ur
+      WHERE ur.user_id = $1
+        AND ur.role_id = ANY($3::int[])
+        AND ur.source IS DISTINCT FROM 'manual'
+        AND NOT EXISTS (
+          SELECT 1
+            FROM user_roles held
+            JOIN role_grant_rules rr ON rr.source_role_id = held.role_id
+           WHERE held.user_id = $1
+             AND held.role_id <> $2
+             AND rr.role_id = ur.role_id
+             AND rr.action = 'grant'
+             AND rr.enabled = true
+        )
+      RETURNING ur.role_id`,
+    [userId, removedRoleId, (rows as { role_id: number }[]).map((rule) => rule.role_id)],
+  );
+  await auditMany(
+    client,
+    (revoked as { role_id: number }[]).map((row) => ({
+      actorId,
+      entityType: "role",
+      entityId: row.role_id,
+      action: "remove_user",
+      source: "system",
+      before: { userId, sourceRoleId: removedRoleId },
+    })),
+  );
 }

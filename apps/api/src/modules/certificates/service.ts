@@ -4,7 +4,7 @@ import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type pg from "pg";
 import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { recordsToCsv, toCsv } from "../../lib/csv.js";
 import {
   AppError,
@@ -83,14 +83,16 @@ export async function updateSettings(
         WHERE revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND snapshot->>'manuallyCertified' IS DISTINCT FROM 'true' RETURNING id`,
         [actorId],
       );
-      for (const row of rows)
-        await audit(client, {
+      await auditMany(
+        client,
+        rows.map((row) => ({
           actorId,
           entityType: "attendance_certificate",
           entityId: row.id,
           action: "certificate.revoke",
           reason: "certificate_award_policy_changed",
-        });
+        })),
+      );
     }
     await audit(client, {
       actorId,
@@ -201,14 +203,16 @@ async function recordApproval(
     WHERE user_id=$1 AND revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND ((snapshot->>'hours')::numeric IS DISTINCT FROM $3::numeric OR snapshot->>'manuallyCertified' IS DISTINCT FROM 'true') RETURNING id`,
     [userId, actorId, certifiedHours],
   );
-  for (const row of rows)
-    await audit(client, {
+  await auditMany(
+    client,
+    rows.map((row) => ({
       actorId,
       entityType: "attendance_certificate",
       entityId: row.id,
       action: "certificate.revoke",
       reason: "certified_hours_reviewed",
-    });
+    })),
+  );
   await audit(client, {
     actorId,
     entityType: "certificate_approval",
@@ -825,14 +829,20 @@ export async function listForUser(userId: number): Promise<CertificateRow[]> {
   );
   if (candidates.length > 0) {
     const eligibility = await eligibilityFor(userId);
+    const activitiesByLocale = new Map<string, Awaited<ReturnType<typeof attendedActivities>>>();
     for (const row of candidates) {
       const current = certificates.find((cert) => cert.id === row.id);
       if (!current || !eligibility.eligible) continue;
       const snapshot = row.snapshot as CertificateSnapshot;
+      let activities = activitiesByLocale.get(row.locale);
+      if (!activities) {
+        activities = await attendedActivities(pool, userId, row.locale);
+        activitiesByLocale.set(row.locale, activities);
+      }
       const fresh = {
         ...snapshot,
         hours: eligibility.certifiedHours ?? eligibility.hours,
-        activities: await attendedActivities(pool, userId, row.locale),
+        activities,
       };
       current.outdated = !sameStatedFacts(snapshot, fresh, row.variant);
     }
@@ -1145,12 +1155,32 @@ export async function exportCertificateParticipants(
   return csv;
 }
 
+/** Wraps a pool so identical read queries made through it run once (callers must only read). */
+function memoizedReads(db: pg.Pool): pg.Pool {
+  const cache = new Map<string, Promise<unknown>>();
+  return {
+    query: (text: unknown, values?: unknown[]) => {
+      if (typeof text !== "string") return (db.query as (...a: unknown[]) => unknown)(text, values);
+      const key = `${text}\u0000${JSON.stringify(values ?? [])}`;
+      let hit = cache.get(key);
+      if (!hit) {
+        hit = db.query(text, values);
+        cache.set(key, hit);
+      }
+      return hit;
+    },
+  } as unknown as pg.Pool;
+}
+
 /** The types this person can be issued, each with why not yet (null when available now). */
 export async function availableCertificateTypes(userId: number, self: boolean) {
   const types = await listCertificateTypes();
+  // The per-type checks repeat the same user-wide reads (event access, event
+  // end, presentations); share one result per distinct query within this call.
+  const reads = memoizedReads(pool);
   const matches = await Promise.all(
     types.map(async (type) =>
-      (await recipientMatchesType(type, userId, pool, self)) ? type : null,
+      (await recipientMatchesType(type, userId, reads, self)) ? type : null,
     ),
   );
   const eligibility = await eligibilityFor(userId);
@@ -1159,9 +1189,9 @@ export async function availableCertificateTypes(userId: number, self: boolean) {
       .filter((type) => type != null)
       .map(async (type) => {
         let availability: GateReason | null = null;
-        if (!(await isExemptRecipient(type, userId, pool))) {
+        if (!(await isExemptRecipient(type, userId, reads))) {
           availability =
-            (await typeGate(type, userId, pool, eligibility.approval != null)) ??
+            (await typeGate(type, userId, reads, eligibility.approval != null)) ??
             (type.attendancePolicy && !eligibility.eligible ? eligibility.reason : null);
         }
         return { ...type, availability };

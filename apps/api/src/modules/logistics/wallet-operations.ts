@@ -142,18 +142,21 @@ export async function processWalletOperations(): Promise<number> {
             continue;
           }
           const failures: unknown[] = [];
+          const unregistered: string[] = [];
           for (const device of devices.rows) {
             try {
               await sendApplePush(device.push_token, PASS_TYPE_IDENTIFIER);
             } catch (err) {
               if (err instanceof ApplePushUnregisteredError)
-                await pool.query(
-                  `DELETE FROM wallet_pass_devices WHERE pass_id=$1 AND device_library_identifier=$2`,
-                  [delivery.id, device.device_library_identifier],
-                );
+                unregistered.push(device.device_library_identifier);
               else failures.push(err);
             }
           }
+          if (unregistered.length)
+            await pool.query(
+              `DELETE FROM wallet_pass_devices WHERE pass_id=$1 AND device_library_identifier=ANY($2::text[])`,
+              [delivery.id, unregistered],
+            );
           if (failures.length) throw new AggregateError(failures, "Apple Wallet refresh failed");
         } else if (delivery.google_object_id) {
           if (delivery.kind === "alert") {

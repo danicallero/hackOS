@@ -213,19 +213,27 @@ export async function saveLiveActivitySettings(
         [override],
       );
     }
-    for (const [priority, kind] of input.kinds.entries()) {
+    if (input.kinds.length > 0) {
       await client.query(
         `INSERT INTO live_activity_kind_settings (kind, enabled, priority)
-         VALUES ($1, $2, $3)
+         SELECT t.kind, t.enabled, t.priority
+           FROM unnest($1::text[], $2::boolean[], $3::int[]) AS t(kind, enabled, priority)
          ON CONFLICT (kind) DO UPDATE SET enabled = EXCLUDED.enabled, priority = EXCLUDED.priority`,
-        [kind.kind, kind.enabled, priority],
+        [
+          input.kinds.map((kind) => kind.kind),
+          input.kinds.map((kind) => kind.enabled),
+          input.kinds.map((_kind, priority) => priority),
+        ],
       );
-      await client.query(`DELETE FROM live_activity_kind_roles WHERE kind = $1`, [kind.kind]);
-      if (kind.roleIds.length > 0) {
+      await client.query(`DELETE FROM live_activity_kind_roles WHERE kind = ANY($1::text[])`, [
+        input.kinds.map((kind) => kind.kind),
+      ]);
+      const roleKinds = input.kinds.flatMap((kind) => kind.roleIds.map(() => kind.kind));
+      if (roleKinds.length > 0) {
         await client.query(
           `INSERT INTO live_activity_kind_roles (kind, role_id)
-           SELECT $1, unnest($2::int[]) ON CONFLICT DO NOTHING`,
-          [kind.kind, kind.roleIds],
+           SELECT * FROM unnest($1::text[], $2::int[]) ON CONFLICT DO NOTHING`,
+          [roleKinds, input.kinds.flatMap((kind) => kind.roleIds)],
         );
       }
     }

@@ -5,7 +5,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
-import { notify, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
+import { notifyMany, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
 import { broadcastQueueEvent, queueFixtureMarker } from "./broadcast.js";
 import { anyEvaluationStarted, lockQueueGroupForEntry } from "./evaluation-lock.js";
 import {
@@ -373,8 +373,9 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
 
     // H31: "que entre" — routed through notify() (H51/H53) so it lands in the
     // inbox and every configured channel, same as the initial call (H29/H38).
-    for (const userId of memberIds) {
-      await notify(client, {
+    await notifyMany(
+      client,
+      memberIds.map((userId) => ({
         userId,
         category: "queue",
         payload: {
@@ -387,8 +388,8 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
           vars: { name: nameById.get(userId) ?? "", challengeName, roomName },
         },
         fixtureMarker,
-      });
-    }
+      })),
+    );
     const { rows: staffRows } = await client.query(
       `SELECT DISTINCT np.user_id
          FROM notification_preferences np
@@ -398,11 +399,12 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
           AND u.is_test_account = $2`,
       [QUEUE_STAFF_CATEGORY, fixtureMarker],
     );
-    for (const row of staffRows as { user_id: number }[]) {
-      await notify(client, {
+    await notifyMany(
+      client,
+      (staffRows as { user_id: number }[]).map((row) => ({
         userId: row.user_id,
         category: QUEUE_STAFF_CATEGORY,
-        channels: ["push"],
+        channels: ["push" as const],
         payload: {
           entryId,
           roomId: entry.assigned_room_id,
@@ -410,8 +412,8 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
           vars: { teamName, challengeName, roomName },
         },
         fixtureMarker,
-      });
-    }
+      })),
+    );
     return {
       entry,
       memberIds,
