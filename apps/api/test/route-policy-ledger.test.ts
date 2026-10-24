@@ -13,8 +13,8 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(493);
-    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(30);
+    expect(rows).toHaveLength(494);
+    expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(31);
     expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(13);
     // #992 and #1016: match the current inventory enforced by scripts/route-policy-audit.ts.
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(104);
@@ -36,6 +36,7 @@ describe("final route-policy ledger", () => {
       "GET /api/public/applications/:id",
       "GET /api/public/certificates/:code",
       "GET /api/public/certificates/:code/pdf",
+      "GET /api/public/certificates/by-hash/:sha256",
       "GET /api/public/challenges",
       "GET /api/public/challenges/:id/winners",
       "GET /api/public/degrees",
