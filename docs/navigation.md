@@ -45,7 +45,7 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 ### Stable personal area (`PERSONAL_NAV`)
 
 The personal sidebar exposes **Home**, **My applications**, **Projects**,
-**Wallet**, **Certificates** (`/certificates`, event access, #1083), **Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+**Wallet**, **Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
 and Inbox (`/inbox`) in a shared internal navigation row.
 Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
 keeps the parent selected on every grouped route, including records, and Home

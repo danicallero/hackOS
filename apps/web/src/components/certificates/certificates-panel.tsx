@@ -1,16 +1,22 @@
 "use client";
 
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
-import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -94,12 +100,85 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
   const below = staff && !data.eligibility.eligible;
   const dateFormat = new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" });
 
-  return (
-    <div className="space-y-6">
-      <SectionCard
-        title={staff ? t("certificates") : undefined}
-        icon={staff ? SealCheckIcon : undefined}
-      >
+  const body = (
+    <div className="space-y-5">
+      {data.certificates.length === 0 ? (
+        staff ? (
+          <p className="text-muted-foreground text-sm">{t("certificatesNone")}</p>
+        ) : null
+      ) : (
+        <ul className="divide-border/60 border-border/60 divide-y rounded-surface border">
+          {data.certificates.map((cert) => (
+            <li
+              key={cert.id}
+              className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{t(VARIANT_LABEL[cert.variant])}</span>
+                <span className="text-muted-foreground text-sm">
+                  {cert.locale.toUpperCase()} · {dateFormat.format(new Date(cert.issuedAt))}
+                </span>
+                {cert.revokedAt ? (
+                  <StatusBadge tone="danger">{t("certificateRevoked")}</StatusBadge>
+                ) : null}
+              </div>
+              {cert.revokedAt ? null : (
+                <div className="flex flex-wrap gap-2">
+                  {staff ? (
+                    <>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={pending}>
+                            <DownloadSimpleIcon />
+                            {t("certificateDownload")}
+                            <CaretDownIcon />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              void run(() => certificatesApi.download(cert.id, false))
+                            }
+                          >
+                            {t("certificateDownloadNoCsv")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => void run(() => certificatesApi.download(cert.id, true))}
+                          >
+                            {t("certificateDownloadCopy")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pending}
+                        onClick={() => {
+                          setRevokeReason("");
+                          setRevoking(cert);
+                        }}
+                      >
+                        {t("certificateRevoke")}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pending}
+                      onClick={() => void run(() => certificatesApi.downloadMine(cert.id))}
+                    >
+                      <DownloadSimpleIcon />
+                      {t("certificateDownload")}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div>
         <div className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
           <div className="space-y-2">
             <Select value={variant} onValueChange={(v) => setVariant(v as CertificateVariant)}>
@@ -161,78 +240,19 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
             />
           </div>
         ) : null}
-      </SectionCard>
+      </div>
+    </div>
+  );
 
-      {data.certificates.length === 0 ? (
-        <EmptyState icon={SealCheckIcon} title={t("certificatesNone")} />
+  return (
+    <>
+      {staff ? (
+        <SectionCard title={t("certificates")} icon={SealCheckIcon}>
+          {body}
+        </SectionCard>
       ) : (
-        <ul className="divide-border divide-y rounded-lg border">
-          {data.certificates.map((cert) => (
-            <li
-              key={cert.id}
-              className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{t(VARIANT_LABEL[cert.variant])}</span>
-                <span className="text-muted-foreground text-sm">
-                  {cert.locale.toUpperCase()} · {dateFormat.format(new Date(cert.issuedAt))}
-                </span>
-                {cert.revokedAt ? (
-                  <StatusBadge tone="danger">{t("certificateRevoked")}</StatusBadge>
-                ) : null}
-              </div>
-              {cert.revokedAt ? null : (
-                <div className="flex flex-wrap gap-2">
-                  {staff ? (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => void run(() => certificatesApi.download(cert.id, false))}
-                      >
-                        <DownloadSimpleIcon />
-                        {t("certificateDownloadNoCsv")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => void run(() => certificatesApi.download(cert.id, true))}
-                      >
-                        <DownloadSimpleIcon />
-                        {t("certificateDownloadCopy")}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => {
-                          setRevokeReason("");
-                          setRevoking(cert);
-                        }}
-                      >
-                        {t("certificateRevoke")}
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => void run(() => certificatesApi.downloadMine(cert.id))}
-                    >
-                      <DownloadSimpleIcon />
-                      {t("certificateDownload")}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+        body
       )}
-
       {staff ? (
         <>
           <Modal
@@ -274,6 +294,6 @@ export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
           </Modal>
         </>
       ) : null}
-    </div>
+    </>
   );
 }

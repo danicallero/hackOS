@@ -301,6 +301,36 @@ describe("staff", () => {
   });
 });
 
+describe("official document by code", () => {
+  it("serves the PDF with the footer to anyone with the code, until it is revoked", async () => {
+    await presence(person, 12);
+    const cert = (await issue(person)).json();
+    const open = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${cert.code}/pdf`,
+    });
+    expect(open.statusCode).toBe(200);
+    expect(open.headers["content-disposition"]).toContain("inline");
+    expect(open.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    const unknown = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${"x".repeat(24)}/pdf`,
+    });
+    expect(unknown.statusCode).toBe(404);
+    await app.inject({
+      method: "POST",
+      url: `/api/certificates/${cert.id}/revoke`,
+      headers: { ...asUser(staff), "idempotency-key": "official-revoke" },
+      payload: { reason: "mistake" },
+    });
+    const revoked = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${cert.code}/pdf`,
+    });
+    expect(revoked.statusCode).toBe(409);
+  });
+});
+
 describe("CSV footer", () => {
   const get = (url: string, user: number) =>
     app.inject({ method: "GET", url, headers: asUser(user) });

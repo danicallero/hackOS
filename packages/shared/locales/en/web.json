@@ -3668,5 +3668,6 @@
   "toastCertificate": "Certificate",
   "certificateIssuedToast": "Certificate issued",
   "certificateRevokedToast": "Certificate revoked",
-  "couldNotUseCertificate": "Could not complete the action."
+  "couldNotUseCertificate": "Could not complete the action.",
+  "certificateViewDocument": "View document"
 }

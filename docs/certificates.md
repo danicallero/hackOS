@@ -61,8 +61,8 @@ participant-facing PDF should be stamped with `stampCopyFooter` the same way.
 
 ## Web
 
-Participants use `/certificates` (nav item under Wallet): pick a variant and
-language, get the certificate, download copies. Staff with `presence:manage` get
+Participants with event access get a Certificates section in My profile: pick a
+variant and language, get the certificate, download it. Staff with `presence:manage` get
 the same panel for a person in their profile's Attendance tab, plus override
 reason, revoke, download without CSV and download copy.
 Mobile screens are not built yet.

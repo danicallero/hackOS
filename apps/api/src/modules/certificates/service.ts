@@ -388,6 +388,16 @@ export async function listForUser(userId: number): Promise<CertificateRow[]> {
   return rows.map(toRow);
 }
 
+/** The id behind a verification code. */
+export async function certificateIdByCode(code: string): Promise<number> {
+  const { rows } = await pool.query<{ id: number }>(
+    `SELECT id FROM attendance_certificates WHERE code = $1`,
+    [code],
+  );
+  if (!rows[0]) throw new NotFoundError("Certificate not found");
+  return rows[0].id;
+}
+
 /** The certificate's owner, for access checks. */
 export async function certificateOwner(id: number): Promise<number> {
   const { rows } = await pool.query<{ user_id: number }>(

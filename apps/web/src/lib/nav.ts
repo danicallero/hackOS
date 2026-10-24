@@ -159,8 +159,6 @@ export const PERSONAL_NAV: NavItem[] = [
   // Entrance ticket is exposed only while a role grants current event access
   // (the historical tickets row remains for audit/idempotency).
   { title: "wallet", href: "/wallet", icon: WalletIcon, hideForPureApplicant: true },
-  // #1083: attendance certificates, for anyone with event access.
-  { title: "certificates", href: "/certificates", icon: SealCheckIcon, hideForPureApplicant: true },
 
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.

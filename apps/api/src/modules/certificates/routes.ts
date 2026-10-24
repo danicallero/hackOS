@@ -7,6 +7,7 @@ import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import {
+  certificateIdByCode,
   certificateOwner,
   eligibilityFor,
   issueForSelf,
@@ -59,10 +60,11 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
     reply: { header(name: string, value: string): unknown },
     id: number,
     copy: boolean,
+    disposition: "attachment" | "inline" = "attachment",
   ): Promise<Buffer> => {
     const { pdf, filename } = await renderCertificate(id, { copy });
     reply.header("content-type", "application/pdf");
-    reply.header("content-disposition", `attachment; filename="${filename}"`);
+    reply.header("content-disposition", `${disposition}; filename="${filename}"`);
     reply.header("cache-control", "private, no-store");
     return Buffer.from(pdf);
   };
@@ -291,5 +293,20 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => verifyCode(req.params.code),
+  );
+
+  r.get(
+    "/api/public/certificates/:code/pdf",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-content" } },
+      schema: {
+        params: z.object({ code: z.string().min(16).max(64) }),
+        summary: "View the official certificate",
+        description:
+          "The certificate PDF itself, with the CSV footer, for anyone holding its verification code (the code is printed on every copy). 404 for an unknown code and 409 once revoked (#1083).",
+      },
+    },
+    async (req, reply) =>
+      sendPdf(reply, await certificateIdByCode(req.params.code), true, "inline"),
   );
 }

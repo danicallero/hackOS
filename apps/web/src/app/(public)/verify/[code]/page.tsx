@@ -1,7 +1,7 @@
 "use client";
 
 // #1083: the page behind the QR and code printed on an attendance certificate.
-// It shows what the organisation issued, never the person's DNI/NIE.
+// It shows what the organisation issued and links the official PDF.
 
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
@@ -11,7 +11,9 @@ import { Brand } from "@/components/common/brand";
 import { LanguageSelect } from "@/components/common/language-select";
 import { Spinner } from "@/components/common/spinner";
 import { ThemeToggle } from "@/components/common/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { API_URL } from "@/lib/env";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
 
 interface Verification {
@@ -103,6 +105,17 @@ export default function VerifyCertificatePage() {
               ) : null}
               <Row label={t("certificateIssuedOn")}>{date(state.data.issuedAt)}</Row>
             </dl>
+            {state.data.status === "valid" ? (
+              <Button asChild className="self-start">
+                <a
+                  href={`${API_URL}/api/public/certificates/${encodeURIComponent(code)}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t("certificateViewDocument")}
+                </a>
+              </Button>
+            ) : null}
           </section>
         )}
       </main>

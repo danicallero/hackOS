@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
@@ -12,6 +13,7 @@ import Link from "next/link";
 import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CertificatesPanel } from "@/components/certificates/certificates-panel";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { MultiSelect } from "@/components/common/multi-select";
@@ -423,6 +425,14 @@ function ProfileForm({ me }: { me: Me }) {
               <PublicProfileCard onSaveControl={setPublicProfile} />
             </div>
           </div>
+          {me.hasEventAccess && (
+            <div className={CARD}>
+              <RowHeading icon={SealCheckIcon} title={t("certificates")} />
+              <div className="min-w-0">
+                <CertificatesPanel />
+              </div>
+            </div>
+          )}
           <div className={CARD}>
             <RowHeading icon={ShieldIcon} title={t("profileAccountSecurity")} />
             <ul className="min-w-0 divide-y divide-border/60 rounded-surface border border-border/60">
