@@ -31,6 +31,17 @@ parameterized ones), never a stream URL; recovery and sequence gaps stay scope-s
 payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
 for the contract, bounds, revocation and migration behavior.
 
+## Indexing
+
+Nothing in the web app is indexed: the root layout sets `robots` metadata,
+`next.config.ts` sends `X-Robots-Tag: noindex` on every route (static icons and
+generated images included), `app/robots.ts` disallows everything, and the API
+sends the same header on every response (photos, CVs, project files, wallet
+images, certificates). Whatever is served from the public S3 host (company logos,
+and any future public prefix such as gallery images) never passes through the API,
+so the Caddy block of that host adds the header (`deploy/README.md`).
+Keep it that way when adding a public page: do not set `index: true`.
+
 ## Edition theme
 
 `src/styles/theme.css` is the visual source of truth: the HackUDC 2027 palette,

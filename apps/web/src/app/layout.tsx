@@ -33,8 +33,14 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     description: SITE_DESCRIPTION,
     applicationName: "hackOS",
-    alternates: {
-      canonical: "/",
+    // hackOS is an operations app, never a search result: pages, images and files stay out of
+    // indexes (the matching X-Robots-Tag and robots.txt are in next.config.ts / robots.ts).
+    robots: {
+      index: false,
+      follow: false,
+      noarchive: true,
+      nosnippet: true,
+      noimageindex: true,
     },
     openGraph: {
       type: "website",
