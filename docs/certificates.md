@@ -47,7 +47,10 @@ uses the standard Helvetica fonts, which viewers substitute rather than embed.
 The PDF is rendered on demand from `attendance_certificates.snapshot` (name,
 event, dates, venue, issuer, hours, activities as issued). The DNI/NIE is the
 exception: it is read live from `users.dni`, printed only when the account has
-one, and never stored on the certificate or shown by verification.
+one, and never stored on the certificate. The JSON verification never returns it;
+the official PDF does, on purpose: the owner shares the document (or its CSV) with
+administrations, and `/verify/{code}` is the viewer they use to check it is the
+real one.
 
 Downloads from the participant portal are *copies*: every page gets the footer
 from `lib/pdf-copy-footer.ts` (QR, "Copy of the document - issuer", print date,
