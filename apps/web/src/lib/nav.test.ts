@@ -87,8 +87,8 @@ describe("dynamic statistics visibility", () => {
 describe("accounts without current role-derived event access", () => {
   const ctx = contextFor([], { isPureApplicant: true });
 
-  it("hides wallet and keeps inbox inside Home", () => {
-    const hidden = ["/wallet", "/inbox"];
+  it("hides the diary and keeps inbox inside Home", () => {
+    const hidden = ["/people", "/inbox"];
     const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
       (item) => item.href,
     );
@@ -265,14 +265,13 @@ describe("route stability (deep links, issue #187)", () => {
       "/timetable",
       "/my-applications",
       "/my-project",
-      "/wallet",
       "/inbox",
       "/settings/profile",
       "/applications",
       "/projects",
       "/queue",
       "/judging",
-      // /my-queue, /logistics/accreditation and /logistics/meals are deliberately
+      // /my-queue, /wallet, /logistics/accreditation and /logistics/meals are deliberately
       // gone from here: their content was merged into a single destination and the old hrefs now
       // redirect server-side (see their page.tsx files) instead of being
       // live nav items — deep links still resolve, just not via nav.

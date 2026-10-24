@@ -31,6 +31,23 @@ parameterized ones), never a stream URL; recovery and sequence gaps stay scope-s
 payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
 for the contract, bounds, revocation and migration behavior.
 
+## Indexing
+
+Only public information is indexed: home (`/`), `/horario`, `/privacy`, `/terms`
+and the public gallery (`/gallery`, open to anonymous viewers while the gallery
+audience is public), plus `/llms.txt` (`app/llms.txt/route.ts`) describing them
+and the read-only public JSON for assistants. Everything else is out: the root
+layout sets `robots` metadata, `next.config.ts` sends `X-Robots-Tag: noindex`
+on every route outside that list (static icons and generated images included),
+`app/robots.ts` disallows all but the list, and the API
+sends the same header on every response (photos, CVs, project files, wallet
+images, certificates). Whatever is served from the public S3 host (company logos,
+and any future public prefix such as gallery images) never passes through the API,
+so the Caddy block of that host adds the header (`deploy/README.md`).
+Images are never indexed (`noimageindex`). Adding a public page to the index means
+updating the three places together: `robots.ts`, the `headers()` pattern and the page's
+`INDEXABLE_ROBOTS` metadata.
+
 ## Edition theme
 
 `src/styles/theme.css` is the visual source of truth: the HackUDC 2027 palette,
@@ -221,7 +238,7 @@ src/
       login, signup, forgot-password, reset-password, verify-email,
       claim-account, applications (public application form)
     (app)/             authenticated shell — sidebar + workspace bar, AuthGuard
-      personal area (my-applications, my-project, my-queue, wallet, inbox,
+      personal area (my-applications, my-project, my-queue, inbox,
       schedule, settings/profile — Home is the event overview and sign-in
       landing destination) · staff workspaces (applications, projects,
       challenges, enterprises, queue, judging, logistics, announcements,

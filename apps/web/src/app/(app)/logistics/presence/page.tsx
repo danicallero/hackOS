@@ -23,13 +23,14 @@ import {
 } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
+import { AttendanceCertificatesTab } from "./certificates-tab";
 import { HoursTab } from "./hours-tab";
 import { PeopleTab } from "./people-tab";
 import { ScanTab } from "./scan-tab";
 import { SessionsTab } from "./sessions-tab";
 import { queryLoadError } from "./shared";
 
-const PRESENCE_TABS = ["scan", "people", "sessions", "hours"] as const;
+const PRESENCE_TABS = ["scan", "people", "sessions", "hours", "certificates"] as const;
 type PresenceTab = (typeof PRESENCE_TABS)[number];
 
 const PRESENCE_EVENTS = [EVENTS.LOGISTICS_PRESENCE_SCAN, EVENTS.LOGISTICS_ACTIVITY_SCAN];
@@ -41,10 +42,11 @@ export default function PresencePage() {
   const searchParams = useSearchParams();
   const canAccredit = useCan(CAPABILITIES.ACCREDIT_SCAN);
   const canPresence = useCan(CAPABILITIES.PRESENCE_SCAN);
+  const canManage = useCan(CAPABILITIES.PRESENCE_MANAGE);
   const canStats = useCan(CAPABILITIES.LOGISTICS_STATS);
   const { tab, setTab } = useUrlTab<PresenceTab>({
     values: PRESENCE_TABS,
-    defaultValue: "scan",
+    defaultValue: canManage && !canAccredit && !canPresence ? "certificates" : "scan",
   });
 
   const [sessionCount, setSessionCount] = useState(0);
@@ -105,7 +107,7 @@ export default function PresencePage() {
     [pathname, router, searchParams],
   );
 
-  if (!canAccredit && !canPresence && !canStats) {
+  if (!canAccredit && !canPresence && !canStats && !canManage) {
     return <AccessDenied ask={t("presenceDeniedDesc")} />;
   }
 
@@ -117,6 +119,7 @@ export default function PresencePage() {
       />
       <Tabs value={tab} onValueChange={(value) => setTab(value)}>
         <TabBar aria-label={t("presenceSections")}>
+          {canManage && <TabsTrigger value="certificates">{t("certificates")}</TabsTrigger>}
           <TabsTrigger value="scan">{t("presenceScanTab")}</TabsTrigger>
           <TabsTrigger value="people">{t("peopleTab")}</TabsTrigger>
           {canPresence && <TabsTrigger value="sessions">{t("presenceSessionsTab")}</TabsTrigger>}
@@ -159,6 +162,8 @@ export default function PresencePage() {
           }}
         />
       )}
+
+      {tab === "certificates" && canManage && <AttendanceCertificatesTab />}
 
       {tab === "people" && <PeopleTab onOpenPerson={openPersonFromDirectory} />}
 

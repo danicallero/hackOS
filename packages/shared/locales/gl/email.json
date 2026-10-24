@@ -20,7 +20,7 @@
       },
       "reset": {
         "subject": "Restablece o teu contrasinal de hackOS",
-        "body": "Ola {{name}},\n\nPodes escoller un contrasinal novo aquí:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nSe non o pediches ti, podes ignorar este correo — o teu contrasinal non cambiou."
+        "body": "Ola {{name}},\n\nPodes escoller un contrasinal novo aquí:\n\n[Restablecer contrasinal]({{resetUrl}})\n\nSe non o pediches ti, podes ignorar este correo. O teu contrasinal non cambiou."
       },
       "accountRemovalPin": {
         "subject": "Confirma a eliminación da túa conta de hackOS",

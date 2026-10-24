@@ -1,7 +1,6 @@
 "use client";
 
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
-import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
@@ -108,22 +107,13 @@ export function previewEntry(
  * attendee's write (docs/directory.md). The CV file saves on its own; the
  * switch that shares it is part of the form.
  */
-export type PublicProfileSaveControl = {
-  dirty: boolean;
-  pending: boolean;
-  error: boolean;
-  /** What the owner's card looks like with the unsaved edits; null while the profile is hidden. */
-  preview: DirectoryEntry | null;
-  save: () => Promise<void>;
-};
-
 export function PublicProfileCard({
   onboarding,
-  onSaveControl,
+  onDirtyChange,
 }: {
   onboarding?: { onFinished: () => void; onLater: () => void };
-  /** Hands the save to the page, which owns one Save for every profile form. */
-  onSaveControl?: (control: PublicProfileSaveControl) => void;
+  /** Lets the profile's section list mark a section that holds unsaved edits. */
+  onDirtyChange?: (dirty: boolean) => void;
 } = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
@@ -161,10 +151,6 @@ export function PublicProfileCard({
   const dirty = Boolean(initialSettings && settings && !sameSettings(settings, initialSettings));
   useUnsavedChangesGuard(dirty);
 
-  const submitRef = useRef(onSubmit);
-  submitRef.current = onSubmit;
-  const hasError = saveError !== null;
-  const loaded = profile !== null;
   const preview = useMemo(() => {
     if (!me || !profile || !settings?.directoryVisible) return null;
     return dirty
@@ -172,26 +158,18 @@ export function PublicProfileCard({
       : profile.preview;
   }, [me, profile, settings, dirty]);
   useEffect(() => {
-    if (!loaded) return;
-    onSaveControl?.({
-      preview,
-      dirty,
-      pending,
-      error: hasError,
-      save: () => submitRef.current({ preventDefault() {} } as React.FormEvent),
-    });
-  }, [onSaveControl, loaded, preview, dirty, pending, hasError]);
+    onDirtyChange?.(dirty);
+  }, [onDirtyChange, dirty]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   if (!me) return null;
   if (!profile || !stored || !settings) {
     if (!error || (error instanceof ApiError && error.status === 403)) return null;
     return (
-      <SectionCard icon={AddressBookIcon} title={t("publicProfileTitle")}>
-        <ContextualError
-          message={apiErrorText(error, t, t("couldNotLoadPublicProfile"))}
-          onRetry={() => refetch("retry")}
-        />
-      </SectionCard>
+      <ContextualError
+        message={apiErrorText(error, t, t("couldNotLoadPublicProfile"))}
+        onRetry={() => refetch("retry")}
+      />
     );
   }
 
@@ -264,14 +242,13 @@ export function PublicProfileCard({
 
   const hasCv = profile.cv !== null;
   return (
-    <form className="min-w-0" onSubmit={onSubmit}>
+    <form className="@container min-w-0" onSubmit={onSubmit}>
       <SectionCard
         footerClassName="justify-start"
-        icon={onboarding || onSaveControl ? undefined : AddressBookIcon}
-        title={onboarding || onSaveControl ? undefined : t("publicProfileTitle")}
-        variant={onboarding || onSaveControl ? "plain" : "surface"}
+        stickyFooter={!onboarding}
+        variant="plain"
         footer={
-          onSaveControl ? undefined : onboarding ? (
+          onboarding ? (
             <div className="flex w-full flex-wrap justify-end gap-2">
               <Button type="button" variant="ghost" disabled={pending} onClick={onboarding.onLater}>
                 {t("networkingOnboardingLater")}
@@ -313,7 +290,7 @@ export function PublicProfileCard({
           )}
           {settings.directoryVisible && (
             <>
-              <div className="grid gap-x-6 gap-y-3 border-t border-border/60 pt-4 sm:grid-cols-3">
+              <div className="flex flex-wrap gap-x-8 gap-y-3">
                 <SwitchRow
                   checked={settings.showSurname}
                   onChange={(showSurname) => update({ showSurname })}
@@ -382,55 +359,51 @@ export function PublicProfileCard({
                 </>
               ) : (
                 <>
-                  <div className="space-y-6">
-                    <div className="min-w-0 space-y-4">
-                      <div className="space-y-4">
-                        <TextField
-                          label={t("publicProfileHeadline")}
-                          max={HEADLINE_MAX}
-                          value={settings.headline}
-                          onChange={(headline) => update({ headline })}
-                        />
-                        <TextField
-                          label={t("publicProfileLocation")}
-                          max={LOCATION_MAX}
-                          placeholder={t("publicProfileLocationPlaceholder")}
-                          value={settings.locationNote}
-                          onChange={(locationNote) => update({ locationNote })}
-                        />
-                      </div>
-                      <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
-                    </div>
+                  {/* Same two-column field grid as Personal details. */}
+                  <div className="grid items-start gap-4 @xl:grid-cols-2">
+                    <TextField
+                      label={t("publicProfileHeadline")}
+                      max={HEADLINE_MAX}
+                      value={settings.headline}
+                      onChange={(headline) => update({ headline })}
+                    />
+                    <TextField
+                      label={t("publicProfileLocation")}
+                      max={LOCATION_MAX}
+                      placeholder={t("publicProfileLocationPlaceholder")}
+                      value={settings.locationNote}
+                      onChange={(locationNote) => update({ locationNote })}
+                    />
                   </div>
-                  {!onSaveControl && (
-                    <section className="space-y-2 border-t border-border/60 pt-4">
-                      <h3 className="type-label text-muted-foreground">
-                        {t("publicProfilePreview")}
-                      </h3>
-                      <DirectoryCard entry={preview ?? profile.preview} />
-                    </section>
-                  )}
+                  <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
                   <LinksEditor
                     links={settings.socials}
                     onChange={(socials) => update({ socials })}
                   />
-                  {(!onboarding || profile.cv?.source === "application") && (
-                    <CvField
-                      cv={profile.cv}
-                      ownerName={displayName(me, true)}
-                      shareCv={settings.shareCv}
-                      onShareChange={(shareCv) => update({ shareCv })}
-                      onSaved={(next) => {
-                        commit(next);
-                        // A removed CV is no longer shared; drop a pending share too.
-                        if (!next.cv) {
-                          setEdits((current) =>
-                            current?.shareCv ? { ...current, shareCv: false } : current,
-                          );
-                        }
-                      }}
-                    />
-                  )}
+                  <CvField
+                    cv={profile.cv}
+                    ownerName={displayName(me, true)}
+                    shareCv={settings.shareCv}
+                    onShareChange={(shareCv) => update({ shareCv })}
+                    onSaved={(next) => {
+                      commit(next);
+                      // A removed CV is no longer shared; drop a pending share too.
+                      if (!next.cv) {
+                        setEdits((current) =>
+                          current?.shareCv ? { ...current, shareCv: false } : current,
+                        );
+                      }
+                    }}
+                  />
+                  {/* One grid column wide: close to the card's size on a phone. */}
+                  <section className="grid gap-x-4 gap-y-2 @xl:grid-cols-2">
+                    <h3 className="type-label text-muted-foreground @xl:col-span-2">
+                      {t("publicProfilePreview")}
+                    </h3>
+                    <div className="@xl:col-start-1">
+                      <DirectoryCard entry={preview ?? profile.preview} />
+                    </div>
+                  </section>
                 </>
               )}
             </>

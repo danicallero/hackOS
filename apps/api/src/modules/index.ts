@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { registerApplicationsModule } from "./applications/index.js";
+import { registerCertificatesModule } from "./certificates/index.js";
 import { registerChallengesModule } from "./challenges/index.js";
 import { registerDiaryModule } from "./diary/index.js";
 import { registerDirectoryModule } from "./directory/index.js";
@@ -29,6 +30,7 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   // Registered first so it covers every module's routes (H18, H54).
   registerFixtureBoundaryGuard(app);
   await registerApplicationsModule(app); // WS-A2 (H11-H15, H27)
+  registerCertificatesModule(app); // #1083 attendance certificates
   await registerChallengesModule(app); // WS-G  (H44)
   await registerDiaryModule(app); // #935 event diary (people and sponsor stands)
   await registerDirectoryModule(app); // #934 opt-in people directory

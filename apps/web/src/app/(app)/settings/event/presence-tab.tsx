@@ -3,13 +3,17 @@
 // Presence policy category (H24): the two knobs behind automatic presence
 // estimation. Keep each policy's consequence beside its control (H24).
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
+import { AttendanceEvidenceExports } from "@/components/exports/attendance-evidence-exports";
+import { Button } from "@/components/ui/button";
 import {
   Form,
   FormControl,
@@ -24,6 +28,7 @@ import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
@@ -50,6 +55,7 @@ function fromConfig(cfg: EventConfig): Values {
 
 export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
+  const canReview = useCan(CAPABILITIES.PRESENCE_MANAGE);
   const { config, status, applyConfig } = useEventConfig();
   const form = useForm<Values>({
     mode: "onBlur",
@@ -89,56 +95,68 @@ export function PresenceTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)}>
-        <SectionCard
-          variant="plain"
-          footerClassName="justify-start"
-          stickyFooter
-          footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
-        >
-          <div className="grid items-start gap-4 sm:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="presenceAutoEntryAt"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("automaticEntryTime")}</FormLabel>
-                  <FormControl>
-                    <DateTimeInput value={field.value} onChange={field.onChange} />
-                  </FormControl>
-                  <FormDescription>{t("automaticEntryTimeDesc")}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="presenceCertaintyWindowMinutes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("certaintyWindow")}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={15}
-                      max={10080}
-                      step={15}
-                      value={field.value}
-                      onChange={(event) => field.onChange(event.target.valueAsNumber)}
-                      onBlur={field.onBlur}
-                      name={field.name}
-                      ref={field.ref}
-                    />
-                  </FormControl>
-                  <FormDescription>{t("certaintyWindowDesc")}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        </SectionCard>
-      </form>
-    </Form>
+    <>
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <AttendanceEvidenceExports />
+        {canReview && (
+          <Button asChild variant="outline">
+            <Link href="/logistics/presence?tab=certificates">
+              {t("certificateReviewAttendance")}
+            </Link>
+          </Button>
+        )}
+      </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <SectionCard
+            variant="plain"
+            footerClassName="justify-start"
+            stickyFooter
+            footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
+          >
+            <div className="grid items-start gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="presenceAutoEntryAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("automaticEntryTime")}</FormLabel>
+                    <FormControl>
+                      <DateTimeInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormDescription>{t("automaticEntryTimeDesc")}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="presenceCertaintyWindowMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("certaintyWindow")}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={15}
+                        max={10080}
+                        step={15}
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        ref={field.ref}
+                      />
+                    </FormControl>
+                    <FormDescription>{t("certaintyWindowDesc")}</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </SectionCard>
+        </form>
+      </Form>
+    </>
   );
 }
