@@ -108,16 +108,29 @@ export async function readCertificateType(
   if (!rows[0]) throw new NotFoundError("Certificate type not found");
   return rowType(rows[0]);
 }
+/** The person's live role ids, read once so several types can be checked without a query each. */
+export async function activeRoleIds(
+  userId: number,
+  db: pg.Pool | pg.PoolClient = pool,
+): Promise<Set<number>> {
+  const { rows } = await db.query<{ role_id: number }>(
+    `SELECT ur.role_id FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.deleted_at IS NULL`,
+    [userId],
+  );
+  return new Set(rows.map((row) => row.role_id));
+}
 export async function recipientMatchesType(
   type: CertificateType,
   userId: number,
   db: pg.Pool | pg.PoolClient = pool,
   self = false,
+  roleIds?: ReadonlySet<number>,
 ): Promise<boolean> {
   if (!type.enabled || (self && !type.selfService)) return false;
   if ((self || type.legacyVariant === "accepted_spot") && !(await hasEventAccess(db, userId)))
     return false;
   if (type.audienceRoleIds == null) return true;
+  if (roleIds) return type.audienceRoleIds.some((id) => roleIds.has(id));
   const { rowCount } = await db.query(
     `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL LIMIT 1`,
     [userId, type.audienceRoleIds],
@@ -129,8 +142,10 @@ export async function isExemptRecipient(
   type: CertificateType,
   userId: number,
   db: pg.Pool | pg.PoolClient = pool,
+  roleIds?: ReadonlySet<number>,
 ): Promise<boolean> {
   if (!type.exemptRoleIds?.length) return false;
+  if (roleIds) return type.exemptRoleIds.some((id) => roleIds.has(id));
   const { rowCount } = await db.query(
     `SELECT 1 FROM user_roles ur JOIN roles r ON r.id=ur.role_id WHERE ur.user_id=$1 AND r.id=ANY($2::int[]) AND r.deleted_at IS NULL LIMIT 1`,
     [userId, type.exemptRoleIds],

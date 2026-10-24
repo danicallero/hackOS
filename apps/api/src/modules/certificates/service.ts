@@ -25,6 +25,7 @@ import {
   statesHours,
 } from "./pdf.js";
 import {
+  activeRoleIds,
   assertTypeRecipient,
   type CertificateType,
   isExemptRecipient,
@@ -245,25 +246,50 @@ interface Presentations {
   challengeIds: Set<number>;
 }
 
-/** Teams that presented: their queue entry started or finished a presentation. */
+/** Teams that presented: their queue entry started or finished a presentation, per person. */
+async function presentationsFor(
+  userIds: number[],
+  db: pg.Pool | pg.PoolClient = pool,
+): Promise<Map<number, Presentations>> {
+  const { rows } = await db.query<{ user_id: number; challenge_id: number; mandatory: boolean }>(
+    `SELECT DISTINCT s.user_id, q.challenge_id, c.mandatory
+       FROM submissions s
+       JOIN queue_entries q ON q.repo_id = s.repo_id
+       JOIN challenges c ON c.id = q.challenge_id
+      WHERE s.status = 'active' AND s.user_id = ANY($1::int[])
+        AND (q.completed_at IS NOT NULL OR q.presentation_started_at IS NOT NULL)`,
+    [userIds],
+  );
+  const result = new Map<number, Presentations>();
+  for (const row of rows) {
+    let entry = result.get(row.user_id);
+    if (!entry) {
+      entry = { any: true, mandatory: false, challengeIds: new Set() };
+      result.set(row.user_id, entry);
+    }
+    entry.mandatory ||= row.mandatory;
+    entry.challengeIds.add(row.challenge_id);
+  }
+  return result;
+}
+
+const NO_PRESENTATIONS = (): Presentations => ({
+  any: false,
+  mandatory: false,
+  challengeIds: new Set(),
+});
+
 async function presentationsOf(
   userId: number,
   db: pg.Pool | pg.PoolClient = pool,
 ): Promise<Presentations> {
-  const { rows } = await db.query<{ challenge_id: number; mandatory: boolean }>(
-    `SELECT DISTINCT q.challenge_id, c.mandatory
-       FROM submissions s
-       JOIN queue_entries q ON q.repo_id = s.repo_id
-       JOIN challenges c ON c.id = q.challenge_id
-      WHERE s.status = 'active' AND s.user_id = $1
-        AND (q.completed_at IS NOT NULL OR q.presentation_started_at IS NOT NULL)`,
-    [userId],
-  );
-  return {
-    any: rows.length > 0,
-    mandatory: rows.some((row) => row.mandatory),
-    challengeIds: new Set(rows.map((row) => row.challenge_id)),
-  };
+  return (await presentationsFor([userId], db)).get(userId) ?? NO_PRESENTATIONS();
+}
+
+/** Facts typeGate would otherwise query, preloaded for a whole batch. */
+interface GateFacts {
+  eventEndsAt: Date | null;
+  presented: Presentations;
 }
 
 /**
@@ -276,14 +302,17 @@ async function typeGate(
   userId: number,
   db: pg.Pool | pg.PoolClient,
   approved: boolean,
+  facts?: GateFacts,
 ): Promise<GateReason | null> {
   if (definition.requiresEventEnd) {
-    const { rows } = await db.query(`SELECT event_ends_at FROM event_config WHERE id = 1`);
-    const ends = rows[0]?.event_ends_at as Date | null | undefined;
+    const ends = facts
+      ? facts.eventEndsAt
+      : ((await db.query(`SELECT event_ends_at FROM event_config WHERE id = 1`)).rows[0]
+          ?.event_ends_at as Date | null | undefined);
     if (!ends || ends.getTime() > Date.now()) return "event_not_ended";
   }
   if (definition.demoRequirement === "none" || approved) return null;
-  const presented = await presentationsOf(userId, db);
+  const presented = facts?.presented ?? (await presentationsOf(userId, db));
   if (definition.demoRequirement === "any") return presented.any ? null : "demo_required";
   const met =
     definition.demoRequirement === "mandatory"
@@ -340,9 +369,11 @@ async function buildSnapshot(
   hours: number,
   issuerName: string,
   guestName?: string,
+  preloaded?: { person: Record<string, unknown>; activities: { name: string; at: string }[] },
 ): Promise<CertificateSnapshot> {
-  const { rows: people } =
-    userId == null
+  const { rows: people } = preloaded
+    ? { rows: [preloaded.person] }
+    : userId == null
       ? await db.query(
           `SELECT $1::text AS name, NULL::text AS surname, name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM event_config WHERE id=1`,
           [guestName],
@@ -362,7 +393,7 @@ async function buildSnapshot(
       code: ERROR_REASONS.CERTIFICATE_NOT_AVAILABLE,
     });
   }
-  const activities = await attendedActivities(db, userId, locale);
+  const activities = preloaded?.activities ?? (await attendedActivities(db, userId, locale));
   return {
     name: person.name ?? "",
     surname: person.surname ?? null,
@@ -440,6 +471,20 @@ interface IssueOptions {
   includeIdentification?: boolean;
   /** Replace the current certificate when what it states has changed. */
   refresh?: boolean;
+  /** Batch reads shared by a bulk run; the locked rows are still re-read per person. */
+  preloaded?: BulkRecipient;
+}
+
+/** Everything a bulk run reads once for one recipient instead of inside each transaction. */
+interface BulkRecipient {
+  definition: CertificateType;
+  hours: number;
+  matchesAudience: boolean;
+  exempt: boolean;
+  dni: string | null;
+  person: Record<string, unknown>;
+  activities: { name: string; at: string }[];
+  gate: GateFacts;
 }
 
 /** What a legacy attendance variant states: hours for `hours`, the list for `activities`. */
@@ -463,16 +508,32 @@ async function attendedActivities(
   userId: number | null,
   locale: CertificateLocale,
 ): Promise<{ name: string; at: string }[]> {
+  if (userId == null) return [];
+  return (await attendedActivitiesFor(db, [userId], locale)).get(userId) ?? [];
+}
+
+/** The same lists for many people in one query. */
+async function attendedActivitiesFor(
+  db: pg.Pool | pg.PoolClient,
+  userIds: number[],
+  locale: CertificateLocale,
+): Promise<Map<number, { name: string; at: string }[]>> {
   // Meals are not activities a certificate should list.
   const { rows } = await db.query(
-    `SELECT COALESCE(a.name_i18n ->> $2, a.name) AS name, min(l.logged_at) AS at
+    `SELECT l.user_id, COALESCE(a.name_i18n ->> $2, a.name) AS name, min(l.logged_at) AS at
        FROM activity_logs l JOIN activities a ON a.id = l.activity_id
-      WHERE l.user_id = $1 AND NOT (a.category = ANY($3::text[]))
-      GROUP BY a.id, a.name, a.name_i18n
-      ORDER BY min(l.logged_at), a.id`,
-    [userId, locale, [...MEAL_ACTIVITY_KINDS]],
+      WHERE l.user_id = ANY($1::int[]) AND NOT (a.category = ANY($3::text[]))
+      GROUP BY l.user_id, a.id, a.name, a.name_i18n
+      ORDER BY l.user_id, min(l.logged_at), a.id`,
+    [userIds, locale, [...MEAL_ACTIVITY_KINDS]],
   );
-  return rows.map((row) => ({ name: String(row.name), at: (row.at as Date).toISOString() }));
+  const result = new Map<number, { name: string; at: string }[]>();
+  for (const row of rows) {
+    const list = result.get(row.user_id) ?? [];
+    list.push({ name: String(row.name), at: (row.at as Date).toISOString() });
+    result.set(row.user_id, list);
+  }
+  return result;
 }
 
 /**
@@ -485,11 +546,29 @@ async function insertCertificate(
   return withTransaction(async (client) => {
     await client.query(`SELECT id FROM certificate_settings WHERE id=1 FOR SHARE`);
     const settings = await readSettings(client);
-    const definition = await readCertificateType(opts.typeId, opts.variant, client, true);
+    let pre = opts.preloaded;
+    let definition: CertificateType;
+    if (pre) {
+      // Lock the type row, and drop the preload if the type was edited since it was read.
+      const { rows: locked } = await client.query(
+        `SELECT revision FROM certificate_types WHERE id=$1 FOR SHARE`,
+        [pre.definition.id],
+      );
+      if (locked[0]?.revision === pre.definition.revision) definition = pre.definition;
+      else {
+        pre = undefined;
+        definition = await readCertificateType(opts.typeId, opts.variant, client, true);
+      }
+    } else {
+      definition = await readCertificateType(opts.typeId, opts.variant, client, true);
+    }
     if (!definition.enabled) throw new ConflictError("This certificate type is disabled");
     if (opts.userId != null) {
       await lockPerson(client, opts.userId);
-      await assertTypeRecipient(definition, opts.userId, client, opts.source === "self");
+      if (pre) {
+        if (!pre.matchesAudience)
+          throw new ForbiddenError("This certificate type is not available to this recipient");
+      } else await assertTypeRecipient(definition, opts.userId, client, opts.source === "self");
     } else if (!definition.allowGuests || !opts.guestName?.trim()) {
       throw new BadRequestError("This certificate type does not accept guest recipients");
     }
@@ -498,7 +577,9 @@ async function insertCertificate(
     const { rows: identities } =
       opts.userId == null
         ? { rows: [] }
-        : await client.query(`SELECT dni FROM users WHERE id=$1`, [opts.userId]);
+        : pre
+          ? { rows: [{ dni: pre.dni }] }
+          : await client.query(`SELECT dni FROM users WHERE id=$1`, [opts.userId]);
     if (
       definition.identityPolicy === "required" &&
       (opts.includeIdentification === false || !(opts.documentNumber?.trim() || identities[0]?.dni))
@@ -526,10 +607,13 @@ async function insertCertificate(
         ? await readApproval(opts.userId, client)
         : null;
     const exempt =
-      opts.userId != null && (await isExemptRecipient(definition, opts.userId, client));
+      opts.userId != null &&
+      (pre ? pre.exempt : await isExemptRecipient(definition, opts.userId, client));
     let certificateHours = opts.hours;
     if (definition.attendancePolicy && opts.userId != null) {
-      const { hours } = await userHours(opts.userId, undefined, undefined, { verifiedOnly: true });
+      const { hours } = pre
+        ? { hours: pre.hours }
+        : await userHours(opts.userId, undefined, undefined, { verifiedOnly: true });
       const eligibility = evaluate(settings, hours, approval);
       if (exempt) {
         certificateHours = approval?.certifiedHours ?? settings.awardHours ?? hours;
@@ -542,7 +626,7 @@ async function insertCertificate(
       }
     }
     if (opts.userId != null && !exempt) {
-      const gate = await typeGate(definition, opts.userId, client, approval != null);
+      const gate = await typeGate(definition, opts.userId, client, approval != null, pre?.gate);
       // Staff may skip these requirements for one person by giving a reason.
       if (gate && !(opts.source === "staff" && opts.overrideReason)) throw reasonError(gate);
     }
@@ -553,6 +637,7 @@ async function insertCertificate(
       certificateHours,
       settings.issuerName,
       opts.guestName,
+      pre && { person: pre.person, activities: pre.activities },
     );
     if (definition.legacyVariant === "activities" && snapshot.activities.length === 0)
       throw new ConflictError("There are no attended activities to list", {
@@ -740,6 +825,63 @@ const SKIPPED_IN_BULK = new Set<string>([
   ERROR_REASONS.CERTIFICATE_DEMO_JURY_REQUIRED,
 ]);
 
+/** Reads for the whole batch in set-based queries; each issuance then only re-reads what it locks. */
+async function preloadBulk(
+  userIds: number[],
+  hoursByUser: Map<number, number>,
+  variant: CertificateVariant,
+  locale: CertificateLocale,
+): Promise<Map<number, BulkRecipient>> {
+  const result = new Map<number, BulkRecipient>();
+  if (userIds.length === 0) return result;
+  const definition = await readCertificateType(undefined, variant);
+  const idList = [userIds];
+  const [users, event, activities, audience, exempt, presented] = await Promise.all([
+    pool.query(
+      `SELECT u.id, u.dni, u.name, u.surname FROM users u
+        WHERE u.id = ANY($1::int[]) AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+      idList,
+    ),
+    pool.query(
+      `SELECT name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM event_config WHERE id = 1`,
+    ),
+    attendedActivitiesFor(pool, userIds, locale),
+    roleHolders(userIds, definition.audienceRoleIds),
+    roleHolders(userIds, definition.exemptRoleIds),
+    definition.demoRequirement === "none"
+      ? new Map<number, Presentations>()
+      : presentationsFor(userIds),
+  ]);
+  const eventRow = event.rows[0] ?? {};
+  for (const user of users.rows) {
+    result.set(user.id, {
+      definition,
+      hours: hoursByUser.get(user.id) ?? 0,
+      matchesAudience: definition.audienceRoleIds == null || audience.has(user.id),
+      exempt: exempt.has(user.id),
+      dni: user.dni ?? null,
+      person: { ...eventRow, name: user.name, surname: user.surname },
+      activities: activities.get(user.id) ?? [],
+      gate: {
+        eventEndsAt: (eventRow.event_ends_at as Date | null | undefined) ?? null,
+        presented: presented.get(user.id) ?? NO_PRESENTATIONS(),
+      },
+    });
+  }
+  return result;
+}
+
+/** Which of these people hold any of the given roles. */
+async function roleHolders(userIds: number[], roleIds: number[] | null): Promise<Set<number>> {
+  if (!roleIds?.length) return new Set();
+  const { rows } = await pool.query<{ user_id: number }>(
+    `SELECT DISTINCT ur.user_id FROM user_roles ur JOIN roles r ON r.id=ur.role_id
+      WHERE ur.user_id = ANY($1::int[]) AND r.id = ANY($2::int[]) AND r.deleted_at IS NULL`,
+    [userIds, roleIds],
+  );
+  return new Set(rows.map((row) => row.user_id));
+}
+
 /** Issues the variant to everyone who meets the policy; already issued ones are skipped. */
 export async function issueInBulk(
   actorId: number,
@@ -748,6 +890,13 @@ export async function issueInBulk(
 ): Promise<{ issued: number; existing: number; skipped: number }> {
   const people = (await certificateParticipants(actorId)).filter(
     (p) => p.hasAttendanceEvidence || p.eligibility.approval,
+  );
+  const candidates = people.filter((p) => p.eligibility.eligible);
+  const preloaded = await preloadBulk(
+    candidates.map((p) => p.userId),
+    new Map(candidates.map((p) => [p.userId, p.eligibility.hours])),
+    variant,
+    locale,
   );
   let issued = 0;
   let existing = 0;
@@ -758,6 +907,7 @@ export async function issueInBulk(
       continue;
     }
     try {
+      // Each person is still issued in their own transaction, so one skip never undoes another.
       const result = await insertCertificate({
         userId: person.userId,
         variant,
@@ -765,6 +915,7 @@ export async function issueInBulk(
         source: "bulk",
         actorId,
         hours: person.eligibility.certifiedHours ?? person.eligibility.hours,
+        preloaded: preloaded.get(person.userId),
       });
       if (result.created) issued++;
       else existing++;
@@ -1178,9 +1329,10 @@ export async function availableCertificateTypes(userId: number, self: boolean) {
   // The per-type checks repeat the same user-wide reads (event access, event
   // end, presentations); share one result per distinct query within this call.
   const reads = memoizedReads(pool);
+  const roleIds = await activeRoleIds(userId, reads);
   const matches = await Promise.all(
     types.map(async (type) =>
-      (await recipientMatchesType(type, userId, reads, self)) ? type : null,
+      (await recipientMatchesType(type, userId, reads, self, roleIds)) ? type : null,
     ),
   );
   const eligibility = await eligibilityFor(userId);
@@ -1189,7 +1341,7 @@ export async function availableCertificateTypes(userId: number, self: boolean) {
       .filter((type) => type != null)
       .map(async (type) => {
         let availability: GateReason | null = null;
-        if (!(await isExemptRecipient(type, userId, reads))) {
+        if (!(await isExemptRecipient(type, userId, reads, roleIds))) {
           availability =
             (await typeGate(type, userId, reads, eligibility.approval != null)) ??
             (type.attendancePolicy && !eligibility.eligible ? eligibility.reason : null);

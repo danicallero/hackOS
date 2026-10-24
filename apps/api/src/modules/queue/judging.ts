@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { type Question, validateAnswers } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
+import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
@@ -260,22 +261,30 @@ export async function upsertAttemptReview(
     return { review: updatedRows[0], completedEntry, changed: true };
   });
 
+  // Post-commit realtime echoes run off the response path (autosave and
+  // submit must not wait on Valkey/BullMQ round trips).
   if (changed) {
-    await broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
-      entryId,
-    });
+    await afterCommit(`review ${entryId} broadcast`, () =>
+      broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
+        entryId,
+      }),
+    );
   }
   // One queue transition -> one broadcast (plan/07 invariant 5). The judging
   // panel's live query drops the completed team from the room on this event.
   if (completedEntry) {
-    await broadcastQueueEvent(
-      pool,
-      "entry",
-      completedEntry.id,
-      EVENTS.QUEUE_ENTRY_CHANGED,
-      completedEntry,
+    await afterCommit(`review ${entryId} completion broadcast`, () =>
+      Promise.all([
+        broadcastQueueEvent(
+          pool,
+          "entry",
+          completedEntry.id,
+          EVENTS.QUEUE_ENTRY_CHANGED,
+          completedEntry,
+        ),
+        notifyChallengeQueueChanged(pool, completedEntry.challenge_id),
+      ]),
     );
-    await notifyChallengeQueueChanged(pool, completedEntry.challenge_id);
   }
 
   return review;
@@ -307,9 +316,11 @@ export async function joinJudgingSession(entryId: number, judgeId: number, roomI
     [judgeId, entryId, roomId ?? null],
   );
   if (rows.length > 0) {
-    await broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
-      entryId,
-    });
+    await afterCommit(`session ${entryId} join broadcast`, () =>
+      broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
+        entryId,
+      }),
+    );
     return rows[0];
   }
   const existing = await pool.query(
@@ -327,9 +338,11 @@ export async function leaveJudgingSession(entryId: number, judgeId: number) {
     [judgeId, entryId],
   );
   if (rows[0]) {
-    await broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
-      entryId,
-    });
+    await afterCommit(`session ${entryId} leave broadcast`, () =>
+      broadcast(`${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`, EVENTS.QUEUE_REVIEW_CHANGED, {
+        entryId,
+      }),
+    );
   }
   return rows[0] ?? null;
 }

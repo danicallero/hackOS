@@ -9,6 +9,7 @@ import { applyRoleGrantRule } from "../identity/role-grants.js";
 import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
 import {
   assertFixtureEnterpriseScope,
+  assertFixtureEnterpriseScopes,
   assertFixtureSubjectScope,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
@@ -73,6 +74,14 @@ async function assertEnterpriseScope(
   enterpriseId: number,
 ): Promise<void> {
   if (actorId != null) await assertFixtureEnterpriseScope(db, actorId, enterpriseId);
+}
+
+async function assertEnterpriseScopes(
+  db: Queryable,
+  actorId: number | null,
+  enterpriseIds: readonly number[],
+): Promise<void> {
+  if (actorId != null) await assertFixtureEnterpriseScopes(db, actorId, enterpriseIds);
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -223,7 +232,11 @@ export async function setEnterprisesVisibility(
       `SELECT id FROM enterprises WHERE id = ANY($1::int[])`,
       [ids],
     );
-    for (const row of existing.rows) await assertEnterpriseScope(client, actorId, Number(row.id));
+    await assertEnterpriseScopes(
+      client,
+      actorId,
+      existing.rows.map((row) => Number(row.id)),
+    );
     const visibility = visible ? "visible" : "hidden";
     const { rows } = await client.query(
       `UPDATE enterprises
@@ -267,7 +280,11 @@ export async function reorderEnterprises(
     if (!first) throw new NotFoundError("Enterprise not found", { ids });
     if (priority === undefined && rows.some((r) => r.priority !== first.priority))
       throw new ConflictError("Only enterprises with the same priority can be reordered");
-    for (const row of rows) await assertEnterpriseScope(client, actorId, Number(row.id));
+    await assertEnterpriseScopes(
+      client,
+      actorId,
+      rows.map((row) => Number(row.id)),
+    );
     await client.query(
       `UPDATE enterprises e SET position = o.pos, priority = COALESCE($2::int, e.priority)
          FROM unnest($1::int[]) WITH ORDINALITY AS o(id, pos)

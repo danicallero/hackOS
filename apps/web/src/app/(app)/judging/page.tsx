@@ -192,14 +192,26 @@ export default function QueuePage() {
     void loadRooms();
   }, [loadRooms]);
 
-  const refreshLive = useCallback(async () => {
+  // After a queue action only the room board needs an immediate read; the
+  // pace and progress reads follow the same QUEUE_ENTRY_CHANGED /
+  // QUEUE_ROOM_CHANGED events the action just emitted, so refetching them here
+  // too only doubled the requests (3 reads now + 3 more from the event).
+  const refreshRoomView = useCallback(() => {
+    if (activeRoomId) invalidateServerState(["judging", "room-view", activeRoomId]);
+    roomView.refetch();
+  }, [activeRoomId, roomView]);
+
+  // A timing change affects the pace read model, which no queue event covers.
+  const refreshLive = useCallback(() => {
     if (activeRoomId) {
       invalidateServerState(["judging", "room-view", activeRoomId]);
       invalidateServerState(["judging", "room-pace", activeRoomId]);
     }
     if (effectiveChallengeId)
       invalidateServerState(["judging", "challenge-progress", effectiveChallengeId]);
-    await Promise.all([roomView.refetch(), pace.refetch(), progress.refetch()]);
+    roomView.refetch();
+    pace.refetch();
+    progress.refetch();
   }, [activeRoomId, effectiveChallengeId, roomView, pace, progress]);
 
   const mutate = useCallback(
@@ -209,14 +221,14 @@ export default function QueuePage() {
       try {
         await action();
         toast.success(success, { compactTitle: t("judging") });
-        await refreshLive();
+        refreshRoomView();
       } catch (err) {
         showQueueError(t, err, t("queueActionFailed"));
       } finally {
         setBusy(null);
       }
     },
-    [refreshLive, t],
+    [refreshRoomView, t],
   );
 
   // Used by the queue panel's per-entry manual status changes.
@@ -366,7 +378,7 @@ export default function QueuePage() {
         progress={progress.data}
         pace={pace.data}
         challengeId={effectiveChallengeId}
-        onTimingSaved={() => void refreshLive()}
+        onTimingSaved={refreshLive}
         canJudge={canJudge}
         canOperate={canOperate}
         canExport={canExport}

@@ -6,6 +6,7 @@ import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.j
 import {
   assertFixtureEnterpriseScope,
   assertFixtureQueueScope,
+  assertFixtureQueueScopes,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
 import { notifyMany } from "../notifications/service.js";
@@ -446,9 +447,11 @@ export async function setChallengesVisibility(
 ) {
   if (challengeIds.length === 0) return { updated: [] as number[] };
   return withTransaction(async (client) => {
-    for (const challengeId of challengeIds) {
-      await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
-    }
+    await assertFixtureQueueScopes(
+      client,
+      actorId,
+      challengeIds.map((id) => ({ resource: "challenge" as const, id })),
+    );
     const visibility = visible ? "visible" : "hidden";
     const { rows } = await client.query(
       `UPDATE challenges

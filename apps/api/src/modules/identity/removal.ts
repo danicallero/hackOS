@@ -25,7 +25,7 @@ import {
 import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import type { GoogleObjectType } from "../logistics/wallet-passes.js";
-import { queueFixtureMarker } from "../queue/broadcast.js";
+import { queueEntryFixtureMarkers } from "../queue/broadcast.js";
 import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
 import { consumeRemovalPin } from "./removal-pin.js";
@@ -1262,15 +1262,19 @@ async function deleteOrphanedProjects(
   );
   const queueIds = queueRows.map((row) => row.id);
   const deletedQueueEntries: DeletedQueueEntryNotification[] = [];
+  let entryMarkers: Map<number, boolean | null>;
+  try {
+    entryMarkers = await queueEntryFixtureMarkers(
+      client,
+      queueRows.map((row) => Number(row.id)),
+    );
+  } catch {
+    // Deletion remains durable, but a malformed graph must never leak an
+    // identity-bearing event onto the real operator topic.
+    entryMarkers = new Map();
+  }
   for (const row of queueRows) {
-    let fixtureMarker: boolean | null;
-    try {
-      fixtureMarker = await queueFixtureMarker(client, "entry", Number(row.id));
-    } catch {
-      // Deletion remains durable, but a malformed graph must never leak an
-      // identity-bearing event onto the real operator topic.
-      fixtureMarker = null;
-    }
+    const fixtureMarker = entryMarkers.get(Number(row.id)) ?? null;
     deletedQueueEntries.push({
       id: Number(row.id),
       challengeId: Number(row.challenge_id),

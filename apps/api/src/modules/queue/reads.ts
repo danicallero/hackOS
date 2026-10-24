@@ -1095,18 +1095,16 @@ export async function roomPace(
   fixtureMarker = false,
   startingEntryId?: number,
 ) {
-  const { rowCount } = await db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [
-    roomId,
-  ]);
-  if (!rowCount) throw new NotFoundError("Room not found", { roomId });
-  const settings = (await db.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
-
-  // H29/H46: the presentation-length ceiling comes from the room's queue_group.
-  // Every group is 1:1 today, so this is that one challenge's own ceiling; for
-  // a merged group the strictest member ceiling is the one that must hold for
-  // every team the group calls.
-  const primaryChallenge = (
-    await db.query(
+  // Independent reads run concurrently (a pooled `db` serves them on separate
+  // connections; a transaction client still queues them in order).
+  const [roomState, settingsRes, primaryRes] = await Promise.all([
+    db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [roomId]),
+    db.query(`SELECT * FROM queue_settings WHERE id = 1`),
+    // H29/H46: the presentation-length ceiling comes from the room's queue_group.
+    // Every group is 1:1 today, so this is that one challenge's own ceiling; for
+    // a merged group the strictest member ceiling is the one that must hold for
+    // every team the group calls.
+    db.query(
       `SELECT qgc.challenge_id::int AS id,
               (SELECT min(sc.max_presentation_seconds) FROM queue_group_challenges sg JOIN challenges sc ON sc.id=sg.challenge_id WHERE sg.queue_group_id=rqg.queue_group_id)::int AS max_presentation_seconds
          FROM room_queue_groups rqg
@@ -1116,8 +1114,13 @@ export async function roomPace(
          ORDER BY EXISTS(SELECT 1 FROM queue_entries active JOIN queue_group_challenges ag ON ag.challenge_id=active.challenge_id WHERE ag.queue_group_id=rqg.queue_group_id AND active.assigned_room_id=$1 AND active.status IN ('in_room','presenting')) DESC,qgc.challenge_id ASC
          LIMIT 1`,
       [roomId, requestedChallengeId ?? null, fixtureMarker],
-    )
-  ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
+    ),
+  ]);
+  if (!roomState.rowCount) throw new NotFoundError("Room not found", { roomId });
+  const settings = settingsRes.rows[0];
+  const primaryChallenge = primaryRes.rows[0] as
+    | { id: number; max_presentation_seconds: number | null }
+    | undefined;
 
   if (requestedChallengeId && !primaryChallenge)
     throw new NotFoundError("This room does not judge the requested track");
@@ -1130,31 +1133,48 @@ export async function roomPace(
       ).rows.map((r) => Number(r.challenge_id))
     : [];
 
-  // Distinct teams, not rows: a repo merged across two of the group's
-  // challenges is one team still to be judged (the "call once" view).
-  const pendingCount = challengeIds.length
-    ? (
-        await db.query(
+  // pendingCount: distinct teams, not rows: a repo merged across two of the
+  // group's challenges is one team still to be judged (the "call once" view).
+  // timing: #997/H38 queue_group_pace() is the one pace source. Every active
+  // room working the same queue_group splits the pending teams between them —
+  // more rooms means more time/team fits in the same remaining window. A
+  // room that serves no queue reads the function's defaults (NULL group).
+  const hasChallenges = challengeIds.length > 0;
+  const [pendingRes, timingRes, challengeSettingsRes, activeRes] = await Promise.all([
+    hasChallenges
+      ? db.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
             WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
               AND repo_id IN (SELECT pe.repo_id FROM project_eligibility pe JOIN repos project ON project.id=pe.repo_id WHERE project.is_test_account = $2 AND pe.eligible)`,
           [challengeIds, fixtureMarker],
         )
-      ).rows[0].n
-    : 0;
-
-  // #997/H38: queue_group_pace() is the one pace source. Every active room
-  // working the same queue_group splits the pending teams between them —
-  // more rooms means more time/team fits in the same remaining window. A
-  // room that serves no queue reads the function's defaults (NULL group).
-  const timing = (
-    await db.query(
+      : null,
+    db.query(
       `SELECT p.* FROM (SELECT $1::int AS challenge_id) anchor
          LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = anchor.challenge_id
          CROSS JOIN LATERAL queue_group_pace(qgc.queue_group_id) p`,
       [primaryChallenge?.id ?? null],
-    )
-  ).rows[0];
+    ),
+    // The track's configured allowance (H32), same max-over-group rule as
+    // queue_group_pace, and the longest a presentation may run, as `start`
+    // computes it for the entry.
+    hasChallenges
+      ? db.query(
+          `SELECT COALESCE(max(preparation_seconds), 120) AS preparation_seconds,
+                  LEAST(min(target_seconds_per_team), min(max_presentation_seconds))::int AS presentation_seconds
+             FROM challenges WHERE id = ANY($1)`,
+          [challengeIds],
+        )
+      : null,
+    hasChallenges
+      ? db.query(
+          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
+          [challengeIds],
+        )
+      : null,
+  ]);
+  const pendingCount = pendingRes ? pendingRes.rows[0].n : 0;
+  const timing = timingRes.rows[0];
   const roomCount = Math.max(1, Number(timing.active_rooms));
   const targetMinutes = Number(timing.target_minutes);
   const estimatedCycleMinutes = Number(timing.estimated_cycle_minutes);
@@ -1163,34 +1183,14 @@ export async function roomPace(
     (5 * targetMinutes + samples * Number(timing.observed_presentation_minutes ?? targetMinutes)) /
     (5 + samples);
   const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
-  // The track's configured allowance (H32), same max-over-group rule as queue_group_pace.
-  const configuredPreparationSeconds = challengeIds.length
-    ? Number(
-        (
-          await db.query(
-            `SELECT COALESCE(max(preparation_seconds), 120) AS seconds FROM challenges WHERE id = ANY($1)`,
-            [challengeIds],
-          )
-        ).rows[0].seconds,
-      )
+  // The track's configured allowance (H32).
+  const configuredPreparationSeconds = challengeSettingsRes
+    ? Number(challengeSettingsRes.rows[0].preparation_seconds)
     : 120;
-  // The longest a presentation may run, as `start` computes it for the entry.
-  const configuredPresentationSeconds = challengeIds.length
-    ? ((
-        await db.query(
-          `SELECT LEAST(min(target_seconds_per_team), min(max_presentation_seconds))::int AS seconds FROM challenges WHERE id = ANY($1)`,
-          [challengeIds],
-        )
-      ).rows[0]?.seconds ?? null)
+  const configuredPresentationSeconds = challengeSettingsRes
+    ? (challengeSettingsRes.rows[0]?.presentation_seconds ?? null)
     : null;
-  const activeEntries = challengeIds.length
-    ? (
-        await db.query(
-          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
-          [challengeIds],
-        )
-      ).rows
-    : [];
+  const activeEntries = activeRes ? activeRes.rows : [];
   const now = Date.now();
   const activeMinutes = activeEntries.map((entry) => {
     // #926: the entry being started has finished preparing; only its own

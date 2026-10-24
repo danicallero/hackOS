@@ -246,7 +246,8 @@ export function QueueOperationsScreen() {
         });
         setNotifiedEntryId(entryId);
         void haptic("success");
-        await load();
+        // Do not hold the button spinner on a full board reload.
+        void load();
       } catch (cause) {
         setActionError(actionErrorMessage(cause, t));
       } finally {

@@ -327,29 +327,35 @@ export async function broadcast<T>(
   data: T,
 ): Promise<SseEnvelope<T> | null> {
   assertPayloadFreePublicInvalidation(topic, type, data);
-  await Promise.all(
+  // Cache invalidation must land before the event is published (a client that
+  // refetches on the event must not read the stale cache), but it is
+  // independent of the sequence INCR, so both run in one round trip.
+  const invalidation = Promise.all(
     (CACHE_NAMESPACES_BY_TOPIC[topic] ?? []).map((namespace) => invalidateSharedCache(namespace)),
   );
   try {
     const sequenceKey = `sse:seq:${topic}`;
-    const seq = await valkey.incr(sequenceKey);
+    const [seq] = await Promise.all([valkey.incr(sequenceKey), invalidation]);
     // Sequence IDs only need to bridge reconnects/gap detection. Retaining
     // them forever would make an ephemeral broker's keyspace grow with every
     // topic ever created; refreshing this TTL on activity keeps the active
-    // event window safe while allowing old topics to disappear.
-    await valkey.expire(sequenceKey, SEQUENCE_RETENTION_SECONDS);
+    // event window safe while allowing old topics to disappear. The TTL write
+    // is pipelined with the publish (same connection, in order).
     const envelope: SseEnvelope<T> = {
       type,
       id: String(seq),
       at: new Date().toISOString(),
       data,
     };
-    await valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope));
-    // Public walls see only their relevant, payload-free invalidation. This is
-    // intentionally separate from authenticated domain refresh notifications.
-    for (const publicInvalidation of publicInvalidationsFor(topic)) {
-      await broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data);
-    }
+    await Promise.all([
+      valkey.expire(sequenceKey, SEQUENCE_RETENTION_SECONDS),
+      valkey.publish(`${CHANNEL_PREFIX}${topic}`, formatSse(envelope)),
+      // Public walls see only their relevant, payload-free invalidation. This is
+      // intentionally separate from authenticated domain refresh notifications.
+      ...publicInvalidationsFor(topic).map((publicInvalidation) =>
+        broadcast(publicInvalidation.topic, publicInvalidation.type, publicInvalidation.data),
+      ),
+    ]);
     return envelope;
   } catch (err) {
     console.error(`[sse] broadcast(${topic}, ${type}) failed`, err);

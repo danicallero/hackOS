@@ -2,6 +2,7 @@ import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
+import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
@@ -21,7 +22,7 @@ import { writeQueueHistory } from "./history.js";
 import {
   notifyChallengeQueueChanged,
   notifyRoomQueueChanged,
-  notifyTeamCalled,
+  prepareTeamCalled,
   repoMemberIds,
 } from "./notify.js";
 import {
@@ -91,11 +92,19 @@ async function assertEntryFixtureScope(
   return assertQueueEntryScope(client, actorId, entryId);
 }
 
+/**
+ * Post-commit realtime signal for a queue action. Runs off the response path
+ * (`afterCommit`): the write is already durable, and the SSE publish plus the
+ * debounced participant-invalidation enqueue are several Valkey round trips
+ * the caller does not need to wait for.
+ */
 async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
-  await Promise.all([
-    broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry),
-    notifyChallengeQueueChanged(pool, entry.challenge_id),
-  ]);
+  await afterCommit(`queue entry ${entry.id} broadcast`, () =>
+    Promise.all([
+      broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_ENTRY_CHANGED, entry),
+      notifyChallengeQueueChanged(pool, entry.challenge_id),
+    ]),
+  );
   return entry;
 }
 
@@ -106,7 +115,9 @@ async function broadcastEntry(entry: QueueEntryRow): Promise<QueueEntryRow> {
  * queue-topic broadcast per action, so this avoids doubling it up.
  */
 async function signalChallengeQueueChanged(entry: QueueEntryRow): Promise<QueueEntryRow> {
-  await notifyChallengeQueueChanged(pool, entry.challenge_id);
+  await afterCommit(`queue entry ${entry.id} participant signal`, () =>
+    notifyChallengeQueueChanged(pool, entry.challenge_id),
+  );
   return entry;
 }
 
@@ -159,7 +170,8 @@ export async function callNextForRoom(
   roomId: number,
   opts: { force?: boolean; automatic?: boolean } = {},
 ): Promise<QueueEntryRow | null> {
-  return withTransaction(async (client) => {
+  let publishCalled: (() => Promise<void>) | null = null;
+  const entry = await withTransaction(async (client): Promise<QueueEntryRow | null> => {
     const stateRes = await client.query(
       `SELECT * FROM room_queue_state WHERE room_id = $1 FOR UPDATE`,
       [roomId],
@@ -314,7 +326,7 @@ export async function callNextForRoom(
         action: "call_next",
         metadata: { roomId, forced: Boolean(opts.force) },
       });
-      await notifyTeamCalled(client, {
+      publishCalled = await prepareTeamCalled(client, {
         entryId: entry.id,
         challengeId: entry.challenge_id,
         repoId: entry.repo_id,
@@ -325,10 +337,14 @@ export async function callNextForRoom(
       return entry;
     }
     return null; // nobody eligible right now — candidates keep their position
-  }).then(async (entry) => {
-    if (entry) await signalChallengeQueueChanged(entry);
-    return entry;
   });
+  if (entry) {
+    // Realtime echo only after commit and off the response path.
+    const publish = publishCalled as (() => Promise<void>) | null;
+    if (publish) await afterCommit(`call_next ${entry.id} publish`, publish);
+    await signalChallengeQueueChanged(entry);
+  }
+  return entry;
 }
 
 // ── H31: notify_enter (no status transition) ────────────────────────────────
@@ -348,18 +364,16 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
 
     const memberIds = await repoMemberIds(client, entry.repo_id, fixtureMarker);
     const { rows: ctxRows } = await client.query(
-      `SELECT c.title AS challenge_name, r.name AS room_name, r.location AS room_location
+      `SELECT c.title AS challenge_name, r.name AS room_name, r.location AS room_location,
+              (SELECT name FROM repos WHERE id = $3) AS team_name
          FROM challenges c, rooms r
         WHERE c.id = $1 AND r.id = $2`,
-      [entry.challenge_id, entry.assigned_room_id],
+      [entry.challenge_id, entry.assigned_room_id, entry.repo_id],
     );
     const challengeName: string = ctxRows[0]?.challenge_name ?? "";
     const roomName: string = ctxRows[0]?.room_name ?? "";
     const roomLocation: string | null = ctxRows[0]?.room_location ?? null;
-    const { rows: repoRows } = await client.query(`SELECT name FROM repos WHERE id = $1`, [
-      entry.repo_id,
-    ]);
-    const teamName: string = repoRows[0]?.name ?? `#${entry.repo_id}`;
+    const teamName: string = ctxRows[0]?.team_name ?? `#${entry.repo_id}`;
 
     const { rows: userRows } = await client.query(
       `SELECT id, name FROM users
@@ -427,21 +441,24 @@ export async function notifyEnter(entryId: number, actorId: number): Promise<Que
     };
   });
 
-  await Promise.all([
-    broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload),
-    ...memberIds.map((userId) =>
-      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
-        entryId: entry.id,
-        type: "notify_enter",
-      }),
-    ),
-  ]);
+  await afterCommit(`notify_enter ${entry.id} broadcast`, () =>
+    Promise.all([
+      broadcastQueueEvent(pool, "entry", entry.id, EVENTS.QUEUE_NOTIFY_ENTER, eventPayload),
+      ...memberIds.map((userId) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_NOTIFICATION, {
+          entryId: entry.id,
+          type: "notify_enter",
+        }),
+      ),
+    ]),
+  );
   return entry;
 }
 
 /** H29: remind a team already in the waiting room to come to this room and wait. */
 export async function remindWaitingRoom(entryId: number, actorId: number): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  let publish: (() => Promise<void>) | null = null;
+  const entry = await withTransaction(async (client) => {
     const entry = await lockEntry(client, entryId);
     await assertEntryFixtureScope(client, actorId, entryId);
     assertFrom(entry, ["called"], "remind_waiting_room");
@@ -464,7 +481,7 @@ export async function remindWaitingRoom(entryId: number, actorId: number): Promi
       newStatus: entry.status,
       action: "remind_waiting_room",
     });
-    await notifyTeamCalled(client, {
+    publish = await prepareTeamCalled(client, {
       entryId,
       challengeId: entry.challenge_id,
       repoId: entry.repo_id,
@@ -474,6 +491,9 @@ export async function remindWaitingRoom(entryId: number, actorId: number): Promi
     });
     return entry;
   });
+  const after = publish as (() => Promise<void>) | null;
+  if (after) await afterCommit(`remind_waiting_room ${entryId} publish`, after);
+  return entry;
 }
 
 // ── H32: bring_in / start / complete ────────────────────────────────────────
@@ -1051,7 +1071,8 @@ export async function manualCall(
   roomId: number,
   reason: string | undefined,
 ): Promise<QueueEntryRow> {
-  return withTransaction(async (client) => {
+  let publishCalled: (() => Promise<void>) | null = null;
+  const result = await withTransaction(async (client) => {
     // Match structural queue mutations: lock the queue group before its
     // entries so a concurrent merge cannot move the challenge between the
     // entry lock and the target-room validation.
@@ -1183,7 +1204,7 @@ export async function manualCall(
     });
 
     if (targetStatus === "called") {
-      await notifyTeamCalled(client, {
+      publishCalled = await prepareTeamCalled(client, {
         entryId: updated.id,
         challengeId: updated.challenge_id,
         repoId: updated.repo_id,
@@ -1193,13 +1214,14 @@ export async function manualCall(
       });
     }
     return updated;
-  }).then(async (updated) => {
-    // targetStatus === "called" already broadcast QUEUE_TEAM_CALLED to the
-    // queue topic above (notifyTeamCalled) — plan/07 invariant 5, one
-    // broadcast per action.
-    if (updated.status === "called") return signalChallengeQueueChanged(updated);
-    return broadcastEntry(updated);
   });
+  // targetStatus === "called" publishes QUEUE_TEAM_CALLED to the queue topic
+  // (prepareTeamCalled) — plan/07 invariant 5, one broadcast per action. The
+  // publish runs after commit, off the response path.
+  const publish = publishCalled as (() => Promise<void>) | null;
+  if (publish) await afterCommit(`manual_call ${entryId} publish`, publish);
+  if (result.status === "called") return signalChallengeQueueChanged(result);
+  return broadcastEntry(result);
 }
 
 // ── enqueue (admin) ──────────────────────────────────────────────────────────
@@ -1668,11 +1690,15 @@ export async function pauseRoom(roomId: number, actorId: number): Promise<void> 
     // endpoint, H34).
   });
 
-  await broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
-    roomId,
-    isPaused: true,
-  });
-  await notifyRoomQueueChanged(pool, roomId);
+  await afterCommit(`room ${roomId} pause broadcast`, () =>
+    Promise.all([
+      broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
+        roomId,
+        isPaused: true,
+      }),
+      notifyRoomQueueChanged(pool, roomId),
+    ]),
+  );
 }
 
 export async function resumeRoom(roomId: number, actorId: number): Promise<void> {
@@ -1688,9 +1714,13 @@ export async function resumeRoom(roomId: number, actorId: number): Promise<void>
       [roomId],
     );
   });
-  await broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
-    roomId,
-    isPaused: false,
-  });
-  await notifyRoomQueueChanged(pool, roomId);
+  await afterCommit(`room ${roomId} resume broadcast`, () =>
+    Promise.all([
+      broadcastQueueEvent(pool, "room", roomId, EVENTS.QUEUE_ROOM_CHANGED, {
+        roomId,
+        isPaused: false,
+      }),
+      notifyRoomQueueChanged(pool, roomId),
+    ]),
+  );
 }

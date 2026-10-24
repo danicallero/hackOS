@@ -8,8 +8,8 @@ import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
-import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
-import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
+import { assertBadgeScanTimestamp, resolveByBadges } from "./badge.js";
+import { fixtureSubjectScopeErrors } from "./review-fixture-scope.js";
 
 const QUEUE_NAME = "logistics.meal-scans";
 
@@ -47,30 +47,41 @@ export async function enqueueMealScanBatch(
     // H54: validate and share-lock every badge before persisting the offline
     // inbox row. Removal takes the same user row lock, so a stale device
     // cannot create a new identifying batch item after closure begins.
-    const owners = new Map<string, { userId: number; badgeAssignedAt: Date | null }>();
-    for (const badgeId of [...new Set(input.scans.map((scan) => scan.badgeId))].sort()) {
-      const userId = await resolveByBadge(client, badgeId);
-      const owner = await client.query<{
+    const badgeIds = [...new Set(input.scans.map((scan) => scan.badgeId))].sort();
+    const resolved = await resolveByBadges(client, badgeIds);
+    const userIds = [...resolved.values()].filter((v): v is number => typeof v === "number");
+    const locked = new Map<number, { badge_id: string | null; badge_assigned_at: Date | null }>();
+    if (userIds.length > 0) {
+      const lockedRows = await client.query<{
         id: number;
         badge_id: string | null;
         badge_assigned_at: Date | null;
       }>(
         `SELECT id, badge_id, badge_assigned_at FROM users
-          WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+          WHERE id = ANY($1::int[]) AND account_state = 'active' AND anonymized_at IS NULL
+          ORDER BY id
           FOR SHARE`,
-        [userId],
+        [userIds],
       );
-      const lockedOwner = owner.rows[0];
+      for (const row of lockedRows.rows) locked.set(row.id, row);
+    }
+    const scopeErrors = await fixtureSubjectScopeErrors(client, actorId, userIds);
+
+    // Per badge, in sorted order: resolution, then lock/revocation, then
+    // fixture scope; the first failure wins, as in the former per-badge loop.
+    const owners = new Map<string, { userId: number; badgeAssignedAt: Date | null }>();
+    for (const badgeId of badgeIds) {
+      const userId = resolved.get(badgeId) as number | AppError;
+      if (typeof userId !== "number") throw userId;
+      const lockedOwner = locked.get(userId);
       if (!lockedOwner || lockedOwner.badge_id !== badgeId) {
         throw new AppError(409, "badge_revoked", "This badge has been revoked", {
           code: ERROR_REASONS.BADGE_REVOKED,
         });
       }
-      await assertFixtureSubjectScope(client, actorId, userId);
-      owners.set(badgeId, {
-        userId,
-        badgeAssignedAt: lockedOwner.badge_assigned_at,
-      });
+      const scopeError = scopeErrors.get(userId);
+      if (scopeError) throw scopeError;
+      owners.set(badgeId, { userId, badgeAssignedAt: lockedOwner.badge_assigned_at });
     }
     for (const scan of input.scans) {
       const owner = owners.get(scan.badgeId);

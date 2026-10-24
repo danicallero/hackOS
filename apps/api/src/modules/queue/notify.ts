@@ -171,30 +171,60 @@ async function lockNotificationEntry(
  * Also broadcasts on the member's personal SSE topic so an open participant
  * view updates live.
  */
-export async function notifyTeamCalled(
+export async function notifyTeamCalled(client: Queryable, params: TeamCalledParams): Promise<void> {
+  const publish = await prepareTeamCalled(client, params);
+  await publish();
+}
+
+type TeamCalledParams = {
+  entryId: number;
+  challengeId: number;
+  repoId: number;
+  roomId: number;
+  roomName: string;
+  roomLocation?: string | null;
+};
+
+/**
+ * Transactional half of {@link notifyTeamCalled}: validates the entry and
+ * enqueues the inbox/push rows on the caller's client. The realtime half
+ * (member SSE, Live Activity kick, operator echo) is returned as a thunk the
+ * caller runs AFTER its transaction commits, so a slow Valkey/BullMQ never
+ * holds the entry/room locks and a client never refetches an uncommitted
+ * state (H29, H38).
+ */
+export async function prepareTeamCalled(
   client: Queryable,
-  params: {
-    entryId: number;
-    challengeId: number;
-    repoId: number;
-    roomId: number;
-    roomName: string;
-    roomLocation?: string | null;
-  },
-): Promise<void> {
+  params: TeamCalledParams,
+): Promise<() => Promise<void>> {
+  const nothing = async () => {};
   if (!(await lockNotificationEntry(client, params, "called", false, params.roomId))) {
-    return;
+    return nothing;
   }
   const fixtureMarker = await queueFixtureMarker(client, "entry", params.entryId);
-  if (fixtureMarker === null) return;
+  if (fixtureMarker === null) return nothing;
   const memberIds = await repoMemberIds(client, params.repoId, fixtureMarker);
-  if (memberIds.length === 0) return;
+  if (memberIds.length === 0) return nothing;
 
-  const { challengeName, teamName, nameById } = await loadNotifyContext(client, {
-    challengeId: params.challengeId,
-    repoId: params.repoId,
-    memberIds,
-  });
+  const [{ challengeName, teamName, nameById }, { rows: staffRows }] = await Promise.all([
+    loadNotifyContext(client, {
+      challengeId: params.challengeId,
+      repoId: params.repoId,
+      memberIds,
+    }),
+    // H29: same opt-in staff push used by notify-enter (queue.staff), so
+    // operators with a backgrounded app still get a device notification the
+    // moment a team is called, not just the live SSE echo.
+    client.query(
+      `SELECT DISTINCT np.user_id
+         FROM notification_preferences np
+         JOIN users u ON u.id = np.user_id
+        WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL
+          AND u.is_test_account = $2`,
+      [QUEUE_STAFF_CATEGORY, fixtureMarker],
+    ),
+  ]);
 
   const payload = {
     entryId: params.entryId,
@@ -203,9 +233,9 @@ export async function notifyTeamCalled(
     roomName: params.roomName,
     roomLocation: params.roomLocation ?? null,
   };
-  await notifyMany(
-    client,
-    memberIds.map((userId) => ({
+  // One set-based insert for team members and staff: same rows, one round trip.
+  await notifyMany(client, [
+    ...memberIds.map((userId) => ({
       userId,
       category: "queue",
       payload: {
@@ -220,37 +250,7 @@ export async function notifyTeamCalled(
       },
       fixtureMarker,
     })),
-  );
-  // Broadcast after the rows are durably queued but still inside the caller's
-  // transaction boundary is fine — SSE has no rollback semantics either way,
-  // and callers only reach here once the domain write already validated.
-  for (const userId of memberIds) {
-    await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_CALLED, payload);
-  }
-  // #966: push the "go to room" Live Activity update without waiting for
-  // the worker's next repetition.
-  await requestLiveActivitySync();
-  // Operator-facing echo on the shared queue topic, carrying the team name so
-  // the queue-ops screen can hint "team X should arrive at room Y" (opt-in).
-  await broadcastQueueEventWithMarker(fixtureMarker, EVENTS.QUEUE_TEAM_CALLED, {
-    ...payload,
-    teamName,
-  });
-  // H29: same opt-in staff push used by notify-enter (queue.staff), so
-  // operators with a backgrounded app still get a device notification the
-  // moment a team is called, not just the live SSE echo above.
-  const { rows: staffRows } = await client.query(
-    `SELECT DISTINCT np.user_id
-       FROM notification_preferences np
-       JOIN users u ON u.id = np.user_id
-      WHERE np.category = $1 AND np.channel = 'push' AND np.enabled = true
-        AND u.account_state = 'active' AND u.anonymized_at IS NULL
-        AND u.is_test_account = $2`,
-    [QUEUE_STAFF_CATEGORY, fixtureMarker],
-  );
-  await notifyMany(
-    client,
-    (staffRows as { user_id: number }[]).map((row) => ({
+    ...(staffRows as { user_id: number }[]).map((row) => ({
       userId: row.user_id,
       category: QUEUE_STAFF_CATEGORY,
       channels: ["push" as const],
@@ -262,7 +262,24 @@ export async function notifyTeamCalled(
       },
       fixtureMarker,
     })),
-  );
+  ]);
+
+  return async () => {
+    await Promise.all([
+      ...memberIds.map((userId) =>
+        broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_CALLED, payload),
+      ),
+      // #966: push the "go to room" Live Activity update without waiting for
+      // the worker's next repetition.
+      requestLiveActivitySync(),
+      // Operator-facing echo on the shared queue topic, carrying the team name
+      // so the queue-ops screen can hint "team X should arrive at room Y".
+      broadcastQueueEventWithMarker(fixtureMarker, EVENTS.QUEUE_TEAM_CALLED, {
+        ...payload,
+        teamName,
+      }),
+    ]);
+  };
 }
 
 /** H38 pre-aviso: estimated wait <= queue_settings.pre_call_notification_eta_minutes. */
@@ -308,9 +325,11 @@ export async function notifyTeamPreCall(
       fixtureMarker,
     })),
   );
-  for (const userId of memberIds) {
-    await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload);
-  }
+  await Promise.all(
+    memberIds.map((userId) =>
+      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_PRECALL, payload),
+    ),
+  );
 }
 
 /**
@@ -678,9 +697,11 @@ export async function notifyTeamMessage(
       fixtureMarker,
     })),
   );
-  for (const userId of memberIds) {
-    await broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_MESSAGE, payload);
-  }
+  await Promise.all(
+    memberIds.map((userId) =>
+      broadcast(`${SSE_TOPICS.USER_PREFIX}${userId}`, EVENTS.USER_QUEUE_MESSAGE, payload),
+    ),
+  );
   return memberIds.length;
 }
 

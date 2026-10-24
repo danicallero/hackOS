@@ -2,10 +2,18 @@ import type { Queryable } from "../../db/pool.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import {
   assertFixtureQueueScope,
+  type FixtureRoomScope,
   inspectFixtureEnterpriseScope,
-  inspectFixtureRoomScope,
+  inspectFixtureRoomScopes,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
+
+const MISSING_ROOM_SCOPE: FixtureRoomScope = {
+  exists: false,
+  has_graph: false,
+  has_synthetic: false,
+  has_real: false,
+};
 
 type QueueFixtureMarkers = {
   has_synthetic: boolean;
@@ -75,8 +83,14 @@ export async function queueGroupFixtureMarker(
       `SELECT room_id FROM room_queue_groups WHERE queue_group_id = $1`,
       [queueGroupId],
     );
+    // One set-based inspection for every serving room (same verdict per room
+    // as inspectFixtureRoomScope, without a query per room).
+    const roomScopes = await inspectFixtureRoomScopes(
+      client,
+      roomRows.map((roomRow) => Number(roomRow.room_id)),
+    );
     for (const roomRow of roomRows) {
-      const room = await inspectFixtureRoomScope(client, Number(roomRow.room_id));
+      const room = roomScopes.get(Number(roomRow.room_id)) ?? MISSING_ROOM_SCOPE;
       if (
         !room.exists ||
         (room.has_synthetic && room.has_real) ||

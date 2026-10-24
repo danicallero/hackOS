@@ -142,7 +142,18 @@ the dead-letter queue.
   `claimPreCall` reacquires the queue-group lock, locks its entries, validates
   the fixture marker, and atomically claims one logical repo cycle before
   notifying. These are the transaction boundaries that preserve the
-  "exactly one winner per transition" invariant (`plan/07`).
+  "exactly one winner per transition" invariant (`plan/07`). Discovery ranks
+  each group's waiting teams in one lock-free query and only claims the teams
+  already inside the ETA threshold and not yet warned, so a long queue does
+  not run a lock-holding transaction per waiting team every tick.
+- Queue actions answer once the transactional write commits. Realtime echoes
+  (the entry/room SSE event, member `user.queue_called` pushes, the Live
+  Activity kick and the debounced participant invalidation) run after commit
+  through `afterCommit` (`lib/after-commit.ts`): fire-and-forget with error
+  logging in production, awaited under test. Notification rows
+  (`notifyMany`) and audit/history stay inside the transaction;
+  `prepareTeamCalled` returns the post-commit publish as a thunk so Valkey and
+  BullMQ round trips never hold the entry or room locks.
 
 ## Event mapping — synchronous vs. background
 

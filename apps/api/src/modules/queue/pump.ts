@@ -301,30 +301,90 @@ async function claimPreCall(queueGroupId: number, repoId: number): Promise<PreCa
   });
 }
 
-/** H38 pre-aviso: notify once per call cycle when ETA <= queue_settings.pre_call_notification_eta_minutes. */
+/**
+ * H38 pre-aviso: notify once per call cycle when ETA <= queue_settings.pre_call_notification_eta_minutes.
+ *
+ * Discovery is a lock-free, set-based pre-filter per queue group: it ranks the
+ * group's waiting teams exactly like `claimPreCall` and keeps only the teams
+ * whose rank * minutes-per-slot is already inside the threshold and that have
+ * not been warned this cycle. Only those pay for the locking claim transaction
+ * (group + room-state + every entry row FOR UPDATE), so a long queue no longer
+ * runs one lock-holding transaction per waiting team every tick — which
+ * stalled judge actions that needed the same rows. The claim re-verifies
+ * everything under lock, so a stale snapshot is harmless.
+ */
 async function emitPreCallWarnings(): Promise<void> {
   const settings = (
     await pool.query(
-      `SELECT (schedule_start_at IS NULL OR schedule_start_at <= now())
+      `SELECT pre_call_notification_eta_minutes,
+              (schedule_start_at IS NULL OR schedule_start_at <= now())
               AND (schedule_end_at IS NULL OR schedule_end_at > now()) AS window_open
          FROM queue_settings WHERE id = 1`,
     )
   ).rows[0];
   if (!settings?.window_open) return;
+  const threshold = Number(settings.pre_call_notification_eta_minutes ?? 10);
 
-  // The group/repo list is only work discovery. Every candidate is re-read
-  // and claimed under the group lock, so this snapshot may safely go stale.
-  const { rows: groupRepos } = await pool.query<{ queue_group_id: number; repo_id: number }>(
-    `SELECT DISTINCT qgc.queue_group_id, qe.repo_id
+  // Groups with at least one team that has not been warned this cycle and a
+  // serving room that is not paused.
+  const { rows: groups } = await pool.query<{ queue_group_id: number }>(
+    `SELECT DISTINCT qgc.queue_group_id
        FROM queue_group_challenges qgc
        JOIN room_queue_groups rqg ON rqg.queue_group_id = qgc.queue_group_id
        JOIN room_queue_state rqs ON rqs.room_id = rqg.room_id AND rqs.is_paused = false
-       JOIN queue_entries qe ON qe.challenge_id = qgc.challenge_id
-                            AND qe.status = 'waiting'`,
+      WHERE EXISTS (
+        SELECT 1 FROM queue_entries qe
+         WHERE qe.challenge_id = qgc.challenge_id
+           AND qe.status = 'waiting'
+           AND qe.precalled_at IS NULL
+      )`,
   );
 
-  for (const { queue_group_id: queueGroupId, repo_id: repoId } of groupRepos) {
-    await claimPreCall(Number(queueGroupId), Number(repoId));
+  for (const { queue_group_id } of groups) {
+    const queueGroupId = Number(queue_group_id);
+    const marker = await queueFixtureMarker(pool, "queueGroup", queueGroupId);
+    if (marker === null) continue;
+    const { rows: candidates } = await pool.query<{ repo_id: number }>(
+      `WITH group_waiting AS (
+         SELECT qe.id, qe.repo_id, qe.position, qe.precalled_at,
+                ROW_NUMBER() OVER (
+                  PARTITION BY qe.repo_id
+                  ORDER BY qe.position ASC NULLS LAST, qe.id ASC
+                ) AS repo_rank
+           FROM queue_entries qe
+           JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+           JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
+           JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
+          WHERE qgc.queue_group_id = $1
+            AND qe.status = 'waiting'
+       ), ranked AS (
+         SELECT gw.repo_id,
+                ROW_NUMBER() OVER (ORDER BY gw.position ASC NULLS LAST, gw.id ASC) AS rank
+           FROM group_waiting gw
+          WHERE gw.repo_rank = 1
+            AND NOT EXISTS (
+              SELECT 1
+                FROM queue_entries active
+                JOIN queue_group_challenges active_qgc
+                  ON active_qgc.challenge_id = active.challenge_id
+               WHERE active_qgc.queue_group_id = $1
+                 AND active.repo_id = gw.repo_id
+                 AND active.status IN ('called', 'in_room', 'presenting', 'completed')
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM group_waiting warned
+               WHERE warned.repo_id = gw.repo_id AND warned.precalled_at IS NOT NULL
+            )
+       )
+       SELECT ranked.repo_id
+         FROM ranked, queue_group_pace($1) pace
+        WHERE ranked.rank * pace.minutes_per_slot <= $3
+        ORDER BY ranked.rank`,
+      [queueGroupId, marker, threshold],
+    );
+    for (const { repo_id } of candidates) {
+      await claimPreCall(queueGroupId, Number(repo_id));
+    }
   }
 }
 
