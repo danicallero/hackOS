@@ -311,6 +311,7 @@ describe("official document by code", () => {
     });
     expect(open.statusCode).toBe(200);
     expect(open.headers["content-disposition"]).toContain("inline");
+    expect(open.headers["x-robots-tag"]).toContain("noindex");
     expect(open.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
     const unknown = await app.inject({
       method: "GET",

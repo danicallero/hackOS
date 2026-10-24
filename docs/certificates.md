@@ -61,6 +61,10 @@ participant-facing PDF should be stamped with `stampCopyFooter` the same way.
 
 ## Web
 
+`/verify/{code}` shows only the official PDF (no text, hackOS branding in the
+header) and is never indexed: `noindex` metadata and `X-Robots-Tag` on the page
+(`next.config.ts`), `X-Robots-Tag` on every API response, no Referer.
+
 Participants with event access get a Certificates section in My profile: pick a
 variant and language, get the certificate, download it. Staff with `presence:manage` get
 the same panel for a person in their profile's Attendance tab, plus override

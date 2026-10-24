@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // #1083: certificate pages are never indexed, cached by crawlers or leaked through Referer.
+      {
+        source: "/verify/:path*",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
+      },
       {
         source: "/.well-known/apple-app-site-association",
         headers: [{ key: "Content-Type", value: "application/json" }],

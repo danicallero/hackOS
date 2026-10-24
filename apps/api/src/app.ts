@@ -557,6 +557,10 @@ export async function buildApp(): Promise<App> {
   });
 
   registerSessionInvalidations(app);
+  // The API is for the apps, never a search result (#1083: certificate PDFs are served here).
+  app.addHook("onSend", async (_req, reply) => {
+    reply.header("x-robots-tag", "noindex, nofollow, noarchive");
+  });
   app.addHook("onSend", idempotencyOnSend);
   app.addHook("onResponse", async (req, reply) => {
     // Browser diagnostics are intentionally not a domain mutation: emitting

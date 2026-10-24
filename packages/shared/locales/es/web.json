@@ -3635,14 +3635,8 @@
   "toastReports": "Denuncias",
   "noReportsTitle": "Sin denuncias",
   "certificateVerifyTitle": "Verificación de certificado",
-  "certificateStatusValid": "Certificado válido",
   "certificateStatusRevoked": "Certificado revocado",
   "certificateNotFound": "Este código no corresponde a ningún certificado.",
-  "certificateHolder": "Emitido a",
-  "certificateEvent": "Evento",
-  "certificateHours": "Horas verificadas en el recinto",
-  "certificateIssuedBy": "Emitido por",
-  "certificateIssuedOn": "Fecha de emisión",
   "sendEmail": "Enviar correo",
   "testEmailSent": "Correo enviado a {to}",
   "couldNotSendTestEmail": "No se pudo enviar el correo",
@@ -3668,6 +3662,5 @@
   "toastCertificate": "Certificado",
   "certificateIssuedToast": "Certificado emitido",
   "certificateRevokedToast": "Certificado revocado",
-  "couldNotUseCertificate": "No se pudo completar la acción.",
-  "certificateViewDocument": "Ver documento"
+  "couldNotUseCertificate": "No se pudo completar la acción."
 }
