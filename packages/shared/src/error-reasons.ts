@@ -25,11 +25,20 @@ export const ERROR_REASONS = {
   SCHEDULE_SCAN_NEEDS_PARTICIPANTS: "schedule_scan_needs_participants",
   /** 409: certificates are not offered, or the participant is below the venue-hours threshold (#1083). */
   CERTIFICATE_NOT_AVAILABLE: "certificate_not_available",
-  /** 409: the participant has not presented a project, which the certificate requires (#1083). */
+  /** 409: attendance is awaiting staff review (#1083). */
   CERTIFICATE_REVIEW_REQUIRED: "certificate_review_required",
+  /** 409: the type requires having presented a project (#1083). */
   CERTIFICATE_DEMO_REQUIRED: "certificate_demo_required",
   /** 409: the participant has no verified venue time yet (#1083). */
   CERTIFICATE_HOURS_NOT_MET: "certificate_hours_not_met",
+  /** 409: this type is only issued once the event has ended (#1083). */
+  CERTIFICATE_EVENT_NOT_ENDED: "certificate_event_not_ended",
+  /** 409: the type requires having presented to a specific jury (mandatory or chosen challenge) (#1083). */
+  CERTIFICATE_DEMO_JURY_REQUIRED: "certificate_demo_jury_required",
+  /** 409: the activities certificate has nothing to list: no scanned non-meal activity (#1083). */
+  CERTIFICATE_NO_ACTIVITIES: "certificate_no_activities",
+  /** 500: a stored certificate copy no longer matches its SHA-256 (#1083). */
+  CERTIFICATE_COPY_CORRUPT: "certificate_copy_corrupt",
   /** 409: the GitHub repository is already linked to another project. */
   GITHUB_REPO_ALREADY_LINKED: "github_repo_already_linked",
   /** 404: the repository is not among the member's GitHub App installations. */

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { CertificateTypesManager } from "@/components/certificates/certificate-types-manager";
+import { IssuedCertificates } from "@/components/certificates/issued-certificates";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -56,7 +58,6 @@ const schema = (t: Translate) =>
             (Number.isFinite(Number(value)) && Number(value) > 0 && Number(value) <= 999),
           t("fieldMustBeNumber"),
         ),
-      requiresDemo: z.boolean(),
       issuerName: z.string().trim().min(1, t("required")).max(200, t("tooLong")),
     })
     .superRefine((values, ctx) => {
@@ -69,13 +70,13 @@ const fromSettings = (settings: CertificateSettings): Values => ({
   minReviewHours: settings.minReviewHours == null ? "" : String(settings.minReviewHours),
   minHours: settings.minHours == null ? "" : String(settings.minHours),
   awardHours: settings.awardHours == null ? "" : String(settings.awardHours),
-  requiresDemo: settings.requiresDemo,
   issuerName: settings.issuerName,
 });
 
 /** #1083: the certificate policy has one capability and one category Save. */
 export function CertificatesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useLocale();
+  const [view, setView] = useState("issued");
   const resource = useServerResource(["certificate-settings"], () =>
     api.get<CertificateSettings>("/api/certificates/settings"),
   );
@@ -93,14 +94,27 @@ export function CertificatesTab({ onDirtyChange }: { onDirtyChange: (dirty: bool
       </div>
     );
   return (
-    <>
-      <CertificatePolicyForm
-        settings={resource.data}
-        onSaved={resource.mutate}
-        onDirtyChange={onDirtyChange}
-      />
-      <CertificateTypesManager />
-    </>
+    <Tabs value={view} onValueChange={setView} className="gap-6">
+      <TabsList>
+        <TabsTrigger value="issued">{t("certificateIssuedRegister")}</TabsTrigger>
+        <TabsTrigger value="types">{t("certificateTypes")}</TabsTrigger>
+        <TabsTrigger value="policy">{t("certificatePolicy")}</TabsTrigger>
+      </TabsList>
+      {/* Mounted while hidden so unsaved policy edits survive switching views. */}
+      <TabsContent value="issued" forceMount className="data-[state=inactive]:hidden">
+        <IssuedCertificates />
+      </TabsContent>
+      <TabsContent value="types" forceMount className="data-[state=inactive]:hidden">
+        <CertificateTypesManager />
+      </TabsContent>
+      <TabsContent value="policy" forceMount className="data-[state=inactive]:hidden">
+        <CertificatePolicyForm
+          settings={resource.data}
+          onSaved={resource.mutate}
+          onDirtyChange={onDirtyChange}
+        />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -139,7 +153,6 @@ function CertificatePolicyForm({
         ...(dirty.awardHours && {
           awardHours: values.awardHours.trim() === "" ? null : Number(values.awardHours),
         }),
-        ...(dirty.requiresDemo && { requiresDemo: values.requiresDemo }),
         ...(dirty.issuerName && { issuerName: values.issuerName }),
       });
       onSaved(next);
@@ -245,22 +258,6 @@ function CertificatePolicyForm({
                   </FormControl>
                   <FormDescription>{t("certificatePolicyAwardHoursHelp")}</FormDescription>
                   <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="requiresDemo"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-4">
-                  <FormLabel>{t("certificateRequiresDemo")}</FormLabel>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      onBlur={field.onBlur}
-                    />
-                  </FormControl>
                 </FormItem>
               )}
             />

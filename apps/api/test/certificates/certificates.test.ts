@@ -1,6 +1,7 @@
 import "./env.js";
+import { createHash } from "node:crypto";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { PDFDocument } from "pdf-lib";
+import { decodePDFRawStream, PDFDocument, PDFRawStream } from "pdf-lib";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
@@ -31,11 +32,11 @@ beforeEach(async () => {
        event_starts_at = '2026-02-27T09:00:00Z', event_ends_at = '2026-03-01T17:00:00Z'`,
   );
   await pool.query(
-    `UPDATE certificate_settings SET min_hours = 10, min_review_hours = NULL, award_hours = NULL, requires_demo = false, issuer_name = DEFAULT`,
+    `UPDATE certificate_settings SET min_hours = 10, min_review_hours = NULL, award_hours = NULL, issuer_name = DEFAULT`,
   );
   await pool.query(`DELETE FROM certificate_types WHERE legacy_variant IS NULL`);
   await pool.query(
-    `UPDATE certificate_types SET enabled=true, attendance_policy=true, self_service=true, audience_role_ids=NULL, allow_guests=false, identity_policy='optional', requires_activity=false, body_i18n=NULL WHERE legacy_variant IN ('participation','hours','activities')`,
+    `UPDATE certificate_types SET enabled=true, attendance_policy=true, self_service=true, audience_role_ids=NULL, allow_guests=false, identity_policy='optional', requires_activity=false, demo_requirement='none', demo_challenge_id=NULL, exempt_role_ids=NULL, body_i18n=NULL WHERE legacy_variant IN ('participation','hours','activities')`,
   );
   await pool.query(
     `UPDATE certificate_types SET enabled=true WHERE legacy_variant='accepted_spot'`,
@@ -65,6 +66,31 @@ async function presence(userId: number, hours: number) {
        ($1, 'out', now() - interval '1 hour')`,
     [userId, String(hours)],
   );
+}
+
+/** One scanned, non-meal activity: what the Activities certificate lists. */
+async function scanned(userId: number, name = "Intro to Rust") {
+  const activity = await pool.query(
+    `INSERT INTO activities (name, category) VALUES ($1, 'workshop') RETURNING id`,
+    [name],
+  );
+  await pool.query(`INSERT INTO activity_logs (user_id, activity_id) VALUES ($1, $2)`, [
+    userId,
+    activity.rows[0].id,
+  ]);
+}
+
+/** The words drawn on the PDF's pages (standard fonts store them as hex strings). */
+async function pdfText(bytes: Uint8Array): Promise<string> {
+  const doc = await PDFDocument.load(bytes);
+  let text = "";
+  for (const [, object] of doc.context.enumerateIndirectObjects()) {
+    if (!(object instanceof PDFRawStream)) continue;
+    const content = Buffer.from(decodePDFRawStream(object).decode()).toString("latin1");
+    for (const match of content.matchAll(/<([0-9A-Fa-f]+)>\s*Tj/g))
+      text += `${Buffer.from(match[1] as string, "hex").toString("latin1")} `;
+  }
+  return text;
 }
 
 async function presented(userId: number) {
@@ -111,9 +137,11 @@ describe("self-service issue", () => {
     expect(off.json().error.details.code).toBe("certificate_not_available");
   });
 
-  it("requires a presented project when the policy says so", async () => {
+  it("requires a presented project when the type says so", async () => {
     await presence(person, 12);
-    await pool.query(`UPDATE certificate_settings SET requires_demo = true`);
+    await pool.query(
+      `UPDATE certificate_types SET demo_requirement='any' WHERE legacy_variant='participation'`,
+    );
     const without = await issue(person);
     expect(without.json().error.details.code).toBe("certificate_demo_required");
     await presented(person);
@@ -186,6 +214,7 @@ describe("self-service issue", () => {
 describe("pdf and verification", () => {
   it("serves each variant to its owner only, and refuses other people", async () => {
     await presence(person, 12);
+    await scanned(person);
     for (const variant of ["participation", "hours", "activities"]) {
       const created = await issue(person, { variant, locale: "gl" });
       const pdf = await app.inject({
@@ -347,7 +376,7 @@ describe("staff", () => {
       await blocker.query("SELECT id FROM certificate_settings WHERE id = 1 FOR UPDATE");
       pending = [
         updateSettings(staff, { minHours: 20 }),
-        updateSettings(staff, { requiresDemo: true }),
+        updateSettings(staff, { issuerName: "Organisers" }),
       ];
       const deadline = Date.now() + 5000;
       let waiting = 0;
@@ -363,7 +392,7 @@ describe("staff", () => {
       expect(waiting).toBe(2);
       await blocker.query("COMMIT");
       await Promise.all(pending);
-      expect(await readSettings()).toMatchObject({ minHours: 20, requiresDemo: true });
+      expect(await readSettings()).toMatchObject({ minHours: 20, issuerName: "Organisers" });
       const { rows } = await pool.query(
         `SELECT before, after FROM audit_log WHERE action = 'certificate_settings.update' ORDER BY id`,
       );
@@ -390,9 +419,9 @@ describe("staff", () => {
       method: "PUT",
       url: "/api/certificates/settings",
       headers: asUser(staff),
-      payload: { minHours: 20, requiresDemo: true },
+      payload: { minHours: 20, issuerName: "Organisers" },
     });
-    expect(updated.json()).toMatchObject({ minHours: 20, requiresDemo: true });
+    expect(updated.json()).toMatchObject({ minHours: 20, issuerName: "Organisers" });
     const { rows } = await pool.query(
       `SELECT 1 FROM audit_log WHERE action = 'certificate_settings.update'`,
     );
@@ -615,7 +644,7 @@ describe("attendance review and university awards (#1083)", () => {
       payload: { awardHours: 37.5 },
     });
     expect(policy.json().awardHours).toBe(37.5);
-    const cert = (await issue(person)).json();
+    const cert = (await issue(person, { variant: "hours" })).json();
     expect(
       (await app.inject({ method: "GET", url: `/api/public/certificates/${cert.code}` })).json()
         .hours,
@@ -627,7 +656,7 @@ describe("attendance review and university awards (#1083)", () => {
     });
     expect(overview.json().settings.awardHours).toBe(37.5);
     await approve(person, 22.5);
-    const reviewed = (await issue(person)).json();
+    const reviewed = (await issue(person, { variant: "hours" })).json();
     expect(
       (await app.inject({ method: "GET", url: `/api/public/certificates/${reviewed.code}` })).json()
         .hours,
@@ -722,20 +751,348 @@ describe("official document by code", () => {
   });
 });
 
-describe("CSV footer", () => {
+describe("per-type requirements", () => {
   const get = (url: string, user: number) =>
     app.inject({ method: "GET", url, headers: asUser(user) });
+  const code = async (variant: string, payload: Record<string, unknown> = {}) =>
+    (await issue(person, { variant, ...payload })).json().error?.details?.code;
+  const presentedTo = async (userId: number, challengeId: number) => {
+    const repo = await pool.query(
+      `INSERT INTO repos (name) VALUES ('Team ' || $1::text) RETURNING id`,
+      [String(challengeId)],
+    );
+    await pool.query(
+      `INSERT INTO submissions (repo_id, user_id, status) VALUES ($1, $2, 'active')`,
+      [repo.rows[0].id, userId],
+    );
+    await pool.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, completed_at)
+       VALUES ($1, $2, 'completed', now())`,
+      [challengeId, repo.rows[0].id],
+    );
+  };
 
-  it("stamps the footer on participant copies and on staff copies, not on the bare document", async () => {
+  it("waits for the event to end for Attendance, while Attendance hours is available any time", async () => {
+    await presence(person, 12);
+    await pool.query(`UPDATE event_config SET event_ends_at = now() + interval '2 days'`);
+    expect(await code("participation")).toBe("certificate_event_not_ended");
+    expect((await issue(person, { variant: "hours" })).statusCode).toBe(200);
+    const overview = (await get("/api/me/certificates", person)).json();
+    const byName = (name: string) =>
+      overview.types.find((t: { name: { en: string } }) => t.name.en === name);
+    expect(byName("Attendance").availability).toBe("event_not_ended");
+    expect(byName("Attendance hours").availability).toBeNull();
+    await pool.query(`UPDATE event_config SET event_ends_at = now() - interval '1 hour'`);
+    expect((await issue(person)).statusCode).toBe(200);
+  });
+
+  it("requires presenting to the mandatory jury or to a chosen challenge", async () => {
+    await presence(person, 12);
+    const mandatory = await createChallenge("Mandatory");
+    const other = await createChallenge("Other");
+    await pool.query(`UPDATE challenges SET mandatory = true WHERE id = $1`, [mandatory]);
+    await pool.query(
+      `UPDATE certificate_types SET demo_requirement='mandatory' WHERE legacy_variant='participation'`,
+    );
+    await presentedTo(person, other);
+    expect(await code("participation")).toBe("certificate_demo_jury_required");
+    await pool.query(
+      `UPDATE certificate_types SET demo_requirement='challenge', demo_challenge_id=$1 WHERE legacy_variant='participation'`,
+      [other],
+    );
+    expect((await issue(person)).statusCode).toBe(200);
+    await pool.query(`UPDATE challenges SET mandatory = false WHERE id = $1`, [mandatory]);
+    await pool.query(
+      `UPDATE certificate_types SET demo_requirement='mandatory' WHERE legacy_variant='hours'`,
+    );
+    expect(await code("hours")).toBe("certificate_demo_jury_required");
+    await presentedTo(person, mandatory);
+    await pool.query(`UPDATE challenges SET mandatory = true WHERE id = $1`, [mandatory]);
+    expect((await issue(person, { variant: "hours" })).statusCode).toBe(200);
+  });
+
+  it("lets exempt roles skip hours, event end and presentation, and staff skip them with a reason", async () => {
+    await pool.query(`UPDATE event_config SET event_ends_at = now() + interval '2 days'`);
+    const organiser = await createUser({ name: "Org" });
+    await admitParticipant(organiser);
+    const role = await createRole([], { eventAccess: true });
+    await assignRole(organiser, role);
+    await pool.query(
+      `UPDATE certificate_types SET demo_requirement='any', exempt_role_ids=$1 WHERE legacy_variant IN ('participation','hours')`,
+      [[role]],
+    );
+    expect((await issue(person)).statusCode).toBe(409);
+    expect((await issue(organiser)).statusCode).toBe(200);
+    // Hours stated need a number: none measured, none awarded.
+    expect((await issue(organiser, { variant: "hours" })).json().error.details.code).toBe(
+      "certificate_hours_not_met",
+    );
+    await pool.query(`UPDATE certificate_settings SET award_hours = 8`);
+    const hours = await issue(organiser, { variant: "hours" });
+    expect(hours.statusCode).toBe(200);
+    const verified = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${hours.json().code}`,
+    });
+    expect(verified.json().hours).toBe(8);
+    const type = (
+      await pool.query(`SELECT id FROM certificate_types WHERE legacy_variant='participation'`)
+    ).rows[0].id;
+    const staffIssue = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "POST",
+        url: "/api/certificates/issue",
+        headers: asUser(staff),
+        payload: { typeId: type, locale: "en", userId: person, ...payload },
+      });
+    expect((await staffIssue({})).statusCode).toBe(409);
+    expect(
+      (await staffIssue({ overrideReason: "Event organiser", certifiedHours: 5 })).statusCode,
+    ).toBe(200);
+  });
+
+  it("validates the requirement fields and keeps Accepted spot unrestricted", async () => {
+    const list = (await get("/api/certificates/types", staff)).json();
+    const definition = (legacy: string) => {
+      const { id, revision, legacyVariant, ...rest } = list.items.find(
+        (t: { legacyVariant: string }) => t.legacyVariant === legacy,
+      );
+      return { id, revision, definition: rest };
+    };
+    const put = (legacy: string, patch: Record<string, unknown>) => {
+      const { id, revision, definition: body } = definition(legacy);
+      return app.inject({
+        method: "PUT",
+        url: `/api/certificates/types/${id}`,
+        headers: asUser(staff),
+        payload: { revision, definition: { ...body, ...patch } },
+      });
+    };
+    expect((await put("hours", { demoRequirement: "challenge" })).statusCode).toBe(400);
+    expect((await put("hours", { demoRequirement: "any", demoChallengeId: 1 })).statusCode).toBe(
+      400,
+    );
+    expect((await put("accepted_spot", { requiresEventEnd: true })).statusCode).toBe(400);
+    expect((await put("hours", { requiresEventEnd: true })).statusCode).toBe(200);
+    expect(list.challenges).toEqual(expect.any(Array));
+  });
+});
+
+describe("accepted spot follows event access", () => {
+  const acceptedType = async () =>
+    (await pool.query(`SELECT id FROM certificate_types WHERE legacy_variant='accepted_spot'`))
+      .rows[0].id as number;
+  const request = async (userId: number) =>
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/me/certificates/issue",
+        headers: asUser(userId),
+        payload: { typeId: await acceptedType(), locale: "en" },
+      })
+    ).json();
+  const status = async (code: string) =>
+    (await app.inject({ method: "GET", url: `/api/public/certificates/${code}` })).json().status;
+
+  it("revokes it when the last event-access role goes, even after a copy was generated", async () => {
+    const cert = await request(person);
+    await app.inject({
+      method: "GET",
+      url: `/api/me/certificates/${cert.id}/pdf`,
+      headers: asUser(person),
+    });
+    expect(await status(cert.code)).toBe("valid");
+    await pool.query(`DELETE FROM user_roles WHERE user_id=$1`, [person]);
+    const { rows } = await pool.query(
+      `SELECT revoked_reason, pdf FROM attendance_certificates WHERE id=$1`,
+      [cert.id],
+    );
+    expect(rows[0]).toEqual({ revoked_reason: "event_access_lost", pdf: null });
+    expect(await status(cert.code)).toBe("revoked");
+    const audit = await pool.query(
+      `SELECT source FROM audit_log WHERE action='certificate.revoke' AND entity_id=$1`,
+      [String(cert.id)],
+    );
+    expect(audit.rows).toEqual([{ source: "system" }]);
+  });
+
+  it("keeps it through a role swap, and revokes when the role stops granting access or is deleted", async () => {
+    const cert = await request(person);
+    const other = await createRole([], { eventAccess: true });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM user_roles WHERE user_id=$1`, [person]);
+      await client.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [
+        person,
+        other,
+      ]);
+      await client.query("COMMIT");
+    } finally {
+      client.release();
+    }
+    expect(await status(cert.code)).toBe("valid");
+    await pool.query(`UPDATE roles SET event_access=false WHERE id=$1`, [other]);
+    expect(await status(cert.code)).toBe("revoked");
+    // Access back: a fresh certificate can be requested, the old one stays revoked.
+    await pool.query(`UPDATE roles SET event_access=true WHERE id=$1`, [other]);
+    const again = await request(person);
+    expect(again.id).not.toBe(cert.id);
+    await pool.query(`UPDATE roles SET deleted_at=now() WHERE id=$1`, [other]);
+    expect(await status(again.code)).toBe("revoked");
+  });
+
+  it("leaves attendance certificates alone when access changes", async () => {
+    await presence(person, 12);
+    const attendance = (await issue(person, { variant: "hours" })).json();
+    await pool.query(`DELETE FROM user_roles WHERE user_id=$1`, [person]);
+    expect(await status(attendance.code)).toBe("valid");
+  });
+});
+
+describe("single stored copy", () => {
+  const get = (url: string, user?: number) =>
+    app.inject({ method: "GET", url, headers: user ? asUser(user) : {} });
+  const sha = (body: Buffer) => createHash("sha256").update(body).digest("hex");
+
+  it("generates the copy once and serves the same bytes to owner, staff and the public viewer", async () => {
     await presence(person, 12);
     const cert = (await issue(person)).json();
+    const stored = () =>
+      pool.query(`SELECT pdf, pdf_sha256 FROM attendance_certificates WHERE id=$1`, [cert.id]);
+    expect((await stored()).rows[0].pdf).toBeNull();
     const mine = await get(`/api/me/certificates/${cert.id}/pdf`, person);
-    const bare = await get(`/api/certificates/${cert.id}/pdf`, staff);
-    const staffCopy = await get(`/api/certificates/${cert.id}/pdf?copy=true`, staff);
-    // The footer adds a QR image and text: the bare document is smaller.
-    expect(bare.rawPayload.length).toBeLessThan(mine.rawPayload.length);
-    expect(staffCopy.rawPayload.length).toBeGreaterThan(bare.rawPayload.length);
+    const [a, b] = await Promise.all([
+      get(`/api/certificates/${cert.id}/pdf`, staff),
+      get(`/api/public/certificates/${cert.code}/pdf`),
+    ]);
+    expect(mine.statusCode).toBe(200);
+    expect(a.rawPayload.equals(mine.rawPayload)).toBe(true);
+    expect(b.rawPayload.equals(mine.rawPayload)).toBe(true);
+    const { rows } = await stored();
+    expect(rows[0].pdf_sha256).toBe(sha(mine.rawPayload));
+    expect(Buffer.from(rows[0].pdf).equals(mine.rawPayload)).toBe(true);
     expect((await PDFDocument.load(mine.rawPayload)).getPageCount()).toBe(1);
+    expect(mine.rawPayload.length).toBeLessThan(20_000);
+    const verified = (await get(`/api/public/certificates/${cert.code}`)).json();
+    expect(verified.sha256).toBe(sha(mine.rawPayload));
+    expect(verified.generatedAt).toEqual(expect.any(String));
+    // Later changes to the account do not alter the issued copy.
+    await pool.query(`UPDATE users SET dni='99999999R' WHERE id=$1`, [person]);
+    const later = await get(`/api/me/certificates/${cert.id}/pdf`, person);
+    expect(later.rawPayload.equals(mine.rawPayload)).toBe(true);
+    expect(await pdfText(later.rawPayload)).toContain("12345678Z");
+  });
+
+  it("drops the copy on revocation and refuses a copy that fails its hash", async () => {
+    await presence(person, 12);
+    const cert = (await issue(person)).json();
+    await get(`/api/me/certificates/${cert.id}/pdf`, person);
+    await pool.query(`UPDATE attendance_certificates SET pdf_sha256=$2 WHERE id=$1`, [
+      cert.id,
+      "0".repeat(64),
+    ]);
+    const corrupt = await get(`/api/me/certificates/${cert.id}/pdf`, person);
+    expect(corrupt.statusCode).toBe(500);
+    expect(corrupt.json().error.details.code).toBe("certificate_copy_corrupt");
+    const revoked = await app.inject({
+      method: "POST",
+      url: `/api/certificates/${cert.id}/revoke`,
+      headers: asUser(staff),
+      payload: { reason: "Mistake" },
+    });
+    expect(revoked.statusCode).toBe(200);
+    const { rows } = await pool.query(
+      `SELECT pdf, pdf_sha256, pdf_generated_at FROM attendance_certificates WHERE id=$1`,
+      [cert.id],
+    );
+    expect(rows[0]).toEqual({ pdf: null, pdf_sha256: null, pdf_generated_at: null });
+    expect((await get(`/api/public/certificates/${cert.code}`)).json()).toMatchObject({
+      status: "revoked",
+      sha256: null,
+    });
+    expect((await get(`/api/me/certificates/${cert.id}/pdf`, person)).statusCode).toBe(409);
+  });
+
+  it("tells Attendance, Attendance hours and Activities apart", async () => {
+    await presence(person, 12);
+    await scanned(person, "Intro to Rust");
+    await pool.query(`UPDATE users SET dni='12345678Z' WHERE id=$1`, [person]);
+    await app.inject({
+      method: "POST",
+      url: `/api/users/${person}/certificate-approval`,
+      headers: asUser(staff),
+      payload: { certifiedHours: 30, reason: "Reviewed" },
+    });
+    const text: Record<string, string> = {};
+    for (const variant of ["participation", "hours", "activities"]) {
+      const cert = (await issue(person, { variant, locale: "en" })).json();
+      const pdf = await get(`/api/me/certificates/${cert.id}/pdf`, person);
+      text[variant] = await pdfText(pdf.rawPayload);
+      const verified = await get(`/api/public/certificates/${cert.code}`);
+      expect(verified.json().hours).toBe(variant === "hours" ? 30 : null);
+    }
+    expect(text.participation).not.toMatch(/hours of participation/);
+    expect(text.hours).toMatch(/30 hours of participation/);
+    expect(text.activities).not.toMatch(/hours of participation/);
+    expect(text.activities).toContain("Intro to Rust");
+  });
+
+  it("replaces a certificate after more attendance without revoking the old one", async () => {
+    await presence(person, 12);
+    await scanned(person, "Intro to Rust");
+    const { rows } = await pool.query(
+      `SELECT id FROM certificate_types WHERE legacy_variant='activities'`,
+    );
+    const request = (refresh?: boolean) =>
+      app.inject({
+        method: "POST",
+        url: "/api/me/certificates/issue",
+        headers: asUser(person),
+        payload: {
+          typeId: rows[0].id,
+          locale: "en",
+          ...(refresh === undefined ? {} : { refresh }),
+        },
+      });
+    const old = (await request()).json();
+    const oldPdf = await get(`/api/me/certificates/${old.id}/pdf`, person);
+    expect((await request(true)).json().id).toBe(old.id);
+    await scanned(person, "Closing talk");
+    const listed = (await get("/api/me/certificates", person)).json();
+    expect(listed.certificates.find((c: { id: number }) => c.id === old.id).outdated).toBe(true);
+    expect((await request()).json().id).toBe(old.id);
+    const fresh = (await request(true)).json();
+    expect(fresh.id).not.toBe(old.id);
+    expect(fresh.code).not.toBe(old.code);
+    expect((await request(true)).json().id).toBe(fresh.id);
+    const verifiedOld = (await get(`/api/public/certificates/${old.code}`)).json();
+    expect(verifiedOld.status).toBe("valid");
+    expect(verifiedOld.supersededAt).toEqual(expect.any(String));
+    expect((await get(`/api/public/certificates/${fresh.code}`)).json().supersededAt).toBeNull();
+    const oldAgain = await get(`/api/me/certificates/${old.id}/pdf`, person);
+    expect(oldAgain.rawPayload.equals(oldPdf.rawPayload)).toBe(true);
+    expect(await pdfText(oldAgain.rawPayload)).not.toContain("Closing talk");
+    const current = await get(`/api/me/certificates/${fresh.id}/pdf`, person);
+    expect(await pdfText(current.rawPayload)).toContain("Closing talk");
+    const after = (await get("/api/me/certificates", person)).json();
+    expect(after.certificates.filter((c: { outdated: boolean }) => c.outdated)).toHaveLength(0);
+  });
+
+  it("refuses an Activities certificate with nothing to list, and skips those people in bulk", async () => {
+    await presence(person, 12);
+    const refused = await issue(person, { variant: "activities" });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().error.details.code).toBe("certificate_no_activities");
+    const bulk = await app.inject({
+      method: "POST",
+      url: "/api/certificates/bulk",
+      headers: asUser(staff),
+      payload: { variant: "activities", locale: "es" },
+    });
+    expect(bulk.json()).toEqual({ issued: 0, existing: 0, skipped: 1 });
+    await scanned(person);
+    expect((await issue(person, { variant: "activities" })).statusCode).toBe(200);
   });
 });
 
@@ -771,6 +1128,10 @@ describe("configured types and the durable guest register", () => {
     allowGuests: true,
     identityPolicy: "optional",
     requiresActivity: true,
+    requiresEventEnd: false,
+    demoRequirement: "none",
+    demoChallengeId: null,
+    exemptRoleIds: null,
     ...patch,
   });
   async function createType(patch = {}) {
@@ -819,15 +1180,13 @@ describe("configured types and the durable guest register", () => {
     expect(register.json().items).toContainEqual(
       expect.objectContaining({ id: cert.id, recipientName: "Grace Hopper" }),
     );
-    for (const copy of [false, true]) {
-      const pdf = await app.inject({
-        method: "GET",
-        url: `/api/certificates/${cert.id}/pdf?copy=${copy}`,
-        headers: asUser(staff),
-      });
-      expect(pdf.statusCode, pdf.body).toBe(200);
-      expect(pdf.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
-    }
+    const download = await app.inject({
+      method: "GET",
+      url: `/api/certificates/${cert.id}/pdf`,
+      headers: asUser(staff),
+    });
+    expect(download.statusCode, download.body).toBe(200);
+    expect(download.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
     const noOwner = await app.inject({
       method: "GET",
       url: `/api/me/certificates/${cert.id}/pdf`,
@@ -1031,7 +1390,7 @@ describe("configured types and the durable guest register", () => {
       method: "PUT",
       url: "/api/certificates/settings",
       headers: asUser(staff),
-      payload: { minHours: null, requiresDemo: true },
+      payload: { minHours: null },
     });
     const catalog = await app.inject({
       method: "GET",

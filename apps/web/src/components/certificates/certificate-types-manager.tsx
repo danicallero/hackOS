@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -34,9 +35,8 @@ import {
   type CertificateTypeInput,
   certificateTypesApi,
 } from "@/lib/certificates";
-import { LANGS, languageName, type MessageKey, useLocale } from "@/lib/i18n";
+import { LANGS, type MessageKey, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
-import { IssuedCertificates } from "./issued-certificates";
 
 const blank = () => ({ es: "", gl: "", en: "" });
 const newDefinition = (): CertificateTypeInput => ({
@@ -50,6 +50,10 @@ const newDefinition = (): CertificateTypeInput => ({
   allowGuests: false,
   identityPolicy: "optional",
   requiresActivity: false,
+  requiresEventEnd: false,
+  demoRequirement: "none",
+  demoChallengeId: null,
+  exemptRoleIds: null,
 });
 const FIELDS: [string, MessageKey][] = [
   ["recipient", "certificateFieldRecipient"],
@@ -61,7 +65,7 @@ const FIELDS: [string, MessageKey][] = [
   ["venue", "certificateFieldVenue"],
 ];
 
-/** #1083: editable definitions and the guest register are owned by Event settings. */
+/** #1083: editable certificate definitions, owned by Event settings. */
 export function CertificateTypesManager() {
   const { t, language } = useLocale();
   const catalog = useServerResource(["certificate-types"], certificateTypesApi.list);
@@ -88,7 +92,7 @@ export function CertificateTypesManager() {
     },
   ];
   return (
-    <div className="mt-8 space-y-8">
+    <>
       <SectionCard
         variant="plain"
         icon={CertificateIcon}
@@ -120,7 +124,6 @@ export function CertificateTypesManager() {
           )}
         />
       </SectionCard>
-      <IssuedCertificates />
       <Modal
         open={editing !== undefined}
         onOpenChange={(open) => !open && setEditing(undefined)}
@@ -132,6 +135,7 @@ export function CertificateTypesManager() {
             key={editing?.id ?? "new"}
             original={editing}
             roles={catalog.data?.roles ?? []}
+            challenges={catalog.data?.challenges ?? []}
             onSaved={() => {
               catalog.reload();
               setEditing(undefined);
@@ -139,16 +143,18 @@ export function CertificateTypesManager() {
           />
         )}
       </Modal>
-    </div>
+    </>
   );
 }
 function DefinitionEditor({
   original,
   roles,
+  challenges,
   onSaved,
 }: {
   original: CertificateType | null;
   roles: { id: number; name: string }[];
+  challenges: { id: number; title: string; mandatory: boolean }[];
   onSaved: () => void;
 }) {
   const { t, language } = useLocale();
@@ -188,6 +194,10 @@ function DefinitionEditor({
         allowGuests,
         identityPolicy,
         requiresActivity,
+        requiresEventEnd,
+        demoRequirement,
+        demoChallengeId,
+        exemptRoleIds,
       } = draft;
       const definition = {
         name,
@@ -200,6 +210,10 @@ function DefinitionEditor({
         allowGuests,
         identityPolicy,
         requiresActivity,
+        requiresEventEnd,
+        demoRequirement,
+        demoChallengeId: demoRequirement === "challenge" ? demoChallengeId : null,
+        exemptRoleIds: exemptRoleIds?.length ? exemptRoleIds : null,
       };
       if (original) await certificateTypesApi.update(original.id, original.revision, definition);
       else await certificateTypesApi.create(definition);
@@ -211,7 +225,13 @@ function DefinitionEditor({
     }
   }
   const toggle = (
-    key: "enabled" | "attendancePolicy" | "selfService" | "allowGuests" | "requiresActivity",
+    key:
+      | "enabled"
+      | "attendancePolicy"
+      | "selfService"
+      | "allowGuests"
+      | "requiresActivity"
+      | "requiresEventEnd",
     label: MessageKey,
   ) => (
     <div className="flex items-center gap-2">
@@ -235,21 +255,16 @@ function DefinitionEditor({
     <form onSubmit={(event) => void save(event)} className="space-y-5">
       {error && <ContextualError message={error} />}
       <fieldset disabled={pending} className="space-y-5">
-        <div className="space-y-2">
-          <Label htmlFor="type-language">{t("language")}</Label>
-          <Select value={locale} onValueChange={(v) => setLocale(v as Language)}>
-            <SelectTrigger id="type-language" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {LANGS.map((lang) => (
-                <SelectItem key={lang} value={lang}>
-                  {languageName(lang)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <h3 className="font-medium">{t("certificateEditorWording")}</h3>
+        <Tabs value={locale} onValueChange={(v) => setLocale(v as Language)}>
+          <TabsList aria-label={t("language")}>
+            {LANGS.map((lang) => (
+              <TabsTrigger key={lang} value={lang}>
+                {lang.toUpperCase()}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className="space-y-2">
           <Label htmlFor="type-name">{t("certificateTypeName")}</Label>
           <Input
@@ -319,51 +334,109 @@ function DefinitionEditor({
             />
           </div>
         )}
-        {toggle("enabled", "certificateTypeEnabled")}
-        {toggle("attendancePolicy", "certificateUseAttendancePolicy")}
-        {toggle("selfService", "certificateSelfService")}
-        {acceptedSpot && <p className="text-sm">{t("certificateAllEventAccess")}</p>}
-        {!acceptedSpot && (
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="type-all-accounts"
-              checked={draft.audienceRoleIds === null}
-              onCheckedChange={(v) => patch({ audienceRoleIds: v === true ? null : [] })}
-            />
-            <Label htmlFor="type-all-accounts">{t("certificateAllAccounts")}</Label>
-          </div>
-        )}
-        {draft.audienceRoleIds !== null && (
+        <section className="space-y-3">
+          <h3 className="font-medium">{t("certificateEditorRecipients")}</h3>
+          {toggle("enabled", "certificateTypeEnabled")}
+          {toggle("selfService", "certificateSelfService")}
+          {acceptedSpot && <p className="text-sm">{t("certificateAllEventAccess")}</p>}
+          {!acceptedSpot && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="type-all-accounts"
+                checked={draft.audienceRoleIds === null}
+                onCheckedChange={(v) => patch({ audienceRoleIds: v === true ? null : [] })}
+              />
+              <Label htmlFor="type-all-accounts">{t("certificateAllAccounts")}</Label>
+            </div>
+          )}
+          {draft.audienceRoleIds !== null && (
+            <div className="space-y-2">
+              <Label htmlFor="type-role-ids">{t("certificateRecipientRoles")}</Label>
+              <MultiSelect
+                id="type-role-ids"
+                options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
+                value={draft.audienceRoleIds.map(String)}
+                onChange={(ids) => patch({ audienceRoleIds: ids.map(Number) })}
+              />
+            </div>
+          )}
+          {toggle("allowGuests", "certificateAllowGuests")}
+        </section>
+        <section className="space-y-3">
+          <h3 className="font-medium">{t("certificateEditorRules")}</h3>
+          {toggle("attendancePolicy", "certificateUseAttendancePolicy")}
+          {toggle("requiresActivity", "certificateRequiresTalk")}
+          {toggle("requiresEventEnd", "certificateRequiresEventEnd")}
           <div className="space-y-2">
-            <Label htmlFor="type-role-ids">{t("certificateRecipientRoles")}</Label>
-            <MultiSelect
-              id="type-role-ids"
-              options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
-              value={draft.audienceRoleIds.map(String)}
-              onChange={(ids) => patch({ audienceRoleIds: ids.map(Number) })}
-            />
+            <Label htmlFor="type-demo-requirement">{t("certificateDemoRequirement")}</Label>
+            <Select
+              value={draft.demoRequirement}
+              disabled={acceptedSpot}
+              onValueChange={(v) =>
+                patch({
+                  demoRequirement: v as CertificateTypeInput["demoRequirement"],
+                  demoChallengeId: v === "challenge" ? (challenges[0]?.id ?? null) : null,
+                })
+              }
+            >
+              <SelectTrigger id="type-demo-requirement" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="none">{t("certificateDemoNone")}</SelectItem>
+                <SelectItem value="any">{t("certificateDemoAny")}</SelectItem>
+                <SelectItem value="mandatory">{t("certificateDemoMandatory")}</SelectItem>
+                <SelectItem value="challenge">{t("certificateDemoChallenge")}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
-        {toggle("allowGuests", "certificateAllowGuests")}
-        {toggle("requiresActivity", "certificateRequiresTalk")}
-        <div className="space-y-2">
-          <Label htmlFor="type-identity-policy">{t("certificateIdentificationPolicy")}</Label>
-          <Select
-            value={draft.identityPolicy}
-            onValueChange={(v) =>
-              patch({ identityPolicy: v as CertificateTypeInput["identityPolicy"] })
-            }
-          >
-            <SelectTrigger id="type-identity-policy" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">{t("certificateNameOnly")}</SelectItem>
-              <SelectItem value="optional">{t("certificateIdOptional")}</SelectItem>
-              <SelectItem value="required">{t("certificateIdRequired")}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          {draft.demoRequirement === "challenge" && (
+            <Select
+              value={draft.demoChallengeId == null ? "" : String(draft.demoChallengeId)}
+              onValueChange={(v) => patch({ demoChallengeId: Number(v) })}
+            >
+              <SelectTrigger aria-label={t("certificateDemoChallenge")} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {challenges.map((challenge) => (
+                  <SelectItem key={challenge.id} value={String(challenge.id)}>
+                    {challenge.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {!acceptedSpot && (
+            <div className="space-y-2">
+              <Label htmlFor="type-exempt-roles">{t("certificateExemptRoles")}</Label>
+              <MultiSelect
+                id="type-exempt-roles"
+                options={roles.map((r) => ({ value: String(r.id), label: r.name }))}
+                value={(draft.exemptRoleIds ?? []).map(String)}
+                onChange={(ids) => patch({ exemptRoleIds: ids.map(Number) })}
+              />
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="type-identity-policy">{t("certificateIdentificationPolicy")}</Label>
+            <Select
+              value={draft.identityPolicy}
+              onValueChange={(v) =>
+                patch({ identityPolicy: v as CertificateTypeInput["identityPolicy"] })
+              }
+            >
+              <SelectTrigger id="type-identity-policy" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="none">{t("certificateNameOnly")}</SelectItem>
+                <SelectItem value="optional">{t("certificateIdOptional")}</SelectItem>
+                <SelectItem value="required">{t("certificateIdRequired")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </section>
       </fieldset>
       <SubmitButton pending={pending}>{t("saveChanges")}</SubmitButton>
     </form>

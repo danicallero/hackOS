@@ -31,14 +31,21 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
       schema: {
         summary: "Certificate definitions and recipient roles",
         description:
-          "All configured certificate types, their trilingual text, actual recipient-role IDs, identity policy and guest/self-service options. Includes the active role catalogue for the settings editor (#1083).",
+          "All configured certificate types, their trilingual text, actual recipient-role IDs, identity policy, guest/self-service options, event-end and presentation requirements and exempt roles. Includes the active role and challenge catalogues for the settings editor (#1083).",
       },
     },
     async () => {
       const roles = await pool.query(
         `SELECT id,name FROM roles WHERE deleted_at IS NULL ORDER BY position DESC,id`,
       );
-      return { items: await listCertificateTypes(), roles: roles.rows };
+      const challenges = await pool.query(
+        `SELECT id,title,mandatory FROM challenges ORDER BY mandatory DESC,title,id`,
+      );
+      return {
+        items: await listCertificateTypes(),
+        roles: roles.rows,
+        challenges: challenges.rows,
+      };
     },
   );
   r.post(
@@ -115,6 +122,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
             activityName: z.string().trim().max(500).optional(),
             certifiedHours: z.number().positive().max(999).optional(),
             overrideReason: z.string().trim().min(1).max(2000).optional(),
+            refresh: z.boolean().optional(),
           })
           .strict(),
         summary: "Issue a configured certificate to an account or guest",
@@ -130,10 +138,14 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
       config: { routeAccessPolicy: { kind: "authenticated" } },
       preHandler: [requireAuth, idempotencyGuard],
       schema: {
-        body: z.object({ typeId: z.number().int().positive(), locale: z.enum(["es", "gl", "en"]) }),
+        body: z.object({
+          typeId: z.number().int().positive(),
+          locale: z.enum(["es", "gl", "en"]),
+          refresh: z.boolean().optional(),
+        }),
         summary: "Obtain an eligible configured certificate",
         description:
-          "Enabled self-service definitions require event access and matching recipient criteria. Accepted spot is predefined for everyone with event access, without hours or demo requirements. Attendance types additionally enforce the attendance policy. Speaker/activity-specific certificates must be issued by staff (#1083).",
+          "Enabled self-service definitions require event access and matching recipient criteria. Accepted spot is predefined for everyone with event access, without hours or demo requirements. Attendance types additionally enforce the attendance policy. Speaker/activity-specific certificates must be issued by staff. `refresh: true` replaces the current document with a new one, without revoking it, when the hours or activities it states changed after more attendance; otherwise it returns the current one (#1083).",
       },
     },
     async (req) => {
@@ -145,6 +157,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
           : (type.legacyVariant ?? "participation"),
         req.body.locale,
         type.id,
+        req.body.refresh,
       );
     },
   );

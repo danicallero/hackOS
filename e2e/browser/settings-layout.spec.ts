@@ -29,7 +29,6 @@ test.beforeEach(async ({ page }) => {
           minHours: null,
           minReviewHours: null,
           awardHours: null,
-          requiresDemo: false,
           issuerName: "GPUL",
         },
         eligibility: {
@@ -38,7 +37,6 @@ test.beforeEach(async ({ page }) => {
           eligible: false,
           reviewRequired: false,
           reason: "not_available",
-          demoed: false,
           approval: null,
         },
         certificates: [],

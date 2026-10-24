@@ -12,7 +12,6 @@ test("reviews the full timeline and awards certified hours without changing meas
     eligible: false,
     reviewRequired: true,
     reason: "review_required" as string | null,
-    demoed: true,
     approval: null as unknown,
   };
   let award: unknown;
@@ -58,7 +57,6 @@ test("reviews the full timeline and awards certified hours without changing meas
           minHours: 42,
           minReviewHours: 10,
           awardHours: 36.5,
-          requiresDemo: false,
           issuerName: "GPUL",
         },
       };
@@ -148,7 +146,7 @@ test("reviews the full timeline and awards certified hours without changing meas
   await expect
     .poll(() => award)
     .toEqual({ certifiedHours: 27.5, reason: "Reviewed dinner and midnight workshop" });
-  await expect(page.getByText("Certified hours: 27.5", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Certified hours: 27\.5/)).toBeVisible();
   await expect(page.locator("[data-sileo-toast]")).toHaveCount(0);
   await page.getByRole("button", { name: webEn.certificateApproveHours }).scrollIntoViewIfNeeded();
   await page.screenshot({
