@@ -69,6 +69,31 @@ than fixed delays. Invitation-language scenarios seed the language and the
 cookie-notice dismissal preference before hydration; they test onboarding
 language synchronization without racing the unrelated cookie overlay.
 
+## Demo data for local screenshots
+
+Against a disposable local database, run migrations, the bootstrap seed, then
+mock data (#1021):
+
+```sh
+pnpm migrate
+pnpm --filter @hackos/api seed
+pnpm --filter @hackos/api seed:mock
+```
+
+The mock seed reuses the form granting the Participant role, or creates a
+fallback form with an immutable version. It creates example.com users,
+application responses, submitted native projects with active team members and
+challenge selections, tickets, and an enterprise-owned room for each demo queue.
+Re-running preserves these fixtures. To seed selected modules, pass
+`-- --only users,enterprises,projects`; dependencies must already exist.
+The bootstrap user has no password credentials: use the normal authentication
+setup before opening the queue and judging pages.
+
+The API integration suite runs `seed` and `seed:mock` against a fresh migrated
+database, repeats the mock seed, and checks roster, form-version, eligibility
+and room ownership consistency. Run it alone with
+`pnpm --filter @hackos/api test:serial test/seed-mock.test.ts`.
+
 ## Native mobile tests
 
 Fast native UI tests run with the existing mobile Jest command and are included
