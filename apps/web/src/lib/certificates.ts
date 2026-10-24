@@ -48,7 +48,7 @@ export const certificatesApi = {
     }),
   revoke: (id: number, reason: string) =>
     api.post<Certificate>(`/api/certificates/${id}/revoke`, { reason }),
-  /** Without the CSV footer, to be signed; `copy` is what the participant gets. */
+  /** Without the CSV footer; `copy` is what the participant gets. */
   download: (id: number, copy: boolean) =>
     apiDownload(`/api/certificates/${id}/pdf${copy ? "?copy=true" : ""}`, `certificate-${id}.pdf`),
 };

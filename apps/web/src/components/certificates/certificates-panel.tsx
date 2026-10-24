@@ -40,8 +40,8 @@ const VARIANT_LABEL: Record<CertificateVariant, MessageKey> = {
 
 /**
  * #1083: attendance certificates. `self` is the participant's own list;
- * `staff` is one person's, with the manual-signature round trip (download
- * without the CSV footer, sign, upload the signed PDF).
+ * `staff` is one person's, with issue, revoke and downloads
+ * with and without the CSV footer.
  */
 export function CertificatesPanel({ staffUserId }: { staffUserId?: number }) {
   const { t, language } = useLocale();
