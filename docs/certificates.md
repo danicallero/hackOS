@@ -1,4 +1,4 @@
-# Attendance certificates
+# Certificates and attendance awards
 
 Certificates (#1083) are issued by the organisation, not by a person. There is
 no handwritten or personal digital signature and no electronic seal (the
@@ -9,8 +9,7 @@ download the PDF of any certificate (`GET /api/certificates/:id/pdf`).
 
 Code: `apps/api/src/modules/certificates/` (`service.ts` policy and issue,
 `pdf.ts` rendering, `routes.ts`). Migrations:
-`0503_attendance_certificates.sql`, `0504_certificate_languages.sql`,
-`0505_certificate_review.sql`, `0506_certificate_award_hours.sql`.
+`0503_attendance_certificates.sql` (consolidated before the first staging/production deployment).
 
 ## Policy
 
@@ -59,7 +58,7 @@ transaction with `POST /api/certificates` and both `certifiedHours` and
 `overrideReason`; a reason alone is insufficient.
 
 Approval, issuance and account removal serialize on the person. A changed
-award revokes all live documents carrying a different award (including earlier
+award revokes live attendance-policy documents carrying a different award (including earlier
 automatic documents); the person obtains a new code on their next request.
 Reapproving unchanged hours preserves documents already carrying that manual
 award. Each approval and resulting revocation is audited.
@@ -108,17 +107,51 @@ participation and activities certificates.
 
 Languages: es, gl and en. Requesting another language creates a separate
 certificate and verification code; same-language retries return the existing one.
-The text is fixed per language in `pdf.ts`. The
+The three original types retain the default wording from `pdf.ts` until custom wording is saved. The
 GPUL logo is `apps/api/assets/certificate/logo.png` (rasterised from the
 organisation's `default.svg`); it is drawn top right (the Docker image already copies `assets/`). The PDF
 uses the standard Helvetica fonts, which viewers substitute rather than embed.
+
+## Configurable types and guest register
+
+**Event settings → Certificates** also owns the certificate catalogue and
+persistent issued-document register, all guarded by `presence:manage`.
+Create or edit a type's name, PDF title and wording in es/gl/en. Text supports
+`{recipient}`, `{event}`, `{issuer}`, `{activity}`, `{hours}`,
+`{dates}` and `{venue}`. Issued text is frozen; later edits only affect new
+documents. Disabling a type stops issuance without revoking existing documents.
+Each definition is revision checked, locked and audited.
+
+Select actual stored recipient roles (staff, participants, sponsors, mentors
+or any event-defined role), or all accounts. These are recipient criteria;
+management authorization still uses capabilities. A type may allow guests
+without accounts, require a talk/activity name, and choose name-only, optional
+identification or mandatory identification. Only types using the shared
+attendance policy and not requiring an activity can offer self-service.
+Types without the attendance policy are manually issued, without attendance
+thresholds; their optional hours are entered explicitly.
+
+Staff issue from settings, the attendance reviewer or an account's certificate
+panel. `POST /api/certificates/issue` accepts exactly one account ID or guest
+name, an optional DNI/NIE/passport, activity and hours. An attendance-policy
+guest requires explicit hours and a review reason because there is no linked
+attendance evidence. Guest request replays are idempotent; separate intentional
+requests may issue distinct documents to people with identical names.
+Accounts can hold separate certificates for different talks.
+
+The settings register (`GET /api/certificates/issued`) defaults to guests.
+Search by recipient name, certificate type, talk/activity or verification code,
+filter valid/revoked documents, download the original or stamped copy, and revoke
+with a reason. Guest documents remain here after the issuance dialog closes;
+they need no account to be found or downloaded again. Revoked records stay
+searchable while all PDF access returns 409. Attendance-award changes affect
+attendance-policy documents only, preserving unrelated speaker/staff documents.
 
 ## Document and verification
 
 The PDF is rendered on demand from `attendance_certificates.snapshot` (name,
 event, dates, venue, issuer, hours, activities as issued). The DNI/NIE is the
-exception: it is read live from `users.dni`, printed only when the account has
-one, and never stored on the certificate. The JSON verification never returns it;
+exception: by default it is read live from `users.dni`. Explicitly supplied DNI/NIE/passport values are stored in separate recipient columns, outside the public snapshot. The type can omit identification, allow it optionally, or require it. Optional identification can be excluded at issuance. The JSON verification and register never return identification numbers;
 the official PDF does, on purpose: the owner shares the document (or its CSV) with
 administrations, and `/verify/{code}` is the viewer they use to check it is the
 real one.
@@ -148,14 +181,14 @@ Mobile screens are not built yet.
 
 ## Lifecycle
 
-- One live certificate per person, variant and language: asking again returns it
+- One live certificate per account, configured type, activity and language: asking again returns it
   (concurrent requests converge on the unique index).
 - Staff issue one (`POST /api/certificates`), issue to everyone eligible
   (`POST /api/certificates/bulk`, idempotent) or revoke with a reason
   (`POST /api/certificates/:id/revoke`). A revoked certificate verifies as
   revoked with no personal data and its PDF answers 409.
 - Account removal (H54) revokes the person's certificates and clears their
-  snapshot and deletes the manual award (`identity/removal.ts`).
+  snapshot, explicit recipient identity fields and the manual award (`identity/removal.ts`).
 - Issue, revoke and settings changes are audited (H53):
   `certificate.issue`, `certificate.approve`, `certificate.revoke`,
-  `certificate_settings.update` and university `export` actions.
+  `certificate_settings.update`, `certificate_type.create`, `certificate_type.update` and university `export` actions.

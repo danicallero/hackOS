@@ -31,6 +31,10 @@ beforeEach(async () => {
   await pool.query(
     `UPDATE certificate_settings SET min_hours = 10, min_review_hours = NULL, award_hours = NULL, requires_demo = false, issuer_name = DEFAULT`,
   );
+  await pool.query(`DELETE FROM certificate_types WHERE legacy_variant IS NULL`);
+  await pool.query(
+    `UPDATE certificate_types SET enabled=true, attendance_policy=true, self_service=true, audience_role_ids=NULL, allow_guests=false, identity_policy='optional', requires_activity=false, body_i18n=NULL WHERE legacy_variant IS NOT NULL`,
+  );
   staff = await createUserWithCapabilities([CAPABILITIES.PRESENCE_MANAGE]);
   person = await createUser({ name: "Ada" });
   await pool.query(`UPDATE users SET surname = 'Lovelace', dni = '12345678Z' WHERE id = $1`, [
@@ -746,5 +750,286 @@ describe("public verification rate limit", () => {
     }
     expect(statuses.slice(0, 60).every((s) => s === 404)).toBe(true);
     expect(statuses.slice(60).every((s) => s === 429)).toBe(true);
+  });
+});
+
+describe("configured types and the durable guest register", () => {
+  const tr = (value: string) => ({ es: value, gl: value, en: value });
+  const definition = (patch = {}) => ({
+    name: tr("Speaker"),
+    title: tr("Speaker certificate"),
+    body: tr("{recipient} gave {activity} at {event}."),
+    enabled: true,
+    attendancePolicy: false,
+    selfService: false,
+    audienceRoleIds: null,
+    allowGuests: true,
+    identityPolicy: "optional",
+    requiresActivity: true,
+    ...patch,
+  });
+  async function createType(patch = {}) {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/certificates/types",
+      headers: asUser(staff),
+      payload: definition(patch),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return res.json();
+  }
+  async function configured(typeId: number, patch = {}, key?: string) {
+    return app.inject({
+      method: "POST",
+      url: "/api/certificates/issue",
+      headers: { ...asUser(staff), ...(key ? { "idempotency-key": key } : {}) },
+      payload: {
+        typeId,
+        locale: "en",
+        guestName: "Grace Hopper",
+        activityName: "Compilers",
+        ...patch,
+      },
+    });
+  }
+
+  it("keeps name-only guest documents searchable, downloadable and revocable after issuance", async () => {
+    const type = await createType();
+    const response = await configured(type.id, { includeIdentification: false }, "guest-speaker");
+    expect(response.statusCode, response.body).toBe(200);
+    const cert = response.json();
+    expect(cert).toMatchObject({
+      userId: null,
+      recipientName: "Grace Hopper",
+      typeName: "Speaker",
+      activityName: "Compilers",
+    });
+    const replay = await configured(type.id, { includeIdentification: false }, "guest-speaker");
+    expect(replay.json().id).toBe(cert.id);
+    const register = await app.inject({
+      method: "GET",
+      url: "/api/certificates/issued",
+      headers: asUser(staff),
+    });
+    expect(register.json().items).toContainEqual(
+      expect.objectContaining({ id: cert.id, recipientName: "Grace Hopper" }),
+    );
+    for (const copy of [false, true]) {
+      const pdf = await app.inject({
+        method: "GET",
+        url: `/api/certificates/${cert.id}/pdf?copy=${copy}`,
+        headers: asUser(staff),
+      });
+      expect(pdf.statusCode, pdf.body).toBe(200);
+      expect(pdf.rawPayload.subarray(0, 5).toString()).toBe("%PDF-");
+    }
+    const noOwner = await app.inject({
+      method: "GET",
+      url: `/api/me/certificates/${cert.id}/pdf`,
+      headers: asUser(person),
+    });
+    expect(noOwner.statusCode).toBe(403);
+    const revoked = await app.inject({
+      method: "POST",
+      url: `/api/certificates/${cert.id}/revoke`,
+      headers: asUser(staff),
+      payload: { reason: "Wrong talk" },
+    });
+    expect(revoked.statusCode).toBe(200);
+    const check = await app.inject({ method: "GET", url: `/api/public/certificates/${cert.code}` });
+    expect(check.json()).toMatchObject({ status: "revoked", name: null });
+    const pdf = await app.inject({
+      method: "GET",
+      url: `/api/certificates/${cert.id}/pdf`,
+      headers: asUser(staff),
+    });
+    expect(pdf.statusCode).toBe(409);
+    const after = await app.inject({
+      method: "GET",
+      url: "/api/certificates/issued",
+      headers: asUser(staff),
+    });
+    expect(after.json().items[0].revokedAt).toBeTruthy();
+  });
+
+  it("enforces guest, activity and identification policies and keeps passport numbers private", async () => {
+    const type = await createType({ identityPolicy: "required" });
+    expect((await configured(type.id)).statusCode).toBe(400);
+    expect((await configured(type.id, { activityName: "" })).statusCode).toBe(400);
+    expect(
+      (await configured(type.id, { documentNumber: "P12345", includeIdentification: false }))
+        .statusCode,
+    ).toBe(400);
+    const issued = await configured(type.id, {
+      documentNumber: "P12345",
+      documentKind: "passport",
+    });
+    expect(issued.statusCode, issued.body).toBe(200);
+    const cert = issued.json();
+    const verification = await app.inject({
+      method: "GET",
+      url: `/api/public/certificates/${cert.code}`,
+    });
+    expect(verification.body).not.toContain("P12345");
+    const registry = await app.inject({
+      method: "GET",
+      url: "/api/certificates/issued",
+      headers: asUser(staff),
+    });
+    expect(registry.body).not.toContain("P12345");
+    const { rows } = await pool.query(
+      "SELECT recipient_document_number, snapshot FROM attendance_certificates WHERE id=$1",
+      [cert.id],
+    );
+    expect(rows[0].recipient_document_number).toBe("P12345");
+    expect(JSON.stringify(rows[0].snapshot)).not.toContain("P12345");
+    const noGuests = await createType({ allowGuests: false });
+    expect((await configured(noGuests.id)).statusCode).toBe(400);
+    const noId = await createType({ identityPolicy: "none" });
+    expect((await configured(noId.id, { documentNumber: "123" })).statusCode).toBe(400);
+  });
+
+  it("uses stored role membership and allows separate talks for the same account", async () => {
+    const { rows } = await pool.query("SELECT role_id FROM user_roles WHERE user_id=$1 LIMIT 1", [
+      staff,
+    ]);
+    const roleId = rows[0].role_id;
+    const type = await createType({ audienceRoleIds: [roleId], allowGuests: false });
+    const request = (userId: number, activityName = "Compilers") =>
+      app.inject({
+        method: "POST",
+        url: "/api/certificates/issue",
+        headers: asUser(staff),
+        payload: { typeId: type.id, locale: "en", userId, activityName },
+      });
+    expect((await request(person)).statusCode).toBe(403);
+    const first = await request(staff);
+    expect(first.statusCode, first.body).toBe(200);
+    expect((await request(staff)).json().id).toBe(first.json().id);
+    const second = await request(staff, "Debugging");
+    expect(second.statusCode).toBe(200);
+    expect(second.json().id).not.toBe(first.json().id);
+    const self = await app.inject({
+      method: "POST",
+      url: "/api/me/certificates/issue",
+      headers: asUser(staff),
+      payload: { typeId: type.id, locale: "en" },
+    });
+    expect(self.statusCode).toBe(403);
+  });
+
+  it("freezes issued wording, checks revisions and keeps old downloads when a type is disabled", async () => {
+    const type = await createType();
+    const cert = (await configured(type.id)).json();
+    const updated = definition({
+      enabled: false,
+      title: tr("New title"),
+      body: tr("Changed wording"),
+    });
+    const update = () =>
+      app.inject({
+        method: "PUT",
+        url: `/api/certificates/types/${type.id}`,
+        headers: asUser(staff),
+        payload: { revision: type.revision, definition: updated },
+      });
+    expect((await update()).statusCode).toBe(200);
+    expect((await update()).statusCode).toBe(409);
+    expect((await configured(type.id)).statusCode).toBe(409);
+    const { rows } = await pool.query("SELECT snapshot FROM attendance_certificates WHERE id=$1", [
+      cert.id,
+    ]);
+    expect(rows[0].snapshot.templateBody).toBe("Grace Hopper gave Compilers at HackUDC.");
+    expect(rows[0].snapshot.templateTitle).toBe("Speaker certificate");
+    const pdf = await app.inject({
+      method: "GET",
+      url: `/api/certificates/${cert.id}/pdf`,
+      headers: asUser(staff),
+    });
+    expect(pdf.statusCode).toBe(200);
+  });
+
+  it("does not revoke speaker documents when attendance awards change", async () => {
+    const type = await createType({ requiresActivity: false });
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/certificates/issue",
+      headers: asUser(staff),
+      payload: { typeId: type.id, locale: "en", userId: person },
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { awardHours: 37 },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/api/users/${person}/certificate-approval`,
+      headers: asUser(staff),
+      payload: { certifiedHours: 31, reason: "Reviewed all activities" },
+    });
+    const { rows } = await pool.query(
+      "SELECT revoked_at FROM attendance_certificates WHERE id=$1",
+      [response.json().id],
+    );
+    expect(rows[0].revoked_at).toBeNull();
+  });
+
+  it("offers eligible configured attendance types through self-service", async () => {
+    await presence(person, 12);
+    const type = await createType({
+      attendancePolicy: true,
+      selfService: true,
+      requiresActivity: false,
+      allowGuests: false,
+    });
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/me/certificates",
+      headers: asUser(person),
+    });
+    expect(overview.json().types).toContainEqual(expect.objectContaining({ id: type.id }));
+    const issued = await app.inject({
+      method: "POST",
+      url: "/api/me/certificates/issue",
+      headers: asUser(person),
+      payload: { typeId: type.id, locale: "gl" },
+    });
+    expect(issued.statusCode, issued.body).toBe(200);
+    expect(issued.json()).toMatchObject({ typeId: type.id, userId: person, locale: "gl" });
+  });
+
+  it("requires an explicit attendance award for guests and preserves it over the standard award", async () => {
+    const type = await createType({ attendancePolicy: true, requiresActivity: false });
+    expect((await configured(type.id)).statusCode).toBe(400);
+    await app.inject({
+      method: "PUT",
+      url: "/api/certificates/settings",
+      headers: asUser(staff),
+      payload: { awardHours: 37 },
+    });
+    const issued = await configured(type.id, {
+      certifiedHours: 27.5,
+      overrideReason: "Reviewed the guest's attendance",
+    });
+    expect(issued.statusCode, issued.body).toBe(200);
+    const { rows } = await pool.query("SELECT snapshot FROM attendance_certificates WHERE id=$1", [
+      issued.json().id,
+    ]);
+    expect(rows[0].snapshot).toMatchObject({ hours: 27.5, manuallyCertified: true });
+  });
+
+  it("denies certificate management without the capability", async () => {
+    for (const url of [
+      "/api/certificates/types",
+      "/api/certificates/issued",
+      "/api/certificates/recipients?q=Ada",
+    ]) {
+      expect((await app.inject({ method: "GET", url, headers: asUser(person) })).statusCode).toBe(
+        403,
+      );
+    }
   });
 });

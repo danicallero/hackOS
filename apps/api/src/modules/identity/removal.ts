@@ -1423,7 +1423,7 @@ async function scrubRelationships(
   // #1083: certificates stay verifiable as revoked, without the person's data.
   await client.query(
     `UPDATE attendance_certificates
-        SET snapshot = '{}'::jsonb, revoked_at = COALESCE(revoked_at, now()),
+        SET snapshot = '{}'::jsonb, recipient_name=NULL, recipient_document_kind=NULL, recipient_document_number=NULL, revoked_at = COALESCE(revoked_at, now()),
             revoked_reason = COALESCE(revoked_reason, 'account_removed')
       WHERE user_id = $1`,
     [userId],

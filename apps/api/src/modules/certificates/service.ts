@@ -17,6 +17,12 @@ import {
   type CertificateVariant,
   renderCertificatePdf,
 } from "./pdf.js";
+import {
+  assertTypeRecipient,
+  listCertificateTypes,
+  readCertificateType,
+  recipientMatchesType,
+} from "./types.js";
 
 /** #1083: the organisation-wide certificate policy (one row). */
 export interface CertificateSettings {
@@ -68,7 +74,7 @@ export async function updateSettings(
       const { rows } = await client.query(
         `UPDATE attendance_certificates
         SET revoked_at=now(), revoked_by=$1, revoked_reason='certificate_award_policy_changed'
-        WHERE revoked_at IS NULL AND snapshot->>'manuallyCertified' IS DISTINCT FROM 'true' RETURNING id`,
+        WHERE revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND snapshot->>'manuallyCertified' IS DISTINCT FROM 'true' RETURNING id`,
         [actorId],
       );
       for (const row of rows)
@@ -187,7 +193,7 @@ async function recordApproval(
   // An existing public code must never verify a different award after a review.
   const { rows } = await client.query(
     `UPDATE attendance_certificates SET revoked_at=now(), revoked_by=$2, revoked_reason='certified_hours_reviewed'
-    WHERE user_id=$1 AND revoked_at IS NULL AND ((snapshot->>'hours')::numeric IS DISTINCT FROM $3::numeric OR snapshot->>'manuallyCertified' IS DISTINCT FROM 'true') RETURNING id`,
+    WHERE user_id=$1 AND revoked_at IS NULL AND snapshot->>'attendancePolicy' IS DISTINCT FROM 'false' AND ((snapshot->>'hours')::numeric IS DISTINCT FROM $3::numeric OR snapshot->>'manuallyCertified' IS DISTINCT FROM 'true') RETURNING id`,
     [userId, actorId, certifiedHours],
   );
   for (const row of rows)
@@ -272,19 +278,26 @@ function reasonError(reason: EligibilityReason): ConflictError {
 
 async function buildSnapshot(
   db: pg.Pool | pg.PoolClient,
-  userId: number,
+  userId: number | null,
   locale: CertificateLocale,
   hours: number,
   issuerName: string,
+  guestName?: string,
 ): Promise<CertificateSnapshot> {
-  const { rows: people } = await db.query(
-    `SELECT u.name, u.surname, c.name AS event_name, c.venue_name, c.timezone,
+  const { rows: people } =
+    userId == null
+      ? await db.query(
+          `SELECT $1::text AS name, NULL::text AS surname, name AS event_name, venue_name, timezone, event_starts_at, event_ends_at FROM event_config WHERE id=1`,
+          [guestName],
+        )
+      : await db.query(
+          `SELECT u.name, u.surname, c.name AS event_name, c.venue_name, c.timezone,
             c.event_starts_at, c.event_ends_at
        FROM users u CROSS JOIN event_config c
       WHERE u.id = $1 AND c.id = 1
         AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
-    [userId],
-  );
+          [userId],
+        );
   const person = people[0];
   if (!person) throw new NotFoundError("User not found");
   if (!person.event_starts_at || !person.event_ends_at) {
@@ -321,7 +334,11 @@ async function buildSnapshot(
 export interface CertificateRow {
   id: number;
   code: string;
-  userId: number;
+  userId: number | null;
+  typeId: number;
+  typeName: string | null;
+  recipientName: string;
+  activityName: string;
   variant: CertificateVariant;
   locale: CertificateLocale;
   source: "self" | "bulk" | "staff";
@@ -335,7 +352,11 @@ function toRow(row: Record<string, unknown>): CertificateRow {
   return {
     id: row.id as number,
     code: row.code as string,
-    userId: row.user_id as number,
+    userId: row.user_id as number | null,
+    typeId: row.type_id as number,
+    typeName: row.type_name as string | null,
+    recipientName: row.recipient_name_display as string,
+    activityName: row.activity_name as string,
     variant: row.variant as CertificateVariant,
     locale: row.locale as CertificateLocale,
     source: row.source as CertificateRow["source"],
@@ -346,18 +367,25 @@ function toRow(row: Record<string, unknown>): CertificateRow {
   };
 }
 
-const COLUMNS = `id, code, user_id, variant, locale, source, override_reason, issued_at,
+const COLUMNS = `id, code, user_id, type_id, snapshot->>'typeName' AS type_name,
+                 COALESCE(snapshot->>'name','') || COALESCE(' ' || (snapshot->>'surname'),'') AS recipient_name_display, activity_name, variant, locale, source, override_reason, issued_at,
                  revoked_at, revoked_reason`;
 
 interface IssueOptions {
-  userId: number;
+  userId: number | null;
   variant: CertificateVariant;
+  typeId?: number;
   locale: CertificateLocale;
   source: "self" | "bulk" | "staff";
   actorId: number | null;
   overrideReason?: string | null;
   hours: number;
   approval?: { certifiedHours: number; reason: string };
+  guestName?: string;
+  activityName?: string;
+  documentKind?: "dni_nie" | "passport";
+  documentNumber?: string;
+  includeIdentification?: boolean;
 }
 
 /**
@@ -370,8 +398,35 @@ async function insertCertificate(
   return withTransaction(async (client) => {
     await client.query(`SELECT id FROM certificate_settings WHERE id=1 FOR SHARE`);
     const settings = await readSettings(client);
-    await lockPerson(client, opts.userId);
-    if (opts.approval && opts.actorId != null)
+    const definition = await readCertificateType(opts.typeId, opts.variant, client, true);
+    if (!definition.enabled) throw new ConflictError("This certificate type is disabled");
+    if (opts.userId != null) {
+      await lockPerson(client, opts.userId);
+      await assertTypeRecipient(definition, opts.userId, client, opts.source === "self");
+    } else if (!definition.allowGuests || !opts.guestName?.trim()) {
+      throw new BadRequestError("This certificate type does not accept guest recipients");
+    }
+    if (definition.requiresActivity && !opts.activityName?.trim())
+      throw new BadRequestError("A talk or activity name is required");
+    const { rows: identities } =
+      opts.userId == null
+        ? { rows: [] }
+        : await client.query(`SELECT dni FROM users WHERE id=$1`, [opts.userId]);
+    if (
+      definition.identityPolicy === "required" &&
+      (opts.includeIdentification === false || !(opts.documentNumber?.trim() || identities[0]?.dni))
+    )
+      throw new BadRequestError("This certificate type requires identification");
+    if (opts.includeIdentification === true && !(opts.documentNumber?.trim() || identities[0]?.dni))
+      throw new BadRequestError("Identification was selected but no document number is available");
+    if (opts.documentKind && !opts.documentNumber)
+      throw new BadRequestError("A document type requires an explicit document number");
+    if (
+      (definition.identityPolicy === "none" || opts.includeIdentification === false) &&
+      opts.documentNumber
+    )
+      throw new BadRequestError("This certificate type does not collect identification");
+    if (opts.approval && opts.actorId != null && opts.userId != null)
       await recordApproval(
         client,
         opts.actorId,
@@ -379,21 +434,65 @@ async function insertCertificate(
         opts.approval.certifiedHours,
         opts.approval.reason,
       );
-    const approval = await readApproval(opts.userId, client);
+    const approval =
+      definition.attendancePolicy && opts.userId != null
+        ? await readApproval(opts.userId, client)
+        : null;
+    let certificateHours = opts.hours;
+    if (definition.attendancePolicy && opts.userId != null) {
+      const [{ hours }, demoed] = await Promise.all([
+        userHours(opts.userId, undefined, undefined, { verifiedOnly: true }),
+        demoedUsers([opts.userId]),
+      ]);
+      const eligibility = evaluate(settings, hours, demoed.has(opts.userId), approval);
+      if (!eligibility.eligible && eligibility.reason) throw reasonError(eligibility.reason);
+      certificateHours = eligibility.certifiedHours ?? hours;
+    }
     const snapshot = await buildSnapshot(
       client,
       opts.userId,
       opts.locale,
-      approval?.certifiedHours ?? settings.awardHours ?? opts.hours,
+      certificateHours,
       settings.issuerName,
+      opts.guestName,
     );
-    if (approval) snapshot.manuallyCertified = true;
-    if (settings.awardHours != null) snapshot.certifiedAward = true;
+    if (approval || (definition.attendancePolicy && opts.userId == null))
+      snapshot.manuallyCertified = true;
+    if (definition.attendancePolicy && settings.awardHours != null) snapshot.certifiedAward = true;
+    snapshot.attendancePolicy = definition.attendancePolicy;
+    snapshot.typeName = definition.name[opts.locale];
+    snapshot.templateTitle = definition.title[opts.locale];
+    snapshot.identityPolicy =
+      definition.identityPolicy === "optional" && opts.includeIdentification === false
+        ? "none"
+        : definition.identityPolicy;
+    snapshot.documentKind = opts.documentKind ?? "dni_nie";
+    const activityName = opts.activityName?.trim() ?? "";
+    if (definition.body) {
+      const date = new Intl.DateTimeFormat(opts.locale, {
+        dateStyle: "long",
+        timeZone: snapshot.timezone,
+      });
+      const fields: Record<string, string> = {
+        recipient: [snapshot.name, snapshot.surname].filter(Boolean).join(" "),
+        issuer: snapshot.issuerName,
+        event: snapshot.eventName,
+        activity: activityName,
+        hours: String(snapshot.hours),
+        dates: `${date.format(new Date(snapshot.eventStartsAt))} – ${date.format(new Date(snapshot.eventEndsAt))}`,
+        venue: snapshot.venue ?? "",
+      };
+      snapshot.templateBody = definition.body[opts.locale].replace(
+        /\{([^{}]+)\}/g,
+        (_match, key: string) => fields[key] ?? "",
+      );
+    }
+    if (!definition.attendancePolicy && opts.hours > 0) snapshot.certifiedAward = true;
     const { rows } = await client.query(
       `INSERT INTO attendance_certificates
-         (code, user_id, variant, locale, source, override_reason, issued_by, snapshot)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (user_id, variant, locale) WHERE revoked_at IS NULL DO NOTHING
+         (code, user_id, variant, locale, source, override_reason, issued_by, snapshot, type_id, activity_name, recipient_name, recipient_document_kind, recipient_document_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       ON CONFLICT (user_id, type_id, locale, activity_name) WHERE revoked_at IS NULL DO NOTHING
        RETURNING ${COLUMNS}`,
       [
         randomBytes(18).toString("base64url"),
@@ -404,6 +503,11 @@ async function insertCertificate(
         opts.overrideReason ?? null,
         opts.actorId,
         JSON.stringify(snapshot),
+        definition.id,
+        activityName,
+        opts.guestName ?? null,
+        opts.documentKind ?? null,
+        opts.documentNumber?.trim() || null,
       ],
     );
     if (rows[0]) {
@@ -413,15 +517,20 @@ async function insertCertificate(
         entityId: rows[0].id,
         action: "certificate.issue",
         source: opts.source === "bulk" ? "admin" : "web",
-        after: { userId: opts.userId, variant: opts.variant, source: opts.source },
+        after: {
+          userId: opts.userId,
+          typeId: definition.id,
+          variant: opts.variant,
+          source: opts.source,
+        },
         reason: opts.overrideReason ?? undefined,
       });
       return { ...toRow(rows[0]), created: true };
     }
     const { rows: live } = await client.query(
       `SELECT ${COLUMNS} FROM attendance_certificates
-        WHERE user_id = $1 AND variant = $2 AND locale = $3 AND revoked_at IS NULL`,
-      [opts.userId, opts.variant, opts.locale],
+        WHERE user_id = $1 AND type_id = $2 AND locale = $3 AND activity_name=$4 AND revoked_at IS NULL`,
+      [opts.userId, definition.id, opts.locale, activityName],
     );
     return { ...toRow(live[0]), created: false };
   });
@@ -432,8 +541,11 @@ export async function issueForSelf(
   userId: number,
   variant: CertificateVariant,
   locale: CertificateLocale,
+  typeId?: number,
 ): Promise<CertificateRow> {
-  if (!(await hasEventAccess(pool, userId))) {
+  const definition = await readCertificateType(typeId, variant);
+  await assertTypeRecipient(definition, userId, pool, true);
+  if (definition.audienceRoleIds == null && !(await hasEventAccess(pool, userId))) {
     throw new ForbiddenError("Certificates are only available to event attendees");
   }
   const eligibility = await eligibilityFor(userId);
@@ -442,6 +554,7 @@ export async function issueForSelf(
     userId,
     variant,
     locale,
+    typeId: definition.id,
     source: "self",
     actorId: userId,
     hours: eligibility.hours,
@@ -570,8 +683,8 @@ export async function certificateIdByCode(code: string): Promise<number> {
 }
 
 /** The certificate's owner, for access checks. */
-export async function certificateOwner(id: number): Promise<number> {
-  const { rows } = await pool.query<{ user_id: number }>(
+export async function certificateOwner(id: number): Promise<number | null> {
+  const { rows } = await pool.query<{ user_id: number | null }>(
     `SELECT user_id FROM attendance_certificates WHERE id = $1`,
     [id],
   );
@@ -588,8 +701,8 @@ export async function renderCertificate(
   opts: { copy: boolean },
 ): Promise<{ pdf: Uint8Array; filename: string }> {
   const { rows } = await pool.query(
-    `SELECT c.code, c.variant, c.locale, c.issued_at, c.revoked_at, c.snapshot, u.dni
-       FROM attendance_certificates c JOIN users u ON u.id = c.user_id
+    `SELECT c.code, c.variant, c.locale, c.issued_at, c.revoked_at, c.snapshot, COALESCE(c.recipient_document_number,u.dni) AS dni
+       FROM attendance_certificates c LEFT JOIN users u ON u.id = c.user_id
       WHERE c.id = $1`,
     [id],
   );
@@ -602,7 +715,7 @@ export async function renderCertificate(
     variant: row.variant,
     locale: row.locale,
     issuedAt: row.issued_at,
-    dni: row.dni ?? null,
+    dni: snapshot.identityPolicy === "none" ? null : (row.dni ?? null),
   });
   if (opts.copy) {
     pdf = await stampCopyFooter(pdf, {
@@ -814,4 +927,93 @@ export async function exportCertificateParticipants(
     }),
   );
   return csv;
+}
+
+export async function availableCertificateTypes(userId: number, self: boolean) {
+  const types = await listCertificateTypes();
+  const matches = await Promise.all(
+    types.map(async (type) =>
+      (await recipientMatchesType(type, userId, pool, self)) ? type : null,
+    ),
+  );
+  return matches.filter((type) => type != null);
+}
+
+export interface ConfiguredIssueInput {
+  typeId: number;
+  locale: CertificateLocale;
+  userId?: number;
+  guestName?: string;
+  documentKind?: "dni_nie" | "passport";
+  documentNumber?: string;
+  includeIdentification?: boolean;
+  activityName?: string;
+  certifiedHours?: number;
+  overrideReason?: string;
+}
+
+export async function issueConfiguredCertificate(
+  actorId: number,
+  input: ConfiguredIssueInput,
+): Promise<CertificateRow> {
+  const definition = await readCertificateType(input.typeId);
+  if ((input.userId == null) === !input.guestName?.trim())
+    throw new BadRequestError("Choose an account or enter a guest name");
+  let hours = input.certifiedHours ?? 0;
+  let approval: IssueOptions["approval"];
+  if (
+    input.userId == null &&
+    definition.attendancePolicy &&
+    !(input.certifiedHours && input.overrideReason)
+  )
+    throw new BadRequestError(
+      "Guest attendance certificates require explicit hours and a review reason",
+    );
+  if (input.userId != null) {
+    await assertFixtureSubjectScope(pool, actorId, input.userId);
+    await assertTypeRecipient(definition, input.userId);
+    if (definition.attendancePolicy) {
+      const eligibility = await eligibilityFor(input.userId);
+      if (!eligibility.eligible && !(input.overrideReason && input.certifiedHours != null))
+        throw reasonError(eligibility.reason ?? "not_available");
+      hours = input.certifiedHours ?? eligibility.certifiedHours ?? eligibility.hours;
+      if (input.certifiedHours != null) {
+        if (!input.overrideReason)
+          throw new BadRequestError("An attendance override requires a review reason");
+        approval = { certifiedHours: input.certifiedHours, reason: input.overrideReason };
+      }
+    }
+  }
+  return insertCertificate({
+    userId: input.userId ?? null,
+    typeId: definition.id,
+    variant: definition.legacyVariant ?? "participation",
+    locale: input.locale,
+    source: "staff",
+    actorId,
+    hours,
+    approval,
+    guestName: input.guestName,
+    documentKind: input.documentKind,
+    documentNumber: input.documentNumber,
+    includeIdentification: input.includeIdentification,
+    activityName: input.activityName,
+    overrideReason: input.overrideReason,
+  });
+}
+
+export async function listIssuedCertificates(actorId: number) {
+  const fixture = await fixtureReadFilter(pool, actorId, "u");
+  const { rows } = await pool.query(
+    `SELECT c.id FROM attendance_certificates c LEFT JOIN users u ON u.id=c.user_id
+    WHERE (c.user_id IS NULL AND NOT EXISTS(SELECT 1 FROM users actor WHERE actor.id=$1 AND actor.is_test_account=true))
+       OR (c.user_id IS NOT NULL ${fixture}) ORDER BY c.issued_at DESC,c.id DESC`,
+    [actorId],
+  );
+  if (!rows.length) return [];
+  const { rows: records } = await pool.query(
+    `SELECT ${COLUMNS} FROM attendance_certificates WHERE id=ANY($1::int[]) ORDER BY issued_at DESC,id DESC`,
+    [rows.map((r) => r.id)],
+  );
+  return records.map(toRow);
 }

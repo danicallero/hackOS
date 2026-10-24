@@ -272,21 +272,26 @@ Table attempt_review_versions {
 }
 
 Table attendance_certificates {
+  activity_name text [not null, default: `''::text`]
   code text [unique, not null]
   id integer [pk, increment, not null]
   issued_at "timestamp with time zone" [not null, default: `now()`]
   issued_by integer
   locale text [not null]
   override_reason text
+  recipient_document_kind text
+  recipient_document_number text [note: '#1083 explicit recipient identification outside the public snapshot. Cleared on account removal. Account DNI remains live unless explicitly overridden.']
+  recipient_name text
   revoked_at "timestamp with time zone"
   revoked_by integer
   revoked_reason text
-  snapshot jsonb [not null, note: '#1083 name, event, dates, venue, issuer, verified hours and attended activities as issued; cleared on account removal (H54).']
+  snapshot jsonb [not null, note: '#1083 name, event, dates, venue, issuer, certified hours, activities and wording as issued; identification numbers excluded. Cleared on account removal (H54).']
   source text [not null]
-  user_id integer [not null]
+  type_id integer [not null]
+  user_id integer
   variant text [not null]
 
-  Note: '#1083 issued attendance certificates; rendered on demand from snapshot, verified publicly by code. DNI is never stored here.'
+  Note: '#1083 account and guest certificates; rendered from frozen content, publicly verified by code, searchable and revocable by staff.'
 }
 
 Table audit_log {
@@ -325,7 +330,7 @@ Table certificate_approvals {
 }
 
 Table certificate_settings {
-  award_hours "numeric(5,2)" [note: '#1083 optional configured certificate/university award; NULL uses confirmed attendance. No preset value.']
+  award_hours "numeric(5,2)" [note: '#1083 optional configured certificate/university award; NULL uses confirmed attendance. Individual approvals win.']
   id integer [pk, not null, default: `1`]
   issuer_name text [not null, default: `'Asociación Universitaria Grupo de Programadores e Usuarios de Linux (GPUL)'::text`]
   min_hours "numeric(5,2)"
@@ -333,7 +338,26 @@ Table certificate_settings {
   requires_demo boolean [not null, default: `false`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
-  Note: '#1083 single-row policy: hour threshold (NULL = no automatic issue), demo requirement and issuer name printed on certificates.'
+  Note: '#1083 single-row attendance policy: automatic/review thresholds, optional awarded hours and issuer name. No preconfigured hours.'
+}
+
+Table certificate_types {
+  allow_guests boolean [not null, default: `false`]
+  attendance_policy boolean [not null, default: `false`]
+  audience_role_ids "integer[]"
+  body_i18n jsonb
+  enabled boolean [not null, default: `true`]
+  id integer [pk, increment, not null]
+  identity_policy text [not null, default: `'optional'::text`]
+  legacy_variant text [unique]
+  name_i18n jsonb [not null]
+  requires_activity boolean [not null, default: `false`]
+  revision integer [not null, default: `1`]
+  self_service boolean [not null, default: `false`]
+  title_i18n jsonb [not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: '#1083 editable certificate definitions: trilingual content, actual role IDs, attendance policy, self-service, guests and optional/required/omitted identification.'
 }
 
 Table challenge_versions {
@@ -1502,6 +1526,7 @@ Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id
 Ref: attendance_certificates.issued_by > users.id
 Ref: attendance_certificates.revoked_by > users.id
+Ref: attendance_certificates.type_id > certificate_types.id
 Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
 Ref: certificate_approvals.approved_by > users.id

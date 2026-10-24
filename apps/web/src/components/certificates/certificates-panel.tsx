@@ -34,11 +34,13 @@ import {
   type CertificateOverview,
   type CertificateVariant,
   certificatesApi,
+  certificateTypesApi,
 } from "@/lib/certificates";
 import { LANGS, LOCALE_CODES, languageName, type MessageKey, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
+import { IssueCertificateDialog } from "./issue-certificate-dialog";
 
 const VARIANT_LABEL: Record<CertificateVariant, MessageKey> = {
   participation: "certificateVariantParticipation",
@@ -64,6 +66,7 @@ export function CertificatesPanel({
   const [data, setData] = useState<CertificateOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [variant, setVariant] = useState<CertificateVariant>("participation");
+  const [selectedTypeId, setSelectedTypeId] = useState("");
   const [locale, setLocale] = useState<Language>(language);
   const [certifiedHours, setCertifiedHours] = useState<string | null>(null);
   const [reason, setReason] = useState("");
@@ -108,6 +111,10 @@ export function CertificatesPanel({
     );
   }
 
+  const definitions =
+    data.types?.filter((type) => type.attendancePolicy && !type.requiresActivity) ?? [];
+  const selectedDefinition =
+    definitions.find((type) => String(type.id) === selectedTypeId) ?? definitions[0];
   const awardInput =
     certifiedHours ?? (data.settings?.awardHours == null ? "" : String(data.settings.awardHours));
   const below = staff && !data.eligibility.eligible;
@@ -115,6 +122,7 @@ export function CertificatesPanel({
 
   const body = (
     <div className="space-y-5">
+      {staff && <IssueCertificateDialog userId={staffUserId} onIssued={() => void load()} />}
       {staff && canExport && (
         <Button
           variant="outline"
@@ -137,7 +145,9 @@ export function CertificatesPanel({
               className="flex flex-wrap items-center justify-between gap-3 p-4 sm:px-5"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{t(VARIANT_LABEL[cert.variant])}</span>
+                <span className="font-medium">
+                  {cert.typeName ?? t(VARIANT_LABEL[cert.variant])}
+                </span>
                 <span className="text-muted-foreground text-sm">
                   {cert.locale.toUpperCase()} · {dateFormat.format(new Date(cert.issuedAt))}
                 </span>
@@ -205,18 +215,36 @@ export function CertificatesPanel({
       <div className="@container">
         <div className="grid gap-4 @lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] @lg:items-end">
           <div className="space-y-2">
-            <Select value={variant} onValueChange={(v) => setVariant(v as CertificateVariant)}>
-              <SelectTrigger aria-label={t("certificates")} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CERTIFICATE_VARIANTS.map((v) => (
-                  <SelectItem key={v} value={v}>
-                    {t(VARIANT_LABEL[v])}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {data.types ? (
+              <Select
+                value={selectedDefinition ? String(selectedDefinition.id) : ""}
+                onValueChange={setSelectedTypeId}
+              >
+                <SelectTrigger aria-label={t("certificateType")} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {definitions.map((type) => (
+                    <SelectItem key={type.id} value={String(type.id)}>
+                      {type.name[language]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={variant} onValueChange={(v) => setVariant(v as CertificateVariant)}>
+                <SelectTrigger aria-label={t("certificates")} className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CERTIFICATE_VARIANTS.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {t(VARIANT_LABEL[v])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div className="space-y-2">
             <Select value={locale} onValueChange={(v) => setLocale(v as Language)}>
@@ -234,13 +262,24 @@ export function CertificatesPanel({
           </div>
           <SubmitButton
             pending={pending}
-            disabled={staff ? below : !data.eligibility.eligible}
+            disabled={
+              (data.types !== undefined && !selectedDefinition) ||
+              (staff ? below : !data.eligibility.eligible)
+            }
             onClick={() =>
               void run(
                 () =>
-                  staff
-                    ? certificatesApi.issueFor(staffUserId, variant, locale)
-                    : certificatesApi.issueMine(variant, locale),
+                  selectedDefinition
+                    ? staff
+                      ? certificateTypesApi.issue({
+                          typeId: selectedDefinition.id,
+                          userId: staffUserId,
+                          locale,
+                        })
+                      : certificateTypesApi.issueMine(selectedDefinition.id, locale)
+                    : staff
+                      ? certificatesApi.issueFor(staffUserId, variant, locale)
+                      : certificatesApi.issueMine(variant, locale),
                 t("certificateIssuedToast"),
               )
             }

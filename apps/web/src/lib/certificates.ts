@@ -14,7 +14,11 @@ export interface CertificateSettings {
 export interface Certificate {
   id: number;
   code: string;
-  userId: number;
+  userId: number | null;
+  typeId: number;
+  typeName: string | null;
+  recipientName: string;
+  activityName: string;
   variant: CertificateVariant;
   locale: Language;
   issuedAt: string;
@@ -39,6 +43,7 @@ export const CERTIFICATE_VARIANTS: CertificateVariant[] = ["participation", "hou
 
 export interface CertificateOverview {
   settings?: CertificateSettings;
+  types?: CertificateType[];
   eligibility: CertificateEligibility;
   certificates: Certificate[];
 }
@@ -89,4 +94,50 @@ export const certificatesApi = {
   /** Without the CSV footer; `copy` is what the participant gets. */
   download: (id: number, copy: boolean) =>
     apiDownload(`/api/certificates/${id}/pdf${copy ? "?copy=true" : ""}`, `certificate-${id}.pdf`),
+};
+
+export type CertificateText = Record<Language, string>;
+export interface CertificateTypeInput {
+  name: CertificateText;
+  title: CertificateText;
+  body: CertificateText | null;
+  enabled: boolean;
+  attendancePolicy: boolean;
+  selfService: boolean;
+  audienceRoleIds: number[] | null;
+  allowGuests: boolean;
+  identityPolicy: "none" | "optional" | "required";
+  requiresActivity: boolean;
+}
+export interface CertificateType extends CertificateTypeInput {
+  id: number;
+  revision: number;
+  legacyVariant: CertificateVariant | null;
+}
+export interface CertificateIssueInput {
+  typeId: number;
+  locale: Language;
+  userId?: number;
+  guestName?: string;
+  documentKind?: "dni_nie" | "passport";
+  documentNumber?: string;
+  includeIdentification?: boolean;
+  activityName?: string;
+  certifiedHours?: number;
+  overrideReason?: string;
+}
+export const certificateTypesApi = {
+  list: () =>
+    api.get<{ items: CertificateType[]; roles: { id: number; name: string }[] }>(
+      "/api/certificates/types",
+    ),
+  create: (definition: CertificateTypeInput) =>
+    api.post<CertificateType>("/api/certificates/types", { ...definition }),
+  update: (id: number, revision: number, definition: CertificateTypeInput) =>
+    api.put<CertificateType>(`/api/certificates/types/${id}`, { revision, definition }),
+  issue: (input: CertificateIssueInput) =>
+    api.post<Certificate>("/api/certificates/issue", { ...input }),
+  issueMine: (typeId: number, locale: Language) =>
+    api.post<Certificate>("/api/me/certificates/issue", { typeId, locale }),
+  issued: () => api.get<{ items: Certificate[] }>("/api/certificates/issued"),
 };

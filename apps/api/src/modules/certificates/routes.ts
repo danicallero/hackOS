@@ -13,6 +13,7 @@ import { presenceTimeline } from "../logistics/presence.js";
 import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import {
   approveCertificateHours,
+  availableCertificateTypes,
   certificateIdByCode,
   certificateOwner,
   certificateParticipants,
@@ -28,6 +29,7 @@ import {
   updateSettings,
   verifyCode,
 } from "./service.js";
+import { registerCertificateTypeRoutes } from "./type-routes.js";
 
 const variant = z.enum(["participation", "hours", "activities"]);
 const locale = z.enum(["es", "gl", "en"]);
@@ -59,7 +61,11 @@ const eligibilitySchema = z.object({
 const certificateSchema = z.object({
   id: z.number(),
   code: z.string(),
-  userId: z.number(),
+  userId: z.number().nullable(),
+  typeId: z.number(),
+  typeName: z.string().nullable(),
+  recipientName: z.string(),
+  activityName: z.string(),
   variant,
   locale,
   source: z.enum(["self", "bulk", "staff"]),
@@ -85,6 +91,7 @@ async function limitVerification(req: FastifyRequest): Promise<void> {
 
 /** #1083: attendance certificates. Staff routes need `presence:manage`, the capability behind verified hours. */
 export function registerCertificateRoutes(app: FastifyInstance): void {
+  registerCertificateTypeRoutes(app);
   const r = app.withTypeProvider<ZodTypeProvider>();
   const staff = requireCapability(CAPABILITIES.PRESENCE_MANAGE);
   const staffPolicy = { kind: "capability" as const, capability: CAPABILITIES.PRESENCE_MANAGE };
@@ -215,6 +222,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
             settings: settingsSchema,
             eligibility: eligibilitySchema,
             certificates: z.array(certificateSchema),
+            types: z.array(z.unknown()),
           }),
         },
       },
@@ -226,7 +234,12 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         eligibilityFor(userId),
         listForUser(userId),
       ]);
-      return { settings, eligibility, certificates };
+      return {
+        settings,
+        eligibility,
+        certificates,
+        types: await availableCertificateTypes(userId, true),
+      };
     },
   );
 
@@ -320,6 +333,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
             settings: settingsSchema,
             eligibility: eligibilitySchema,
             certificates: z.array(certificateSchema),
+            types: z.array(z.unknown()),
           }),
         },
       },
@@ -328,6 +342,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       settings: await readSettings(),
       eligibility: await eligibilityFor(req.params.id),
       certificates: await listForUser(req.params.id),
+      types: await availableCertificateTypes(req.params.id, false),
     }),
   );
 

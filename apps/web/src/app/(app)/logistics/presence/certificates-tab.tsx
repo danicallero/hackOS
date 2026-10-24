@@ -4,6 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { useState } from "react";
 import { CertificatesPanel } from "@/components/certificates/certificates-panel";
+import { IssueCertificateDialog } from "@/components/certificates/issue-certificate-dialog";
 import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EntityCombobox } from "@/components/common/entity-combobox";
@@ -154,7 +155,10 @@ export function AttendanceCertificatesTab() {
           </div>
         )}
       </div>
-      <AttendanceEvidenceExports />
+      <div className="flex flex-wrap gap-2">
+        <AttendanceEvidenceExports />
+        <IssueCertificateDialog onIssued={roster.reload} />
+      </div>
       {error && <ContextualError message={error} />}
       <p className="text-sm text-muted-foreground">{t("certificateExportScope")}</p>
       <DataTable

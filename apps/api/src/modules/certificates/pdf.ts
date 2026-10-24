@@ -16,6 +16,12 @@ export interface CertificateSnapshot {
   hours: number;
   manuallyCertified?: boolean;
   certifiedAward?: boolean;
+  attendancePolicy?: boolean;
+  typeName?: string;
+  templateTitle?: string;
+  templateBody?: string;
+  identityPolicy?: "none" | "optional" | "required";
+  documentKind?: "dni_nie" | "passport";
   activities: { name: string; at: string }[];
 }
 
@@ -26,7 +32,7 @@ interface Copy {
   title: string;
   by: (issuer: string) => string;
   certifies: string;
-  person: (dni: string | null) => { before: string; after: string };
+  person: (dni: string | null, passport?: boolean) => { before: string; after: string };
   took: (event: string, venue: string | null, from: string, to: string) => string;
   participation: string;
   hours: (hours: string) => string;
@@ -40,13 +46,15 @@ const COPY: Record<CertificateLocale, Copy> = {
     title: "CERTIFICADO DE ASISTENCIA",
     by: (issuer) => `${issuer}, como entidad organizadora,`,
     certifies: "CERTIFICA:",
-    person: (dni) => ({ before: "Que ", after: `${dni ? ` con DNI/NIE ${dni}` : ""}, ` }),
+    person: (dni, passport) => ({
+      before: "Que ",
+      after: `${dni ? ` con ${passport ? "pasaporte" : "DNI/NIE"} ${dni}` : ""}, `,
+    }),
     took: (event, venue, from, to) =>
       `ha participado activamente en el evento ${event}${venue ? `, celebrado en ${venue},` : ""} durante los días ${from} al ${to}.`,
     participation:
       "Durante el transcurso del evento, el interesado ha colaborado en el desarrollo de proyectos tecnológicos, asistido a talleres especializados y participado en las dinámicas de innovación propuestas por la organización, completando el programa del evento.",
-    hours: (hours) =>
-      `Su presencia verificada en el recinto durante el evento ha sido de ${hours} horas.`,
+    hours: (hours) => `Se acreditan ${hours} horas de participación en el evento.`,
     activities: "Ha asistido a las siguientes actividades:",
     closing: "Y para que así conste a los efectos oportunos, se expide el presente certificado.",
     issued: (date) => `Emitido el ${date}.`,
@@ -55,13 +63,15 @@ const COPY: Record<CertificateLocale, Copy> = {
     title: "CERTIFICADO DE ASISTENCIA",
     by: (issuer) => `${issuer}, como entidade organizadora,`,
     certifies: "CERTIFICA:",
-    person: (dni) => ({ before: "Que ", after: `${dni ? ` con DNI/NIE ${dni}` : ""}, ` }),
+    person: (dni, passport) => ({
+      before: "Que ",
+      after: `${dni ? ` con ${passport ? "pasaporte" : "DNI/NIE"} ${dni}` : ""}, `,
+    }),
     took: (event, venue, from, to) =>
       `participou activamente no evento ${event}${venue ? `, celebrado en ${venue},` : ""} durante os días ${from} ao ${to}.`,
     participation:
       "Durante o transcurso do evento, o interesado colaborou no desenvolvemento de proxectos tecnolóxicos, asistiu a obradoiros especializados e participou nas dinámicas de innovación propostas pola organización, completando o programa do evento.",
-    hours: (hours) =>
-      `A súa presenza verificada no recinto durante o evento foi de ${hours} horas.`,
+    hours: (hours) => `Acredítanse ${hours} horas de participación no evento.`,
     activities: "Asistiu ás seguintes actividades:",
     closing: "E para que así conste aos efectos oportunos, expídese o presente certificado.",
     issued: (date) => `Emitido o ${date}.`,
@@ -75,7 +85,7 @@ const COPY: Record<CertificateLocale, Copy> = {
       `actively took part in the event ${event}${venue ? `, held at ${venue},` : ""} from ${from} to ${to}.`,
     participation:
       "During the event, the participant collaborated in the development of technology projects, attended specialised workshops and took part in the innovation activities proposed by the organisation, completing the event programme.",
-    hours: (hours) => `Their verified presence at the venue during the event was ${hours} hours.`,
+    hours: (hours) => `This certifies ${hours} hours of participation in the event.`,
     activities: "They attended the following activities:",
     closing: "This certificate is issued for all appropriate purposes.",
     issued: (date) => `Issued on ${date}.`,
@@ -117,7 +127,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   const { snapshot, variant, locale, issuedAt, dni } = input;
   const copy = COPY[locale];
   const pdf = await PDFDocument.create();
-  pdf.setTitle(copy.title);
+  pdf.setTitle(snapshot.templateTitle ?? copy.title);
   pdf.setProducer("hackOS");
   pdf.setCreationDate(issuedAt);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -192,10 +202,32 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     y -= scaled.height + 24;
   }
 
-  paragraph(copy.title, bold, 16, 18);
+  if (snapshot.templateBody != null) {
+    paragraph(snapshot.templateTitle ?? copy.title, bold, 16, 18);
+    paragraph(copy.by(snapshot.issuerName), regular, 12, 18);
+    paragraph(fullName, bold, 12, 14);
+    paragraph(snapshot.templateBody, regular, 12, 14);
+    if (dni)
+      paragraph(
+        `${snapshot.documentKind === "passport" ? { es: "Pasaporte", gl: "Pasaporte", en: "Passport" }[locale] : "DNI/NIE"}: ${dni}`,
+        regular,
+        12,
+        14,
+      );
+    if (snapshot.manuallyCertified || snapshot.certifiedAward)
+      paragraph(copy.hours(formatHours(snapshot.hours, locale)), bold, 12, 14);
+    paragraph(
+      copy.issued(formatDate(issuedAt.toISOString(), locale, snapshot.timezone)),
+      regular,
+      12,
+      22,
+    );
+    return pdf.save();
+  }
+  paragraph(snapshot.templateTitle ?? copy.title, bold, 16, 18);
   paragraph(copy.by(snapshot.issuerName), regular, 12, 18);
   paragraph(copy.certifies, bold, 12, 14);
-  const person = copy.person(dni);
+  const person = copy.person(dni, snapshot.documentKind === "passport");
   rich(
     [
       { text: person.before },

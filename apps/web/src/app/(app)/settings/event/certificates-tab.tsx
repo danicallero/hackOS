@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { CertificateTypesManager } from "@/components/certificates/certificate-types-manager";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
@@ -92,11 +93,14 @@ export function CertificatesTab({ onDirtyChange }: { onDirtyChange: (dirty: bool
       </div>
     );
   return (
-    <CertificatePolicyForm
-      settings={resource.data}
-      onSaved={resource.mutate}
-      onDirtyChange={onDirtyChange}
-    />
+    <>
+      <CertificatePolicyForm
+        settings={resource.data}
+        onSaved={resource.mutate}
+        onDirtyChange={onDirtyChange}
+      />
+      <CertificateTypesManager />
+    </>
   );
 }
 
