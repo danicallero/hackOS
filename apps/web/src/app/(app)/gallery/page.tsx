@@ -8,6 +8,7 @@ import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { INDEXABLE_ROBOTS } from "@/lib/metadata";
 import type { NativeProject } from "@/lib/native-projects";
 import { galleryContext } from "./data";
 import { GalleryProjectCard } from "./gallery-project-card";
@@ -42,7 +43,12 @@ function galleryClosedNotice(
 export const dynamic = "force-dynamic";
 export async function generateMetadata() {
   const { copy } = await galleryContext();
-  return { title: copy.projectGallery, robots: { index: false, follow: false } };
+  // Open to anyone while the gallery audience is public (the API answers 403 otherwise).
+  return {
+    title: copy.projectGallery,
+    alternates: { canonical: "/gallery" },
+    robots: INDEXABLE_ROBOTS,
+  };
 }
 export default async function GalleryPage({
   searchParams,

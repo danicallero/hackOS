@@ -1,8 +1,8 @@
 "use client";
 
-import { ForkKnifeIcon } from "@phosphor-icons/react/dist/csr/ForkKnife";
 import { useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { EmptyState } from "@/components/common/empty-state";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { MealPlanChecklist } from "@/components/profile/meal-plan-checklist";
@@ -12,7 +12,7 @@ import { answersFromPlan, type MealAnswers, type MealPlan } from "@/lib/meal-pla
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
-/** Sponsor meal plan on My profile (#933). Rendered only for sponsor representatives. */
+/** Sponsor meal plan, a section of My profile (#933) shown only to sponsor representatives. */
 export function MealsSection({
   userId,
   onDirtyChange,
@@ -26,8 +26,8 @@ export function MealsSection({
   if (loadError && !plan) {
     return <ContextualError message={t("couldNotLoadMealPlan")} onRetry={reload} />;
   }
-  // Nothing offered yet: the section would be an empty list.
-  if (!plan || plan.meals.length === 0) return null;
+  if (!plan) return null;
+  if (plan.meals.length === 0) return <EmptyState title={t("noMealsDefinedTitle")} />;
   // Remount on every saved/loaded plan so the draft restarts from the stored answers.
   const version = plan.meals.map((m) => `${m.activityId}:${m.attending}:${m.locked}`).join(",");
   return <MealsForm key={version} plan={plan} save={save} onDirtyChange={onDirtyChange} />;
@@ -81,8 +81,8 @@ function MealsForm({
     <form className="min-w-0" onSubmit={onSubmit}>
       <SectionCard
         footerClassName="justify-start"
-        icon={ForkKnifeIcon}
-        title={t("meals")}
+        variant="plain"
+        bodyClassName="pt-0"
         footer={
           <FormActions
             pending={pending}

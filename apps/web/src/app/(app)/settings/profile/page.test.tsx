@@ -1,116 +1,77 @@
-import userEvent from "@testing-library/user-event";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
-globalThis.ResizeObserver ??= class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-} as unknown as typeof ResizeObserver;
 
-const session = vi.hoisted(() => ({
-  me: null as unknown,
-  refresh: vi.fn().mockResolvedValue(undefined),
+const nav = vi.hoisted(() => ({
+  search: "",
+  replace: vi.fn(),
 }));
+const session = vi.hoisted(() => ({ me: null as unknown, isPureApplicant: false }));
 
-vi.mock("./github-row", () => ({ GithubRow: () => null }));
-vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
-vi.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {},
-  api: { get: vi.fn(), patch: vi.fn() },
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/settings/profile",
+  useRouter: () => ({ replace: nav.replace, push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
-vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/lib/i18n", () => ({
-  languageName: (lang: string) => lang,
-  pickText: (text: Record<string, string> | null) => text?.en ?? "",
-  useLocale: () => ({ language: "en", t: (key: string) => key }),
-}));
-vi.mock("@/lib/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: () => {} }));
-vi.mock("@/hooks/use-shirt-sizes", () => ({
-  useShirtSizes: () => ({ sizes: ["M"], loading: false, error: null, reload: () => {} }),
-}));
-vi.mock("@/hooks/use-food-intolerances", () => ({
-  useFoodIntolerances: () => ({
-    intolerances: [{ id: 3, label: { en: "Gluten" }, description: null }],
-    loading: false,
-    error: null,
-    reload: () => {},
-  }),
-}));
-vi.mock("@/components/common/multi-select", () => ({
-  MultiSelect: ({
-    value,
-    onChange,
-    disabled,
-  }: {
-    value: string[];
-    onChange: (value: string[]) => void;
-    disabled?: boolean;
-  }) => (
-    <button
-      type="button"
-      data-testid="intolerances"
-      data-value={value.join(",")}
-      disabled={disabled}
-      onClick={() => onChange([])}
-    >
-      clear
-    </button>
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a {...props}>{children}</a>
   ),
 }));
+vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
+vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock("@/components/common/page-layout", () => ({
   PageLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
-vi.mock("@/components/common/page-header", () => ({ PageHeader: () => null }));
-vi.mock("@/components/common/form-actions", () => ({
-  FormActions: ({ form }: { form?: string }) => (
-    <button type="submit" form={form}>
-      save
-    </button>
-  ),
+vi.mock("@/components/common/page-header", () => ({
+  PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
-vi.mock("@/components/common/section-card", () => ({
-  SectionCard: ({ children, footer }: { children: React.ReactNode; footer?: React.ReactNode }) => (
-    <section>
-      {children}
-      {footer}
-    </section>
-  ),
+vi.mock("@/components/certificates/certificates-panel", () => ({
+  CertificatesPanel: () => <p>certificates-body</p>,
 }));
-vi.mock("./danger-zone", () => ({ DangerZoneCard: () => null }));
+vi.mock("./wallet-section", () => ({ WalletSection: () => <p>wallet-body</p> }));
+vi.mock("./personal-details", () => ({
+  PersonalDetails: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => {
+    useEffect(() => onDirtyChange(personal.dirty), [onDirtyChange]);
+    return <p>personal-body</p>;
+  },
+}));
+vi.mock("./public-profile-card", () => ({ PublicProfileCard: () => <p>public-body</p> }));
+vi.mock("./meals-section", () => ({ MealsSection: () => <p>meals-body</p> }));
+vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));
 vi.mock("./password-card", () => ({ PasswordRow: () => null }));
-vi.mock("./meals-section", () => ({ MealsSection: () => null }));
+vi.mock("./github-row", () => ({ GithubRow: () => null }));
+vi.mock("./profile-roles", () => ({ ProfileRoles: () => <p>roles-body</p> }));
 
-import { api } from "@/lib/api";
+const personal = { dirty: false };
+
 import ProfileSettingsPage from "./page";
 
-const baseMe = {
+const participant = {
   id: 7,
   name: "Ana",
   surname: "Pérez",
-  language: "en",
-  shirtSize: "M",
-  foodIntolerances: [3],
-  foodIntoleranceNotes: "No nuts",
-  dietaryConfirmedAt: "2026-10-01T00:00:00.000Z",
-  profileLocked: false,
-  dietaryLocked: false,
+  email: "ana@example.com",
+  emailVerified: true,
+  visibleRoleName: "Hacker",
+  hasEventAccess: true,
   isSponsorRep: false,
-  capabilities: [],
-  roles: [],
+  roles: [{ id: 1, name: "Hacker", isVisible: true }],
 };
 
-describe("My profile dietary answer (#933)", () => {
+describe("Profile tabs (H28, #1083)", () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
-    session.me = { ...baseMe };
-    vi.mocked(api.patch).mockResolvedValue({});
+    nav.search = "";
+    personal.dirty = false;
+    session.me = { ...participant };
+    session.isPureApplicant = false;
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -125,53 +86,72 @@ describe("My profile dietary answer (#933)", () => {
   async function render() {
     await act(async () => root.render(<ProfileSettingsPage />));
   }
-
-  const noneBox = () => container.querySelector('button[role="checkbox"]') as HTMLButtonElement;
-  const notes = () => container.querySelector("textarea") as HTMLTextAreaElement;
-  const picker = () => container.querySelector('[data-testid="intolerances"]') as HTMLElement;
-  const save = () =>
-    [...container.querySelectorAll("button")].find((b) => b.textContent === "save") as HTMLElement;
-
-  it("refuses an empty answer that is not No restrictions", async () => {
-    const user = userEvent.setup();
-    await render();
-    await user.click(picker());
-    await user.clear(notes());
-    await user.click(save());
-    expect(container.textContent).toContain("dietaryAnswerRequired");
-    expect(api.patch).not.toHaveBeenCalled();
-
-    await user.click(noneBox());
-    await user.click(save());
-    expect(api.patch).toHaveBeenCalledWith(
-      "/api/me",
-      expect.objectContaining({ foodIntolerances: [], foodIntoleranceNotes: null }),
+  const tabs = () => [...container.querySelectorAll("[role=tab]")].map((tab) => tab.textContent);
+  const openPanel = () =>
+    [...container.querySelectorAll<HTMLElement>("[role=tabpanel]")].filter(
+      (panel) => !panel.hidden,
     );
+
+  it("gives the participant Personal details, Public profile, Wallet and Account", async () => {
+    await render();
+    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "wallet", "accountTitle"]);
+    expect(openPanel()).toHaveLength(1);
+    expect(openPanel()[0].textContent).toContain("personal-body");
+    expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
-  it("keeps dietary data editable after acceptance until a first answer locks it (H7)", async () => {
-    session.me = { ...baseMe, profileLocked: true, dietaryLocked: false };
+  it("opens the public profile on its own tab", async () => {
+    nav.search = "tab=public";
     await render();
-    expect(noneBox().disabled).toBe(false);
-    expect(notes().disabled).toBe(false);
+    expect(openPanel()[0].textContent).toContain("public-body");
+    expect(openPanel()[0].textContent).not.toContain("personal-body");
   });
 
-  it("locks the recorded dietary data for the participant (H7)", async () => {
-    session.me = { ...baseMe, profileLocked: true, dietaryLocked: true };
+  it("keeps the passes and certificates together in Wallet", async () => {
+    nav.search = "tab=wallet";
     await render();
-    expect(noneBox().disabled).toBe(true);
-    expect(notes().disabled).toBe(true);
+    expect(openPanel()[0].textContent).toContain("wallet-body");
+    expect(openPanel()[0].textContent).toContain("certificates-body");
   });
 
-  it("restores the previous answer when No restrictions is unticked", async () => {
-    const user = userEvent.setup();
+  it("drops Wallet and event-only sections for a pure applicant", async () => {
+    session.me = { ...participant, hasEventAccess: false, roles: [] };
+    session.isPureApplicant = true;
     await render();
-    await user.click(noneBox());
-    expect(picker()).toBeNull();
-    expect(notes()).toBeNull();
+    expect(tabs()).toEqual(["personalDetails", "accountTitle"]);
+    expect(container.textContent).not.toContain("public-body");
+    expect(container.textContent).not.toContain("roles-body");
+  });
 
-    await user.click(noneBox());
-    expect(picker().dataset.value).toBe("3");
-    expect(notes().value).toBe("No nuts");
+  it("adds Meals to Personal details for a sponsor representative", async () => {
+    session.me = { ...participant, isSponsorRep: true };
+    await render();
+    expect(openPanel()[0].textContent).toContain("meals-body");
+  });
+
+  it("keeps every tab mounted so a hidden draft survives switching", async () => {
+    nav.search = "tab=account";
+    await render();
+    expect(openPanel()[0].textContent).toContain("danger-body");
+    expect(container.textContent).toContain("personal-body");
+  });
+
+  it("marks a tab holding unsaved edits", async () => {
+    personal.dirty = true;
+    nav.search = "tab=wallet";
+    await render();
+    const profileTab = [...container.querySelectorAll("[role=tab]")][0];
+    expect(profileTab.textContent).toContain("unsavedChanges");
+  });
+
+  it("writes no URL when the open tab is selected again (R003)", async () => {
+    nav.search = "tab=personal";
+    await render();
+    const current = container.querySelector("[role=tab][data-state=active]") as HTMLElement;
+    act(() => {
+      current.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+      current.click();
+    });
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });

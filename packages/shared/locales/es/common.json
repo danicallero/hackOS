@@ -24,7 +24,7 @@
   "ticketNotReadyTitle": "Entrada no disponible",
   "noTicketYet": "Confirma tu plaza aceptada para recibir tu entrada.",
   "badgeNotReadyTitle": "Badge no disponible",
-  "noBadgeYet": "Todavía no tienes badge — acredítate en el check-in.",
+  "noBadgeYet": "Todavía no tienes badge. Acredítate en el check-in.",
   "edit": "Editar",
   "clear": "Borrar",
   "close": "Cerrar",
@@ -67,6 +67,9 @@
   "apiError_badge_scan_before_assignment": "Este escaneo es anterior a la asignación actual de la acreditación.",
   "apiError_team_member_busy": "Un miembro del equipo ya está activo en otra sala.",
   "apiError_github_repo_already_linked": "Este repositorio ya está enlazado a otro proyecto.",
+  "apiError_certificate_not_available": "Los certificados aún no están disponibles.",
+  "apiError_certificate_demo_required": "Este certificado solo se emite a quienes presentaron un proyecto.",
+  "apiError_certificate_hours_not_met": "No has alcanzado las horas en el recinto necesarias para el certificado.",
   "apiError_github_repo_not_available": "Este repositorio no está compartido con la app de GitHub.",
   "apiError_schedule_ends_before_starts": "El final debe ser posterior al inicio.",
   "apiError_schedule_scan_needs_participants": "Solo los elementos visibles para participantes pueden requerir escaneo.",
@@ -89,5 +92,6 @@
   "apiErrorForbidden": "No tienes permiso para hacer esto.",
   "apiErrorRateLimited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
   "apiErrorServer": "Algo ha fallado por nuestra parte. Inténtalo de nuevo o avisa al staff si persiste.",
-  "apiError_review_field_lease_required": "Tu bloqueo de edición ha caducado o pertenece a otro jurado."
+  "apiError_review_field_lease_required": "Tu bloqueo de edición ha caducado o pertenece a otro jurado.",
+  "apiError_certificate_review_required": "Pendiente de revisión de asistencia"
 }

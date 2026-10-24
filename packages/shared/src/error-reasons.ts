@@ -23,6 +23,13 @@ export const ERROR_REASONS = {
   SCHEDULE_ENDS_BEFORE_STARTS: "schedule_ends_before_starts",
   /** 400: a scan-required schedule item is not visible to participants. */
   SCHEDULE_SCAN_NEEDS_PARTICIPANTS: "schedule_scan_needs_participants",
+  /** 409: certificates are not offered, or the participant is below the venue-hours threshold (#1083). */
+  CERTIFICATE_NOT_AVAILABLE: "certificate_not_available",
+  /** 409: the participant has not presented a project, which the certificate requires (#1083). */
+  CERTIFICATE_REVIEW_REQUIRED: "certificate_review_required",
+  CERTIFICATE_DEMO_REQUIRED: "certificate_demo_required",
+  /** 409: the participant has no verified venue time yet (#1083). */
+  CERTIFICATE_HOURS_NOT_MET: "certificate_hours_not_met",
   /** 409: the GitHub repository is already linked to another project. */
   GITHUB_REPO_ALREADY_LINKED: "github_repo_already_linked",
   /** 404: the repository is not among the member's GitHub App installations. */

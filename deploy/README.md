@@ -54,6 +54,9 @@ os.hackudc.com {
 }
 
 s3.hackudc.com {
+    # Public objects (company logos, any future public prefix) are for browsers, never search engines.
+    header X-Robots-Tag "noindex, nofollow, noimageindex"
+    respond /robots.txt "User-agent: *\nDisallow: /\n" 200
     @public-logos {
         path /hackos/enterprises /hackos/enterprises/*
         method GET HEAD
@@ -64,6 +67,8 @@ s3.hackudc.com {
     respond 403
 }
 ```
+
+Las tres rutas no deben indexarse: `api` y `os` ya envían `X-Robots-Tag: noindex` y `/robots.txt` (Disallow total); el host S3 lo añade Caddy como arriba, porque MinIO no lo hace: vale para cualquier prefijo público de ese host (hoy los logos de empresa; fotos y CV pasan por el API).
 
 La tercera ruta sólo puede apuntar a la API S3 de MinIO, nunca a la consola
 (9001), y debe permitir únicamente `/hackos/enterprises/`. `S3_PUBLIC_URL` no

@@ -31,7 +31,7 @@ async function testTableList(): Promise<string> {
 
   const { rows } = await pool.query(
     `SELECT tablename FROM pg_tables
-     WHERE schemaname = 'public' AND tablename NOT IN ('_migrations', 'queue_settings')`,
+     WHERE schemaname = 'public' AND tablename NOT IN ('_migrations', 'queue_settings', 'certificate_settings', 'certificate_types')`,
   );
   tablesForTruncation = rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(", ");
   return tablesForTruncation;

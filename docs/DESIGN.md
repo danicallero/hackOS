@@ -512,11 +512,17 @@ shared implementations. Geometry lives in `styles/surfaces.css`.
 Application management and user/enterprise detail use the same 1280 px content
 canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
-or a side editor. Libraries use the 896 px reading canvas. Profile and account (`/settings/profile`),
+or a side editor. Libraries and Profile and account (`/settings/profile`) use the 896 px reading canvas;
 project details and event settings use the 1280 px content canvas. Profile and account
-is two columns: bordered cards for editing on the left (personal details, public profile,
-account and security, roles, danger zone, one shared Save) and a sticky identity panel on the
-right (photo, name, verified email, visible role and the live public-card preview).
+(H28, #1083) is four content-width tabs: Personal details (photo, fields, meals), Public
+profile, Wallet (ticket and badge, certificates) and Account (email/password/GitHub rows,
+roles, danger zone). Each is a run of open sections divided by hairlines; a section the tab
+label already names has no heading of its own; never a second navigation rail beside the app sidebar. Ticket and badge are the
+only bounded objects. Each editable section owns its `FormActions` (sticky only for the long
+public profile); tabs stay mounted while hidden, so switching keeps drafts, and a tab with
+unsaved edits carries a dot. No disclosures: roles, capabilities and the danger zone are
+shown expanded. Field grids follow the column's width with container queries (`@container`,
+`@xl:`), not viewport breakpoints, so a narrow column never squeezes two fields side by side.
 Project details and event settings group project content and challenges, or category
 navigation and settings. Keep individual form fields and descriptions readable within
 that canvas. These contexts use bounded SectionCard surfaces with plain rows
@@ -945,7 +951,7 @@ workspaces; nothing hides to make room. Implementation and full
 capability→workspace mapping: [`navigation.md`](./navigation.md).**
 
 - Personal area (always, for any authenticated account): Home, Schedule, My
-  applications, My project, My queue, Wallet, Inbox, Profile. Concepts that
+  applications, My project, My queue, Inbox, Profile (with the Wallet inside). Concepts that
   aren't available yet don't become permanent empty nav items.
 - Work area: capability-gated workspaces — Applications, Projects, Live
   judging, Logistics, Programme, Sponsors, Event setup,

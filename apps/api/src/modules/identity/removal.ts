@@ -1419,6 +1419,15 @@ async function scrubRelationships(
   await client.query(`DELETE FROM content_reports WHERE reporter_id = $1 OR target_user_id = $1`, [
     userId,
   ]);
+  await client.query(`DELETE FROM certificate_approvals WHERE user_id = $1`, [userId]);
+  // #1083: certificates stay verifiable as revoked, without the person's data.
+  await client.query(
+    `UPDATE attendance_certificates
+        SET snapshot = '{}'::jsonb, recipient_name=NULL, recipient_document_kind=NULL, recipient_document_number=NULL, revoked_at = COALESCE(revoked_at, now()),
+            revoked_reason = COALESCE(revoked_reason, 'account_removed')
+      WHERE user_id = $1`,
+    [userId],
+  );
   await client.query(`DELETE FROM project_files WHERE uploaded_by=$1`, [userId]);
   await client.query(
     `UPDATE users SET gallery_show_photo=false,gallery_show_name=false,gallery_consented_at=NULL WHERE id=$1`,
