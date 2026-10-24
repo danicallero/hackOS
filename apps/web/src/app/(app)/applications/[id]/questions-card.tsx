@@ -752,7 +752,7 @@ export function QuestionsCard({
             <ul className="list-disc space-y-1 pl-5">
               {RESERVED_FIELD_KEYS.map((r) => (
                 <li key={r.key}>
-                  <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>{" "}
+                  <code className="bg-muted rounded px-1 py-0.5 text-xs">{r.key}</code>:{" "}
                   {t(RESERVED_KEY_DESC[r.key])}
                 </li>
               ))}
