@@ -23,6 +23,10 @@ CREATE UNIQUE INDEX attendance_certificates_one_live
   ON attendance_certificates(user_id,type_id,locale,activity_name)
   WHERE revoked_at IS NULL AND superseded_at IS NULL;
 
+-- Public "which certificate is this file?" lookup by fingerprint.
+CREATE INDEX attendance_certificates_pdf_sha256 ON attendance_certificates(pdf_sha256)
+  WHERE pdf_sha256 IS NOT NULL;
+
 CREATE FUNCTION certificate_drop_pdf_when_revoked() RETURNS trigger
   LANGUAGE plpgsql AS $$
 BEGIN

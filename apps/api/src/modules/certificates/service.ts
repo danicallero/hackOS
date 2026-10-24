@@ -950,8 +950,14 @@ export interface Verification {
   supersededAt: string | null;
 }
 
-/** Public verification by code: never the DNI, and no personal data once revoked. */
+/** Public verification by code: never the DNI, and no personal data once revoked. Generates the stored copy when none exists yet. */
 export async function verifyCode(code: string): Promise<Verification> {
+  // A valid certificate always has its copy: the fingerprint is part of what is verified.
+  const { rows: pending } = await pool.query(
+    `SELECT id FROM attendance_certificates WHERE code = $1 AND revoked_at IS NULL AND pdf IS NULL`,
+    [code],
+  );
+  if (pending[0]) await renderCertificate(pending[0].id);
   const { rows } = await pool.query(
     `SELECT variant, issued_at, revoked_at, snapshot, pdf_sha256, pdf_generated_at, superseded_at FROM attendance_certificates WHERE code = $1`,
     [code],
@@ -975,6 +981,16 @@ export async function verifyCode(code: string): Promise<Verification> {
     sha256: row.pdf_sha256 ?? null,
     generatedAt: row.pdf_generated_at ? (row.pdf_generated_at as Date).toISOString() : null,
   };
+}
+
+/** Which stored copy has this fingerprint, answered like a verification by its code. */
+export async function verifyByHash(sha256: string): Promise<Verification & { code: string }> {
+  const { rows } = await pool.query(
+    `SELECT code FROM attendance_certificates WHERE pdf_sha256 = $1 AND revoked_at IS NULL LIMIT 1`,
+    [sha256],
+  );
+  if (!rows[0]) throw new NotFoundError("No certificate matches this file");
+  return { code: rows[0].code, ...(await verifyCode(rows[0].code)) };
 }
 
 export interface CertificateParticipant {
