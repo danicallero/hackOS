@@ -240,11 +240,6 @@ export function DangerZone() {
               {t("accountRemovalExitRequired")}
             </p>
           )}
-          {eligibility.integrityWarning && (
-            <p role="alert" className="text-destructive text-pretty text-sm">
-              {t("accountRemovalIntegrityWarning")}
-            </p>
-          )}
           <p className="text-muted-foreground text-sm">
             <Link href="/privacy" className="underline underline-offset-2">
               {t("privacyPolicy")}
@@ -273,11 +268,6 @@ export function DangerZone() {
           {eligibility.requiresVenueExit && (
             <p role="alert" className="text-destructive text-pretty text-sm">
               {t("accountAnonymizeExitRequired")}
-            </p>
-          )}
-          {eligibility.integrityWarning && (
-            <p role="alert" className="text-destructive text-pretty text-sm">
-              {t("accountRemovalIntegrityWarning")}
             </p>
           )}
           <p className="text-muted-foreground text-sm">
@@ -315,7 +305,6 @@ export function DangerZone() {
               ? [
                   t("areYouSureCantBeUndone"),
                   ...(eligibility.requiresVenueExit ? [t("accountRemovalExitRequired")] : []),
-                  ...(eligibility.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
                 ].join("\n\n")
               : [
                   t("accountAnonymizeConfirmBody"),
@@ -323,7 +312,6 @@ export function DangerZone() {
                     ? [t("accountAnonymizeActiveEvent")]
                     : []),
                   ...(eligibility.requiresVenueExit ? [t("accountAnonymizeExitRequired")] : []),
-                  ...(eligibility.integrityWarning ? [t("accountRemovalIntegrityWarning")] : []),
                 ].join("\n\n")
           }
           cancelLabel={t("cancel")}

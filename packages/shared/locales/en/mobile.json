@@ -120,7 +120,6 @@
   "accountRetainedOriginCity": "Origin city",
   "accountRetainedPresenceTime": "Verified venue-presence time",
   "accountDeleteVenueExitWarning": "You're recorded as inside the HackUDC venue. GPUL event staff must record your exit before hackOS can finish deleting your account.",
-  "accountDeleteIntegrityWarning": "Some HackUDC operational records aren't linked to a canonical accreditation. GPUL event staff may need to reconcile them before hackOS can finish deleting your account.",
   "accountDeleteContinue": "Continue to delete account",
   "accountDeleteConfirmTitle": "Confirm account deletion",
   "accountDeleteVerificationBody": "We've sent a 6-digit verification code to your verified email. Enter it below to confirm that you want to permanently delete your account.",

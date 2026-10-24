@@ -221,8 +221,10 @@ scan alone is therefore insufficient.
 
 This is intentionally a backend fact, not a client-side `hasCheckedIn` flag.
 `check_in_logs` is the canonical physical boundary. The other references are
-integrity signals: they trigger a warning and safe cleanup, but do not silently
-become a permanent retention requirement. A product decision may change the
+integrity signals: they trigger safe cleanup and a warning shown only to staff
+on the person's user page (the participant's own Danger zone, web and mobile,
+does not show it: they cannot act on it), but do not silently become a
+permanent retention requirement. A product decision may change the
 reconciliation rule, but it must change the server function and tests together.
 
 ## 5. Anonymous-account design

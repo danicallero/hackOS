@@ -120,7 +120,6 @@
   "accountRetainedOriginCity": "Ciudad de origen",
   "accountRetainedPresenceTime": "Tiempo verificado de presencia en el recinto",
   "accountDeleteVenueExitWarning": "Constas dentro del recinto de HackUDC. El personal del evento de GPUL debe registrar tu salida antes de que hackOS pueda terminar de eliminar tu cuenta.",
-  "accountDeleteIntegrityWarning": "Hay registros operativos de HackUDC que no están vinculados a una acreditación canónica. El personal del evento de GPUL puede tener que conciliarlos antes de que hackOS termine de eliminar tu cuenta.",
   "accountDeleteContinue": "Continuar para eliminar la cuenta",
   "accountDeleteConfirmTitle": "Confirmar eliminación de la cuenta",
   "accountDeleteVerificationBody": "Hemos enviado un código de verificación de 6 dígitos a tu correo verificado. Introdúcelo para confirmar que quieres eliminar tu cuenta de forma permanente.",
