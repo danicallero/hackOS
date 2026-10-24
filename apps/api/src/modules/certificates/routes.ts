@@ -5,8 +5,10 @@ import { z } from "zod";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { readUpload, uploadOperation } from "../../lib/profile-files.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import {
+  attachSigned,
   certificateOwner,
   eligibilityFor,
   issueForSelf,
@@ -46,6 +48,7 @@ const certificateSchema = z.object({
   issuedAt: z.string(),
   revokedAt: z.string().nullable(),
   revokedReason: z.string().nullable(),
+  signedAt: z.string().nullable(),
 });
 
 /** #1083: attendance certificates. Staff routes need `presence:manage`, the capability behind verified hours. */
@@ -58,8 +61,9 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   const sendPdf = async (
     reply: { header(name: string, value: string): unknown },
     id: number,
+    copy: boolean,
   ): Promise<Buffer> => {
-    const { pdf, filename } = await renderCertificate(id);
+    const { pdf, filename } = await renderCertificate(id, { copy });
     reply.header("content-type", "application/pdf");
     reply.header("content-disposition", `attachment; filename="${filename}"`);
     reply.header("cache-control", "private, no-store");
@@ -120,14 +124,14 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
         params: idParams,
         summary: "Download my certificate",
         description:
-          "The certificate as a PDF issued by the organisation, with a verification QR and code. Only its owner can download it; a revoked certificate answers 409 (#1083).",
+          "The certificate as a PDF issued by the organisation, with a footer carrying a verification QR, the CSV code and the print date on every page. It is a copy of the signed original when staff uploaded one. Only its owner can download it; a revoked certificate answers 409 (#1083).",
       },
     },
     async (req, reply) => {
       if ((await certificateOwner(req.params.id)) !== req.userId) {
         throw new ForbiddenError("Not your certificate");
       }
-      return sendPdf(reply, req.params.id);
+      return sendPdf(reply, req.params.id, true);
     },
   );
 
@@ -255,12 +259,32 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
       preHandler: staff,
       schema: {
         params: idParams,
+        querystring: z.object({ copy: z.coerce.boolean().default(false) }),
         summary: "Download anyone's certificate",
         description:
-          "Staff download of a person's certificate PDF, for example to sign it by hand. A revoked certificate answers 409 (#1083).",
+          "Staff download of a person's certificate PDF. By default it has no CSV footer, to be signed digitally and uploaded back; `copy=true` returns what the participant gets, with the footer. Once a signed original is uploaded, both are based on it. A revoked certificate answers 409 (#1083).",
       },
     },
-    async (req, reply) => sendPdf(reply, req.params.id),
+    async (req, reply) => sendPdf(reply, req.params.id, req.query.copy),
+  );
+
+  r.put(
+    "/api/certificates/:id/signed",
+    {
+      ...routeAccess(staffPolicy),
+      preHandler: [staff, idempotencyGuard],
+      schema: {
+        params: idParams,
+        summary: "Upload the signed certificate",
+        description:
+          "Uploads the digitally signed PDF (multipart, up to 10 MB) of a live certificate. Copies downloaded afterwards, with the CSV footer, are stamped on this document instead of the rendered one. Uploading again replaces it. Audited as `certificate.sign_upload` (#1083, H53).",
+        response: { 200: certificateSchema },
+      },
+    },
+    async (req) => {
+      const { bytes } = await readUpload(req, 10 * 1024 * 1024);
+      return attachSigned(req.userId as number, req.params.id, bytes, uploadOperation(req));
+    },
   );
 
   r.get(

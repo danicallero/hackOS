@@ -282,6 +282,9 @@ Table attendance_certificates {
   revoked_by integer
   revoked_reason text
   snapshot jsonb [not null, note: '#1083 name, event, dates, venue, issuer, verified hours and attended activities as issued; cleared on account removal (H54).']
+  signed_at "timestamp with time zone"
+  signed_by integer
+  signed_key text
   source text [not null]
   user_id integer [not null]
   variant text [not null]
@@ -1490,6 +1493,7 @@ Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id
 Ref: attendance_certificates.issued_by > users.id
 Ref: attendance_certificates.revoked_by > users.id
+Ref: attendance_certificates.signed_by > users.id
 Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id

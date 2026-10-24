@@ -1,5 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { PDFDocument } from "pdf-lib";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
@@ -297,5 +298,73 @@ describe("staff", () => {
       `SELECT 1 FROM audit_log WHERE action = 'certificate_settings.update'`,
     );
     expect(rows).toHaveLength(1);
+  });
+});
+
+describe("signed original and CSV footer", () => {
+  const get = (url: string, user: number) =>
+    app.inject({ method: "GET", url, headers: asUser(user) });
+  const pages = async (res: { rawPayload: Buffer }) =>
+    (await PDFDocument.load(res.rawPayload)).getPageCount();
+
+  async function signedPdf(pageCount: number) {
+    const doc = await PDFDocument.create();
+    for (let i = 0; i < pageCount; i++) doc.addPage([595, 842]);
+    return Buffer.from(await doc.save());
+  }
+  function putSigned(id: number, bytes: Buffer, key: string) {
+    const boundary = `----hackos-${key}`;
+    return app.inject({
+      method: "PUT",
+      url: `/api/certificates/${id}/signed`,
+      headers: {
+        ...asUser(staff),
+        "content-type": `multipart/form-data; boundary=${boundary}`,
+        "idempotency-key": key,
+      },
+      payload: Buffer.concat([
+        Buffer.from(
+          `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="s.pdf"\r\nContent-Type: application/pdf\r\n\r\n`,
+        ),
+        bytes,
+        Buffer.from(`\r\n--${boundary}--\r\n`),
+      ]),
+    });
+  }
+
+  it("stamps the CSV footer on participant copies only, and copies follow the signed original", async () => {
+    await presence(person, 12);
+    const cert = (await issue(person)).json();
+    const mine = await get(`/api/me/certificates/${cert.id}/pdf`, person);
+    const bare = await get(`/api/certificates/${cert.id}/pdf`, staff);
+    const staffCopy = await get(`/api/certificates/${cert.id}/pdf?copy=true`, staff);
+    // The footer adds a QR image and text: the bare document is smaller.
+    expect(bare.rawPayload.length).toBeLessThan(mine.rawPayload.length);
+    expect(staffCopy.rawPayload.length).toBeGreaterThan(bare.rawPayload.length);
+
+    const rejected = await putSigned(cert.id, Buffer.from("not a pdf"), "bad");
+    expect(rejected.statusCode).toBe(400);
+    const uploaded = await putSigned(cert.id, await signedPdf(3), "ok");
+    expect(uploaded.statusCode).toBe(200);
+    expect(uploaded.json().signedAt).not.toBeNull();
+
+    expect(await pages(await get(`/api/me/certificates/${cert.id}/pdf`, person))).toBe(3);
+    expect(await pages(await get(`/api/certificates/${cert.id}/pdf`, staff))).toBe(3);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM audit_log WHERE action = 'certificate.sign_upload'`,
+    );
+    expect(rows[0].n).toBe(1);
+  });
+
+  it("refuses a signed upload to a revoked certificate and to people without the capability", async () => {
+    await presence(person, 12);
+    const cert = (await issue(person)).json();
+    await app.inject({
+      method: "POST",
+      url: `/api/certificates/${cert.id}/revoke`,
+      headers: { ...asUser(staff), "idempotency-key": "revoke" },
+      payload: { reason: "mistake" },
+    });
+    expect((await putSigned(cert.id, await signedPdf(1), "late")).statusCode).toBe(409);
   });
 });

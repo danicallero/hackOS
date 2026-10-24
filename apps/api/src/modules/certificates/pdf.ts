@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PDFDocument, type PDFFont, rgb, StandardFonts } from "pdf-lib";
-import QRCode from "qrcode";
+import { COPY_FOOTER_RESERVE, printable, wrap } from "../../lib/pdf-copy-footer.js";
 
 /** #1083: what a certificate says, frozen when it was issued. */
 export interface CertificateSnapshot {
@@ -31,7 +31,6 @@ interface Copy {
   activities: string;
   closing: string;
   issued: (date: string) => string;
-  verify: (url: string, code: string) => string;
 }
 
 const COPY: Record<CertificateLocale, Copy> = {
@@ -49,8 +48,6 @@ const COPY: Record<CertificateLocale, Copy> = {
     activities: "Ha asistido a las siguientes actividades:",
     closing: "Y para que así conste a los efectos oportunos, se expide el presente certificado.",
     issued: (date) => `Emitido el ${date}.`,
-    verify: (url, code) =>
-      `Este documento lo emite la organización y no lleva firma manuscrita. Compruebe su autenticidad en ${url} con el código ${code}.`,
   },
   gl: {
     title: "CERTIFICADO DE ASISTENCIA",
@@ -66,8 +63,6 @@ const COPY: Record<CertificateLocale, Copy> = {
     activities: "Asistiu ás seguintes actividades:",
     closing: "E para que así conste aos efectos oportunos, expídese o presente certificado.",
     issued: (date) => `Emitido o ${date}.`,
-    verify: (url, code) =>
-      `Este documento emíteo a organización e non leva sinatura manuscrita. Comprobe a súa autenticidade en ${url} co código ${code}.`,
   },
   en: {
     title: "CERTIFICATE OF ATTENDANCE",
@@ -82,15 +77,14 @@ const COPY: Record<CertificateLocale, Copy> = {
     activities: "They attended the following activities:",
     closing: "This certificate is issued for all appropriate purposes.",
     issued: (date) => `Issued on ${date}.`,
-    verify: (url, code) =>
-      `This document is issued by the organisation and carries no handwritten signature. Verify its authenticity at ${url} with the code ${code}.`,
   },
 };
 
 const PAGE = { width: 595.28, height: 841.89 };
 const MARGIN = 64;
+/** Bottom margin: the copy footer (lib/pdf-copy-footer.ts) is stamped there on download. */
+const BOTTOM = COPY_FOOTER_RESERVE;
 const BLACK = rgb(0.07, 0.07, 0.07);
-const GREY = rgb(0.4, 0.4, 0.4);
 
 function formatDate(iso: string, locale: CertificateLocale, timezone: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: timezone }).format(
@@ -103,36 +97,10 @@ function formatHours(hours: number, locale: CertificateLocale): string {
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(hours);
 }
 
-/** Standard PDF fonts cover Latin-1 only; anything else would make the render throw. */
-function printable(font: PDFFont, text: string): string {
-  const supported = new Set(font.getCharacterSet());
-  return [...text.normalize("NFC")]
-    .map((char) => (supported.has(char.codePointAt(0) as number) ? char : "?"))
-    .join("");
-}
-
-function wrap(font: PDFFont, text: string, size: number, width: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(/\s+/)) {
-    const candidate = line ? `${line} ${word}` : word;
-    if (line && font.widthOfTextAtSize(candidate, size) > width) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 export interface RenderInput {
   snapshot: CertificateSnapshot;
   variant: CertificateVariant;
   locale: CertificateLocale;
-  code: string;
-  verifyUrl: string;
   issuedAt: Date;
   /** Read live from the account, never stored with the certificate. */
   dni: string | null;
@@ -140,11 +108,11 @@ export interface RenderInput {
 
 /**
  * #1083: the certificate PDF. One A4 page (a second only for a long activity
- * list), issued by the organisation: no personal signature, a QR and a code that
- * the public verification page resolves.
+ * list), issued by the organisation: no personal signature. The QR and code are
+ * added to copies at download (`stampCopyFooter`).
  */
 export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Array> {
-  const { snapshot, variant, locale, code, verifyUrl, issuedAt, dni } = input;
+  const { snapshot, variant, locale, issuedAt, dni } = input;
   const copy = COPY[locale];
   const pdf = await PDFDocument.create();
   pdf.setTitle(copy.title);
@@ -157,7 +125,7 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
   let y = PAGE.height - MARGIN;
 
   const ensure = (needed: number) => {
-    if (y - needed >= MARGIN) return;
+    if (y - needed >= BOTTOM) return;
     page = pdf.addPage([PAGE.width, PAGE.height]);
     y = PAGE.height - MARGIN;
   };
@@ -257,25 +225,5 @@ export async function renderCertificatePdf(input: RenderInput): Promise<Uint8Arr
     12,
     22,
   );
-
-  // Verification block: QR on the left, how to check it beside it.
-  const qr = await pdf.embedPng(
-    await QRCode.toBuffer(verifyUrl, { margin: 1, width: 240, errorCorrectionLevel: "M" }),
-  );
-  const qrSize = 84;
-  ensure(qrSize + 24);
-  page.drawImage(qr, { x: MARGIN, y: y - qrSize, width: qrSize, height: qrSize });
-  const textX = MARGIN + qrSize + 14;
-  const verifyLines = wrap(
-    regular,
-    printable(regular, copy.verify(verifyUrl, code)),
-    9,
-    PAGE.width - MARGIN - textX,
-  );
-  let lineY = y - 12;
-  for (const line of verifyLines) {
-    page.drawText(line, { x: textX, y: lineY, size: 9, font: regular, color: GREY });
-    lineY -= 13;
-  }
   return pdf.save();
 }
