@@ -1,3 +1,4 @@
+import { File } from "expo-file-system";
 import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { apiFetch } from "./api";
 import { createIdempotencyKey } from "./idempotency-key";
@@ -37,8 +38,8 @@ export function uploadPhoto(
   idempotencyKey: string = createIdempotencyKey(),
 ): Promise<{ image: string | null }> {
   const body = new FormData();
-  // React Native reads a file part from its local uri.
-  body.append(PHOTO_FIELD_NAME, { uri, name: "photo.jpg", type: "image/jpeg" } as unknown as Blob);
+  // Expo fetch serializes File bytes; legacy React Native uri parts are unsupported.
+  body.append(PHOTO_FIELD_NAME, new File(uri), "photo.jpg");
   return apiFetch<{ image: string | null }>("/api/me/photo", {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },

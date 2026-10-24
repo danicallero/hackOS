@@ -6,6 +6,13 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockPickDocument = jest.fn();
 
+jest.mock("expo-file-system", () => ({
+  File: class extends Blob {
+    constructor() {
+      super(["x"]);
+    }
+  },
+}));
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush, back: mockBack }) }));
 jest.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
@@ -298,6 +305,7 @@ describe("NetworkingProfileScreen", () => {
     expect(init.method).toBe("POST");
     expect(init.headers["Idempotency-Key"]).toBeTruthy();
     expect(init.body).toBeInstanceOf(FormData);
+    expect(init.body.get("file")).toBeInstanceOf(Blob);
     expect(eye.props.accessibilityState.checked).toBe(false);
 
     await fireEvent.press(eye);
