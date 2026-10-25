@@ -719,6 +719,9 @@ export function EditableOwnersCell({
       setSelectedUserId("");
       setFreeTextName("");
       await refresh();
+    } catch (err) {
+      // #1118: surface failures instead of an unhandled rejection.
+      toast.error(apiErrorText(err, t, t("couldNotAddUser")), t("toastAddOwner"));
     } finally {
       setBusy(false);
     }
@@ -729,6 +732,8 @@ export function EditableOwnersCell({
     try {
       await logisticsApi.removeScheduleOwner(item.id, ownerId);
       await refresh();
+    } catch (err) {
+      toast.error(apiErrorText(err, t, t("couldNotRemoveUser")), t("toastRemoveOwner"));
     } finally {
       setBusy(false);
     }
