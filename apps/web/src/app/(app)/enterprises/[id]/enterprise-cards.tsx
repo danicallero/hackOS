@@ -13,9 +13,7 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { EmptyState } from "@/components/common/empty-state";
-import { PublicationControls } from "@/components/common/publication-controls";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -24,25 +22,8 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Form } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
@@ -58,28 +39,18 @@ import {
   filterChallengesForEnterprise,
   textForDisplay,
 } from "../../challenges/shared";
+import {
+  type EnterpriseFormValues,
+  EnterpriseKindPriorityFields,
+  EnterpriseLogoUrlFields,
+  EnterpriseProfileFields,
+  EnterprisePublicationFields,
+  enterpriseFormSchema,
+} from "../enterprise-form-fields";
 import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
 import { PublicationSummary } from "./publication-summary";
 
-const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
-const optionalPositiveInt = z
-  .string()
-  .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
-
-const editSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  website: optionalUrl,
-  logoUrl: optionalUrl,
-  logoNegativeUrl: optionalUrl,
-  description: z.string().max(2000),
-  priority: optionalPositiveInt,
-  kind: z.enum(["sponsor", "collaborator"]),
-  visibility: z.enum(["visible", "hidden"]),
-  availableFrom: z.string(),
-});
-type EditValues = z.infer<typeof editSchema>;
-
-function toFormValues(e: Enterprise): EditValues {
+function toFormValues(e: Enterprise): EnterpriseFormValues {
   return {
     name: e.name,
     website: e.website ?? "",
@@ -457,17 +428,16 @@ export function EditCard({
   logoUploader: React.ReactNode;
 }) {
   const { t } = useLocale();
-  const form = useForm<EditValues>({
+  const form = useForm<EnterpriseFormValues>({
     mode: "onBlur",
     reValidateMode: "onBlur",
-    resolver: zodResolver(editSchema),
+    resolver: zodResolver(enterpriseFormSchema),
     defaultValues: toFormValues(enterprise),
   });
   const { reset } = form;
   const [scheduledPublish, setScheduledPublish] = useState(
     enterprise.visibility === "hidden" && Boolean(enterprise.available_from),
   );
-  const visibility = form.watch("visibility");
 
   // Re-sync when the underlying record changes (e.g. after a logo upload reload).
   useEffect(() => {
@@ -475,7 +445,7 @@ export function EditCard({
     setScheduledPublish(enterprise.visibility === "hidden" && Boolean(enterprise.available_from));
   }, [enterprise, reset]);
 
-  async function onSubmit(values: EditValues) {
+  async function onSubmit(values: EnterpriseFormValues) {
     try {
       const ownerPatch = {
         website: values.website || null,
@@ -521,87 +491,10 @@ export function EditCard({
               <h2 id="enterprise-details" className="type-section-title">
                 {t("enterpriseDetailsTab")}
               </h2>
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("name")}</FormLabel>
-                    <FormControl>
-                      <Input disabled={!canManage} {...field} />
-                    </FormControl>
-                    {!canManage && (
-                      <FormDescription>{t("contactStaffToChangeName")}</FormDescription>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="website"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("websiteLabel")}</FormLabel>
-                    <FormControl>
-                      <Input type="url" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("descriptionLabel")}</FormLabel>
-                    <FormControl>
-                      <Textarea rows={3} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <EnterpriseProfileFields form={form} nameDisabled={!canManage} />
               {canManage && (
                 <div className="grid items-start gap-5 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="kind"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("enterpriseKindLabel")}</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="sponsor">{t("enterpriseKindSponsor")}</SelectItem>
-                            <SelectItem value="collaborator">
-                              {t("enterpriseKindCollaborator")}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="priority"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{t("priorityLabel")}</FormLabel>
-                        <FormControl>
-                          <Input inputMode="numeric" {...field} />
-                        </FormControl>
-                        <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <EnterpriseKindPriorityFields form={form} />
                 </div>
               )}
             </section>
@@ -610,70 +503,17 @@ export function EditCard({
                 {t("logoTitle")}
               </h2>
               {logoUploader}
-              <FormField
-                control={form.control}
-                name="logoUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("logoUrlLabel")}</FormLabel>
-                    <FormControl>
-                      <Input type="url" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="logoNegativeUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
-                    <FormControl>
-                      <Input type="url" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <EnterpriseLogoUrlFields form={form} />
             </section>
             <section aria-labelledby="enterprise-publication" className="space-y-5 border-t pt-6">
               <h2 id="enterprise-publication" className="type-section-title">
                 {t("publicationTitle")}
               </h2>
               {canManage ? (
-                <PublicationControls
-                  id="enterprise-publication"
-                  visibility={visibility}
-                  hiddenValue="hidden"
-                  publishedValue="visible"
-                  hiddenLabel={t("hiddenOption")}
-                  publishedLabel={t("visibleLabel")}
-                  visibilityLabel={t("colVisibility")}
-                  scheduleLabel={t("schedulePublicationLabel")}
-                  publishAtLabel={t("publishAtLabel")}
+                <EnterprisePublicationFields
+                  form={form}
                   scheduled={scheduledPublish}
-                  publishAt={form.watch("availableFrom")}
-                  onVisibilityChange={(next) => {
-                    form.setValue("visibility", next, { shouldDirty: true });
-                    if (next === "visible") {
-                      setScheduledPublish(false);
-                      form.setValue("availableFrom", "", { shouldDirty: true });
-                    }
-                  }}
-                  onScheduledChange={(next) => {
-                    setScheduledPublish(next);
-                    form.setValue(
-                      "availableFrom",
-                      next ? toDatetimeLocal(new Date().toISOString()) : "",
-                      {
-                        shouldDirty: true,
-                      },
-                    );
-                  }}
-                  onPublishAtChange={(value) =>
-                    form.setValue("availableFrom", value, { shouldDirty: true })
-                  }
+                  setScheduled={setScheduledPublish}
                 />
               ) : (
                 <PublicationSummary enterprise={enterprise} />
