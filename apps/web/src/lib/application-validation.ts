@@ -1,4 +1,5 @@
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { isSimpleEmail, isSimpleUrl } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ApiError } from "@/lib/api";
@@ -94,9 +95,9 @@ export function validateFieldOnBlur(
       code = FIELD_ERROR_REASONS.TOO_SHORT;
     else if (rule.max_length != null && value.length > rule.max_length)
       code = FIELD_ERROR_REASONS.TOO_LONG;
-    else if (rule.text_condition === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+    else if (rule.text_condition === "email" && !isSimpleEmail(value))
       code = FIELD_ERROR_REASONS.INVALID_EMAIL;
-    else if (rule.text_condition === "url" && !SIMPLE_URL_RE.test(value))
+    else if (rule.text_condition === "url" && !isSimpleUrl(value))
       code = FIELD_ERROR_REASONS.INVALID_URL;
     else if (
       rule.text_condition === "contains" &&
@@ -135,10 +136,6 @@ export function validateFieldOnBlur(
     : "";
   return custom || t(validationMessageKey(code, field));
 }
-
-// Keep client feedback aligned with the permissive URL shape accepted by the
-// API: a scheme is optional, but the value must still be domain-shaped.
-const SIMPLE_URL_RE = /^(https?:\/\/)?[^\s/$.?#][^\s]*\.[^\s]{2,}$/i;
 
 /** Generic fallback copy per server validation-rule reason (H11). */
 const VALIDATION_ERROR_KEYS: Record<string, MessageKey> = {

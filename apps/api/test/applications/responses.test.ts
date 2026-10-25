@@ -498,6 +498,48 @@ describe("application responses (H12)", () => {
     expect(ok.statusCode).toBe(200);
   });
 
+  it("#1110: rejects a 100k-character email/url answer without stalling", async () => {
+    const a = await getApp();
+    const appId = await createApplication({
+      template: [
+        {
+          key: "contact",
+          label: { en: "Contact email", es: "Correo", gl: "Correo" },
+          kind: "text",
+          required: false,
+          validation: { text_condition: "email" },
+        },
+        {
+          key: "site",
+          label: { en: "Website", es: "Web", gl: "Web" },
+          kind: "text",
+          required: false,
+          validation: { text_condition: "url" },
+        },
+      ],
+    });
+    const user = await createUser({ emailVerified: true });
+    // Inputs that took seconds against the earlier backtracking patterns.
+    await saveDraft(a, appId, user, {
+      contact: `a@${".".repeat(100_000)} `,
+      site: `a${".".repeat(100_000)} `,
+    });
+
+    const started = performance.now();
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.fields).toMatchObject({
+      contact: "invalid email",
+      site: "invalid url",
+    });
+  });
+
   it("H11: enforces a multiselect field's selected-count validation rule", async () => {
     const a = await getApp();
     const appId = await createApplication({
