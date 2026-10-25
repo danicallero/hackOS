@@ -71,6 +71,73 @@ async function assertEntitled(userId: number, purpose: Purpose): Promise<void> {
   }
 }
 
+async function lockEntitledUser(
+  client: pg.PoolClient,
+  userId: number,
+  purpose: Purpose,
+): Promise<void> {
+  await lockRoleGraph(client);
+  // H54: serialize pass issuance with account removal. The preflight above
+  // is only advisory; this row lock is the authoritative state check.
+  const activeUser = await client.query(
+    `SELECT 1 FROM users
+      WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+      FOR UPDATE`,
+    [userId],
+  );
+  if (!activeUser.rows[0]) throw new NotFoundError("User not found");
+  if (purpose === "ticket") {
+    if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Ticket not issued");
+    const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
+    if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
+  } else {
+    if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Badge not issued");
+    const badge = await client.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
+    if (!badge.rows[0]?.badge_id) throw new BadRequestError("Badge not assigned");
+  }
+}
+
+async function createPassRecord(
+  client: pg.PoolClient,
+  userId: number,
+  purpose: Purpose,
+  platform: Platform,
+  googleObjectId: string | null,
+  googleObjectType: GoogleObjectType | null,
+): Promise<PassRow> {
+  // The serial is copied to an installed Wallet pass and may outlive the
+  // database row. Never encode the internal user id in that external
+  // identifier (H54); the random suffix is the only account correlation.
+  const serial = `${purpose}-${randomBytes(16).toString("hex")}`;
+  const auth = randomBytes(24).toString("base64url");
+  const created = await client.query(
+    `INSERT INTO wallet_passes
+       (user_id, purpose, platform, serial_number, authentication_token,
+        google_object_id, google_object_type, update_tag)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     RETURNING id, user_id, purpose, platform, serial_number, authentication_token,
+               google_object_id, google_object_type, status, update_tag`,
+    [
+      userId,
+      purpose,
+      platform,
+      serial,
+      auth,
+      googleObjectId,
+      googleObjectType,
+      Date.now().toString(),
+    ],
+  );
+  await audit(client, {
+    actorId: userId,
+    entityType: "wallet_pass",
+    entityId: created.rows[0].id,
+    action: "issued",
+    after: { purpose, platform, serialNumber: serial, googleObjectId, googleObjectType },
+  });
+  return created.rows[0];
+}
+
 /**
  * Returns the active pass row for (user, purpose, platform), issuing a fresh
  * one if none exists (the previous one may be `voided`, e.g. after badge
@@ -89,25 +156,7 @@ export async function ensurePassRecord(
     // Role mutations and pass issuance use the same ordering (role graph,
     // then user row), so a last-role removal cannot race this final
     // entitlement check and issue a fresh ticket pass afterwards.
-    await lockRoleGraph(client);
-    // H54: serialize pass issuance with account removal. The preflight above
-    // is only advisory; this row lock is the authoritative state check.
-    const activeUser = await client.query(
-      `SELECT 1 FROM users
-        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
-        FOR UPDATE`,
-      [userId],
-    );
-    if (!activeUser.rows[0]) throw new NotFoundError("User not found");
-    if (purpose === "ticket") {
-      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Ticket not issued");
-      const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
-      if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
-    } else {
-      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Badge not issued");
-      const badge = await client.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
-      if (!badge.rows[0]?.badge_id) throw new BadRequestError("Badge not assigned");
-    }
+    await lockEntitledUser(client, userId, purpose);
     const existing = await client.query(
       `SELECT id, user_id, purpose, platform, serial_number, authentication_token,
               google_object_id, google_object_type, status, update_tag
@@ -118,39 +167,14 @@ export async function ensurePassRecord(
     );
     if (existing.rows[0]) return existing.rows[0];
 
-    // The serial is copied to an installed Wallet pass and may outlive the
-    // database row. Never encode the internal user id in that external
-    // identifier (H54); the random suffix is the only account correlation.
-    const serial = `${purpose}-${randomBytes(16).toString("hex")}`;
-    const auth = randomBytes(24).toString("base64url");
-    const googleObjectId = opts?.googleObjectId ?? null;
-    const googleObjectType = platform === "google" ? (opts?.googleObjectType ?? "generic") : null;
-    const created = await client.query(
-      `INSERT INTO wallet_passes
-         (user_id, purpose, platform, serial_number, authentication_token,
-          google_object_id, google_object_type, update_tag)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, user_id, purpose, platform, serial_number, authentication_token,
-                 google_object_id, google_object_type, status, update_tag`,
-      [
-        userId,
-        purpose,
-        platform,
-        serial,
-        auth,
-        googleObjectId,
-        googleObjectType,
-        Date.now().toString(),
-      ],
+    return createPassRecord(
+      client,
+      userId,
+      purpose,
+      platform,
+      opts?.googleObjectId ?? null,
+      platform === "google" ? (opts?.googleObjectType ?? "generic") : null,
     );
-    await audit(client, {
-      actorId: userId,
-      entityType: "wallet_pass",
-      entityId: created.rows[0].id,
-      action: "issued",
-      after: { purpose, platform, serialNumber: serial, googleObjectId, googleObjectType },
-    });
-    return created.rows[0];
   });
 }
 
@@ -174,23 +198,7 @@ export async function ensureGooglePassRecord(
   if (existingType === googleObjectType) return { pass: existing, retiredPassIds: [] };
 
   return withTransaction(async (client) => {
-    await lockRoleGraph(client);
-    const activeUser = await client.query(
-      `SELECT 1 FROM users
-        WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
-        FOR UPDATE`,
-      [userId],
-    );
-    if (!activeUser.rows[0]) throw new NotFoundError("User not found");
-    if (purpose === "ticket") {
-      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Ticket not issued");
-      const ticket = await client.query(`SELECT 1 FROM tickets WHERE user_id = $1`, [userId]);
-      if (!ticket.rows[0]) throw new NotFoundError("Ticket not issued");
-    } else {
-      if (!(await hasEventAccess(client, userId))) throw new NotFoundError("Badge not issued");
-      const badge = await client.query(`SELECT badge_id FROM users WHERE id = $1`, [userId]);
-      if (!badge.rows[0]?.badge_id) throw new BadRequestError("Badge not assigned");
-    }
+    await lockEntitledUser(client, userId, purpose);
 
     const current = await client.query(
       `SELECT id, user_id, purpose, platform, serial_number, authentication_token,
@@ -202,37 +210,15 @@ export async function ensureGooglePassRecord(
     );
     const row = current.rows[0] as PassRow | undefined;
     if (!row) {
-      const created = await client.query(
-        `INSERT INTO wallet_passes
-           (user_id, purpose, platform, serial_number, authentication_token,
-            google_object_id, google_object_type, update_tag)
-         VALUES ($1, $2, 'google', $3, $4, $5, $6, $7)
-         RETURNING id, user_id, purpose, platform, serial_number, authentication_token,
-                   google_object_id, google_object_type, status, update_tag`,
-        [
-          userId,
-          purpose,
-          `${purpose}-${randomBytes(16).toString("hex")}`,
-          randomBytes(24).toString("base64url"),
-          googleObjectId,
-          googleObjectType,
-          Date.now().toString(),
-        ],
+      const pass = await createPassRecord(
+        client,
+        userId,
+        purpose,
+        "google",
+        googleObjectId,
+        googleObjectType,
       );
-      await audit(client, {
-        actorId: userId,
-        entityType: "wallet_pass",
-        entityId: created.rows[0].id,
-        action: "issued",
-        after: {
-          purpose,
-          platform: "google",
-          serialNumber: created.rows[0].serial_number,
-          googleObjectId,
-          googleObjectType,
-        },
-      });
-      return { pass: created.rows[0], retiredPassIds: [] };
+      return { pass, retiredPassIds: [] };
     }
 
     if ((row.google_object_type ?? "generic") === googleObjectType) {
@@ -255,37 +241,15 @@ export async function ensureGooglePassRecord(
       reason: "migrate Google Wallet resource type",
     });
 
-    const created = await client.query(
-      `INSERT INTO wallet_passes
-         (user_id, purpose, platform, serial_number, authentication_token,
-          google_object_id, google_object_type, update_tag)
-       VALUES ($1, $2, 'google', $3, $4, $5, $6, $7)
-       RETURNING id, user_id, purpose, platform, serial_number, authentication_token,
-                 google_object_id, google_object_type, status, update_tag`,
-      [
-        userId,
-        purpose,
-        `${purpose}-${randomBytes(16).toString("hex")}`,
-        randomBytes(24).toString("base64url"),
-        googleObjectId,
-        googleObjectType,
-        Date.now().toString(),
-      ],
+    const pass = await createPassRecord(
+      client,
+      userId,
+      purpose,
+      "google",
+      googleObjectId,
+      googleObjectType,
     );
-    await audit(client, {
-      actorId: userId,
-      entityType: "wallet_pass",
-      entityId: created.rows[0].id,
-      action: "issued",
-      after: {
-        purpose,
-        platform: "google",
-        serialNumber: created.rows[0].serial_number,
-        googleObjectId,
-        googleObjectType,
-      },
-    });
-    return { pass: created.rows[0], retiredPassIds: [row.id] };
+    return { pass, retiredPassIds: [row.id] };
   });
 }
 
