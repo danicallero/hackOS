@@ -1,17 +1,10 @@
 import "./env.js";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import type { TemplateField } from "../../src/modules/applications/schemas.js";
-import {
-  asUser,
-  buildTestApp,
-  createUser,
-  createUserWithCapabilities,
-  truncateAll,
-} from "../helpers.js";
+import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
 import { createApplication, createResponse } from "./fixtures.js";
 
 /**
@@ -22,7 +15,7 @@ import { createApplication, createResponse } from "./fixtures.js";
  * validate only the form template staff actually edit.
  */
 
-let app: App;
+const getApp = useTestApp();
 let editor: number;
 
 const template: TemplateField[] = [
@@ -32,25 +25,8 @@ const template: TemplateField[] = [
 ];
 
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
   editor = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_EDIT_RESPONSE]);
 });
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
 
 async function editAnswers(responseId: number, responses: Record<string, unknown>) {
   const a = await getApp();

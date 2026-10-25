@@ -1,42 +1,19 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { describe, expect, it } from "vitest";
 import {
   assignRole,
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 
 /** #933: sponsor meal plans, explicit dietary confirmation and pendingProfileTasks. */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 async function db() {
   return (await import("../../src/db/pool.js")).pool;

@@ -1,7 +1,7 @@
 import "./env.js";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
-import { asUser, buildTestApp, createUser, truncateAll } from "../helpers.js";
+import { asUser, createUser, useTestApp } from "../helpers.js";
 import {
   createApplication,
   createFoodIntolerance,
@@ -11,28 +11,7 @@ import {
 
 /** H12: draft, submit, verified-email gate, sensitive-data-to-user, privacy notice. */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 function saveDraft(a: App, appId: number, userId: number, responses: Record<string, unknown>) {
   return a.inject({

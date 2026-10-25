@@ -1,3 +1,4 @@
+import { afterAll, beforeEach } from "vitest";
 import type { App } from "../src/app.js";
 import { pool } from "../src/db/pool.js";
 
@@ -247,4 +248,33 @@ export function asUser(userId: number): Record<string, string> {
 export async function buildTestApp(): Promise<App> {
   const { buildApp } = await import("../src/app.js");
   return buildApp();
+}
+
+/**
+ * Register the standard DB-backed suite lifecycle: a clean database and Valkey
+ * before each test, and app/queue/Valkey/pool teardown after the suite.
+ * Returns a getter that builds the app on first use (#1133).
+ */
+export function useTestApp(): () => Promise<App> {
+  let app: App | undefined;
+
+  beforeEach(async () => {
+    await truncateAll();
+    const { valkey } = await import("../src/lib/valkey.js");
+    await valkey.flushdb();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    const { stopQueues } = await import("../src/lib/queues.js");
+    const { closeValkey } = await import("../src/lib/valkey.js");
+    await stopQueues();
+    await closeValkey();
+    await pool.end();
+  });
+
+  return async () => {
+    app ??= await buildTestApp();
+    return app;
+  };
 }

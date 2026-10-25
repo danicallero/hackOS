@@ -1,40 +1,17 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { describe, expect, it } from "vitest";
 import {
   asUser,
-  buildTestApp,
   createUser,
   createUserWithCapabilities,
   setUserUniversity,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 
 /** University directory: public search/propose + admin create/rename/delete (H12). */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 describe("university directory", () => {
   it("requires a signed-in user to propose and attributes a successful proposal", async () => {

@@ -1,17 +1,15 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   assignRole,
   asUser,
   authorizationContextFor,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
   seedRoleDefaults,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 import { TEST_DATABASE_URL } from "../test-env.js";
 
@@ -22,31 +20,34 @@ import { TEST_DATABASE_URL } from "../test-env.js";
  * capability-group management.
  */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 async function manager(): Promise<number> {
   return createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
+}
+
+/**
+ * The sole wildcard holder plus a distinct, even-higher actor — the sole
+ * wildcard holder can never manage their own role (self-management is blocked
+ * at the ceiling), so the active-wildcard-holder invariant is only reachable
+ * from strictly above.
+ */
+async function soleWildcardHolderBelowTopActor() {
+  const wildcardHolder = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
+  const { pool } = await import("../../src/db/pool.js");
+  const { rows } = await pool.query(
+    `SELECT role_id, position FROM user_roles ur
+    JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1`,
+    [wildcardHolder],
+  );
+  const roleId = rows[0].role_id as number;
+  const rolePosition = rows[0].position as number;
+  const topActor = await manager();
+  await pool.query(
+    `UPDATE roles SET position = $2 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
+    [topActor, rolePosition + 1000],
+  );
+  return { wildcardHolder, roleId, topActor };
 }
 
 describe("H8 role resolution semantics", () => {
@@ -282,24 +283,7 @@ describe("H8 admin-hierarchy mutation authority", () => {
 
   it("keeps at least one active wildcard holder", async () => {
     const a = await getApp();
-    const wildcardHolder = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `SELECT role_id, position FROM user_roles ur
-      JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1`,
-      [wildcardHolder],
-    );
-    const roleId = rows[0].role_id as number;
-    const rolePosition = rows[0].position as number;
-
-    // A distinct, even-higher actor — the sole wildcard holder can never
-    // manage their own role (self-management is blocked at the ceiling), so
-    // this invariant is only reachable from strictly above.
-    const topActor = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
-    await pool.query(
-      `UPDATE roles SET position = $2 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
-      [topActor, rolePosition + 1000],
-    );
+    const { wildcardHolder, roleId, topActor } = await soleWildcardHolderBelowTopActor();
 
     const removal = await a.inject({
       method: "DELETE",
@@ -1057,20 +1041,7 @@ describe("H8 role soft-delete and restore", () => {
 
   it("deleting a role removing the last wildcard holder still enforces the active-wildcard-holder invariant", async () => {
     const a = await getApp();
-    const wildcardHolder = await createUserWithCapabilities([CAPABILITIES.ADMIN_ALL]);
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      `SELECT role_id, position FROM user_roles ur
-      JOIN roles r ON r.id = ur.role_id WHERE ur.user_id = $1`,
-      [wildcardHolder],
-    );
-    const roleId = rows[0].role_id as number;
-    const rolePosition = rows[0].position as number;
-    const topActor = await createUserWithCapabilities([CAPABILITIES.PERMISSIONS_MANAGE]);
-    await pool.query(
-      `UPDATE roles SET position = $2 WHERE id = (SELECT role_id FROM user_roles WHERE user_id = $1)`,
-      [topActor, rolePosition + 1000],
-    );
+    const { roleId, topActor } = await soleWildcardHolderBelowTopActor();
 
     const res = await a.inject({
       method: "DELETE",
