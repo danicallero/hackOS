@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
@@ -109,7 +109,7 @@ jobs:
           --health-retries 12
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Start S3Mock
         run: |
@@ -148,7 +148,7 @@ jobs:
       CI: true
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
@@ -164,7 +164,7 @@ jobs:
       CI: true
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
@@ -183,7 +183,7 @@ jobs:
       CI: true
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Set up workspace
         uses: ./.github/actions/setup-node-pnpm
@@ -197,7 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Verify real cgroup limits and collector privileges
         run: bash deploy/metrics/test-runtime.sh
