@@ -864,6 +864,37 @@ describe("send_back / requeue / re_enter (H33)", () => {
     expect(invalid.statusCode).toBe(409);
   });
 
+  it("requeue top: the head takes the freed slot instead of the same team being re-called (H33)", async () => {
+    const { challengeId, roomId } = await setup(); // waiting area holds 2
+    const ids: number[] = [];
+    for (let i = 1; i <= 3; i++) {
+      const { repoId } = await createRepoWithTeam();
+      ids.push(await enqueueRepo(challengeId, repoId, i));
+    }
+    const [e1, e2, e3] = ids as [number, number, number];
+    for (let i = 0; i < 2; i++) {
+      await app.inject({
+        method: "POST",
+        url: `/api/queue/rooms/${roomId}/call-next`,
+        headers: asUser(operatorId),
+        payload: {},
+      });
+    }
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/queue/entries/${e1}/requeue`,
+      headers: asUser(operatorId),
+      payload: { position: "top" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("waiting");
+    // The top-up gave the freed slot to the former head (e3), not back to e1.
+    expect(await getEntry(e3).then((e) => e.status)).toBe("called");
+    expect(await getEntry(e2).then((e) => e.status)).toBe("called");
+    expect(await getEntry(e1).then((e) => e.status)).toBe("waiting");
+  });
+
   it("re_enter recovers a completed team, requires a reason, and is audited", async () => {
     const { challengeId } = await setup();
     const { repoId } = await createRepoWithTeam();

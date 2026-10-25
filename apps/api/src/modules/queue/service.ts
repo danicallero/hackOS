@@ -762,7 +762,13 @@ export async function requeue(
     const fixtureMarker = await assertEntryFixtureScope(client, actorId, entryId);
     await assertEntryCanMove(client, entry, fixtureMarker);
     assertFrom(entry, ["called"], "requeue");
-    const pos = await placeEntry(client, entry.challenge_id, entryId, position);
+    // "top" from the waiting room goes right behind the head of the queue (same as
+    // move_to_top): the head takes the slot this frees, instead of the same team
+    // being called straight back in by the top-up.
+    const pos =
+      position === "top"
+        ? await placeEntryAtWaitingRank(client, entry.challenge_id, entryId, 2)
+        : await placeEntry(client, entry.challenge_id, entryId, position);
     const res = await client.query(
       `UPDATE queue_entries
           SET status = 'waiting', position = $1, assigned_room_id = NULL, called_at = NULL,
