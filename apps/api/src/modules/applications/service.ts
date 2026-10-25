@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { MAX_IMAGES_PER_FIELD, MINIMUM_APPLICANT_AGE } from "@hackos/shared/forms";
+import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
 import type pg from "pg";
 import { config } from "../../config.js";
@@ -254,6 +254,9 @@ function checkFieldValidation(field: TemplateField, value: unknown): string | nu
     if (v.min !== undefined && value < v.min) return "too small";
     if (v.max !== undefined && value > v.max) return "too large";
   }
+  if (field.kind === "birth_year" && typeof value === "number") {
+    if (v.min_age !== undefined && value > new Date().getFullYear() - v.min_age) return "too young";
+  }
   if (field.kind === "multiselect" && Array.isArray(value)) {
     if (v.min_selected !== undefined && value.length < v.min_selected) return "too few selected";
     if (v.max_selected !== undefined && value.length > v.max_selected) return "too many selected";
@@ -294,8 +297,6 @@ export function validateResponses(
           value > new Date().getFullYear()
         ) {
           errors[field.key] = "must be a birth year";
-        } else if (value > new Date().getFullYear() - MINIMUM_APPLICANT_AGE) {
-          errors[field.key] = "too young";
         }
         break;
       case "checkbox":

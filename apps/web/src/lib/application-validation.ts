@@ -1,5 +1,4 @@
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
-import { MINIMUM_APPLICANT_AGE } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ApiError } from "@/lib/api";
@@ -21,6 +20,7 @@ export interface ValidationField {
     max?: number;
     min_selected?: number;
     max_selected?: number;
+    min_age?: number;
     error_message?: I18nText;
   };
 }
@@ -83,7 +83,6 @@ export function validateFieldOnBlur(
     ) {
       return t("fieldMustBeBirthYear");
     }
-    if (value > currentYear - MINIMUM_APPLICANT_AGE) return t("fieldBirthYearTooRecent");
   }
   if (field.kind === "phone" && (typeof value !== "string" || normalizePhone(value) === null)) {
     return t("fieldMustBePhone");
@@ -121,6 +120,9 @@ export function validateFieldOnBlur(
   } else if (field.kind === "number" && typeof value === "number" && rule) {
     if (rule.min != null && value < rule.min) code = FIELD_ERROR_REASONS.TOO_SMALL;
     else if (rule.max != null && value > rule.max) code = FIELD_ERROR_REASONS.TOO_LARGE;
+  } else if (field.kind === "birth_year" && typeof value === "number" && rule) {
+    if (rule.min_age != null && value > new Date().getFullYear() - rule.min_age)
+      code = FIELD_ERROR_REASONS.BIRTH_YEAR_TOO_RECENT;
   } else if (field.kind === "multiselect" && Array.isArray(value) && rule) {
     if (rule.min_selected != null && value.length < rule.min_selected)
       code = FIELD_ERROR_REASONS.TOO_FEW_SELECTED;

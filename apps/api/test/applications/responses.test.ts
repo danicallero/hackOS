@@ -380,6 +380,7 @@ describe("application responses (H12)", () => {
           label: { en: "Birth year", es: "Año de nacimiento", gl: "Ano de nacemento" },
           kind: "birth_year",
           required: true,
+          validation: { min_age: 16 },
         },
       ],
     });

@@ -985,7 +985,13 @@ const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
 
 /** Kinds where a response-validation rule (length/pattern/range/selection
  *  count) is meaningful — see `checkFieldValidation` in the API's service.ts. */
-const VALIDATABLE_KINDS = new Set<FieldKind>(["text", "textarea", "number", "multiselect"]);
+const VALIDATABLE_KINDS = new Set<FieldKind>([
+  "text",
+  "textarea",
+  "number",
+  "multiselect",
+  "birth_year",
+]);
 
 function hasI18nText(v: I18nText | undefined): v is I18nText {
   return !!v && Object.values(v).some((s) => s.trim());
@@ -1761,7 +1767,7 @@ function ValidationEditor({
 
   const numberField = (
     label: string,
-    key: "min_length" | "max_length" | "min" | "max",
+    key: "min_length" | "max_length" | "min" | "max" | "min_age",
     extra?: Partial<FieldValidation>,
   ) => (
     <div className="space-y-1.5">
@@ -1963,6 +1969,15 @@ function ValidationEditor({
             />
           </div>
         </div>
+        {errorMessageField}
+      </div>
+    );
+  }
+
+  if (field.kind === "birth_year") {
+    return (
+      <div className="space-y-3 border-t pt-4">
+        {numberField(t("minAgeLabel"), "min_age")}
         {errorMessageField}
       </div>
     );
