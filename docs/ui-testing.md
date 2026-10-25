@@ -62,6 +62,11 @@ so they do not replace that state with an empty response and accidentally open
 the onboarding screen. Onboarding scenarios explicitly override the profile
 route to exercise incomplete, hidden, shared and deferred states.
 
+The judging save and alignment specs share `e2e/browser/judging-helpers.ts`: it
+installs the room/project API fixtures, review saves and note leases, and
+returns per-test review state and failure controls. Presentation timing, deck
+visibility and challenge memberships remain scenario-specific (#1135).
+
 The Chromium project is the required pull-request smoke subset. CI uses two
 isolated browser workers so independent scenarios can overlap. It includes
 the judging-room transition scenario, whose API read model and SSE connection

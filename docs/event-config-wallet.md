@@ -180,6 +180,11 @@ Existing Google objects carry their own background color, so a class color
 change alone does not recolor those objects. The runtime refresh now also
 patches individual objects.
 
+Pass bookkeeping in `logistics/wallet-passes.ts` shares the role-graph/user
+lock and entitlement check across issuance and Google resource migration. A
+single local helper inserts and audits new pass records inside the caller’s
+transaction; provider payloads and signing remain unchanged (#1135).
+
 ### How a device learns about a change (H28)
 
 The pass's `webServiceURL` is `{BETTER_AUTH_URL}/api/wallet/apple` — the
