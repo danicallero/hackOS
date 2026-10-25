@@ -126,7 +126,7 @@ function runShard(paths, shardNumber) {
 }
 
 // H53: collect every shard's result before exiting, including after a failure.
-const results = await Promise.allSettled(shards.map(runShard));
+const results = await Promise.allSettled(shards.map((paths, index) => runShard(paths, index)));
 const failures = results.filter((result) => result.status === "rejected");
 if (failures.length > 0) {
   throw new AggregateError(

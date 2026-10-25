@@ -31,7 +31,7 @@ export function PresenceScreen() {
   const initialDraft = draftKindValid
     ? { kind: draftKindValid, occurredAt: draftAt ? new Date(draftAt) : new Date() }
     : undefined;
-  const focusLogIdNumber = focusLogId ? Number(focusLogId) : NaN;
+  const focusLogIdNumber = focusLogId ? Number(focusLogId) : Number.NaN;
   const focusSignal: { id: number; source: "door" | "activity" } | undefined =
     Number.isInteger(focusLogIdNumber) && focusLogIdNumber > 0
       ? focusSource === "door"
