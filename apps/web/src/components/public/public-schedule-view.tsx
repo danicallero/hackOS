@@ -159,7 +159,7 @@ export function PublicScheduleView({
             .filter((location): location is string => Boolean(location)),
         ),
       ]
-        .sort()
+        .sort((a, b) => a.localeCompare(b, language))
         .map((location) => ({ value: location, label: location })),
     },
   ].filter((filter) => filter.options.length > 0);

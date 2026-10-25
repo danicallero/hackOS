@@ -72,8 +72,8 @@ export function useScheduleReminders() {
     () =>
       [
         ...new Set(items.map((item) => item.type).filter((type): type is string => Boolean(type))),
-      ].sort(),
-    [items],
+      ].sort((a, b) => a.localeCompare(b, language)),
+    [items, language],
   );
 
   useEffect(() => {

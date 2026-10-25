@@ -107,7 +107,7 @@ const EMPTY_FILTERS: FilterState = {
 };
 
 export default function AuditPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
   const [filters, setFilters] = usePersistedState("audit-list:filters", EMPTY_FILTERS);
   const [debounced, setDebounced] = useState(filters);
@@ -204,10 +204,10 @@ export default function AuditPage() {
   const hasFilters = Object.values(filters).some((v) => v.trim() !== "");
 
   const actionOptions = Array.from(new Set(vocabulary.map((v) => v.action)))
-    .sort()
-    .map((action) => ({ action, label: getActionLabel(action, t) }));
+    .map((action) => ({ action, label: getActionLabel(action, t) }))
+    .sort((a, b) => a.label.localeCompare(b.label, language));
   const entityTypeOptions = Array.from(new Set(vocabulary.map((v) => v.entity_type)))
-    .sort()
+    .sort((a, b) => a.localeCompare(b, language))
     .map((entityType) => ({ entityType }));
 
   const columns: Column<AuditRow>[] = [
