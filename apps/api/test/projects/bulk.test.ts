@@ -148,4 +148,61 @@ describe("POST /api/challenges/:challengeId/repos/bulk-add|bulk-remove (H21)", (
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it("writes one history row and one audit row per entry, revives terminal entries at the bottom, and survives concurrent calls", async () => {
+    const server = await getApp();
+    const challengeId = await createChallenge("Bulk Challenge");
+    const repoA = await createRepo("Repo A");
+    const repoB = await createRepo("Repo B");
+    const repoC = await createRepo("Repo C");
+    const operator = await createUserWithCapabilities([CAPABILITIES.PROJECTS_EDIT]);
+    const call = (action: "bulk-add" | "bulk-remove") =>
+      server.inject({
+        method: "POST",
+        url: `/api/challenges/${challengeId}/repos/${action}`,
+        headers: asUser(operator),
+      });
+
+    // Two simultaneous bulk-adds: exactly one entry per repo, no duplicates.
+    const [first, second] = await Promise.all([call("bulk-add"), call("bulk-add")]);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    const queued = await pool.query(
+      `SELECT repo_id, position FROM queue_entries WHERE challenge_id = $1 ORDER BY position`,
+      [challengeId],
+    );
+    expect(queued.rows.map((r: { repo_id: number }) => r.repo_id)).toEqual([repoA, repoB, repoC]);
+    expect(queued.rows.map((r: { position: number }) => r.position)).toEqual([1, 2, 3]);
+    const enqueues = await pool.query(
+      `SELECT count(*)::int AS n FROM queue_history WHERE action = 'enqueue'`,
+    );
+    expect(enqueues.rows[0].n).toBe(3);
+
+    // Withdraw all: one history + one audit row per entry, positions cleared.
+    expect((await call("bulk-remove")).json()).toEqual({ total: 3, removed: 3, alreadySkipped: 0 });
+    const removals = await pool.query(
+      `SELECT count(*)::int AS n FROM queue_history WHERE action = 'remove_from_challenge'`,
+    );
+    expect(removals.rows[0].n).toBe(3);
+    const removeAudits = await pool.query(
+      `SELECT count(*)::int AS n FROM audit_log WHERE action = 'challenge_remove'`,
+    );
+    expect(removeAudits.rows[0].n).toBe(3);
+
+    // Re-adding revives the cancelled entries (same rows) at the bottom, in repo order.
+    expect((await call("bulk-add")).json()).toEqual({ total: 3, added: 3, alreadyEnrolled: 0 });
+    const revived = await pool.query(
+      `SELECT repo_id, status, position FROM queue_entries WHERE challenge_id = $1 ORDER BY position`,
+      [challengeId],
+    );
+    expect(revived.rows).toEqual([
+      { repo_id: repoA, status: "waiting", position: 1 },
+      { repo_id: repoB, status: "waiting", position: 2 },
+      { repo_id: repoC, status: "waiting", position: 3 },
+    ]);
+    const reEnters = await pool.query(
+      `SELECT count(*)::int AS n FROM queue_history WHERE action = 're_enter'`,
+    );
+    expect(reEnters.rows[0].n).toBe(3);
+  });
 });

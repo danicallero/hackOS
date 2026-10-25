@@ -1396,9 +1396,9 @@ describe("self-service account removal (H54)", () => {
     );
     await pool.query(
       `UPDATE users
-          SET university_id = $2, food_intolerances = ARRAY[7], food_intolerance_notes = 'Peanut'
+          SET food_intolerances = ARRAY[7], food_intolerance_notes = 'Peanut'
         WHERE id = $1`,
-      [user, universityRows[0].id],
+      [user],
     );
     const demographicTemplate = [
       {

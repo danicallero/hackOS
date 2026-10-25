@@ -58,6 +58,8 @@ Architecture & modules:
   outbox/object-storage and SSE boundaries.
 - [Question-owned libraries](./form-libraries.md) — dynamic library fields, unlimited
   participant proposals, inline bulk curation and confirmed cascading deletion.
+- [Attendance certificates](./certificates.md) — policy (hours, demo), variants,
+  organisation-issued PDF with public verification code, staff override and revoke.
 - [Native projects](./projects.md) — drafts, autosave, form snapshots,
   phases, gallery/consent, uploads, invitations, queue eligibility and winner
   publication.
@@ -148,6 +150,8 @@ Frontend (web & mobile):
   (signing, push, Wallet certs), and
   [store release](./mobile-store-release.md) (artwork, privacy declarations,
   submission, release checklist).
+- [Test coverage and execution](./testing.md) — suite inventory, behavioral
+  coverage map, audit corrections, runtime policy and verification limits.
 - [UI testing](./ui-testing.md) — the shared browser/native selector contract,
   Playwright browser projects, fast React Native screen tests, optional
   Detox simulator/device runs, and the screenshot-on-UI-PRs rule.

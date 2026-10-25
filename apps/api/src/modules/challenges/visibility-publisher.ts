@@ -1,6 +1,6 @@
 import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { auditMany } from "../../lib/audit.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { revealDueEnterprises } from "../sponsors/service.js";
 import { revealDueChallenges } from "./service.js";
@@ -22,24 +22,22 @@ export async function runScheduledVisibilityPublisherOnce(): Promise<{
     const challenges = await revealDueChallenges(client);
     const enterprises = await revealDueEnterprises(client);
 
-    for (const id of challenges) {
-      await audit(client, {
+    await auditMany(client, [
+      ...challenges.map((id) => ({
         actorId: null,
         entityType: "challenge",
         entityId: id,
         action: "scheduled_reveal",
         after: { visibility: "visible" },
-      });
-    }
-    for (const id of enterprises) {
-      await audit(client, {
+      })),
+      ...enterprises.map((id) => ({
         actorId: null,
         entityType: "enterprise",
         entityId: id,
         action: "scheduled_reveal",
         after: { visibility: "visible" },
-      });
-    }
+      })),
+    ]);
 
     return { challenges, enterprises };
   });

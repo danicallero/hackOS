@@ -12,7 +12,6 @@ export interface Me {
   foodIntolerances: number[];
   foodIntoleranceNotes: string | null;
   shirtSize: string | null;
-  universityId: number | null;
   notes: string | null;
   accountState: "active" | "removal_pending";
   removal:

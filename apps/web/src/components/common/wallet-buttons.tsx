@@ -59,7 +59,8 @@ export function WalletButtons({ purpose, accessToken, className }: WalletButtons
     // Consume the action once, so returning from Wallet does not reopen it.
     if (handledEmailAction.current || accessToken || purpose !== "ticket") return;
     const url = new URL(window.location.href);
-    if (url.pathname !== "/wallet") return;
+    // /wallet redirects to the profile's Wallet section with `add` intact.
+    if (url.pathname !== "/settings/profile" || url.searchParams.get("tab") !== "wallet") return;
     const action = url.searchParams.get("add");
     if (action !== "apple" && action !== "google") return;
     handledEmailAction.current = true;

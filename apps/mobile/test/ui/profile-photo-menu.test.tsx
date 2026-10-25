@@ -12,6 +12,13 @@ let mockMenu: {
   onPressAction: (event: { nativeEvent: { event: string } }) => void;
 } | null = null;
 
+jest.mock("expo-file-system", () => ({
+  File: class extends Blob {
+    constructor() {
+      super(["x"]);
+    }
+  },
+}));
 jest.mock("@expo/ui/community/menu", () => ({
   MenuView: (props: { children: unknown } & NonNullable<typeof mockMenu>) => {
     mockMenu = props;
@@ -109,6 +116,7 @@ describe("ProfilePhotoMenu (#934)", () => {
     expect(init.method).toBe("POST");
     expect(init.headers["Idempotency-Key"]).toBeTruthy();
     expect(init.body).toBeInstanceOf(FormData);
+    expect(init.body.get("file")).toBeInstanceOf(Blob);
     await waitFor(() => expect(mockRefetch).toHaveBeenCalledTimes(1));
     expect(Alert.alert).not.toHaveBeenCalled();
   });

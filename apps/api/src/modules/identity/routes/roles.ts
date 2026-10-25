@@ -340,12 +340,11 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           [name, position, isVisible, eventAccess],
         );
         const roleId = rows[0].id as number;
-        for (const { capability, state } of capabilities) {
-          await client.query(
-            `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, $3)`,
-            [roleId, capability, state],
-          );
-        }
+        await client.query(
+          `INSERT INTO role_capabilities (role_id, capability, state)
+           SELECT $1::int, capability, state::public.permission_state FROM unnest($2::text[], $3::text[]) AS t(capability, state)`,
+          [roleId, capabilities.map((c) => c.capability), capabilities.map((c) => c.state)],
+        );
         const created = await loadRole(client, roleId);
         await audit(client, {
           actorId,
@@ -508,13 +507,17 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         const hadWildcard = await roleGrantsWildcard(client, roleId);
         if (introducesWildcard || hadWildcard) await requireWildcardRoleAuthority(client, actorId);
         await client.query(`DELETE FROM role_capabilities WHERE role_id = $1`, [roleId]);
-        for (const { capability, state } of req.body.capabilities) {
-          if (state === "inherit") continue; // matches the implicit default: no row needed
-          await client.query(
-            `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, $3)`,
-            [roleId, capability, state],
-          );
-        }
+        // "inherit" matches the implicit default: no row needed.
+        const explicitCapabilities = req.body.capabilities.filter((c) => c.state !== "inherit");
+        await client.query(
+          `INSERT INTO role_capabilities (role_id, capability, state)
+           SELECT $1::int, capability, state::public.permission_state FROM unnest($2::text[], $3::text[]) AS t(capability, state)`,
+          [
+            roleId,
+            explicitCapabilities.map((c) => c.capability),
+            explicitCapabilities.map((c) => c.state),
+          ],
+        );
         await audit(client, {
           actorId,
           entityType: "role",
@@ -736,12 +739,15 @@ export function registerRoleRoutes(app: FastifyInstance): void {
           capability,
           state,
         }));
-        for (const { capability, state } of afterCapabilities) {
-          await client.query(
-            `INSERT INTO role_capabilities (role_id, capability, state) VALUES ($1, $2, $3)`,
-            [roleId, capability, state],
-          );
-        }
+        await client.query(
+          `INSERT INTO role_capabilities (role_id, capability, state)
+           SELECT $1::int, capability, state::public.permission_state FROM unnest($2::text[], $3::text[]) AS t(capability, state)`,
+          [
+            roleId,
+            afterCapabilities.map((c) => c.capability),
+            afterCapabilities.map((c) => c.state),
+          ],
+        );
         await client.query(`UPDATE roles SET event_access = $2 WHERE id = $1`, [
           roleId,
           defaultEventAccess,

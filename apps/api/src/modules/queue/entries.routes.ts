@@ -6,7 +6,6 @@ import { requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { actor } from "./actor.js";
 import { requireEntryJudgeOrCapability } from "./contextual-access.js";
-import { assertQueueEntryScope } from "./fixture-scope.js";
 import { scheduleTopUp } from "./pump.js";
 import { entryHistory } from "./reads.js";
 import {
@@ -50,18 +49,15 @@ import type { QueueEntryRow } from "./types.js";
  */
 async function transitionAndTopUp(
   entryId: number,
-  actorId: number,
   run: () => Promise<QueueEntryRow>,
 ): Promise<QueueEntryRow> {
-  const fixtureMarker = await assertQueueEntryScope(pool, actorId, entryId);
-  const { rows } = await pool.query(
-    `SELECT qe.assigned_room_id
-       FROM queue_entries qe
-       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = $2
-       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = $2
-      WHERE qe.id = $1`,
-    [entryId, fixtureMarker],
-  );
+  // One cheap read for the pre-transition room. The fixture boundary is
+  // enforced by the route's contextual guard and again under the entry lock
+  // inside `run`, and the top-up resolves its own room marker, so no scope
+  // re-check is repeated here.
+  const { rows } = await pool.query(`SELECT assigned_room_id FROM queue_entries WHERE id = $1`, [
+    entryId,
+  ]);
   const roomBefore = (rows[0]?.assigned_room_id as number | null) ?? null;
   const entry = await run();
   const roomId = roomBefore ?? entry.assigned_room_id;
@@ -70,23 +66,17 @@ async function transitionAndTopUp(
 }
 
 /** A top-of-challenge move should immediately fill any open waiting-room slot. */
-async function moveToTopAndTopUp(
-  entryId: number,
-  actorId: number,
-  run: () => Promise<QueueEntryRow>,
-): Promise<QueueEntryRow> {
-  const fixtureMarker = await assertQueueEntryScope(pool, actorId, entryId);
+async function moveToTopAndTopUp(run: () => Promise<QueueEntryRow>): Promise<QueueEntryRow> {
   const entry = await run();
   // H46: every room serving this challenge's queue_group has a slot that a
   // top-of-queue move could fill.
   const { rows } = await pool.query(
     `SELECT rqg.room_id
        FROM queue_group_challenges self
-       JOIN challenges c ON c.id = self.challenge_id AND c.is_test_account = $2
        JOIN room_queue_groups rqg ON rqg.queue_group_id = self.queue_group_id
       WHERE self.challenge_id = $1
       ORDER BY rqg.room_id ASC`,
-    [entry.challenge_id, fixtureMarker],
+    [entry.challenge_id],
   );
   await Promise.all(rows.map((row: { room_id: number }) => scheduleTopUp(row.room_id)));
   return entry;
@@ -172,9 +162,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
-        bringIn(req.params.entryId, actor(req.userId)),
-      ),
+      transitionAndTopUp(req.params.entryId, () => bringIn(req.params.entryId, actor(req.userId))),
   );
 
   typed.post(
@@ -234,7 +222,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+      transitionAndTopUp(req.params.entryId, () =>
         completePresentation(req.params.entryId, actor(req.userId)),
       ),
   );
@@ -257,7 +245,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+      transitionAndTopUp(req.params.entryId, () =>
         sendBackToWaiting(req.params.entryId, actor(req.userId), req.body.reason),
       ),
   );
@@ -277,7 +265,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: requeueBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+      transitionAndTopUp(req.params.entryId, () =>
         requeue(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
       ),
   );
@@ -309,7 +297,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+      transitionAndTopUp(req.params.entryId, () =>
         markNoShow(req.params.entryId, actor(req.userId), req.body.reason),
       ),
   );
@@ -330,9 +318,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: reasonBody },
     },
     async (req) =>
-      moveToTopAndTopUp(req.params.entryId, actor(req.userId), () =>
-        moveToTop(req.params.entryId, actor(req.userId), req.body.reason),
-      ),
+      moveToTopAndTopUp(() => moveToTop(req.params.entryId, actor(req.userId), req.body.reason)),
   );
 
   // Drag-free reordering: put a team at an explicit place in its queue.
@@ -356,7 +342,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+      transitionAndTopUp(req.params.entryId, () =>
         moveToPosition(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
       ),
   );
@@ -414,7 +400,7 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
       schema: { params: entryIdParam, body: manualCallBody },
     },
     async (req) =>
-      transitionAndTopUp(req.params.entryId, actor(req.userId), () =>
+      transitionAndTopUp(req.params.entryId, () =>
         manualCall(
           req.params.entryId,
           actor(req.userId),

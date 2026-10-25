@@ -172,6 +172,24 @@ export async function roleGrantsWildcard(
   return rows.length > 0;
 }
 
+/** Whether any of the given roles' own direct capability rows grants the wildcard. */
+export async function rolesGrantWildcard(
+  client: RoleGraphClient,
+  roleIds: readonly number[],
+): Promise<boolean> {
+  if (roleIds.length === 0) return false;
+  const { rows } = await client.query(
+    `SELECT 1
+       FROM role_capabilities rc
+       JOIN roles r ON r.id = rc.role_id
+      WHERE rc.role_id = ANY($1::integer[]) AND rc.capability = $2 AND rc.state = 'allow'
+        AND r.deleted_at IS NULL
+      LIMIT 1`,
+    [roleIds, CAPABILITIES.ADMIN_ALL],
+  );
+  return rows.length > 0;
+}
+
 /**
  * The multi-role hierarchy's admin-authority guard (H8): to assign, remove,
  * edit, or reorder a role, the actor's highest assigned-role position must
@@ -312,4 +330,52 @@ export async function requireCapabilityPossessionForAssignment(
       .map((r) => r.capability),
     "You may only assign a role that grants capabilities you already possess yourself",
   );
+}
+
+/**
+ * Set-based equivalent of calling requireRoleMutationAuthority then
+ * requireCapabilityPossessionForAssignment for each role in order: the actor's
+ * highest position, effective capabilities and every role's explicit ALLOW
+ * rows are each read once. The first failing role throws, exactly as the
+ * per-role sequence would.
+ */
+export async function requireRoleAssignmentAuthorityMany(
+  client: RoleGraphClient,
+  actorId: number,
+  roles: readonly { id: number; position: number }[],
+): Promise<void> {
+  if (roles.length === 0) return;
+  const actorHighest = await highestRolePosition(client, actorId);
+  const { rows } = await client.query(
+    `SELECT role_id, capability FROM role_capabilities
+      WHERE role_id = ANY($1::integer[]) AND state = 'allow'`,
+    [roles.map((role) => role.id)],
+  );
+  const allowByRole = new Map<number, string[]>();
+  for (const row of rows as { role_id: number; capability: string }[]) {
+    const list = allowByRole.get(Number(row.role_id)) ?? [];
+    list.push(row.capability);
+    allowByRole.set(Number(row.role_id), list);
+  }
+  let effective: Awaited<ReturnType<typeof getEffectiveCapabilities>> | null = null;
+  for (const role of roles) {
+    if (actorHighest === null || !(role.position < actorHighest)) {
+      throw new ForbiddenError(
+        "You may only manage roles positioned strictly below your own highest role",
+        { targetPosition: role.position, actorHighest },
+      );
+    }
+    const capabilities = allowByRole.get(role.id) ?? [];
+    if (capabilities.length === 0) continue;
+    effective ??= await getEffectiveCapabilities(createAuthorizationContext(actorId, client));
+    if (effective.has(CAPABILITIES.ADMIN_ALL)) continue;
+    for (const capability of capabilities) {
+      if (!effective.has(capability)) {
+        throw new ForbiddenError(
+          "You may only assign a role that grants capabilities you already possess yourself",
+          { capability, reason: "capability_possession" },
+        );
+      }
+    }
+  }
 }

@@ -221,8 +221,10 @@ scan alone is therefore insufficient.
 
 This is intentionally a backend fact, not a client-side `hasCheckedIn` flag.
 `check_in_logs` is the canonical physical boundary. The other references are
-integrity signals: they trigger a warning and safe cleanup, but do not silently
-become a permanent retention requirement. A product decision may change the
+integrity signals: they trigger safe cleanup and a warning shown only to staff
+on the person's user page (the participant's own Danger zone, web and mobile,
+does not show it: they cannot act on it), but do not silently become a
+permanent retention requirement. A product decision may change the
 reconciliation rule, but it must change the server function and tests together.
 
 ## 5. Anonymous-account design
@@ -545,7 +547,7 @@ synthetic identity-shaped `users` row.
 | `users`: badge_id, badge_id_history | Credential before use | Active badge operations | Delete; permanent unlinked keyed-digest non-reuse tombstone | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
 | `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
 | `users`: dietary_confirmed_at, meal_plan_confirmed_at; `meal_attendance_plans` (#933) | May be edited | Sponsor meal planning and the dietary re-ask | Clear the timestamps and delete plan rows with the dietary values; the user FK cascades at final deletion | No | Planned attendance supports catering headcounts only; aggregates never identify the person. |
-| `users.university_id` / `universities.name` | Profile dimension | May support services | Detach/delete the subject link; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
+| University answer on `application_responses` / `universities.name` | Profile dimension | May support services | Deleted with the response; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
 | `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep existing rows while reversible `pending_exit` is active, with new/refresh sessions capped at the fixed recovery deadline, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
 | `account_removal_pin_challenges`: verified email, HMAC digest, nonce, attempts, expiry | None | Short-lived self-service proof | Expire/consume and cascade-delete with the account; raw PIN is never stored | No | Transient authentication metadata is not participant audit data. |
@@ -755,3 +757,7 @@ revokes access before asynchronous cleanup, and does not retain identity
 merely to preserve certificates or implementation convenience. The remaining
 high risks are deliberately visible rather than hidden behind a success
 response.
+
+Certificate review awards (#1083) are deleted during the removal scrub; issued
+documents are revoked and their snapshots cleared. No certified-hours approval
+remains linked to the anonymized person.

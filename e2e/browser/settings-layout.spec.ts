@@ -23,6 +23,25 @@ test.beforeEach(async ({ page }) => {
         ],
       };
     if (path === "/api/public/food-intolerances") body = { intolerances: [] };
+    if (path === "/api/me/certificates")
+      body = {
+        settings: {
+          minHours: null,
+          minReviewHours: null,
+          awardHours: null,
+          issuerName: "GPUL",
+        },
+        eligibility: {
+          hours: 0,
+          certifiedHours: null,
+          eligible: false,
+          reviewRequired: false,
+          reason: "not_available",
+          approval: null,
+        },
+        certificates: [],
+      };
+    if (path === "/api/exports/activities/catalog") body = { activities: [] };
     if (path === "/api/me/removal-eligibility") body = { action: "delete" };
     if (path === "/api/event")
       body = {
@@ -98,6 +117,7 @@ test("opens password fields on demand and clears dismissed secrets", async ({ pa
   await expect(cookies).toBeVisible();
   await cookies.locator("button").first().click();
   await expect(cookies).toBeHidden();
+  await page.getByRole("tab", { name: webEn.accountTitle, exact: true }).click();
   await expect(page.getByLabel("Current password", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Update password", exact: true }).click();
   await page.getByLabel("Current password", { exact: true }).fill("discard-this-secret");

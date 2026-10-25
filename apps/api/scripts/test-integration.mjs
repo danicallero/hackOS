@@ -1,17 +1,23 @@
+import "dotenv/config";
 import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { CreateBucketCommand, HeadBucketCommand, S3Client } from "@aws-sdk/client-s3";
 
 const baseDatabaseUrl = new URL(
   process.env.TEST_DATABASE_URL ?? "postgres://hackos:hackos@localhost:5433/hackos_test",
 );
 
+// H53: balance measured suite time without splitting a domain. Each shard
+// receives independent Postgres, Valkey and storage namespaces below.
 const shardDirectories = [
-  ["identity", "applications"],
-  ["queue", "logistics", "live-activities"],
-  ["projects", "github", "diary", "directory", "reports", "challenges", "sponsors", "event"],
-  ["notifications", "exports", "statistics"],
+  ["identity", "certificates", "notifications", "directory", "event"],
+  ["queue", "live-activities", "exports", "diary"],
+  ["logistics", "projects", "github", "reports", "sponsors"],
+  ["applications", "challenges", "statistics"],
 ];
+
+const bucketFor = (shardNumber) => `${process.env.S3_BUCKET ?? "hackos"}-shard-${shardNumber}`;
 
 // #992: assign by directory ownership, never by Vitest substring filters.
 async function discoverTests(directory) {
@@ -43,6 +49,38 @@ if (invalid.length > 0) {
   );
 }
 
+// H54: local shards need the same storage isolation as CI. User/project IDs
+// restart in each database, so a removal must never delete a sibling's files.
+const storage = new S3Client({
+  endpoint: process.env.S3_ENDPOINT ?? "http://localhost:9000",
+  region: process.env.S3_REGION ?? "us-east-1",
+  forcePathStyle: true,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY ?? "hackos",
+    secretAccessKey: process.env.S3_SECRET_KEY ?? "hackos-secret",
+  },
+  maxAttempts: 1,
+});
+try {
+  await Promise.all(
+    shards.map(async (_, index) => {
+      const Bucket = bucketFor(index);
+      try {
+        await storage.send(new HeadBucketCommand({ Bucket }), {
+          abortSignal: AbortSignal.timeout(5_000),
+        });
+      } catch (error) {
+        if (error.$metadata?.httpStatusCode !== 404) throw error;
+        await storage.send(new CreateBucketCommand({ Bucket }), {
+          abortSignal: AbortSignal.timeout(5_000),
+        });
+      }
+    }),
+  );
+} finally {
+  storage.destroy();
+}
+
 function databaseUrlFor(shardNumber) {
   const url = new URL(baseDatabaseUrl);
   const baseName = decodeURIComponent(url.pathname.slice(1));
@@ -50,6 +88,18 @@ function databaseUrlFor(shardNumber) {
     throw new Error(`Unsafe TEST_DATABASE_URL database name: ${baseName}`);
   }
   url.pathname = `/${baseName}_shard_${shardNumber}`;
+  return url.toString();
+}
+
+function valkeyUrlFor(shardNumber) {
+  const url = new URL(
+    process.env.TEST_VALKEY_URL ?? process.env.VALKEY_URL ?? "redis://localhost:6379/0",
+  );
+  const firstDatabase = Number(url.pathname.slice(1) || "0");
+  if (!Number.isInteger(firstDatabase) || firstDatabase < 0 || firstDatabase + shards.length > 16) {
+    throw new Error("The API test Valkey base database must leave room for all four shards (0–15)");
+  }
+  url.pathname = `/${firstDatabase + shardNumber}`;
   return url.toString();
 }
 
@@ -61,9 +111,9 @@ function runShard(paths, shardNumber) {
         API_TEST_SHARD_FILES: JSON.stringify(paths),
         TEST_DATABASE_URL: databaseUrlFor(shardNumber),
         TEST_DATABASE_EPHEMERAL: "true",
-        ...(process.env.CI === "true" && process.env.S3_BUCKET
-          ? { S3_BUCKET: `${process.env.S3_BUCKET}-shard-${shardNumber}` }
-          : {}),
+        TEST_VALKEY_URL: valkeyUrlFor(shardNumber),
+        VALKEY_URL: valkeyUrlFor(shardNumber),
+        S3_BUCKET: bucketFor(shardNumber),
       },
       stdio: "inherit",
     });
@@ -75,4 +125,12 @@ function runShard(paths, shardNumber) {
   });
 }
 
-await Promise.all(shards.map(runShard));
+// H53: collect every shard's result before exiting, including after a failure.
+const results = await Promise.allSettled(shards.map(runShard));
+const failures = results.filter((result) => result.status === "rejected");
+if (failures.length > 0) {
+  throw new AggregateError(
+    failures.map((result) => result.reason),
+    "API integration tests failed",
+  );
+}

@@ -76,60 +76,71 @@ export async function runPresenceEventEndCloserOnce(): Promise<{
         ORDER BY tl.user_id, tl.scanned_at DESC, tl.id DESC`,
     );
 
+    // Lock every still-eligible candidate in one statement, in ascending id
+    // order (the same order the candidate list is sorted in).
+    const { rows: lockedRows } = await client.query<{ id: number }>(
+      `SELECT id
+         FROM users
+        WHERE id = ANY($1::int[])
+          AND (
+            account_state = 'active'
+            OR (account_state = 'removal_pending' AND removal_requires_exit = true)
+          )
+          AND anonymized_at IS NULL
+        ORDER BY id
+          FOR UPDATE`,
+      [candidates.map((candidate) => candidate.user_id)],
+    );
+    const lockedIds = new Set(lockedRows.map((row) => row.id));
+    const lockedList = [...lockedIds];
+    const { rows: latestRows } = lockedList.length
+      ? await client.query<{ user_id: number; kind: string; scanned_at: Date }>(
+          `SELECT DISTINCT ON (user_id) user_id, kind, scanned_at
+             FROM time_logs
+            WHERE user_id = ANY($1::int[])
+            ORDER BY user_id, scanned_at DESC, id DESC`,
+          [lockedList],
+        )
+      : { rows: [] };
+    const latestByUser = new Map(latestRows.map((row) => [row.user_id, row]));
+    const toClose = candidates.filter((candidate) => {
+      if (!lockedIds.has(candidate.user_id)) return false;
+      const latest = latestByUser.get(candidate.user_id);
+      return latest?.kind === "in" && latest.scanned_at <= candidate.event_ends_at;
+    });
+
     const closedIds: number[] = [];
     const pendingIds: Array<{ userId: number; action: AccountRemovalAction }> = [];
-    for (const candidate of candidates) {
-      const active = await client.query<{ id: number }>(
-        `SELECT id
-           FROM users
-          WHERE id = $1
-            AND (
-              account_state = 'active'
-              OR (account_state = 'removal_pending' AND removal_requires_exit = true)
-            )
-            AND anonymized_at IS NULL
-          FOR UPDATE`,
-        [candidate.user_id],
-      );
-      if (active.rowCount === 0) continue;
-
-      const { rows: latestRows } = await client.query<{
-        kind: string;
-        scanned_at: Date;
-      }>(
-        `SELECT kind, scanned_at
-           FROM time_logs
-          WHERE user_id = $1
-          ORDER BY scanned_at DESC, id DESC
-          LIMIT 1`,
-        [candidate.user_id],
-      );
-      const latest = latestRows[0];
-      if (latest?.kind !== "in" || latest.scanned_at > candidate.event_ends_at) {
-        continue;
-      }
-
+    if (toClose.length > 0) {
       await client.query(
         `INSERT INTO time_logs (user_id, kind, scanned_at, scanned_by, notes)
-         VALUES ($1, 'out', $2, NULL, 'Automatic exit at event end')`,
-        [candidate.user_id, candidate.event_ends_at],
+         SELECT t.user_id, 'out', t.scanned_at, NULL, 'Automatic exit at event end'
+           FROM unnest($1::int[], $2::timestamptz[]) WITH ORDINALITY AS t(user_id, scanned_at, ord)
+          ORDER BY t.ord`,
+        [toClose.map((c) => c.user_id), toClose.map((c) => c.event_ends_at)],
       );
-      closedIds.push(candidate.user_id);
       const { rows: stateRows } = await client.query<{
+        id: number;
         account_state: "active" | "removal_pending";
         removal_action: AccountRemovalAction | null;
-      }>(`SELECT account_state, removal_action FROM users WHERE id = $1`, [candidate.user_id]);
-      const state = stateRows[0];
-      if (state?.account_state === "removal_pending" && state.removal_action) {
-        pendingIds.push({ userId: candidate.user_id, action: state.removal_action });
+      }>(`SELECT id, account_state, removal_action FROM users WHERE id = ANY($1::int[])`, [
+        toClose.map((c) => c.user_id),
+      ]);
+      const stateByUser = new Map(stateRows.map((row) => [row.id, row]));
+      for (const candidate of toClose) {
+        closedIds.push(candidate.user_id);
+        const state = stateByUser.get(candidate.user_id);
+        if (state?.account_state === "removal_pending" && state.removal_action) {
+          pendingIds.push({ userId: candidate.user_id, action: state.removal_action });
+        }
+        await audit(client, {
+          actorId: null,
+          entityType: "presence",
+          entityId: candidate.user_id,
+          action: "event_end_auto_exit",
+          after: { kind: "out", scannedAt: candidate.event_ends_at },
+        });
       }
-      await audit(client, {
-        actorId: null,
-        entityType: "presence",
-        entityId: candidate.user_id,
-        action: "event_end_auto_exit",
-        after: { kind: "out", scannedAt: candidate.event_ends_at },
-      });
     }
 
     // The raw H24 session can remain open after its latest certainty window
@@ -147,16 +158,21 @@ export async function runPresenceEventEndCloserOnce(): Promise<{
           AND anonymized_at IS NULL
         FOR UPDATE`,
     );
+    const releasedIds: number[] = [];
     for (const row of pendingRows) {
       const venue = await removalVenueState(client, row.id);
       if (!venue.requiresExit) {
-        await client.query(`UPDATE users SET removal_requires_exit = false WHERE id = $1`, [
-          row.id,
-        ]);
+        releasedIds.push(row.id);
         if (!pendingIds.some((pendingRow) => pendingRow.userId === row.id)) {
           pendingIds.push({ userId: row.id, action: row.removal_action });
         }
       }
+    }
+    if (releasedIds.length > 0) {
+      await client.query(
+        `UPDATE users SET removal_requires_exit = false WHERE id = ANY($1::int[])`,
+        [releasedIds],
+      );
     }
 
     // The participant may cancel only until the fixed recovery deadline that

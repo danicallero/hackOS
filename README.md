@@ -190,6 +190,7 @@ pnpm lint                             # Biome, copy/i18n, size and retired-runti
 pnpm --filter @hackos/api test        # API integration tests
 pnpm --filter @hackos/web typecheck   # web TypeScript check
 pnpm --filter @hackos/web test        # web unit tests
+pnpm --filter @hackos/shared test     # shared contracts
 pnpm --filter @hackos/mobile typecheck
 pnpm --filter @hackos/mobile test     # mobile Jest tests
 
@@ -215,8 +216,12 @@ API tests use real Postgres and Valkey. The runner discovers every
 `apps/api/test/**/*.test.ts` and checks that each belongs to exactly one of four
 shards before starting Vitest with explicit include lists. Unknown test directories
 fail this check; add them to `apps/api/scripts/test-integration.mjs`. Root-level
-suites belong to the fourth shard. Each shard resets and migrates its own
+suites belong to the fourth shard. The measured domain allocation is defined
+in that script. Each shard resets and migrates its own
 `hackos_test_shard_N` database and runs files serially, then drops its database.
+The runner creates/reuses a separate `${S3_BUCKET:-hackos}-shard-N` bucket for
+each shard locally and in CI, checking storage before launching the suites.
+It waits for every shard to finish before reporting aggregate failures.
 Use `pnpm --filter @hackos/api test:serial test/<file>.test.ts` for focused runs.
 For isolated local services, set `TEST_DATABASE_URL`, both `TEST_VALKEY_URL` and
 `VALKEY_URL`, the `S3_*` variables, and `SMTP_HOST`/`SMTP_PORT`. Set
@@ -224,15 +229,16 @@ For isolated local services, set `TEST_DATABASE_URL`, both `TEST_VALKEY_URL` and
 `http://localhost:8025`): email tests clear that inbox, so never point it at a
 shared instance. Keep unrelated dev-server variables such as `WEB_URL` unset
 when running tests that assert the default local origins.
-Valkey test database indices must stay within its default 0–15 range. The
-project suites use DB 3 so concurrent root-level tests cannot erase their SSE
-counters or capability cache. The rate-limit TTL regression uses DB 4, separate
-from identity's DB 11, so other
-suites' `FLUSHDB` calls cannot remove its counter mid-window (#1035).
+The full runner assigns each shard a separate Valkey logical database, starting
+at the database in `TEST_VALKEY_URL` (otherwise `VALKEY_URL`, default 0). The
+base index must leave room for four databases within 0–15. Standalone serial
+suites retain their domain defaults unless overridden. Concurrent full runs
+need distinct database names, bucket prefixes and Valkey database ranges.
 
 Open every pull request as a draft. Feature PRs may target protected `staging`
 or `main`; `staging` is the development branch and `main` is production. Draft
-updates run lint and typecheck; marking one ready runs the complete test matrix.
+updates run lint, shared contract tests, memory-collector tests and typecheck;
+marking one ready runs the complete test matrix.
 Container images are not built for individual PRs.
 
 The release paths are:

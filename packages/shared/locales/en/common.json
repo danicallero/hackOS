@@ -24,7 +24,7 @@
   "ticketNotReadyTitle": "Ticket not ready",
   "noTicketYet": "Confirm your accepted spot to receive your ticket.",
   "badgeNotReadyTitle": "Badge not ready",
-  "noBadgeYet": "You don't have a badge yet — get accredited at check-in.",
+  "noBadgeYet": "You don't have a badge yet. Get accredited at check-in.",
   "edit": "Edit",
   "clear": "Clear",
   "close": "Close",
@@ -67,6 +67,13 @@
   "apiError_badge_scan_before_assignment": "This scan predates the current badge assignment.",
   "apiError_team_member_busy": "A team member is already active in another room.",
   "apiError_github_repo_already_linked": "This repository is already linked to another project.",
+  "apiError_certificate_not_available": "Certificates are not available yet.",
+  "apiError_certificate_demo_required": "This certificate is only issued to people who presented a project.",
+  "apiError_certificate_hours_not_met": "You have not reached the venue hours required for a certificate.",
+  "apiError_certificate_no_activities": "There are no attended activities to list yet.",
+  "apiError_certificate_event_not_ended": "This certificate is available once the event has ended.",
+  "apiError_certificate_demo_jury_required": "This certificate is only issued to people who presented to the required jury.",
+  "apiError_certificate_copy_corrupt": "The stored certificate copy failed its integrity check. Revoke and reissue it.",
   "apiError_github_repo_not_available": "This repository is not shared with the GitHub app.",
   "apiError_schedule_ends_before_starts": "The end must be after the start.",
   "apiError_schedule_scan_needs_participants": "Only items visible to participants can require scanning.",
@@ -89,5 +96,6 @@
   "apiErrorForbidden": "You don't have permission to do this.",
   "apiErrorRateLimited": "Too many attempts. Wait a moment and try again.",
   "apiErrorServer": "Something went wrong on our side. Try again, or contact staff if it persists.",
-  "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge."
+  "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge.",
+  "apiError_certificate_review_required": "Awaiting attendance review"
 }

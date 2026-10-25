@@ -10,6 +10,14 @@ Web: `apps/web/src/lib/nav.ts` (data) + `apps/web/src/components/layout/app-side
 (rendering). Mobile: `apps/mobile/lib/tabs.ts` (data) +
 `apps/mobile/app/(tabs)/_layout.tsx` (rendering).
 
+Certificate policy (#1083) is available at **Event settings → Certificates**
+(`/settings/event?tab=certificates`) to organisers with `presence:manage`.
+The section owns one Save for automatic/review thresholds, presentation
+requirement and issuer name. **Attendance → Certificates**
+(`/logistics/presence?tab=certificates`, `presence:manage`) provides the review
+queue, full evidence timeline, explicit certified-hour awards and university
+filters. CSV exports require `logistics:stats`.
+
 ## Contents
 
 - [Principle](#principle)
@@ -45,7 +53,7 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 ### Stable personal area (`PERSONAL_NAV`)
 
 The personal sidebar exposes **Home**, **My applications**, **Projects**,
-**Wallet**, **Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+**Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
 and Inbox (`/inbox`) in a shared internal navigation row.
 Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
 keeps the parent selected on every grouped route, including records, and Home
@@ -54,8 +62,8 @@ PageLayout content width and parent header/navigation tracks, including loading
 states. Record titles and route-specific controls sit below those tracks.
 
 A **pure applicant** has no role-derived event access, operational capability,
-or room-judge/sponsor-rep association (`isPureApplicant` in `session.tsx`). Wallet
-and Contacts hide; Home omits Inbox and Projects opens the gallery instead of
+or room-judge/sponsor-rep association (`isPureApplicant` in `session.tsx`).
+Contacts and the profile's Wallet section hide; Home omits Inbox and Projects opens the gallery instead of
 requesting a private team list. API audience and capability checks still govern
 every destination.
 
@@ -63,9 +71,20 @@ every destination.
 address-book icon) is the attendee's event diary:
 the people and sponsor stands they scanned, in People and Companies tabs.
 There is no people directory to browse. It needs only current event access,
-like Wallet and Inbox, and no capability. It sits just above My profile,
+like Inbox, and no capability. It sits just above My profile,
 where each person decides whether to share a public profile with the people
 who scan their badge. See [`diary.md`](./diary.md).
+
+**My profile** (`/settings/profile`, H28, #1083) holds the Wallet, as the
+mobile Account tab does. Four tabs, selected by `?tab=` through `useUrlTab`:
+`personal` (Personal details, Meals), `public` (Public profile), `wallet`
+(ticket and badge, Certificates) and `account` (Account and security, Roles,
+Danger zone).
+Each section shows only when its API serves the account: passes unless a pure
+applicant, Certificates and Public profile with current event access, Meals
+for sponsor representatives, Roles with at least one role; a tab left empty
+is dropped. Tabs stay mounted while hidden, so drafts survive switching.
+`/wallet` redirects to `?tab=wallet`, keeping the email's `add=apple|google`.
 
 `/event` is the default landing destination after sign-in and verification.
 It leads with the current event-phase countdown, then public announcements,
@@ -140,8 +159,8 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   message key. `/timetable` is **Schedule** (the read-only programme every
   participant uses) and `/schedule` is **Manage schedule** (the editor); no
   multi-destination workspace is labelled with one of its own items.
-- `/timetable` and the public `/horario` (both rendered by
-  `PublicScheduleView`) get a client-side audience filter (H59 follow-up,
+- `/timetable` (one route for signed-in and signed-out viewers, rendered by
+  `PublicScheduleView`; `/horario` redirects to it) get a client-side audience filter (H59 follow-up,
   `components/public/schedule-audience-filter.tsx`) whenever the caller's own
   feed from `/api/public/activities` contains audience tags —
   the API projects each item's tags to that caller's accessible segments, and

@@ -21,6 +21,7 @@ import {
   UnauthorizedError,
 } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { userUniversityIdSql } from "../../lib/user-university.js";
 import { getHighestVisibleRoleName, hasEventAccess } from "../identity/role.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import {
@@ -120,7 +121,7 @@ async function passPayload(pass: PassRow) {
     `SELECT u.name, u.surname, u.email, u.badge_id, u.language, un.name AS university, t.token
        FROM users u
        LEFT JOIN tickets t ON t.user_id = u.id
-       LEFT JOIN universities un ON un.id = u.university_id
+       LEFT JOIN universities un ON un.id = ${userUniversityIdSql("u.id")}
       WHERE u.id = $1 AND u.anonymized_at IS NULL
         AND u.account_state IN ('active', 'removal_pending')`,
     [pass.user_id],

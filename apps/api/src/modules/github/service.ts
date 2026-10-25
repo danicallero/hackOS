@@ -91,12 +91,13 @@ export async function saveAccount(
 
 /** Installations GitHub says the member can reach, so repos can be chosen without another redirect. */
 export async function saveInstallations(userId: number, installationIds: number[]): Promise<void> {
-  for (const installationId of installationIds)
-    await pool.query(
-      `INSERT INTO github_user_installations (user_id, installation_id) VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
-      [userId, installationId],
-    );
+  if (installationIds.length === 0) return;
+  await pool.query(
+    `INSERT INTO github_user_installations (user_id, installation_id)
+     SELECT $1, unnest($2::bigint[])
+     ON CONFLICT DO NOTHING`,
+    [userId, installationIds],
+  );
 }
 
 export async function accountStatus(userId: number) {
@@ -248,12 +249,20 @@ export async function recordCommits(
   repoId: number,
   commits: GithubCommit[],
 ): Promise<void> {
-  for (const commit of commits)
-    await db.query(
-      `INSERT INTO github_commits (repo_id, sha, author_login, committed_at) VALUES ($1, $2, $3, $4)
-       ON CONFLICT (repo_id, sha) DO NOTHING`,
-      [repoId, commit.sha, commit.login, commit.at],
-    );
+  if (commits.length === 0) return;
+  await db.query(
+    `INSERT INTO github_commits (repo_id, sha, author_login, committed_at)
+     SELECT $1::int, t.sha, t.login, t.at
+       FROM unnest($2::text[], $3::text[], $4::timestamptz[]) WITH ORDINALITY AS t(sha, login, at, ord)
+      ORDER BY t.ord
+     ON CONFLICT (repo_id, sha) DO NOTHING`,
+    [
+      repoId,
+      commits.map((commit) => commit.sha),
+      commits.map((commit) => commit.login),
+      commits.map((commit) => commit.at),
+    ],
+  );
 }
 
 export async function recordPull(

@@ -32,7 +32,6 @@ const mockMeContext = {
     foodIntolerances: [],
     foodIntoleranceNotes: null,
     shirtSize: null,
-    universityId: null,
     notes: null,
     accountState: "active" as const,
     removal: null,
@@ -191,8 +190,6 @@ jest.mock("@/lib/i18n", () => {
       accountDeleteRetainedDisclosureHide: "Hide retained data",
       accountDeleteVenueExitWarning:
         "You're recorded as inside the HackUDC venue. GPUL event staff must record your exit before hackOS can finish deleting your account.",
-      accountDeleteIntegrityWarning:
-        "Some HackUDC operational records aren't linked to a canonical accreditation. GPUL event staff may need to reconcile them before hackOS can finish deleting your account.",
       accountDeleteContinue: "Continue to delete account",
       accountDeleteAction: "Delete my account",
       accountDeleteConfirmTitle: "Confirm account deletion",

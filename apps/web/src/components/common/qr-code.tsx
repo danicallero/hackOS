@@ -12,6 +12,7 @@ export function QrCode({
   className,
   variant = "card",
   showValue = true,
+  showLabel = true,
 }: {
   /** Encoded content; renders a "not available" placeholder card when null/undefined. */
   value: string | null | undefined;
@@ -20,6 +21,8 @@ export function QrCode({
   className?: string;
   variant?: "card" | "plain";
   showValue?: boolean;
+  /** Hide the caption when a heading next to the code already names it. */
+  showLabel?: boolean;
 }) {
   const { t } = useLocale();
   const copyToClipboard = useCopyToClipboard();
@@ -45,7 +48,7 @@ export function QrCode({
           className="rounded-md border bg-white p-2"
         />
         <div className="w-full space-y-2">
-          <p className="text-muted-foreground text-xs">{label}</p>
+          {showLabel && <p className="text-muted-foreground text-xs">{label}</p>}
           {showValue && (
             <code className="bg-muted block overflow-x-auto rounded-md px-2 py-1 font-mono text-xs">
               {value}

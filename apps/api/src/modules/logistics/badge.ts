@@ -78,3 +78,59 @@ export async function resolveByBadge(
 
   throw new AppError(404, "badge_unknown", "Badge not recognized");
 }
+
+/**
+ * Set-based `resolveByBadge` (H23/H54) for offline batches: three queries
+ * regardless of batch size, same tombstone -> current owner -> revoked ->
+ * unknown precedence per badge. Returns each badge's owner id, or the
+ * AppError `resolveByBadge` would have thrown, so callers can keep their own
+ * per-badge error precedence across later validation stages.
+ */
+export async function resolveByBadges(
+  db: Queryable,
+  badgeIds: string[],
+): Promise<Map<string, number | AppError>> {
+  const out = new Map<string, number | AppError>();
+  if (badgeIds.length === 0) return out;
+  const revokedError = () =>
+    new AppError(409, "badge_revoked", "This badge has been revoked", {
+      code: ERROR_REASONS.BADGE_REVOKED,
+    });
+
+  const digests = badgeIds.map((badgeId) => scannerCredentialDigest("badge", badgeId));
+  const tombstones = await db.query<{ credential_digest: string }>(
+    `SELECT credential_digest FROM scanner_revoked_badges
+      WHERE credential_digest = ANY($1::text[])`,
+    [digests],
+  );
+  const tombstoned = new Set(tombstones.rows.map((r) => r.credential_digest));
+
+  const current = await db.query<{ id: number; badge_id: string }>(
+    `SELECT id, badge_id FROM users
+      WHERE badge_id = ANY($1::text[])
+        AND anonymized_at IS NULL
+        AND account_state = 'active'`,
+    [badgeIds],
+  );
+  const owners = new Map(current.rows.map((r) => [r.badge_id, r.id]));
+
+  const revoked = await db.query<{ badge_id: string }>(
+    `SELECT b AS badge_id FROM unnest($1::text[]) AS b
+      WHERE EXISTS (
+        SELECT 1 FROM users
+         WHERE b = ANY(badge_id_history)
+            OR (badge_id = b AND account_state = 'removal_pending')
+      )`,
+    [badgeIds],
+  );
+  const revokedIds = new Set(revoked.rows.map((r) => r.badge_id));
+
+  badgeIds.forEach((badgeId, i) => {
+    const owner = owners.get(badgeId);
+    if (tombstoned.has(digests[i] as string)) out.set(badgeId, revokedError());
+    else if (owner != null) out.set(badgeId, owner);
+    else if (revokedIds.has(badgeId)) out.set(badgeId, revokedError());
+    else out.set(badgeId, new AppError(404, "badge_unknown", "Badge not recognized"));
+  });
+  return out;
+}

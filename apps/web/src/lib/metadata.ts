@@ -23,3 +23,6 @@ export const SITE_DESCRIPTION =
 export const SOCIAL_IMAGE_PATH = "/opengraph-image";
 
 export const BRAND_IMAGE_PATH = "/icon.png";
+
+/** Pages meant for search engines and answer engines; images stay out of image search. */
+export const INDEXABLE_ROBOTS = { index: true, follow: true, noimageindex: true } as const;

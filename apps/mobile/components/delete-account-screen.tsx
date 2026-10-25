@@ -581,7 +581,6 @@ export default function DeleteAccountScreen() {
               eligibilityError={removalErrorKind === "load" ? removalError : null}
               actionError={removalErrorKind === "action" ? removalError : null}
               requiresVenueExit={removalEligibility?.requiresVenueExit ?? false}
-              integrityWarning={removalEligibility?.integrityWarning ?? false}
               retainedFields={retainedFields}
               onContinue={() => void beginRemoval(removalEligibility?.action ?? "delete")}
               onToggleRetained={() => setRetainedDataExpanded((expanded) => !expanded)}
@@ -652,7 +651,6 @@ function IntroScreen({
   eligibilityError,
   actionError,
   requiresVenueExit,
-  integrityWarning,
   retainedFields,
   onContinue,
   onToggleRetained,
@@ -666,7 +664,6 @@ function IntroScreen({
   eligibilityError: Error | null;
   actionError: Error | null;
   requiresVenueExit: boolean;
-  integrityWarning: boolean;
   retainedFields: string[];
   onContinue: () => void;
   onToggleRetained: () => void;
@@ -751,9 +748,6 @@ function IntroScreen({
         />
         {requiresVenueExit ? (
           <DestructiveNotice compact message={t("accountDeleteVenueExitWarning")} />
-        ) : null}
-        {integrityWarning ? (
-          <DestructiveNotice compact message={t("accountDeleteIntegrityWarning")} />
         ) : null}
       </View>
 

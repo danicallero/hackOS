@@ -1,8 +1,8 @@
 import { pool, type Queryable } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
-import { queueFixtureMarker } from "./broadcast.js";
+import { queueRoomFixtureMarkers } from "./broadcast.js";
 import { assertQueueChallengeReadScope, assertQueueEntryScope } from "./fixture-scope.js";
-import { QUEUE_GROUP_LABEL_JOIN, QUEUE_GROUP_LABEL_SQL, roomChallengeIds } from "./groups.js";
+import { QUEUE_GROUP_LABEL_JOIN, QUEUE_GROUP_LABEL_SQL } from "./groups.js";
 import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_description,
@@ -20,9 +20,23 @@ const QUEUE_ENTRY_SELECT = `qe.*, r.name AS repo_name, r.description AS repo_des
  * already key off; `judging_panel_criteria` is the single form every team in
  * this queue is scored with, which for a merged group is the group's own.
  */
-async function roomQueueLabel(roomId: number) {
+async function roomQueueLabels(roomIds: number[]) {
+  const labels = new Map<
+    number,
+    {
+      id: number | null;
+      title: string;
+      enterprise_name: string;
+      queue_group_id: number;
+      queue_group_name: string;
+      challenge_count: number;
+      judging_panel_criteria: unknown[] | null;
+    }
+  >();
+  if (roomIds.length === 0) return labels;
   const { rows } = await pool.query(
-    `SELECT c.id, c.title, qg.id AS queue_group_id, qg.display_name,
+    `SELECT DISTINCT ON (rqg.room_id)
+            rqg.room_id, c.id, c.title, qg.id AS queue_group_id, qg.display_name,
             e.name AS enterprise_name,
             COALESCE(qg.judging_panel_criteria, c.judging_panel_criteria) AS judging_panel_criteria,
             (SELECT COUNT(*)::int FROM queue_group_challenges q
@@ -38,7 +52,7 @@ async function roomQueueLabel(roomId: number) {
           ORDER BY ch.id ASC
           LIMIT 1
        ) c ON true
-      WHERE rqg.room_id = $1
+      WHERE rqg.room_id = ANY($1::int[])
         AND NOT EXISTS (
           SELECT 1
             FROM queue_group_challenges hidden_qgc
@@ -46,22 +60,23 @@ async function roomQueueLabel(roomId: number) {
            WHERE hidden_qgc.queue_group_id = qg.id
              AND hidden_c.is_test_account = true
         )
-      LIMIT 1`,
-    [roomId],
+      ORDER BY rqg.room_id, qg.id`,
+    [roomIds],
   );
-  const row = rows[0];
-  if (!row) return null;
-  return {
-    id: row.id === null ? null : Number(row.id),
-    title: row.display_name,
-    enterprise_name: row.enterprise_name,
-    queue_group_id: Number(row.queue_group_id),
-    queue_group_name: row.display_name,
-    challenge_count: Number(row.challenge_count),
-    judging_panel_criteria: Array.isArray(row.judging_panel_criteria)
-      ? row.judging_panel_criteria
-      : null,
-  };
+  for (const row of rows) {
+    labels.set(Number(row.room_id), {
+      id: row.id === null ? null : Number(row.id),
+      title: row.display_name,
+      enterprise_name: row.enterprise_name,
+      queue_group_id: Number(row.queue_group_id),
+      queue_group_name: row.display_name,
+      challenge_count: Number(row.challenge_count),
+      judging_panel_criteria: Array.isArray(row.judging_panel_criteria)
+        ? row.judging_panel_criteria
+        : null,
+    });
+  }
+  return labels;
 }
 
 /**
@@ -76,42 +91,60 @@ async function roomQueueLabel(roomId: number) {
  * untouched. `DISTINCT ON` is a no-op for a 1:1 group (one challenge cannot
  * yield two rows for one repo), so today's output is byte-identical.
  */
-async function waitingQueueView(challengeIds: number[]) {
+async function waitingQueueViews(challengeSets: number[][]) {
+  // biome-ignore lint/suspicious/noExplicitAny: pg rows are untyped, as in the single-room reads this replaced
+  const result: any[][] = challengeSets.map(() => []);
+  const keys: number[] = [];
+  const ids: number[] = [];
+  challengeSets.forEach((set, key) => {
+    for (const id of set) {
+      keys.push(key);
+      ids.push(id);
+    }
+  });
+  if (ids.length === 0) return result;
+  // `sets` carries one (set key, challenge id) pair per challenge so every
+  // room's challenge set is evaluated independently in a single statement.
   const { rows } = await pool.query(
-    `SELECT * FROM (
-       SELECT DISTINCT ON (qe.repo_id) ${QUEUE_ENTRY_SELECT},
+    `WITH sets AS (
+       SELECT k, challenge_id FROM unnest($1::int[], $2::int[]) AS t(k, challenge_id)
+     )
+     SELECT * FROM (
+       SELECT DISTINCT ON (s.k, qe.repo_id) s.k AS set_key, ${QUEUE_ENTRY_SELECT},
               (SELECT COALESCE(jsonb_agg(DISTINCT o.challenge_id), '[]'::jsonb)
                  FROM queue_entries o
+                 JOIN sets so ON so.k = s.k AND so.challenge_id = o.challenge_id
                 WHERE o.repo_id = qe.repo_id
-                  AND o.challenge_id = ANY($1)
                   AND o.status = 'waiting') AS queued_challenge_ids
-         FROM queue_entries qe JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
-        WHERE qe.challenge_id = ANY($1) AND qe.status = 'waiting'
+         FROM sets s
+         JOIN queue_entries qe ON qe.challenge_id = s.challenge_id AND qe.status = 'waiting'
+         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+        WHERE
           -- Same filter callNextForRoom applies: a team already called or
           -- judged for another of the group's challenges is done with the
           -- group, so it is no longer a waiting line item. Never matches for
           -- a 1:1 group.
-          AND NOT EXISTS (
+          NOT EXISTS (
             SELECT 1 FROM queue_entries sib
+              JOIN sets ss ON ss.k = s.k AND ss.challenge_id = sib.challenge_id
              WHERE sib.repo_id = qe.repo_id
-               AND sib.challenge_id = ANY($1)
                AND sib.id <> qe.id
                AND sib.status IN ('called', 'in_room', 'presenting', 'completed')
           )
-        ORDER BY qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC
+        ORDER BY s.k, qe.repo_id, qe.position ASC NULLS LAST, qe.id ASC
      ) merged
-      ORDER BY merged.position ASC NULLS LAST, merged.id ASC`,
-    [challengeIds],
+      ORDER BY merged.set_key, merged.position ASC NULLS LAST, merged.id ASC`,
+    [keys, ids],
   );
   // The displayed queue position is "how many teams are ahead of entering
   // the waiting room" — a rank over `waiting` entries only (ordering.ts).
-  // `rows` here is already the deduped, `status = 'waiting'` set in that
-  // exact order, so the 1-based array index *is* that rank; no called teams
-  // to skip over.
-  return rows.map((row, index) => ({
-    ...row,
-    position: index + 1,
-  }));
+  // Each set's rows are already the deduped, `status = 'waiting'` set in that
+  // exact order, so the 1-based index within the set *is* that rank.
+  for (const { set_key, ...row } of rows) {
+    const bucket = result[Number(set_key)] ?? [];
+    bucket.push({ ...row, position: bucket.length + 1 });
+  }
+  return result;
 }
 
 /**
@@ -268,27 +301,53 @@ export async function challengeProgress(challengeId: number, fixtureMarker: bool
  * it must never reach the public, unauthenticated TV feed.
  */
 export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: boolean } = {}) {
-  const room = (await pool.query(`SELECT * FROM rooms WHERE id = $1`, [roomId])).rows[0];
-  if (!room) throw new NotFoundError("Room not found", { roomId });
-  const state = (await pool.query(`SELECT * FROM room_queue_state WHERE room_id = $1`, [roomId]))
-    .rows[0];
+  const [view] = await roomViews([roomId], opts);
+  if (!view) throw new NotFoundError("Room not found", { roomId });
+  return view;
+}
 
-  const active =
-    (
-      await pool.query(
-        `SELECT ${QUEUE_ENTRY_SELECT}
-         FROM queue_entries qe
-         JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
-         JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
-         JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
-         JOIN room_queue_groups rqg
-           ON rqg.room_id = qe.assigned_room_id
-          AND rqg.queue_group_id = qgc.queue_group_id
-        WHERE qe.assigned_room_id = $1 AND qe.status IN ('in_room', 'presenting')
-        LIMIT 1`,
-        [roomId],
-      )
-    ).rows[0] ?? null;
+/**
+ * Set-based {@link roomView}: the same projection for many rooms using one
+ * query per concern (rooms, state, active, called, challenge sets, labels,
+ * waiting queues, ETA, cross-room skips) instead of one set per room. Rooms
+ * that do not exist are omitted; the result follows the order of `roomIds`.
+ */
+export async function roomViews(roomIds: number[], opts: { includeCrossRoomSkips?: boolean } = {}) {
+  const ids = [...new Set(roomIds)];
+  if (ids.length === 0) return [];
+  const { rows: roomRows } = await pool.query(`SELECT * FROM rooms WHERE id = ANY($1::int[])`, [
+    ids,
+  ]);
+  const roomById = new Map<number, Record<string, unknown>>(
+    roomRows.map((row) => [Number(row.id), row]),
+  );
+  const present = ids.filter((id) => roomById.has(id));
+  if (present.length === 0) return [];
+
+  const { rows: stateRows } = await pool.query(
+    `SELECT * FROM room_queue_state WHERE room_id = ANY($1::int[])`,
+    [present],
+  );
+  const stateByRoom = new Map<number, Record<string, unknown>>(
+    stateRows.map((row) => [Number(row.room_id), row]),
+  );
+
+  const { rows: activeRows } = await pool.query(
+    `SELECT DISTINCT ON (qe.assigned_room_id) ${QUEUE_ENTRY_SELECT}
+       FROM queue_entries qe
+       JOIN repos r ON r.id = qe.repo_id AND r.is_test_account = false
+       JOIN challenges c ON c.id = qe.challenge_id AND c.is_test_account = false
+       JOIN queue_group_challenges qgc ON qgc.challenge_id = qe.challenge_id
+       JOIN room_queue_groups rqg
+         ON rqg.room_id = qe.assigned_room_id
+        AND rqg.queue_group_id = qgc.queue_group_id
+      WHERE qe.assigned_room_id = ANY($1::int[]) AND qe.status IN ('in_room', 'presenting')
+      ORDER BY qe.assigned_room_id, qe.id`,
+    [present],
+  );
+  const activeByRoom = new Map<number, Record<string, unknown>>(
+    activeRows.map((row) => [Number(row.assigned_room_id), row]),
+  );
 
   const { rows: calledRows } = await pool.query(
     `SELECT ${QUEUE_ENTRY_SELECT}
@@ -299,45 +358,109 @@ export async function roomView(roomId: number, opts: { includeCrossRoomSkips?: b
        JOIN room_queue_groups rqg
          ON rqg.room_id = qe.assigned_room_id
         AND rqg.queue_group_id = qgc.queue_group_id
-      WHERE qe.assigned_room_id = $1 AND qe.status = 'called'
+      WHERE qe.assigned_room_id = ANY($1::int[]) AND qe.status = 'called'
       ORDER BY qe.called_at ASC NULLS LAST, qe.id ASC`,
-    [roomId],
+    [present],
   );
   // `called` teams have already entered the waiting room, so they have no
   // "teams ahead of entering it" number — never show the stale combined
   // ordering value here.
-  const called = calledRows.map((row) => ({ ...row, position: null }));
+  const calledByRoom = new Map<number, (typeof calledRows)[number][]>();
+  for (const row of calledRows) {
+    const roomId = Number(row.assigned_room_id);
+    const list = calledByRoom.get(roomId) ?? [];
+    list.push({ ...row, position: null });
+    calledByRoom.set(roomId, list);
+  }
 
-  const challengeIds = await roomChallengeIds(pool, roomId);
+  const { rows: challengeRows } = await pool.query(
+    `SELECT rqg.room_id, qgc.challenge_id
+       FROM room_queue_groups rqg
+       JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
+       JOIN challenges c ON c.id = qgc.challenge_id AND c.is_test_account = false
+      WHERE rqg.room_id = ANY($1::int[])
+      ORDER BY rqg.room_id, qgc.challenge_id ASC`,
+    [present],
+  );
+  const challengeIdsByRoom = new Map<number, number[]>();
+  for (const row of challengeRows) {
+    const roomId = Number(row.room_id);
+    const list = challengeIdsByRoom.get(roomId) ?? [];
+    list.push(Number(row.challenge_id));
+    challengeIdsByRoom.set(roomId, list);
+  }
 
   // H29/H46: a room serves one queue_group. The judging panel renders it as a
   // read-only label, so expose it directly. A 1:1 group (every group today)
   // labels itself with its challenge's own title; a merged group uses the
   // admin-chosen group name, which is what the shared queue is called.
   // H41: the TV shows the sponsoring enterprise above that title.
-  const challenge = await roomQueueLabel(roomId);
+  const labelByRoom = await roomQueueLabels(present);
 
   // The whole group queue — the operator/judge panel shows every upcoming
   // team, not just the head (the waiting-area top-up is bounded separately by
-  // max_in_waiting_area in the pump).
-  const next = challengeIds.length
-    ? await withEtaMinutes(await waitingQueueView(challengeIds))
-    : [];
+  // max_in_waiting_area in the pump). Rooms serving the same challenge set
+  // share one evaluation.
+  const setIndexByKey = new Map<string, number>();
+  const challengeSets: number[][] = [];
+  const setIndexByRoom = new Map<number, number>();
+  for (const roomId of present) {
+    const set = challengeIdsByRoom.get(roomId) ?? [];
+    if (set.length === 0) continue;
+    const key = set.join(",");
+    let index = setIndexByKey.get(key);
+    if (index === undefined) {
+      index = challengeSets.length;
+      setIndexByKey.set(key, index);
+      challengeSets.push(set);
+    }
+    setIndexByRoom.set(roomId, index);
+  }
+  const waitingSets = await waitingQueueViews(challengeSets);
+  const withEta = await withEtaMinutes(waitingSets.flat());
+  const etaBySet = new Map<number, typeof withEta>();
+  let offset = 0;
+  waitingSets.forEach((set, index) => {
+    etaBySet.set(index, withEta.slice(offset, offset + set.length));
+    offset += set.length;
+  });
+  const nextByRoom = new Map<number, typeof withEta>(
+    present.map((roomId) => {
+      const index = setIndexByRoom.get(roomId);
+      return [roomId, index === undefined ? [] : (etaBySet.get(index) ?? [])];
+    }),
+  );
 
   // H30/#203: read-only projection of the same cross-room busy-member guard
   // callNextForRoom enforces (guard.ts) — explains, without mutating
   // anything, why a waiting team at the top of the queue was not (yet)
   // called into THIS room. Recomputed on every read, so it clears the moment
   // the blocking member's other entry leaves called/in_room/presenting.
-  const crossRoomSkips = opts.includeCrossRoomSkips
+  const skipsByRoom = opts.includeCrossRoomSkips
     ? await crossRoomSkipReasons(
-        roomId,
-        next as { id: number; repo_id: number; position: number | null }[],
+        present.map((roomId) => ({
+          roomId,
+          entries: nextByRoom.get(roomId) ?? [],
+        })),
       )
-    : [];
+    : new Map<number, CrossRoomSkip[]>();
 
-  return { room, state, challenge, active, called, next, crossRoomSkips };
+  return present.map((roomId) => ({
+    room: roomById.get(roomId) as Record<string, unknown> & {
+      id: number;
+      name: string;
+      location?: string | null;
+    },
+    state: (stateByRoom.get(roomId) ?? undefined) as { is_paused?: boolean } | undefined,
+    challenge: labelByRoom.get(roomId) ?? null,
+    active: activeByRoom.get(roomId) ?? null,
+    called: calledByRoom.get(roomId) ?? [],
+    next: nextByRoom.get(roomId) ?? [],
+    crossRoomSkips: skipsByRoom.get(roomId) ?? [],
+  }));
 }
+
+type WaitingRow = { id: number; repo_id: number; challenge_id: number; position: number | null };
 
 /** Why call_next passed over a waiting entry without moving it. */
 export type CrossRoomSkip =
@@ -369,66 +492,80 @@ export type CrossRoomSkip =
  * which specific member is shared.
  */
 async function crossRoomSkipReasons(
-  roomId: number,
-  entries: { id: number; repo_id: number; position: number | null }[],
-): Promise<CrossRoomSkip[]> {
-  if (entries.length === 0) return [];
+  rooms: { roomId: number; entries: WaitingRow[] }[],
+): Promise<Map<number, CrossRoomSkip[]>> {
+  const result = new Map<number, CrossRoomSkip[]>();
+  const pairs = rooms.flatMap(({ roomId, entries }) => entries.map((entry) => ({ roomId, entry })));
+  if (pairs.length === 0) return result;
   const { rows: ineligibleRows } = await pool.query<{ id: number }>(
     `SELECT repo_id AS id FROM project_eligibility WHERE repo_id = ANY($1) AND eligible = false`,
-    [entries.map((e) => e.repo_id)],
+    [[...new Set(pairs.map(({ entry }) => entry.repo_id))]],
   );
   const ineligible = new Set(ineligibleRows.map((r) => r.id));
+  // One (room, entry) pair per row: the same shared-queue entry is evaluated
+  // against each room that lists it, excluding that room's own entries.
   const { rows } = await pool.query(
-    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
-     SELECT DISTINCT ON (qe.id)
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL}),
+          pairs AS (
+            SELECT room_id, entry_id FROM unnest($1::int[], $2::int[]) AS t(room_id, entry_id)
+          )
+     SELECT DISTINCT ON (p.room_id, qe.id)
+            p.room_id,
             qe.id AS entry_id,
             br.id AS blocking_room_id, br.name AS blocking_room_name,
             bqe.status AS blocking_status, brepo.name AS blocking_team_name
-       FROM queue_entries qe
+       FROM pairs p
+       JOIN queue_entries qe ON qe.id = p.entry_id
        JOIN repo_members s1 ON s1.repo_id = qe.repo_id
        JOIN repo_members s2 ON s2.user_id = s1.user_id
        JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                               AND bqe.status IN ('called', 'in_room', 'presenting')
-                              AND bqe.assigned_room_id IS DISTINCT FROM $2::int
+                              AND bqe.assigned_room_id IS DISTINCT FROM p.room_id
        JOIN rooms br ON br.id = bqe.assigned_room_id
        JOIN repos brepo ON brepo.id = bqe.repo_id
-      WHERE qe.id = ANY($1)
-      ORDER BY qe.id, bqe.id`,
-    [entries.map((e) => e.id), roomId],
+      ORDER BY p.room_id, qe.id, bqe.id`,
+    [pairs.map(({ roomId }) => roomId), pairs.map(({ entry }) => entry.id)],
   );
-  const byEntryId = new Map(
+  const byPair = new Map(
     (
       rows as {
+        room_id: number;
         entry_id: number;
         blocking_room_id: number;
         blocking_room_name: string;
         blocking_status: string;
         blocking_team_name: string;
       }[]
-    ).map((r) => [r.entry_id, r]),
+    ).map((r) => [`${r.room_id}:${r.entry_id}`, r]),
   );
   // H30 guarantee: a skip never reorders the queue, only call_next does.
-  return entries.flatMap((e): CrossRoomSkip[] => {
-    if (ineligible.has(e.repo_id)) {
-      return [
-        { entryId: e.id, position: e.position, reason: "ineligible", positionPreserved: true },
-      ];
-    }
-    const r = byEntryId.get(e.id);
-    if (!r) return [];
-    return [
-      {
-        entryId: e.id,
-        position: e.position,
-        reason: "busy_member",
-        blockingRoomId: r.blocking_room_id,
-        blockingRoomName: r.blocking_room_name,
-        blockingTeamName: r.blocking_team_name,
-        blockingStatus: r.blocking_status,
-        positionPreserved: true,
-      },
-    ];
-  });
+  for (const { roomId, entries } of rooms) {
+    result.set(
+      roomId,
+      entries.flatMap((e): CrossRoomSkip[] => {
+        if (ineligible.has(e.repo_id)) {
+          return [
+            { entryId: e.id, position: e.position, reason: "ineligible", positionPreserved: true },
+          ];
+        }
+        const r = byPair.get(`${roomId}:${e.id}`);
+        if (!r) return [];
+        return [
+          {
+            entryId: e.id,
+            position: e.position,
+            reason: "busy_member",
+            blockingRoomId: r.blocking_room_id,
+            blockingRoomName: r.blocking_room_name,
+            blockingTeamName: r.blocking_team_name,
+            blockingStatus: r.blocking_status,
+            positionPreserved: true,
+          },
+        ];
+      }),
+    );
+  }
+  return result;
 }
 
 /** H46 read surface: current room -> enterprise pool, serving queue_group, and the judges that follow. */
@@ -532,13 +669,14 @@ export async function publicRoomViews() {
   // are omitted entirely rather than appearing as empty room shells after
   // `roomView` filters their queue contents.
   const { rows: rooms } = await pool.query<{ id: number }>(`SELECT id FROM rooms ORDER BY id ASC`);
-  const realRoomIds: number[] = [];
-  for (const room of rooms) {
-    if ((await queueFixtureMarker(pool, "room", Number(room.id))) === false) {
-      realRoomIds.push(Number(room.id));
-    }
-  }
-  const views = await Promise.all(realRoomIds.map((roomId) => roomView(roomId)));
+  const markers = await queueRoomFixtureMarkers(
+    pool,
+    rooms.map((room) => Number(room.id)),
+  );
+  const realRoomIds = rooms
+    .map((room) => Number(room.id))
+    .filter((id) => markers.get(id) === false);
+  const views = await roomViews(realRoomIds);
   const entry = (value: Record<string, unknown> | null) =>
     value
       ? {
@@ -957,18 +1095,16 @@ export async function roomPace(
   fixtureMarker = false,
   startingEntryId?: number,
 ) {
-  const { rowCount } = await db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [
-    roomId,
-  ]);
-  if (!rowCount) throw new NotFoundError("Room not found", { roomId });
-  const settings = (await db.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0];
-
-  // H29/H46: the presentation-length ceiling comes from the room's queue_group.
-  // Every group is 1:1 today, so this is that one challenge's own ceiling; for
-  // a merged group the strictest member ceiling is the one that must hold for
-  // every team the group calls.
-  const primaryChallenge = (
-    await db.query(
+  // Independent reads run concurrently (a pooled `db` serves them on separate
+  // connections; a transaction client still queues them in order).
+  const [roomState, settingsRes, primaryRes] = await Promise.all([
+    db.query(`SELECT 1 FROM room_queue_state WHERE room_id = $1`, [roomId]),
+    db.query(`SELECT * FROM queue_settings WHERE id = 1`),
+    // H29/H46: the presentation-length ceiling comes from the room's queue_group.
+    // Every group is 1:1 today, so this is that one challenge's own ceiling; for
+    // a merged group the strictest member ceiling is the one that must hold for
+    // every team the group calls.
+    db.query(
       `SELECT qgc.challenge_id::int AS id,
               (SELECT min(sc.max_presentation_seconds) FROM queue_group_challenges sg JOIN challenges sc ON sc.id=sg.challenge_id WHERE sg.queue_group_id=rqg.queue_group_id)::int AS max_presentation_seconds
          FROM room_queue_groups rqg
@@ -978,8 +1114,13 @@ export async function roomPace(
          ORDER BY EXISTS(SELECT 1 FROM queue_entries active JOIN queue_group_challenges ag ON ag.challenge_id=active.challenge_id WHERE ag.queue_group_id=rqg.queue_group_id AND active.assigned_room_id=$1 AND active.status IN ('in_room','presenting')) DESC,qgc.challenge_id ASC
          LIMIT 1`,
       [roomId, requestedChallengeId ?? null, fixtureMarker],
-    )
-  ).rows[0] as { id: number; max_presentation_seconds: number | null } | undefined;
+    ),
+  ]);
+  if (!roomState.rowCount) throw new NotFoundError("Room not found", { roomId });
+  const settings = settingsRes.rows[0];
+  const primaryChallenge = primaryRes.rows[0] as
+    | { id: number; max_presentation_seconds: number | null }
+    | undefined;
 
   if (requestedChallengeId && !primaryChallenge)
     throw new NotFoundError("This room does not judge the requested track");
@@ -992,31 +1133,48 @@ export async function roomPace(
       ).rows.map((r) => Number(r.challenge_id))
     : [];
 
-  // Distinct teams, not rows: a repo merged across two of the group's
-  // challenges is one team still to be judged (the "call once" view).
-  const pendingCount = challengeIds.length
-    ? (
-        await db.query(
+  // pendingCount: distinct teams, not rows: a repo merged across two of the
+  // group's challenges is one team still to be judged (the "call once" view).
+  // timing: #997/H38 queue_group_pace() is the one pace source. Every active
+  // room working the same queue_group splits the pending teams between them —
+  // more rooms means more time/team fits in the same remaining window. A
+  // room that serves no queue reads the function's defaults (NULL group).
+  const hasChallenges = challengeIds.length > 0;
+  const [pendingRes, timingRes, challengeSettingsRes, activeRes] = await Promise.all([
+    hasChallenges
+      ? db.query(
           `SELECT COUNT(DISTINCT repo_id)::int AS n FROM queue_entries
             WHERE challenge_id = ANY($1) AND status IN ('waiting', 'called')
               AND repo_id IN (SELECT pe.repo_id FROM project_eligibility pe JOIN repos project ON project.id=pe.repo_id WHERE project.is_test_account = $2 AND pe.eligible)`,
           [challengeIds, fixtureMarker],
         )
-      ).rows[0].n
-    : 0;
-
-  // #997/H38: queue_group_pace() is the one pace source. Every active room
-  // working the same queue_group splits the pending teams between them —
-  // more rooms means more time/team fits in the same remaining window. A
-  // room that serves no queue reads the function's defaults (NULL group).
-  const timing = (
-    await db.query(
+      : null,
+    db.query(
       `SELECT p.* FROM (SELECT $1::int AS challenge_id) anchor
          LEFT JOIN queue_group_challenges qgc ON qgc.challenge_id = anchor.challenge_id
          CROSS JOIN LATERAL queue_group_pace(qgc.queue_group_id) p`,
       [primaryChallenge?.id ?? null],
-    )
-  ).rows[0];
+    ),
+    // The track's configured allowance (H32), same max-over-group rule as
+    // queue_group_pace, and the longest a presentation may run, as `start`
+    // computes it for the entry.
+    hasChallenges
+      ? db.query(
+          `SELECT COALESCE(max(preparation_seconds), 120) AS preparation_seconds,
+                  LEAST(min(target_seconds_per_team), min(max_presentation_seconds))::int AS presentation_seconds
+             FROM challenges WHERE id = ANY($1)`,
+          [challengeIds],
+        )
+      : null,
+    hasChallenges
+      ? db.query(
+          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
+          [challengeIds],
+        )
+      : null,
+  ]);
+  const pendingCount = pendingRes ? pendingRes.rows[0].n : 0;
+  const timing = timingRes.rows[0];
   const roomCount = Math.max(1, Number(timing.active_rooms));
   const targetMinutes = Number(timing.target_minutes);
   const estimatedCycleMinutes = Number(timing.estimated_cycle_minutes);
@@ -1025,34 +1183,14 @@ export async function roomPace(
     (5 * targetMinutes + samples * Number(timing.observed_presentation_minutes ?? targetMinutes)) /
     (5 + samples);
   const preparationMinutes = estimatedCycleMinutes - estimatedPresentationMinutes;
-  // The track's configured allowance (H32), same max-over-group rule as queue_group_pace.
-  const configuredPreparationSeconds = challengeIds.length
-    ? Number(
-        (
-          await db.query(
-            `SELECT COALESCE(max(preparation_seconds), 120) AS seconds FROM challenges WHERE id = ANY($1)`,
-            [challengeIds],
-          )
-        ).rows[0].seconds,
-      )
+  // The track's configured allowance (H32).
+  const configuredPreparationSeconds = challengeSettingsRes
+    ? Number(challengeSettingsRes.rows[0].preparation_seconds)
     : 120;
-  // The longest a presentation may run, as `start` computes it for the entry.
-  const configuredPresentationSeconds = challengeIds.length
-    ? ((
-        await db.query(
-          `SELECT LEAST(min(target_seconds_per_team), min(max_presentation_seconds))::int AS seconds FROM challenges WHERE id = ANY($1)`,
-          [challengeIds],
-        )
-      ).rows[0]?.seconds ?? null)
+  const configuredPresentationSeconds = challengeSettingsRes
+    ? (challengeSettingsRes.rows[0]?.presentation_seconds ?? null)
     : null;
-  const activeEntries = challengeIds.length
-    ? (
-        await db.query(
-          `SELECT DISTINCT ON(repo_id) id,status,presentation_started_at,presentation_paused_at,presentation_paused_seconds,room_entered_at,called_at FROM queue_entries WHERE challenge_id=ANY($1::int[]) AND status IN ('in_room','presenting') ORDER BY repo_id,presentation_started_at DESC NULLS LAST`,
-          [challengeIds],
-        )
-      ).rows
-    : [];
+  const activeEntries = activeRes ? activeRes.rows : [];
   const now = Date.now();
   const activeMinutes = activeEntries.map((entry) => {
     // #926: the entry being started has finished preparing; only its own

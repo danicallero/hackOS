@@ -3,6 +3,7 @@ import { config } from "../../config.js";
 import { withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { csvCell, toCsv } from "../../lib/csv.js";
+import { userUniversityIdSql } from "../../lib/user-university.js";
 
 /** H16/H54: export the configured form, with submitted answers tied to their immutable version. */
 export async function exportProjectsCsv(actorId: number): Promise<string> {
@@ -13,7 +14,7 @@ export async function exportProjectsCsv(actorId: number): Promise<string> {
     const currentTemplate: TemplateField[] = current.rows[0]?.template ?? [];
     const { rows } = await db.query(`SELECT r.*,v.snapshot,f.template AS submitted_template,
       COALESCE((SELECT jsonb_agg(jsonb_build_object('name',u.name,'surname',u.surname,'email',u.email,'school',uni.name) ORDER BY (u.id=r.created_by) DESC,s.created_at,u.id)
-        FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN universities uni ON uni.id=u.university_id
+        FROM submissions s JOIN users u ON u.id=s.user_id LEFT JOIN universities uni ON uni.id=${userUniversityIdSql("u.id")}
         WHERE s.repo_id=r.id AND s.status='active' AND u.account_state='active' AND u.anonymized_at IS NULL AND NOT u.is_test_account),'[]') AS members,
       COALESCE((SELECT string_agg(c.title, '; ' ORDER BY c.id) FROM project_challenges pc JOIN challenges c ON c.id=pc.challenge_id WHERE pc.repo_id=r.id),'') AS challenges,
       CASE

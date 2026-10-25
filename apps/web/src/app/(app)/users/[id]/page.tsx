@@ -1,10 +1,12 @@
 "use client";
 
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { CertificatesPanel } from "@/components/certificates/certificates-panel";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
@@ -18,6 +20,7 @@ import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { useCan } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { ApplicationTab } from "./application-tab";
@@ -45,6 +48,7 @@ export default function UserProfilePage() {
   const { t } = useLocale();
   const params = useParams<{ id: string }>();
   const userId = Number(params.id);
+  const canCertificates = useCan(CAPABILITIES.PRESENCE_MANAGE);
   const { tab, setTab } = useUrlTab({
     values: USER_TABS,
     defaultValue: "overview",
@@ -152,6 +156,7 @@ export default function UserProfilePage() {
         <TabsContent value="attendance" className="pt-2">
           <div className="space-y-6">
             <PresenceSection userId={user.id} refreshKey={liveRefresh} />
+            {canCertificates ? <CertificatesPanel staffUserId={user.id} /> : null}
             <details className="group rounded-lg border">
               <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:p-5">
                 <div className="min-w-0">

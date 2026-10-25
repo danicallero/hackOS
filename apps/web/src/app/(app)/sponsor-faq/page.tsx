@@ -4,11 +4,11 @@
 // collapsible, plus free-form text blocks) admins author for sponsor reps,
 // and a "Sponsor events" panel: the sponsor-tagged slice of the schedule
 // (deadlines, sponsor reception, etc.), shown with the same day-grouped
-// timeline the public /horario page uses, extended to reveal each item's
+// timeline the public schedule uses, extended to reveal each item's
 // responsible person(s)/contact note. A sponsor rep's own /api/public/activities
 // call already returns the entire public schedule too (H59 — sponsor is
 // additive, never a narrower view of the general programme). Deliberately
-// not public (unlike /horario) and not judge-visible (unlike challenges'
+// not public (unlike /timetable) and not judge-visible (unlike challenges'
 // challenge-directory access) — see requireSponsorPortalAccess.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
@@ -239,7 +239,7 @@ function FaqItemsDisplay({ items }: { items: FaqItem[] }) {
  * returns the entire public schedule (they see everything a participant
  * does), so this filters client-side to just the items that involve
  * sponsors, and renders them with the same day-grouped timeline the public
- * `/horario` page uses, extended to reveal each item's responsible
+ * `/timetable` page uses, extended to reveal each item's responsible
  * person(s)/contact note (never shown on the public timeline).
  */
 function SponsorScheduleCard() {

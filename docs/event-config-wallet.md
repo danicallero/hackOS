@@ -294,7 +294,7 @@ around that rule:
   itself never creates a session, and scoped pass requests always use its owner.
 
 `WalletButtons` (`apps/web/src/components/common/wallet-buttons.tsx`) is shared
-by this page and the signed-in wallet page; passing `accessToken` switches it to
+by this page and the Wallet section of My profile (`/settings/profile?tab=wallet`); passing `accessToken` switches it to
 the scoped routes and to `credentials: "omit"` fetches, so the request carries
 no cookie at all. The Apple Wallet badge is a same-tab link: the browser must
 hand the `.pkpass` response to Wallet without creating a blank tab that the
@@ -324,11 +324,12 @@ Delivery checks current access and the opening time again. Dates use each
 recipient's language and the event timezone. The permanent entrance token is
 rendered locally as a PNG QR and attached inline (CID); no external QR service
 receives ticket credentials. Official Apple/Google Wallet artwork is exported
-from the SVGs already used on `/wallet` to email-compatible PNGs, preserving the
+from the SVGs already used in the profile's Wallet section to email-compatible PNGs, preserving the
 artwork and aspect ratio; Galician uses Spanish artwork. Email buttons open
-`/wallet?add=apple` or `?add=google`, retaining the action through login, then
-request the authenticated recipient's pass. A separate `/wallet` link remains
-available. No long-lived sessionless Wallet credential is issued.
+`/wallet?add=apple` or `?add=google`, retaining the action through login;
+`/wallet` redirects to `/settings/profile?tab=wallet` with `add` intact, and
+the Wallet section then requests the authenticated recipient's pass. A separate
+`/wallet` link remains available. No long-lived sessionless Wallet credential is issued.
 
 ## Runtime editor, artwork, actions, and manual operations (H28/H53)
 

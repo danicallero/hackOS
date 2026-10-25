@@ -17,6 +17,7 @@ export function PageHeader({
   actions,
   className,
   headingLevel = 1,
+  reserveNavigation = true,
 }: {
   context?: React.ReactNode;
   /**
@@ -27,6 +28,8 @@ export function PageHeader({
   title: string;
   /** Embedded design specimens use h2; destinations always keep the default h1. */
   headingLevel?: 1 | 2;
+  /** Narrow screens leave room for the app's sidebar trigger; public pages have none. */
+  reserveNavigation?: boolean;
   state?: React.ReactNode;
   /** Identity metadata under the title (email, badge id) — not a description. */
   meta?: React.ReactNode;
@@ -55,7 +58,12 @@ export function PageHeader({
         className,
       )}
     >
-      <div className="flex min-w-0 items-start gap-(--space-related) pl-12 md:pl-0">
+      <div
+        className={cn(
+          "flex min-w-0 items-start gap-(--space-related) md:pl-0",
+          reserveNavigation && "pl-12",
+        )}
+      >
         {leading && <div className="shrink-0">{leading}</div>}
         <div className="min-w-0 space-y-1">
           {context && <div className="type-meta">{context}</div>}

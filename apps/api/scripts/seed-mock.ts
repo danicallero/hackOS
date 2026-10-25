@@ -17,11 +17,12 @@
  * later module without its dependencies present is a no-op for the rows
  * that need them.
  *
- * `applications` reuses the real participant application form (by type)
+ * `applications` reuses the real participant application form (by its Participant role grant)
  * when one already exists in the target database, generating responses
  * that match its actual template — otherwise it creates a small fallback
  * form so the module still works against a bare schema.
  */
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import pg from "pg";
 import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
 
@@ -449,32 +450,25 @@ async function upsertUser(row: {
   name: string;
   surname: string;
   language?: "en" | "es" | "gl";
-  university_id?: number | null;
   dni?: string;
 }): Promise<number> {
   const res = await client.query(
-    `INSERT INTO users (email, name, surname, email_verified, language, university_id, dni)
-     VALUES ($1, $2, $3, true, $4, $5, $6)
+    `INSERT INTO users (email, name, surname, email_verified, language, dni)
+     VALUES ($1, $2, $3, true, $4, $5)
      ON CONFLICT (email) DO UPDATE SET updated_at = now()
      RETURNING id`,
-    [
-      row.email,
-      row.name,
-      row.surname,
-      row.language ?? "en",
-      row.university_id ?? null,
-      row.dni ?? null,
-    ],
+    [row.email, row.name, row.surname, row.language ?? "en", row.dni ?? null],
   );
   return res.rows[0].id;
 }
 
-async function ensureRole(name: string, position: number, capabilities: string[]): Promise<number> {
+async function ensureRole(name: string, capabilities: string[]): Promise<number> {
   const role = await client.query(
-    `INSERT INTO roles (name, position, event_access) VALUES ($1, $2, true)
-     ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position, event_access = true
+    `INSERT INTO roles (name, position, event_access)
+     SELECT $1, COALESCE(MAX(position), 0) + 1, true FROM roles
+     ON CONFLICT (name) DO UPDATE SET event_access = true
      RETURNING id`,
-    [name, position],
+    [name],
   );
   const roleId = role.rows[0].id;
   for (const capability of capabilities) {
@@ -494,13 +488,13 @@ async function addRole(userId: number, roleId: number): Promise<void> {
   );
 }
 
-/** Seeded participants: an @example.com user with no assigned role. */
+/** #1021: identify fixture participants independently of their assigned roles. */
 async function seededParticipants(): Promise<{ id: number; email: string }[]> {
   const res = await client.query(
     `SELECT id, email FROM users
-     WHERE email LIKE '%@example.com'
-       AND id NOT IN (SELECT user_id FROM user_roles)
+     WHERE email = ANY($1)
      ORDER BY email`,
+    [PARTICIPANTS.map((p) => emailFor(p.first, p.last))],
   );
   return res.rows;
 }
@@ -511,27 +505,24 @@ async function seedUsers(): Promise<void> {
   const admin = await client.query(`SELECT id FROM users WHERE email = 'admin@hackos.local'`);
   const adminId = admin.rows[0]?.id ?? null;
 
-  const universityIds: number[] = [];
   for (const name of UNIVERSITIES) {
-    const res = await client.query(
+    await client.query(
       `INSERT INTO universities (name, proposed_by) VALUES ($1, $2)
-       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
+       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name`,
       [name, adminId],
     );
-    universityIds.push(res.rows[0].id);
   }
 
-  const staffRole = await ensureRole("mock:staff", 600, [
-    "users:read",
-    "accredit:scan",
-    "presence:scan",
-    "activity:scan",
-    "logistics:stats",
-    "queue:operate",
+  const staffRole = await ensureRole("mock:staff", [
+    CAPABILITIES.USERS_READ,
+    CAPABILITIES.ACCREDIT_SCAN,
+    CAPABILITIES.PRESENCE_SCAN,
+    CAPABILITIES.ACTIVITY_SCAN,
+    CAPABILITIES.LOGISTICS_STATS,
+    CAPABILITIES.QUEUE_OPERATE,
   ]);
-  const judgeRole = await ensureRole("mock:judge", 500, ["judge:panel"]);
-  const sponsorRole = await ensureRole("mock:sponsor", 400, []);
+  const judgeRole = await ensureRole("mock:judge", [CAPABILITIES.JUDGE_PANEL]);
+  const sponsorRole = await ensureRole("mock:sponsor", []);
 
   for (const person of STAFF) {
     const id = await upsertUser({
@@ -566,7 +557,6 @@ async function seedUsers(): Promise<void> {
       name: p.first,
       surname: p.last,
       language: p.language,
-      university_id: universityIds[p.universityIndex] ?? null,
       dni: dniFor(i),
     });
   }
@@ -760,8 +750,12 @@ async function ensureCurrentApplicationFormVersion(
 }
 
 async function seedApplications(): Promise<void> {
+  const participantRoleId = await ensureRole("Participant", []);
   const existing = await client.query(
-    `SELECT id, name, template FROM applications WHERE type = 'participant' ORDER BY id LIMIT 1`,
+    `SELECT a.id, a.name, a.template FROM applications a
+     JOIN application_grants_roles agr ON agr.application_id = a.id
+     WHERE agr.role_id = $1 ORDER BY a.id LIMIT 1`,
+    [participantRoleId],
   );
 
   let applicationId: number;
@@ -771,8 +765,8 @@ async function seedApplications(): Promise<void> {
     template = existing.rows[0].template as FormField[];
   } else {
     const created = await client.query(
-      `INSERT INTO applications (name, type, template, description, active, capacity)
-       VALUES ('Participant Application', 'participant', $1, 'Seed fallback participant application', true, 500)
+      `INSERT INTO applications (name, template, description, capacity)
+       VALUES ('Participant Application', $1, 'Seed fallback participant application', 500)
        RETURNING id`,
       [JSON.stringify(FALLBACK_APPLICATION_TEMPLATE)],
     );
@@ -781,31 +775,16 @@ async function seedApplications(): Promise<void> {
   }
   const formVersionId = await ensureCurrentApplicationFormVersion(applicationId);
 
-  const participantRole = await client.query(
-    `SELECT id FROM roles
-      WHERE name = 'Participant' AND deleted_at IS NULL
-      ORDER BY position DESC LIMIT 1`,
-  );
-  let participantRoleId = participantRole.rows[0]?.id as number | undefined;
-  if (!participantRoleId) {
-    const { rows: positionRows } = await client.query(
-      `SELECT COALESCE(MAX(position), 0) + 1 AS position FROM roles`,
-    );
-    participantRoleId = await ensureRole("Participant", Number(positionRows[0].position), []);
-  }
   await client.query(
     `INSERT INTO application_grants_roles (application_id, role_id)
      VALUES ($1, $2) ON CONFLICT DO NOTHING`,
     [applicationId, participantRoleId],
   );
 
-  const universities = await client.query(`SELECT id, name FROM universities ORDER BY id`);
-  const universityById = new Map<number, string>(universities.rows.map((r) => [r.id, r.name]));
-
   const participantUsers = await client.query(
-    `SELECT id, email, university_id FROM users WHERE email LIKE '%@example.com'
-       AND id NOT IN (SELECT user_id FROM user_roles)
+    `SELECT id, email FROM users WHERE email = ANY($1)
      ORDER BY email`,
+    [PARTICIPANTS.map((p) => emailFor(p.first, p.last))],
   );
   if (participantUsers.rows.length === 0) {
     console.log(
@@ -824,7 +803,7 @@ async function seedApplications(): Promise<void> {
     "confirmed",
     "confirmed",
     "accepted",
-    "submitted",
+    "rejected",
     "review",
   ];
   let count = 0;
@@ -832,7 +811,7 @@ async function seedApplications(): Promise<void> {
     const row = participantUsers.rows[i];
     const p = participantByEmail.get(row.email);
     if (!p) continue;
-    const universityName = universityById.get(row.university_id) ?? UNIVERSITIES[0]!;
+    const universityName = UNIVERSITIES[p.universityIndex] ?? UNIVERSITIES[0]!;
 
     const responses: Record<string, unknown> = {};
     for (const field of template) {
@@ -910,31 +889,38 @@ async function seedProjects(): Promise<void> {
     challengeIds.push(created.rows[0].id);
   }
 
-  const existingRoom = await client.query<{ id: number }>(
-    `SELECT id FROM rooms WHERE name = $1 ORDER BY id LIMIT 1`,
-    ["Main Hall"],
-  );
-  let roomId = existingRoom.rows[0]?.id;
-  if (!roomId) {
-    const createdRoom = await client.query<{ id: number }>(
-      `INSERT INTO rooms (name, location, status)
-       VALUES ($1, $2, 'active')
-       RETURNING id`,
-      ["Main Hall", "CITIC Building, Ground Floor"],
+  // #1021: every demo queue needs a room pooled into its owning enterprise.
+  for (const [index, challengeId] of challengeIds.entries()) {
+    const roomName = index === 0 ? "Main Hall" : `Demo Room ${index + 1}`;
+    const existingRoom = await client.query<{ id: number }>(
+      `SELECT id FROM rooms WHERE name = $1 ORDER BY id LIMIT 1`,
+      [roomName],
     );
-    roomId = createdRoom.rows[0]?.id;
-  }
-  if (!roomId) throw new Error("Could not create the mock room");
-  await client.query(`INSERT INTO room_queue_state (room_id) VALUES ($1) ON CONFLICT DO NOTHING`, [
-    roomId,
-  ]);
-  // A room serves one queue group; the first challenge's group wins, same as
-  // the unique-per-room room_challenges row this replaced.
-  for (const challengeId of challengeIds) {
+    let roomId = existingRoom.rows[0]?.id;
+    if (!roomId) {
+      const created = await client.query<{ id: number }>(
+        `INSERT INTO rooms (name, location, status)
+         VALUES ($1, 'CITIC Building, Ground Floor', 'active') RETURNING id`,
+        [roomName],
+      );
+      roomId = created.rows[0]?.id;
+    }
+    if (!roomId) throw new Error("Could not create the mock room");
+    await client.query(
+      `INSERT INTO room_queue_state (room_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [roomId],
+    );
+    await client.query(
+      `INSERT INTO room_enterprises (room_id, enterprise_id)
+       SELECT $1, qg.enterprise_id FROM queue_group_challenges qgc
+       JOIN queue_groups qg ON qg.id = qgc.queue_group_id WHERE qgc.challenge_id = $2
+       ON CONFLICT (room_id) DO UPDATE SET enterprise_id = EXCLUDED.enterprise_id`,
+      [roomId, challengeId],
+    );
     await client.query(
       `INSERT INTO room_queue_groups (room_id, queue_group_id)
-       SELECT $1, qgc.queue_group_id FROM queue_group_challenges qgc WHERE qgc.challenge_id = $2
-       ON CONFLICT DO NOTHING`,
+       SELECT $1, queue_group_id FROM queue_group_challenges WHERE challenge_id = $2
+       ON CONFLICT (room_id) DO UPDATE SET queue_group_id = EXCLUDED.queue_group_id`,
       [roomId, challengeId],
     );
   }
@@ -951,10 +937,15 @@ async function seedProjects(): Promise<void> {
       .rows[0]?.id;
     if (!repoId) {
       const repo = await client.query(
-        `INSERT INTO repos (name, description, github_url)
-         VALUES ($1, $2, $3)
+        `INSERT INTO repos (name, description, github_url, submission_status, submitted_at, created_by)
+         VALUES ($1, $2, $3, 'submitted', now(), $4)
          RETURNING id`,
-        [project.name, project.tagline, `https://github.com/hackudc-demo/${project.repoSlug}`],
+        [
+          project.name,
+          project.tagline,
+          `https://github.com/hackudc-demo/${project.repoSlug}`,
+          adminId,
+        ],
       );
       repoId = repo.rows[0]?.id;
     }
@@ -971,6 +962,10 @@ async function seedProjects(): Promise<void> {
 
     const challengeId = challengeIds[i % Math.max(challengeIds.length, 1)];
     if (!challengeId) continue;
+    await client.query(
+      `INSERT INTO project_challenges (repo_id, challenge_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [repoId, challengeId],
+    );
     const entry = await client.query(
       `INSERT INTO queue_entries (challenge_id, repo_id, status)
        VALUES ($1, $2, 'waiting')
@@ -982,7 +977,7 @@ async function seedProjects(): Promise<void> {
   }
 
   console.log(
-    `projects: ${challengeIds.length} challenges, 1 room, ${repoCount} repos, ${queueCount} queue entries`,
+    `projects: ${challengeIds.length} challenges, ${challengeIds.length} rooms, ${repoCount} repos, ${queueCount} queue entries`,
   );
 }
 

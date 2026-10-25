@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { sharedCache } from "../../lib/shared-cache.js";
@@ -71,16 +71,21 @@ export async function publishDueWinners() {
     const { rows } = await db.query(
       `SELECT id FROM challenges WHERE winners_published_at IS NULL AND winners_publish_at<=now() AND is_test_account=false ORDER BY id FOR UPDATE SKIP LOCKED`,
     );
-    for (const row of rows) {
-      await db.query(`UPDATE challenges SET winners_published_at=now() WHERE id=$1`, [row.id]);
-      await audit(db, {
-        actorId: null,
-        entityType: "challenge_winner_publication",
-        entityId: row.id,
-        action: "scheduled_publish",
-        source: "system",
-        after: { published: true },
-      });
+    if (rows.length > 0) {
+      await db.query(`UPDATE challenges SET winners_published_at=now() WHERE id=ANY($1::int[])`, [
+        rows.map((row) => row.id),
+      ]);
+      await auditMany(
+        db,
+        rows.map((row) => ({
+          actorId: null,
+          entityType: "challenge_winner_publication",
+          entityId: row.id,
+          action: "scheduled_publish",
+          source: "system",
+          after: { published: true },
+        })),
+      );
     }
     return rows.map((row) => Number(row.id));
   });

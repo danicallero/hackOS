@@ -5,7 +5,7 @@ import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { ProjectOverview } from "@/components/projects/project-overview";
 import { ProjectRecordActions } from "@/components/projects/project-record-actions";
 import { ApiError } from "@/lib/api";
-import { SITE_URL, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
+import { INDEXABLE_ROBOTS, SITE_URL, SOCIAL_IMAGE_PATH } from "@/lib/metadata";
 import { galleryProject, projectAssetUrl } from "../data";
 import { GalleryRefresh } from "../gallery-refresh";
 
@@ -32,7 +32,7 @@ export async function generateMetadata({
             : new URL(SOCIAL_IMAGE_PATH, SITE_URL).toString(),
         ],
       },
-      robots: { index: false, follow: false },
+      robots: INDEXABLE_ROBOTS,
     };
   } catch {
     return { robots: { index: false, follow: false } };

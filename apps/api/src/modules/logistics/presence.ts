@@ -14,6 +14,7 @@ import {
   buildPresenceBreakdown,
   buildPresenceIntervals,
   DEFAULT_SUSPICIOUS_GAP_MS,
+  guaranteedPresenceMs,
   isPresentAt,
   type PresenceEvent,
   totalPresenceMs,
@@ -473,7 +474,12 @@ export async function occupancyEstimate(cutoff?: number, actorId?: number) {
 }
 
 /** H24: estimated attendance hours for one user (e.g. university-credit minimum). */
-export async function userHours(userId: number, cutoff?: number, actorId?: number) {
+export async function userHours(
+  userId: number,
+  cutoff?: number,
+  actorId?: number,
+  options: { verifiedOnly?: boolean } = {},
+) {
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const now = cutoff ?? (await databaseNow()).getTime();
   const events = (await loadEvents(userId)).get(userId) ?? [];
@@ -481,7 +487,11 @@ export async function userHours(userId: number, cutoff?: number, actorId?: numbe
   const intervals = buildPresenceIntervals(events, now, { suspiciousGapMs });
   return {
     userId,
-    hours: round2(totalPresenceMs(events, now, { suspiciousGapMs }) / MS_PER_HOUR),
+    hours: round2(
+      (options.verifiedOnly ? guaranteedPresenceMs : totalPresenceMs)(events, now, {
+        suspiciousGapMs,
+      }) / MS_PER_HOUR,
+    ),
     intervals: intervals.map((i) => ({
       start: new Date(i.start).toISOString(),
       end: new Date(i.end).toISOString(),
@@ -491,7 +501,11 @@ export async function userHours(userId: number, cutoff?: number, actorId?: numbe
 }
 
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
-export async function allHours(cutoff?: number, actorId?: number) {
+export async function allHours(
+  cutoff?: number,
+  actorId?: number,
+  options: { verifiedOnly?: boolean } = {},
+) {
   const now = cutoff ?? (await databaseNow()).getTime();
   const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
   const map = await loadEvents(undefined, {
@@ -522,7 +536,11 @@ export async function allHours(cutoff?: number, actorId?: number) {
         userId,
         name: nameById.get(userId)?.name ?? null,
         surname: nameById.get(userId)?.surname ?? null,
-        hours: round2(totalPresenceMs(events, now, { suspiciousGapMs }) / MS_PER_HOUR),
+        hours: round2(
+          (options.verifiedOnly ? guaranteedPresenceMs : totalPresenceMs)(events, now, {
+            suspiciousGapMs,
+          }) / MS_PER_HOUR,
+        ),
       };
     })
     .sort((a, b) => a.userId - b.userId);

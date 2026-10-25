@@ -2,7 +2,7 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { projectDescriptionField } from "@hackos/shared/forms";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
@@ -19,7 +19,7 @@ import { notify } from "../notifications/service.js";
 import {
   broadcastQueueEvent,
   broadcastQueueEventWithMarker,
-  queueFixtureMarker,
+  queueEntryFixtureMarkers,
 } from "../queue/broadcast.js";
 import { assertQueueChallengeScope, assertQueueRepoScope } from "../queue/fixture-scope.js";
 import { writeQueueHistory } from "../queue/history.js";
@@ -134,22 +134,170 @@ export async function enqueueRepoOnChallenge(
   return { entry, inserted: true, revived: false };
 }
 
-export async function announceQueueOutcomes(outcomes: EnqueueOutcome[]): Promise<void> {
+export async function announceQueueOutcomes(
+  outcomes: EnqueueOutcome[],
+  /** Fixture marker the caller already resolved; skips one marker lookup per entry. */
+  marker?: boolean,
+): Promise<void> {
   await Promise.all(
     outcomes.map((outcome) =>
-      broadcastQueueEvent(
-        pool,
-        "entry",
-        outcome.entry.id,
-        EVENTS.QUEUE_ENTRY_CHANGED,
-        outcome.entry,
-      ),
+      marker === undefined
+        ? broadcastQueueEvent(
+            pool,
+            "entry",
+            outcome.entry.id,
+            EVENTS.QUEUE_ENTRY_CHANGED,
+            outcome.entry,
+          )
+        : broadcastQueueEventWithMarker(marker, EVENTS.QUEUE_ENTRY_CHANGED, outcome.entry),
     ),
   );
   const challengeIds = new Set(outcomes.map((outcome) => outcome.entry.challenge_id));
   await Promise.all(
     [...challengeIds].map((challengeId) => notifyChallengeQueueChanged(pool, challengeId)),
   );
+}
+
+/**
+ * Set-based form of `enqueueRepoOnChallenge` for one challenge (H21 bulk
+ * enroll). Callers have already validated fixture scope and hold the repo row
+ * locks. Locks the existing entries in id order, skips actively queued repos,
+ * revives terminal entries and inserts the rest at the BOTTOM in `repoIds`
+ * order, with one queue_history row + one audit row per entry (plan/07
+ * invariant 5) written by multi-row statements. Outcomes follow `repoIds`.
+ */
+async function enqueueReposOnChallenge(
+  client: Queryable,
+  actorId: number,
+  repoIds: number[],
+  challengeId: number,
+  auditSource: string,
+): Promise<EnqueueOutcome[]> {
+  if (repoIds.length === 0) return [];
+  const { rows: existingRows } = await client.query(
+    `SELECT id, repo_id, status FROM queue_entries
+      WHERE challenge_id = $1 AND repo_id = ANY($2::int[])
+      ORDER BY id FOR UPDATE`,
+    [challengeId, repoIds],
+  );
+  const existing = new Map<number, { id: number; status: string }>(
+    existingRows.map((r: { id: number; repo_id: number; status: string }) => [
+      Number(r.repo_id),
+      { id: Number(r.id), status: r.status },
+    ]),
+  );
+  const terminal = ["cancelled", "disqualified", "completed"];
+  const revive: Array<{ repoId: number; entryId: number; previous: string }> = [];
+  const create: number[] = [];
+  for (const repoId of repoIds) {
+    const entry = existing.get(repoId);
+    if (!entry) create.push(repoId);
+    else if (terminal.includes(entry.status))
+      revive.push({ repoId, entryId: entry.id, previous: entry.status });
+  }
+  if (revive.length === 0 && create.length === 0) return [];
+
+  // Bottom positions in repo order: revivals and inserts share one sequence.
+  const start = await nextBottomPosition(client, challengeId);
+  const order = new Map<number, number>();
+  for (const [i, repoId] of repoIds.entries()) order.set(repoId, i);
+  const slots = [...revive.map((r) => r.repoId), ...create].sort(
+    (a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0),
+  );
+  const positionOf = new Map<number, number>(slots.map((repoId, i) => [repoId, start + i]));
+
+  const byRepo = new Map<number, EnqueueOutcome>();
+  const historyRows: Array<{
+    entryId: number;
+    previous: string;
+    action: string;
+    reason: string | null;
+    metadata: string;
+  }> = [];
+  const auditEntries: Parameters<typeof auditMany>[1][number][] = [];
+
+  if (revive.length > 0) {
+    const { rows } = await client.query(
+      `UPDATE queue_entries
+          SET status = 'waiting', position = t.new_position, assigned_room_id = NULL,
+              called_at = NULL, precalled_at = NULL, presentation_started_at = NULL,
+              ${RESET_PRESENTATION_CLOCK_SQL}, completed_at = NULL
+         FROM unnest($1::int[], $2::int[]) AS t(entry_id, new_position)
+        WHERE queue_entries.id = t.entry_id
+        RETURNING queue_entries.*`,
+      [revive.map((r) => r.entryId), revive.map((r) => positionOf.get(r.repoId))],
+    );
+    for (const row of rows) {
+      byRepo.set(Number(row.repo_id), { entry: row, inserted: false, revived: true });
+    }
+    for (const r of revive) {
+      historyRows.push({
+        entryId: r.entryId,
+        previous: r.previous,
+        action: "re_enter",
+        reason: "Added back to challenge",
+        metadata: JSON.stringify({ position: "bottom" }),
+      });
+      auditEntries.push({
+        actorId,
+        entityType: "queue_entry",
+        entityId: r.entryId,
+        action: "re_enter",
+        before: { status: r.previous },
+        after: { status: "waiting", position: "bottom" },
+        reason: "Added back to challenge",
+        source: auditSource,
+      });
+    }
+  }
+  if (create.length > 0) {
+    const { rows } = await client.query(
+      `INSERT INTO queue_entries (challenge_id, repo_id, status, position)
+       SELECT $1, t.repo_id, 'waiting', t.new_position
+         FROM unnest($2::int[], $3::int[]) AS t(repo_id, new_position)
+       RETURNING *`,
+      [challengeId, create, create.map((repoId) => positionOf.get(repoId))],
+    );
+    for (const row of rows) {
+      const repoId = Number(row.repo_id);
+      byRepo.set(repoId, { entry: row, inserted: true, revived: false });
+      historyRows.push({
+        entryId: row.id,
+        previous: "none",
+        action: "enqueue",
+        reason: null,
+        metadata: JSON.stringify({ source: "project_edit" }),
+      });
+      auditEntries.push({
+        actorId,
+        entityType: "queue_entry",
+        entityId: row.id,
+        action: "add_challenge",
+        after: { repoId, challengeId, status: "waiting", position: row.position },
+        source: auditSource,
+      });
+    }
+  }
+  await client.query(
+    `INSERT INTO queue_history
+       (queue_entry_id, actor_id, previous_status, new_status, action, reason, metadata)
+     SELECT t.entry_id, $1, t.previous, 'waiting', t.action, t.reason, t.metadata::jsonb
+       FROM unnest($2::int[], $3::text[], $4::text[], $5::text[], $6::text[])
+            AS t(entry_id, previous, action, reason, metadata)`,
+    [
+      actorId,
+      historyRows.map((h) => h.entryId),
+      historyRows.map((h) => h.previous),
+      historyRows.map((h) => h.action),
+      historyRows.map((h) => h.reason),
+      historyRows.map((h) => h.metadata),
+    ],
+  );
+  await auditMany(client, auditEntries);
+  return repoIds.flatMap((repoId) => {
+    const outcome = byRepo.get(repoId);
+    return outcome ? [outcome] : [];
+  });
 }
 
 export async function enrollReposInMandatoryChallenges(
@@ -168,21 +316,23 @@ export async function enrollReposInMandatoryChallenges(
       ORDER BY id FOR SHARE`,
     onlyChallengeIds ? [fixtureMarker, onlyChallengeIds] : [fixtureMarker],
   );
+  const { rows: submittedRows } = await client.query(
+    `SELECT id FROM repos WHERE id=ANY($1::int[]) AND submission_status='submitted'`,
+    [uniqueRepoIds],
+  );
+  const submittedRepoIds = new Set<number>(submittedRows.map((r: { id: number }) => Number(r.id)));
   const outcomes: EnqueueOutcome[] = [];
   for (const row of rows as Array<{ id: number; mandatory: boolean }>) {
     if (row.mandatory !== true) continue;
     const challengeId = Number(row.id);
     let nextPosition = await nextBottomPosition(client, challengeId);
     const allocatePosition = async () => nextPosition++;
+    await client.query(
+      `INSERT INTO project_challenges(repo_id,challenge_id) SELECT r,$2 FROM unnest($1::int[]) AS r ON CONFLICT DO NOTHING`,
+      [uniqueRepoIds, challengeId],
+    );
     for (const repoId of uniqueRepoIds) {
-      await client.query(
-        `INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
-        [repoId, challengeId],
-      );
-      const project = await client.query(`SELECT submission_status FROM repos WHERE id=$1`, [
-        repoId,
-      ]);
-      if (project.rows[0]?.submission_status !== "submitted") continue;
+      if (!submittedRepoIds.has(repoId)) continue;
       const outcome = await enqueueRepoOnChallenge(
         client,
         actorId,
@@ -711,39 +861,157 @@ export async function removeMyProjectChallenge(userId: number, id: number, chall
 }
 export async function bulkAddRepoChallenge(actorId: number, challengeId: number) {
   await assertBulkChallenge(actorId, challengeId);
-  const { rows } = await pool.query(
-    `SELECT id,EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=$1 AND qe.status NOT IN('cancelled','disqualified','completed')) AS queued FROM repos r WHERE submission_status='submitted' AND is_test_account=$2 ORDER BY id`,
-    [challengeId, await isSyntheticOperator(pool, actorId)],
-  );
-  let added = 0;
-  for (const row of rows)
-    if (!row.queued) {
-      await addRepoChallenge(actorId, row.id, challengeId);
-      added++;
+  const marker = await isSyntheticOperator(pool, actorId);
+  const { outcomes, total, added } = await withTransaction(async (db) => {
+    const { rows } = await db.query(
+      `SELECT r.id,
+              EXISTS(SELECT 1 FROM queue_entries qe
+                      WHERE qe.repo_id=r.id AND qe.challenge_id=$1
+                        AND qe.status NOT IN('cancelled','disqualified','completed')) AS queued
+         FROM repos r
+        WHERE r.submission_status='submitted' AND r.is_test_account=$2
+        ORDER BY r.id`,
+      [challengeId, marker],
+    );
+    const candidates: number[] = rows.filter((r) => !r.queued).map((r) => Number(r.id));
+    // Lock in id order, then re-read the queue state a concurrent bulk call may have changed.
+    await db.query(`SELECT id FROM repos WHERE id=ANY($1::int[]) ORDER BY id FOR UPDATE`, [
+      candidates,
+    ]);
+    const { rows: active } = await db.query(
+      `SELECT repo_id FROM queue_entries
+        WHERE challenge_id=$1 AND repo_id=ANY($2::int[])
+          AND status NOT IN('cancelled','disqualified','completed')`,
+      [challengeId, candidates],
+    );
+    const activeIds = new Set<number>(active.map((r: { repo_id: number }) => Number(r.repo_id)));
+    const repoIds = candidates.filter((id) => !activeIds.has(id));
+    if (repoIds.length > 0) {
+      // Entries of a repo on a differently-scoped queue must never be touched.
+      const { rows: mismatched } = await db.query(
+        `SELECT 1 FROM queue_entries qe JOIN challenges c ON c.id=qe.challenge_id
+          WHERE qe.repo_id=ANY($1::int[]) AND c.is_test_account<>$2 LIMIT 1`,
+        [repoIds, marker],
+      );
+      if (mismatched.length > 0)
+        throw new ConflictError("Queue fixture markers must match", {
+          code: "review_fixture_scope",
+          challengeId,
+        });
+      await db.query(
+        `INSERT INTO project_challenges(repo_id,challenge_id)
+         SELECT r,$2 FROM unnest($1::int[]) AS r ON CONFLICT DO NOTHING`,
+        [repoIds, challengeId],
+      );
+      await auditMany(
+        db,
+        repoIds.map((id) => ({
+          actorId,
+          entityType: "project",
+          entityId: id,
+          action: "challenge_add",
+          after: { challengeId },
+        })),
+      );
     }
-  return { total: rows.length, added, alreadyEnrolled: rows.length - added };
+    const generated = await db.query(`SELECT 1 FROM queue_group_challenges WHERE challenge_id=$1`, [
+      challengeId,
+    ]);
+    const outcomes = generated.rowCount
+      ? await enqueueReposOnChallenge(db, actorId, repoIds, challengeId, "admin")
+      : [];
+    return { outcomes, total: rows.length, added: repoIds.length };
+  });
+  await announceQueueOutcomes(outcomes, marker);
+  return { total, added, alreadyEnrolled: total - added };
 }
 export async function bulkRemoveRepoChallenge(actorId: number, challengeId: number) {
   await assertBulkChallenge(actorId, challengeId);
-  const { rows } = await pool.query(
-    `SELECT r.id AS repo_id,
-            (EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$1)
-             OR EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=$1
-                         AND qe.status NOT IN('cancelled','disqualified'))) AS active
-       FROM repos r
-      WHERE r.is_test_account=$2
-        AND (EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$1)
-          OR EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=$1))
-      ORDER BY r.id`,
-    [challengeId, await isSyntheticOperator(pool, actorId)],
+  const marker = await isSyntheticOperator(pool, actorId);
+  const { updated, total, removed } = await withTransaction(async (db) => {
+    const { rows } = await db.query(
+      `SELECT r.id AS repo_id,
+              (EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$1)
+               OR EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=$1
+                           AND qe.status NOT IN('cancelled','disqualified'))) AS active
+         FROM repos r
+        WHERE r.is_test_account=$2
+          AND (EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$1)
+            OR EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.repo_id=r.id AND qe.challenge_id=$1))
+        ORDER BY r.id`,
+      [challengeId, marker],
+    );
+    const repoIds: number[] = rows.filter((r) => r.active).map((r) => Number(r.repo_id));
+    const result = {
+      updated: [] as Array<Record<string, unknown>>,
+      total: rows.length,
+      removed: repoIds.length,
+    };
+    if (repoIds.length === 0) return result;
+    await db.query(`SELECT id FROM repos WHERE id=ANY($1::int[]) ORDER BY id FOR UPDATE`, [
+      repoIds,
+    ]);
+    const challenge = await db.query(`SELECT mandatory FROM challenges WHERE id=$1 FOR SHARE`, [
+      challengeId,
+    ]);
+    if (challenge.rows[0]?.mandatory)
+      throw new ConflictError("Mandatory challenge cannot be withdrawn");
+    await db.query(
+      `DELETE FROM project_challenges WHERE challenge_id=$1 AND repo_id=ANY($2::int[])`,
+      [challengeId, repoIds],
+    );
+    const { rows: old } = await db.query(
+      `SELECT id,status FROM queue_entries
+        WHERE challenge_id=$1 AND repo_id=ANY($2::int[]) ORDER BY id FOR UPDATE`,
+      [challengeId, repoIds],
+    );
+    await auditMany(
+      db,
+      repoIds.map((id) => ({
+        actorId,
+        entityType: "project",
+        entityId: id,
+        action: "challenge_remove",
+        before: { challengeId },
+      })),
+    );
+    if (old.length === 0) return result;
+    const next = old.map((o: { status: string }) =>
+      ["waiting", "called"].includes(o.status) ? "cancelled" : "disqualified",
+    );
+    const { rows: entries } = await db.query(
+      `UPDATE queue_entries
+          SET status=t.new_status::queue_status, assigned_room_id=NULL, position=NULL,
+              called_at=NULL, precalled_at=NULL, presentation_started_at=NULL,
+              ${RESET_PRESENTATION_CLOCK_SQL}, completed_at=NULL
+         FROM unnest($1::int[], $2::text[]) AS t(entry_id, new_status)
+        WHERE queue_entries.id=t.entry_id
+        RETURNING queue_entries.*`,
+      [old.map((o: { id: number }) => o.id), next],
+    );
+    await db.query(
+      `INSERT INTO queue_history
+         (queue_entry_id, actor_id, previous_status, new_status, action)
+       SELECT t.entry_id, $1, t.previous, t.new_status, 'remove_from_challenge'
+         FROM unnest($2::int[], $3::text[], $4::text[]) AS t(entry_id, previous, new_status)`,
+      [
+        actorId,
+        old.map((o: { id: number }) => o.id),
+        old.map((o: { status: string }) => o.status),
+        next,
+      ],
+    );
+    await compactQueueGroupPositions(db, challengeId);
+    result.updated = entries;
+    return result;
+  });
+  await Promise.all(
+    updated.map((entry) =>
+      broadcastQueueEventWithMarker(marker, EVENTS.QUEUE_ENTRY_CHANGED, entry),
+    ),
   );
-  const active = rows.filter((row) => row.active);
-  for (const row of active) await removeRepoChallenge(actorId, row.repo_id, challengeId);
-  return {
-    total: rows.length,
-    removed: active.length,
-    alreadySkipped: rows.length - active.length,
-  };
+  if (updated.length > 0) await notifyChallengeQueueChanged(pool, challengeId);
+  return { total, removed, alreadySkipped: total - removed };
 }
 async function assertBulkChallenge(actorId: number, challengeId: number) {
   await assertQueueChallengeScope(pool, actorId, challengeId);
@@ -778,20 +1046,20 @@ export async function createRepoNative(
     const descriptionAnswer = descriptionField ? responses[descriptionField.key] : undefined;
     const description =
       typeof descriptionAnswer === "string" ? descriptionAnswer.trim() : input.description;
-    for (const userId of new Set(input.memberUserIds)) {
-      const user = await db.query(
-        `SELECT id FROM users WHERE id=$1 AND account_state='active' AND anonymized_at IS NULL AND is_test_account=$2`,
-        [userId, marker],
-      );
-      if (!user.rowCount) throw new NotFoundError("Project member not found");
-    }
-    for (const challengeId of new Set(input.challengeIds)) {
-      const challenge = await db.query(
-        `SELECT id FROM challenges WHERE id=$1 AND is_test_account=$2`,
-        [challengeId, marker],
-      );
-      if (!challenge.rowCount) throw new NotFoundError("Challenge not found");
-    }
+    const memberUserIds = [...new Set(input.memberUserIds)];
+    const users = await db.query(
+      `SELECT id FROM users WHERE id=ANY($1::int[]) AND account_state='active' AND anonymized_at IS NULL AND is_test_account=$2`,
+      [memberUserIds, marker],
+    );
+    if (users.rowCount !== memberUserIds.length)
+      throw new NotFoundError("Project member not found");
+    const requestedChallengeIds = [...new Set(input.challengeIds)];
+    const challenges = await db.query(
+      `SELECT id FROM challenges WHERE id=ANY($1::int[]) AND is_test_account=$2`,
+      [requestedChallengeIds, marker],
+    );
+    if (challenges.rowCount !== requestedChallengeIds.length)
+      throw new NotFoundError("Challenge not found");
     const { rows } = await db.query(
       `INSERT INTO repos(name,description,github_url,demo_url,created_by,submission_status,submitted_via,submitted_at,is_test_account,responses) VALUES($1,$2,$3,$4,$5,'submitted','admin',now(),$6,$7) RETURNING id`,
       [
@@ -805,11 +1073,11 @@ export async function createRepoNative(
       ],
     );
     const id = rows[0].id;
-    for (const userId of new Set(input.memberUserIds))
-      await db.query(`INSERT INTO submissions(repo_id,user_id,status) VALUES($1,$2,'active')`, [
-        id,
-        userId,
-      ]);
+    if (memberUserIds.length > 0)
+      await db.query(
+        `INSERT INTO submissions(repo_id,user_id,status) SELECT $1::int,u,'active' FROM unnest($2::int[]) AS u`,
+        [id, memberUserIds],
+      );
     const challengeIds = new Set(input.challengeIds);
     const mandatory = await db.query(
       `SELECT id FROM challenges WHERE mandatory AND is_test_account=$1`,
@@ -817,11 +1085,12 @@ export async function createRepoNative(
     );
     for (const row of mandatory.rows) challengeIds.add(row.id);
     const outcomes: EnqueueOutcome[] = [];
+    if (challengeIds.size > 0)
+      await db.query(
+        `INSERT INTO project_challenges(repo_id,challenge_id) SELECT $1::int,c FROM unnest($2::int[]) AS c`,
+        [id, [...challengeIds]],
+      );
     for (const challengeId of challengeIds) {
-      await db.query(`INSERT INTO project_challenges(repo_id,challenge_id) VALUES($1,$2)`, [
-        id,
-        challengeId,
-      ]);
       const outcome = await enqueueRepoOnChallenge(db, actorId, id, challengeId, "admin");
       if (outcome) outcomes.push(outcome);
     }
@@ -852,8 +1121,12 @@ export async function deleteRepo(actorId: number, id: number, participant = fals
         [id],
       )
     ).rows;
+    const entryMarkers = await queueEntryFixtureMarkers(
+      db,
+      entries.map((entry) => entry.id),
+    );
     for (const entry of entries)
-      if ((await queueFixtureMarker(db, "entry", entry.id)) !== marker)
+      if (entryMarkers.get(entry.id) !== marker)
         throw new ConflictError("Queue fixture markers must match");
     const memberIds = (
       await db.query(
@@ -891,8 +1164,10 @@ export async function deleteRepo(actorId: number, id: number, participant = fals
       await broadcast(`${SSE_TOPICS.USER_PREFIX}${memberId}`, EVENTS.USER_QUEUE_CHANGED, {
         challengeId: entry.challenge_id,
       });
-    await notifyChallengeQueueChanged(pool, entry.challenge_id);
   }
+  // Several entries on one challenge need a single refresh.
+  for (const challengeId of new Set(deleted.entries.map((entry) => entry.challenge_id)))
+    await notifyChallengeQueueChanged(pool, challengeId);
   return { deleted: true };
 }
 export async function deleteMyProject(userId: number, id: number) {

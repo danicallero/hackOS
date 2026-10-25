@@ -8,11 +8,10 @@ import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Brand } from "@/components/common/brand";
-import { LanguageSelect } from "@/components/common/language-select";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { ThemeToggle } from "@/components/common/theme-toggle";
+import { PublicFooter } from "@/components/layout/public-footer";
+import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { HomeOverview } from "@/components/public/home-overview";
 import type {
   PublicAnnouncement,
@@ -123,23 +122,12 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   }, [content]);
   return (
     <div className="relative overflow-x-clip">
-      <div className={embedded ? "" : "mx-auto max-w-6xl px-5 sm:px-8"}>
-        {!embedded && (
-          <header className="flex items-center justify-between gap-2 py-5 sm:py-6">
-            <Brand />
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <LanguageSelect />
-              <ThemeToggle />
-              <Button size="sm" asChild className="hidden sm:inline-flex">
-                <Link href={appHref}>
-                  {appLabel}
-                  <ArrowRightIcon aria-hidden="true" className="size-4" />
-                </Link>
-              </Button>
-            </div>
-          </header>
-        )}
-
+      {!embedded && <PublicTopBar />}
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={embedded ? "outline-none" : "mx-auto max-w-7xl px-4 outline-none sm:px-6"}
+      >
         {!content && !error && (
           <div className="grid py-24" role="status" aria-busy="true">
             <div className="mx-auto">
@@ -175,23 +163,8 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
               now={now}
             />
           ))}
-
-        {!embedded && (
-          <footer className="text-muted-foreground border-t py-8 text-center text-xs">
-            <nav
-              aria-label={t("legalLinksLabel")}
-              className="flex flex-wrap justify-center gap-x-4 gap-y-2"
-            >
-              <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
-                {t("termsAndConditions")}
-              </Link>
-              <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
-                {t("privacyPolicy")}
-              </Link>
-            </nav>
-          </footer>
-        )}
-      </div>
+      </main>
+      {!embedded && <PublicFooter />}
     </div>
   );
 }
@@ -343,7 +316,7 @@ function PublicPageContent({
         )}
         {schedule.length > 0 && (
           <Button asChild variant="outline" className="mt-4">
-            <Link href="/horario">
+            <Link href="/timetable">
               {t("viewSchedule")}
               <ArrowRightIcon className="size-4" aria-hidden="true" />
             </Link>

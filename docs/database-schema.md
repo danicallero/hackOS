@@ -28,6 +28,11 @@ The generated ERD contains tables, views, enums, primary/unique constraints and
 foreign keys. The SQL baseline also contains check constraints, functions,
 triggers and indexes that do not fit in DBML.
 
+`challenges.mandatory` enrolls every project regardless of manual challenge
+selection. Its database comment and generated ERD describe the native project
+model; migration `0708_challenge_mandatory_comment.sql` updates the historical
+comment without changing enrollment behavior (#1005).
+
 ## New database and future migrations
 
 On an empty database, run:

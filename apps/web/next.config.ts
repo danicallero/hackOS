@@ -16,8 +16,25 @@ const nextConfig: NextConfig = {
     // #935 Android App Links: generated from deployment env, see the route.
     return [{ source: "/.well-known/assetlinks.json", destination: "/android-assetlinks.json" }];
   },
+  async redirects() {
+    // The public schedule used to live at its own route; it is now /timetable for everyone.
+    return [{ source: "/horario", destination: "/timetable", permanent: true }];
+  },
   async headers() {
     return [
+      // Nothing is indexed except the public pages listed in app/robots.ts; icons, logos
+      // and generated images included.
+      {
+        source: "/:path((?!timetable|privacy|terms|gallery|llms\\.txt).+)",
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex" },
+        ],
+      },
+      // #1083: certificate pages also never leak the code through Referer.
+      {
+        source: "/verify/:path*",
+        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
+      },
       {
         source: "/.well-known/apple-app-site-association",
         headers: [{ key: "Content-Type", value: "application/json" }],

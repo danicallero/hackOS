@@ -126,65 +126,76 @@ export async function purgeReviewFixtureQueue(
     }
   }
 
-  for (const entryId of entryIds) {
-    await client.query(`DELETE FROM attempt_review_versions WHERE attempt_id = $1`, [entryId]);
-    await client.query(`DELETE FROM attempt_review WHERE attempt_id = $1`, [entryId]);
-    await client.query(`DELETE FROM judging_session WHERE queue_entry_id = $1`, [entryId]);
-    await client.query(`DELETE FROM queue_history WHERE queue_entry_id = $1`, [entryId]);
-    await client.query(`DELETE FROM queue_entries WHERE id = $1`, [entryId]);
+  if (entryIds.length > 0) {
+    await client.query(`DELETE FROM attempt_review_versions WHERE attempt_id = ANY($1::int[])`, [
+      entryIds,
+    ]);
+    await client.query(`DELETE FROM attempt_review WHERE attempt_id = ANY($1::int[])`, [entryIds]);
+    await client.query(`DELETE FROM judging_session WHERE queue_entry_id = ANY($1::int[])`, [
+      entryIds,
+    ]);
+    await client.query(`DELETE FROM queue_history WHERE queue_entry_id = ANY($1::int[])`, [
+      entryIds,
+    ]);
+    await client.query(`DELETE FROM queue_entries WHERE id = ANY($1::int[])`, [entryIds]);
   }
 
-  for (const roomId of roomIds) {
-    await client.query(`DELETE FROM judging_session WHERE room_id = $1`, [roomId]);
-    await client.query(`DELETE FROM room_queue_groups WHERE room_id = $1`, [roomId]);
-    await client.query(`DELETE FROM room_enterprises WHERE room_id = $1`, [roomId]);
-    await client.query(`DELETE FROM room_queue_state WHERE room_id = $1`, [roomId]);
-    await client.query(`DELETE FROM rooms WHERE id = $1`, [roomId]);
+  if (roomIds.length > 0) {
+    await client.query(`DELETE FROM judging_session WHERE room_id = ANY($1::int[])`, [roomIds]);
+    await client.query(`DELETE FROM room_queue_groups WHERE room_id = ANY($1::int[])`, [roomIds]);
+    await client.query(`DELETE FROM room_enterprises WHERE room_id = ANY($1::int[])`, [roomIds]);
+    await client.query(`DELETE FROM room_queue_state WHERE room_id = ANY($1::int[])`, [roomIds]);
+    await client.query(`DELETE FROM rooms WHERE id = ANY($1::int[])`, [roomIds]);
   }
 
-  for (const repoId of repoIds) {
-    await client.query(`DELETE FROM challenge_winners WHERE repo_id = $1`, [repoId]);
-    await client.query(`DELETE FROM project_challenges WHERE repo_id = $1`, [repoId]);
-    await client.query(`DELETE FROM submissions WHERE repo_id = $1`, [repoId]);
-    await client.query(`DELETE FROM repos WHERE id = $1 AND is_test_account = true`, [repoId]);
-  }
-
-  for (const challengeId of challengeIds) {
-    await client.query(`DELETE FROM challenge_winners WHERE challenge_id = $1`, [challengeId]);
-    await client.query(`DELETE FROM challenges WHERE id = $1 AND is_test_account = true`, [
-      challengeId,
+  if (repoIds.length > 0) {
+    await client.query(`DELETE FROM challenge_winners WHERE repo_id = ANY($1::int[])`, [repoIds]);
+    await client.query(`DELETE FROM project_challenges WHERE repo_id = ANY($1::int[])`, [repoIds]);
+    await client.query(`DELETE FROM submissions WHERE repo_id = ANY($1::int[])`, [repoIds]);
+    await client.query(`DELETE FROM repos WHERE id = ANY($1::int[]) AND is_test_account = true`, [
+      repoIds,
     ]);
   }
 
-  for (const groupId of fixtureQueueGroupIds) {
+  if (challengeIds.length > 0) {
+    await client.query(`DELETE FROM challenge_winners WHERE challenge_id = ANY($1::int[])`, [
+      challengeIds,
+    ]);
     await client.query(
-      `DELETE FROM queue_groups
-        WHERE id = $1 AND enterprise_id = ANY($2::int[])`,
-      [groupId, enterpriseIds],
+      `DELETE FROM challenges WHERE id = ANY($1::int[]) AND is_test_account = true`,
+      [challengeIds],
     );
   }
 
-  for (const sponsorId of sponsorIds) {
-    await client.query(`DELETE FROM sponsors WHERE id = $1`, [sponsorId]);
+  if (fixtureQueueGroupIds.length > 0) {
+    await client.query(
+      `DELETE FROM queue_groups
+        WHERE id = ANY($1::int[]) AND enterprise_id = ANY($2::int[])`,
+      [fixtureQueueGroupIds, enterpriseIds],
+    );
   }
 
-  for (const enterpriseId of enterpriseIds) {
+  if (sponsorIds.length > 0) {
+    await client.query(`DELETE FROM sponsors WHERE id = ANY($1::int[])`, [sponsorIds]);
+  }
+
+  if (enterpriseIds.length > 0) {
     const { rows: enterpriseRefs } = await client.query(
       `SELECT 1
-         FROM sponsors WHERE enterprise_id = $1
+         FROM sponsors WHERE enterprise_id = ANY($1::int[])
        UNION ALL
        SELECT 1
-         FROM queue_groups WHERE enterprise_id = $1
+         FROM queue_groups WHERE enterprise_id = ANY($1::int[])
        UNION ALL
        SELECT 1
-         FROM room_enterprises WHERE enterprise_id = $1
+         FROM room_enterprises WHERE enterprise_id = ANY($1::int[])
         LIMIT 1`,
-      [enterpriseId],
+      [enterpriseIds],
     );
     if (enterpriseRefs.length > 0) {
       throw integrity("Review fixture enterprise has unexpected references.");
     }
-    await client.query(`DELETE FROM enterprises WHERE id = $1`, [enterpriseId]);
+    await client.query(`DELETE FROM enterprises WHERE id = ANY($1::int[])`, [enterpriseIds]);
   }
 
   await client.query(`DELETE FROM review_fixture_queues WHERE fixture_key = $1`, [fixtureKey]);

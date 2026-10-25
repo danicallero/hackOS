@@ -1,4 +1,5 @@
 import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
 import { ApiError, apiFetch } from "./api";
 import type { MessageKey } from "./i18n";
 import { createIdempotencyKey } from "./idempotency-key";
@@ -49,12 +50,8 @@ export function uploadCv(
   idempotencyKey: string = createIdempotencyKey(),
 ): Promise<NetworkingProfile> {
   const body = new FormData();
-  // React Native reads a file part from its local uri.
-  body.append(CV_FIELD_NAME, {
-    uri: cv.uri,
-    name: cv.name,
-    type: "application/pdf",
-  } as unknown as Blob);
+  // Expo fetch serializes File bytes; legacy React Native uri parts are unsupported.
+  body.append(CV_FIELD_NAME, new File(cv.uri), cv.name);
   return apiFetch<NetworkingProfile>(CV_PATH, {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },

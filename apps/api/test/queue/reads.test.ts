@@ -216,6 +216,18 @@ describe("room view (H41)", () => {
     expect(body.called).toHaveLength(1);
     expect(body.next).toHaveLength(2);
 
+    // The bulk read returns exactly the per-room view for every visible room.
+    const bulk = await app.inject({
+      method: "GET",
+      url: "/api/queue/rooms/views",
+      headers: asUser(operatorId),
+    });
+    expect(bulk.statusCode).toBe(200);
+    expect(bulk.json()).toEqual([body]);
+    expect(
+      (await app.inject({ method: "GET", url: "/api/queue/rooms/views" })).statusCode,
+    ).toBeGreaterThanOrEqual(401);
+
     const tv = await app.inject({ method: "GET", url: "/api/tv/rooms" }); // no auth
     expect(tv.statusCode).toBe(200);
     expect(tv.json()).toHaveLength(1);

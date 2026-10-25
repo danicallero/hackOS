@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
@@ -120,15 +120,16 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
         }
       }
 
-      for (const failure of failures) {
-        await audit(pool, {
+      await auditMany(
+        pool,
+        failures.map((failure) => ({
           actorId: req.userId,
           entityType: "application_response",
           entityId: failure.responseId,
           action: "export_file_unreadable",
           reason: `Field '${fieldKey}' upload missing from storage during export`,
-        });
-      }
+        })),
+      );
       await audit(pool, {
         actorId: req.userId,
         entityType: "application_field_export",

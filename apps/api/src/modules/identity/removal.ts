@@ -3,7 +3,7 @@ import { hashPassword, verifyPassword } from "better-auth/crypto";
 import type { Job } from "bullmq";
 import type pg from "pg";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import {
   BadRequestError,
   ConflictError,
@@ -25,7 +25,7 @@ import {
 import { expireGoogleObject } from "../logistics/google-wallet.js";
 import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import type { GoogleObjectType } from "../logistics/wallet-passes.js";
-import { queueFixtureMarker } from "../queue/broadcast.js";
+import { queueEntryFixtureMarkers } from "../queue/broadcast.js";
 import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";
 import { consumeRemovalPin } from "./removal-pin.js";
@@ -76,7 +76,6 @@ interface UserRemovalRow {
   is_test_account: boolean;
   badge_id: string | null;
   badge_id_history: string[];
-  university_id: number | null;
   account_state: "active" | "removal_pending";
   removal_action: AccountRemovalAction | null;
   removal_requires_exit: boolean;
@@ -312,7 +311,7 @@ async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promis
   const { rows } = await client.query<UserRemovalRow>(
     `SELECT id, email, email_verified, name, surname, dni, is_test_account,
             badge_id, badge_id_history,
-            university_id, account_state, removal_action,
+            account_state, removal_action,
             removal_requires_exit, removal_expires_at, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,
     [userId],
@@ -1262,15 +1261,19 @@ async function deleteOrphanedProjects(
   );
   const queueIds = queueRows.map((row) => row.id);
   const deletedQueueEntries: DeletedQueueEntryNotification[] = [];
+  let entryMarkers: Map<number, boolean | null>;
+  try {
+    entryMarkers = await queueEntryFixtureMarkers(
+      client,
+      queueRows.map((row) => Number(row.id)),
+    );
+  } catch {
+    // Deletion remains durable, but a malformed graph must never leak an
+    // identity-bearing event onto the real operator topic.
+    entryMarkers = new Map();
+  }
   for (const row of queueRows) {
-    let fixtureMarker: boolean | null;
-    try {
-      fixtureMarker = await queueFixtureMarker(client, "entry", Number(row.id));
-    } catch {
-      // Deletion remains durable, but a malformed graph must never leak an
-      // identity-bearing event onto the real operator topic.
-      fixtureMarker = null;
-    }
+    const fixtureMarker = entryMarkers.get(Number(row.id)) ?? null;
     deletedQueueEntries.push({
       id: Number(row.id),
       challengeId: Number(row.challenge_id),
@@ -1419,6 +1422,15 @@ async function scrubRelationships(
   await client.query(`DELETE FROM content_reports WHERE reporter_id = $1 OR target_user_id = $1`, [
     userId,
   ]);
+  await client.query(`DELETE FROM certificate_approvals WHERE user_id = $1`, [userId]);
+  // #1083: certificates stay verifiable as revoked, without the person's data.
+  await client.query(
+    `UPDATE attendance_certificates
+        SET snapshot = '{}'::jsonb, recipient_name=NULL, recipient_document_kind=NULL, recipient_document_number=NULL, revoked_at = COALESCE(revoked_at, now()),
+            revoked_reason = COALESCE(revoked_reason, 'account_removed')
+      WHERE user_id = $1`,
+    [userId],
+  );
   await client.query(`DELETE FROM project_files WHERE uploaded_by=$1`, [userId]);
   await client.query(
     `UPDATE users SET gallery_show_photo=false,gallery_show_name=false,gallery_consented_at=NULL WHERE id=$1`,
@@ -1586,8 +1598,9 @@ async function scrubRelationships(
         FOR UPDATE`,
       [userId],
     );
-    for (const request of syntheticRequestRows) {
-      await audit(client, {
+    await auditMany(
+      client,
+      syntheticRequestRows.map((request) => ({
         actorId: null,
         entityType: "data_subject_request",
         entityId: request.id,
@@ -1596,8 +1609,8 @@ async function scrubRelationships(
         after: { is_test_account: true },
         ip: null,
         userAgent: null,
-      });
-    }
+      })),
+    );
   }
 
   const { rows: completedDeletionRequests } = await client.query<{ id: number }>(
@@ -1615,8 +1628,9 @@ async function scrubRelationships(
   // request row has already lost its subject/requester/reason, and the audit
   // payload contains only its own opaque request id plus the terminal state;
   // it cannot be used as an anonymous-participant mapping.
-  for (const request of completedDeletionRequests) {
-    await audit(client, {
+  await auditMany(
+    client,
+    completedDeletionRequests.map((request) => ({
       actorId: null,
       entityType: "data_subject_request",
       entityId: request.id,
@@ -1625,8 +1639,8 @@ async function scrubRelationships(
       after: { status: "completed" },
       ip: null,
       userAgent: null,
-    });
-  }
+    })),
+  );
   await client.query(
     `UPDATE data_subject_requests
         SET subject_user_id = NULL, requested_by = NULL,
@@ -1822,7 +1836,6 @@ export async function resetReviewFixtureAccount(
             dietary_data_state = 'not_provided',
             dietary_confirmed_at = NULL,
             meal_plan_confirmed_at = NULL,
-            university_id = NULL,
             shirt_size = NULL,
             language = 'en',
             notes = NULL,
@@ -1909,20 +1922,25 @@ export async function finalizeAccountRemoval(
        VALUES ($1, $2, $3)`,
       [anonymousId, guaranteedMinutes, user.is_test_account],
     );
-    for (const field of retainedApplicationFields) {
+    if (retainedApplicationFields.length > 0) {
       await client.query(
         `INSERT INTO anonymous_participant_fields
            (anonymous_participant_id, application_id, application_form_version,
             field_key, anonymous_audit_dimension, field_kind, value)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)`,
+         SELECT $1::uuid, t.application_id, t.form_version, t.field_key, t.dimension,
+                t.field_kind, t.value
+           FROM unnest($2::int[], $3::int[], $4::text[], $5::text[], $6::text[], $7::jsonb[])
+                WITH ORDINALITY AS t(application_id, form_version, field_key, dimension,
+                                     field_kind, value, ord)
+          ORDER BY t.ord`,
         [
           anonymousId,
-          field.applicationId,
-          field.applicationFormVersion,
-          field.fieldKey,
-          field.dimension,
-          field.fieldKind,
-          JSON.stringify(field.value),
+          retainedApplicationFields.map((field) => field.applicationId),
+          retainedApplicationFields.map((field) => field.applicationFormVersion),
+          retainedApplicationFields.map((field) => field.fieldKey),
+          retainedApplicationFields.map((field) => field.dimension),
+          retainedApplicationFields.map((field) => field.fieldKind),
+          retainedApplicationFields.map((field) => JSON.stringify(field.value)),
         ],
       );
     }

@@ -72,7 +72,6 @@ const selfPatchSchema = z
     name: z.string().min(1).max(200).optional(),
     surname: z.string().min(1).max(200).optional(),
     language: z.enum(LANGUAGES).optional(),
-    universityId: z.number().int().nullable().optional(),
     // Logistics data a participant owns and manages on their own settings page.
     foodIntolerances: z.array(z.number().int()).optional(),
     foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
@@ -97,7 +96,6 @@ const COLUMN_BY_FIELD: Record<string, string> = {
   foodIntolerances: "food_intolerances",
   foodIntoleranceNotes: "food_intolerance_notes",
   shirtSize: "shirt_size",
-  universityId: "university_id",
   dni: "dni",
   notes: "notes",
 };
@@ -182,7 +180,6 @@ const userResponseSchema = z.object({
   // #933: last explicit dietary answer, including "no restrictions".
   dietaryConfirmedAt: z.string().nullable(),
   shirtSize: z.string().nullable(),
-  universityId: z.number().nullable(),
   notes: z.string().nullable(),
   accountState: z.enum(["active", "removal_pending"]),
   isTestAccount: z.boolean(),
@@ -223,7 +220,6 @@ interface UserRow {
   dietary_confirmed_at: Date | null;
   notification_onboarded_at: Date | null;
   shirt_size: string | null;
-  university_id: number | null;
   notes: string | null;
   account_state: "active" | "removal_pending";
   is_test_account: boolean;
@@ -267,7 +263,6 @@ function serializeUser(row: UserRow, removalStatus?: PendingAccountRemovalStatus
     dietaryDataState: row.dietary_data_state,
     dietaryConfirmedAt: row.dietary_confirmed_at?.toISOString() ?? null,
     shirtSize: row.shirt_size,
-    universityId: row.university_id,
     notes: row.notes,
     accountState: row.account_state,
     isTestAccount: row.is_test_account,

@@ -15,8 +15,8 @@ story; code and commits reference `#934` and `#935`.
 People manage their public profile (opt-in, surname/photo/project, headline,
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
-is uploaded in the same page's Personal details section, because it is the
-account's photo everywhere, not only on the public profile. The mobile app
+is uploaded at the top of the Personal details tab, because it
+is the account's photo everywhere, not only on the public profile. The mobile app
 edits the same photo from the Account avatar and the networking profile editor
 (`docs/mobile.md`).
 
@@ -360,9 +360,10 @@ gallery too; hiding either hides it there (see [projects](./projects.md)).
 `users.gallery_show_name` still controls the name in nonmember project reads,
 and H54 removal clears it together with the user's project uploads.
 
-My profile uses three persistent panels: Profile, Public profile, and Account and
-security. Tab switches preserve edits. On desktop, the public-profile fields and
-live preview share two columns; narrow screens stack them. Personal dietary fields
-are grouped separately, and choosing No restrictions hides the optional fields while
-preserving their previous values for restoration when unticked. Email, password,
-role details and account-removal actions live in the security panel.
+Public profile is its own tab of My profile (see
+[`navigation.md`](./navigation.md)); switching tabs preserves edits. It has its
+own Save; the live preview sits below the fields, one grid column wide. Personal dietary fields are
+grouped separately in Personal details, and choosing No restrictions hides the
+optional fields while preserving their previous values for restoration when
+unticked. Email, password and GitHub live in Account and security; roles and
+account removal have their own sections.

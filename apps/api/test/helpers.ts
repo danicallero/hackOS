@@ -31,7 +31,7 @@ async function testTableList(): Promise<string> {
 
   const { rows } = await pool.query(
     `SELECT tablename FROM pg_tables
-     WHERE schemaname = 'public' AND tablename NOT IN ('_migrations', 'queue_settings')`,
+     WHERE schemaname = 'public' AND tablename NOT IN ('_migrations', 'queue_settings', 'certificate_settings', 'certificate_types')`,
   );
   tablesForTruncation = rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(", ");
   return tablesForTruncation;
@@ -220,6 +220,22 @@ export async function ensureApplicationFormVersion(applicationId: number): Promi
     throw new Error(`Expected application ${applicationId} before creating its form snapshot`);
   }
   return afterConflict[0].id;
+}
+
+/** Gives the user a university the way the product does: a library answer on an application response (H12). */
+export async function setUserUniversity(userId: number, universityId: number): Promise<number> {
+  const template = [{ key: "university", kind: "university", label: { en: "University" } }];
+  const { rows: apps } = await pool.query(
+    `INSERT INTO applications (name, template) VALUES ('University form', $1::jsonb) RETURNING id`,
+    [JSON.stringify(template)],
+  );
+  const versionId = await ensureApplicationFormVersion(apps[0].id);
+  const { rows } = await pool.query(
+    `INSERT INTO application_responses (user_id, application_id, application_form_version_id, responses)
+     VALUES ($1, $2, $3, $4::jsonb) RETURNING id`,
+    [userId, apps[0].id, versionId, JSON.stringify({ university: universityId })],
+  );
+  return rows[0].id;
 }
 
 /** Auth header for app.inject() — resolved by the test-mode auth context. */

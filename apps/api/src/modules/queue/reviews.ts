@@ -5,7 +5,6 @@ import { audit } from "../../lib/audit.js";
 import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { toCsv } from "../../lib/csv.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { RESOLVED_PANEL_SQL } from "./criteria-merge.js";
 import { assertQueueEntryScope } from "./fixture-scope.js";
 import { QUEUE_GROUP_LABEL_JOIN, QUEUE_GROUP_LABEL_SQL } from "./groups.js";
@@ -33,32 +32,65 @@ export interface ReviewScope {
   fixtureMarker: boolean;
 }
 
-export async function resolveReviewScope(context: AuthorizationContext): Promise<ReviewScope> {
+const reviewScopeByContext = new WeakMap<AuthorizationContext, Promise<ReviewScope>>();
+const verifiedEntriesByScope = new WeakMap<ReviewScope, Set<number>>();
+
+/**
+ * Resolved once per request authorization context: guards and handler on the
+ * same request share one scope instead of re-reading capabilities, the actor
+ * marker and the sponsor's challenges (request-scoped, never cross-request).
+ */
+export function resolveReviewScope(context: AuthorizationContext): Promise<ReviewScope> {
+  let scope = reviewScopeByContext.get(context);
+  if (!scope) {
+    scope = loadReviewScope(context);
+    reviewScopeByContext.set(context, scope);
+  }
+  return scope;
+}
+
+async function loadReviewScope(context: AuthorizationContext): Promise<ReviewScope> {
   const userId = context.userId;
   if (userId == null) throw new UnauthorizedError();
-  const fixtureMarker = await isSyntheticOperator(pool, userId);
-  if (await userHasCapability(context, CAPABILITIES.QUEUE_ADMIN)) {
+  const [fixtureMarker, isAdmin] = await Promise.all([
+    context.actorIsSyntheticOperator,
+    userHasCapability(context, CAPABILITIES.QUEUE_ADMIN),
+  ]);
+  if (isAdmin) {
     return { actorId: userId, isAdmin: true, ownChallengeIds: [], fixtureMarker };
   }
 
-  const isSponsor =
-    (await pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId])).rowCount! > 0;
-  if (!isSponsor) throw new ForbiddenError("Not allowed to view reviews");
-
-  const { rows } = await pool.query(
-    `SELECT DISTINCT c.id
-       FROM challenges c
-      JOIN sponsors author ON author.id = c.author
-      JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE mine.user_id = $1 AND c.is_test_account = $2`,
-    [userId, fixtureMarker],
-  );
+  const [sponsor, challenges] = await Promise.all([
+    pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId]),
+    pool.query(
+      `SELECT DISTINCT c.id
+         FROM challenges c
+        JOIN sponsors author ON author.id = c.author
+        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+        WHERE mine.user_id = $1 AND c.is_test_account = $2`,
+      [userId, fixtureMarker],
+    ),
+  ]);
+  if ((sponsor.rowCount ?? 0) === 0) throw new ForbiddenError("Not allowed to view reviews");
   return {
     actorId: userId,
     isAdmin: false,
-    ownChallengeIds: rows.map((r: { id: number }) => r.id),
+    ownChallengeIds: challenges.rows.map((r: { id: number }) => r.id),
     fixtureMarker,
   };
+}
+
+/**
+ * Record that this request already ran the entry's fixture-graph assertion for
+ * this scope (the route guard), so `assertEntryInScope` does not repeat it.
+ */
+export function markEntryScopeVerified(scope: ReviewScope, entryId: number): void {
+  let verified = verifiedEntriesByScope.get(scope);
+  if (!verified) {
+    verified = new Set();
+    verifiedEntriesByScope.set(scope, verified);
+  }
+  verified.add(entryId);
 }
 
 export interface ReviewFilters {
@@ -243,7 +275,10 @@ export async function assertEntryInScope(
   // challenge/repository/group graph before loading any review projection.
   // This prevents a synthetic QUEUE_ADMIN from using a real entry id to
   // bypass the marker boundary (H54).
-  await assertQueueEntryScope(pool, scope.actorId, entryId);
+  if (!verifiedEntriesByScope.get(scope)?.has(entryId)) {
+    await assertQueueEntryScope(pool, scope.actorId, entryId, scope.fixtureMarker);
+    markEntryScopeVerified(scope, entryId);
+  }
   const { rows } = await pool.query(
     `SELECT qe.challenge_id, qe.repo_id
        FROM queue_entries qe
@@ -422,6 +457,7 @@ export async function sendReviewMessage(
       repoId,
       senderName,
       message,
+      fixtureMarker: scope.fixtureMarker,
     });
     await audit(client, {
       actorId,

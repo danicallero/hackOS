@@ -271,6 +271,33 @@ Table attempt_review_versions {
   previous jsonb
 }
 
+Table attendance_certificates {
+  activity_name text [not null, default: `''::text`]
+  code text [unique, not null]
+  id integer [pk, increment, not null]
+  issued_at "timestamp with time zone" [not null, default: `now()`]
+  issued_by integer
+  locale text [not null]
+  override_reason text
+  pdf bytea [note: '#1083 the single generated copy (footer included), rendered on first download. NULL until then and after revocation or account removal.']
+  pdf_generated_at "timestamp with time zone"
+  pdf_sha256 text [note: '#1083 hex SHA-256 of pdf, checked on every read so a corrupted copy is never served.']
+  recipient_document_kind text
+  recipient_document_number text [note: '#1083 explicit recipient identification outside the public snapshot. Cleared on account removal. Account DNI remains live unless explicitly overridden.']
+  recipient_name text
+  revoked_at "timestamp with time zone"
+  revoked_by integer
+  revoked_reason text
+  snapshot jsonb [not null, note: '#1083 name, event, dates, venue, issuer, certified hours, activities and wording as issued; identification numbers excluded. Cleared on account removal (H54).']
+  source text [not null]
+  superseded_at "timestamp with time zone" [note: '#1083 a newer certificate replaced this one after the person attended more. Still valid and downloadable as issued; only the newest is offered.']
+  type_id integer [not null]
+  user_id integer
+  variant text [not null]
+
+  Note: '#1083 account and guest certificates; rendered from frozen content, publicly verified by code, searchable and revocable by staff.'
+}
+
 Table audit_log {
   action text [not null]
   actor_id integer
@@ -294,6 +321,50 @@ Table capability_grant_quarantine {
   reason text [not null]
 
   Note: 'H8/H53 repair queue for grants outside packages/shared/src/capabilities.ts; these grants never participate in authorization.'
+}
+
+Table certificate_approvals {
+  approved_at "timestamp with time zone" [not null, default: `now()`]
+  approved_by integer
+  certified_hours "numeric(5,2)" [not null]
+  reason text [not null]
+  user_id integer [pk, not null]
+
+  Note: '#1083 manual attendance awards: certified hours feed certificates and university exports; raw presence signals remain unchanged. Cleared on account removal (H54).'
+}
+
+Table certificate_settings {
+  award_hours "numeric(5,2)" [note: '#1083 optional configured certificate/university award; NULL uses confirmed attendance. Individual approvals win.']
+  id integer [pk, not null, default: `1`]
+  issuer_name text [not null, default: `'Asociación Universitaria Grupo de Programadores e Usuarios de Linux (GPUL)'::text`]
+  min_hours "numeric(5,2)"
+  min_review_hours "numeric(5,2)"
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: '#1083 single-row attendance policy: automatic/review thresholds, optional awarded hours and issuer name. No preconfigured hours.'
+}
+
+Table certificate_types {
+  allow_guests boolean [not null, default: `false`]
+  attendance_policy boolean [not null, default: `false`]
+  audience_role_ids "integer[]"
+  body_i18n jsonb
+  demo_challenge_id integer
+  demo_requirement text [not null, default: `'none'::text`, note: '#1083 none | any presentation | presented to a mandatory challenge | presented to demo_challenge_id (queue_entries started or completed).']
+  enabled boolean [not null, default: `true`]
+  exempt_role_ids "integer[]" [note: '#1083 holders of these roles skip the attendance, event-end and presentation requirements of this type.']
+  id integer [pk, increment, not null]
+  identity_policy text [not null, default: `'optional'::text`]
+  legacy_variant text [unique]
+  name_i18n jsonb [not null]
+  requires_activity boolean [not null, default: `false`]
+  requires_event_end boolean [not null, default: `false`, note: '#1083 self-service and bulk issue wait until event_config.event_ends_at has passed.']
+  revision integer [not null, default: `1`]
+  self_service boolean [not null, default: `false`]
+  title_i18n jsonb [not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: '#1083 editable certificate definitions: trilingual content, actual role IDs, attendance policy, self-service, guests and optional/required/omitted identification.'
 }
 
 Table challenge_versions {
@@ -331,7 +402,7 @@ Table challenges {
   id integer [pk, increment, not null]
   is_test_account boolean [not null, default: `false`, note: 'Synthetic review-fixture queue marker; ordinary event operations exclude marked rows.']
   judging_panel_criteria jsonb
-  mandatory boolean [not null, default: `false`, note: 'When true, every project is enrolled regardless of Devpost tags or manual selection (issue #851).']
+  mandatory boolean [not null, default: `false`, note: 'When true, every project is enrolled regardless of manual challenge selection (issue #851).']
   max_in_waiting_area integer [not null, default: `2`]
   max_presentation_seconds integer
   preparation_seconds integer [not null, default: `120`]
@@ -1328,7 +1399,6 @@ Table users {
   shirt_size text
   surname text
   ui_prefs jsonb [not null, default: `'{}'::jsonb`]
-  university_id integer
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
   Note: 'Authorization is resolved from the user\'s assigned roles and each role\'s tri-state capability grants (H8). Display labels may be relationship-derived, but never authorize access.'
@@ -1460,7 +1530,13 @@ Ref: application_responses.user_id > users.id
 Ref: attempt_review.attempt_id > queue_entries.id
 Ref: attempt_review_versions.attempt_id > queue_entries.id
 Ref: attempt_review_versions.author_id > users.id
+Ref: attendance_certificates.issued_by > users.id
+Ref: attendance_certificates.revoked_by > users.id
+Ref: attendance_certificates.type_id > certificate_types.id
+Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
+Ref: certificate_approvals.approved_by > users.id
+Ref: certificate_approvals.user_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
 Ref: challenge_versions.editor_id > users.id
 Ref: challenge_winners.challenge_id > challenges.id
@@ -1586,7 +1662,6 @@ Ref: user_public_profiles.user_id > users.id
 Ref: user_roles.assigned_by > users.id
 Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id
-Ref: users.university_id > universities.id
 Ref: wallet_access_tokens.user_id > users.id
 Ref: wallet_operation_passes.operation_id > wallet_operations.id
 Ref: wallet_operation_passes.pass_id > wallet_passes.id

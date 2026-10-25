@@ -49,8 +49,11 @@ for (const initial of ["es", "gl", "en"] as const) {
     await form.locator('input[autocomplete="new-password"]').nth(0).fill("Secret123!");
     await form.locator('input[autocomplete="new-password"]').nth(1).fill("Secret123!");
 
-    await page.locator("header").getByRole("combobox").click();
-    await page.getByRole("option", { name: "English", exact: true }).click();
+    await page
+      .locator("header")
+      .getByRole("button", { name: /language|idioma/i })
+      .click();
+    await page.getByRole("menuitemradio", { name: "English", exact: true }).click();
     await expect(form.getByRole("combobox").first()).toHaveText("English");
     await expect(form.getByText(labels.en, { exact: true })).toBeVisible();
     await expect(
@@ -59,7 +62,9 @@ for (const initial of ["es", "gl", "en"] as const) {
 
     await form.getByRole("combobox").first().click();
     await page.getByRole("option", { name: "Galego", exact: true }).click();
-    await expect(page.locator("header").getByRole("combobox")).toHaveText("GL");
+    await expect(
+      page.locator("header").getByRole("button", { name: /language|idioma/i }),
+    ).toHaveText("GL");
     await expect(form.getByText(labels.gl, { exact: true })).toBeVisible();
     await expect(form.locator('input[autocomplete="given-name"]')).toHaveValue("Test");
     await page.screenshot({
@@ -68,8 +73,11 @@ for (const initial of ["es", "gl", "en"] as const) {
     });
     const savedLanguage = initial === "gl" ? "es" : "gl";
     if (savedLanguage === "es") {
-      await page.locator("header").getByRole("combobox").click();
-      await page.getByRole("option", { name: "Castellano", exact: true }).click();
+      await page
+        .locator("header")
+        .getByRole("button", { name: /language|idioma/i })
+        .click();
+      await page.getByRole("menuitemradio", { name: "Castellano", exact: true }).click();
       await expect(form.getByRole("combobox").first()).toHaveText("Castellano");
       await expect(form.getByText(labels.es, { exact: true })).toBeVisible();
     }

@@ -1,14 +1,15 @@
 import type { Question } from "@hackos/shared/questions";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import {
   assertFixtureEnterpriseScope,
   assertFixtureQueueScope,
+  assertFixtureQueueScopes,
   isSyntheticOperator,
 } from "../logistics/review-fixture-scope.js";
-import { notify } from "../notifications/service.js";
+import { notifyMany } from "../notifications/service.js";
 import { announceQueueOutcomes, enrollReposInMandatoryChallenges } from "../projects/service.js";
 import { challengePanelLocked } from "../queue/evaluation-lock.js";
 import type { ChallengeAccess } from "./access.js";
@@ -168,21 +169,24 @@ export async function sendChallengeAlert(
     );
     if (!challengeRows[0]) throw new NotFoundError("Challenge not found", { challengeId });
     const recipients = await alertRecipients(db, challengeId, input.target, fixtureMarker);
-    for (const recipient of recipients) {
-      const language =
-        recipient.language === "es" || recipient.language === "gl" ? recipient.language : "en";
-      await notify(db, {
-        userId: recipient.id,
-        actorId,
-        fixtureMarker,
-        category: "challenge",
-        payload: {
-          subject: input.title[language],
-          body: input.body[language],
-          vars: { challengeId, target: input.target },
-        },
-      });
-    }
+    await notifyMany(
+      db,
+      recipients.map((recipient) => {
+        const language =
+          recipient.language === "es" || recipient.language === "gl" ? recipient.language : "en";
+        return {
+          userId: recipient.id,
+          actorId,
+          fixtureMarker,
+          category: "challenge",
+          payload: {
+            subject: input.title[language],
+            body: input.body[language],
+            vars: { challengeId, target: input.target },
+          },
+        };
+      }),
+    );
     await audit(db, {
       actorId,
       entityType: "challenge",
@@ -443,9 +447,11 @@ export async function setChallengesVisibility(
 ) {
   if (challengeIds.length === 0) return { updated: [] as number[] };
   return withTransaction(async (client) => {
-    for (const challengeId of challengeIds) {
-      await assertFixtureQueueScope(client, actorId, "challenge", challengeId);
-    }
+    await assertFixtureQueueScopes(
+      client,
+      actorId,
+      challengeIds.map((id) => ({ resource: "challenge" as const, id })),
+    );
     const visibility = visible ? "visible" : "hidden";
     const { rows } = await client.query(
       `UPDATE challenges
@@ -455,15 +461,16 @@ export async function setChallengesVisibility(
         RETURNING id`,
       [challengeIds, visibility],
     );
-    for (const row of rows) {
-      await audit(client, {
+    await auditMany(
+      client,
+      rows.map((row) => ({
         actorId,
         entityType: "challenge",
         entityId: Number(row.id),
         action: visible ? "published" : "unpublished",
         after: { visibility },
-      });
-    }
+      })),
+    );
     return { updated: rows.map((r) => Number(r.id)) };
   });
 }

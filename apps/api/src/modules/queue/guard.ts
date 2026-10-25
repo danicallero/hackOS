@@ -130,3 +130,67 @@ export async function findBusyMemberEntry(
     ? { entryId: row.entry_id, roomId: row.room_id, roomName: row.room_name, status: row.status }
     : null;
 }
+
+/**
+ * Batch form of {@link findBusyMemberEntry} for the pre-call pump (H30/H38):
+ * returns the subset of `repoIds` that have a member (or the repo itself)
+ * occupying a live entry. Every repo lock is taken first (ascending), then every
+ * member lock (ascending), the same global order as the single-repo guard, so
+ * holding many repos in one transaction cannot form a lock cycle with it.
+ */
+export async function findBusyMemberRepoIds(
+  client: Queryable,
+  repoIds: readonly number[],
+  opts: { statuses?: readonly string[]; fixtureMarker?: boolean } = {},
+): Promise<Set<number>> {
+  const ids = [...new Set(repoIds)].sort((a, b) => a - b);
+  if (ids.length === 0) return new Set();
+  const statuses = opts.statuses ?? ["called", "in_room", "presenting"];
+  const fixtureMarker = opts.fixtureMarker ?? null;
+  await client.query(
+    `SELECT pg_advisory_xact_lock($1::int, locked.id)
+       FROM (SELECT unnest($2::int[]) AS id ORDER BY 1) locked`,
+    [H30_REPO_LOCK_NAMESPACE, ids],
+  );
+  await client.query(
+    `SELECT pg_advisory_xact_lock($1::int, members.user_id)
+       FROM (
+         SELECT DISTINCT repo_members.user_id
+           FROM (${REPO_MEMBER_RELATION_SQL}) repo_members
+           JOIN users member_user ON member_user.id = repo_members.user_id
+          WHERE repo_members.repo_id = ANY($2::int[])
+            AND ($3::boolean IS NULL OR member_user.is_test_account = $3::boolean)
+          ORDER BY repo_members.user_id
+       ) members`,
+    [H30_LOCK_NAMESPACE, ids, fixtureMarker],
+  );
+  const { rows } = await client.query<{ repo_id: number }>(
+    `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL})
+     SELECT cand.repo_id
+       FROM unnest($1::int[]) AS cand(repo_id)
+      WHERE EXISTS (
+        SELECT 1
+          FROM (
+            SELECT active.repo_id AS blocking_repo_id
+              FROM repo_members candidate
+              JOIN repo_members active ON active.user_id = candidate.user_id
+             WHERE candidate.repo_id = cand.repo_id
+               AND ($3::boolean IS NULL OR EXISTS (
+                 SELECT 1 FROM repos candidate_repo
+                  WHERE candidate_repo.id = cand.repo_id
+                    AND candidate_repo.is_test_account = $3::boolean
+               ))
+            UNION
+            SELECT cand.repo_id
+          ) blocking
+          JOIN queue_entries qe ON qe.repo_id = blocking.blocking_repo_id
+          JOIN repos active_repo ON active_repo.id = qe.repo_id
+                                 AND ($3::boolean IS NULL OR active_repo.is_test_account = $3::boolean)
+          JOIN challenges active_challenge ON active_challenge.id = qe.challenge_id
+                                         AND ($3::boolean IS NULL OR active_challenge.is_test_account = $3::boolean)
+         WHERE qe.status = ANY($2::queue_status[])
+      )`,
+    [ids, statuses, fixtureMarker],
+  );
+  return new Set(rows.map((row) => Number(row.repo_id)));
+}

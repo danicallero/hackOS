@@ -212,8 +212,8 @@ function LoginInner() {
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="text-muted-foreground justify-center border-t text-center text-sm">
-        {t("newToHackos")}{" "}
+      <CardFooter className="text-muted-foreground flex-col items-center gap-1 border-t text-center text-sm">
+        {t("newToHackos")}
         <Link
           href={withReturnPath("/signup", rawNext)}
           className="text-foreground underline underline-offset-4"

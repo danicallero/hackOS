@@ -1514,8 +1514,8 @@ simulator build yet.
 ### Queue operations
 
 `components/queue-operations-screen.tsx` — Queue operations is available to
-`queue:operate`, `queue:admin`, and `*`. It first lists only the caller's
-authorized rooms, then loads each protected room view. Each card keeps the
+`queue:operate`, `queue:admin`, and `*`. It loads the room views of
+every room the caller may list in one request (`GET /api/queue/rooms/views`). Each card keeps the
 presenting team, teams called to the door, and the first waiting team easy
 to scan. `operations/_layout.tsx` and `others/operations/_layout.tsx` wrap
 it in its own `Stack` so it can use the same native

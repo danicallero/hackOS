@@ -9,8 +9,7 @@ const env = vi.hoisted(() => ({ code: "STAND-FIRST", status: "authenticated" }))
 vi.mock("next/navigation", () => ({ useParams: () => ({ code: env.code }) }));
 vi.mock("@/lib/session", () => ({ useSessionContext: () => ({ status: env.status }) }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
-vi.mock("@/components/common/brand", () => ({ Brand: () => null }));
-vi.mock("@/components/common/theme-toggle", () => ({ ThemeToggle: () => null }));
+vi.mock("@/components/layout/public-top-bar", () => ({ PublicTopBar: () => null }));
 vi.mock("@/lib/api", () => ({ api: { post: vi.fn() }, ApiError: class extends Error {} }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
