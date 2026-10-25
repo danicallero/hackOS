@@ -450,22 +450,14 @@ async function upsertUser(row: {
   name: string;
   surname: string;
   language?: "en" | "es" | "gl";
-  university_id?: number | null;
   dni?: string;
 }): Promise<number> {
   const res = await client.query(
-    `INSERT INTO users (email, name, surname, email_verified, language, university_id, dni)
-     VALUES ($1, $2, $3, true, $4, $5, $6)
+    `INSERT INTO users (email, name, surname, email_verified, language, dni)
+     VALUES ($1, $2, $3, true, $4, $5)
      ON CONFLICT (email) DO UPDATE SET updated_at = now()
      RETURNING id`,
-    [
-      row.email,
-      row.name,
-      row.surname,
-      row.language ?? "en",
-      row.university_id ?? null,
-      row.dni ?? null,
-    ],
+    [row.email, row.name, row.surname, row.language ?? "en", row.dni ?? null],
   );
   return res.rows[0].id;
 }
@@ -513,15 +505,12 @@ async function seedUsers(): Promise<void> {
   const admin = await client.query(`SELECT id FROM users WHERE email = 'admin@hackos.local'`);
   const adminId = admin.rows[0]?.id ?? null;
 
-  const universityIds: number[] = [];
   for (const name of UNIVERSITIES) {
-    const res = await client.query(
+    await client.query(
       `INSERT INTO universities (name, proposed_by) VALUES ($1, $2)
-       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-       RETURNING id`,
+       ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name`,
       [name, adminId],
     );
-    universityIds.push(res.rows[0].id);
   }
 
   const staffRole = await ensureRole("mock:staff", [
@@ -568,7 +557,6 @@ async function seedUsers(): Promise<void> {
       name: p.first,
       surname: p.last,
       language: p.language,
-      university_id: universityIds[p.universityIndex] ?? null,
       dni: dniFor(i),
     });
   }
@@ -793,11 +781,8 @@ async function seedApplications(): Promise<void> {
     [applicationId, participantRoleId],
   );
 
-  const universities = await client.query(`SELECT id, name FROM universities ORDER BY id`);
-  const universityById = new Map<number, string>(universities.rows.map((r) => [r.id, r.name]));
-
   const participantUsers = await client.query(
-    `SELECT id, email, university_id FROM users WHERE email = ANY($1)
+    `SELECT id, email FROM users WHERE email = ANY($1)
      ORDER BY email`,
     [PARTICIPANTS.map((p) => emailFor(p.first, p.last))],
   );
@@ -826,7 +811,7 @@ async function seedApplications(): Promise<void> {
     const row = participantUsers.rows[i];
     const p = participantByEmail.get(row.email);
     if (!p) continue;
-    const universityName = universityById.get(row.university_id) ?? UNIVERSITIES[0]!;
+    const universityName = UNIVERSITIES[p.universityIndex] ?? UNIVERSITIES[0]!;
 
     const responses: Record<string, unknown> = {};
     for (const field of template) {

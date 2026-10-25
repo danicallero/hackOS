@@ -1399,7 +1399,6 @@ Table users {
   shirt_size text
   surname text
   ui_prefs jsonb [not null, default: `'{}'::jsonb`]
-  university_id integer
   updated_at "timestamp with time zone" [not null, default: `now()`]
 
   Note: 'Authorization is resolved from the user\'s assigned roles and each role\'s tri-state capability grants (H8). Display labels may be relationship-derived, but never authorize access.'
@@ -1663,7 +1662,6 @@ Ref: user_public_profiles.user_id > users.id
 Ref: user_roles.assigned_by > users.id
 Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id
-Ref: users.university_id > universities.id
 Ref: wallet_access_tokens.user_id > users.id
 Ref: wallet_operation_passes.operation_id > wallet_operations.id
 Ref: wallet_operation_passes.pass_id > wallet_passes.id

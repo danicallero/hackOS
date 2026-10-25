@@ -12,6 +12,7 @@ import {
   createRole,
   createUser,
   createUserWithCapabilities,
+  setUserUniversity,
   truncateAll,
 } from "../helpers.js";
 import { admitParticipant, createChallenge } from "../projects/fixtures.js";
@@ -530,7 +531,7 @@ describe("attendance review and university awards (#1083)", () => {
     const uni = await pool.query(
       `INSERT INTO universities(name) VALUES ('Universidade da Coruña') RETURNING id`,
     );
-    await pool.query(`UPDATE users SET university_id=$2 WHERE id=$1`, [person, uni.rows[0].id]);
+    await setUserUniversity(person, uni.rows[0].id);
     const exporter = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
     const url = `/api/certificates/participants/export.csv?universityId=${uni.rows[0].id}`;
     const general = await app.inject({ method: "GET", url, headers: asUser(exporter) });

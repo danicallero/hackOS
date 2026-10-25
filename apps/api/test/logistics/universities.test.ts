@@ -7,6 +7,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  setUserUniversity,
   truncateAll,
 } from "../helpers.js";
 
@@ -112,7 +113,7 @@ describe("university directory", () => {
     expect(first.json().id).toBe(second.json().id);
   });
 
-  it("normalizes a duplicate into one row and reassigns profiles and application responses", async () => {
+  it("normalizes a duplicate into one row and reassigns application responses", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
     const applicant = await createUser();
@@ -125,7 +126,6 @@ describe("university directory", () => {
     );
     const source = universities.find((university) => university.name === "UDC")!;
     const target = universities.find((university) => university.name === "Universidade da Coruña")!;
-    await pool.query(`UPDATE users SET university_id = $2 WHERE id = $1`, [applicant, source.id]);
     const template = [{ key: "university", kind: "university", label: { en: "University" } }];
     const { rows: applications } = await pool.query(
       `INSERT INTO applications (name, template) VALUES ('Form', $1::jsonb)
@@ -153,12 +153,9 @@ describe("university directory", () => {
     expect(normalized.json()).toMatchObject({
       mergedUniversityId: source.id,
       university: { id: target.id },
-      usersUpdated: 1,
       applicationResponsesUpdated: 1,
     });
 
-    const profile = await pool.query(`SELECT university_id FROM users WHERE id = $1`, [applicant]);
-    expect(profile.rows[0].university_id).toBe(target.id);
     const response = await pool.query(`SELECT responses FROM application_responses WHERE id = $1`, [
       responses[0].id,
     ]);
@@ -214,7 +211,7 @@ describe("university directory", () => {
     expect(del.statusCode).toBe(204);
   });
 
-  it("returns a business conflict when deleting a university linked to a profile", async () => {
+  it("returns a business conflict when deleting a university used in an application", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
     const user = await createUser();
@@ -223,7 +220,7 @@ describe("university directory", () => {
       "Used University",
     ]);
     const id = rows[0].id;
-    await pool.query("UPDATE users SET university_id = $1 WHERE id = $2", [id, user]);
+    await setUserUniversity(user, id);
     const response = await a.inject({
       method: "DELETE",
       url: `/api/universities/${id}`,
@@ -231,11 +228,7 @@ describe("university directory", () => {
     });
     expect(response.statusCode).toBe(409);
     expect(response.json().error.details.reason).toBe("university_in_use");
-    expect(response.json().error.message).toContain("linked to user profiles");
-    expect(
-      (await pool.query("SELECT university_id FROM users WHERE id = $1", [user])).rows[0]
-        .university_id,
-    ).toBe(id);
+    expect(response.json().error.message).toContain("used in applications");
     expect((await pool.query("SELECT id FROM universities WHERE id = $1", [id])).rowCount).toBe(1);
   });
 

@@ -610,7 +610,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       schema: {
         summary: "List fields available to the batch application export",
         description:
-          "Returns profile fields (excluding university_id; use the university form answer), response metadata, and every field from the current or immutable historical form versions. Pass application_id to list one form's columns. The endpoint is gated by exports:run because it exposes the export shape, including fields whose files may be shareable with sponsors (H54/H56).",
+          "Returns profile fields (the university comes from the university form answer), response metadata, and every field from the current or immutable historical form versions. Pass application_id to list one form's columns. The endpoint is gated by exports:run because it exposes the export shape, including fields whose files may be shareable with sponsors (H54/H56).",
         querystring: applicationExportCatalogQuery,
       },
     },
