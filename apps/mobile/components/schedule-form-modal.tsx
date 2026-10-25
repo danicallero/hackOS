@@ -5,16 +5,18 @@ import {
 } from "@hackos/shared/activity-kinds";
 import type { Language } from "@hackos/shared/locale";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { type ScrollView, Text, TextInput, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { MenuView } from "@/components/app-menu";
-import { SheetModal } from "@/components/app-sheet";
 import { DateTimeField } from "@/components/date-time-field";
-import { FloatingGlassButton, Section, ToggleRow } from "@/components/native-ui";
+import {
+  FormModalPeoplePicker,
+  type FormModalPersonCandidate,
+  FormModalShell,
+  FormModalTranslationsDisclosure,
+} from "@/components/form-modal-sections";
+import { Section, ToggleRow } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
-import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -122,7 +124,6 @@ export function ScheduleFormModal({
   onSaved?: (item: AdminScheduleItem) => void | Promise<void>;
 }) {
   const { t, language: accountLanguage } = useLocale();
-  const insets = useSafeAreaInsets();
   const [values, setValues] = useState<ScheduleInput>(initial ?? emptyForm());
   const [owners, setOwners] = useState<ScheduleOwner[]>(initialOwners ?? []);
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial?.publishAt));
@@ -242,477 +243,363 @@ export function ScheduleFormModal({
   }
 
   return (
-    <SheetModal animationType="slide" onRequestClose={onClose} visible={visible}>
-      <AdaptiveFrame>
-        <ScrollView
-          alwaysBounceVertical
-          ref={scrollRef}
-          automaticallyAdjustKeyboardInsets
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          contentContainerStyle={{
-            gap: 22,
-            padding: 16,
-            paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16,
+    <FormModalShell
+      visible={visible}
+      onClose={onClose}
+      onSave={() => void save()}
+      pending={pending}
+      scrollRef={scrollRef}
+      title={scheduleId ? t("scheduleEdit") : t("scheduleAdd")}
+    >
+      {error ? (
+        <View
+          accessibilityLiveRegion="assertive"
+          accessibilityRole="alert"
+          style={{
+            backgroundColor: colors.destructiveSurface,
+            borderCurve: "continuous",
+            borderRadius: radius.control,
+            padding: 14,
           }}
         >
-          <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
-            <Text
-              selectable
-              style={{
-                color: colors.label,
-                fontSize: type.title3.fontSize,
-                fontWeight: "700",
-                textAlign: "center",
-              }}
-            >
-              {scheduleId ? t("scheduleEdit") : t("scheduleAdd")}
+          <Text
+            selectable
+            style={{ color: colors.onDestructiveSurface, fontSize: type.subhead.fontSize }}
+          >
+            {error}
+          </Text>
+        </View>
+      ) : null}
+
+      <Section title={`${t("scheduleTitleLabel")} · ${languageTag(accountLanguage, t)}`}>
+        <TextInput
+          accessibilityLabel={t("scheduleTitleLabel")}
+          onChangeText={(title) => setValues((current) => ({ ...current, title }))}
+          placeholder={t("scheduleTitleLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
+          value={values.title}
+        />
+      </Section>
+
+      <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(accountLanguage, t)}`}>
+        <TextInput
+          accessibilityLabel={t("scheduleDescriptionLabel")}
+          multiline
+          onChangeText={(description) =>
+            setValues((current) => ({ ...current, description: description || null }))
+          }
+          placeholder={t("scheduleDescriptionLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{
+            color: colors.label,
+            fontSize: type.callout.fontSize,
+            lineHeight: 22,
+            minHeight: 90,
+            padding: 16,
+            textAlignVertical: "top",
+          }}
+          value={values.description ?? ""}
+        />
+      </Section>
+
+      <Section title={t("scheduleTypeLabel")}>
+        <MenuView
+          actions={ACTIVITY_KINDS.map((kind) => ({
+            id: kind,
+            title: scheduleTypeLabel(kind, t),
+            state: values.type === kind ? ("on" as const) : ("off" as const),
+          }))}
+          onPressAction={({ nativeEvent }) =>
+            setValues((current) => {
+              const type = nativeEvent.event as ActivityKind;
+              return {
+                ...current,
+                type,
+                requiresScan: isMealActivityKind(type) || current.requiresScan,
+              };
+            })
+          }
+        >
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 12,
+              minHeight: 50,
+              padding: 16,
+            }}
+          >
+            <Text style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}>
+              {scheduleTypeLabel(values.type, t)}
             </Text>
+            <SymbolView
+              name="chevron.up.chevron.down"
+              tintColor={colors.secondaryLabel}
+              size={14}
+            />
           </View>
+        </MenuView>
+      </Section>
 
-          {error ? (
-            <View
-              accessibilityLiveRegion="assertive"
-              accessibilityRole="alert"
-              style={{
-                backgroundColor: colors.destructiveSurface,
-                borderCurve: "continuous",
-                borderRadius: radius.control,
-                padding: 14,
-              }}
-            >
-              <Text
-                selectable
-                style={{ color: colors.onDestructiveSurface, fontSize: type.subhead.fontSize }}
-              >
-                {error}
-              </Text>
-            </View>
-          ) : null}
-
-          <Section title={`${t("scheduleTitleLabel")} · ${languageTag(accountLanguage, t)}`}>
-            <TextInput
-              accessibilityLabel={t("scheduleTitleLabel")}
-              onChangeText={(title) => setValues((current) => ({ ...current, title }))}
-              placeholder={t("scheduleTitleLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
-              value={values.title}
-            />
-          </Section>
-
-          <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(accountLanguage, t)}`}>
-            <TextInput
-              accessibilityLabel={t("scheduleDescriptionLabel")}
-              multiline
-              onChangeText={(description) =>
-                setValues((current) => ({ ...current, description: description || null }))
-              }
-              placeholder={t("scheduleDescriptionLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{
-                color: colors.label,
-                fontSize: type.callout.fontSize,
-                lineHeight: 22,
-                minHeight: 90,
-                padding: 16,
-                textAlignVertical: "top",
-              }}
-              value={values.description ?? ""}
-            />
-          </Section>
-
-          <Section title={t("scheduleTypeLabel")}>
-            <MenuView
-              actions={ACTIVITY_KINDS.map((kind) => ({
-                id: kind,
-                title: scheduleTypeLabel(kind, t),
-                state: values.type === kind ? ("on" as const) : ("off" as const),
-              }))}
-              onPressAction={({ nativeEvent }) =>
-                setValues((current) => {
-                  const type = nativeEvent.event as ActivityKind;
-                  return {
+      <FormModalTranslationsDisclosure
+        expanded={translationsOpen}
+        onToggle={() => setTranslationsOpen((open) => !open)}
+        onTranslate={() => void autoTranslate()}
+        translateAccessibilityState={{
+          busy: translating,
+          disabled: blankTargetLanguages.length === 0,
+        }}
+        translateAvailable={translateAvailable}
+        translateButtonStyle={{ paddingHorizontal: 16, paddingVertical: 10 }}
+        translateDisabled={translating || blankTargetLanguages.length === 0}
+        translating={translating}
+      >
+        {targetLanguages.map((language) => (
+          <View key={language} style={{ gap: 8 }}>
+            <Section title={`${t("scheduleTitleLabel")} · ${languageTag(language, t)}`}>
+              <TextInput
+                accessibilityLabel={t("scheduleTitleLabel")}
+                onChangeText={(title) =>
+                  setTranslations((current) => ({
                     ...current,
-                    type,
-                    requiresScan: isMealActivityKind(type) || current.requiresScan,
-                  };
-                })
-              }
-            >
-              <View
-                style={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  gap: 12,
-                  minHeight: 50,
-                  padding: 16,
-                }}
-              >
-                <Text style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}>
-                  {scheduleTypeLabel(values.type, t)}
-                </Text>
-                <SymbolView
-                  name="chevron.up.chevron.down"
-                  tintColor={colors.secondaryLabel}
-                  size={14}
-                />
-              </View>
-            </MenuView>
-          </Section>
-
-          <View style={{ gap: 8 }}>
-            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-              <PressableFeedback
-                feedback="opacity"
-                accessibilityRole="button"
-                accessibilityLabel={t("translationsAndSettings")}
-                accessibilityState={{ expanded: translationsOpen }}
-                onPress={() => setTranslationsOpen((open) => !open)}
-                hitSlop={8}
-                style={{
-                  alignItems: "center",
-                  flex: 1,
-                  flexDirection: "row",
-                  gap: 6,
-                  paddingVertical: 8,
-                }}
-              >
-                <SymbolView
-                  name="chevron.right"
-                  tintColor={colors.secondaryLabel}
-                  size={13}
-                  weight="semibold"
-                  style={{ transform: [{ rotate: translationsOpen ? "90deg" : "0deg" }] }}
-                />
-                <Text
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: type.footnote.fontSize,
-                    fontWeight: "600",
-                  }}
-                >
-                  {t("translationsAndSettings")}
-                </Text>
-              </PressableFeedback>
-              {translateAvailable ? (
-                <PressableFeedback
-                  feedback="opacity"
-                  accessibilityRole="button"
-                  accessibilityLabel={t("translateAutomatically")}
-                  accessibilityState={{
-                    busy: translating,
-                    disabled: blankTargetLanguages.length === 0,
-                  }}
-                  disabled={translating || blankTargetLanguages.length === 0}
-                  onPress={() => void autoTranslate()}
-                  style={{
-                    alignItems: "center",
-                    backgroundColor: colors.elevatedSurface,
-                    borderCurve: "continuous",
-                    borderRadius: radius.chip,
-                    flexDirection: "row",
-                    gap: 8,
-                    paddingHorizontal: 16,
-                    paddingVertical: 10,
-                  }}
-                >
-                  <SymbolView
-                    name="character.book.closed"
-                    tintColor={colors.accent}
-                    size={16}
-                    accessible={false}
-                  />
-                  <Text
-                    style={{
-                      color: colors.accent,
-                      fontSize: type.subhead.fontSize,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
-                  </Text>
-                </PressableFeedback>
-              ) : null}
-            </View>
-
-            {translationsOpen
-              ? targetLanguages.map((language) => (
-                  <View key={language} style={{ gap: 8 }}>
-                    <Section title={`${t("scheduleTitleLabel")} · ${languageTag(language, t)}`}>
-                      <TextInput
-                        accessibilityLabel={t("scheduleTitleLabel")}
-                        onChangeText={(title) =>
-                          setTranslations((current) => ({
-                            ...current,
-                            [language]: { ...current[language], title },
-                          }))
-                        }
-                        placeholderTextColor={colors.tertiaryLabel}
-                        style={{
-                          color: colors.label,
-                          fontSize: type.callout.fontSize,
-                          padding: 16,
-                        }}
-                        value={translations[language]?.title ?? ""}
-                      />
-                    </Section>
-                    <Section
-                      title={`${t("scheduleDescriptionLabel")} · ${languageTag(language, t)}`}
-                    >
-                      <TextInput
-                        accessibilityLabel={t("scheduleDescriptionLabel")}
-                        multiline
-                        onChangeText={(description) =>
-                          setTranslations((current) => ({
-                            ...current,
-                            [language]: { ...current[language], description },
-                          }))
-                        }
-                        placeholderTextColor={colors.tertiaryLabel}
-                        style={{
-                          color: colors.label,
-                          fontSize: type.callout.fontSize,
-                          lineHeight: 22,
-                          minHeight: 70,
-                          padding: 16,
-                          textAlignVertical: "top",
-                        }}
-                        value={translations[language]?.description ?? ""}
-                      />
-                    </Section>
-                  </View>
-                ))
-              : null}
-          </View>
-
-          <Section title={t("scheduleLocationLabel")}>
-            <TextInput
-              accessibilityLabel={t("scheduleLocationLabel")}
-              onChangeText={(location) =>
-                setValues((current) => ({ ...current, location: location || null }))
-              }
-              placeholder={t("scheduleLocationLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
-              value={values.location ?? ""}
-            />
-          </Section>
-
-          <View style={{ gap: 8 }}>
-            <Text
-              accessibilityRole="header"
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: type.footnote.fontSize,
-                fontWeight: "600",
-                paddingHorizontal: 16,
-              }}
-            >
-              {t("scheduleStartsAtLabel")}
-            </Text>
-            <DateTimeField
-              dateAccessibilityLabel={t("scheduleStartsAtLabel")}
-              timeAccessibilityLabel={t("scheduleStartsAtLabel")}
-              value={new Date(values.startsAt)}
-              onChange={(date) =>
-                setValues((current) => ({ ...current, startsAt: date.toISOString() }))
-              }
-            />
-          </View>
-
-          <View style={{ gap: 8 }}>
-            <Text
-              accessibilityRole="header"
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: type.footnote.fontSize,
-                fontWeight: "600",
-                paddingHorizontal: 16,
-              }}
-            >
-              {t("scheduleEndsAtLabel")}
-            </Text>
-            <DateTimeField
-              dateAccessibilityLabel={t("scheduleEndsAtLabel")}
-              timeAccessibilityLabel={t("scheduleEndsAtLabel")}
-              value={new Date(values.endsAt)}
-              onChange={(date) =>
-                setValues((current) => ({ ...current, endsAt: date.toISOString() }))
-              }
-            />
-          </View>
-
-          <View style={{ gap: 6 }}>
-            <Section title={t("scheduleFilterAudience")}>
-              {SCHEDULE_AUDIENCES.map((audience, index) => {
-                const selected = (values.audiences ?? []).includes(audience);
-                return (
-                  <View key={audience}>
-                    {index > 0 ? (
-                      <View
-                        style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
-                      />
-                    ) : null}
-                    <ToggleRow
-                      label={audienceLabel(audience, t)}
-                      value={selected}
-                      disabled={isMealActivityKind(values.type) && audience === "participant"}
-                      onChange={(next) => {
-                        const audiences = next
-                          ? [...(values.audiences ?? []), audience]
-                          : (values.audiences ?? []).filter((a) => a !== audience);
-                        setValues((current) => ({
-                          ...current,
-                          audiences,
-                          requiresScan: audiences.includes("participant")
-                            ? current.requiresScan
-                            : false,
-                          // Mirror the API's own normalization immediately so the
-                          // form never shows a "Shown"/scheduled-publish state
-                          // that's about to become a no-op (H59 follow-up).
-                          ...(audiences.length === 0
-                            ? { visibility: "hidden" as const, publishAt: null }
-                            : {}),
-                        }));
-                        if (audiences.length === 0) setScheduledPublish(false);
-                      }}
-                    />
-                  </View>
-                );
-              })}
-            </Section>
-
-            <Text
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: type.footnote.fontSize,
-                paddingHorizontal: 16,
-              }}
-            >
-              {t("scheduleStaffSeeAllHint")}
-            </Text>
-          </View>
-
-          {hasAudience ? (
-            <Section>
-              <ToggleRow
-                label={t("scheduleVisibilityLabel")}
-                value={values.visibility === "shown"}
-                onChange={(shown) =>
-                  setValues((current) => ({
-                    ...current,
-                    visibility: shown ? "shown" : "hidden",
+                    [language]: { ...current[language], title },
                   }))
                 }
+                placeholderTextColor={colors.tertiaryLabel}
+                style={{
+                  color: colors.label,
+                  fontSize: type.callout.fontSize,
+                  padding: 16,
+                }}
+                value={translations[language]?.title ?? ""}
               />
-              {values.visibility === "shown" ? null : (
-                <>
+            </Section>
+            <Section title={`${t("scheduleDescriptionLabel")} · ${languageTag(language, t)}`}>
+              <TextInput
+                accessibilityLabel={t("scheduleDescriptionLabel")}
+                multiline
+                onChangeText={(description) =>
+                  setTranslations((current) => ({
+                    ...current,
+                    [language]: { ...current[language], description },
+                  }))
+                }
+                placeholderTextColor={colors.tertiaryLabel}
+                style={{
+                  color: colors.label,
+                  fontSize: type.callout.fontSize,
+                  lineHeight: 22,
+                  minHeight: 70,
+                  padding: 16,
+                  textAlignVertical: "top",
+                }}
+                value={translations[language]?.description ?? ""}
+              />
+            </Section>
+          </View>
+        ))}
+      </FormModalTranslationsDisclosure>
+
+      <Section title={t("scheduleLocationLabel")}>
+        <TextInput
+          accessibilityLabel={t("scheduleLocationLabel")}
+          onChangeText={(location) =>
+            setValues((current) => ({ ...current, location: location || null }))
+          }
+          placeholder={t("scheduleLocationLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
+          value={values.location ?? ""}
+        />
+      </Section>
+
+      <View style={{ gap: 8 }}>
+        <Text
+          accessibilityRole="header"
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: type.footnote.fontSize,
+            fontWeight: "600",
+            paddingHorizontal: 16,
+          }}
+        >
+          {t("scheduleStartsAtLabel")}
+        </Text>
+        <DateTimeField
+          dateAccessibilityLabel={t("scheduleStartsAtLabel")}
+          timeAccessibilityLabel={t("scheduleStartsAtLabel")}
+          value={new Date(values.startsAt)}
+          onChange={(date) =>
+            setValues((current) => ({ ...current, startsAt: date.toISOString() }))
+          }
+        />
+      </View>
+
+      <View style={{ gap: 8 }}>
+        <Text
+          accessibilityRole="header"
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: type.footnote.fontSize,
+            fontWeight: "600",
+            paddingHorizontal: 16,
+          }}
+        >
+          {t("scheduleEndsAtLabel")}
+        </Text>
+        <DateTimeField
+          dateAccessibilityLabel={t("scheduleEndsAtLabel")}
+          timeAccessibilityLabel={t("scheduleEndsAtLabel")}
+          value={new Date(values.endsAt)}
+          onChange={(date) => setValues((current) => ({ ...current, endsAt: date.toISOString() }))}
+        />
+      </View>
+
+      <View style={{ gap: 6 }}>
+        <Section title={t("scheduleFilterAudience")}>
+          {SCHEDULE_AUDIENCES.map((audience, index) => {
+            const selected = (values.audiences ?? []).includes(audience);
+            return (
+              <View key={audience}>
+                {index > 0 ? (
                   <View
                     style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
                   />
-                  <ToggleRow
-                    label={t("schedulePublishAtLabel")}
-                    value={scheduledPublish}
-                    onChange={setScheduledPublish}
+                ) : null}
+                <ToggleRow
+                  label={audienceLabel(audience, t)}
+                  value={selected}
+                  disabled={isMealActivityKind(values.type) && audience === "participant"}
+                  onChange={(next) => {
+                    const audiences = next
+                      ? [...(values.audiences ?? []), audience]
+                      : (values.audiences ?? []).filter((a) => a !== audience);
+                    setValues((current) => ({
+                      ...current,
+                      audiences,
+                      requiresScan: audiences.includes("participant")
+                        ? current.requiresScan
+                        : false,
+                      // Mirror the API's own normalization immediately so the
+                      // form never shows a "Shown"/scheduled-publish state
+                      // that's about to become a no-op (H59 follow-up).
+                      ...(audiences.length === 0
+                        ? { visibility: "hidden" as const, publishAt: null }
+                        : {}),
+                    }));
+                    if (audiences.length === 0) setScheduledPublish(false);
+                  }}
+                />
+              </View>
+            );
+          })}
+        </Section>
+
+        <Text
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: type.footnote.fontSize,
+            paddingHorizontal: 16,
+          }}
+        >
+          {t("scheduleStaffSeeAllHint")}
+        </Text>
+      </View>
+
+      {hasAudience ? (
+        <Section>
+          <ToggleRow
+            label={t("scheduleVisibilityLabel")}
+            value={values.visibility === "shown"}
+            onChange={(shown) =>
+              setValues((current) => ({
+                ...current,
+                visibility: shown ? "shown" : "hidden",
+              }))
+            }
+          />
+          {values.visibility === "shown" ? null : (
+            <>
+              <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
+              <ToggleRow
+                label={t("schedulePublishAtLabel")}
+                value={scheduledPublish}
+                onChange={setScheduledPublish}
+              />
+              {scheduledPublish ? (
+                <View style={{ padding: 16, paddingTop: 0 }}>
+                  <DateTimeField
+                    dateAccessibilityLabel={t("schedulePublishAtLabel")}
+                    timeAccessibilityLabel={t("schedulePublishAtLabel")}
+                    value={values.publishAt ? new Date(values.publishAt) : new Date()}
+                    onChange={(date) =>
+                      setValues((current) => ({ ...current, publishAt: date.toISOString() }))
+                    }
                   />
-                  {scheduledPublish ? (
-                    <View style={{ padding: 16, paddingTop: 0 }}>
-                      <DateTimeField
-                        dateAccessibilityLabel={t("schedulePublishAtLabel")}
-                        timeAccessibilityLabel={t("schedulePublishAtLabel")}
-                        value={values.publishAt ? new Date(values.publishAt) : new Date()}
-                        onChange={(date) =>
-                          setValues((current) => ({ ...current, publishAt: date.toISOString() }))
-                        }
-                      />
-                    </View>
-                  ) : null}
-                </>
-              )}
-            </Section>
-          ) : null}
+                </View>
+              ) : null}
+            </>
+          )}
+        </Section>
+      ) : null}
 
-          {hasAudience && (values.audiences ?? []).includes("participant") ? (
-            <Section>
-              <ToggleRow
-                label={t("scheduleRequiresScanLabel")}
-                value={values.requiresScan}
-                onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
-              />
-            </Section>
-          ) : null}
+      {hasAudience && (values.audiences ?? []).includes("participant") ? (
+        <Section>
+          <ToggleRow
+            label={t("scheduleRequiresScanLabel")}
+            value={values.requiresScan}
+            onChange={(requiresScan) => setValues((current) => ({ ...current, requiresScan }))}
+          />
+        </Section>
+      ) : null}
 
-          {hasAudience ? (
-            <Section>
-              <ToggleRow
-                label={t("scheduleLiveActivityLabel")}
-                value={values.liveActivityAudience === true}
-                onChange={(liveActivityAudience) =>
-                  setValues((current) => ({ ...current, liveActivityAudience }))
-                }
-              />
-            </Section>
-          ) : null}
+      {hasAudience ? (
+        <Section>
+          <ToggleRow
+            label={t("scheduleLiveActivityLabel")}
+            value={values.liveActivityAudience === true}
+            onChange={(liveActivityAudience) =>
+              setValues((current) => ({ ...current, liveActivityAudience }))
+            }
+          />
+        </Section>
+      ) : null}
 
-          <Section title={t("scheduleContactNoteLabel")}>
-            <TextInput
-              accessibilityLabel={t("scheduleContactNoteLabel")}
-              onChangeText={(contactNote) =>
-                setValues((current) => ({ ...current, contactNote: contactNote || null }))
-              }
-              placeholder={t("scheduleContactNoteLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
-              value={values.contactNote ?? ""}
-            />
-          </Section>
-
-          <Section title={t("scheduleNotesLabel")}>
-            <TextInput
-              accessibilityLabel={t("scheduleNotesLabel")}
-              multiline
-              onChangeText={(notes) =>
-                setValues((current) => ({ ...current, notes: notes || null }))
-              }
-              placeholder={t("scheduleNotesLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{
-                color: colors.label,
-                fontSize: type.callout.fontSize,
-                lineHeight: 22,
-                minHeight: 70,
-                padding: 16,
-                textAlignVertical: "top",
-              }}
-              value={values.notes ?? ""}
-            />
-          </Section>
-
-          <OwnersField owners={owners} onChange={setOwners} scheduleId={scheduleId} />
-        </ScrollView>
-
-        <FloatingGlassButton
-          top={16}
-          side="left"
-          icon="xmark"
-          accessibilityLabel={t("cancel")}
-          onPress={onClose}
+      <Section title={t("scheduleContactNoteLabel")}>
+        <TextInput
+          accessibilityLabel={t("scheduleContactNoteLabel")}
+          onChangeText={(contactNote) =>
+            setValues((current) => ({ ...current, contactNote: contactNote || null }))
+          }
+          placeholder={t("scheduleContactNoteLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
+          value={values.contactNote ?? ""}
         />
-        <FloatingGlassButton
-          top={16}
-          side="right"
-          icon="checkmark"
-          tintColor={colors.accent}
-          accessibilityLabel={t("save")}
-          accessibilityState={{ busy: pending }}
-          disabled={pending}
-          onPress={() => void save()}
+      </Section>
+
+      <Section title={t("scheduleNotesLabel")}>
+        <TextInput
+          accessibilityLabel={t("scheduleNotesLabel")}
+          multiline
+          onChangeText={(notes) => setValues((current) => ({ ...current, notes: notes || null }))}
+          placeholder={t("scheduleNotesLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{
+            color: colors.label,
+            fontSize: type.callout.fontSize,
+            lineHeight: 22,
+            minHeight: 70,
+            padding: 16,
+            textAlignVertical: "top",
+          }}
+          value={values.notes ?? ""}
         />
-      </AdaptiveFrame>
-    </SheetModal>
+      </Section>
+
+      <OwnersField owners={owners} onChange={setOwners} scheduleId={scheduleId} />
+    </FormModalShell>
   );
 }
 
@@ -723,11 +610,7 @@ export function ScheduleFormModal({
  * the owner endpoints immediately (mirrors the web admin table's picker).
  */
 /** A candidate returned by the owner-candidates search. */
-type OwnerCandidate = { id: number; email: string; name: string | null; surname: string | null };
-
-function ownerCandidateName(candidate: OwnerCandidate): string {
-  return [candidate.name, candidate.surname].filter(Boolean).join(" ").trim() || candidate.email;
-}
+type OwnerCandidate = FormModalPersonCandidate;
 
 /** Negative, decrementing — real owner ids from the API are always positive. */
 let nextLocalOwnerId = -1;
@@ -848,127 +731,52 @@ function OwnersField({
   }
 
   return (
-    <Section title={t("scheduleOwnersLabel")}>
-      <View style={{ gap: 8, padding: 16 }}>
-        <View
-          accessible
-          accessibilityLabel={t("scheduleOwnerSearchPlaceholder")}
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.elevatedSurface,
-            borderCurve: "continuous",
-            borderRadius: radius.chip,
-            flexDirection: "row",
-            gap: 8,
-            minHeight: 36,
-            paddingHorizontal: 8,
-          }}
-        >
-          <SymbolView
-            name="magnifyingglass"
-            tintColor={colors.tertiaryLabel}
-            size={15}
-            accessible={false}
-          />
-          <TextInput
-            accessibilityLabel={t("scheduleOwnerSearchPlaceholder")}
-            editable={mutation === null && !searching}
-            onChangeText={(value) => {
-              setQuery(value);
-              setResults([]);
-              setSearched(false);
-            }}
-            onSubmitEditing={() => void search()}
-            placeholder={t("scheduleOwnerSearchPlaceholder")}
-            placeholderTextColor={colors.tertiaryLabel}
-            returnKeyType="search"
-            value={query}
-            style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize, minHeight: 36 }}
-          />
-          {query.length > 0 ? (
-            <Pressable
-              accessibilityLabel={t("cancel")}
-              onPress={() => {
-                setQuery("");
-                setResults([]);
-                setSearched(false);
-              }}
-              hitSlop={8}
-            >
-              <SymbolView
-                name="xmark.circle.fill"
-                tintColor={colors.tertiaryLabel}
-                size={16}
-                accessible={false}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-        {searchError ? (
-          <RequestFeedback error={searchError} onRetry={() => void search()} retrying={searching} />
-        ) : null}
-      </View>
-      {results.map((candidate) => (
-        <View key={candidate.id}>
-          <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
-          <View
+    <FormModalPeoplePicker
+      title={t("scheduleOwnersLabel")}
+      accessibilityLabel={t("scheduleOwnerSearchPlaceholder")}
+      query={query}
+      onChangeQuery={(value) => {
+        setQuery(value);
+        setResults([]);
+        setSearched(false);
+      }}
+      onClear={() => {
+        setQuery("");
+        setResults([]);
+        setSearched(false);
+      }}
+      onSearch={() => void search()}
+      editable={mutation === null && !searching}
+      searching={searching}
+      searched={searched}
+      searchError={searchError}
+      candidates={results}
+      emptyResultsLabel={t("scheduleOwnerSearchEmpty")}
+      renderCandidateAction={(candidate) =>
+        mutation === `add-user:${candidate.id}` ? (
+          <AppActivityIndicator size="small" color={colors.accent} />
+        ) : (
+          <PressableFeedback
+            feedback="opacity"
+            accessibilityRole="button"
+            accessibilityLabel={t("scheduleOwnerAdd")}
+            disabled={mutation !== null}
+            onPress={() => void add(candidate)}
+            hitSlop={8}
             style={{
               alignItems: "center",
-              flexDirection: "row",
-              gap: 12,
+              justifyContent: "center",
               minHeight: 44,
-              paddingHorizontal: 16,
-              paddingVertical: 6,
+              minWidth: 44,
             }}
           >
-            <View style={{ flex: 1 }}>
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ color: colors.label, fontSize: type.callout.fontSize }}
-              >
-                {ownerCandidateName(candidate)}
-              </Text>
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
-              >
-                {candidate.email}
-              </Text>
-            </View>
-            {mutation === `add-user:${candidate.id}` ? (
-              <AppActivityIndicator size="small" color={colors.accent} />
-            ) : (
-              <PressableFeedback
-                feedback="opacity"
-                accessibilityRole="button"
-                accessibilityLabel={t("scheduleOwnerAdd")}
-                disabled={mutation !== null}
-                onPress={() => void add(candidate)}
-                hitSlop={8}
-                style={{
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minHeight: 44,
-                  minWidth: 44,
-                }}
-              >
-                <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
-                  {t("add")}
-                </Text>
-              </PressableFeedback>
-            )}
-          </View>
-        </View>
-      ))}
-      {!searching && searched && results.length === 0 ? (
-        <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
-            {t("scheduleOwnerSearchEmpty")}
-          </Text>
-        </View>
-      ) : null}
+            <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
+              {t("add")}
+            </Text>
+          </PressableFeedback>
+        )
+      }
+    >
       <View
         style={{
           alignItems: "center",
@@ -1072,6 +880,6 @@ function OwnersField({
           </View>
         ))
       )}
-    </Section>
+    </FormModalPeoplePicker>
   );
 }

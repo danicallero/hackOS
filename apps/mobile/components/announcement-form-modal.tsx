@@ -4,15 +4,16 @@ import {
   targetingModeOf,
 } from "@hackos/shared/announcement-form";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { AdaptiveFrame } from "@/components/adaptive-frame";
+import { Text, TextInput, View } from "react-native";
 import { MenuView } from "@/components/app-menu";
-import { SheetModal } from "@/components/app-sheet";
 import { DateTimeField } from "@/components/date-time-field";
-import { FloatingGlassButton, Section, ToggleRow } from "@/components/native-ui";
+import {
+  FormModalPeoplePicker,
+  FormModalShell,
+  FormModalTranslationsDisclosure,
+} from "@/components/form-modal-sections";
+import { Section, ToggleRow } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
-import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import {
   ANNOUNCEMENT_CHANNELS,
@@ -29,7 +30,7 @@ import {
   translateAnnouncement,
 } from "@/lib/announcements-admin";
 import { useLocale } from "@/lib/i18n";
-import { colors, radius, type } from "@/theme";
+import { colors, type } from "@/theme";
 
 function channelLabel(channel: AnnouncementChannel, t: ReturnType<typeof useLocale>["t"]): string {
   switch (channel) {
@@ -91,7 +92,6 @@ export function AnnouncementFormModal({
   onSubmit: (values: AnnouncementInput) => Promise<void>;
 }) {
   const { t, language } = useLocale();
-  const insets = useSafeAreaInsets();
   const [values, setValues] = useState<AnnouncementInput>(initial ?? emptyAnnouncementForm());
   const [recipients, setRecipients] = useState<AnnouncementRecipient[]>(initialRecipients ?? []);
   const [roles, setRoles] = useState<Array<{ id: number; name: string }>>([]);
@@ -274,232 +274,223 @@ export function AnnouncementFormModal({
   }
 
   return (
-    <SheetModal animationType="slide" onRequestClose={onClose} visible={visible}>
-      <AdaptiveFrame>
-        <ScrollView
-          alwaysBounceVertical
-          automaticallyAdjustKeyboardInsets
-          contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          contentContainerStyle={{
-            gap: 22,
-            padding: 16,
-            paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16,
+    <FormModalShell
+      visible={visible}
+      onClose={onClose}
+      onSave={() => void save()}
+      pending={pending}
+      title={announcementId ? t("announcementEdit") : t("announcementAdd")}
+    >
+      <Section title={`${t("announcementTitleLabel")} · ${t("spanishTag")}`}>
+        <TextInput
+          accessibilityLabel={t("announcementTitleLabel")}
+          onChangeText={(title) =>
+            setValues((current) => ({
+              ...current,
+              title,
+              translations: { ...current.translations, es: { title, body: current.body } },
+            }))
+          }
+          onSubmitEditing={() => bodyRefs.current.es?.focus()}
+          placeholder={t("announcementTitleLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          returnKeyType="next"
+          style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
+          value={values.title}
+        />
+      </Section>
+
+      <Section title={`${t("announcementBodyLabel")} · ${t("spanishTag")}`}>
+        <TextInput
+          ref={(r) => {
+            bodyRefs.current.es = r;
           }}
-        >
-          <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 52 }}>
-            <Text
-              selectable
-              style={{
-                color: colors.label,
-                fontSize: type.title3.fontSize,
-                fontWeight: "700",
-                textAlign: "center",
-              }}
+          accessibilityLabel={t("announcementBodyLabel")}
+          multiline
+          onChangeText={(body) =>
+            setValues((current) => ({
+              ...current,
+              body,
+              translations: { ...current.translations, es: { title: current.title, body } },
+            }))
+          }
+          placeholder={t("announcementBodyLabel")}
+          placeholderTextColor={colors.tertiaryLabel}
+          style={{
+            color: colors.label,
+            fontSize: type.callout.fontSize,
+            lineHeight: 22,
+            minHeight: 90,
+            padding: 16,
+            textAlignVertical: "top",
+          }}
+          value={values.body}
+        />
+      </Section>
+
+      <FormModalTranslationsDisclosure
+        expanded={translationsOpen}
+        onToggle={() => setTranslationsOpen((open) => !open)}
+        onTranslate={() => void autoTranslate()}
+        translateAccessibilityState={{ busy: translating }}
+        translateAvailable={translateAvailable}
+        translateButtonStyle={{ minHeight: 44, paddingHorizontal: 16 }}
+        translateDisabled={translating}
+        translating={translating}
+      >
+        {(["gl", "en"] as const).map((language) => (
+          <View key={language} style={{ gap: 8 }}>
+            <Section
+              title={`${t("announcementTitleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
             >
-              {announcementId ? t("announcementEdit") : t("announcementAdd")}
-            </Text>
-          </View>
-
-          <Section title={`${t("announcementTitleLabel")} · ${t("spanishTag")}`}>
-            <TextInput
-              accessibilityLabel={t("announcementTitleLabel")}
-              onChangeText={(title) =>
-                setValues((current) => ({
-                  ...current,
-                  title,
-                  translations: { ...current.translations, es: { title, body: current.body } },
-                }))
-              }
-              onSubmitEditing={() => bodyRefs.current.es?.focus()}
-              placeholder={t("announcementTitleLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              returnKeyType="next"
-              style={{ color: colors.label, fontSize: type.callout.fontSize, padding: 16 }}
-              value={values.title}
-            />
-          </Section>
-
-          <Section title={`${t("announcementBodyLabel")} · ${t("spanishTag")}`}>
-            <TextInput
-              ref={(r) => {
-                bodyRefs.current.es = r;
-              }}
-              accessibilityLabel={t("announcementBodyLabel")}
-              multiline
-              onChangeText={(body) =>
-                setValues((current) => ({
-                  ...current,
-                  body,
-                  translations: { ...current.translations, es: { title: current.title, body } },
-                }))
-              }
-              placeholder={t("announcementBodyLabel")}
-              placeholderTextColor={colors.tertiaryLabel}
-              style={{
-                color: colors.label,
-                fontSize: type.callout.fontSize,
-                lineHeight: 22,
-                minHeight: 90,
-                padding: 16,
-                textAlignVertical: "top",
-              }}
-              value={values.body}
-            />
-          </Section>
-
-          <View style={{ gap: 8 }}>
-            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-              <PressableFeedback
-                feedback="opacity"
-                accessibilityRole="button"
-                accessibilityLabel={t("translationsAndSettings")}
-                accessibilityState={{ expanded: translationsOpen }}
-                hitSlop={8}
-                onPress={() => setTranslationsOpen((open) => !open)}
+              <TextInput
+                accessibilityLabel={t("announcementTitleLabel")}
+                onChangeText={(title) =>
+                  setValues((current) => ({
+                    ...current,
+                    translations: {
+                      ...current.translations,
+                      [language]: {
+                        title,
+                        body: current.translations[language]?.body ?? "",
+                      },
+                    },
+                  }))
+                }
+                onSubmitEditing={() => bodyRefs.current[language]?.focus()}
+                placeholderTextColor={colors.tertiaryLabel}
+                returnKeyType="next"
                 style={{
-                  alignItems: "center",
-                  flex: 1,
-                  flexDirection: "row",
-                  gap: 6,
-                  paddingVertical: 8,
+                  color: colors.label,
+                  fontSize: type.callout.fontSize,
+                  padding: 16,
                 }}
-              >
-                <SymbolView
-                  name="chevron.right"
-                  tintColor={colors.secondaryLabel}
-                  size={13}
-                  weight="semibold"
-                  style={{ transform: [{ rotate: translationsOpen ? "90deg" : "0deg" }] }}
-                />
-                <Text
-                  style={{
-                    color: colors.secondaryLabel,
-                    fontSize: type.footnote.fontSize,
-                    fontWeight: "600",
-                  }}
-                >
-                  {t("translationsAndSettings")}
-                </Text>
-              </PressableFeedback>
-              {translateAvailable ? (
-                <PressableFeedback
-                  feedback="opacity"
-                  accessibilityRole="button"
-                  accessibilityLabel={t("translateAutomatically")}
-                  accessibilityState={{ busy: translating }}
-                  disabled={translating}
-                  onPress={() => void autoTranslate()}
-                  style={{
-                    alignItems: "center",
-                    backgroundColor: colors.elevatedSurface,
-                    borderCurve: "continuous",
-                    borderRadius: radius.chip,
-                    flexDirection: "row",
-                    gap: 8,
-                    minHeight: 44,
-                    paddingHorizontal: 16,
-                  }}
-                >
-                  <SymbolView
-                    name="character.book.closed"
-                    tintColor={colors.accent}
-                    size={16}
-                    accessible={false}
-                  />
-                  <Text
-                    style={{
-                      color: colors.accent,
-                      fontSize: type.subhead.fontSize,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {translating ? t("translatingInProgress") : t("translateAutomatically")}
-                  </Text>
-                </PressableFeedback>
-              ) : null}
-            </View>
-
-            {translationsOpen
-              ? (["gl", "en"] as const).map((language) => (
-                  <View key={language} style={{ gap: 8 }}>
-                    <Section
-                      title={`${t("announcementTitleLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-                    >
-                      <TextInput
-                        accessibilityLabel={t("announcementTitleLabel")}
-                        onChangeText={(title) =>
-                          setValues((current) => ({
-                            ...current,
-                            translations: {
-                              ...current.translations,
-                              [language]: {
-                                title,
-                                body: current.translations[language]?.body ?? "",
-                              },
-                            },
-                          }))
-                        }
-                        onSubmitEditing={() => bodyRefs.current[language]?.focus()}
-                        placeholderTextColor={colors.tertiaryLabel}
-                        returnKeyType="next"
-                        style={{
-                          color: colors.label,
-                          fontSize: type.callout.fontSize,
-                          padding: 16,
-                        }}
-                        value={values.translations[language]?.title ?? ""}
-                      />
-                    </Section>
-                    <Section
-                      title={`${t("announcementBodyLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
-                    >
-                      <TextInput
-                        ref={(r) => {
-                          bodyRefs.current[language] = r;
-                        }}
-                        accessibilityLabel={t("announcementBodyLabel")}
-                        multiline
-                        onChangeText={(body) =>
-                          setValues((current) => ({
-                            ...current,
-                            translations: {
-                              ...current.translations,
-                              [language]: {
-                                title: current.translations[language]?.title ?? "",
-                                body,
-                              },
-                            },
-                          }))
-                        }
-                        placeholderTextColor={colors.tertiaryLabel}
-                        style={{
-                          color: colors.label,
-                          fontSize: type.callout.fontSize,
-                          lineHeight: 22,
-                          minHeight: 70,
-                          padding: 16,
-                          textAlignVertical: "top",
-                        }}
-                        value={values.translations[language]?.body ?? ""}
-                      />
-                    </Section>
-                  </View>
-                ))
-              : null}
+                value={values.translations[language]?.title ?? ""}
+              />
+            </Section>
+            <Section
+              title={`${t("announcementBodyLabel")} · ${t(language === "gl" ? "galicianTag" : "englishTag")}`}
+            >
+              <TextInput
+                ref={(r) => {
+                  bodyRefs.current[language] = r;
+                }}
+                accessibilityLabel={t("announcementBodyLabel")}
+                multiline
+                onChangeText={(body) =>
+                  setValues((current) => ({
+                    ...current,
+                    translations: {
+                      ...current.translations,
+                      [language]: {
+                        title: current.translations[language]?.title ?? "",
+                        body,
+                      },
+                    },
+                  }))
+                }
+                placeholderTextColor={colors.tertiaryLabel}
+                style={{
+                  color: colors.label,
+                  fontSize: type.callout.fontSize,
+                  lineHeight: 22,
+                  minHeight: 70,
+                  padding: 16,
+                  textAlignVertical: "top",
+                }}
+                value={values.translations[language]?.body ?? ""}
+              />
+            </Section>
           </View>
+        ))}
+      </FormModalTranslationsDisclosure>
 
-          <Section title={t("announcementScreenPlacementLabel")}>
+      <Section title={t("announcementScreenPlacementLabel")}>
+        <MenuView
+          actions={ANNOUNCEMENT_SCREEN_PLACEMENTS.map((placement) => ({
+            id: placement,
+            title: placementLabel(placement, t),
+            state: values.screenPlacement === placement ? ("on" as const) : ("off" as const),
+          }))}
+          onPressAction={({ nativeEvent }) =>
+            setScreenPlacement(nativeEvent.event as AnnouncementScreenPlacement)
+          }
+        >
+          <View
+            style={{
+              alignItems: "center",
+              flexDirection: "row",
+              gap: 12,
+              minHeight: 50,
+              padding: 16,
+            }}
+          >
+            <Text style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}>
+              {placementLabel(values.screenPlacement, t)}
+            </Text>
+            <SymbolView
+              name="chevron.up.chevron.down"
+              tintColor={colors.secondaryLabel}
+              size={14}
+            />
+          </View>
+        </MenuView>
+      </Section>
+
+      <Section>
+        <ToggleRow
+          label={t("announcementNotifyLabel")}
+          value={values.notifyUsers}
+          onChange={(notifyUsers) => setValues((current) => ({ ...current, notifyUsers }))}
+        />
+      </Section>
+      <Text
+        style={{
+          color: colors.secondaryLabel,
+          fontSize: type.footnote.fontSize,
+          paddingHorizontal: 16,
+        }}
+      >
+        {t("announcementNotifyHelp")}
+      </Text>
+
+      {values.notifyUsers ? (
+        <>
+          <Section title={t("announcementChannelsLabel")}>
+            {ANNOUNCEMENT_CHANNELS.map((channel, index) => (
+              <View key={channel}>
+                {index > 0 ? (
+                  <View
+                    style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+                  />
+                ) : null}
+                <ToggleRow
+                  label={channelLabel(channel, t)}
+                  value={values.channels.includes(channel)}
+                  onChange={(checked) =>
+                    setValues((current) => ({
+                      ...current,
+                      channels: checked
+                        ? [...current.channels, channel]
+                        : current.channels.filter((c) => c !== channel),
+                    }))
+                  }
+                />
+              </View>
+            ))}
+          </Section>
+
+          <Section title={t("announcementTargetingLabel")}>
             <MenuView
-              actions={ANNOUNCEMENT_SCREEN_PLACEMENTS.map((placement) => ({
-                id: placement,
-                title: placementLabel(placement, t),
-                state: values.screenPlacement === placement ? ("on" as const) : ("off" as const),
+              actions={(["everyone", "roles", "specific"] as TargetingMode[]).map((mode) => ({
+                id: mode,
+                title: targetingLabel(mode, t),
+                attributes:
+                  mode === "specific" && !canTargetSpecific ? { disabled: true } : undefined,
+                state: targetingMode === mode ? ("on" as const) : ("off" as const),
               }))}
               onPressAction={({ nativeEvent }) =>
-                setScreenPlacement(nativeEvent.event as AnnouncementScreenPlacement)
+                setTargetingMode(nativeEvent.event as TargetingMode)
               }
             >
               <View
@@ -512,7 +503,7 @@ export function AnnouncementFormModal({
                 }}
               >
                 <Text style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}>
-                  {placementLabel(values.screenPlacement, t)}
+                  {targetingLabel(targetingMode, t)}
                 </Text>
                 <SymbolView
                   name="chevron.up.chevron.down"
@@ -521,282 +512,183 @@ export function AnnouncementFormModal({
                 />
               </View>
             </MenuView>
-          </Section>
-
-          <Section>
-            <ToggleRow
-              label={t("announcementNotifyLabel")}
-              value={values.notifyUsers}
-              onChange={(notifyUsers) => setValues((current) => ({ ...current, notifyUsers }))}
-            />
-          </Section>
-          <Text
-            style={{
-              color: colors.secondaryLabel,
-              fontSize: type.footnote.fontSize,
-              paddingHorizontal: 16,
-            }}
-          >
-            {t("announcementNotifyHelp")}
-          </Text>
-
-          {values.notifyUsers ? (
-            <>
-              <Section title={t("announcementChannelsLabel")}>
-                {ANNOUNCEMENT_CHANNELS.map((channel, index) => (
-                  <View key={channel}>
-                    {index > 0 ? (
-                      <View
-                        style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
-                      />
-                    ) : null}
-                    <ToggleRow
-                      label={channelLabel(channel, t)}
-                      value={values.channels.includes(channel)}
-                      onChange={(checked) =>
-                        setValues((current) => ({
-                          ...current,
-                          channels: checked
-                            ? [...current.channels, channel]
-                            : current.channels.filter((c) => c !== channel),
-                        }))
-                      }
-                    />
-                  </View>
-                ))}
-              </Section>
-
-              <Section title={t("announcementTargetingLabel")}>
-                <MenuView
-                  actions={(["everyone", "roles", "specific"] as TargetingMode[]).map((mode) => ({
-                    id: mode,
-                    title: targetingLabel(mode, t),
-                    attributes:
-                      mode === "specific" && !canTargetSpecific ? { disabled: true } : undefined,
-                    state: targetingMode === mode ? ("on" as const) : ("off" as const),
-                  }))}
-                  onPressAction={({ nativeEvent }) =>
-                    setTargetingMode(nativeEvent.event as TargetingMode)
-                  }
-                >
-                  <View
-                    style={{
-                      alignItems: "center",
-                      flexDirection: "row",
-                      gap: 12,
-                      minHeight: 50,
-                      padding: 16,
-                    }}
-                  >
-                    <Text style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}>
-                      {targetingLabel(targetingMode, t)}
-                    </Text>
-                    <SymbolView
-                      name="chevron.up.chevron.down"
-                      tintColor={colors.secondaryLabel}
-                      size={14}
-                    />
-                  </View>
-                </MenuView>
-                {!canTargetSpecific ? (
-                  <View
-                    style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}
-                  >
-                    <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
-                      {t("announcementScreenTargetingDisabledHint")}
-                    </Text>
-                  </View>
-                ) : null}
-              </Section>
-
-              {targetingMode === "roles" ? (
-                <Section>
-                  <Text
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: type.footnote.fontSize,
-                      padding: 16,
-                      paddingBottom: 8,
-                    }}
-                  >
-                    {t("announcementRolesLabel")}
-                  </Text>
-                  {roles.map((role, index) => (
-                    <View key={role.id}>
-                      {index > 0 ? (
-                        <View
-                          style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
-                        />
-                      ) : null}
-                      <ToggleRow
-                        label={role.name}
-                        value={values.roleIds.includes(role.id)}
-                        onChange={(checked) =>
-                          setValues((current) => ({
-                            ...current,
-                            roleIds: checked
-                              ? [...current.roleIds, role.id]
-                              : current.roleIds.filter((id) => id !== role.id),
-                          }))
-                        }
-                      />
-                    </View>
-                  ))}
-                  <Text
-                    style={{
-                      color: colors.secondaryLabel,
-                      fontSize: type.footnote.fontSize,
-                      padding: 16,
-                      paddingBottom: 8,
-                    }}
-                  >
-                    {t("foodIntolerances")}
-                  </Text>
-                  {intolerances.map((intolerance) => (
-                    <View key={intolerance.id}>
-                      <View
-                        style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
-                      />
-                      <ToggleRow
-                        label={
-                          intolerance.label[language] ??
-                          intolerance.label.es ??
-                          intolerance.label.en ??
-                          String(intolerance.id)
-                        }
-                        value={values.intoleranceIds.includes(intolerance.id)}
-                        onChange={(checked) =>
-                          setValues((current) => ({
-                            ...current,
-                            intoleranceIds: checked
-                              ? [...current.intoleranceIds, intolerance.id]
-                              : current.intoleranceIds.filter((id) => id !== intolerance.id),
-                          }))
-                        }
-                      />
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
-
-              {targetingMode === "specific" ? (
-                <RecipientsField
-                  recipients={recipients}
-                  onChange={(next) => {
-                    setRecipients(next);
-                    setValues((current) => ({
-                      ...current,
-                      recipientUserIds: next.map((recipient) => recipient.id),
-                    }));
-                  }}
-                />
-              ) : null}
-            </>
-          ) : null}
-
-          <Section title={t("announcementSendAtLabel")}>
-            <ToggleRow
-              label={
-                values.screenPlacement === "none"
-                  ? t("announcementScheduleSendLabel")
-                  : t("announcementScheduleVisibleFromLabel")
-              }
-              value={scheduledSend}
-              onChange={(next) => {
-                setScheduledSend(next);
-                setValues((current) => ({
-                  ...current,
-                  publishAt: next ? (current.publishAt ?? new Date().toISOString()) : null,
-                }));
-              }}
-            />
-            {scheduledSend ? (
-              <View style={{ padding: 16, paddingTop: 0 }}>
-                <DateTimeField
-                  dateAccessibilityLabel={t("announcementSendAtLabel")}
-                  timeAccessibilityLabel={t("announcementSendAtLabel")}
-                  value={values.publishAt ? new Date(values.publishAt) : new Date()}
-                  onChange={(date) =>
-                    setValues((current) => ({ ...current, publishAt: date.toISOString() }))
-                  }
-                />
+            {!canTargetSpecific ? (
+              <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
+                <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
+                  {t("announcementScreenTargetingDisabledHint")}
+                </Text>
               </View>
             ) : null}
           </Section>
 
-          {values.screenPlacement !== "none" ? (
-            <Section title={t("announcementScheduleVisibleUntilLabel")}>
-              <ToggleRow
-                label={t("announcementScheduleVisibleUntilLabel")}
-                value={scheduledExpiry}
-                onChange={(next) => {
-                  setScheduledExpiry(next);
-                  setValues((current) => ({
-                    ...current,
-                    expiresAt: next
-                      ? (current.expiresAt ?? new Date(Date.now() + 60 * 60_000).toISOString())
-                      : null,
-                  }));
+          {targetingMode === "roles" ? (
+            <Section>
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: type.footnote.fontSize,
+                  padding: 16,
+                  paddingBottom: 8,
                 }}
-              />
-              {scheduledExpiry ? (
-                <View style={{ padding: 16, paddingTop: 0 }}>
-                  <DateTimeField
-                    dateAccessibilityLabel={t("announcementScheduleVisibleUntilLabel")}
-                    timeAccessibilityLabel={t("announcementScheduleVisibleUntilLabel")}
-                    value={values.expiresAt ? new Date(values.expiresAt) : new Date()}
-                    onChange={(date) =>
-                      setValues((current) => ({ ...current, expiresAt: date.toISOString() }))
+              >
+                {t("announcementRolesLabel")}
+              </Text>
+              {roles.map((role, index) => (
+                <View key={role.id}>
+                  {index > 0 ? (
+                    <View
+                      style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+                    />
+                  ) : null}
+                  <ToggleRow
+                    label={role.name}
+                    value={values.roleIds.includes(role.id)}
+                    onChange={(checked) =>
+                      setValues((current) => ({
+                        ...current,
+                        roleIds: checked
+                          ? [...current.roleIds, role.id]
+                          : current.roleIds.filter((id) => id !== role.id),
+                      }))
                     }
                   />
                 </View>
-              ) : null}
+              ))}
+              <Text
+                style={{
+                  color: colors.secondaryLabel,
+                  fontSize: type.footnote.fontSize,
+                  padding: 16,
+                  paddingBottom: 8,
+                }}
+              >
+                {t("foodIntolerances")}
+              </Text>
+              {intolerances.map((intolerance) => (
+                <View key={intolerance.id}>
+                  <View
+                    style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }}
+                  />
+                  <ToggleRow
+                    label={
+                      intolerance.label[language] ??
+                      intolerance.label.es ??
+                      intolerance.label.en ??
+                      String(intolerance.id)
+                    }
+                    value={values.intoleranceIds.includes(intolerance.id)}
+                    onChange={(checked) =>
+                      setValues((current) => ({
+                        ...current,
+                        intoleranceIds: checked
+                          ? [...current.intoleranceIds, intolerance.id]
+                          : current.intoleranceIds.filter((id) => id !== intolerance.id),
+                      }))
+                    }
+                  />
+                </View>
+              ))}
             </Section>
-          ) : (
-            <Text
-              style={{
-                color: colors.secondaryLabel,
-                fontSize: type.footnote.fontSize,
-                paddingHorizontal: 16,
-              }}
-            >
-              {t("announcementNotifyOnlyHint")}
-            </Text>
-          )}
-
-          {error ? (
-            <Text
-              selectable
-              style={{
-                color: colors.destructive,
-                fontSize: type.compact.fontSize,
-                textAlign: "center",
-              }}
-            >
-              {error}
-            </Text>
           ) : null}
-        </ScrollView>
 
-        <FloatingGlassButton
-          top={16}
-          side="left"
-          icon="xmark"
-          accessibilityLabel={t("cancel")}
-          onPress={onClose}
+          {targetingMode === "specific" ? (
+            <RecipientsField
+              recipients={recipients}
+              onChange={(next) => {
+                setRecipients(next);
+                setValues((current) => ({
+                  ...current,
+                  recipientUserIds: next.map((recipient) => recipient.id),
+                }));
+              }}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      <Section title={t("announcementSendAtLabel")}>
+        <ToggleRow
+          label={
+            values.screenPlacement === "none"
+              ? t("announcementScheduleSendLabel")
+              : t("announcementScheduleVisibleFromLabel")
+          }
+          value={scheduledSend}
+          onChange={(next) => {
+            setScheduledSend(next);
+            setValues((current) => ({
+              ...current,
+              publishAt: next ? (current.publishAt ?? new Date().toISOString()) : null,
+            }));
+          }}
         />
-        <FloatingGlassButton
-          top={16}
-          side="right"
-          icon="checkmark"
-          tintColor={colors.accent}
-          accessibilityLabel={t("save")}
-          accessibilityState={{ busy: pending }}
-          disabled={pending}
-          onPress={() => void save()}
-        />
-      </AdaptiveFrame>
-    </SheetModal>
+        {scheduledSend ? (
+          <View style={{ padding: 16, paddingTop: 0 }}>
+            <DateTimeField
+              dateAccessibilityLabel={t("announcementSendAtLabel")}
+              timeAccessibilityLabel={t("announcementSendAtLabel")}
+              value={values.publishAt ? new Date(values.publishAt) : new Date()}
+              onChange={(date) =>
+                setValues((current) => ({ ...current, publishAt: date.toISOString() }))
+              }
+            />
+          </View>
+        ) : null}
+      </Section>
+
+      {values.screenPlacement !== "none" ? (
+        <Section title={t("announcementScheduleVisibleUntilLabel")}>
+          <ToggleRow
+            label={t("announcementScheduleVisibleUntilLabel")}
+            value={scheduledExpiry}
+            onChange={(next) => {
+              setScheduledExpiry(next);
+              setValues((current) => ({
+                ...current,
+                expiresAt: next
+                  ? (current.expiresAt ?? new Date(Date.now() + 60 * 60_000).toISOString())
+                  : null,
+              }));
+            }}
+          />
+          {scheduledExpiry ? (
+            <View style={{ padding: 16, paddingTop: 0 }}>
+              <DateTimeField
+                dateAccessibilityLabel={t("announcementScheduleVisibleUntilLabel")}
+                timeAccessibilityLabel={t("announcementScheduleVisibleUntilLabel")}
+                value={values.expiresAt ? new Date(values.expiresAt) : new Date()}
+                onChange={(date) =>
+                  setValues((current) => ({ ...current, expiresAt: date.toISOString() }))
+                }
+              />
+            </View>
+          ) : null}
+        </Section>
+      ) : (
+        <Text
+          style={{
+            color: colors.secondaryLabel,
+            fontSize: type.footnote.fontSize,
+            paddingHorizontal: 16,
+          }}
+        >
+          {t("announcementNotifyOnlyHint")}
+        </Text>
+      )}
+
+      {error ? (
+        <Text
+          selectable
+          style={{
+            color: colors.destructive,
+            fontSize: type.compact.fontSize,
+            textAlign: "center",
+          }}
+        >
+          {error}
+        </Text>
+      ) : null}
+    </FormModalShell>
   );
 }
 
@@ -850,124 +742,46 @@ function RecipientsField({
   }
 
   return (
-    <Section title={t("announcementRecipientsLabel")}>
-      <View style={{ gap: 8, padding: 16 }}>
-        <View
-          accessible
-          accessibilityLabel={t("announcementRecipientSearchPlaceholder")}
+    <FormModalPeoplePicker
+      title={t("announcementRecipientsLabel")}
+      accessibilityLabel={t("announcementRecipientSearchPlaceholder")}
+      query={query}
+      onChangeQuery={(value) => {
+        setQuery(value);
+        setResults([]);
+        setSearched(false);
+      }}
+      onClear={() => {
+        setQuery("");
+        setResults([]);
+        setSearched(false);
+      }}
+      onSearch={() => void search()}
+      editable={!searching}
+      searching={searching}
+      searched={searched}
+      searchError={searchError}
+      candidates={results}
+      emptyResultsLabel={t("announcementRecipientSearchEmpty")}
+      renderCandidateAction={(candidate) => (
+        <PressableFeedback
+          feedback="opacity"
+          accessibilityRole="button"
+          accessibilityLabel={t("announcementRecipientAdd")}
+          disabled={recipientIds.has(candidate.id)}
+          onPress={() => add(candidate)}
+          hitSlop={8}
           style={{
             alignItems: "center",
-            backgroundColor: colors.elevatedSurface,
-            borderCurve: "continuous",
-            borderRadius: radius.chip,
-            flexDirection: "row",
-            gap: 8,
-            minHeight: 36,
-            paddingHorizontal: 8,
+            justifyContent: "center",
+            minHeight: 44,
+            minWidth: 44,
           }}
         >
-          <SymbolView
-            name="magnifyingglass"
-            tintColor={colors.tertiaryLabel}
-            size={15}
-            accessible={false}
-          />
-          <TextInput
-            accessibilityLabel={t("announcementRecipientSearchPlaceholder")}
-            editable={!searching}
-            onChangeText={(value) => {
-              setQuery(value);
-              setResults([]);
-              setSearched(false);
-            }}
-            onSubmitEditing={() => void search()}
-            placeholder={t("announcementRecipientSearchPlaceholder")}
-            placeholderTextColor={colors.tertiaryLabel}
-            returnKeyType="search"
-            value={query}
-            style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize, minHeight: 36 }}
-          />
-          {query.length > 0 ? (
-            <Pressable
-              accessibilityLabel={t("cancel")}
-              onPress={() => {
-                setQuery("");
-                setResults([]);
-                setSearched(false);
-              }}
-              hitSlop={8}
-            >
-              <SymbolView
-                name="xmark.circle.fill"
-                tintColor={colors.tertiaryLabel}
-                size={16}
-                accessible={false}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-        {searchError ? (
-          <RequestFeedback error={searchError} onRetry={() => void search()} retrying={searching} />
-        ) : null}
-      </View>
-      {results.map((candidate) => (
-        <View key={candidate.id}>
-          <View style={{ backgroundColor: colors.separator, height: 0.5, marginLeft: 16 }} />
-          <View
-            style={{
-              alignItems: "center",
-              flexDirection: "row",
-              gap: 12,
-              minHeight: 44,
-              paddingHorizontal: 16,
-              paddingVertical: 6,
-            }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ color: colors.label, fontSize: type.callout.fontSize }}
-              >
-                {[candidate.name, candidate.surname].filter(Boolean).join(" ").trim() ||
-                  candidate.email}
-              </Text>
-              <Text
-                selectable
-                numberOfLines={1}
-                style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
-              >
-                {candidate.email}
-              </Text>
-            </View>
-            <PressableFeedback
-              feedback="opacity"
-              accessibilityRole="button"
-              accessibilityLabel={t("announcementRecipientAdd")}
-              disabled={recipientIds.has(candidate.id)}
-              onPress={() => add(candidate)}
-              hitSlop={8}
-              style={{
-                alignItems: "center",
-                justifyContent: "center",
-                minHeight: 44,
-                minWidth: 44,
-              }}
-            >
-              <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
-                {t("add")}
-              </Text>
-            </PressableFeedback>
-          </View>
-        </View>
-      ))}
-      {!searching && searched && results.length === 0 ? (
-        <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
-            {t("announcementRecipientSearchEmpty")}
-          </Text>
-        </View>
-      ) : null}
+          <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>{t("add")}</Text>
+        </PressableFeedback>
+      )}
+    >
       {recipients.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
           <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
@@ -1017,6 +831,6 @@ function RecipientsField({
           </View>
         ))
       )}
-    </Section>
+    </FormModalPeoplePicker>
   );
 }
