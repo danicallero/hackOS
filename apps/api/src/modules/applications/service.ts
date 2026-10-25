@@ -213,6 +213,7 @@ const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
   "invalid option": FIELD_ERROR_REASONS.INVALID_OPTION,
   "must be a number": FIELD_ERROR_REASONS.MUST_BE_NUMBER,
   "must be a birth year": FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR,
+  "too young": FIELD_ERROR_REASONS.BIRTH_YEAR_TOO_RECENT,
   "must be a phone number": FIELD_ERROR_REASONS.MUST_BE_PHONE,
   "must be a boolean": FIELD_ERROR_REASONS.MUST_BE_BOOLEAN,
   "must be an array": FIELD_ERROR_REASONS.MUST_BE_ARRAY,
@@ -252,6 +253,9 @@ function checkFieldValidation(field: TemplateField, value: unknown): string | nu
   if (field.kind === "number" && typeof value === "number") {
     if (v.min !== undefined && value < v.min) return "too small";
     if (v.max !== undefined && value > v.max) return "too large";
+  }
+  if (field.kind === "birth_year" && typeof value === "number") {
+    if (v.min_age !== undefined && value > new Date().getFullYear() - v.min_age) return "too young";
   }
   if (field.kind === "multiselect" && Array.isArray(value)) {
     if (v.min_selected !== undefined && value.length < v.min_selected) return "too few selected";

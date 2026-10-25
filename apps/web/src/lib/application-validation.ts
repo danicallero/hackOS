@@ -20,6 +20,7 @@ export interface ValidationField {
     max?: number;
     min_selected?: number;
     max_selected?: number;
+    min_age?: number;
     error_message?: I18nText;
   };
 }
@@ -119,6 +120,9 @@ export function validateFieldOnBlur(
   } else if (field.kind === "number" && typeof value === "number" && rule) {
     if (rule.min != null && value < rule.min) code = FIELD_ERROR_REASONS.TOO_SMALL;
     else if (rule.max != null && value > rule.max) code = FIELD_ERROR_REASONS.TOO_LARGE;
+  } else if (field.kind === "birth_year" && typeof value === "number" && rule) {
+    if (rule.min_age != null && value > new Date().getFullYear() - rule.min_age)
+      code = FIELD_ERROR_REASONS.BIRTH_YEAR_TOO_RECENT;
   } else if (field.kind === "multiselect" && Array.isArray(value) && rule) {
     if (rule.min_selected != null && value.length < rule.min_selected)
       code = FIELD_ERROR_REASONS.TOO_FEW_SELECTED;
@@ -142,6 +146,7 @@ const VALIDATION_ERROR_KEYS: Record<string, MessageKey> = {
   [FIELD_ERROR_REASONS.TOO_LONG]: "tooLong",
   [FIELD_ERROR_REASONS.INVALID_FORMAT]: "invalidFormat",
   [FIELD_ERROR_REASONS.TOO_SMALL]: "tooSmall",
+  [FIELD_ERROR_REASONS.BIRTH_YEAR_TOO_RECENT]: "fieldBirthYearTooRecent",
   [FIELD_ERROR_REASONS.TOO_LARGE]: "tooLarge",
   [FIELD_ERROR_REASONS.TOO_FEW_SELECTED]: "tooFewSelected",
   [FIELD_ERROR_REASONS.TOO_MANY_SELECTED]: "tooManySelected",

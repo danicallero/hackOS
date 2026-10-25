@@ -106,6 +106,8 @@ export const fieldValidationSchema = z.object({
   max: z.number().optional(),
   min_selected: z.number().int().nonnegative().optional(),
   max_selected: z.number().int().positive().optional(),
+  /** birth_year only: reject applicants younger than this many years. */
+  min_age: z.number().int().min(0).max(120).optional(),
   /** Shown to the applicant instead of the generic message when a rule fails. */
   error_message: i18nSchema.optional(),
 });

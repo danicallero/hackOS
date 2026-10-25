@@ -62,6 +62,8 @@ export const FIELD_ERROR_REASONS = {
   REQUIRED: "required",
   INVALID_OPTION: "invalid_option",
   MUST_BE_NUMBER: "must_be_number",
+  /** 400: the birth year makes the applicant younger than the minimum age. */
+  BIRTH_YEAR_TOO_RECENT: "birth_year_too_recent",
   MUST_BE_BIRTH_YEAR: "must_be_birth_year",
   MUST_BE_PHONE: "must_be_phone",
   MUST_BE_BOOLEAN: "must_be_boolean",
