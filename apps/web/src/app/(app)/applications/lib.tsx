@@ -140,6 +140,8 @@ export interface FieldValidation {
   max?: number;
   min_selected?: number;
   max_selected?: number;
+  /** birth_year only: reject applicants younger than this many years. */
+  min_age?: number;
   error_message?: I18nText;
 }
 

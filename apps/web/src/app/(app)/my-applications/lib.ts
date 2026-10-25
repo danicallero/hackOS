@@ -70,6 +70,7 @@ export interface FieldValidation {
   text_value?: string;
   min?: number;
   max?: number;
+  min_age?: number;
   min_selected?: number;
   max_selected?: number;
   error_message?: I18nText;

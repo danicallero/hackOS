@@ -26,6 +26,12 @@ describe("application validation errors", () => {
     expect(validateFieldOnBlur(field, new Date().getFullYear() - 121, translate, "en")).toBe(
       "fieldMustBeBirthYear",
     );
+    const adults = { ...field, validation: { min_age: 16 } };
+    expect(validateFieldOnBlur(adults, new Date().getFullYear() - 15, translate, "en")).toBe(
+      "fieldBirthYearTooRecent",
+    );
+    expect(validateFieldOnBlur(adults, new Date().getFullYear() - 16, translate, "en")).toBeNull();
+    expect(validateFieldOnBlur(field, new Date().getFullYear() - 5, translate, "en")).toBeNull();
     expect(validateFieldOnBlur(field, new Date().getFullYear() - 20, translate, "en")).toBeNull();
   });
 
