@@ -1,31 +1,40 @@
 "use client";
 
+import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { languageName, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
-/** A compact language control for routes without the authenticated account menu. */
-export function LanguageSelect({ className }: { className?: string }) {
+/** A compact language menu for routes without the authenticated account menu; pairs with `ThemeToggle`. */
+export function LanguageSelect() {
   const { language, setLanguage, t } = useLocale();
   return (
-    <Select value={language} onValueChange={(value) => setLanguage(value as Language)}>
-      <SelectTrigger size="sm" className={cn("w-18 px-2.5", className)} aria-label={t("language")}>
-        <SelectValue>{language.toUpperCase()}</SelectValue>
-      </SelectTrigger>
-      <SelectContent align="end">
-        {(["es", "gl", "en"] as const).map((item) => (
-          <SelectItem key={item} value={item}>
-            {languageName(item)}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" aria-label={t("language")}>
+          <GlobeIcon aria-hidden="true" className="size-4" />
+          {language.toUpperCase()}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuRadioGroup
+          value={language}
+          onValueChange={(value) => setLanguage(value as Language)}
+        >
+          {(["es", "gl", "en"] as const).map((item) => (
+            <DropdownMenuRadioItem key={item} value={item}>
+              {languageName(item)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

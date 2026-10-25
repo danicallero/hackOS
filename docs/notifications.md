@@ -282,7 +282,7 @@ an editor — can resolve their own display text: preferred language, else
 English, else `primaryLanguage`'s canonical text. `resolveScheduleText`
 (`apps/web/src/lib/logistics.ts`, `apps/mobile/lib/schedule.ts`) implements
 that fallback client-side; every viewer-facing schedule read (web
-`/timetable`, `/horario`, the TV display; mobile's Schedule tab and detail
+`/timetable`, the TV display; mobile's Schedule tab and detail
 screen) resolves through it before handing items to their renderers, so those
 renderers keep reading plain `item.title`/`item.description` unchanged.
 `ScheduleFormModal` (both frontends) labels Title/Description with the

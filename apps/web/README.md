@@ -33,7 +33,7 @@ for the contract, bounds, revocation and migration behavior.
 
 ## Indexing
 
-Only public information is indexed: home (`/`), `/horario`, `/privacy`, `/terms`
+Only public information is indexed: home (`/`), `/timetable`, `/privacy`, `/terms`
 and the public gallery (`/gallery`, open to anonymous viewers while the gallery
 audience is public), plus `/llms.txt` (`app/llms.txt/route.ts`) describing them
 and the read-only public JSON for assistants. Everything else is out: the root

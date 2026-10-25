@@ -5,7 +5,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { PdfCheck } from "@/components/certificates/pdf-check";
-import { Brand } from "@/components/common/brand";
+import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,12 +29,12 @@ export default function VerifyRootPage() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="bg-background border-b">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center px-6">
-          <Brand className="text-2xl" />
-        </div>
-      </header>
-      <main className="grid flex-1 place-items-center px-6 pb-24">
+      <PublicTopBar />
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="outline-none grid flex-1 place-items-center px-6 pb-24"
+      >
         <form
           className="flex w-full max-w-md flex-col gap-3"
           onSubmit={(event) => {
