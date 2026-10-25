@@ -5,16 +5,18 @@ import { createElement } from "react";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
+const COPY_LINK_MESSAGES = {
+  title: "toastCopyLink",
+  failure: "couldNotCopyLink",
+} as const satisfies { title: MessageKey; failure: MessageKey };
+
 /**
  * Copies to the clipboard with a success/error toast (shared across invite-link
  * and QR copy actions). Callers that copy something other than a link name
  * their action in `title` and `failure` (R007).
  */
 export function useCopyToClipboard(
-  copy: { title: MessageKey; failure: MessageKey } = {
-    title: "toastCopyLink",
-    failure: "couldNotCopyLink",
-  },
+  copy: { title: MessageKey; failure: MessageKey } = COPY_LINK_MESSAGES,
 ) {
   const { t } = useLocale();
 

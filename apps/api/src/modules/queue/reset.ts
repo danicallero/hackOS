@@ -36,6 +36,11 @@ interface IdempotencyExclusion {
   scope: string | null;
 }
 
+const NO_IDEMPOTENCY_EXCLUSION: Readonly<IdempotencyExclusion> = Object.freeze({
+  key: null,
+  scope: null,
+});
+
 const Q_IDEMPOTENCY_SCOPE = `(
   scope LIKE '% /api/queue%'
   OR scope LIKE '% /api/repos%'
@@ -99,7 +104,7 @@ async function recreateDefaultQueueGroups(client: Queryable): Promise<number> {
  */
 export async function resetJudgingData(
   actorId: number,
-  idempotency: IdempotencyExclusion = { key: null, scope: null },
+  idempotency: IdempotencyExclusion = NO_IDEMPOTENCY_EXCLUSION,
 ): Promise<JudgingDataResetResult> {
   return withTransaction(async (client) => {
     // This is an explicitly confirmed maintenance operation, not a normal
