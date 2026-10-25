@@ -51,6 +51,31 @@ at build time, otherwise the event website.
 | --- | --- | --- | --- | --- |
 | 0 | — | — | — | nothing yet |
 
+## Android dependency locking
+
+`apps/mobile/modules/live-updates/android` has no Gradle dependency lockfile
+(`gradle.lockfile`) or `gradle/verification-metadata.xml`, deliberately (#1116).
+The module is not a standalone Gradle project: it has no `settings.gradle`,
+wrapper or repository declarations, and is compiled only as an autolinked
+subproject of the `android/` project that `expo prebuild` generates (gitignored,
+rebuilt from scratch by every EAS build). Locking would have to be written by a
+full prebuild plus Android build, and the lock would be tied to that generated
+project's Expo/React Native version alignment, Gradle plugin and repository
+set, so it would go stale or fail the build (`lockAllConfigurations()` rejects
+any resolution that differs) on every SDK bump without protecting anything the
+Expo-managed build does not already pin.
+
+What bounds resolution today: the module declares exact versions only
+(`androidx.core:core:1.17.0`, `junit:junit:4.13.2`), and its transitive
+dependencies resolve under the generated app's Expo SDK/React Native versions,
+which `apps/mobile/package.json` and `pnpm-lock.yaml` pin. Upgrading the SDK is
+the point at which Android dependency versions change; review the Gradle
+dependency diff then.
+
+If locking is adopted later, enable it in the `android/` project that prebuild
+generates (a config plugin), not in this module's `build.gradle`, and add the
+refresh command (`./gradlew dependencies --write-locks`) here.
+
 The examples across all three match the versions currently in the
 repository: Expo SDK 57, React Native 0.86, and pnpm 10. Check Expo, Apple,
 and Google requirements again when upgrading the SDK.
