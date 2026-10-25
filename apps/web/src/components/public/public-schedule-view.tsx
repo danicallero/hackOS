@@ -29,10 +29,8 @@ import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/li
 /**
  * The public schedule combines the event and activity reads required by H47.
  * Each read has its own retryable failure state so a rejected request cannot
- * leave the public page in an infinite loading state. `/timetable` and
- * `/horario` are the same page written twice and only differ in their shell,
- * so the shell is all they keep — the app route wraps it in `PageHeader`, the
- * public route in its own `Brand` header.
+ * leave the public page in an infinite loading state. `/timetable` is the one
+ * route for signed-in and signed-out viewers; only its header differs.
  *
  * `header` is a title slot rather than a plain node because both shells title
  * themselves with the event name, which only this component has loaded.
@@ -188,7 +186,7 @@ export function PublicScheduleView({
              includes contactNote/owners for callers entitled to see them
              (staff, or a sponsor rep on their own sponsor-tagged items) —
              this page reuses that same /api/public/activities payload for
-             both /timetable and /horario, so a sponsor rep landing here
+             /timetable for every viewer, so a sponsor rep landing here
              (the "schedule" nav item has no sponsor gate) still sees the
              contact info the API already sent, matching sponsor-faq. */
           <ScheduleTimeline

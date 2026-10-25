@@ -362,6 +362,38 @@ surfaces — never from stacking rounded rectangles around every region.
   Avoid background washes, gratuitous shadows and inset outlines that create
   several competing planes.
 
+### Public surfaces: one top bar
+
+Every surface a signed-out visitor can open (landing, schedule, gallery,
+challenge pages, terms/privacy, certificate verification, company-tag
+landing, sign-in/sign-up flows) shares one `PublicTopBar`
+(`components/layout/public-top-bar.tsx`). Do not hand-roll a `<header>`.
+
+- **Sticky, 64 px, hairline bottom border.** `sticky top-0` with a blurred
+  `background` wash so content scrolls beneath it; it never hides on scroll.
+  Pages that own the viewport (certificate PDF) keep it as a fixed row.
+- **Wordmark leading, controls trailing.** `Brand` at the default size, always
+  linking home; then language, theme and one session button — "Log in" when
+  signed out (returning to the current page), "Go to app" when signed in.
+  Sign-in/sign-up screens and the company-tag landing pass `access={false}`.
+  Inner width `max-w-7xl`, 16/24 px gutter, aligned with the app content
+  canvas, regardless of how narrow the page body is.
+- **Language and theme are ghost controls.** Language is a globe + code menu
+  (radio list of names), theme an icon menu; both sit after the session button
+  with 8/12 px gaps. A language field inside a form (signup) drives the page
+  language too. The first Tab stop is a "Skip to content" link targeting the
+  page's `main#main-content`.
+- **One footer.** `PublicFooter` (legal links, same container as the bar) closes
+  landing, legal and auth pages; do not inline another.
+- **Branding only.** The bar carries the product, never the page: no event
+  name, page title, back button or breadcrumb. Titles, the event name and
+  navigation live in the page content under it, with a single `h1`.
+- **One route per destination.** A page that exists in the app (schedule at
+  `/timetable`, gallery, challenges) is the same route for everyone. Signed-in
+  viewers get the app shell with the sidebar; signed-out viewers get this bar
+  and the same content without personal-area navigation
+  (`PublicContentShell`). Never fork a public copy of an app page.
+
 ## 3. Containers
 
 **Summary: three explicit levels — border-only `Surface`, titled `Section`,
@@ -836,7 +868,7 @@ anything else.
 | A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
 | Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
-| Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`) | Coloured text, custom pills |
+| Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`); `StatusDot` (a toned dot plus muted label, no pill or outline) where the header already carries emphasis, e.g. the judging evaluation header (`ReviewStatusBadge quiet`) | Coloured text, custom pills |
 | A metric | `StatCard` (delta/footer slots for meters/sparklines) | Bare big numbers in a `Surface` |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |

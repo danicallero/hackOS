@@ -159,8 +159,8 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
   message key. `/timetable` is **Schedule** (the read-only programme every
   participant uses) and `/schedule` is **Manage schedule** (the editor); no
   multi-destination workspace is labelled with one of its own items.
-- `/timetable` and the public `/horario` (both rendered by
-  `PublicScheduleView`) get a client-side audience filter (H59 follow-up,
+- `/timetable` (one route for signed-in and signed-out viewers, rendered by
+  `PublicScheduleView`; `/horario` redirects to it) get a client-side audience filter (H59 follow-up,
   `components/public/schedule-audience-filter.tsx`) whenever the caller's own
   feed from `/api/public/activities` contains audience tags —
   the API projects each item's tags to that caller's accessible segments, and

@@ -9,10 +9,9 @@ import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Brand } from "@/components/common/brand";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
-import { ThemeToggle } from "@/components/common/theme-toggle";
+import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -55,13 +54,14 @@ export default function CompanyTagPage() {
   }, [status, code, t]);
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-md flex-col px-5 py-6">
-      <header className="flex items-center justify-between gap-4 pb-10">
-        <Brand />
-        <ThemeToggle />
-      </header>
-
-      <section className="flex flex-1 flex-col items-center gap-5 text-center" aria-live="polite">
+    <div className="min-h-dvh">
+      <PublicTopBar access={false} />
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-md flex-col items-center gap-5 px-5 py-10 text-center"
+        aria-live="polite"
+      >
         {status === "loading" || (status === "authenticated" && state.status === "collecting") ? (
           <div className="grid place-items-center py-24" role="status" aria-busy="true">
             <Spinner className="size-7" />
@@ -95,7 +95,7 @@ export default function CompanyTagPage() {
             </Button>
           </>
         ) : null}
-      </section>
+      </main>
     </div>
   );
 }

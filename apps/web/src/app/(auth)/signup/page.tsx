@@ -41,6 +41,7 @@ import { signUp } from "@/lib/auth-client";
 import { LANGS, languageName, type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
+import type { Language } from "@/lib/types";
 
 function signupSchema(t: Translate) {
   return z
@@ -83,7 +84,7 @@ function localizedSignUpError(error: AuthError, t: Translate): string {
 function SignUpInner() {
   const router = useRouter();
   const { status } = useSessionContext();
-  const { t, language } = useLocale();
+  const { t, language, setLanguage } = useLocale();
   // The application (or other same-origin destination) the visitor was
   // trying to reach — carried through verification so they land back there
   // instead of the schedule (#188: applicant return-path continuity).
@@ -111,6 +112,11 @@ function SignUpInner() {
       language,
     },
   });
+
+  // The top-bar language switch carries into the field until the visitor sets it here.
+  useEffect(() => {
+    if (!form.getFieldState("language").isDirty) form.setValue("language", language);
+  }, [language, form]);
 
   // Already signed in: no reason to show the sign-up form again.
   useEffect(() => {
@@ -257,7 +263,13 @@ function SignUpInner() {
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>{t("language")}</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select
+                    value={field.value}
+                    onValueChange={(value) => {
+                      field.onChange(value);
+                      setLanguage(value as Language);
+                    }}
+                  >
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue />
@@ -297,8 +309,8 @@ function SignUpInner() {
           </form>
         </Form>
       </CardContent>
-      <CardFooter className="text-muted-foreground justify-center border-t text-center text-sm">
-        {t("alreadyHaveAccount")}{" "}
+      <CardFooter className="text-muted-foreground flex-col items-center gap-1 border-t text-center text-sm">
+        {t("alreadyHaveAccount")}
         <Link
           href={withReturnPath("/login", next || null)}
           className="text-foreground underline underline-offset-4"

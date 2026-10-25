@@ -16,7 +16,7 @@ export function GET(request: Request) {
 ## Pages
 
 - [Home](${origin}/): the event, phases, announcements, challenges and sponsors
-- [Schedule](${origin}/horario): the public schedule
+- [Schedule](${origin}/timetable): the public schedule
 - [Project gallery](${origin}/gallery): submitted projects, open to everyone once published
 - [Privacy policy](${origin}/privacy)
 - [Terms and conditions](${origin}/terms)

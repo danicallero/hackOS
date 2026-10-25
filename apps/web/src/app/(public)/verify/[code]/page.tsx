@@ -10,9 +10,9 @@ import { XCircleIcon } from "@phosphor-icons/react/dist/csr/XCircle";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PdfCheck } from "@/components/certificates/pdf-check";
-import { Brand } from "@/components/common/brand";
 import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
+import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
@@ -51,12 +51,12 @@ export default function VerifyCertificatePage() {
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="bg-background border-b">
-        <div className="mx-auto flex h-16 w-full max-w-6xl items-center px-6">
-          <Brand className="text-2xl" />
-        </div>
-      </header>
-      <main className="bg-muted/40 relative min-h-0 flex-1">
+      <PublicTopBar />
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="outline-none bg-muted/40 relative min-h-0 flex-1"
+      >
         {state.kind === "valid" ? (
           <div className="flex size-full flex-col">
             <iframe
