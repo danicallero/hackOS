@@ -129,11 +129,7 @@ async function clearLocalSession(): Promise<void> {
 export function forceLocalSignOut(): void {
   void clearStoredSession();
   clearSessionAtom();
-  try {
-    void notifySignOut();
-  } catch {
-    // A listener failure must not prevent the caller from replacing the route.
-  }
+  void notifySignOut();
 }
 
 /** Best-effort server-side revocation, fired after the device is signed out. */
@@ -181,8 +177,7 @@ export async function signOut(): Promise<Awaited<ReturnType<typeof authClient.si
   const cleanup = notifySignOut();
   if (sessionCookie) {
     const revoke = () => revokeServerSession(sessionCookie);
-    if (cleanup) void cleanup.then(revoke, revoke);
-    else void revoke();
+    void cleanup.then(revoke, revoke);
   }
   return { data: { success: true }, error: null };
 }

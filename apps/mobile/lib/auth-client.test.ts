@@ -56,7 +56,7 @@ const mockNotifySignOut = notifySignOut as jest.Mock;
 describe("mobile sign-out", () => {
   beforeEach(() => {
     mockSecureStoreData.clear();
-    mockNotifySignOut.mockReset();
+    mockNotifySignOut.mockReset().mockResolvedValue(undefined);
     mockAuthClient.getCookie.mockReset().mockReturnValue("hackos.session_token=old-session");
     mockAuthClient.$fetch.mockReset().mockResolvedValue({ data: { success: true }, error: null });
     mockAuthClient.$store.atoms.session.get.mockReset().mockReturnValue({

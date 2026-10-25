@@ -35,6 +35,15 @@ describe("activityKinds", () => {
   });
 });
 
+describe("activityKinds locale order", () => {
+  it("sorts extra categories by locale rather than code unit (#1117)", () => {
+    const items = ["zeta", "Árbol", "alfa", "Beta"].map((category, i) =>
+      activity({ id: i + 1, category }),
+    );
+    expect(activityKinds(items, "es")).toEqual(["alfa", "Árbol", "Beta", "zeta"]);
+  });
+});
+
 describe("filterActivities", () => {
   const items = [
     activity({ id: 1, name: "Cena Sábado", category: "meal" }),
