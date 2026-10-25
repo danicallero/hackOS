@@ -5,53 +5,24 @@ import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { PublicationControls } from "@/components/common/publication-controls";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Form } from "@/components/ui/form";
 import { api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
+import {
+  type EnterpriseFormValues,
+  EnterpriseKindPriorityFields,
+  EnterpriseLogoUrlFields,
+  EnterpriseProfileFields,
+  EnterprisePublicationFields,
+  enterpriseFormSchema,
+} from "./enterprise-form-fields";
 import { type Enterprise, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "./shared";
-
-const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
-const optionalPositiveInt = z
-  .string()
-  .refine((v) => v === "" || (/^\d+$/.test(v) && Number(v) > 0), "Must be a positive number");
-
-const createSchema = z.object({
-  name: z.string().min(1, "Required").max(200),
-  website: optionalUrl,
-  logoUrl: optionalUrl,
-  logoNegativeUrl: optionalUrl,
-  description: z.string().max(2000),
-  priority: optionalPositiveInt,
-  kind: z.enum(["sponsor", "collaborator"]),
-  visibility: z.enum(["visible", "hidden"]),
-  availableFrom: z.string(),
-});
-type CreateValues = z.infer<typeof createSchema>;
 
 export function CreateEnterpriseModal({
   open,
@@ -63,10 +34,10 @@ export function CreateEnterpriseModal({
   onCreated: (created: Enterprise) => void | Promise<void>;
 }) {
   const { t } = useLocale();
-  const form = useForm<CreateValues>({
+  const form = useForm<EnterpriseFormValues>({
     mode: "onBlur",
     reValidateMode: "onBlur",
-    resolver: zodResolver(createSchema),
+    resolver: zodResolver(enterpriseFormSchema),
     defaultValues: {
       name: "",
       website: "",
@@ -85,7 +56,6 @@ export function CreateEnterpriseModal({
   const [defaultLogo, setDefaultLogo] = useState<File | null>(null);
   const [darkLogo, setDarkLogo] = useState<File | null>(null);
   const [scheduledPublish, setScheduledPublish] = useState(false);
-  const visibility = form.watch("visibility");
 
   // Reset the form each time the modal opens so stale input never lingers.
   useEffect(() => {
@@ -113,7 +83,7 @@ export function CreateEnterpriseModal({
     await apiUpload(`/api/enterprises/${enterpriseId}/logo?variant=${variant}`, data);
   }
 
-  async function onSubmit(values: CreateValues) {
+  async function onSubmit(values: EnterpriseFormValues) {
     try {
       // POST /api/enterprises (createEnterpriseBody). Empty strings → null so
       // optional fields are omitted; availableFrom is coerced to a Date server-side.
@@ -159,72 +129,9 @@ export function CreateEnterpriseModal({
           onSubmit={form.handleSubmit(onSubmit)}
           className="space-y-5"
         >
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("name")}</FormLabel>
-                <FormControl>
-                  <Input {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="website"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("websiteLabel")}</FormLabel>
-                <FormControl>
-                  <Input type="url" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t("descriptionLabel")}</FormLabel>
-                <FormControl>
-                  <Textarea rows={3} {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <EnterpriseProfileFields form={form} />
           <div className="space-y-5 border-t pt-5">
-            <FormField
-              control={form.control}
-              name="logoUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("logoUrlLabel")}</FormLabel>
-                  <FormControl>
-                    <Input type="url" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="logoNegativeUrl"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("darkBackgroundLogoUrlLabel")}</FormLabel>
-                  <FormControl>
-                    <Input type="url" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <EnterpriseLogoUrlFields form={form} />
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -271,75 +178,11 @@ export function CreateEnterpriseModal({
             </div>
           </div>
           <div className="space-y-5 border-t pt-5">
-            <FormField
-              control={form.control}
-              name="kind"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("enterpriseKindLabel")}</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="sponsor">{t("enterpriseKindSponsor")}</SelectItem>
-                      <SelectItem value="collaborator">
-                        {t("enterpriseKindCollaborator")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="priority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("priorityLabel")}</FormLabel>
-                  <FormControl>
-                    <Input inputMode="numeric" {...field} />
-                  </FormControl>
-                  <FormDescription>{t("lowerShowsFirstDesc")}</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <PublicationControls
-              id="enterprise-publication"
-              visibility={visibility}
-              hiddenValue="hidden"
-              publishedValue="visible"
-              hiddenLabel={t("hiddenOption")}
-              publishedLabel={t("visibleLabel")}
-              visibilityLabel={t("colVisibility")}
-              scheduleLabel={t("schedulePublicationLabel")}
-              publishAtLabel={t("publishAtLabel")}
+            <EnterpriseKindPriorityFields form={form} />
+            <EnterprisePublicationFields
+              form={form}
               scheduled={scheduledPublish}
-              publishAt={form.watch("availableFrom")}
-              onVisibilityChange={(next) => {
-                form.setValue("visibility", next, { shouldDirty: true });
-                if (next === "visible") {
-                  setScheduledPublish(false);
-                  form.setValue("availableFrom", "", { shouldDirty: true });
-                }
-              }}
-              onScheduledChange={(next) => {
-                setScheduledPublish(next);
-                form.setValue(
-                  "availableFrom",
-                  next ? toDatetimeLocal(new Date().toISOString()) : "",
-                  {
-                    shouldDirty: true,
-                  },
-                );
-              }}
-              onPublishAtChange={(value) =>
-                form.setValue("availableFrom", value, { shouldDirty: true })
-              }
+              setScheduled={setScheduledPublish}
             />
           </div>
         </form>
