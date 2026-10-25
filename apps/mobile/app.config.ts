@@ -64,6 +64,7 @@ export default function appConfig({ config }: ConfigContext): ExpoConfig {
       "expo-secure-store",
       "expo-status-bar",
       "expo-web-browser",
+      "./plugins/withAndroidGradleMemory.js",
       "./plugins/withAndroidResConfigs.js",
       "./plugins/withAndroidAppleTheme.js",
       "./plugins/withAndroidNfcTagClaim.js",
