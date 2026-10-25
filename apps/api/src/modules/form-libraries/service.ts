@@ -105,18 +105,42 @@ export async function validateLibraryAnswers(
   responses: Record<string, unknown>,
   userId: number,
 ) {
+  const libraryIds = [
+    ...new Set(
+      fields.flatMap((field) =>
+        field.kind === "library" && field.library_id && responses[field.key] != null
+          ? [field.library_id]
+          : [],
+      ),
+    ),
+  ];
+  // One lookup for every library instead of two per field.
+  const existing = new Set<string>();
+  const namesByLibrary = new Map<string, Set<string>>();
+  if (libraryIds.length) {
+    const { rows: libraries } = await db.query(
+      `SELECT id FROM form_libraries WHERE id=ANY($1::uuid[])`,
+      [libraryIds],
+    );
+    for (const row of libraries) existing.add(row.id as string);
+    const { rows: valueRows } = await db.query(
+      `SELECT library_id, name FROM form_library_values WHERE library_id=ANY($1::uuid[]) AND is_test_account=(SELECT is_test_account FROM users WHERE id=$2)`,
+      [libraryIds, userId],
+    );
+    for (const row of valueRows) {
+      const names = namesByLibrary.get(row.library_id as string) ?? new Set<string>();
+      names.add(row.name as string);
+      namesByLibrary.set(row.library_id as string, names);
+    }
+  }
   for (const field of fields) {
     if (field.kind !== "library" || !field.library_id || responses[field.key] == null) continue;
     const answers = responses[field.key];
     if (!Array.isArray(answers) || answers.some((value) => typeof value !== "string"))
       throw new BadRequestError("Invalid library answer");
-    const library = await db.query(`SELECT 1 FROM form_libraries WHERE id=$1`, [field.library_id]);
-    if (!library.rowCount) continue; // Historical form versions retain answers after their catalogue is retired.
-    const values = await db.query(
-      `SELECT name FROM form_library_values WHERE library_id=$1 AND is_test_account=(SELECT is_test_account FROM users WHERE id=$2)`,
-      [field.library_id, userId],
-    );
-    if (answers.some((value) => !values.rows.some((row) => row.name === value)))
+    if (!existing.has(field.library_id)) continue; // Historical form versions retain answers after their catalogue is retired.
+    const names = namesByLibrary.get(field.library_id);
+    if (answers.some((value) => !names?.has(value)))
       throw new ConflictError("Library values have changed; reload the form");
   }
 }

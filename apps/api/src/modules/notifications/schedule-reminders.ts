@@ -2,7 +2,13 @@ import { config } from "../../config.js";
 import { type Queryable, withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { readNotificationAutomationSettings } from "./automation-settings.js";
-import { DEFAULT_CHANNELS, notify, REMINDER_CHANNEL_CATEGORY, resolveChannels } from "./service.js";
+import {
+  DEFAULT_CHANNELS,
+  type NotifyOptions,
+  notifyMany,
+  REMINDER_CHANNEL_CATEGORY,
+  resolveChannelsMany,
+} from "./service.js";
 
 /**
  * Activity reminder job (H51: "apuntarme a recordatorios de actividades
@@ -147,19 +153,24 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
         const startsAtLabel = formatStartsAt(row.starts_at, timezone);
         const locationLine = row.location ? `\n\nLocation: ${row.location}` : "";
         const locationSuffix = row.location ? ` · ${row.location}` : "";
-        for (const { user_id: userId } of audienceRows as { user_id: number }[]) {
-          const resolved = await resolveChannels(
-            client,
+        const audienceIds = (audienceRows as { user_id: number }[]).map((a) => a.user_id);
+        const resolvedByUser = await resolveChannelsMany(
+          client,
+          audienceIds.map((userId) => ({
             userId,
-            REMINDER_CHANNEL_CATEGORY,
-            DEFAULT_CHANNELS,
-          );
+            category: REMINDER_CHANNEL_CATEGORY,
+            candidates: DEFAULT_CHANNELS,
+          })),
+        );
+        const reminders: NotifyOptions[] = [];
+        audienceIds.forEach((userId, idx) => {
+          const resolved = resolvedByUser[idx] ?? [];
           // The phone fires this reminder itself, also offline (H51).
           const channels = covered.has(userId)
             ? resolved.filter((channel) => channel !== "push")
             : resolved;
-          if (channels.length === 0) continue;
-          await notify(client, {
+          if (channels.length === 0) return;
+          reminders.push({
             userId,
             category,
             channels,
@@ -173,8 +184,9 @@ export async function runScheduleRemindersOnce(): Promise<{ reminded: number; no
               },
             },
           });
-          notified += 1;
-        }
+        });
+        await notifyMany(client, reminders);
+        notified += reminders.length;
 
         await client.query(`UPDATE schedule SET reminded_at = now() WHERE id = $1`, [row.id]);
       }

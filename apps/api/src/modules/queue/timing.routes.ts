@@ -6,7 +6,7 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
-import { broadcastQueueEvent } from "./broadcast.js";
+import { broadcastQueueEventWithMarker } from "./broadcast.js";
 import { requireChallengeJudgeOrCapability } from "./contextual-access.js";
 import { assertQueueChallengeScope } from "./fixture-scope.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
@@ -64,8 +64,8 @@ export function registerTimingRoutes(app: FastifyInstance) {
     },
     async (q) => {
       const id = q.params.challengeId;
-      await withTransaction(async (db) => {
-        await assertQueueChallengeScope(db, q.userId as number, id);
+      const marker = await withTransaction(async (db) => {
+        const marker = await assertQueueChallengeScope(db, q.userId as number, id);
         const before = await db.query(
           `SELECT target_seconds_per_team,preparation_seconds FROM challenges WHERE id=$1 FOR UPDATE`,
           [id],
@@ -83,8 +83,9 @@ export function registerTimingRoutes(app: FastifyInstance) {
           after: q.body,
           source: "web",
         });
+        return marker;
       });
-      await broadcastQueueEvent(pool, "challenge", id, EVENTS.QUEUE_ROOM_CHANGED, {
+      await broadcastQueueEventWithMarker(marker, EVENTS.QUEUE_ROOM_CHANGED, {
         challengeId: id,
       });
       await notifyChallengeQueueChanged(pool, id);

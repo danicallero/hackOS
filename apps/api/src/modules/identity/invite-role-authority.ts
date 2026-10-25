@@ -4,7 +4,7 @@ import {
   lockRoleGraph,
   type RoleGraphClient,
   requireWildcardRoleAuthority,
-  roleGrantsWildcard,
+  rolesGrantWildcard,
 } from "./role-authority.js";
 
 /**
@@ -23,22 +23,27 @@ export async function inviteContainsWildcardRole(
   roleIds: readonly number[],
   { requireExisting = false }: { requireExisting?: boolean } = {},
 ): Promise<boolean> {
-  let containsWildcard = false;
+  if (roleIds.length === 0) return false;
+  const { rows } = await client.query(
+    `SELECT id, name, is_protected FROM roles WHERE id = ANY($1::integer[])`,
+    [roleIds],
+  );
+  const byId = new Map(rows.map((row) => [Number(row.id), row]));
+  // Validate in the caller's order so the first offending role is reported.
+  const present: number[] = [];
   for (const roleId of roleIds) {
-    const { rows } = await client.query(`SELECT id, name, is_protected FROM roles WHERE id = $1`, [
-      roleId,
-    ]);
-    if (!rows[0]) {
+    const row = byId.get(roleId);
+    if (!row) {
       if (requireExisting) throw new NotFoundError("Role not found", { roleId });
       continue;
     }
     assertNotProtectedRole({
-      isProtected: rows[0].is_protected as boolean,
-      name: rows[0].name as string,
+      isProtected: row.is_protected as boolean,
+      name: row.name as string,
     });
-    if (await roleGrantsWildcard(client, roleId)) containsWildcard = true;
+    present.push(roleId);
   }
-  return containsWildcard;
+  return rolesGrantWildcard(client, present);
 }
 
 export async function requireWildcardInviteAuthority(

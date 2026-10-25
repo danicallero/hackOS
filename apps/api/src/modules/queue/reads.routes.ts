@@ -19,10 +19,12 @@ import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { queueTopicForFixture } from "./broadcast.js";
 import {
+  accessibleRoomIds,
   requireChallengeJudgeOrCapability,
   requireRepoJudgeOrCapability,
   requireRoomAssignmentsAccess,
   requireRoomJudgeOrCapability,
+  requireRoomListAccess,
 } from "./contextual-access.js";
 import {
   challengeProgress,
@@ -32,6 +34,7 @@ import {
   roomAssignments,
   roomPace,
   roomView,
+  roomViews,
 } from "./reads.js";
 import { challengeIdParam, repoIdParam, roomIdParam, tvConfigBody, tvModeBody } from "./schemas.js";
 import { clearTvMode, resolveTvState, setTvLanguage, setTvMode, tvVenueConfig } from "./tv.js";
@@ -92,6 +95,28 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => repoChallenges(req.params.repoId),
+  );
+
+  typed.get(
+    "/api/queue/rooms/views",
+    {
+      preHandler: requireRoomListAccess,
+      config: {
+        routeAccessPolicy: {
+          kind: "contextual",
+          policy: "room-list",
+        },
+      },
+      schema: {
+        summary: "Room queue views for every visible room",
+        description:
+          "Bulk form of `GET /api/queue/rooms/:roomId/view` for operator and judge boards: one request returns the room queue view (room, state, queue label, active, called, waiting teams with ETA and `crossRoomSkips`) of every room the caller can list through `GET /api/queue/rooms`, ordered by room id. Global queue operators and administrators receive every room in their fixture boundary; relationship-only judges and sponsor representatives receive only the rooms serving their enterprise's queues. Callers with no visible room are denied, except global operators/administrators, who receive an empty list. Each element is identical to the single-room view. The data is computed set-based across rooms rather than per room (H29, H38, H41).",
+      },
+    },
+    async (req) => {
+      const roomIds = (await accessibleRoomIds(req)) ?? [];
+      return roomViews(roomIds, { includeCrossRoomSkips: true });
+    },
   );
 
   typed.get(

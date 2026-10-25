@@ -10,7 +10,7 @@ import {
   assertQueueRepoScope,
   assertQueueRoomScope,
 } from "./fixture-scope.js";
-import { assertEntryInScope, resolveReviewScope } from "./reviews.js";
+import { assertEntryInScope, markEntryScopeVerified, resolveReviewScope } from "./reviews.js";
 
 type ParamName = "roomId" | "challengeId" | "entryId" | "repoId";
 
@@ -33,19 +33,6 @@ async function hasAnyCapability(
     if (await userHasCapability(context, capability)) return true;
   }
   return false;
-}
-
-async function ownsChallenge(userId: number, challengeId: number): Promise<boolean> {
-  const { rowCount } = await pool.query(
-    `SELECT 1
-       FROM challenges c
-       JOIN sponsors author ON author.id = c.author
-       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-      WHERE c.id = $1 AND mine.user_id = $2
-      LIMIT 1`,
-    [challengeId, userId],
-  );
-  return rowCount !== 0;
 }
 
 /**
@@ -108,23 +95,55 @@ async function ownsRoomEnterprise(userId: number, roomId: number): Promise<boole
   return rowCount !== 0;
 }
 
-async function entryChallengeId(entryId: number): Promise<number | null> {
-  const { rows } = await pool.query(
-    `SELECT challenge_id FROM queue_entries WHERE id = $1 LIMIT 1`,
-    [entryId],
+/**
+ * Entry-level relationship in ONE query (it used to be entry -> challenge id,
+ * then the roster check): the caller belongs to the enterprise of the entry's
+ * challenge through the judge roster or as a sponsor representative.
+ */
+async function judgesEntry(userId: number, entryId: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `SELECT 1
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN sponsors author ON author.id = c.author
+       LEFT JOIN enterprise_judges ej
+              ON ej.enterprise_id = author.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine
+              ON mine.enterprise_id = author.enterprise_id AND mine.user_id = $1
+      WHERE qe.id = $2 AND (ej.user_id = $1 OR mine.user_id = $1)
+      LIMIT 1`,
+    [userId, entryId],
   );
-  return rows[0] ? Number(rows[0].challenge_id) : null;
+  return rowCount !== 0;
 }
 
-async function repoChallengeIds(repoId: number): Promise<number[]> {
-  const { rows } = await pool.query(`SELECT challenge_id FROM queue_entries WHERE repo_id = $1`, [
-    repoId,
-  ]);
-  return rows.map((row: { challenge_id: number }) => row.challenge_id);
+/** True when the caller judges or represents ANY challenge queued for the repo, in one query. */
+async function judgesRepoChallenge(userId: number, repoId: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `SELECT 1
+       FROM queue_entries qe
+       JOIN challenges c ON c.id = qe.challenge_id
+       JOIN sponsors author ON author.id = c.author
+       LEFT JOIN enterprise_judges ej
+              ON ej.enterprise_id = author.enterprise_id AND ej.user_id = $1
+       LEFT JOIN sponsors mine
+              ON mine.enterprise_id = author.enterprise_id AND mine.user_id = $1
+      WHERE qe.repo_id = $2 AND (ej.user_id = $1 OR mine.user_id = $1)
+      LIMIT 1`,
+    [userId, repoId],
+  );
+  return rowCount !== 0;
 }
 
-async function hasChallengeRelationship(userId: number, challengeId: number): Promise<boolean> {
-  return (await judgesChallenge(userId, challengeId)) || (await ownsChallenge(userId, challengeId));
+/** The request's memoized actor marker; shared by every scope assert on this request. */
+function actorMarker(req: FastifyRequest): Promise<boolean> {
+  return getRequestAuthorizationContext(req).actorIsSyntheticOperator;
+}
+
+/** Start a lookup now and keep a later rejection from going unhandled if an earlier check throws first. */
+function started<T>(promise: Promise<T>): Promise<T> {
+  promise.catch(() => undefined);
+  return promise;
 }
 
 function denied(resource: string, details: Record<string, unknown> = {}): never {
@@ -140,9 +159,12 @@ function denied(resource: string, details: Record<string, unknown> = {}): never 
 export function requireRoomJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
-    if (await hasAnyCapability(req, capabilities)) return;
     const roomId = numberParam(req, "roomId");
+    // Capabilities load beside the fixture-scope assert; the scope verdict is
+    // still awaited first, so a scope violation wins over any grant.
+    const granted = started(hasAnyCapability(req, capabilities));
+    await assertQueueRoomScope(pool, userId, roomId, actorMarker(req));
+    if (await granted) return;
     if (await judgesRoomEnterprise(userId, roomId)) return;
     denied("room", { roomId, capabilities });
   };
@@ -154,9 +176,10 @@ export function requireRoomAccessOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
-    if (await hasAnyCapability(req, capabilities)) return;
     const roomId = numberParam(req, "roomId");
+    const granted = started(hasAnyCapability(req, capabilities));
+    await assertQueueRoomScope(pool, userId, roomId, actorMarker(req));
+    if (await granted) return;
     if (await judgesRoomEnterprise(userId, roomId)) return;
     // H46 ownership remains a read-only sponsor scope; a roster judge reaches
     // every room their enterprise currently judges in.
@@ -168,10 +191,12 @@ export function requireRoomAccessOrCapability(
 /** H46 room assignments are global-admin or challenge-owner only. */
 export const requireRoomAssignmentsAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
-  await assertQueueRoomScope(pool, userId, numberParam(req, "roomId"));
-  if (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.QUEUE_ADMIN))
-    return;
   const roomId = numberParam(req, "roomId");
+  const isAdmin = started(
+    userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.QUEUE_ADMIN),
+  );
+  await assertQueueRoomScope(pool, userId, roomId, actorMarker(req));
+  if (await isAdmin) return;
   if (await ownsRoomEnterprise(userId, roomId)) return;
   denied("room assignments", { roomId });
 };
@@ -181,10 +206,11 @@ export function requireChallengeJudgeOrCapability(
 ): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertQueueChallengeScope(pool, userId, numberParam(req, "challengeId"));
-    if (await hasAnyCapability(req, capabilities)) return;
     const challengeId = numberParam(req, "challengeId");
-    if (await hasChallengeRelationship(userId, challengeId)) return;
+    const granted = started(hasAnyCapability(req, capabilities));
+    await assertQueueChallengeScope(pool, userId, challengeId, actorMarker(req));
+    if (await granted) return;
+    if (await judgesChallenge(userId, challengeId)) return;
     denied("challenge", { challengeId, capabilities });
   };
 }
@@ -192,16 +218,11 @@ export function requireChallengeJudgeOrCapability(
 export function requireRepoJudgeOrCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     const userId = await requireUser(req);
-    await assertQueueRepoScope(pool, userId, numberParam(req, "repoId"));
-    if (await hasAnyCapability(req, capabilities)) return;
     const repoId = numberParam(req, "repoId");
-    const challengeIds = await repoChallengeIds(repoId);
-    if (
-      await Promise.all(challengeIds.map((id) => hasChallengeRelationship(userId, id))).then((v) =>
-        v.some(Boolean),
-      )
-    )
-      return;
+    const granted = started(hasAnyCapability(req, capabilities));
+    await assertQueueRepoScope(pool, userId, repoId, actorMarker(req));
+    if (await granted) return;
+    if (await judgesRepoChallenge(userId, repoId)) return;
     denied("repo's queue entries", { repoId, capabilities });
   };
 }
@@ -214,16 +235,30 @@ export function requireEntryJudgeOrCapability(
   };
 }
 
-/** Lists are centrally filtered; an association never turns into global room access. */
-export async function accessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
-  const userId = await requireUser(req);
-  const scopedRoomIds = await fixtureRoomIds(pool, userId);
-  if (
-    (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.QUEUE_OPERATE)) ||
-    (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.QUEUE_ADMIN))
-  ) {
-    return scopedRoomIds;
+const accessibleRoomIdsByRequest = new WeakMap<FastifyRequest, Promise<number[] | null>>();
+
+/**
+ * Lists are centrally filtered; an association never turns into global room
+ * access. Computed once per request: the list guard and the handler share it.
+ */
+export function accessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
+  let result = accessibleRoomIdsByRequest.get(req);
+  if (!result) {
+    result = loadAccessibleRoomIds(req);
+    accessibleRoomIdsByRequest.set(req, result);
   }
+  return result;
+}
+
+async function loadAccessibleRoomIds(req: FastifyRequest): Promise<number[] | null> {
+  const userId = await requireUser(req);
+  const context = getRequestAuthorizationContext(req);
+  const [scopedRoomIds, isOperator, isAdmin] = await Promise.all([
+    fixtureRoomIds(pool, userId, context.actorIsSyntheticOperator),
+    userHasCapability(context, CAPABILITIES.QUEUE_OPERATE),
+    userHasCapability(context, CAPABILITIES.QUEUE_ADMIN),
+  ]);
+  if (isOperator || isAdmin) return scopedRoomIds;
   if (scopedRoomIds.length === 0) return [];
   // Every room linked to a queue_group whose enterprise this user judges for
   // or reps — the room's enterprise is now read straight off the group, with
@@ -270,10 +305,15 @@ export function requireChallengeExport(): preHandlerHookHandler {
     ) {
       denied("challenge export", { capability: CAPABILITIES.JUDGING_EXPORT });
     }
-    await assertQueueChallengeScope(pool, userId, numberParam(req, "challengeId"));
+    await assertQueueChallengeScope(
+      pool,
+      userId,
+      numberParam(req, "challengeId"),
+      actorMarker(req),
+    );
     if (
       (await hasAnyCapability(req, [CAPABILITIES.QUEUE_ADMIN, CAPABILITIES.PROJECTS_READ])) ||
-      (await hasChallengeRelationship(userId, numberParam(req, "challengeId")))
+      (await judgesChallenge(userId, numberParam(req, "challengeId")))
     ) {
       return;
     }
@@ -284,21 +324,31 @@ export function requireChallengeExport(): preHandlerHookHandler {
 /** H46 review lists/details/exports use the same sponsor-or-admin scope. */
 export const requireReviewScopeAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
-  await resolveReviewScope(getRequestAuthorizationContext(req));
+  const scope = started(resolveReviewScope(getRequestAuthorizationContext(req)));
   const query = req.query as Partial<{ challengeId: number; roomId: number }>;
+  const marker = actorMarker(req);
+  // Scope-violation verdicts keep their original precedence over the review
+  // audience check: resolve the scope (Forbidden for outsiders) first, as
+  // before, then validate the filters.
+  await scope;
   if (query.challengeId != null) {
-    await assertQueueChallengeScope(pool, userId, query.challengeId);
+    await assertQueueChallengeScope(pool, userId, query.challengeId, marker);
   }
   if (query.roomId != null) {
-    await assertQueueRoomScope(pool, userId, query.roomId);
+    await assertQueueRoomScope(pool, userId, query.roomId, marker);
   }
 };
 
 export const requireReviewEntryAccess: preHandlerHookHandler = async (req) => {
   const userId = await requireUser(req);
   const entryId = numberParam(req, "entryId");
-  await assertQueueEntryScope(pool, userId, entryId);
-  await assertEntryInScope(await resolveReviewScope(getRequestAuthorizationContext(req)), entryId);
+  const scope = started(resolveReviewScope(getRequestAuthorizationContext(req)));
+  // Fixture-graph verdict first (as before), then the review audience check.
+  await assertQueueEntryScope(pool, userId, entryId, actorMarker(req));
+  const resolved = await scope;
+  // The graph assert above is this request's authoritative check; do not repeat it.
+  markEntryScopeVerified(resolved, entryId);
+  await assertEntryInScope(resolved, entryId);
 };
 
 /** Shared contextual authorization for HTTP and multiplexed entry subscriptions (#892). */
@@ -308,11 +358,11 @@ export async function assertEntryJudgeAccess(
   capabilities: readonly Capability[] = [CAPABILITIES.JUDGE_PANEL],
 ): Promise<void> {
   const userId = await requireUser(req);
-  await assertQueueEntryScope(pool, userId, entryId);
-  if (await hasAnyCapability(req, capabilities)) return;
-  const challengeId = await entryChallengeId(entryId);
+  const granted = started(hasAnyCapability(req, capabilities));
+  await assertQueueEntryScope(pool, userId, entryId, actorMarker(req));
+  if (await granted) return;
   // Sponsor representatives judge their own enterprise by default; external
   // judges reach the same scope through the enterprise roster.
-  if (challengeId != null && (await judgesChallenge(userId, challengeId))) return;
+  if (await judgesEntry(userId, entryId)) return;
   denied("queue entry", { entryId, capabilities });
 }

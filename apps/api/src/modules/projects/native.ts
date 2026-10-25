@@ -213,16 +213,30 @@ export async function submitNativeProject(userId: number, id: number) {
     );
     if (rows[0].maximum && rows[0].count > rows[0].maximum && !project.team_size_exception)
       throw new BadRequestError("Project exceeds maximum team size");
+    const expectedKeys = new Map<string, Set<string>>();
     for (const field of form.template) {
       if (field.kind !== "file" && field.kind !== "images") continue;
       const keys = responseFileKeys(project.responses[field.key]);
-      if (!keys.length) continue;
-      const owned = await db.query(
-        `SELECT count(DISTINCT object_key)::int AS count FROM project_files WHERE repo_id=$1 AND object_key=ANY($2::text[]) AND field_key=$3`,
-        [id, keys, field.key],
+      if (keys.length) expectedKeys.set(field.key, new Set(keys));
+    }
+    if (expectedKeys.size > 0) {
+      const pairs = [...expectedKeys].flatMap(([fieldKey, keys]) =>
+        [...keys].map((objectKey) => ({ fieldKey, objectKey })),
       );
-      if (owned.rows[0].count !== new Set(keys).size)
-        throw new BadRequestError("File does not belong to this project");
+      const owned = await db.query(
+        `SELECT p.field_key, count(DISTINCT pf.object_key)::int AS count
+           FROM unnest($2::text[], $3::text[]) AS p(field_key, object_key)
+           JOIN project_files pf
+             ON pf.repo_id=$1 AND pf.field_key=p.field_key AND pf.object_key=p.object_key
+          GROUP BY p.field_key`,
+        [id, pairs.map((pair) => pair.fieldKey), pairs.map((pair) => pair.objectKey)],
+      );
+      const ownedCounts = new Map<string, number>(
+        owned.rows.map((row: { field_key: string; count: number }) => [row.field_key, row.count]),
+      );
+      for (const [fieldKey, keys] of expectedKeys)
+        if ((ownedCounts.get(fieldKey) ?? 0) !== keys.size)
+          throw new BadRequestError("File does not belong to this project");
     }
     await db.query(
       `UPDATE repos SET submission_status='submitted',submitted_at=now(),submitted_via='native',locked_at=now(),lock_reason='native_submission' WHERE id=$1`,

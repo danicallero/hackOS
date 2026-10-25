@@ -8,7 +8,7 @@ import type pg from "pg";
 import { config } from "../../config.js";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { translateEmail } from "../../lib/i18n.js";
@@ -1410,7 +1410,10 @@ async function revokeApplicationGrantedRoles(
   );
   for (const row of revoked as { role_id: number }[]) {
     await applyRoleAssignmentRevokeRules(client, userId, row.role_id, actorId);
-    await audit(client, {
+  }
+  await auditMany(
+    client,
+    (revoked as { role_id: number }[]).map((row) => ({
       actorId,
       entityType: "role",
       entityId: row.role_id,
@@ -1418,8 +1421,8 @@ async function revokeApplicationGrantedRoles(
       source: "system",
       before: { userId },
       reason: "application spot lost after confirmation",
-    });
-  }
+    })),
+  );
 }
 
 async function pushTicketVoid(userId: number, voidedPassIds: number[]): Promise<void> {
@@ -1625,16 +1628,21 @@ export async function batchSendDecisions(
   const tokens: Array<{ responseId: number; token: string | null }> = [];
   const skipped: Array<{ id: number; reason: string }> = [];
   const sorted = [...responseIds].sort((a, b) => a - b);
+  const statusById = new Map<number, string>();
+  if (sorted.length > 0) {
+    const { rows: statusRows } = await pool.query(
+      `SELECT id, status FROM application_responses WHERE id = ANY($1::int[])`,
+      [sorted],
+    );
+    for (const row of statusRows) statusById.set(Number(row.id), row.status as string);
+  }
   for (const id of sorted) {
     try {
-      const { rows } = await pool.query(`SELECT status FROM application_responses WHERE id = $1`, [
-        id,
-      ]);
-      if (!rows[0]) {
+      const status = statusById.get(id);
+      if (status === undefined) {
         skipped.push({ id, reason: "not found" });
         continue;
       }
-      const status = rows[0].status;
       if (status === "accepted_internal" || status === "rejected_internal") {
         const result = await sendDecision(actorId, id);
         tokens.push({ responseId: id, token: result.confirmationToken });

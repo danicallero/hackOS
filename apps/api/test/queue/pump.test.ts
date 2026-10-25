@@ -290,6 +290,40 @@ describe("queue pump (H29, plan/07 §5.1)", () => {
     expect(again.rows[0].n).toBe(3);
   });
 
+  it("H38: warns every due team of a group in one claim, once, even with overlapping ticks", async () => {
+    const challengeId = await createChallenge();
+    const roomId = await createRoom({ maxInWaitingArea: 0 });
+    await assignChallengeToRoom(roomId, challengeId);
+    const { pool } = await import("../../src/db/pool.js");
+    // Pace 5 min/slot, threshold 20: the first four teams are due, the fifth is not.
+    await pool.query(
+      `UPDATE queue_settings SET pre_call_notification_eta_minutes = 20 WHERE id = 1`,
+    );
+    const members: number[] = [];
+    const entries: number[] = [];
+    for (let i = 1; i <= 5; i++) {
+      const member = await createUser();
+      members.push(member);
+      const { repoId } = await createRepoWithTeam([member]);
+      entries.push(await enqueueRepo(challengeId, repoId, i));
+    }
+
+    await Promise.all([pump(), pump()]);
+
+    for (const entryId of entries.slice(0, 4)) {
+      expect((await getEntry(entryId)).precalled_at).not.toBeNull();
+    }
+    expect((await getEntry(entries[4]!)).precalled_at).toBeNull();
+    for (const member of members.slice(0, 4)) {
+      const { rows } = await pool.query(
+        `SELECT count(*)::int AS n FROM notification_outbox
+          WHERE user_id = $1 AND category = 'queue'`,
+        [member],
+      );
+      expect(rows[0].n).toBe(3); // in_app, email, push: one warning, not two
+    }
+  });
+
   it("does not pre-call teams far from the front (ETA above threshold)", async () => {
     const challengeId = await createChallenge();
     const roomId = await createRoom({ maxInWaitingArea: 0 });

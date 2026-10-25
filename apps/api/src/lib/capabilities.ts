@@ -13,6 +13,12 @@ export interface AuthorizationContext {
   readonly userId: number | null;
   readonly db: Queryable;
   readonly effectiveCapabilities: Promise<ReadonlySet<string>>;
+  /**
+   * The actor's synthetic-operator marker (`users.is_test_account`), read at
+   * most once per context. Request-scoped like `effectiveCapabilities`, so
+   * stacked guards and the handler share one read instead of one per assert.
+   */
+  readonly actorIsSyntheticOperator: Promise<boolean>;
 }
 
 function resolveCapabilities(userId: number | null, db: Queryable): Promise<ReadonlySet<string>> {
@@ -28,18 +34,30 @@ function resolveCapabilities(userId: number | null, db: Queryable): Promise<Read
     .then((result) => new Set(result.rows.map((r: { capability: string }) => r.capability)));
 }
 
+function resolveSyntheticOperator(userId: number | null, db: Queryable): Promise<boolean> {
+  if (userId == null) return Promise.resolve(false);
+  return db
+    .query(`SELECT is_test_account FROM users WHERE id = $1`, [userId])
+    .then((result) => result.rows[0]?.is_test_account === true);
+}
+
 /** Create an explicit request or transaction authorization context (H8, #714). */
 export function createAuthorizationContext(
   userId: number | null,
   db: Queryable = pool,
 ): AuthorizationContext {
   let effectiveCapabilities: Promise<ReadonlySet<string>> | undefined;
+  let actorIsSyntheticOperator: Promise<boolean> | undefined;
   return {
     userId,
     db,
     get effectiveCapabilities() {
       effectiveCapabilities ??= resolveCapabilities(userId, db);
       return effectiveCapabilities;
+    },
+    get actorIsSyntheticOperator() {
+      actorIsSyntheticOperator ??= resolveSyntheticOperator(userId, db);
+      return actorIsSyntheticOperator;
     },
   };
 }

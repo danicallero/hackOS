@@ -5,7 +5,7 @@ import { ZipArchive } from "archiver";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
-import { audit } from "../../lib/audit.js";
+import { audit, auditMany } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
@@ -680,15 +680,16 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
         }
       }
 
-      for (const failure of failures) {
-        await audit(pool, {
+      await auditMany(
+        pool,
+        failures.map((failure) => ({
           actorId: req.userId,
           entityType: "application_response",
           entityId: failure.responseId,
           action: "export_file_unreadable",
           reason: `Field '${failure.fieldKey}' upload missing from storage during batch export`,
-        });
-      }
+        })),
+      );
       await audit(pool, {
         actorId: req.userId,
         entityType: "application_batch_export",

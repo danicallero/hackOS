@@ -102,7 +102,12 @@ await notify(client, { userId, category: "application.decision", payload: {...} 
 `notify()` expands the requested candidate channels through
 `notification_preferences` (`resolveChannels`) and inserts one
 `notification_outbox` row per resulting channel — it never sends anything
-itself. Two background workers do the actual work:
+itself. Fan-out loops (queue calls, announcements, challenge alerts, activity
+reminders) use `notifyMany(client, items)`: identical per-item semantics, but
+every step (user `FOR SHARE` lock, fixture/actor scope, channel resolution,
+inbox rendering, outbox insert) is one set-based query for the whole batch, so
+cost no longer grows per recipient. `notify()` is `notifyMany` with one item.
+Two background workers do the actual work:
 
 - `notifications-outbox` (`dispatcher.ts`, every 5s) drains queued/due
   outbox rows with `FOR UPDATE SKIP LOCKED`, dispatches per channel

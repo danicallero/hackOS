@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { pool } from "../../db/pool.js";
-import { assertFixtureQueueScope } from "../logistics/review-fixture-scope.js";
+import { assertFixtureQueueScopes } from "../logistics/review-fixture-scope.js";
 
 type Resource = "room" | "entry" | "queueGroup" | "challenge" | "repo";
 type Target = { resource: Resource; id: number };
@@ -84,8 +84,6 @@ export function registerFixtureBoundaryGuard(app: FastifyInstance): void {
     if (!BOUNDED_PREFIXES.some((prefix) => url.startsWith(prefix))) return;
     const targets = targetsOf(req, url);
     if (targets.length === 0) return;
-    for (const target of targets) {
-      await assertFixtureQueueScope(pool, userId, target.resource, target.id);
-    }
+    await assertFixtureQueueScopes(pool, userId, targets);
   });
 }

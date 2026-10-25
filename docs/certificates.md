@@ -245,6 +245,10 @@ Mobile screens are not built yet.
   (`POST /api/certificates/bulk`, idempotent) or revoke with a reason
   (`POST /api/certificates/:id/revoke`). A revoked certificate verifies as
   revoked with no personal data and its PDF answers 409.
+- Bulk issue reads hours, attended activities, presentations, roles and contact data for the whole
+  batch in set-based queries, then issues each person in their own transaction. Each transaction
+  still locks the settings, type and person and re-reads the person's award, so a concurrent review
+  or type edit is honoured (an edited type drops the preload for that person).
 - Account removal (H54) revokes the person's certificates and clears their
   snapshot, explicit recipient identity fields and the manual award (`identity/removal.ts`).
 - Issue, revoke and settings changes are audited (H53):

@@ -4,7 +4,7 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import { notifyTeamCalled, notifyTeamPreCall } from "../../src/modules/queue/notify.js";
+import { notifyTeamCalled, prepareTeamPreCalls } from "../../src/modules/queue/notify.js";
 import {
   asUser,
   buildTestApp,
@@ -409,12 +409,20 @@ describe("queue contextual isolation", () => {
       `${SSE_TOPICS.USER_PREFIX}${fixtureMember}`,
     );
     const fixtureQueueAfterCalled = await broadcastCount(SSE_TOPICS.QUEUE_FIXTURE);
-    await notifyTeamPreCall(pool, {
-      entryId: fixtureEntryId,
-      challengeId: fixtureChallengeId,
-      repoId: fixtureRepoId,
-      etaMinutes: 5,
-    });
+    await (
+      await prepareTeamPreCalls(
+        pool,
+        [
+          {
+            entryId: fixtureEntryId,
+            challengeId: fixtureChallengeId,
+            repoId: fixtureRepoId,
+            etaMinutes: 5,
+          },
+        ],
+        true,
+      )
+    )();
     await pool.query(
       `UPDATE queue_entries
           SET status = 'waiting', assigned_room_id = NULL, precalled_at = NULL

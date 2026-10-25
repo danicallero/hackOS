@@ -100,15 +100,14 @@ describe("queue operations search (H29-H31)", () => {
   beforeEach(() => {
     mockSetOptions.mockClear();
     mockApiFetch.mockReset().mockImplementation((path: string) => {
-      if (path === "/api/queue/rooms") return Promise.resolve(ROOMS.map(({ room }) => room));
-      const roomId = Number(path.split("/")[4]);
-      return Promise.resolve(ROOMS.find((view) => view.room.id === roomId));
+      if (path === "/api/queue/rooms/views") return Promise.resolve(ROOMS);
+      return Promise.reject(new Error(`unexpected request ${path}`));
     });
   });
 
   it("shows one card listing every room, plus the result count", async () => {
     await renderMobile(<QueueOperationsScreen />);
-    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(ROOMS.length + 1));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(1));
 
     expect(mockSetOptions.mock.calls.at(-1)?.[0].headerSearchBarOptions).toMatchObject({
       allowToolbarIntegration: false,
@@ -134,8 +133,8 @@ describe("queue operations search (H29-H31)", () => {
     const paused = { ...ROOMS[1], state: { is_paused: true } };
     mockApiFetch.mockImplementation((path: string) => {
       const rooms = [ROOMS[0], paused];
-      if (path === "/api/queue/rooms") return Promise.resolve(rooms.map(({ room }) => room));
-      return Promise.resolve(rooms.find((view) => view.room.id === Number(path.split("/")[4])));
+      if (path === "/api/queue/rooms/views") return Promise.resolve(rooms);
+      return Promise.reject(new Error(`unexpected request ${path}`));
     });
     await renderMobile(<QueueOperationsScreen />);
     await waitFor(() => expect(screen.getByText("Aula 3.1")).toBeTruthy());
@@ -159,7 +158,7 @@ describe("queue operations search (H29-H31)", () => {
 
   it("falls back to the empty state, with no duplicate count line, when nothing matches", async () => {
     await renderMobile(<QueueOperationsScreen />);
-    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(ROOMS.length + 1));
+    await waitFor(() => expect(mockApiFetch).toHaveBeenCalledTimes(1));
 
     await search("nobody");
 
