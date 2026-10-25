@@ -26,6 +26,9 @@ describe("application validation errors", () => {
     expect(validateFieldOnBlur(field, new Date().getFullYear() - 121, translate, "en")).toBe(
       "fieldMustBeBirthYear",
     );
+    expect(validateFieldOnBlur(field, new Date().getFullYear() - 15, translate, "en")).toBe(
+      "fieldBirthYearTooRecent",
+    );
     expect(validateFieldOnBlur(field, new Date().getFullYear() - 20, translate, "en")).toBeNull();
   });
 

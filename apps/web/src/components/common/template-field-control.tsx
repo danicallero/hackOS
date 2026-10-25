@@ -7,6 +7,7 @@
 // city/province/country object for city, string[] for
 // multiselect, boolean for checkbox.
 
+import { MINIMUM_APPLICANT_AGE } from "@hackos/shared/forms";
 import { useRef } from "react";
 import { CityPicker } from "@/components/common/city-picker";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -330,7 +331,7 @@ export function TemplateFieldControl({
           type="number"
           inputMode="numeric"
           min={new Date().getFullYear() - MAXIMUM_BIRTH_AGE}
-          max={new Date().getFullYear()}
+          max={new Date().getFullYear() - MINIMUM_APPLICANT_AGE}
           step={1}
           placeholder={t("birthYearPlaceholder")}
           value={typeof value === "number" ? value : ""}

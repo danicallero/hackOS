@@ -19,6 +19,9 @@ export const FIELD_KINDS = [
   "library",
 ] as const;
 
+/** Applicants must be at least this old; birth years later than `year - MINIMUM_APPLICANT_AGE` are rejected. */
+export const MINIMUM_APPLICANT_AGE = 16;
+
 /**
  * H16: an `images` answer is an ordered list of uploaded photo keys. Project
  * forms only; the mobile app opens the system photo picker for it.

@@ -406,6 +406,16 @@ describe("application responses (H12)", () => {
     expect(future.statusCode).toBe(400);
     expect(future.json().error.details.fields.birth_year).toBe("must be a birth year");
 
+    await saveDraft(a, appId, user, { birth_year: currentYear - 15 });
+    const tooYoung = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(tooYoung.statusCode).toBe(400);
+    expect(tooYoung.json().error.details.fields.birth_year).toBe("too young");
+
     await saveDraft(a, appId, user, { birth_year: currentYear - 120 });
     const boundary = await a.inject({
       method: "POST",

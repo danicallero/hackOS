@@ -1318,6 +1318,7 @@
   "fieldInvalidOption": "Selecciona unha opción válida.",
   "fieldMustBeNumber": "Introduce un número válido.",
   "fieldMustBeBirthYear": "Introduce un ano de nacemento válido.",
+  "fieldBirthYearTooRecent": "Debes ter polo menos 16 anos para participar.",
   "fieldMustBeBoolean": "Escolle si ou non.",
   "fieldMustBeArray": "Selecciona unha ou máis opcións.",
   "fieldMustBeString": "Introduce un texto.",

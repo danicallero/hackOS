@@ -1,4 +1,5 @@
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { MINIMUM_APPLICANT_AGE } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
 import { youtubeEmbedUrl } from "@hackos/shared/youtube";
 import { ApiError } from "@/lib/api";
@@ -82,6 +83,7 @@ export function validateFieldOnBlur(
     ) {
       return t("fieldMustBeBirthYear");
     }
+    if (value > currentYear - MINIMUM_APPLICANT_AGE) return t("fieldBirthYearTooRecent");
   }
   if (field.kind === "phone" && (typeof value !== "string" || normalizePhone(value) === null)) {
     return t("fieldMustBePhone");
@@ -157,6 +159,7 @@ const FIELD_SHAPE_KEYS: Record<string, MessageKey> = {
   [FIELD_ERROR_REASONS.INVALID_OPTION]: "fieldInvalidOption",
   [FIELD_ERROR_REASONS.MUST_BE_NUMBER]: "fieldMustBeNumber",
   [FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR]: "fieldMustBeBirthYear",
+  [FIELD_ERROR_REASONS.BIRTH_YEAR_TOO_RECENT]: "fieldBirthYearTooRecent",
   [FIELD_ERROR_REASONS.MUST_BE_PHONE]: "fieldMustBePhone",
   [FIELD_ERROR_REASONS.MUST_BE_BOOLEAN]: "fieldMustBeBoolean",
   [FIELD_ERROR_REASONS.MUST_BE_ARRAY]: "fieldMustBeArray",

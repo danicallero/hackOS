@@ -1318,6 +1318,7 @@
   "fieldInvalidOption": "Select a valid option.",
   "fieldMustBeNumber": "Enter a valid number.",
   "fieldMustBeBirthYear": "Enter a valid birth year.",
+  "fieldBirthYearTooRecent": "You must be at least 16 years old to take part.",
   "fieldMustBeBoolean": "Choose yes or no.",
   "fieldMustBeArray": "Select one or more options.",
   "fieldMustBeString": "Enter text.",

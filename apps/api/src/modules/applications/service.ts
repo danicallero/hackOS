@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
+import { MAX_IMAGES_PER_FIELD, MINIMUM_APPLICANT_AGE } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
 import type pg from "pg";
 import { config } from "../../config.js";
@@ -213,6 +213,7 @@ const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
   "invalid option": FIELD_ERROR_REASONS.INVALID_OPTION,
   "must be a number": FIELD_ERROR_REASONS.MUST_BE_NUMBER,
   "must be a birth year": FIELD_ERROR_REASONS.MUST_BE_BIRTH_YEAR,
+  "too young": FIELD_ERROR_REASONS.BIRTH_YEAR_TOO_RECENT,
   "must be a phone number": FIELD_ERROR_REASONS.MUST_BE_PHONE,
   "must be a boolean": FIELD_ERROR_REASONS.MUST_BE_BOOLEAN,
   "must be an array": FIELD_ERROR_REASONS.MUST_BE_ARRAY,
@@ -293,6 +294,8 @@ export function validateResponses(
           value > new Date().getFullYear()
         ) {
           errors[field.key] = "must be a birth year";
+        } else if (value > new Date().getFullYear() - MINIMUM_APPLICANT_AGE) {
+          errors[field.key] = "too young";
         }
         break;
       case "checkbox":
