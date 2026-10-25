@@ -3,62 +3,24 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
+import { createEntrant, createOwnedChallenge, createSponsor, groupOf } from "./fixtures.js";
 
 /** H46: internal winner ranking — admin/owning-sponsor only, open-ended placements. */
 
 const getApp = useTestApp();
-
-async function createOwnedChallenge(ownerUserId: number): Promise<number> {
-  const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
-    `ent-${crypto.randomUUID()}`,
-  ]);
-  const sponsor = await pool.query(
-    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
-    [enterprise.rows[0].id, ownerUserId],
-  );
-  const challenge = await pool.query(
-    `INSERT INTO challenges (author, title) VALUES ($1, 'Judged Challenge') RETURNING id`,
-    [sponsor.rows[0].id],
-  );
-  return challenge.rows[0].id;
-}
-
-async function createEntrant(challengeId: number, repoName: string): Promise<number> {
-  const repo = await pool.query(`INSERT INTO repos (name) VALUES ($1) RETURNING id`, [repoName]);
-  await pool.query(
-    `INSERT INTO queue_entries (challenge_id, repo_id, status) VALUES ($1, $2, 'completed')`,
-    [challengeId, repo.rows[0].id],
-  );
-  return repo.rows[0].id;
-}
 
 /**
  * Two challenges of the same enterprise, which are eligible to share a queue
  * group.
  */
 async function createSiblingChallenges(ownerUserId: number): Promise<[number, number]> {
-  const enterprise = await pool.query(`INSERT INTO enterprises (name) VALUES ($1) RETURNING id`, [
-    `ent-${crypto.randomUUID()}`,
-  ]);
-  const sponsor = await pool.query(
-    `INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2) RETURNING id`,
-    [enterprise.rows[0].id, ownerUserId],
-  );
   const { rows } = await pool.query(
     `INSERT INTO challenges (author, title)
      VALUES ($1, 'Sibling A'), ($1, 'Sibling B')
      RETURNING id`,
-    [sponsor.rows[0].id],
+    [await createSponsor(ownerUserId)],
   );
   return [rows[0].id, rows[1].id];
-}
-
-async function groupOf(challengeId: number): Promise<number> {
-  const { rows } = await pool.query(
-    `SELECT queue_group_id FROM queue_group_challenges WHERE challenge_id = $1`,
-    [challengeId],
-  );
-  return rows[0].queue_group_id;
 }
 
 /**
@@ -81,7 +43,7 @@ describe("challenge winners (H46)", () => {
   it("lets the owning sponsor and admins set, replace and remove winners", async () => {
     const server = await getApp();
     const owner = await createUser();
-    const challengeId = await createOwnedChallenge(owner);
+    const challengeId = await createOwnedChallenge(owner, "Judged Challenge");
     const repoA = await createEntrant(challengeId, "Team A");
     const repoB = await createEntrant(challengeId, "Team B");
 
@@ -179,7 +141,7 @@ describe("challenge winners (H46)", () => {
   it("rejects a repo that never entered the challenge", async () => {
     const server = await getApp();
     const owner = await createUser();
-    const challengeId = await createOwnedChallenge(owner);
+    const challengeId = await createOwnedChallenge(owner, "Judged Challenge");
     const otherRepo = await pool.query(`INSERT INTO repos (name) VALUES ('Ghost') RETURNING id`);
 
     const res = await server.inject({
@@ -247,7 +209,7 @@ describe("challenge winners (H46)", () => {
     const owner = await createUser();
     const [challengeA, challengeB] = await createSiblingChallenges(owner);
     await mergeIntoGroup(challengeB, challengeA);
-    const outsider = await createOwnedChallenge(owner);
+    const outsider = await createOwnedChallenge(owner, "Judged Challenge");
     const repo = await createEntrant(outsider, "Outsider");
 
     const res = await server.inject({
@@ -262,11 +224,11 @@ describe("challenge winners (H46)", () => {
   it("403s for a sponsor of a different challenge, and for judges/participants", async () => {
     const server = await getApp();
     const owner = await createUser();
-    const challengeId = await createOwnedChallenge(owner);
+    const challengeId = await createOwnedChallenge(owner, "Judged Challenge");
     const repoA = await createEntrant(challengeId, "Team A");
 
     const otherOwner = await createUser();
-    await createOwnedChallenge(otherOwner);
+    await createOwnedChallenge(otherOwner, "Judged Challenge");
     const forbidden = await server.inject({
       method: "PUT",
       url: `/api/challenges/${challengeId}/winners/1`,
