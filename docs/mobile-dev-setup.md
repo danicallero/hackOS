@@ -386,6 +386,13 @@ The app opts into Expo's SDK 57 scene lifecycle support through
 launch on iOS 27; keep the plugin enabled until the app moves to SDK 58, where
 scene support is the default.
 
+Android prebuild also applies `withAndroidGradleMemory.js`, which sets the
+Gradle daemon heap to 4 GiB and Metaspace to 1536 MiB in
+`android/gradle.properties`. This preserves the release-build memory fix
+across clean prebuilds; parallel native-library lint tasks can exhaust the
+template's smaller Metaspace limit. Build hosts need enough RAM for these
+limits alongside the other build processes.
+
 Generate both projects from a clean configuration:
 
 ```sh

@@ -11,13 +11,13 @@ import type { ScannerActivity } from "@/lib/scanner-types";
 const STILL_RUNNING_MS = 2 * 60 * 60 * 1000;
 
 /** The kinds present in `items`, ordered as the activity editor orders them. */
-export function activityKinds(items: ScannerActivity[]): string[] {
+export function activityKinds(items: ScannerActivity[], locale?: string): string[] {
   const present = new Set(items.map((item) => item.category));
   const known = ACTIVITY_KINDS.filter((kind) => present.has(kind));
   // Categories are free text in the DB (`activities.category`), so anything
   // outside the built-in list still needs a way through the filter.
   const extra = [...present].filter((kind) => !ACTIVITY_KINDS.includes(kind as ActivityKind));
-  return [...known, ...extra.sort()];
+  return [...known, ...extra.sort((a, b) => a.localeCompare(b, locale))];
 }
 
 export function filterActivities(

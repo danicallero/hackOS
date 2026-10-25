@@ -498,6 +498,38 @@ describe("application responses (H12)", () => {
     expect(ok.statusCode).toBe(200);
   });
 
+  it("#1110: rejects a 100k-character email/url answer without stalling", async () => {
+    const a = await getApp();
+    const conditions = { contact: "email", site: "url" } as const;
+    const appId = await createApplication({
+      template: Object.entries(conditions).map(([key, text_condition]) => ({
+        key,
+        label: { en: key, es: key, gl: key },
+        kind: "text",
+        required: false,
+        validation: { text_condition },
+      })),
+    });
+    const user = await createUser({ emailVerified: true });
+    // Inputs that took seconds against the earlier backtracking patterns.
+    const dots = ".".repeat(100_000);
+    await saveDraft(a, appId, user, { contact: `a@${dots} `, site: `a${dots} ` });
+
+    const started = performance.now();
+    const res = await a.inject({
+      method: "POST",
+      url: `/api/applications/${appId}/response/submit`,
+      headers: asUser(user),
+      payload: { food_intolerances: [], shirt_size: "M" },
+    });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.fields).toMatchObject({
+      contact: "invalid email",
+      site: "invalid url",
+    });
+  });
+
   it("H11: enforces a multiselect field's selected-count validation rule", async () => {
     const a = await getApp();
     const appId = await createApplication({

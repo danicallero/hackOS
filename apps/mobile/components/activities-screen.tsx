@@ -156,7 +156,10 @@ export function ActivitiesScreen({
   // authoritative empty response looking like an endless loading spinner.
   const listLoading = loading && !sync.serverSnapshot;
 
-  const kinds = useMemo(() => activityKinds(scannableDirectory), [scannableDirectory]);
+  const kinds = useMemo(
+    () => activityKinds(scannableDirectory, language),
+    [scannableDirectory, language],
+  );
   const filtered = useMemo(
     () => filterActivities(scannableDirectory, { query, kinds: selectedKinds }),
     [scannableDirectory, selectedKinds, query],

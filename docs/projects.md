@@ -11,7 +11,9 @@ challenge selections and immutable form version.
 
 Applications and projects share `packages/shared/src/forms.ts`: trilingual
 `TemplateField` definitions, sections and validation. URL questions are text
-fields with `validation.text_condition="url"`. A project text question can also
+fields with `validation.text_condition="url"`; the API and web share its
+`isSimpleUrl` shape check (and `isSimpleEmail` for `"email"`), which rejects
+answers over 2048 (URL) or 320 (email) characters regardless of `max_length`. A project text question can also
 opt into YouTube validation and presentation with `project_video: true`. A single image is a file field
 with image MIME types; a photo list is an `images` field (project form only,
 up to `MAX_IMAGES_PER_FIELD` keys). One text field is the project description

@@ -19,8 +19,8 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
-import { cpus } from "node:os";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { cpus, tmpdir } from "node:os";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
@@ -32,7 +32,8 @@ type Mode = "prepare" | "load" | "smoke";
 
 export const QUALIFICATION_DATABASE_NAME = "hackos_event_day_qualification";
 const DEFAULT_DATABASE_URL = `postgres://hackos:hackos@localhost:5433/${QUALIFICATION_DATABASE_NAME}`;
-const DEFAULT_FIXTURE_PATH = "/private/tmp/hackos-event-day-fixture.json";
+// #1115: portable default (`/private/tmp` is macOS-only); `--fixture` overrides it.
+const DEFAULT_FIXTURE_PATH = join(tmpdir(), "hackos-event-day-fixture.json");
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DEFAULT_OUTPUT_PATH = resolve(REPO_ROOT, "docs/big-event-readiness-results.json");
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";

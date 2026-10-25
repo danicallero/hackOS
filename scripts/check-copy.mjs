@@ -212,22 +212,26 @@ const COMPARISON_OPS = ["===", "!==", "==", "!="];
 function firstArgLiteralKeys(argsText) {
   let depth = 0;
   let firstArgEnd = argsText.length;
-  for (let i = 0; i < argsText.length; i++) {
+  let i = 0;
+  while (i < argsText.length) {
     const c = argsText[i];
     if (c === "(" || c === "[" || c === "{") depth++;
     else if (c === ")" || c === "]" || c === "}") depth--;
     else if (c === '"' || c === "'" || c === "`") {
-      i = skipString(argsText, i, c) - 1;
+      // Jump past the whole literal so commas inside strings are not top-level.
+      i = skipString(argsText, i, c);
+      continue;
     } else if (c === "," && depth === 0) {
       firstArgEnd = i;
       break;
     }
+    i++;
   }
   const firstArg = argsText.slice(0, firstArgEnd);
 
   const keys = [];
   depth = 0;
-  let i = 0;
+  i = 0;
   while (i < firstArg.length) {
     const c = firstArg[i];
     if (c === "(" || c === "[" || c === "{") {

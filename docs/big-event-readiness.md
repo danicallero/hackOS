@@ -229,8 +229,7 @@ pnpm infra:up
 docker compose exec -T postgres createdb -U hackos hackos_event_day_qualification 2>/dev/null || true
 pnpm --filter @hackos/api event-day:load -- \
   --mode prepare \
-  --database-url postgres://hackos:hackos@localhost:5433/hackos_event_day_qualification \
-  --fixture /private/tmp/hackos-event-day-fixture.json
+  --database-url postgres://hackos:hackos@localhost:5433/hackos_event_day_qualification
 
 # second terminal, after prepare reports 600 participants / 35 staff / 30 sponsors / 12 rooms / 7 queues (3 shared)
 NODE_ENV=test QUALIFICATION_STACK=1 WORKERS_INLINE=true DB_POOL_MAX=24 \
@@ -244,10 +243,13 @@ DATABASE_URL=postgres://hackos:hackos@localhost:5433/hackos_event_day_qualificat
 VALKEY_URL=redis://localhost:6379/15 \
 pnpm --filter @hackos/api event-day:load -- \
   --mode load \
-  --fixture /private/tmp/hackos-event-day-fixture.json \
   --duration-seconds 10 \
   --output docs/big-event-readiness-results.json
 ```
+
+The fixture file defaults to `hackos-event-day-fixture.json` under the OS temp
+directory (`os.tmpdir()`); pass `--fixture <path>` to both `prepare` and `load`
+to use another location (#1115).
 
 The load command exits non-zero when a P0, P1, or P2 release budget fails. P3
 `429` responses and degraded participant refreshes remain in the result because

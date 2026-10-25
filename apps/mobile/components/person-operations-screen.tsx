@@ -215,7 +215,7 @@ export function PersonOperationsScreen({
   const admin = capabilities.has("*");
   const canAccredit = admin || capabilities.has(CAPABILITIES.ACCREDIT_SCAN);
   const canPresence = admin || capabilities.has(CAPABILITIES.PRESENCE_SCAN);
-  const focusLogIdNumber = focusLogId ? Number(focusLogId) : NaN;
+  const focusLogIdNumber = focusLogId ? Number(focusLogId) : Number.NaN;
   const focusSignal: { id: number; source: "door" | "activity" } | undefined =
     Number.isInteger(focusLogIdNumber) && focusLogIdNumber > 0
       ? focusSource === "door"
