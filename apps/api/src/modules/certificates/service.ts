@@ -14,6 +14,7 @@ import {
   NotFoundError,
 } from "../../lib/errors.js";
 import { stampCopyFooter } from "../../lib/pdf-copy-footer.js";
+import { userUniversityIdSql } from "../../lib/user-university.js";
 import { hasEventAccess } from "../identity/role.js";
 import { allHours, userHours } from "../logistics/presence.js";
 import { assertFixtureSubjectScope, fixtureReadFilter } from "../logistics/review-fixture-scope.js";
@@ -1171,11 +1172,12 @@ export async function certificateParticipants(
 ): Promise<CertificateParticipant[]> {
   const scope = await fixtureReadFilter(pool, actorId, "u");
   const { rows } = await pool.query(
-    `SELECT u.id, u.name, u.surname, u.university_id, un.name AS university_name
-    FROM users u LEFT JOIN universities un ON un.id=u.university_id
+    `SELECT u.id, u.name, u.surname, un.id AS university_id, un.name AS university_name
+    FROM users u
+    LEFT JOIN universities un ON un.id = ${userUniversityIdSql("u.id")}
     WHERE u.account_state='active' AND u.anonymized_at IS NULL
       AND EXISTS (SELECT 1 FROM user_event_access ea WHERE ea.user_id=u.id)
-      AND ($1::int IS NULL OR u.university_id=$1) ${scope}
+      AND ($1::int IS NULL OR un.id=$1) ${scope}
     ORDER BY u.surname NULLS LAST, u.name, u.id`,
     [universityId ?? null],
   );

@@ -76,7 +76,6 @@ interface UserRemovalRow {
   is_test_account: boolean;
   badge_id: string | null;
   badge_id_history: string[];
-  university_id: number | null;
   account_state: "active" | "removal_pending";
   removal_action: AccountRemovalAction | null;
   removal_requires_exit: boolean;
@@ -312,7 +311,7 @@ async function loadUserForRemoval(client: pg.PoolClient, userId: number): Promis
   const { rows } = await client.query<UserRemovalRow>(
     `SELECT id, email, email_verified, name, surname, dni, is_test_account,
             badge_id, badge_id_history,
-            university_id, account_state, removal_action,
+            account_state, removal_action,
             removal_requires_exit, removal_expires_at, removal_idempotency_key
        FROM users WHERE id = $1 FOR UPDATE`,
     [userId],
@@ -1837,7 +1836,6 @@ export async function resetReviewFixtureAccount(
             dietary_data_state = 'not_provided',
             dietary_confirmed_at = NULL,
             meal_plan_confirmed_at = NULL,
-            university_id = NULL,
             shirt_size = NULL,
             language = 'en',
             notes = NULL,

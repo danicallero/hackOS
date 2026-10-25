@@ -79,10 +79,6 @@ async function normalizeUniversity(actorId: number, sourceId: number, targetId: 
     const target = rows.find((row) => row.id === targetId);
     if (!source || !target) throw new NotFoundError("University not found");
 
-    const users = await client.query(
-      `UPDATE users SET university_id = $2 WHERE university_id = $1 RETURNING id`,
-      [sourceId, targetId],
-    );
     const responses = await client.query(
       `WITH university_fields AS (
          SELECT response.id, field->>'key' AS field_key
@@ -113,14 +109,12 @@ async function normalizeUniversity(actorId: number, sourceId: number, targetId: 
       action: "normalized",
       after: {
         mergedUniversityId: sourceId,
-        usersUpdated: users.rowCount,
         applicationResponsesUpdated: responses.rowCount,
       },
     });
     return {
       university: target,
       mergedUniversityId: sourceId,
-      usersUpdated: users.rowCount,
       applicationResponsesUpdated: responses.rowCount,
     };
   });
@@ -284,34 +278,41 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
         params: idParam,
         summary: "Delete an unused university",
         description:
-          "Deletes a university and audits the mutation. Returns 409 with reason university_in_use when user profiles still reference it; consolidate it into another university first.",
+          "Deletes a university and audits the mutation. Returns 409 with reason university_in_use when application answers still reference it; consolidate it into another university first.",
       },
     },
     async (req, reply) => {
-      try {
-        await withTransaction(async (client) => {
-          const { rowCount } = await client.query(`DELETE FROM universities WHERE id = $1`, [
-            req.params.id,
-          ]);
-          if (rowCount === 0)
-            throw new NotFoundError("University not found", { id: req.params.id });
-          await audit(client, {
-            actorId: req.userId,
-            entityType: "university",
-            entityId: req.params.id,
-            action: "deleted",
-          });
-        });
-      } catch (error) {
-        const databaseError = error as { code?: string; constraint?: string };
-        if (databaseError.code === "23503" && databaseError.constraint === "users_university_fk") {
+      await withTransaction(async (client) => {
+        // The university lives in application answers, not on the profile, so
+        // no FK protects it: refuse while any answer still points at it.
+        const { rowCount: answers } = await client.query(
+          `SELECT 1
+             FROM application_responses response
+             JOIN application_form_versions form ON form.id = response.application_form_version_id
+             CROSS JOIN LATERAL jsonb_array_elements(
+               CASE WHEN jsonb_typeof(form.template) = 'array' THEN form.template ELSE '[]'::jsonb END
+             ) field
+            WHERE field->>'kind' = 'university'
+              AND response.responses ->> (field->>'key') = $1::text
+            LIMIT 1`,
+          [req.params.id],
+        );
+        if (answers)
           throw new ConflictError(
-            "This university is linked to user profiles. Merge it into another university before deleting it.",
+            "This university is used in applications. Merge it into another university before deleting it.",
             { reason: "university_in_use", id: req.params.id },
           );
-        }
-        throw error;
-      }
+        const { rowCount } = await client.query(`DELETE FROM universities WHERE id = $1`, [
+          req.params.id,
+        ]);
+        if (rowCount === 0) throw new NotFoundError("University not found", { id: req.params.id });
+        await audit(client, {
+          actorId: req.userId,
+          entityType: "university",
+          entityId: req.params.id,
+          action: "deleted",
+        });
+      });
       reply.code(204);
       return null;
     },

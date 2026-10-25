@@ -190,10 +190,13 @@ export function AttendanceCertificatesTab() {
         title={person ? [person.name, person.surname].filter(Boolean).join(" ") : t("certificates")}
       >
         {person && (
-          // Evidence scrolls on the left while the award and documents stay beside it.
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_26rem]">
-            <CertificateEvidence key={person.userId} userId={person.userId} />
-            <div className="lg:sticky lg:top-0">
+          // On wide screens each column scrolls on its own, so the documents
+          // never wait for the evidence list to reach its end.
+          <div className="grid gap-6 lg:h-[min(70dvh,52rem)] lg:grid-cols-[minmax(0,1fr)_26rem]">
+            <div className="min-h-0 lg:overflow-y-auto lg:overscroll-contain">
+              <CertificateEvidence key={person.userId} userId={person.userId} />
+            </div>
+            <div className="min-h-0 lg:overflow-y-auto lg:overscroll-contain">
               <CertificatesPanel
                 key={`award-${person.userId}`}
                 staffUserId={person.userId}

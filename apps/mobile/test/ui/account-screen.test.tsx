@@ -32,7 +32,6 @@ const mockMeContext = {
     foodIntolerances: [],
     foodIntoleranceNotes: null,
     shirtSize: null,
-    universityId: null,
     notes: null,
     accountState: "active" as const,
     removal: null,

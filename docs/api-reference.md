@@ -442,9 +442,8 @@ meals, applications, staff scan stats and activity attendance) remain gated by
 
 The ZIP always contains the selected CSV columns. Headers use field keys rather
 than translated question text or application names; repeated keys receive
-numeric suffixes in selection order (`key`, `key (2)`). The profile catalog
-excludes `university_id`: select the university form answer to export its
-catalogue name. `documents=all` includes
+numeric suffixes in selection order (`key`, `key (2)`). The university is only
+available as the university form answer, exported as its catalogue name. `documents=all` includes
 every saved file found in each response's immutable form snapshot;
 `documents=shared` additionally requires the field's
 `shareable_with_sponsors` policy and the applicant's explicit

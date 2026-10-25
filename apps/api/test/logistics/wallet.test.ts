@@ -20,6 +20,7 @@ import {
   buildTestApp,
   createUser,
   createUserWithCapabilities,
+  setUserUniversity,
   truncateAll,
 } from "../helpers.js";
 import { assignBadge, createBadgePass, issueTicket } from "./fixtures.js";
@@ -229,10 +230,7 @@ describe("H28 Apple Wallet PassKit", () => {
       `INSERT INTO universities (name, proposed_by) VALUES ('UDC', $1) RETURNING id`,
       [uid],
     );
-    await pool.query(`UPDATE users SET university_id = $1 WHERE id = $2`, [
-      university.rows[0].id,
-      uid,
-    ]);
+    await setUserUniversity(uid, university.rows[0].id);
     await pool.query(
       `INSERT INTO event_config
           (id, name, tagline, hacking_starts_at, venue_name, venue_latitude, venue_longitude, pass_back_fields)

@@ -94,6 +94,8 @@ The review roster offers **Attendance CSV** and **UDC CSV**; exports require
 university server side (`universityId`) across all review states, independently
 of the roster's status filter. They include people with secured attendance or
 an explicit manual award; accounts with neither are omitted.
+A person's university is the library answer from their newest application
+response with a `university` field, falling back to the profile value (#1083).
 
 `GET /api/certificates/participants/export.csv?format=general` includes identity,
 university, `measured_hours`, `certified_hours` and status. Pending reviews have
