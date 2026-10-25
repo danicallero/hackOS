@@ -1,16 +1,14 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import {
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
   seedAttendeeRoles,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 import { createApplication } from "./fixtures.js";
 
@@ -23,29 +21,12 @@ import { createApplication } from "./fixtures.js";
  * capabilities, visibility, and application status do not grant it.
  */
 
-let app: App;
+const getApp = useTestApp();
 let decider: number;
 
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
   decider = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
 });
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
 
 async function createTicketPass(userId: number): Promise<number> {
   const { rows } = await pool.query(

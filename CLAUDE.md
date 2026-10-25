@@ -95,7 +95,8 @@ Auth context: `req.userId` (null if anonymous) is decorated by
 See root `README.md` for the full command reference. Key points for agents:
 
 - Tests are **integration-first** against real Postgres/Valkey (no mocks).
-  Use `test/helpers.ts`: `truncateAll()`, `createUser()`,
+  Use `test/helpers.ts`: `useTestApp()` (per-test reset + suite teardown,
+  returns a lazy `getApp`), `truncateAll()`, `createUser()`,
   `createUserWithCapabilities([...])`, `asUser(id)` for `app.inject()`.
 - `x-test-user-id` header authenticates in NODE_ENV=test only.
 - Import app code lazily (inside tests) or after `test/setup.ts` ran.

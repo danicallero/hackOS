@@ -1,29 +1,25 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { config } from "../../src/config.js";
 import { logisticsStats } from "../../src/modules/logistics/stats.js";
 import {
   asUser,
-  buildTestApp,
   createUser,
   createUserWithCapabilities,
   ensureApplicationFormVersion,
   seedAttendeeRoles,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 
 /** H54: synthetic App Store/QA fixtures are isolated, repeatable and non-statistical. */
 
-let app: App;
+const getApp = useTestApp();
 const fixturePassword = "review-fixture-password";
 const fixturePin = "246810";
 
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
   config.REVIEW_FIXTURE_PASSWORD = fixturePassword;
   config.REVIEW_FIXTURE_DELETION_PIN = fixturePin;
   // H8 full-replacement: configureFixtureParticipant grants the real seeded
@@ -37,21 +33,6 @@ afterEach(() => {
   config.REVIEW_FIXTURE_PASSWORD = undefined;
   config.REVIEW_FIXTURE_DELETION_PIN = undefined;
 });
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
 
 async function regenerate(a: App, adminId: number, key = `review-fixtures-${crypto.randomUUID()}`) {
   const response = await a.inject({

@@ -1,16 +1,9 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { App } from "../../src/app.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { pool } from "../../src/db/pool.js";
-import {
-  asUser,
-  buildTestApp,
-  createUser,
-  createUserWithCapabilities,
-  truncateAll,
-} from "../helpers.js";
+import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
 import { admitParticipant, createChallenge, setHackingWindow } from "./fixtures.js";
 
 /**
@@ -25,28 +18,11 @@ import { admitParticipant, createChallenge, setHackingWindow } from "./fixtures.
  * policy, which is a separate, unrelated gate from the one under test.
  */
 
-let app: App;
+const getApp = useTestApp();
 
 beforeEach(async () => {
-  await truncateAll();
   await pool.query(`UPDATE queue_settings SET schedule_start_at = NULL WHERE id = 1`);
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
 });
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
 
 /** Staff-created repo with `memberUserIds` as ACTIVE (default status) members. */
 async function seedRepo(name: string, memberUserIds: number[]): Promise<number> {

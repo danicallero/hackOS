@@ -1,15 +1,13 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import {
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 import {
   createApplication,
@@ -22,27 +20,7 @@ import {
 
 /** Expirer worker (plan/07 §5.2) + H27 pre-event stats. */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 describe("confirmation expirer (plan/07 §5.2)", () => {
   it("expires accepted responses past their window, keeps dietary data, one audit row, idempotent", async () => {

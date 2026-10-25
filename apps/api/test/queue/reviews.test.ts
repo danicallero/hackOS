@@ -1,15 +1,8 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
-import {
-  asUser,
-  buildTestApp,
-  createUser,
-  createUserWithCapabilities,
-  truncateAll,
-} from "../helpers.js";
+import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
 import { createEnterpriseChallenges, mergeChallengesIntoOneGroup } from "./fixtures.js";
 
 /**
@@ -19,27 +12,7 @@ import { createEnterpriseChallenges, mergeChallengesIntoOneGroup } from "./fixtu
  * product owner called out explicitly.
  */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 const SCALE_CRITERIA = [
   { key: "score", kind: "scale", label: { en: "Score", es: "Nota", gl: "Nota" }, min: 0, max: 10 },

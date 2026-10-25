@@ -1,15 +1,13 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import {
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 import {
   createApplication,
@@ -20,28 +18,7 @@ import {
 
 /** H11 (APPLICATIONS_MANAGE): CRUD of application forms + public read of open ones. */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 /**
  * Test roles get a random position in [1e6, ~1e9) (see helpers.ts). Push a

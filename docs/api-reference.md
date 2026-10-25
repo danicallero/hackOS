@@ -738,9 +738,11 @@ already does.
 - `pnpm --filter @hackos/api route-policy:audit` — regenerates
   [`access-control-route-ledger.md`](./access-control-route-ledger.md), the
   full sorted inventory of every route's access policy.
-- `apps/api/test/helpers.ts` — `truncateAll()`, `createUser()`,
-  `createUserWithCapabilities([...])`, `asUser(id)` for `app.inject()`; API
-  tests are integration-first against real Postgres/Valkey, no mocks.
+- `apps/api/test/helpers.ts` — `useTestApp()` (registers the per-test
+  database/Valkey reset and suite teardown, returns a lazy `getApp`),
+  `truncateAll()`, `createUser()`, `createUserWithCapabilities([...])`,
+  `asUser(id)` for `app.inject()`; API tests are integration-first against
+  real Postgres/Valkey, no mocks.
 
 See root [`README.md`](../README.md) for the full local dev command
 reference (`pnpm infra:up`, migrations, seeding, running the API/web/mobile
