@@ -36,7 +36,10 @@ export function BrandMark({ className }: { className?: string }) {
   useEffect(() => {
     let cancelled = false;
     fetch("/icons/brand-mark.svg")
-      .then((res) => res.text())
+      .then((res) => {
+        if (!res.ok) throw new Error(`brand mark ${res.status}`);
+        return res.text();
+      })
       .then((svg) => {
         if (cancelled) return;
         setMarkup(
@@ -44,6 +47,9 @@ export function BrandMark({ className }: { className?: string }) {
             .replace(/fill:\s*#[0-9a-fA-F]+/g, "fill:currentColor")
             .replace("<svg ", '<svg width="100%" height="100%" '),
         );
+      })
+      .catch(() => {
+        // #1114: keep the blank fallback; the mark is decorative.
       });
     return () => {
       cancelled = true;
