@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { SignInIcon } from "@phosphor-icons/react/dist/csr/SignIn";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
@@ -66,17 +67,18 @@ export function PublicTopBar({
         >
           <Brand />
         </Link>
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1 sm:gap-3">
           {access && status !== "loading" && (
-            <Button size="sm" asChild>
+            <Button size="sm" className="max-sm:px-2.5" asChild>
               {status === "authenticated" ? (
                 <Link href="/event">
-                  {t("goToApp")}
+                  <span className="max-sm:sr-only">{t("goToApp")}</span>
                   <ArrowRightIcon aria-hidden="true" className="size-4" />
                 </Link>
               ) : (
                 <Link href={pathname === "/" ? "/login" : withReturnPath("/login", pathname)}>
-                  {t("logIn")}
+                  <SignInIcon aria-hidden="true" className="size-4 sm:hidden" />
+                  <span className="max-sm:sr-only">{t("logIn")}</span>
                 </Link>
               )}
             </Button>

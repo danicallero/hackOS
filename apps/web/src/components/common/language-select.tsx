@@ -20,7 +20,7 @@ export function LanguageSelect() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label={t("language")}>
           <GlobeIcon aria-hidden="true" className="size-4" />
-          {language.toUpperCase()}
+          <span className="max-sm:sr-only">{language.toUpperCase()}</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
