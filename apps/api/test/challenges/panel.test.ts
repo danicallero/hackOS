@@ -1,44 +1,20 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
-import {
-  asUser,
-  buildTestApp,
-  createUser,
-  createUserWithCapabilities,
-  truncateAll,
-} from "../helpers.js";
+import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
 
 /** H44: judging panel builder — edit / preview / lock / versioning + access. */
 
-let app: App;
+const getApp = useTestApp();
 
 beforeEach(async () => {
-  await truncateAll();
   // queue_settings is a persistent singleton (not truncated); reset the
   // judging window so an earlier test's lock doesn't leak into this one.
   await pool.query(
     `UPDATE queue_settings SET schedule_start_at = NULL, schedule_end_at = NULL WHERE id = 1`,
   );
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
 });
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
 
 const i18n = (t: string) => ({ en: t, es: t, gl: t });
 const samplePanel = () => [

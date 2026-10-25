@@ -1,15 +1,13 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import type { App } from "../../src/app.js";
+import { beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import {
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 import {
   createApplication,
@@ -22,16 +20,13 @@ import {
 
 /** H13/H14/H15: review -> decide -> send -> confirm/decline/expire, with all the guards. */
 
-let app: App;
+const getApp = useTestApp();
 let reviewer: number;
 let manager: number;
 let decider: number;
 let confirmOverride: number;
 
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
   reviewer = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
   manager = await createUserWithCapabilities([
     CAPABILITIES.APPLICATIONS_REVIEW,
@@ -40,20 +35,6 @@ beforeEach(async () => {
   decider = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_DECIDE]);
   confirmOverride = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_CONFIRM_OVERRIDE]);
 });
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
 
 /** Create a verified applicant with a SUBMITTED response, intolerances set. */
 async function submittedApplicant(appId: number): Promise<{ userId: number; responseId: number }> {

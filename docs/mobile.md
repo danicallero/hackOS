@@ -891,7 +891,10 @@ they are not device screenshots or proof of native toolbar behavior.
   `GET /api/announcements/recipient-candidates`
   (`lib/announcements-admin.ts`'s `fetchAnnouncementRecipientCandidates`),
   scoped to `ANNOUNCEMENTS_MANAGE` rather than the broader `USERS_READ`,
-  mirroring `/api/schedule/owner-candidates`.
+  mirroring `/api/schedule/owner-candidates`. The mobile announcement and
+  schedule forms share their sheet shell, translation disclosure and people
+  picker UI through `components/form-modal-sections.tsx`; each modal retains
+  its own fields and submission state.
 - `components/wallet-screen.tsx` — the ticket/badge toggle is a `SegmentedControl`
   plus a swipe over the QR card itself as an alternative. The swipe gesture is
   nested *inside* the page's `ScrollView`, so it declares itself simultaneous with a `Gesture.Native()`
@@ -1003,8 +1006,11 @@ they are not device screenshots or proof of native toolbar behavior.
   (`components/schedule-swipe-row.tsx`); both the swipe's edit action and the
   Add button open `components/schedule-form-modal.tsx`, which mirrors the web
   admin's `ScheduleFormModal` field-for-field (including the
-  responsible-person picker). Title and description are required in only one
-  language: when the editor's own language is blank, `prepareScheduleSubmission`
+  responsible-person picker). Its sheet shell, translation disclosure and
+  people picker UI are shared with the announcement form in
+  `components/form-modal-sections.tsx`. Title and description are required in
+  only one language: when the editor's own language is blank,
+  `prepareScheduleSubmission`
   (`lib/schedule-save.ts`) promotes the first filled translation and sends its
   `titleLanguage`. A failed save shows the localized reason
   (`scheduleSaveError`: business/validation errors from the API, the

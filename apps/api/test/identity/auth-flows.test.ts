@@ -1,8 +1,8 @@
 import "./env.js";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { createApplication } from "../applications/fixtures.js";
-import { buildTestApp, ensureApplicationFormVersion, truncateAll } from "../helpers.js";
+import { buildTestApp, ensureApplicationFormVersion, useTestApp } from "../helpers.js";
 
 /**
  * Better Auth integration (H1-H5): real sign-up/sign-in/sign-out against
@@ -11,28 +11,7 @@ import { buildTestApp, ensureApplicationFormVersion, truncateAll } from "../help
  * consolidated baseline schema.
  */
 
-let app: App;
-
-beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
-
-async function getApp(): Promise<App> {
-  if (!app) app = await buildTestApp();
-  return app;
-}
+const getApp = useTestApp();
 
 const SIGNUP = {
   email: "ada@example.com",

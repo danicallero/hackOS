@@ -42,6 +42,8 @@ export interface RequestVisibility {
   includeSynthetic?: boolean;
 }
 
+const STAFF_VISIBILITY: Readonly<RequestVisibility> = Object.freeze({ includeSynthetic: false });
+
 function syntheticVisibilityCondition(includeSynthetic: boolean, alias = "r"): string {
   if (includeSynthetic) return "";
   return ` AND (${alias}.subject_user_id IS NULL OR NOT EXISTS (
@@ -110,7 +112,7 @@ export async function createRequest(input: CreateRequestInput): Promise<DataSubj
 
 export async function listRequests(
   filter: ListRequestsFilter,
-  visibility: RequestVisibility = { includeSynthetic: false },
+  visibility: RequestVisibility = STAFF_VISIBILITY,
 ): Promise<{ items: DataSubjectRequestRow[]; total: number }> {
   const conditions: string[] = [];
   const params: unknown[] = [];
@@ -143,7 +145,7 @@ export async function listRequests(
 
 export async function getRequest(
   id: number,
-  visibility: RequestVisibility = { includeSynthetic: false },
+  visibility: RequestVisibility = STAFF_VISIBILITY,
 ): Promise<DataSubjectRequestRow> {
   const visibilityCondition = syntheticVisibilityCondition(visibility.includeSynthetic !== false);
   const { rows } = await pool.query(

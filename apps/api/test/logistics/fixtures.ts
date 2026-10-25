@@ -38,9 +38,15 @@ export async function assignBadge(userId: number, badgeId: string): Promise<void
   await pool.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [badgeId, userId]);
 }
 
+const DEFAULT_INTOLERANCE_LABEL: Readonly<Record<string, string>> = Object.freeze({
+  en: "Gluten",
+  es: "Gluten",
+  gl: "Gluten",
+});
+
 export async function createIntolerance(
   proposedBy: number,
-  label: Record<string, string> = { en: "Gluten", es: "Gluten", gl: "Gluten" },
+  label: Record<string, string> = DEFAULT_INTOLERANCE_LABEL,
 ): Promise<number> {
   const { rows } = await pool.query(
     `INSERT INTO food_intolerances (label, proposed_by) VALUES ($1, $2) RETURNING id`,
