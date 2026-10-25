@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
+import { isSimpleEmail, isSimpleUrl, MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
 import type pg from "pg";
 import { config } from "../../config.js";
@@ -194,19 +194,6 @@ export function extractDni(responses: Record<string, unknown>): string | null {
   return null;
 }
 
-/**
- * Builder-defined validation rules (H11) on top of the kind-shape check —
- * length/pattern for text, min/max for number, selection count for
- * multiselect. `field.validation`'s sub-fields not relevant to `field.kind`
- * are ignored rather than erroring, so switching kind mid-edit is harmless.
- * Only called once the value has already passed its kind-shape check, so the
- * type narrowing below (string/number/array) is safe.
- */
-const SIMPLE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-// A scheme (http:// or https://) is optional — applicants shouldn't have to
-// type it themselves for this to count as a URL, just a domain-shaped value.
-const SIMPLE_URL_RE = /^(https?:\/\/)?[^\s/$.?#][^\s]*\.[^\s]{2,}$/i;
-
 // Legacy `details.fields` messages → stable `details.fieldReasons` (#996).
 const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
   required: FIELD_ERROR_REASONS.REQUIRED,
@@ -234,6 +221,14 @@ const FIELD_ERROR_REASON_BY_MESSAGE: Record<string, string> = {
   "invalid url": FIELD_ERROR_REASONS.INVALID_URL,
 };
 
+/**
+ * Builder-defined validation rules (H11) on top of the kind-shape check —
+ * length/pattern for text, min/max for number, selection count for
+ * multiselect. `field.validation`'s sub-fields not relevant to `field.kind`
+ * are ignored rather than erroring, so switching kind mid-edit is harmless.
+ * Only called once the value has already passed its kind-shape check, so the
+ * type narrowing below (string/number/array) is safe.
+ */
 function checkFieldValidation(field: TemplateField, value: unknown): string | null {
   const v = field.validation;
   if (!v) return null;
@@ -246,8 +241,8 @@ function checkFieldValidation(field: TemplateField, value: unknown): string | nu
     if (v.text_condition === "not_contains" && v.text_value && value.includes(v.text_value)) {
       return "must not contain text";
     }
-    if (v.text_condition === "email" && !SIMPLE_EMAIL_RE.test(value)) return "invalid email";
-    if (v.text_condition === "url" && !SIMPLE_URL_RE.test(value)) return "invalid url";
+    if (v.text_condition === "email" && !isSimpleEmail(value)) return "invalid email";
+    if (v.text_condition === "url" && !isSimpleUrl(value)) return "invalid url";
     if (v.pattern !== undefined && !new RegExp(v.pattern).test(value)) return "invalid format";
   }
   if (field.kind === "number" && typeof value === "number") {

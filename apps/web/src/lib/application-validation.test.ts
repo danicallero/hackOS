@@ -68,6 +68,20 @@ describe("application validation errors", () => {
     expect(validateFieldOnBlur(urlField, "not-a-url", translate, "en")).toBe("invalidUrl");
     expect(validateFieldOnBlur(urlField, "example.org", translate, "en")).toBeNull();
   });
+
+  it("rejects a 100k-character email/url answer quickly (#1110)", () => {
+    const field = { key: "f", kind: "text", label: { en: "F", es: "F", gl: "F" } };
+    const email = { ...field, validation: { text_condition: "email" } };
+    const url = { ...field, validation: { text_condition: "url" } };
+    const started = performance.now();
+    expect(validateFieldOnBlur(email, `a@${".".repeat(100_000)} `, translate, "en")).toBe(
+      "invalidEmail",
+    );
+    expect(validateFieldOnBlur(url, `a${".".repeat(100_000)} `, translate, "en")).toBe(
+      "invalidUrl",
+    );
+    expect(performance.now() - started).toBeLessThan(200);
+  });
 });
 
 describe("dynamic field validation before submit", () => {

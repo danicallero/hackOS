@@ -114,6 +114,32 @@ export const fieldValidationSchema = z.object({
 
 export type FieldValidation = z.infer<typeof fieldValidationSchema>;
 
+// Shape checks for `text_condition` "email"/"url", shared by the API and web
+// so they cannot drift. Applicant input can be as long as the request body, so
+// the length cap runs first and each check is linear: a single-class regex plus
+// a dot search, instead of the earlier `[^\s@]+\.[^\s@]+` style patterns that
+// backtracked quadratically on long non-matching input (#1110).
+export const EMAIL_MAX_LENGTH = 320;
+export const URL_MAX_LENGTH = 2048;
+const EMAIL_SHAPE_RE = /^[^\s@]+@[^\s@]+$/;
+const URL_SHAPE_RE = /^[^\s/$.?#]\S*$/;
+
+/** `local@domain` where the domain has a dot that is neither first nor last. */
+export function isSimpleEmail(value: string): boolean {
+  if (value.length > EMAIL_MAX_LENGTH || !EMAIL_SHAPE_RE.test(value)) return false;
+  return value.slice(value.indexOf("@") + 2, -1).includes(".");
+}
+
+/**
+ * Domain-shaped value: a dot after the first character with at least two
+ * characters after it. A scheme (http:// or https://) is optional — applicants
+ * shouldn't have to type it for this to count as a URL.
+ */
+export function isSimpleUrl(value: string): boolean {
+  if (value.length > URL_MAX_LENGTH || !URL_SHAPE_RE.test(value)) return false;
+  return value.slice(1, -2).includes(".");
+}
+
 export const templateFieldSchema = z
   .object({
     key: z
