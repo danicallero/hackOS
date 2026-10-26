@@ -1,0 +1,28 @@
+name: Backup restore drill
+
+# Rehearses backup -> verify -> restore -> undo with the real deploy/scripts/backup.sh
+# against throwaway containers (#539). The monthly run is the recurring restore drill.
+on:
+  pull_request:
+    paths:
+      - deploy/scripts/backup.sh
+      - deploy/qualification/backup-restore-drill.sh
+      - .github/workflows/backup-restore-drill.yml
+  schedule:
+    - cron: "0 5 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    name: backup restore drill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Run the drill
+        run: bash deploy/qualification/backup-restore-drill.sh

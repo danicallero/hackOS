@@ -793,7 +793,8 @@ BACKUP_S3_ACCESS_KEY_ID=...
 BACKUP_S3_SECRET_ACCESS_KEY=...
 ```
 
-La primera copia puede probarse dentro del LXC con:
+La primera copia puede probarse dentro del LXC con (o desde el shell de
+operador: `services.sh production backups create`):
 
 ```sh
 /opt/hackos/backup.sh production
@@ -821,7 +822,11 @@ infraestructura, no por un despliegue de aplicación.
 - [`scripts/check-env.sh`](./scripts/check-env.sh): validación previa sin
   revelar secretos.
 - [`scripts/backup.sh`](./scripts/backup.sh): backup opt-in de PostgreSQL
-  y MinIO a AWS S3.
+  y MinIO a AWS S3, más `list`, `status`, `verify`, `restore`, `undo` y `unlock`
+  (ver [`docs/backup-restore.md`](../docs/backup-restore.md)); también desde
+  `services.sh <environment> backups …` y el menú del shell.
+- [`qualification/backup-restore-drill.sh`](./qualification/backup-restore-drill.sh):
+  ensayo local de backup, restauración y deshacer; CI lo ejecuta cada mes.
 - [`scripts/services.sh`](./scripts/services.sh): operaciones seguras de estado,
   logs y ciclo de vida para los proyectos staging y production.
 - La infraestructura genera las unidades systemd del backup a partir de
