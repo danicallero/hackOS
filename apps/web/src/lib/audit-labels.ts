@@ -3,6 +3,7 @@
 // a generic humanized label; a curated subset (the highest-traffic/least
 // obvious ones) gets real copy via i18n keys instead.
 
+import { shortDateTimeFmt } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { AuditRow } from "@/lib/notifications";
 
@@ -73,4 +74,13 @@ export function getAuditSummary(
         entity,
       });
   }
+}
+
+export const auditTimeFmt = shortDateTimeFmt;
+
+export function auditActorLabel(
+  row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">,
+) {
+  const fullName = [row.actor_name, row.actor_surname].filter(Boolean).join(" ").trim();
+  return fullName || row.actor_email || null;
 }

@@ -1,10 +1,10 @@
 "use client";
 
 import { maintenanceBodyKey, pollMaintenance } from "@hackos/shared/maintenance";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import { maintenanceStore, useMaintenancePhase } from "@/lib/maintenance";
+import { maintenanceStore } from "@/lib/maintenance";
 
 /**
  * Replaces the whole app with a waiting screen while a database restore holds
@@ -14,7 +14,7 @@ import { maintenanceStore, useMaintenancePhase } from "@/lib/maintenance";
  * restore.
  */
 export function MaintenanceGate({ children }: { children: React.ReactNode }) {
-  const phase = useMaintenancePhase();
+  const phase = useSyncExternalStore(maintenanceStore.subscribe, maintenanceStore.get, () => null);
   const active = phase !== null;
 
   useEffect(() => {

@@ -30,13 +30,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig, PassBackField } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
-import { useCategorySaveState } from "./use-category-save-state";
 import { WalletRuntimeEditor } from "./wallet-runtime-editor";
 
 /**

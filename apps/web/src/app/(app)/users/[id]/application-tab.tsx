@@ -12,8 +12,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
-import { toast } from "@/lib/toast";
+import { applicationStatusLabel } from "@/lib/application-workflow";
 import {
   type ApplicationForm,
   type FormSection,
@@ -21,8 +20,9 @@ import {
   type ResponseRow,
   type ReviewEntry,
   type TemplateField,
-} from "../../applications/lib";
-import { applicationStatusLabel } from "../../applications/workflow";
+} from "@/lib/applications";
+import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
 
 interface UserApplicationRow {
   id: number;

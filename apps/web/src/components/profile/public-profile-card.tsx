@@ -10,18 +10,15 @@ import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import {
-  BioField,
   DirectoryCard,
-  HEADLINE_MAX,
-  LinksEditor,
-  LOCATION_MAX,
   OWN_CV_PATH,
+  ProfileTextFields,
+  ProfileVisibilityFields,
   type PublicProfile,
   type Settings,
   SwitchRow,
   savedLinks,
   settingsFrom,
-  TextField,
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-event-source";
@@ -290,122 +287,65 @@ export function PublicProfileCard({
           )}
           {settings.directoryVisible && (
             <>
-              <div className="flex flex-wrap gap-x-8 gap-y-3">
-                <SwitchRow
-                  checked={settings.showSurname}
-                  onChange={(showSurname) => update({ showSurname })}
-                  label={t("publicProfileShowSurname")}
+              <ProfileVisibilityFields
+                settings={settings}
+                onChange={update}
+                className="flex flex-wrap gap-x-8 gap-y-3"
+              />
+              <ProfileTextFields
+                settings={settings}
+                onChange={update}
+                className={
+                  onboarding
+                    ? "grid items-start gap-4 sm:grid-cols-2"
+                    : "grid items-start gap-4 @xl:grid-cols-2"
+                }
+              />
+              {(!onboarding || profile.cv?.source === "application") && (
+                <CvField
+                  cv={profile.cv}
+                  ownerName={displayName(me, true)}
+                  shareCv={settings.shareCv}
+                  onShareChange={(shareCv) => update({ shareCv })}
+                  onSaved={(next) => {
+                    commit(next);
+                    // A removed CV is no longer shared; drop a pending share too.
+                    if (!next.cv) {
+                      setEdits((current) =>
+                        current?.shareCv ? { ...current, shareCv: false } : current,
+                      );
+                    }
+                  }}
                 />
-                <SwitchRow
-                  checked={settings.showPhoto}
-                  onChange={(showPhoto) => update({ showPhoto })}
-                  label={t("publicProfileShowPhoto")}
-                />
-                <SwitchRow
-                  checked={settings.showProject}
-                  onChange={(showProject) => update({ showProject })}
-                  label={t("publicProfileShowProject")}
-                />
-              </div>
-              {onboarding ? (
-                <>
-                  <div className="grid items-start gap-4 sm:grid-cols-2">
-                    <TextField
-                      label={t("publicProfileHeadline")}
-                      max={HEADLINE_MAX}
-                      value={settings.headline}
-                      onChange={(headline) => update({ headline })}
-                    />
-                    <TextField
-                      label={t("publicProfileLocation")}
-                      max={LOCATION_MAX}
-                      placeholder={t("publicProfileLocationPlaceholder")}
-                      value={settings.locationNote}
-                      onChange={(locationNote) => update({ locationNote })}
-                    />
-                  </div>
-                  <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
-                  <LinksEditor
-                    links={settings.socials}
-                    onChange={(socials) => update({ socials })}
-                  />
-                  {(!onboarding || profile.cv?.source === "application") && (
-                    <CvField
-                      cv={profile.cv}
-                      ownerName={displayName(me, true)}
-                      shareCv={settings.shareCv}
-                      onShareChange={(shareCv) => update({ shareCv })}
-                      onSaved={(next) => {
-                        commit(next);
-                        // A removed CV is no longer shared; drop a pending share too.
-                        if (!next.cv) {
-                          setEdits((current) =>
-                            current?.shareCv ? { ...current, shareCv: false } : current,
-                          );
-                        }
-                      }}
-                    />
-                  )}
-                  <section className="space-y-2 border-t border-border/60 pt-4">
-                    <h3 className="type-label text-muted-foreground">
-                      {t("publicProfilePreview")}
-                    </h3>
-                    <DirectoryCard
-                      entry={
-                        dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
-                      }
-                    />
-                  </section>
-                </>
-              ) : (
-                <>
-                  {/* Same two-column field grid as Personal details. */}
-                  <div className="grid items-start gap-4 @xl:grid-cols-2">
-                    <TextField
-                      label={t("publicProfileHeadline")}
-                      max={HEADLINE_MAX}
-                      value={settings.headline}
-                      onChange={(headline) => update({ headline })}
-                    />
-                    <TextField
-                      label={t("publicProfileLocation")}
-                      max={LOCATION_MAX}
-                      placeholder={t("publicProfileLocationPlaceholder")}
-                      value={settings.locationNote}
-                      onChange={(locationNote) => update({ locationNote })}
-                    />
-                  </div>
-                  <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
-                  <LinksEditor
-                    links={settings.socials}
-                    onChange={(socials) => update({ socials })}
-                  />
-                  <CvField
-                    cv={profile.cv}
-                    ownerName={displayName(me, true)}
-                    shareCv={settings.shareCv}
-                    onShareChange={(shareCv) => update({ shareCv })}
-                    onSaved={(next) => {
-                      commit(next);
-                      // A removed CV is no longer shared; drop a pending share too.
-                      if (!next.cv) {
-                        setEdits((current) =>
-                          current?.shareCv ? { ...current, shareCv: false } : current,
-                        );
-                      }
-                    }}
-                  />
-                  {/* One grid column wide: close to the card's size on a phone. */}
-                  <section className="grid gap-x-4 gap-y-2 @xl:grid-cols-2">
-                    <h3 className="type-label text-muted-foreground @xl:col-span-2">
-                      {t("publicProfilePreview")}
-                    </h3>
-                    <div className="@xl:col-start-1">
-                      <DirectoryCard entry={preview ?? profile.preview} />
-                    </div>
-                  </section>
-                </>
               )}
+              <section
+                className={
+                  onboarding
+                    ? "space-y-2 border-t border-border/60 pt-4"
+                    : "grid gap-x-4 gap-y-2 @xl:grid-cols-2"
+                }
+              >
+                <h3
+                  className={
+                    onboarding
+                      ? "type-label text-muted-foreground"
+                      : "type-label text-muted-foreground @xl:col-span-2"
+                  }
+                >
+                  {t("publicProfilePreview")}
+                </h3>
+                {onboarding ? (
+                  <DirectoryCard
+                    entry={
+                      dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
+                    }
+                  />
+                ) : (
+                  <div className="@xl:col-start-1">
+                    <DirectoryCard entry={preview ?? profile.preview} />
+                  </div>
+                )}
+              </section>
             </>
           )}
         </fieldset>

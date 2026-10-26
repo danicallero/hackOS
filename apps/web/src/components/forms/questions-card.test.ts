@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { newField, serializeApplicationField } from "./questions-card";
+import { newField, serializeApplicationField } from "@/components/forms/questions-card";
 
 describe("application question serialization", () => {
   it("keeps video presentation on arbitrary project text questions only", () => {

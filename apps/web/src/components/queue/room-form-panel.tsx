@@ -10,6 +10,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
+import { AssignmentsEditor } from "@/components/queue/room-panels";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,6 @@ import { useLocale } from "@/lib/i18n";
 import type { Room, RoomAssignments } from "@/lib/queue";
 import { toast } from "@/lib/toast";
 import type { EnterpriseSummary } from "@/lib/types";
-import { AssignmentsEditor } from "./room-panels";
 
 export type RoomFormValues = {
   name: string;

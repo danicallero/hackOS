@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { canAccessSponsorWorkspace } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
 import {
   getAssignableRooms,
@@ -44,7 +45,6 @@ import {
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
-import { canAccessSponsorWorkspace } from "../../../challenges/shared";
 
 export default function QueueDetailPage() {
   const { t } = useLocale();

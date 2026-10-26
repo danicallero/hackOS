@@ -4,13 +4,13 @@ import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowsClockw
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { type Challenge, textForDisplay } from "@/app/(app)/challenges/shared";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { type Challenge, textForDisplay } from "@/lib/challenges";
 import { API_URL } from "@/lib/env";
 import type { Translate } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n";

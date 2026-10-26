@@ -57,6 +57,14 @@ import { LibraryManager } from "@/components/common/library-manager";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
+import { FieldPreviewRow, FormPreviewModal } from "@/components/forms/form-preview";
+import {
+  DragHandle,
+  DroppableBlock,
+  EmptyBlockHint,
+  SortableField,
+  SortableSection,
+} from "@/components/forms/questions-dnd";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -82,11 +90,13 @@ import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
-import type { SaveState } from "@/lib/save-state";
-import { toast } from "@/lib/toast";
-import type { Language } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import {
+  EMPTY_I18N,
+  LOCALES,
+  logisticsPreviewFields,
+  withLogisticsSection,
+} from "@/lib/application-form";
+import { generatedFieldKey } from "@/lib/application-workflow";
 import {
   type ApplicationForm,
   BUILDER_FIELD_KINDS,
@@ -98,17 +108,12 @@ import {
   OPTION_KINDS,
   PROJECT_BUILDER_FIELD_KINDS,
   type TemplateField,
-} from "../lib";
-import { generatedFieldKey } from "../workflow";
-import { FieldPreviewRow, FormPreviewModal } from "./form-preview";
-import {
-  DragHandle,
-  DroppableBlock,
-  EmptyBlockHint,
-  SortableField,
-  SortableSection,
-} from "./questions-dnd";
-import { EMPTY_I18N, LOCALES, logisticsPreviewFields, withLogisticsSection } from "./shared";
+} from "@/lib/applications";
+import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
+import type { SaveState } from "@/lib/save-state";
+import { toast } from "@/lib/toast";
+import type { Language } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 /** A field/section with a stable client-only identity for drag reordering —
  *  `key` can transiently collide while editing (auto-generated from the

@@ -8,7 +8,7 @@ import {
   type OfflineScan,
   saveOfflineQueue,
   updateOfflineQueue,
-} from "./offline-queue";
+} from "@/lib/offline-queue";
 
 const saved: OfflineScan = {
   clientScanId: "device-operation-1",

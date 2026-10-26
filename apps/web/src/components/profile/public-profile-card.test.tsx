@@ -64,15 +64,15 @@ vi.mock("@/hooks/use-event-source", async () => {
 });
 
 import { EVENTS } from "@hackos/shared/events";
-import { ApiError, api, apiUpload } from "@/lib/api";
-import { API_URL } from "@/lib/env";
-import { showErrorToast, toast } from "@/lib/toast";
 import {
   DirectoryCard,
   type DirectoryEntry,
   displayName,
   PublicProfileCard,
-} from "./public-profile-card";
+} from "@/components/profile/public-profile-card";
+import { ApiError, api, apiUpload } from "@/lib/api";
+import { API_URL } from "@/lib/env";
+import { showErrorToast, toast } from "@/lib/toast";
 
 function profile(overrides: Record<string, unknown> = {}, preview: Partial<DirectoryEntry> = {}) {
   return {

@@ -1,8 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useProjectDraft } from "@/hooks/use-project-draft";
 import { ApiError } from "@/lib/api";
-import { useProjectDraft } from "./use-project-draft";
 
 const { saveDraft } = vi.hoisted(() => ({ saveDraft: vi.fn() }));
 vi.mock("@/lib/native-projects", async (importOriginal) => {

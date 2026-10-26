@@ -7,6 +7,7 @@ import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { MultiSelect } from "@/components/common/multi-select";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
@@ -34,7 +35,6 @@ import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Language, Me } from "@/lib/types";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
-import { ProfilePhoto } from "./profile-photo";
 
 const LANGS: Language[] = ["es", "gl", "en"];
 

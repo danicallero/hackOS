@@ -1,5 +1,5 @@
+import type { ResponseRow } from "@/lib/applications";
 import type { Translate } from "@/lib/i18n";
-import type { ResponseRow } from "./lib";
 
 // Three workspaces instead of four: "review" also makes the internal
 // accept/reject call (score → decide, no separate "decisions" tab that
@@ -74,9 +74,8 @@ export function generatedFieldKey(label: string, existing: string[] = []): strin
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "question";
+      .match(/[a-z0-9]+/g)
+      ?.join("_") || "question";
   if (!existing.includes(base)) return base;
   let suffix = 2;
   while (existing.includes(`${base}_${suffix}`)) suffix++;

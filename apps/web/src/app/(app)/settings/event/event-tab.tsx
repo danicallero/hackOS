@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
@@ -47,7 +48,6 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
-import { useCategorySaveState } from "./use-category-save-state";
 
 const createSchema = (t: Translate) =>
   z

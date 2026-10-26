@@ -44,11 +44,11 @@ import {
 import { Surface } from "@/components/ui/surface";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { EMPTY_I18N, textForDisplay } from "@/lib/challenges";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { EMPTY_I18N, textForDisplay } from "../challenges/shared";
 
 type FaqItemKind = "qa" | "text";
 interface FaqItem {

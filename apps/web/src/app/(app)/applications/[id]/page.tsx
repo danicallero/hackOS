@@ -33,10 +33,17 @@ import { Spinner } from "@/components/common/spinner";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
+import { QuestionsCard } from "@/components/forms/questions-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import {
+  type ApplicationForm,
+  type ApplicationStats,
+  grantedRoleNameLabel,
+  windowState,
+} from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
@@ -44,14 +51,7 @@ import {
   confirmDiscardUnsavedChanges,
   useUnsavedChangesGuard,
 } from "@/lib/use-unsaved-changes-guard";
-import {
-  type ApplicationForm,
-  type ApplicationStats,
-  grantedRoleNameLabel,
-  windowState,
-} from "../lib";
 import { ApplicationDangerZone, MetadataCard } from "./metadata-card";
-import { QuestionsCard } from "./questions-card";
 import { ResponsesTab } from "./responses-tab";
 
 export default function ApplicationDetailPage() {

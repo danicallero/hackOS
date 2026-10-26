@@ -5,7 +5,7 @@ import {
   challengeNextAction,
   challengeState,
   filterChallengesForEnterprise,
-} from "./shared";
+} from "@/lib/challenges";
 
 function baseChallenge(overrides: Partial<Challenge> = {}): Challenge {
   return {

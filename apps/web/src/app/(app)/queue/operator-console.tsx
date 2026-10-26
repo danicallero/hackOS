@@ -16,10 +16,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Surface } from "@/components/ui/surface";
+import { textForDisplay } from "@/lib/challenges";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { entryAction, moveQueueEntryToPosition, type QueueEntry, type RoomView } from "@/lib/queue";
 import { showErrorToast, toast } from "@/lib/toast";
-import { textForDisplay } from "../challenges/shared";
 import { operatorRowsForRooms, sortOperatorRows } from "./operator-console-model";
 
 type OperatorAction =

@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ProfilePhoto } from "@/app/(app)/settings/profile/profile-photo";
-import { PublicProfileCard } from "@/app/(app)/settings/profile/public-profile-card";
 import { ContextualError } from "@/components/common/contextual-error";
 import { LanguageSelect } from "@/components/common/language-select";
 import { Spinner } from "@/components/common/spinner";
 import { ThemeToggle } from "@/components/common/theme-toggle";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
+import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import type { PublicProfile } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";

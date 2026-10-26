@@ -37,7 +37,6 @@ import { TextTIcon } from "@phosphor-icons/react/dist/csr/TextT";
 import { ToggleLeftIcon } from "@phosphor-icons/react/dist/csr/ToggleLeft";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useMemo, useRef, useState } from "react";
-import { i18nWithEnglishFallback, type Prize } from "@/app/(app)/challenges/shared";
 import {
   DragHandle,
   dragOverlayDropAnimation,
@@ -67,6 +66,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useClickOutside } from "@/hooks/use-click-outside";
+import { i18nWithEnglishFallback, type Prize } from "@/lib/challenges";
 import { type Translate, useLocale } from "@/lib/i18n";
 
 /** Fixed locale order for translation inputs — English is always the primary
@@ -219,7 +219,7 @@ export function PrizeBuilder({
 }
 
 /** Judging panel builder (H30/H44) — mirrors the application form editor's
- *  row pattern (`FieldEditor` in applications/[id]/questions-card.tsx): a
+ *  row pattern (`FieldEditor` in components/forms/questions-card.tsx): a
  *  collapsed preview row that expands into the full editor on click, plus
  *  drag-and-drop reordering, minus that editor's sections feature (a
  *  judging panel is always a flat list, issue #423). */

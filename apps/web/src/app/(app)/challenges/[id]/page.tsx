@@ -17,9 +17,9 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { type Challenge, isScheduled, textForDisplay, visibilityTone } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
-import { type Challenge, isScheduled, textForDisplay, visibilityTone } from "../shared";
 import { ChallengeAlertDialog } from "./challenge-alert-dialog";
 import { EditCard } from "./challenge-cards";
 

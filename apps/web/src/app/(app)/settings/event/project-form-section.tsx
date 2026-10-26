@@ -4,9 +4,9 @@
 // dates it complements. Gated by PROJECTS_EDIT.
 
 import { useCallback, useEffect, useState } from "react";
-import { QuestionsCard } from "@/app/(app)/applications/[id]/questions-card";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Spinner } from "@/components/common/spinner";
+import { QuestionsCard } from "@/components/forms/questions-card";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { nativeProjects, type ProjectDefinition } from "@/lib/native-projects";

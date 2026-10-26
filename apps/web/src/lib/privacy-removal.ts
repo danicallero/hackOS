@@ -3,7 +3,7 @@ import {
   type AccountRemovalProgress,
   parseAccountRemovalProgress,
 } from "@hackos/shared/account-removal";
-import { isOfflineQueueStorageKey, LEGACY_OFFLINE_KEY } from "@/components/logistics/offline-queue";
+import { isOfflineQueueStorageKey, LEGACY_OFFLINE_KEY } from "@/lib/offline-queue";
 
 export type {
   AccountRemovalAction,

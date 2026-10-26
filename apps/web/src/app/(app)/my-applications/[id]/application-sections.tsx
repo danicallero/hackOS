@@ -1,7 +1,7 @@
 "use client";
 
-import { applicantTimelineState } from "@/app/(app)/applications/workflow";
 import { SectionCard } from "@/components/common/section-card";
+import { applicantTimelineState } from "@/lib/application-workflow";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { MyResponseDetail } from "../lib";

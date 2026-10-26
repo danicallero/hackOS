@@ -6,6 +6,7 @@ import { CertificatesPanel } from "@/components/certificates/certificates-panel"
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
+import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -24,7 +25,6 @@ import {
   type SectionDef,
   visibleProfileTabs,
 } from "./profile-sections";
-import { PublicProfileCard } from "./public-profile-card";
 import { WalletSection } from "./wallet-section";
 
 export default function ProfileSettingsPage() {

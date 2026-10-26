@@ -1,9 +1,9 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { RoomsTable } from "@/components/queue/rooms-table";
 import { LocaleProvider } from "@/lib/i18n";
 import type { Room } from "@/lib/queue";
-import { RoomsTable } from "./rooms-table";
 
 vi.mock("@/lib/session", () => ({ useMe: () => null }));
 vi.mock("@/components/common/entity-combobox", () => ({

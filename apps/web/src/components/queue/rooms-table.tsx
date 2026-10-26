@@ -6,7 +6,7 @@
 import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import {
   commitAndNavigateEditableTableCell,
@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useInlineEditState } from "@/hooks/use-inline-edit-state";
 import { errorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import type { Room } from "@/lib/queue";
@@ -63,19 +64,8 @@ function EditableRoomTextCell({
   onSave: (next: string) => Promise<boolean>;
 }) {
   const { t } = useLocale();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!editing) setDraft(value);
-  }, [value, editing]);
-
-  useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
+  const { editing, setEditing, draft, setDraft, saving, setSaving, inputRef } =
+    useInlineEditState(value);
 
   async function commit(nextDraft = draft): Promise<boolean> {
     if (saving) return false;

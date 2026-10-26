@@ -17,12 +17,12 @@ import { SectionCard } from "@/components/common/section-card";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { TimingField } from "./timing-field";
-import { useCategorySaveState } from "./use-category-save-state";
 
 interface Draft {
   scheduleRemindersEnabled: boolean;
