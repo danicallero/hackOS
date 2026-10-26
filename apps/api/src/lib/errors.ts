@@ -1,3 +1,5 @@
+import { MAINTENANCE_CODE, MAINTENANCE_STATUS } from "@hackos/shared/maintenance";
+
 /**
  * Explicit business-error model (plan/02: "estados de error explícitos, sin
  * silencios"). Route handlers throw AppError subclasses; the global error
@@ -58,7 +60,7 @@ export class UpgradeRequiredError extends AppError {
 /** A database restore holds the maintenance lock; clients show a waiting screen (#539). */
 export class MaintenanceError extends AppError {
   constructor(details: { phase: string; startedAt: string | null; etaAt: string | null }) {
-    super(503, "maintenance_in_progress", "hackOS is being restored from a backup", details);
+    super(MAINTENANCE_STATUS, MAINTENANCE_CODE, "hackOS is being restored from a backup", details);
   }
 }
 

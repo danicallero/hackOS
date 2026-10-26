@@ -1,11 +1,10 @@
 "use client";
 
+import { maintenanceBodyKey, pollMaintenance } from "@hackos/shared/maintenance";
 import { useEffect } from "react";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
-import { clearMaintenance, markMaintenance, useMaintenance } from "@/lib/maintenance";
-
-const POLL_MS = 10_000;
+import { maintenanceStore, useMaintenancePhase } from "@/lib/maintenance";
 
 /**
  * Replaces the whole app with a waiting screen while a database restore holds
@@ -15,43 +14,30 @@ const POLL_MS = 10_000;
  * restore.
  */
 export function MaintenanceGate({ children }: { children: React.ReactNode }) {
-  const maintenance = useMaintenance();
-  const active = maintenance !== null;
+  const phase = useMaintenancePhase();
+  const active = phase !== null;
 
   useEffect(() => {
     if (!active) return;
-    let stopped = false;
-    const poll = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/public/maintenance`, {
-          credentials: "omit",
-          cache: "no-store",
-        });
-        const status = (await res.json()) as { active?: boolean; phase?: string };
-        if (stopped) return;
-        if (status.active === false) {
-          clearMaintenance();
+    return pollMaintenance(
+      API_URL,
+      {
+        onPhase: (next) => maintenanceStore.mark(next),
+        onDone: () => {
+          maintenanceStore.clear();
           window.location.reload();
-        } else if (status.active && status.phase) {
-          markMaintenance({ phase: status.phase });
-        }
-      } catch {
-        // The API itself may be restarting; keep waiting.
-      }
-    };
-    const timer = setInterval(() => void poll(), POLL_MS);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
+        },
+      },
+      { credentials: "omit" },
+    );
   }, [active]);
 
-  if (!maintenance) return <>{children}</>;
-  return <MaintenanceScreen failed={maintenance.phase === "failed"} />;
+  return phase === null ? <>{children}</> : <MaintenanceScreen phase={phase} />;
 }
 
-function MaintenanceScreen({ failed }: { failed: boolean }) {
+function MaintenanceScreen({ phase }: { phase: string }) {
   const { t } = useLocale();
+  const bodyKey = maintenanceBodyKey(phase);
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-8">
       <section
@@ -63,9 +49,9 @@ function MaintenanceScreen({ failed }: { failed: boolean }) {
           {t("maintenanceTitle")}
         </h1>
         <p role="status" className="text-muted-foreground text-pretty">
-          {t(failed ? "maintenanceFailedBody" : "maintenanceBody")}
+          {t(bodyKey)}
         </p>
-        {!failed && (
+        {bodyKey === "maintenanceBody" && (
           <div aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-muted">
             <div className="h-full w-1/3 animate-pulse rounded-full bg-primary" />
           </div>

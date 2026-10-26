@@ -1,10 +1,11 @@
+import { MAINTENANCE_STATUS_PATH } from "@hackos/shared/maintenance";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { MaintenanceError } from "../lib/errors.js";
 import { getMaintenanceStatus } from "../lib/maintenance.js";
 
 /** Stay reachable while the database is being replaced (#539). */
-const ALLOWED_PATHS = new Set(["/healthz", "/readyz", "/metrics", "/api/public/maintenance"]);
+const ALLOWED_PATHS = new Set(["/healthz", "/readyz", "/metrics", MAINTENANCE_STATUS_PATH]);
 
 /**
  * While `deploy/scripts/restore.sh` holds the maintenance lock, every route

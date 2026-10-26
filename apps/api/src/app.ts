@@ -4,6 +4,7 @@ import multipart from "@fastify/multipart";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { MAINTENANCE_STATUS_PATH } from "@hackos/shared/maintenance";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import {
   jsonSchemaTransform,
@@ -705,7 +706,7 @@ export async function buildApp(): Promise<App> {
   );
 
   app.get(
-    "/api/public/maintenance",
+    MAINTENANCE_STATUS_PATH,
     {
       config: { routeAccessPolicy: { kind: "public", anonymousCategory: "health" } },
       schema: {

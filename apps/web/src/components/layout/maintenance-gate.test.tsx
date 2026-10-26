@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock("@/lib/env", () => ({ API_URL: "http://api.test" }));
 
-import { clearMaintenance, markMaintenance } from "@/lib/maintenance";
+import { maintenanceStore } from "@/lib/maintenance";
 import { MaintenanceGate } from "./maintenance-gate";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -23,7 +23,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   host.remove();
-  clearMaintenance();
+  maintenanceStore.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -41,7 +41,7 @@ describe("MaintenanceGate (#539)", () => {
   it("renders the app until a request reports the restore", () => {
     render();
     expect(host.textContent).toBe("app");
-    act(() => markMaintenance({ phase: "restoring" }));
+    act(() => maintenanceStore.mark("restoring"));
     expect(host.textContent).toContain("maintenanceTitle");
     expect(host.textContent).toContain("maintenanceBody");
     expect(host.textContent).not.toContain("app");
@@ -49,7 +49,7 @@ describe("MaintenanceGate (#539)", () => {
 
   it("explains a failed restore without a progress bar", () => {
     render();
-    act(() => markMaintenance({ phase: "failed" }));
+    act(() => maintenanceStore.mark("failed"));
     expect(host.textContent).toContain("maintenanceFailedBody");
   });
 
@@ -59,7 +59,7 @@ describe("MaintenanceGate (#539)", () => {
     const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ active: false }) });
     vi.stubGlobal("fetch", fetchMock);
     render();
-    act(() => markMaintenance({ phase: "restoring" }));
+    act(() => maintenanceStore.mark("restoring"));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
