@@ -28,6 +28,12 @@ means no maintenance; an unreadable file blocks traffic (fail closed).
 A `failed` phase keeps the lock and the screens say an administrator is
 needed; nothing reopens a half-restored database automatically.
 
+## Network
+
+S3 runs in the `backup-sync` Compose service (profile `backup`, started only by
+`backup.sh`). It is the one backup container on the `egress` network with public
+DNS; `minio-init` and the data services stay on the internal `private` network.
+
 ## Commands
 
 All of them are `backup.sh <environment> <command>` on the host

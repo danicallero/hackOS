@@ -145,7 +145,18 @@ minio_root_user="$(require_value MINIO_ROOT_USER)"
 minio_root_password="$(require_value MINIO_ROOT_PASSWORD)"
 s3_bucket="$(env_value S3_BUCKET)"
 s3_bucket="${s3_bucket:-hackos}"
+# Releases update API and web independently and the deploy records the running
+# tags in .image-tags (hackos.env has no IMAGE_TAG). Use them so Compose never
+# recreates a service on a different image than the one deployed.
+image_state_file="${HACKOS_IMAGE_STATE_FILE:-$app_dir/.image-tags}"
+state_value() {
+  [[ -r "$image_state_file" ]] || return 0
+  sed -n "s/^$1=//p" "$image_state_file" | tail -n 1 | tr -d "\"'"
+}
+api_image_tag="${API_IMAGE_TAG:-$(state_value API_IMAGE_TAG)}"
+web_image_tag="${WEB_IMAGE_TAG:-$(state_value WEB_IMAGE_TAG)}"
 image_tag="${IMAGE_TAG:-$(env_value IMAGE_TAG)}"
+image_tag="${image_tag:-$api_image_tag}"
 data_dir="$(env_value HACKOS_DATA_DIR)"
 data_dir="${data_dir:-/mnt/data}"
 
@@ -181,6 +192,8 @@ if [[ "$needs_s3" == true ]]; then
 fi
 
 export IMAGE_TAG="$image_tag"
+[[ ! "$api_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || export API_IMAGE_TAG="$api_image_tag"
+[[ ! "$web_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || export WEB_IMAGE_TAG="$web_image_tag"
 export S3_BUCKET="$s3_bucket"
 export POSTGRES_USER="$postgres_user"
 export POSTGRES_DB="$postgres_db"
@@ -192,8 +205,11 @@ maintenance_dir="$data_dir/maintenance"
 maintenance_file="$maintenance_dir/state.json"
 snapshot_re='^[0-9]{8}T[0-9]{6}Z$'
 
+# One-off containers of parallel steps are not orphans.
+export COMPOSE_IGNORE_ORPHANS=true
+
 compose() {
-  docker compose \
+  docker compose --progress quiet \
     "${compose_env_files[@]}" \
     --file "$compose_file" \
     --project-name "$project_name" \
@@ -235,7 +251,8 @@ say() { printf '%s\n' "$*"; }
 
 # --- S3 access (mc runs in the already-pinned minio-init image) -------------
 
-# Runs a /bin/sh snippet with the `local` (MinIO) and `offsite` (S3) aliases set. Variables the
+# Runs a /bin/sh snippet with the `local` (MinIO) and `offsite` (S3) aliases set,
+# in the backup-sync service (the only backup container with internet access). Variables the
 # snippet reads must be exported by the caller (SNAP_ID, BACKUP_S3_OBJECT, …).
 mc_offsite() {
   compose run --rm --no-deps -T \
@@ -243,11 +260,18 @@ mc_offsite() {
     -e BACKUP_S3_BUCKET -e SNAP_ROOT -e SNAP_ID -e BACKUP_S3_OBJECT -e BACKUP_S3_OBJECT_PREFIX \
     -e BACKUP_DUMP_OBJECT -e BACKUP_MIGRATION_HEAD -e BACKUP_ENVIRONMENT -e BACKUP_IMAGE_TAG \
     -e BACKUP_CREATED_AT \
-    --entrypoint /bin/sh minio-init \
+    --entrypoint /bin/sh backup-sync \
     -c "set -eu
       mc alias set local http://minio:9000 \"\$MINIO_ROOT_USER\" \"\$MINIO_ROOT_PASSWORD\" >/dev/null
       mc alias set offsite \"\$BACKUP_S3_ENDPOINT\" \"\$BACKUP_S3_ACCESS_KEY_ID\" \"\$BACKUP_S3_SECRET_ACCESS_KEY\" >/dev/null
       $1"
+}
+
+# snapshot_ids swallows listing errors on purpose; call this first so an
+# unreachable bucket is reported as such and not as "no snapshots".
+require_s3() {
+  mc_offsite 'mc ls "offsite/$BACKUP_S3_BUCKET/" >/dev/null' ||
+    die "cannot reach the S3 bucket (check BACKUP_S3_* and the host's internet access)"
 }
 
 manifest_value() { # manifest-text key
@@ -294,9 +318,10 @@ epoch_of() { # YYYYMMDDTHHMMSSZ -> epoch seconds
 
 # --- PostgreSQL helpers -----------------------------------------------------
 
-psql_admin() { # SQL on stdin-free form; runs against the maintenance database
+psql_admin() { # runs against the maintenance database
   compose exec -T postgres sh -c \
-    'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -qtA --username "$POSTGRES_USER" --dbname postgres' <<<"$1"
+    'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -qtA --username "$POSTGRES_USER" --dbname postgres' \
+    <<<"SET client_min_messages = warning; $1"
 }
 
 psql_in() { # database SQL
@@ -408,6 +433,7 @@ create_snapshot() {
   export BACKUP_S3_OBJECT="$object_prefix/postgres.dump"
 
   run_quiet "validate Compose" compose config --quiet
+  require_s3
   run_quiet "start backup dependencies" compose up --detach postgres minio
   wait_for_health postgres
   wait_for_health minio
@@ -444,8 +470,9 @@ create_snapshot() {
   BACKUP_CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   run_quiet "backup manifest" mc_offsite '
     stat="$(mc stat --json "offsite/$BACKUP_S3_BUCKET/$BACKUP_DUMP_OBJECT")"
-    dump_size="$(printf "%s" "$stat" | sed -n "s/.*\"size\":\([0-9]*\).*/\1/p")"
-    dump_etag="$(printf "%s" "$stat" | sed -n "s/.*\"etag\":\"\([^\"]*\)\".*/\1/p")"
+    # The MinIO image has no sed/awk/jq: parse with shell expansion only.
+    dump_size="${stat#*\"size\":}"; dump_size="${dump_size%%[!0-9]*}"
+    dump_etag="${stat#*\"etag\":\"}"; dump_etag="${dump_etag%%\"*}"
     [ -n "$dump_size" ] && [ "$dump_size" -gt 0 ] || { echo "empty dump" >&2; exit 1; }
     printf "environment=%s\nimage_tag=%s\nmigration_head=%s\ncreated_at=%s\ndump_size=%s\ndump_etag=%s\n" \
       "$BACKUP_ENVIRONMENT" "$BACKUP_IMAGE_TAG" "$BACKUP_MIGRATION_HEAD" "$BACKUP_CREATED_AT" "$dump_size" "$dump_etag" |
@@ -455,20 +482,39 @@ create_snapshot() {
   echo "OK: S3 backup created at $object_prefix"
 }
 
+human_age() { # seconds -> 5m / 3h / 2d
+  local s="$1"
+  if ((s < 3600)); then printf '%dm' $((s / 60))
+  elif ((s < 172800)); then printf '%dh' $((s / 3600))
+  else printf '%dd' $((s / 86400)); fi
+}
+
+human_size() { # bytes -> 12.3 MB
+  awk -v b="${1:-0}" 'BEGIN { printf "%.1f MB", b / 1048576 }'
+}
+
 cmd_list() {
-  local id manifest count=0
-  printf '%-18s %-16s %-30s %s\n' SNAPSHOT IMAGE MIGRATION DUMP_BYTES
+  local id manifest count=0 now
+  require_s3
+  now="$(date -u +%s)"
+  printf '%-18s %-17s %-6s %-9s %-14s %s\n' SNAPSHOT 'CREATED (UTC)' AGE SIZE IMAGE MIGRATION
   while IFS= read -r id; do
+    printf '%-18s %-17s %-6s ' "$id" "${id:0:4}-${id:4:2}-${id:6:2} ${id:9:2}:${id:11:2}" \
+      "$(human_age $((now - $(epoch_of "$id"))))"
     if manifest="$(read_manifest "$id")"; then
-      printf '%-18s %-16s %-30s %s\n' "$id" "$(manifest_value "$manifest" image_tag | cut -c1-12)" \
-        "$(manifest_value "$manifest" migration_head)" "$(manifest_value "$manifest" dump_size)"
+      printf '%-9s %-14s %s\n' "$(human_size "$(manifest_value "$manifest" dump_size)")" \
+        "$(manifest_value "$manifest" image_tag | cut -c1-12)" "$(manifest_value "$manifest" migration_head)"
     else
-      printf '%-18s incomplete (no manifest)\n' "$id"
+      printf 'incomplete: interrupted upload, not restorable, expires by itself\n'
     fi
     count=$((count + 1))
     ((count < ${1:-15})) || break
   done < <(snapshot_ids)
-  ((count > 0)) || say "No snapshots under $SNAP_ROOT/snapshots/"
+  if ((count == 0)); then
+    say "No snapshots under $SNAP_ROOT/snapshots/"
+  else
+    say "Newest complete one is used by: backups restore latest (verify first with: backups verify latest)"
+  fi
 }
 
 cmd_status() {
@@ -476,7 +522,10 @@ cmd_status() {
   say "Environment: $environment    BACKUPS_ENABLED=$backups_enabled    BACKUP_FREQUENCY=$backup_frequency"
   if [[ "$backups_enabled" == true ]]; then
     snapshot_manifest=''
-    if try_resolve_snapshot latest; then
+    if ! mc_offsite 'mc ls "offsite/$BACKUP_S3_BUCKET/" >/dev/null' 2>&1; then
+      say "S3 UNREACHABLE: cannot list the bucket (check BACKUP_S3_* and internet access)"
+      exit_code=1
+    elif try_resolve_snapshot latest; then
       latest="$SNAP_ID"
       age_h=$((($(date -u +%s) - $(epoch_of "$latest")) / 3600))
       case "$backup_frequency" in
@@ -494,6 +543,9 @@ cmd_status() {
       say "NO COMPLETE SNAPSHOT found under $SNAP_ROOT/snapshots/"
       exit_code=1
     fi
+  fi
+  if [[ "$backups_enabled" == true ]]; then
+    say "Files mirror (MinIO -> S3): $(mc_offsite 'mc du "offsite/$BACKUP_S3_BUCKET/$SNAP_ROOT/minio" 2>/dev/null' | tr -s ' ' | head -n 1 || true)"
   fi
   if [[ -f "$maintenance_file" ]]; then
     state="$(cat "$maintenance_file")"
@@ -514,6 +566,7 @@ cmd_status() {
 
 cmd_verify() {
   local started scratch="${postgres_db}_verify"
+  require_s3
   start_stateful
   resolve_snapshot "${1:-latest}"
   say "Verifying snapshot $SNAP_ID in scratch database $scratch (live data untouched)"
@@ -539,6 +592,7 @@ cmd_restore() {
     shift
   done
   [[ ! -f "$maintenance_file" ]] || die "a maintenance lock already exists; inspect with status, then undo or unlock"
+  require_s3
   start_stateful
   resolve_snapshot "${restore_target:-latest}"
   say "Snapshot $SNAP_ID: image $(manifest_value "$snapshot_manifest" image_tag), migration $(manifest_value "$snapshot_manifest" migration_head), created $(manifest_value "$snapshot_manifest" created_at)"
