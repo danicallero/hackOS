@@ -87,6 +87,11 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: ["true"]
     restart: "no"
+  backup-sync:
+    <<: *minio
+    profiles: ["backup"]
+    entrypoint: ["/bin/sh", "-c"]
+    restart: "no"
   migrate:
     image: alpine:latest
     command: ["true"]
@@ -171,6 +176,7 @@ set +e; backup status >/dev/null 2>&1; expect "status exit without snapshot" "$?
 step "backup, list, status, verify"
 backup create >/dev/null
 expect "one snapshot listed" "$(backup list | grep -c '^[0-9]\{8\}T')" 1
+expect "list shows date, age and size" "$(backup list | grep -c 'CREATED (UTC)')" 1
 backup status >/dev/null; expect "status healthy" "$?" 0
 backup verify latest | tail -n 1
 
