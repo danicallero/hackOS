@@ -32,26 +32,27 @@ validated.
 None for source changes. Documentation-only changes may skip package tests,
 but must still run the checks relevant to the edited documentation or tooling.
 
-## [R002] Treat “PR” as an imperative request
+## [R002] Carry issue fixes through to a draft PR
 
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-09-09
+Date: 2026-10-26
 
 ### Trigger
-When the user says “PR” in the context of a completed change.
+When the user requests an issue fix, including by sending its URL, or says
+“PR” in the context of a completed change.
 
 ### Mistake
-The agent treated the short message “PR” as ambiguous and asked whether the
-user wanted a pull request opened.
+The agent stopped after implementing and validating an issue fix locally,
+leaving the user to explicitly request the pull request.
 
 ### Lesson
-“PR” means the user wants the pull request opened, not a clarification about
-whether to do so.
+An issue-fix request includes delivering a reviewable draft pull request.
+“PR” is an instruction to open it immediately.
 
 ### Action
-Use the repository's pull-request workflow immediately: inspect the branch and
+After completing the fix, use the repository's pull-request workflow: inspect the branch and
 worktree, run the required checks, prepare the required PR body, and open the
 pull request. Ask only if a real external-state blocker prevents opening it.
 
@@ -60,8 +61,8 @@ Confirm the pull-request command succeeds and report the resulting URL or the
 concrete blocker.
 
 ### Exceptions
-If the user explicitly says “draft”, “review”, or otherwise narrows the PR
-request, follow that more specific instruction.
+If the user explicitly requests local-only work or otherwise narrows the
+delivery scope, follow that instruction. Repository restrictions still apply.
 
 ## [R003] Verify URL synchronization under rerenders
 

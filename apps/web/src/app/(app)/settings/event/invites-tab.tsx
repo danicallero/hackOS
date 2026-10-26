@@ -16,13 +16,13 @@ import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { Form, FormControl, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
-import { useCategorySaveState } from "./use-category-save-state";
 
 const schema = z.object({
   requireSponsorShirtSize: z.boolean(),

@@ -1,6 +1,6 @@
 "use client";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useInlineEditState } from "@/hooks/use-inline-edit-state";
 import { ApiError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
@@ -176,19 +177,8 @@ export function EditableTextCell({
   onSave: (next: string) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!editing) setDraft(value); // Resync to latest value while not mid-edit.
-  }, [value, editing]);
-
-  useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
+  const { editing, setEditing, draft, setDraft, saving, setSaving, inputRef } =
+    useInlineEditState(value);
 
   async function commit(nextDraft = draft): Promise<boolean> {
     if (saving) return false;
@@ -273,19 +263,8 @@ export function EditableTimeCell({
   onSave: (next: string) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!editing) setDraft(value); // Resync to latest value while not mid-edit.
-  }, [value, editing]);
-
-  useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
+  const { editing, setEditing, draft, setDraft, saving, setSaving, inputRef } =
+    useInlineEditState(value);
 
   async function commit(nextDraft = draft): Promise<boolean> {
     if (saving) return false;

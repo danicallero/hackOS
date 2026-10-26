@@ -6,7 +6,7 @@ const browserTests = [
   "src/lib/nav.test.ts",
   "src/lib/privacy-removal.test.ts",
   "src/lib/url-tab.test.ts",
-  "src/components/logistics/offline-queue.test.ts",
+  "src/lib/offline-queue.test.ts",
 ];
 
 export default defineConfig({

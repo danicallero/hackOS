@@ -36,12 +36,12 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { type ApplicationForm, fromLocalInput, toLocalInput } from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
 import type { RoleSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { type ApplicationForm, fromLocalInput, toLocalInput } from "../lib";
 
 // Runtime validator is built inside the component with useMemo so its error
 // message can be localized via t("required"). Type is defined separately.

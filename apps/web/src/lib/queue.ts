@@ -4,7 +4,7 @@
  * Keep these in sync with the backend; when a shape is unclear, read the module.
  */
 import type { Question } from "@hackos/shared/questions";
-import type { TranslatedText } from "@/app/(app)/challenges/shared";
+import type { TranslatedText } from "@/lib/challenges";
 import { api } from "./api";
 import type { EnterpriseSummary } from "./types";
 

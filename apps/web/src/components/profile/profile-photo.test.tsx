@@ -17,9 +17,9 @@ vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) })
 vi.mock("@/lib/session", () => ({ useSessionContext: () => session }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { api, apiUpload } from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { ProfilePhoto } from "./profile-photo";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;

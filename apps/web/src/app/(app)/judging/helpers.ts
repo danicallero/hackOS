@@ -8,10 +8,10 @@ import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Question } from "@hackos/shared/questions";
 import { apiErrorReason } from "@/lib/api-error-reason";
 import { apiErrorText } from "@/lib/api-error-text";
+import { type Challenge, textForDisplay } from "@/lib/challenges";
 import { API_URL } from "@/lib/env";
 import type { Translate } from "@/lib/i18n";
 import type { QueueEntry } from "@/lib/queue";
-import { type Challenge, textForDisplay } from "../challenges/shared";
 
 /**
  * Stable empty panel. Shared identity matters: this is read into `useEffect`

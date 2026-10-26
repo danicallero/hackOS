@@ -19,11 +19,10 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { diffAuditSnapshot, formatDiffValue } from "@/lib/audit-diff";
-import { getActionLabel, getAuditSummary } from "@/lib/audit-labels";
+import { auditActorLabel, auditTimeFmt, getActionLabel, getAuditSummary } from "@/lib/audit-labels";
 import { useLocale } from "@/lib/i18n";
 import type { AuditRow } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
-import { auditActorLabel, auditTimeFmt } from "../page";
 
 export default function AuditEntryPage() {
   const { t } = useLocale();

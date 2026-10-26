@@ -3,7 +3,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
-import { useProjectDraft } from "@/app/(app)/my-project/[id]/use-project-draft";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { LinkifiedText } from "@/components/common/linkified-text";
@@ -30,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useProjectDraft } from "@/hooks/use-project-draft";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";

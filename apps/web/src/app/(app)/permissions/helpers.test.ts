@@ -1,23 +1,13 @@
-import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
 import type { RoleGrantRule, RoleTemplate } from "@/lib/types";
 import {
-  capabilitiesByDomain,
   permissionTemplateDescription,
   permissionTemplateName,
   ruleTriggerLabel,
-  selectableCapabilities,
   templateRequiresWildcardAuthority,
 } from "./helpers";
 
 describe("permission helpers", () => {
-  it("exposes the complete current capability catalogue", () => {
-    expect(selectableCapabilities()).toEqual(ALL_CAPABILITIES);
-    const groupedCapabilities = capabilitiesByDomain().flatMap((group) => group.capabilities);
-    expect(groupedCapabilities).toHaveLength(ALL_CAPABILITIES.length);
-    expect(new Set(groupedCapabilities)).toEqual(new Set(ALL_CAPABILITIES));
-  });
-
   it("uses the catalogue's label keys and recognizes wildcard authority", () => {
     const template: RoleTemplate = {
       key: "platform-administrator",

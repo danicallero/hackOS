@@ -26,6 +26,7 @@ import { Surface } from "@/components/ui/surface";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import type { Challenge } from "@/lib/challenges";
 import { API_URL } from "@/lib/env";
 import { externalUrlHref } from "@/lib/external-url";
 import { useLocale } from "@/lib/i18n";
@@ -37,7 +38,6 @@ import {
 import type { NativeProject } from "@/lib/native-projects";
 import { getRepoChallenges, type QueueEntry } from "@/lib/queue";
 import { cn } from "@/lib/utils";
-import type { Challenge } from "../challenges/shared";
 import { challengeName, entryLabel, secondsLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 

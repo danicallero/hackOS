@@ -1,8 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { pickText, type Translate } from "@/lib/i18n";
-import { type SaveState, saveStateLabel } from "@/lib/save-state";
-import type { Language } from "@/lib/types";
-import type { ResponseRow } from "./lib";
 import {
   applicantTimelineState,
   applicationStatusLabel,
@@ -10,7 +6,11 @@ import {
   defaultApplicationWorkspace,
   generatedFieldKey,
   rowsForWorkspace,
-} from "./workflow";
+} from "@/lib/application-workflow";
+import type { ResponseRow } from "@/lib/applications";
+import { pickText, type Translate } from "@/lib/i18n";
+import { type SaveState, saveStateLabel } from "@/lib/save-state";
+import type { Language } from "@/lib/types";
 
 const translate: Translate = (key) => key;
 const row = (id: number, status: string): ResponseRow => ({
@@ -109,6 +109,12 @@ describe("progressive question builder", () => {
   it("generates stable internal keys and resolves collisions without user input", () => {
     expect(generatedFieldKey("¿Por qué quieres venir?")).toBe("por_que_quieres_venir");
     expect(generatedFieldKey("Motivación", ["motivacion", "motivacion_2"])).toBe("motivacion_3");
+  });
+
+  it("normalizes boundary separators and falls back for labels without ASCII words", () => {
+    expect(generatedFieldKey("___ Á--B ___")).toBe("a_b");
+    expect(generatedFieldKey("?!___", ["question"])).toBe("question_2");
+    expect(generatedFieldKey("_".repeat(100_000))).toBe("question");
   });
 
   it("uses the selected Spanish, Galician, or English applicant label in preview", () => {

@@ -19,10 +19,6 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
-import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
-import { useSessionContext } from "@/lib/session";
-import { toast } from "@/lib/toast";
 import {
   type Challenge,
   canAccessSponsorWorkspace,
@@ -30,7 +26,11 @@ import {
   textForDisplay,
   textForSearch,
   visibilityTone,
-} from "./shared";
+} from "@/lib/challenges";
+import { formatScheduledDateTime } from "@/lib/datetime";
+import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
+import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 
 function buildColumns(t: Translate, locale: string): Column<Challenge>[] {
   return [

@@ -39,7 +39,9 @@ vi.mock("./personal-details", () => ({
     return <p>personal-body</p>;
   },
 }));
-vi.mock("./public-profile-card", () => ({ PublicProfileCard: () => <p>public-body</p> }));
+vi.mock("@/components/profile/public-profile-card", () => ({
+  PublicProfileCard: () => <p>public-body</p>,
+}));
 vi.mock("./meals-section", () => ({ MealsSection: () => <p>meals-body</p> }));
 vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));

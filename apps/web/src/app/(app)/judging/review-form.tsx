@@ -12,7 +12,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/csr/WifiSlash";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
-import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
+import { QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
@@ -22,8 +22,10 @@ import { overlayVariants } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { useEventSource } from "@/hooks/use-event-source";
 import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
+import type { Challenge } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
 import { collaborationState } from "@/lib/judging-workspace";
+import { type Answers, normalizeAnswers } from "@/lib/question-answers";
 import {
   type AttemptReviewVersion,
   acquireReviewFieldLease,
@@ -42,7 +44,6 @@ import {
 import { toast } from "@/lib/toast";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
-import type { Challenge } from "../challenges/shared";
 import { EMPTY_PANEL, entryLabel, errorMessage } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
 

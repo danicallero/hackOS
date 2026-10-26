@@ -4,7 +4,7 @@ import { groupApplicationFields } from "@/lib/application-field-groups";
  */
 
 import type { I18nText } from "@hackos/shared/questions";
-import type { FormSection, TemplateField } from "../lib";
+import type { FormSection, TemplateField } from "@/lib/applications";
 
 /** Locale tab order for every trilingual editor on this page. */
 export const LOCALES = ["es", "en", "gl"] as const;

@@ -24,23 +24,14 @@ import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { apiErrorText } from "@/lib/api-error-text";
-import { getActionLabel } from "@/lib/audit-labels";
-import { fromDatetimeLocal, shortDateTimeFmt } from "@/lib/datetime";
+import { auditActorLabel, auditTimeFmt, getActionLabel } from "@/lib/audit-labels";
+import { fromDatetimeLocal } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
 const LIMIT = 50;
-
-export const auditTimeFmt = shortDateTimeFmt;
-
-export function auditActorLabel(
-  row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">,
-) {
-  const fullName = [row.actor_name, row.actor_surname].filter(Boolean).join(" ").trim();
-  return fullName || row.actor_email || null;
-}
 
 function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
   const entityLabel = `${row.entity_type} #${row.entity_id}`;

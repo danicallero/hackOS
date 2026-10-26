@@ -12,6 +12,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { Spinner } from "@/components/common/spinner";
 import { TabBar } from "@/components/common/tab-bar";
 import { JudgingExportPanel } from "@/components/exports/judging-export-panel";
+import { RoomManagement } from "@/components/queue/room-management";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -26,7 +27,6 @@ import { GenerateQueuesAction } from "./generate-queues-action";
 import { QueueOperatorConsole } from "./operator-console";
 import { queueOperationsAccess } from "./queue-access";
 import { QueuesPanel } from "./queues-panel";
-import QueueRoomsPage from "./rooms/page";
 import { TeamQueueSearch } from "./team-queue-search";
 
 export default function QueueOperationsPage() {
@@ -262,7 +262,7 @@ export default function QueueOperationsPage() {
         </TabsContent>
         {canAdmin && (
           <TabsContent value="configuration" className="pt-2">
-            <QueueRoomsPage embedded />
+            <RoomManagement embedded />
           </TabsContent>
         )}
       </Tabs>

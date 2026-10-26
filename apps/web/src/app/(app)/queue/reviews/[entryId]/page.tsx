@@ -19,7 +19,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { type Answers, normalizeAnswers, QuestionField } from "@/components/common/question-field";
+import { QuestionField } from "@/components/common/question-field";
 import { QueueStatusBadge } from "@/components/common/queue-status-badge";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { SectionCard } from "@/components/common/section-card";
@@ -30,7 +30,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorText } from "@/lib/api-error-text";
 import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
+import { textForDisplay } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
+import { type Answers, normalizeAnswers } from "@/lib/question-answers";
 import {
   getReviewDetail,
   messageReviewTeam,
@@ -39,7 +41,6 @@ import {
 } from "@/lib/queue";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { textForDisplay } from "../../../challenges/shared";
 
 export default function ReviewDetailPage() {
   const params = useParams<{ entryId: string }>();

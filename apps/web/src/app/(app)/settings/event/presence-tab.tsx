@@ -24,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
@@ -32,7 +33,6 @@ import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
 import { EventConfigLoadState, useEventConfig } from "./event-config-context";
-import { useCategorySaveState } from "./use-category-save-state";
 
 const createSchema = (t: Translate) =>
   z.object({

@@ -73,8 +73,8 @@ export interface PublicProfile {
   preview: DirectoryEntry;
 }
 
-export const HEADLINE_MAX = 80;
-export const LOCATION_MAX = 60;
+const HEADLINE_MAX = 80;
+const LOCATION_MAX = 60;
 export const BIO_MAX = 500;
 
 export function settingsFrom(profile: PublicProfile): Settings {
@@ -96,6 +96,70 @@ export function savedLinks(links: EditableLink[]): SocialLink[] {
   return links
     .map(({ kind, url }) => ({ kind, url: url.trim() }))
     .filter((link) => link.url.length > 0);
+}
+
+export function ProfileVisibilityFields({
+  settings,
+  onChange,
+  className,
+}: {
+  settings: Settings;
+  onChange: (patch: Partial<Settings>) => void;
+  className: string;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className={className}>
+      <SwitchRow
+        checked={settings.showSurname}
+        onChange={(showSurname) => onChange({ showSurname })}
+        label={t("publicProfileShowSurname")}
+      />
+      <SwitchRow
+        checked={settings.showPhoto}
+        onChange={(showPhoto) => onChange({ showPhoto })}
+        label={t("publicProfileShowPhoto")}
+      />
+      <SwitchRow
+        checked={settings.showProject}
+        onChange={(showProject) => onChange({ showProject })}
+        label={t("publicProfileShowProject")}
+      />
+    </div>
+  );
+}
+
+export function ProfileTextFields({
+  settings,
+  onChange,
+  className,
+}: {
+  settings: Settings;
+  onChange: (patch: Partial<Settings>) => void;
+  className: string;
+}) {
+  const { t } = useLocale();
+  return (
+    <>
+      <div className={className}>
+        <TextField
+          label={t("publicProfileHeadline")}
+          max={HEADLINE_MAX}
+          value={settings.headline}
+          onChange={(headline) => onChange({ headline })}
+        />
+        <TextField
+          label={t("publicProfileLocation")}
+          max={LOCATION_MAX}
+          placeholder={t("publicProfileLocationPlaceholder")}
+          value={settings.locationNote}
+          onChange={(locationNote) => onChange({ locationNote })}
+        />
+      </div>
+      <BioField value={settings.bio} onChange={(bio) => onChange({ bio })} />
+      <LinksEditor links={settings.socials} onChange={(socials) => onChange({ socials })} />
+    </>
+  );
 }
 
 export function SwitchRow({
@@ -131,7 +195,7 @@ export function SwitchRow({
   );
 }
 
-export function TextField({
+function TextField({
   label,
   max,
   placeholder,
@@ -159,13 +223,7 @@ export function TextField({
   );
 }
 
-export function BioField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
+function BioField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useLocale();
   const id = useId();
   return (
@@ -187,7 +245,7 @@ export function BioField({
   );
 }
 
-export function LinksEditor({
+function LinksEditor({
   links,
   onChange,
 }: {

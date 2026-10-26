@@ -11,8 +11,8 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { textForDisplay } from "@/lib/challenges";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import { textForDisplay } from "../shared";
 
 export interface VersionSnapshot {
   title: unknown;

@@ -28,10 +28,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { type ApplicationForm, fromLocalInput } from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { type ApplicationForm, fromLocalInput } from "../lib";
 
 // Runtime validator is built inside the component with useMemo so its error
 // message can be localized via t("required"). Type is defined separately.

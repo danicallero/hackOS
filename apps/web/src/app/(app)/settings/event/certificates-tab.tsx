@@ -22,13 +22,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { CertificateSettings } from "@/lib/certificates";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import { useCategorySaveState } from "./use-category-save-state";
 
 const schema = (t: Translate) =>
   z

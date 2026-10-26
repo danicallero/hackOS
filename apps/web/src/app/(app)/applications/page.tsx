@@ -23,9 +23,14 @@ import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import {
+  type ApplicationForm,
+  fmtDateTime,
+  grantedRoleNameLabel,
+  windowState,
+} from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { type ApplicationForm, fmtDateTime, grantedRoleNameLabel, windowState } from "./lib";
 
 export default function ApplicationsPage() {
   const { t } = useLocale();
