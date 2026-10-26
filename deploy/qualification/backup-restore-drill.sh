@@ -6,7 +6,7 @@
 #
 #   deploy/qualification/backup-restore-drill.sh
 #
-# Needs Docker. Images default to the digests pinned in deploy/docker-compose.yml;
+# Needs Docker. PostgreSQL and Valkey use the digests pinned in deploy/docker-compose.yml;
 # override DRILL_MINIO_IMAGE / DRILL_MINIO_DATA / DRILL_MC_PATH for another MinIO build.
 set -Eeuo pipefail
 
@@ -19,9 +19,11 @@ project=hackos-staging
 pinned() { grep -o "$1@sha256:[a-f0-9]*" "$compose_src" | head -n 1; }
 postgres_image="${DRILL_POSTGRES_IMAGE:-$(pinned postgres)}"
 valkey_image="${DRILL_VALKEY_IMAGE:-$(pinned valkey/valkey)}"
-minio_image="${DRILL_MINIO_IMAGE:-$(pinned quay.io/minio/minio)}"
-minio_data="${DRILL_MINIO_DATA:-/data}"
-mc_path="${DRILL_MC_PATH:-/usr/bin:/bin}"
+# Any MinIO build that ships `mc`. The deploy compose pins a quay.io digest that
+# anonymous pulls (CI) cannot fetch, so the drill defaults to a public image.
+minio_image="${DRILL_MINIO_IMAGE:-bitnamilegacy/minio:latest}"
+minio_data="${DRILL_MINIO_DATA:-/bitnami/minio/data}"
+mc_path="${DRILL_MC_PATH:-/opt/bitnami/minio-client/bin:/opt/bitnami/minio/bin}"
 
 command -v docker >/dev/null 2>&1 || { echo 'docker is required' >&2; exit 2; }
 if ! command -v flock >/dev/null 2>&1; then
