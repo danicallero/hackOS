@@ -10,17 +10,14 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import {
-  BioField,
   DirectoryCard,
-  HEADLINE_MAX,
-  LinksEditor,
-  LOCATION_MAX,
+  ProfileTextFields,
+  ProfileVisibilityFields,
   type PublicProfile,
   type Settings,
   SwitchRow,
   savedLinks,
   settingsFrom,
-  TextField,
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-event-source";
@@ -202,40 +199,16 @@ export function PublicProfileTab({
               )}
             </div>
             <fieldset disabled={pending} className="min-w-0 space-y-4">
-              <div className="grid items-start gap-4 sm:grid-cols-3">
-                <SwitchRow
-                  checked={settings.showSurname}
-                  onChange={(showSurname) => update({ showSurname })}
-                  label={t("publicProfileShowSurname")}
-                />
-                <SwitchRow
-                  checked={settings.showPhoto}
-                  onChange={(showPhoto) => update({ showPhoto })}
-                  label={t("publicProfileShowPhoto")}
-                />
-                <SwitchRow
-                  checked={settings.showProject}
-                  onChange={(showProject) => update({ showProject })}
-                  label={t("publicProfileShowProject")}
-                />
-              </div>
-              <div className="grid items-start gap-4 sm:grid-cols-2">
-                <TextField
-                  label={t("publicProfileHeadline")}
-                  max={HEADLINE_MAX}
-                  value={settings.headline}
-                  onChange={(headline) => update({ headline })}
-                />
-                <TextField
-                  label={t("publicProfileLocation")}
-                  max={LOCATION_MAX}
-                  placeholder={t("publicProfileLocationPlaceholder")}
-                  value={settings.locationNote}
-                  onChange={(locationNote) => update({ locationNote })}
-                />
-              </div>
-              <BioField value={settings.bio} onChange={(bio) => update({ bio })} />
-              <LinksEditor links={settings.socials} onChange={(socials) => update({ socials })} />
+              <ProfileVisibilityFields
+                settings={settings}
+                onChange={update}
+                className="grid items-start gap-4 sm:grid-cols-3"
+              />
+              <ProfileTextFields
+                settings={settings}
+                onChange={update}
+                className="grid items-start gap-4 sm:grid-cols-2"
+              />
               {profile.cv && (
                 <SwitchRow
                   checked={settings.shareCv}

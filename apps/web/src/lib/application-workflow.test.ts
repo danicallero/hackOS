@@ -111,6 +111,12 @@ describe("progressive question builder", () => {
     expect(generatedFieldKey("Motivación", ["motivacion", "motivacion_2"])).toBe("motivacion_3");
   });
 
+  it("normalizes boundary separators and falls back for labels without ASCII words", () => {
+    expect(generatedFieldKey("___ Á--B ___")).toBe("a_b");
+    expect(generatedFieldKey("?!___", ["question"])).toBe("question_2");
+    expect(generatedFieldKey("_".repeat(100_000))).toBe("question");
+  });
+
   it("uses the selected Spanish, Galician, or English applicant label in preview", () => {
     const label = { es: "Motivación", gl: "Motivación en galego", en: "Motivation" };
     expect(["es", "gl", "en"].map((locale) => pickText(label, locale as Language))).toEqual([

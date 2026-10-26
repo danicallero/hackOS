@@ -291,6 +291,11 @@ in the `/queue/rooms` route. Event settings own the project-form and judging-win
 editors. Offline queue encryption and owner isolation live in `lib/offline-queue.ts`,
 and `components/logistics/offline-queue.tsx` only renders queue status.
 
+Profile settings, onboarding and moderation reuse the visibility/text field groups
+in `components/profile/public-profile-form.tsx`, with layout classes supplied by
+each surface. Room and schedule text/time cells share `useInlineEditState` for
+draft synchronization and focus; validation and save errors stay with each cell.
+
 Move existing tests alongside extracted owners and update every consumer and test
 mock. Keep route-local helpers in place when they are only used by that feature.
 

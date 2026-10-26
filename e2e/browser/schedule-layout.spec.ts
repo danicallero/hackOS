@@ -64,6 +64,21 @@ test("schedule columns remain readable and resize inside the horizontal scroller
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+  const locationButton = row.getByRole("button", { name: "Main hall", exact: true });
+  await locationButton.click();
+  const locationInput = row.getByRole("textbox");
+  await expect(locationInput).toBeFocused();
+  await locationInput.fill("Unsaved location");
+  await locationInput.press("Escape");
+  await expect(locationButton).toBeVisible();
+  const timeButton = row.getByRole("button", { name: /^\d{2}:\d{2}$/ }).first();
+  const originalTime = await timeButton.innerText();
+  await timeButton.click();
+  const timeInput = row.getByPlaceholder("HH:MM");
+  await expect(timeInput).toBeFocused();
+  await timeInput.fill("23:59");
+  await timeInput.press("Escape");
+  await expect(row.getByRole("button", { name: originalTime, exact: true }).first()).toBeVisible();
   await page.screenshot({
     path: `artifacts/schedule-${test.info().project.name}.png`,
     fullPage: true,

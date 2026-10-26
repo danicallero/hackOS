@@ -74,9 +74,8 @@ export function generatedFieldKey(label: string, existing: string[] = []): strin
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "question";
+      .match(/[a-z0-9]+/g)
+      ?.join("_") || "question";
   if (!existing.includes(base)) return base;
   let suffix = 2;
   while (existing.includes(`${base}_${suffix}`)) suffix++;
