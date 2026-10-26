@@ -48,7 +48,7 @@ lock_file="${HACKOS_LOCK_FILE:-$app_dir/.deploy.lock}"
 config_file="${HACKOS_CONFIG_FILE:-/etc/hackos/hackos.env}"
 secrets_file="${HACKOS_SECRETS_FILE:-/etc/hackos/hackos.secrets}"
 validator_file="${HACKOS_CHECK_ENV_FILE:-$app_dir/check-env.sh}"
-backup_file="${HACKOS_BACKUP_FILE:-$app_dir/backup-r2.sh}"
+backup_file="${HACKOS_BACKUP_FILE:-$app_dir/backup.sh}"
 release_root="${HACKOS_RELEASE_DIR:-$app_dir/releases}"
 
 if [[ "$image_tag" == current ]]; then
@@ -363,7 +363,7 @@ install -m 0644 "$compose_file" "$release_dir/docker-compose.yml"
 install -m 0700 "$validator_file" "$release_dir/check-env.sh"
 install -m 0700 "${BASH_SOURCE[0]}" "$release_dir/deploy.sh"
 if [[ -f "$backup_file" ]]; then
-  install -m 0700 "$backup_file" "$release_dir/backup-r2.sh"
+  install -m 0700 "$backup_file" "$release_dir/backup.sh"
 fi
 printf 'environment=%s\nimage_tag=%s\ndeployed_at=%s\n' \
   "$environment" \
@@ -442,12 +442,12 @@ wait_for_health valkey
 wait_for_health minio
 phase "Checking object storage"
 run_compose "initialize object storage" run --rm --no-deps minio-init
-if [[ "$deploy_api" == true && "$(env_value R2_BACKUPS_ENABLED)" == true ]]; then
+if [[ "$deploy_api" == true && "$(env_value BACKUPS_ENABLED)" == true ]]; then
   if [[ ! -x "$backup_file" ]]; then
-    echo "ERROR: R2 backups are enabled but $backup_file is missing" >&2
+    echo "ERROR: Backups are enabled but $backup_file is missing" >&2
     exit 1
   fi
-  echo "BACKUP: creating R2 backup before migration"
+  echo "BACKUP: creating S3 backup before migration"
   HACKOS_LOCK_HELD=true "$backup_file" "$environment"
 fi
 if [[ "$deploy_api" == true ]]; then

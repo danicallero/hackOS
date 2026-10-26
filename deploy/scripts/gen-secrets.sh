@@ -31,10 +31,10 @@ S3_SECRET_KEY=$(rand 24)
 SMTP_USER=
 SMTP_PASS=
 
-# Cloudflare R2 S3 credentials for the optional backup helper. Keep R2_BACKUPS_ENABLED
-# and the endpoint/bucket/prefix in hackos.env; create a scoped R2 token manually.
-R2_ACCESS_KEY_ID=
-R2_SECRET_ACCESS_KEY=
+# AWS S3 credentials for the optional backup helper. Keep BACKUPS_ENABLED
+# and the region/bucket/prefix in hackos.env; create a scoped IAM user manually.
+BACKUP_S3_ACCESS_KEY_ID=
+BACKUP_S3_SECRET_ACCESS_KEY=
 
 # Optional Wallet signing values. Leave each platform entirely unset or fill
 # its complete block; check-env.sh enforces that boundary.

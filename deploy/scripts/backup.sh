@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Back up PostgreSQL and the MinIO bucket to Cloudflare R2.
+# Back up PostgreSQL and the MinIO bucket to AWS S3 (#539).
 #
-# The R2 bucket is intentionally provisioned outside this repository. This
-# helper only runs when R2_BACKUPS_ENABLED=true in the deployment environment.
+# The S3 bucket is intentionally provisioned outside this repository. This
+# helper only runs when BACKUPS_ENABLED=true in the deployment environment.
 set -Eeuo pipefail
 
 environment="${1:-production}"
@@ -109,15 +109,15 @@ require_value() {
   printf '%s' "$result"
 }
 
-r2_backups_enabled="$(env_value R2_BACKUPS_ENABLED)"
-r2_backups_enabled="${r2_backups_enabled:-false}"
-[[ "$r2_backups_enabled" == true ]] || die "R2_BACKUPS_ENABLED is not true"
+backup_backups_enabled="$(env_value BACKUPS_ENABLED)"
+backup_backups_enabled="${backup_backups_enabled:-false}"
+[[ "$backup_backups_enabled" == true ]] || die "BACKUPS_ENABLED is not true"
 
-r2_endpoint="$(require_value R2_ENDPOINT)"
-r2_bucket="$(require_value R2_BUCKET)"
-r2_prefix="$(require_value R2_PREFIX)"
-r2_access_key_id="$(require_value R2_ACCESS_KEY_ID)"
-r2_secret_access_key="$(require_value R2_SECRET_ACCESS_KEY)"
+s3_region="$(require_value BACKUP_S3_REGION)"
+backup_bucket="$(require_value BACKUP_S3_BUCKET)"
+backup_prefix="$(require_value BACKUP_S3_PREFIX)"
+backup_access_key_id="$(require_value BACKUP_S3_ACCESS_KEY_ID)"
+backup_secret_access_key="$(require_value BACKUP_S3_SECRET_ACCESS_KEY)"
 postgres_user="$(require_value POSTGRES_USER)"
 postgres_db="$(require_value POSTGRES_DB)"
 postgres_password="$(require_value POSTGRES_PASSWORD)"
@@ -129,10 +129,10 @@ image_tag="${IMAGE_TAG:-$(env_value IMAGE_TAG)}"
 data_dir="$(env_value HACKOS_DATA_DIR)"
 data_dir="${data_dir:-/mnt/data}"
 
-[[ "$r2_endpoint" =~ ^https://[A-Za-z0-9.-]+$ ]] || die "R2_ENDPOINT must be an https host URL"
-[[ "$r2_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || die "R2_BUCKET is not a valid bucket name"
-[[ "$r2_prefix" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die "R2_PREFIX contains unsafe characters"
-[[ "$r2_prefix" != */ && "$r2_prefix" != *..* ]] || die "R2_PREFIX must not end in / or contain .."
+[[ "$s3_region" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]] || die "BACKUP_S3_REGION is not an AWS region name"
+[[ "$backup_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || die "BACKUP_S3_BUCKET is not a valid bucket name"
+[[ "$backup_prefix" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die "BACKUP_S3_PREFIX contains unsafe characters"
+[[ "$backup_prefix" != */ && "$backup_prefix" != *..* ]] || die "BACKUP_S3_PREFIX must not end in / or contain .."
 [[ "$image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || die "IMAGE_TAG must match sha-<40 lowercase hex characters>"
 [[ "$data_dir" == /* && "$data_dir" != "/" ]] || die "HACKOS_DATA_DIR must be an absolute path other than /"
 [[ "$data_dir" != *$'\n'* && "$data_dir" != *$'\r'* ]] || die "HACKOS_DATA_DIR contains a newline"
@@ -142,10 +142,10 @@ if [[ "$environment" == production ]]; then
 fi
 
 export IMAGE_TAG="$image_tag"
-export R2_ENDPOINT="$r2_endpoint"
-export R2_BUCKET="$r2_bucket"
-export R2_ACCESS_KEY_ID="$r2_access_key_id"
-export R2_SECRET_ACCESS_KEY="$r2_secret_access_key"
+export BACKUP_S3_ENDPOINT="https://s3.$s3_region.amazonaws.com"
+export BACKUP_S3_BUCKET="$backup_bucket"
+export BACKUP_S3_ACCESS_KEY_ID="$backup_access_key_id"
+export BACKUP_S3_SECRET_ACCESS_KEY="$backup_secret_access_key"
 export S3_BUCKET="$s3_bucket"
 export POSTGRES_USER="$postgres_user"
 export POSTGRES_DB="$postgres_db"
@@ -193,8 +193,8 @@ wait_for_health() {
 }
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-object_prefix="$r2_prefix/$environment/$timestamp"
-export R2_OBJECT="$object_prefix/postgres.dump"
+object_prefix="$backup_prefix/$environment/snapshots/$timestamp"
+export BACKUP_S3_OBJECT="$object_prefix/postgres.dump"
 
 run_quiet "validate Compose" compose config --quiet
 run_quiet "start backup dependencies" compose up --detach postgres minio
@@ -206,37 +206,56 @@ if ! compose exec -T postgres sh -c \
   'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump --format=custom --no-owner --no-acl --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"' \
   2>"$pg_error" |
   compose run --rm --no-deps -T \
-    -e R2_ENDPOINT -e R2_ACCESS_KEY_ID -e R2_SECRET_ACCESS_KEY -e R2_BUCKET -e R2_OBJECT \
+    -e BACKUP_S3_ENDPOINT -e BACKUP_S3_ACCESS_KEY_ID -e BACKUP_S3_SECRET_ACCESS_KEY -e BACKUP_S3_BUCKET -e BACKUP_S3_OBJECT \
     --entrypoint /bin/sh minio-init \
     -c 'set -eu
-      mc alias set r2 "$R2_ENDPOINT" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" >/dev/null
-      mc pipe "r2/$R2_BUCKET/$R2_OBJECT"' \
+      mc alias set offsite "$BACKUP_S3_ENDPOINT" "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" >/dev/null
+      mc pipe "offsite/$BACKUP_S3_BUCKET/$BACKUP_S3_OBJECT"' \
   >>"$pg_error" 2>&1; then
   rm -f "$pg_error"
   die "PostgreSQL backup failed"
 fi
 rm -f "$pg_error"
 
-export R2_OBJECT_PREFIX="$object_prefix"
+# Objects are written once and keyed by the database, so one incremental mirror
+# per environment replaces a full copy per snapshot (S3 storage is billed per
+# GB-month). Nothing is removed: a restored database may reference files that
+# were deleted after the snapshot. Bucket versioning keeps overwrites recoverable.
+export BACKUP_S3_OBJECT_PREFIX="$backup_prefix/$environment/minio"
 run_quiet "MinIO backup" compose run --rm --no-deps -T \
-  -e R2_ENDPOINT -e R2_ACCESS_KEY_ID -e R2_SECRET_ACCESS_KEY -e R2_BUCKET -e R2_OBJECT_PREFIX \
+  -e BACKUP_S3_ENDPOINT -e BACKUP_S3_ACCESS_KEY_ID -e BACKUP_S3_SECRET_ACCESS_KEY -e BACKUP_S3_BUCKET -e BACKUP_S3_OBJECT_PREFIX \
   --entrypoint /bin/sh minio-init \
   -c 'set -eu
     mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-    mc alias set r2 "$R2_ENDPOINT" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" >/dev/null
-    mc mirror --overwrite "local/$S3_BUCKET" "r2/$R2_BUCKET/$R2_OBJECT_PREFIX/minio"'
+    mc alias set offsite "$BACKUP_S3_ENDPOINT" "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" >/dev/null
+    mc mirror --overwrite "local/$S3_BUCKET" "offsite/$BACKUP_S3_BUCKET/$BACKUP_S3_OBJECT_PREFIX"'
 
-export R2_OBJECT="$object_prefix/manifest.txt"
-export R2_ENVIRONMENT="$environment"
-export R2_IMAGE_TAG="$image_tag"
-export R2_CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Restore (#539) reads this to pick the matching app version and to detect a
+# truncated upload before touching live data.
+export BACKUP_MIGRATION_HEAD="$(compose exec -T postgres sh -c \
+  'PGPASSWORD="$POSTGRES_PASSWORD" psql -qtA --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -c "SELECT max(name) FROM public._migrations"' |
+  tr -d '[:space:]')"
+[[ -n "$BACKUP_MIGRATION_HEAD" ]] || die "could not read the migration head"
+
+# The manifest is written last: its presence marks a complete snapshot.
+export BACKUP_S3_OBJECT="$object_prefix/manifest.txt"
+export BACKUP_DUMP_OBJECT="$object_prefix/postgres.dump"
+export BACKUP_ENVIRONMENT="$environment"
+export BACKUP_IMAGE_TAG="$image_tag"
+export BACKUP_CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 run_quiet "backup manifest" compose run --rm --no-deps -T \
-  -e R2_ENDPOINT -e R2_ACCESS_KEY_ID -e R2_SECRET_ACCESS_KEY -e R2_BUCKET -e R2_OBJECT \
-  -e R2_ENVIRONMENT -e R2_IMAGE_TAG -e R2_CREATED_AT \
+  -e BACKUP_S3_ENDPOINT -e BACKUP_S3_ACCESS_KEY_ID -e BACKUP_S3_SECRET_ACCESS_KEY -e BACKUP_S3_BUCKET -e BACKUP_S3_OBJECT \
+  -e BACKUP_DUMP_OBJECT -e BACKUP_MIGRATION_HEAD \
+  -e BACKUP_ENVIRONMENT -e BACKUP_IMAGE_TAG -e BACKUP_CREATED_AT \
   --entrypoint /bin/sh minio-init \
   -c 'set -eu
-    mc alias set r2 "$R2_ENDPOINT" "$R2_ACCESS_KEY_ID" "$R2_SECRET_ACCESS_KEY" >/dev/null
-    printf "environment=%s\\nimage_tag=%s\\ncreated_at=%s\\n" "$R2_ENVIRONMENT" "$R2_IMAGE_TAG" "$R2_CREATED_AT" |
-      mc pipe "r2/$R2_BUCKET/$R2_OBJECT"'
+    mc alias set offsite "$BACKUP_S3_ENDPOINT" "$BACKUP_S3_ACCESS_KEY_ID" "$BACKUP_S3_SECRET_ACCESS_KEY" >/dev/null
+    stat="$(mc stat --json "offsite/$BACKUP_S3_BUCKET/$BACKUP_DUMP_OBJECT")"
+    dump_size="$(printf "%s" "$stat" | sed -n "s/.*\"size\":\([0-9]*\).*/\1/p")"
+    dump_etag="$(printf "%s" "$stat" | sed -n "s/.*\"etag\":\"\([^\"]*\)\".*/\1/p")"
+    [ -n "$dump_size" ] && [ "$dump_size" -gt 0 ] || { echo "empty dump" >&2; exit 1; }
+    printf "environment=%s\nimage_tag=%s\nmigration_head=%s\ncreated_at=%s\ndump_size=%s\ndump_etag=%s\n" \
+      "$BACKUP_ENVIRONMENT" "$BACKUP_IMAGE_TAG" "$BACKUP_MIGRATION_HEAD" "$BACKUP_CREATED_AT" "$dump_size" "$dump_etag" |
+      mc pipe "offsite/$BACKUP_S3_BUCKET/$BACKUP_S3_OBJECT"'
 
-echo "OK: R2 backup created at $object_prefix"
+echo "OK: S3 backup created at $object_prefix"
