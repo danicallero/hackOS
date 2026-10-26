@@ -205,8 +205,11 @@ maintenance_dir="$data_dir/maintenance"
 maintenance_file="$maintenance_dir/state.json"
 snapshot_re='^[0-9]{8}T[0-9]{6}Z$'
 
+# One-off containers of parallel steps are not orphans.
+export COMPOSE_IGNORE_ORPHANS=true
+
 compose() {
-  docker compose \
+  docker compose --progress quiet \
     "${compose_env_files[@]}" \
     --file "$compose_file" \
     --project-name "$project_name" \
@@ -315,9 +318,10 @@ epoch_of() { # YYYYMMDDTHHMMSSZ -> epoch seconds
 
 # --- PostgreSQL helpers -----------------------------------------------------
 
-psql_admin() { # SQL on stdin-free form; runs against the maintenance database
+psql_admin() { # runs against the maintenance database
   compose exec -T postgres sh -c \
-    'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -qtA --username "$POSTGRES_USER" --dbname postgres' <<<"$1"
+    'PGPASSWORD="$POSTGRES_PASSWORD" psql -v ON_ERROR_STOP=1 -qtA --username "$POSTGRES_USER" --dbname postgres' \
+    <<<"SET client_min_messages = warning; $1"
 }
 
 psql_in() { # database SQL
@@ -466,8 +470,9 @@ create_snapshot() {
   BACKUP_CREATED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   run_quiet "backup manifest" mc_offsite '
     stat="$(mc stat --json "offsite/$BACKUP_S3_BUCKET/$BACKUP_DUMP_OBJECT")"
-    dump_size="$(printf "%s" "$stat" | sed -n "s/.*\"size\":\([0-9]*\).*/\1/p")"
-    dump_etag="$(printf "%s" "$stat" | sed -n "s/.*\"etag\":\"\([^\"]*\)\".*/\1/p")"
+    # The MinIO image has no sed/awk/jq: parse with shell expansion only.
+    dump_size="${stat#*\"size\":}"; dump_size="${dump_size%%[!0-9]*}"
+    dump_etag="${stat#*\"etag\":\"}"; dump_etag="${dump_etag%%\"*}"
     [ -n "$dump_size" ] && [ "$dump_size" -gt 0 ] || { echo "empty dump" >&2; exit 1; }
     printf "environment=%s\nimage_tag=%s\nmigration_head=%s\ncreated_at=%s\ndump_size=%s\ndump_etag=%s\n" \
       "$BACKUP_ENVIRONMENT" "$BACKUP_IMAGE_TAG" "$BACKUP_MIGRATION_HEAD" "$BACKUP_CREATED_AT" "$dump_size" "$dump_etag" |
@@ -477,21 +482,39 @@ create_snapshot() {
   echo "OK: S3 backup created at $object_prefix"
 }
 
+human_age() { # seconds -> 5m / 3h / 2d
+  local s="$1"
+  if ((s < 3600)); then printf '%dm' $((s / 60))
+  elif ((s < 172800)); then printf '%dh' $((s / 3600))
+  else printf '%dd' $((s / 86400)); fi
+}
+
+human_size() { # bytes -> 12.3 MB
+  awk -v b="${1:-0}" 'BEGIN { printf "%.1f MB", b / 1048576 }'
+}
+
 cmd_list() {
-  local id manifest count=0
+  local id manifest count=0 now
   require_s3
-  printf '%-18s %-16s %-30s %s\n' SNAPSHOT IMAGE MIGRATION DUMP_BYTES
+  now="$(date -u +%s)"
+  printf '%-18s %-17s %-6s %-9s %-14s %s\n' SNAPSHOT 'CREATED (UTC)' AGE SIZE IMAGE MIGRATION
   while IFS= read -r id; do
+    printf '%-18s %-17s %-6s ' "$id" "${id:0:4}-${id:4:2}-${id:6:2} ${id:9:2}:${id:11:2}" \
+      "$(human_age $((now - $(epoch_of "$id"))))"
     if manifest="$(read_manifest "$id")"; then
-      printf '%-18s %-16s %-30s %s\n' "$id" "$(manifest_value "$manifest" image_tag | cut -c1-12)" \
-        "$(manifest_value "$manifest" migration_head)" "$(manifest_value "$manifest" dump_size)"
+      printf '%-9s %-14s %s\n' "$(human_size "$(manifest_value "$manifest" dump_size)")" \
+        "$(manifest_value "$manifest" image_tag | cut -c1-12)" "$(manifest_value "$manifest" migration_head)"
     else
-      printf '%-18s incomplete (no manifest)\n' "$id"
+      printf 'incomplete: interrupted upload, not restorable, expires by itself\n'
     fi
     count=$((count + 1))
     ((count < ${1:-15})) || break
   done < <(snapshot_ids)
-  ((count > 0)) || say "No snapshots under $SNAP_ROOT/snapshots/"
+  if ((count == 0)); then
+    say "No snapshots under $SNAP_ROOT/snapshots/"
+  else
+    say "Newest complete one is used by: backups restore latest (verify first with: backups verify latest)"
+  fi
 }
 
 cmd_status() {
