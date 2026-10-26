@@ -12,7 +12,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { AccessibilityInfo, Alert } from "react-native";
 import { DiaryScreen } from "@/components/diary-screen";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { DiaryEntry } from "@/lib/diary";
+import type { DiaryEntry, DiaryScanResult } from "@/lib/diary";
 import type { SponsorCollection } from "@/lib/diary-sponsors";
 import { haptic } from "@/lib/haptics";
 import { renderMobile } from "./render";
@@ -224,7 +224,7 @@ function company(enterpriseId: number, name: string, entryId: number | null) {
 
 let diary: DiaryEntry[];
 let collection: SponsorCollection;
-let scanResult: DiaryEntry | Error;
+let scanResult: DiaryScanResult | Error;
 
 beforeEach(() => {
   mockNfcSupported = true;
@@ -377,6 +377,19 @@ describe("People", () => {
       mockNfc?.onClose();
     });
   }
+
+  it("collects a combined tag while showing only the person's celebration", async () => {
+    scanResult = { ...person(4, "Bea R."), relatedEntries: [sponsorEntry] };
+    await scanWithNfc();
+    await screen.findByTestId("connection-celebration");
+    await waitFor(() => expect(calls("/api/me/diary/sponsors")).toHaveLength(2));
+    expect(screen.queryByLabelText("diaryCompaniesProgress:1/2")).toBeNull();
+    await fireEvent.press(screen.getByTestId("connection-celebration"));
+    await waitFor(() => expect(screen.queryByTestId("connection-celebration")).toBeNull());
+    expect(mockPush).toHaveBeenCalledWith({ pathname: "/people/[id]", params: { id: "104" } });
+    expect(haptic).toHaveBeenCalledWith("success");
+    expect(screen.getByText("Bea R.")).toBeTruthy();
+  });
 
   it("celebrates a new connection, announces it and skips on tap (#935)", async () => {
     const announce = jest.spyOn(AccessibilityInfo, "announceForAccessibility");

@@ -382,7 +382,7 @@ describe("one stand QR as SVG", () => {
 });
 
 describe("linking a tag already in use", () => {
-  it("says whether the tag is a badge or already a stand", async () => {
+  it("only refuses tags already linked to a stand, allowing person badges", async () => {
     const acme = await enterprise("Acme");
     await tag(acme, "04ACAC00000001");
     const person = await createUser();
@@ -398,6 +398,6 @@ describe("linking a tag already in use", () => {
     expect(stand.statusCode).toBe(409);
     expect(stand.json().error.details).toEqual({ code: "stand_tag_in_use", usedBy: "stand" });
     const badge = await link("04000000000001");
-    expect(badge.json().error.details).toEqual({ code: "stand_tag_in_use", usedBy: "badge" });
+    expect(badge.statusCode).toBe(201);
   });
 });
