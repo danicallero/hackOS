@@ -115,7 +115,10 @@ export async function uploadWalletArtwork(
       if (!["png", "jpeg", "webp"].includes(metadata.format ?? "") || (metadata.pages ?? 1) > 1)
         throw new Error("Unsupported image");
     }
-    const fallback = sources.reduce((best, source) => (source.scale > best.scale ? source : best));
+    const fallback = sources.reduce(
+      (best, source) => (source.scale > best.scale ? source : best),
+      sources[0]!,
+    );
     for (const scale of scales) {
       const bytes = files[scale] ?? fallback.bytes;
       normalized.push({
