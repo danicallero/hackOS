@@ -26,6 +26,7 @@ import { getHighestVisibleRoleName, hasEventAccess } from "../identity/role.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import {
   ensurePassRecord,
+  PASS_TYPE_IDENTIFIER,
   type PassRow,
   type Purpose,
   resolvePassIdentity,
@@ -43,7 +44,6 @@ import {
 const PASS_LOCALES: Record<string, string> = { en: "en-GB", es: "es-ES", gl: "gl-ES" };
 
 const execFileAsync = promisify(execFile);
-export const PASS_TYPE_IDENTIFIER = config.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
 const TEAM_IDENTIFIER = config.APPLE_TEAM_IDENTIFIER ?? "LOCALTEAM";
 const ORGANIZATION_NAME = config.APPLE_PASS_ORGANIZATION;
 // Resolved from cwd, not import.meta.url: tsup bundles this module into a

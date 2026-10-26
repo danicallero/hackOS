@@ -12,8 +12,8 @@ import {
   sendGoogleWalletAlert,
 } from "./google-wallet.js";
 import { isSyntheticOperator } from "./review-fixture-scope.js";
-import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 import type { GoogleObjectType, PassRow } from "./wallet-passes.js";
+import { PASS_TYPE_IDENTIFIER } from "./wallet-passes.js";
 import { ensureWalletSettings } from "./wallet-settings.js";
 
 const QUEUE = "logistics.wallet-operations";

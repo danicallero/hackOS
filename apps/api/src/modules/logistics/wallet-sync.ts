@@ -7,8 +7,8 @@ import {
   refreshGoogleEventTicketClass,
   refreshGooglePassObject,
 } from "./google-wallet.js";
-import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
 import type { GoogleObjectType, Purpose } from "./wallet-passes.js";
+import { PASS_TYPE_IDENTIFIER } from "./wallet-passes.js";
 
 /**
  * Notifies devices after a `wallet_passes` row is voided (H28: badge

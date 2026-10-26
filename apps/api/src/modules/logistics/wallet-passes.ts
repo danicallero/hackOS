@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type pg from "pg";
+import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
@@ -13,6 +14,9 @@ import { lockRoleGraph } from "../identity/role-authority.js";
  * are identical — factored out so the two provider modules don't duplicate
  * the SELECT ... FOR UPDATE / INSERT / audit dance.
  */
+
+// H28: owned here so the sync worker and Apple push senders need not import the pass builder.
+export const PASS_TYPE_IDENTIFIER = config.APPLE_PASS_TYPE_IDENTIFIER ?? "pass.local.hackos";
 
 export type Purpose = "ticket" | "badge";
 export type Platform = "apple" | "google";
