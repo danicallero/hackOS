@@ -382,8 +382,17 @@ services:
     pull_policy: always
     # Keep a no-op-safe migration guard for direct/reused container starts.
     command: ["sh", "-c", "node dist/migrate.js && exec node dist/server.js"]
-    environment: *api-env
+    environment:
+      <<: *api-env
+      # Restore lock written by deploy/scripts/restore.sh (#539).
+      MAINTENANCE_DIR: /run/hackos/maintenance
     volumes:
+      - type: bind
+        source: "${HACKOS_DATA_DIR:-/mnt/data}/maintenance"
+        target: /run/hackos/maintenance
+        read_only: true
+        bind:
+          create_host_path: true
       - postgres-memory:/run/hackos-memory/postgres:ro
       - valkey-memory:/run/hackos-memory/valkey:ro
       - minio-memory:/run/hackos-memory/minio:ro

@@ -4,6 +4,7 @@ import { IconContext } from "@phosphor-icons/react/dist/lib/context";
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { CookieNotice } from "@/components/layout/cookie-notice";
+import { MaintenanceGate } from "@/components/layout/maintenance-gate";
 import { Toaster } from "@/components/ui/sileo";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n";
@@ -33,7 +34,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <IconContext.Provider value={{ size: 24, weight: "regular", color: "currentColor" }}>
         <SessionProvider>
           <LocaleProvider>
-            <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+            <TooltipProvider delayDuration={200}>
+              <MaintenanceGate>{children}</MaintenanceGate>
+            </TooltipProvider>
             {!isKiosk && <CookieNotice />}
             <Toaster position="top-right" />
           </LocaleProvider>

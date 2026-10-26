@@ -17,6 +17,7 @@ import { pool } from "./db/pool.js";
 import { dbTimeoutsTotal, isTimeoutError } from "./lib/db-errors.js";
 import { AppError } from "./lib/errors.js";
 import { idempotencyOnSend } from "./lib/idempotency.js";
+import { getMaintenanceStatus } from "./lib/maintenance.js";
 import {
   httpRequestsInFlight,
   observeHttpRequest,
@@ -39,6 +40,7 @@ import { valkey } from "./lib/valkey.js";
 import { registerModules } from "./modules/index.js";
 import { authContextPlugin } from "./plugins/auth-context.js";
 import { clientFloorPlugin } from "./plugins/client-floor.js";
+import { maintenancePlugin } from "./plugins/maintenance.js";
 import { requestContextPlugin } from "./plugins/request-context.js";
 
 export type App = FastifyInstance;
@@ -431,6 +433,7 @@ export async function buildApp(): Promise<App> {
   await app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   await app.register(requestContextPlugin);
   await app.register(clientFloorPlugin);
+  await app.register(maintenancePlugin);
   await app.register(authContextPlugin);
 
   // Event-day admission is deliberately a separate, in-process scheduler
@@ -699,6 +702,22 @@ export async function buildApp(): Promise<App> {
       },
     },
     async () => ({ status: "ok" }),
+  );
+
+  app.get(
+    "/api/public/maintenance",
+    {
+      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "health" } },
+      schema: {
+        summary: "Maintenance status",
+        description:
+          "Whether a database restore holds the maintenance lock (#539). Reads the host-written lock file only, performs no database I/O and stays reachable during the restore; clients poll it from their waiting screen.",
+      },
+    },
+    async (_req, reply) => {
+      reply.header("cache-control", "no-store");
+      return getMaintenanceStatus();
+    },
   );
 
   app.get(

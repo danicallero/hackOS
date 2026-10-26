@@ -55,6 +55,13 @@ export class UpgradeRequiredError extends AppError {
   }
 }
 
+/** A database restore holds the maintenance lock; clients show a waiting screen (#539). */
+export class MaintenanceError extends AppError {
+  constructor(details: { phase: string; startedAt: string | null; etaAt: string | null }) {
+    super(503, "maintenance_in_progress", "hackOS is being restored from a backup", details);
+  }
+}
+
 /** A dependent provider/credential isn't configured, e.g. Apple/Google wallet signing (H28). */
 export class ServiceUnavailableError extends AppError {
   constructor(message: string, details?: Record<string, unknown>) {

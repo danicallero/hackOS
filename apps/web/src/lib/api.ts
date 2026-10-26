@@ -1,5 +1,6 @@
 import { API_URL } from "./env";
 import { intentKey, settleIntentKey } from "./intent-key";
+import { isMaintenanceError, markMaintenance } from "./maintenance";
 
 /**
  * Typed error mirroring the API's error envelope
@@ -90,6 +91,10 @@ export async function apiFetch<T = unknown>(
     const err = (payload as { error?: { code?: string; message?: string; details?: unknown } })
       ?.error;
     const retryAfter = Number(res.headers.get("retry-after")) || undefined;
+    if (isMaintenanceError(res.status, err?.code)) {
+      const phase = (err?.details as { phase?: unknown } | undefined)?.phase;
+      markMaintenance({ phase: typeof phase === "string" ? phase : "restoring" });
+    }
     throw new ApiError(
       res.status,
       err?.code ?? "unknown",

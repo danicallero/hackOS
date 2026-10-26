@@ -287,6 +287,12 @@ sin programar ejecuciones periódicas.
 
 ## Valores fijos deliberados
 
+`MAINTENANCE_DIR` (`/run/hackos/maintenance`, sólo en `api`) apunta al montaje de
+solo lectura de `$HACKOS_DATA_DIR/maintenance`, donde `restore.sh` escribe
+`state.json` mientras sustituye la base de datos. Con el fichero presente, la API
+responde `503 maintenance_in_progress` salvo a las sondas y a
+`GET /api/public/maintenance`; sin variable (desarrollo y tests) no hay puerta.
+
 No existen variables para cambiar los repositorios de imágenes: son
 `ghcr.io/danicallero/hackos-api` y `ghcr.io/danicallero/hackos-web`. Tampoco se
 exponen variables de memoria. Los límites actuales están fijados en Compose:

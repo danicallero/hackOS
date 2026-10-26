@@ -13,6 +13,7 @@ import "react-native-reanimated";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { AlertHost } from "@/components/alert-host";
 import { AppBackGesture } from "@/components/app-back-gesture";
+import { MaintenanceScreen } from "@/components/maintenance-screen";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
 import { UpgradeRequiredScreen } from "@/components/upgrade-required-screen";
@@ -22,6 +23,7 @@ import { signOut } from "@/lib/auth-client";
 import { collectCompanyTagHref, takePendingCompanyTag } from "@/lib/company-tag-link";
 import { isSupportedLanguage, LocaleProvider, useLocale } from "@/lib/i18n";
 import { useLiveActivities } from "@/lib/live-activities/use-live-activities";
+import { useMaintenancePhase } from "@/lib/maintenance";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
 import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
@@ -105,10 +107,13 @@ function RootLayoutSessionContents() {
   const { mode } = useApiMode();
   const initialSessionPending = useInitialSessionPending(loading);
   const upgradeRequired = useUpgradeRequired();
+  const maintenancePhase = useMaintenancePhase();
   useOrientationPolicy();
 
   // The API refuses every request from this build (#999); nothing else can work.
   if (upgradeRequired) return <UpgradeRequiredScreen />;
+  // A database restore is in progress (#539); the screen resumes the app itself.
+  if (maintenancePhase) return <MaintenanceScreen phase={maintenancePhase} />;
 
   return (
     <View style={{ flex: 1 }}>
