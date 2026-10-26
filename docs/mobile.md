@@ -2013,7 +2013,11 @@ the layouts read `environment.isStale` as live. See
 `widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
 `'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
 use only `@expo/ui/swift-ui` and declare every helper and colour inside the
-function. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+function. Pieces every kind repeats (island slot caps, `secondary`/`colorMods`,
+the caption, the **Scan** circle) live in `widgets/live-activity-kit.tsx`
+(#1134): the kit is itself a `'widget'` function and `withLiveActivityKit`
+concatenates its source with each layout's, passing its result as the layout's
+third argument, so nothing is imported inside the extension. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
 answers one question with one hero value; everything else is secondary.
 Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
 neutral grey; Always-On drops the accent fills. Lock Screen colours are
