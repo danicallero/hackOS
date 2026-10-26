@@ -412,7 +412,7 @@ web so the suffix never drifts). The stored file value itself is never
 changed — it stays the plain string object key it always was.
 
 **Endpoints.**
-- `service.ts:validateResponses` — for a "file" field the organizer marked
+- `lib/form-validation.ts:validateResponses` — for a "file" field the organizer marked
   `shareable_with_sponsors`, the sibling consent key (if present) must be a
   boolean; it's optional, never `required`.
 - `GET /api/applications/:id/fields/:fieldKey/files.zip?scope=all|shared`
