@@ -544,6 +544,9 @@ cmd_status() {
       exit_code=1
     fi
   fi
+  if [[ "$backups_enabled" == true ]]; then
+    say "Files mirror (MinIO -> S3): $(mc_offsite 'mc du "offsite/$BACKUP_S3_BUCKET/$SNAP_ROOT/minio" 2>/dev/null' | tr -s ' ' | head -n 1 || true)"
+  fi
   if [[ -f "$maintenance_file" ]]; then
     state="$(cat "$maintenance_file")"
     say "MAINTENANCE LOCK ACTIVE: $state"
