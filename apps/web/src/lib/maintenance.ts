@@ -1,8 +1,4 @@
 import { createMaintenanceStore } from "@hackos/shared/maintenance";
-import { useSyncExternalStore } from "react";
 
+// React-free on purpose: `lib/api.ts` is also imported by server components.
 export const maintenanceStore = createMaintenanceStore();
-
-export function useMaintenancePhase(): string | null {
-  return useSyncExternalStore(maintenanceStore.subscribe, maintenanceStore.get, () => null);
-}
