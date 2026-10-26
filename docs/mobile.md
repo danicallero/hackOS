@@ -1416,6 +1416,16 @@ Physical NFC and camera verification is still pending; tests mock both
 
 ### Company tags (#935)
 
+A tag may simultaneously be a current person badge and an explicitly assigned
+company tag; unassigned and former person badges are valid company tags too.
+Agenda scans resolve the latest server assignment (including a reassignment
+while waiting for account locks), save both public destinations atomically,
+and return the company in `relatedEntries` alongside the primary person.
+`DiaryScreen` refreshes the album without switching tabs or playing a second
+company animation while the person celebration opens their profile. Stand-only
+scans retain the company album/highlight flow. A private profile is never saved
+or revealed just because its badge also identifies a public stand.
+
 Company tags are what attendees scan to collect a company in their Diary
 ([`diary.md`](./diary.md#company-tags)): NFC tags or wristbands linked by
 serial number, and printed QR codes. Staff with `sponsors:manage`

@@ -85,9 +85,9 @@ A company tag is how an attendee collects a company ("visited stand X"): an
 NFC tag or wristband, or a printed QR code, that staff define for that
 company. Tags belong to the company, not to anyone's profile: a rep may wear
 one on a lanyard or a table may hold one, and a company may have several.
-Scanning a person's badge, a sponsor rep's included, only ever saves that
-person; it never grants their company. The schema keeps the original `stand`
-naming.
+A person badge saves the person and also the company only when staff explicitly
+linked that same UID as a company tag. Sponsor membership alone never grants
+a company. The schema keeps the original `stand` naming.
 
 `sponsor_stand_tags` (migrations `0702_sponsor_stand_tags.sql`,
 `0704_company_tag_labels.sql`):
@@ -99,14 +99,14 @@ naming.
 | `code` | Globally unique. QR codes are generated as `STAND-` plus 16 characters. |
 | `label` | Optional staff label (≤40 characters, no control characters) to tell a company's tags apart, such as "Lanyard Ana" or "Table 3". |
 
-Participant badges and company tags use the same wristbands, but a given
-wristband is one or the other, never both. Linking refuses a UID that is or
-was someone's badge (current or rotated away) or a ticket token, with a 409
-"This wristband is already a badge; use an unassigned one"; badge check-in and
-badge replacement refuse a company tag with a 409 (`details.code:
-"company_tag"`, `assertNotStandTag`). The linking 409 carries
-`details.usedBy` (`badge`, `ticket` or `stand`) so staff learn why, without
-the person or the other company being named.
+Participant badges and company tags are independent assignments: the same UID
+may belong to one current person and one company at the same time. Unassigned
+and rotated-away wristbands may also be linked to stands. Ticket tokens remain
+reserved; linking an existing company tag answers 409 with `details.usedBy`
+(`ticket` or `stand`). Concurrent claims of the same UID by different companies
+converge on one winner and a business conflict, not a database error. Removing
+a company link never removes the person's badge, and replacing a person's
+badge never moves the company link.
 
 Every tag has a link, `https://<web host>/s/<code>`, where the code is the
 tag's own code (the UID or the `STAND-` token), so a link resolves to exactly
@@ -130,21 +130,23 @@ cannot collect it until a tag exists.
 
 `POST /api/me/diary/scan` takes the raw `code`. A tag link on the web host
 (`https://<WEB_URL host>/s/<code>`) is reduced to its code first; a link on
-another host is left as is and answers `diary_code_unknown`. It then tries,
-in order:
+another host is left as is and answers `diary_code_unknown`. The server resolves
+the current person and the explicit company link independently.
+A combined tag saves both available destinations in one transaction, returning
+the person as the primary entry and the company entry in optional
+`relatedEntries`. A new destination answers 201; a repeat of both answers 200,
+keeping notes and favourites. Person resolution checks current badge assignment
+before history, rechecks after locking the accounts, and retries a concurrent
+reassignment with the latest holder. NFC UID case is normalized; ticket tokens
+remain case-sensitive. Company rows are share-locked during resolution.
 
-1. a company tag (case-insensitive) → the company, if it is scannable and
-   revealed (`visibility = 'visible'`, never a review fixture); otherwise
-   `stand_unavailable` (409), naming no one;
-2. a current badge (`resolveByBadge`, as the scanners use) — a rotated-away
-   or retired badge answers `badge_revoked` (409);
-3. a ticket token of an active account;
-4. otherwise `diary_code_unknown` (404).
-
-People then need a currently visible profile (`profile_not_shared`); the
-caller's own badge answers `diary_self` (409). A person scan is mutual (see
-[Privacy rules](#privacy-rules)). A
-new entry answers 201, an existing one 200 with the stored favourite and note.
+Only currently shared public profiles and revealed, scannable companies are
+saved. A hidden, revoked or self person does not prevent saving an available
+company; an unavailable company does not prevent saving a shared person. If
+neither is available, the existing non-identifying errors apply. Person scans
+remain reciprocal under the privacy rules above; the company is never added to
+the scanned person's diary. Mobile refreshes the company album in the background
+and shows only the person celebration for a combined result.
 
 ## Access
 

@@ -392,7 +392,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         body: standTagBody,
         summary: "Add a company tag",
         description:
-          "`kind: nfc` links an NFC tag or wristband by its serial number, the 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. `label` is an optional staff label (≤40 characters). A code that is or was someone's badge, a ticket, or already a company tag answers 409 with `details.usedBy` (`badge`, `ticket` or `stand`). Global sponsor administrators only; audited (#935).",
+          "`kind: nfc` links an NFC tag or wristband by its serial number, the 7-byte UID (hex; separators ignored, stored uppercase like badges). `kind: qr` generates a printable `STAND-…` token. `label` is an optional staff label (≤40 characters). Current or former person badges may also be linked to a company. Tickets and codes already linked to a company answer 409 with `details.usedBy` (`ticket` or `stand`). Global sponsor administrators only; audited (#935).",
       },
     },
     async (req, reply) => {
@@ -436,7 +436,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
         params: standTagParams,
         summary: "Remove a company tag",
         description:
-          "Unlinks a company tag; scanning it afterwards is an unknown code, and the wristband can be reused. Diary entries already saved for the company stay. Global sponsor administrators only; audited (#935).",
+          "Unlinks only the company assignment; a person badge using the same UID remains valid. Otherwise scanning it afterwards is an unknown code, and the wristband can be reused. Diary entries already saved for the company stay. Global sponsor administrators only; audited (#935).",
       },
     },
     async (req, reply) => {

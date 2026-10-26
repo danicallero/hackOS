@@ -14,8 +14,8 @@ import { ENTERPRISE_HAS_REAL, ENTERPRISE_HAS_SYNTHETIC } from "./service.js";
  * NTAG UID, uppercase hex like badges) and printable QR tokens for a
  * company; an attendee who scans one collects that company's badge in their
  * event diary ("visited stand X"). Tags belong to the company, never to a
- * representative or participant: a rep may wear one on a lanyard, but
- * scanning a person's badge never grants a company. The tables keep the
+ * representative or participant. The same UID may also be a person's badge;
+ * scanning it saves both explicitly linked destinations. The tables keep the
  * original `stand` naming.
  */
 
@@ -89,23 +89,15 @@ export async function listStandTags(actorId: number, enterpriseId: number): Prom
 }
 
 const IN_USE_MESSAGE = {
-  badge: "This wristband is already a badge; use an unassigned one",
   ticket: "This code is already a ticket",
   stand: "This tag is already a company tag",
 } as const;
 
-/**
- * A company tag must not identify a person: wristbands double as badges, so a
- * UID that is or was someone's badge (current or rotated away), or a ticket
- * token, is refused. Codes are unique across company tags by constraint.
- * `usedBy` lets staff clients say which, without naming the person or the
- * other company.
- */
+/** #935: person badges and stand tags are independent assignments. Ticket
+ * tokens remain reserved; a tag can belong to only one company. */
 async function assertCodeFree(db: pg.PoolClient, code: string): Promise<void> {
-  const { rows } = await db.query<{ used_by: "badge" | "ticket" | "stand" }>(
-    `SELECT 'badge' AS used_by FROM users WHERE badge_id = $1 OR $1 = ANY(badge_id_history)
-     UNION ALL
-     SELECT 'ticket' FROM tickets WHERE token = $1
+  const { rows } = await db.query<{ used_by: "ticket" | "stand" }>(
+    `SELECT 'ticket' AS used_by FROM tickets WHERE token = $1
      UNION ALL
      SELECT 'stand' FROM sponsor_stand_tags WHERE code = $1
      LIMIT 1`,
@@ -131,9 +123,12 @@ export async function addStandTag(
     await assertCodeFree(db, code);
     const { rows } = await db.query(
       `INSERT INTO sponsor_stand_tags (enterprise_id, kind, code, label)
-       VALUES ($1, $2, $3, $4) RETURNING ${TAG_COLUMNS}`,
+       VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO NOTHING RETURNING ${TAG_COLUMNS}`,
       [enterpriseId, input.kind, code, input.label ?? null],
     );
+    if (!rows[0]) {
+      throw new ConflictError(IN_USE_MESSAGE.stand, { code: "stand_tag_in_use", usedBy: "stand" });
+    }
     const tag = toTag(rows[0]);
     await audit(db, {
       actorId,
@@ -200,15 +195,6 @@ export async function removeStandTag(
   });
 }
 
-/** Badge assignment guard: a company tag can never become someone's badge (#935). */
-export async function assertNotStandTag(db: Queryable, badgeId: string): Promise<void> {
-  const { rows } = await db.query(`SELECT 1 FROM sponsor_stand_tags WHERE code = $1`, [badgeId]);
-  if (rows[0])
-    throw new ConflictError("This wristband is a company tag; use an unassigned one", {
-      code: "company_tag",
-    });
-}
-
 /**
  * The enterprise a scanned code belongs to, whatever its visibility, and
  * whether staff made its stand scannable (migration 0703).
@@ -220,7 +206,7 @@ export async function standEnterpriseForCode(
   const { rows } = await db.query(
     `SELECT t.enterprise_id, e.stand_scannable
        FROM sponsor_stand_tags t JOIN enterprises e ON e.id = t.enterprise_id
-      WHERE t.code = $1`,
+      WHERE t.code = $1 FOR SHARE OF t, e`,
     [code.toUpperCase()],
   );
   return rows[0]
