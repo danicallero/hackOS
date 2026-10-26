@@ -94,6 +94,8 @@ services:
   api:
     image: alpine:latest
     command: ["sleep", "100000"]
+    labels:
+      drill.api-tag: "\${API_IMAGE_TAG:?API_IMAGE_TAG must reach Compose}"
     healthcheck: {test: ["CMD-SHELL", "true"], interval: 2s}
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -103,7 +105,6 @@ services:
     healthcheck: {test: ["CMD-SHELL", "true"], interval: 2s}
 YAML
 cat >"$work/hackos.env" <<ENV
-IMAGE_TAG=sha-$(printf 'a%.0s' {1..40})
 POSTGRES_USER=hackos
 POSTGRES_PASSWORD=drillpg
 POSTGRES_DB=hackos
@@ -121,12 +122,14 @@ BACKUP_S3_ACCESS_KEY_ID=drilladmin
 BACKUP_S3_SECRET_ACCESS_KEY=drillminio123
 ENV
 chmod 600 "$work/hackos.env"
+# Like a deployed host: hackos.env has no IMAGE_TAG, the deploy records tags here.
+printf 'API_IMAGE_TAG=sha-%s\nWEB_IMAGE_TAG=sha-%s\n' "$(printf 'a%.0s' {1..40})" "$(printf 'b%.0s' {1..40})" >"$work/.image-tags"
 
 export HACKOS_APP_DIR="$work" HACKOS_COMPOSE_FILE="$work/docker-compose.yml" HACKOS_CONFIG_FILE="$work/hackos.env" \
   HACKOS_SECRETS_FILE="$work/none" HACKOS_LOCK_FILE="$work/.lock" HACKOS_BACKUP_S3_ENDPOINT=http://fake-s3:9000 \
   HACKOS_DRAIN_SECONDS=3 HACKOS_BACKUP_DRILL=true
 
-c() { docker compose --env-file "$work/hackos.env" -p "$project" -f "$work/docker-compose.yml" "$@"; }
+c() { docker compose --env-file "$work/hackos.env" --env-file "$work/.image-tags" -p "$project" -f "$work/docker-compose.yml" "$@"; }
 backup() { "$backup_sh" staging "$@"; }
 pg() { c exec -T postgres sh -c "PGPASSWORD=drillpg psql -qtA -U hackos -d $1" <<<"$2"; }
 mc_run() { c run --rm --no-deps -T --entrypoint /bin/sh minio-init -c "mc alias set l http://minio:9000 drilladmin drillminio123 >/dev/null; mc alias set o http://fake-s3:9000 drilladmin drillminio123 >/dev/null; $1"; }

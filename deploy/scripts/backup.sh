@@ -145,7 +145,18 @@ minio_root_user="$(require_value MINIO_ROOT_USER)"
 minio_root_password="$(require_value MINIO_ROOT_PASSWORD)"
 s3_bucket="$(env_value S3_BUCKET)"
 s3_bucket="${s3_bucket:-hackos}"
+# Releases update API and web independently and the deploy records the running
+# tags in .image-tags (hackos.env has no IMAGE_TAG). Use them so Compose never
+# recreates a service on a different image than the one deployed.
+image_state_file="${HACKOS_IMAGE_STATE_FILE:-$app_dir/.image-tags}"
+state_value() {
+  [[ -r "$image_state_file" ]] || return 0
+  sed -n "s/^$1=//p" "$image_state_file" | tail -n 1 | tr -d "\"'"
+}
+api_image_tag="${API_IMAGE_TAG:-$(state_value API_IMAGE_TAG)}"
+web_image_tag="${WEB_IMAGE_TAG:-$(state_value WEB_IMAGE_TAG)}"
 image_tag="${IMAGE_TAG:-$(env_value IMAGE_TAG)}"
+image_tag="${image_tag:-$api_image_tag}"
 data_dir="$(env_value HACKOS_DATA_DIR)"
 data_dir="${data_dir:-/mnt/data}"
 
@@ -181,6 +192,8 @@ if [[ "$needs_s3" == true ]]; then
 fi
 
 export IMAGE_TAG="$image_tag"
+[[ ! "$api_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || export API_IMAGE_TAG="$api_image_tag"
+[[ ! "$web_image_tag" =~ ^sha-[0-9a-f]{40}$ ]] || export WEB_IMAGE_TAG="$web_image_tag"
 export S3_BUCKET="$s3_bucket"
 export POSTGRES_USER="$postgres_user"
 export POSTGRES_DB="$postgres_db"
