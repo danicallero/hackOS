@@ -360,6 +360,23 @@ services:
       S3_BUCKET: "${S3_BUCKET:-hackos}"
     networks: [private]
 
+  # Off-site backup client (#539). Unlike minio-init it needs the internet, so it
+  # joins the egress network and uses the same public resolvers as api/worker.
+  # Only backup.sh runs it (`compose run`); `up` never starts a profiled service.
+  backup-sync:
+    image: quay.io/minio/minio@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
+    profiles: ["backup"]
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    dns: ["1.1.1.1", "8.8.8.8"]
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}"
+      S3_BUCKET: "${S3_BUCKET:-hackos}"
+    networks: [private, egress]
+
   # Explicit one-shot migration process. It needs only the database URL and
   # auth secret used by the migration's H54 compatibility checks.
   migrate:

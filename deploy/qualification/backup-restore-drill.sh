@@ -87,6 +87,11 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command: ["true"]
     restart: "no"
+  backup-sync:
+    <<: *minio
+    profiles: ["backup"]
+    entrypoint: ["/bin/sh", "-c"]
+    restart: "no"
   migrate:
     image: alpine:latest
     command: ["true"]

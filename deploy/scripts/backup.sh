@@ -248,7 +248,8 @@ say() { printf '%s\n' "$*"; }
 
 # --- S3 access (mc runs in the already-pinned minio-init image) -------------
 
-# Runs a /bin/sh snippet with the `local` (MinIO) and `offsite` (S3) aliases set. Variables the
+# Runs a /bin/sh snippet with the `local` (MinIO) and `offsite` (S3) aliases set,
+# in the backup-sync service (the only backup container with internet access). Variables the
 # snippet reads must be exported by the caller (SNAP_ID, BACKUP_S3_OBJECT, …).
 mc_offsite() {
   compose run --rm --no-deps -T \
@@ -256,11 +257,18 @@ mc_offsite() {
     -e BACKUP_S3_BUCKET -e SNAP_ROOT -e SNAP_ID -e BACKUP_S3_OBJECT -e BACKUP_S3_OBJECT_PREFIX \
     -e BACKUP_DUMP_OBJECT -e BACKUP_MIGRATION_HEAD -e BACKUP_ENVIRONMENT -e BACKUP_IMAGE_TAG \
     -e BACKUP_CREATED_AT \
-    --entrypoint /bin/sh minio-init \
+    --entrypoint /bin/sh backup-sync \
     -c "set -eu
       mc alias set local http://minio:9000 \"\$MINIO_ROOT_USER\" \"\$MINIO_ROOT_PASSWORD\" >/dev/null
       mc alias set offsite \"\$BACKUP_S3_ENDPOINT\" \"\$BACKUP_S3_ACCESS_KEY_ID\" \"\$BACKUP_S3_SECRET_ACCESS_KEY\" >/dev/null
       $1"
+}
+
+# snapshot_ids swallows listing errors on purpose; call this first so an
+# unreachable bucket is reported as such and not as "no snapshots".
+require_s3() {
+  mc_offsite 'mc ls "offsite/$BACKUP_S3_BUCKET/" >/dev/null' ||
+    die "cannot reach the S3 bucket (check BACKUP_S3_* and the host's internet access)"
 }
 
 manifest_value() { # manifest-text key
@@ -421,6 +429,7 @@ create_snapshot() {
   export BACKUP_S3_OBJECT="$object_prefix/postgres.dump"
 
   run_quiet "validate Compose" compose config --quiet
+  require_s3
   run_quiet "start backup dependencies" compose up --detach postgres minio
   wait_for_health postgres
   wait_for_health minio
@@ -470,6 +479,7 @@ create_snapshot() {
 
 cmd_list() {
   local id manifest count=0
+  require_s3
   printf '%-18s %-16s %-30s %s\n' SNAPSHOT IMAGE MIGRATION DUMP_BYTES
   while IFS= read -r id; do
     if manifest="$(read_manifest "$id")"; then
@@ -489,7 +499,10 @@ cmd_status() {
   say "Environment: $environment    BACKUPS_ENABLED=$backups_enabled    BACKUP_FREQUENCY=$backup_frequency"
   if [[ "$backups_enabled" == true ]]; then
     snapshot_manifest=''
-    if try_resolve_snapshot latest; then
+    if ! mc_offsite 'mc ls "offsite/$BACKUP_S3_BUCKET/" >/dev/null' 2>&1; then
+      say "S3 UNREACHABLE: cannot list the bucket (check BACKUP_S3_* and internet access)"
+      exit_code=1
+    elif try_resolve_snapshot latest; then
       latest="$SNAP_ID"
       age_h=$((($(date -u +%s) - $(epoch_of "$latest")) / 3600))
       case "$backup_frequency" in
@@ -527,6 +540,7 @@ cmd_status() {
 
 cmd_verify() {
   local started scratch="${postgres_db}_verify"
+  require_s3
   start_stateful
   resolve_snapshot "${1:-latest}"
   say "Verifying snapshot $SNAP_ID in scratch database $scratch (live data untouched)"
@@ -552,6 +566,7 @@ cmd_restore() {
     shift
   done
   [[ ! -f "$maintenance_file" ]] || die "a maintenance lock already exists; inspect with status, then undo or unlock"
+  require_s3
   start_stateful
   resolve_snapshot "${restore_target:-latest}"
   say "Snapshot $SNAP_ID: image $(manifest_value "$snapshot_manifest" image_tag), migration $(manifest_value "$snapshot_manifest" migration_head), created $(manifest_value "$snapshot_manifest" created_at)"
