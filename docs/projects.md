@@ -208,7 +208,8 @@ CSV exports are arrays of human-readable names, with no count limit.
 
 Project editor fields validate on blur, including phone normalization, required
 consent and configured text/number/selection constraints. Inline errors use the
-same validator as applications and staff response editing. Submission repeats
+same validator as applications and staff response editing
+(`apps/api/src/lib/form-validation.ts`, which has no workflow or worker imports). Submission repeats
 validation and focuses the first invalid field; incomplete drafts still autosave.
 
 The management list (`/projects`) presents CSV export as a secondary header

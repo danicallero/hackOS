@@ -984,7 +984,7 @@ const FIELD_KIND_ICON: Record<FieldKind, PhosphorIcon> = {
 };
 
 /** Kinds where a response-validation rule (length/pattern/range/selection
- *  count) is meaningful — see `checkFieldValidation` in the API's service.ts. */
+ *  count) is meaningful — see `checkFieldValidation` in the API's lib/form-validation.ts. */
 const VALIDATABLE_KINDS = new Set<FieldKind>([
   "text",
   "textarea",
