@@ -39,10 +39,12 @@ import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
-import { API_URL } from "@/lib/env";
-import { pickText, useLocale } from "@/lib/i18n";
-import { useCan, useMe } from "@/lib/session";
-import { toast } from "@/lib/toast";
+import {
+  type ApplicationWorkspace,
+  applicationStatusLabel,
+  rowsForWorkspace,
+  statusesForWorkspace,
+} from "@/lib/application-workflow";
 import {
   type FormSection,
   fmtDateTime,
@@ -50,13 +52,11 @@ import {
   type ResponseRow,
   statusTone,
   type TemplateField,
-} from "../lib";
-import {
-  type ApplicationWorkspace,
-  applicationStatusLabel,
-  rowsForWorkspace,
-  statusesForWorkspace,
-} from "../workflow";
+} from "@/lib/applications";
+import { API_URL } from "@/lib/env";
+import { pickText, useLocale } from "@/lib/i18n";
+import { useCan, useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { SendDecisionsModal } from "./send-decisions-modal";
 
 interface DurableBatchResult {

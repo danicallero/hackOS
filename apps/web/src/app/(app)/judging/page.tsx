@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError, api } from "@/lib/api";
+import type { Challenge } from "@/lib/challenges";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { workspaceAccess } from "@/lib/judging-workspace";
 import {
@@ -38,7 +39,6 @@ import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
-import type { Challenge } from "../challenges/shared";
 
 import { errorMessage, queueErrorToastContent } from "./helpers";
 import { JudgingTopBar } from "./judging-top-bar";

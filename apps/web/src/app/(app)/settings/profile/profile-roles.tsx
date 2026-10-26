@@ -2,9 +2,9 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { Badge } from "@/components/ui/badge";
+import { capabilitiesByDomain, prettifyCapability } from "@/lib/capability-presentation";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { Me } from "@/lib/types";
-import { capabilitiesByDomain, prettifyCapability } from "../../permissions/helpers";
 
 const CAPABILITY_DOMAIN_LABELS: Record<string, MessageKey> = {
   users: "users",

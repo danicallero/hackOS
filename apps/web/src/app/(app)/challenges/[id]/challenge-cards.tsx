@@ -42,17 +42,17 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
-import { toast } from "@/lib/toast";
-import { useUrlTab } from "@/lib/url-tab";
 import {
   asI18n,
   type Challenge,
   i18nWithEnglishFallback,
   type Prize,
   textForDisplay,
-} from "../shared";
+} from "@/lib/challenges";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
+import { useUrlTab } from "@/lib/url-tab";
 import { VersionHistory } from "./version-history";
 import { WinnerPublication } from "./winner-publication";
 

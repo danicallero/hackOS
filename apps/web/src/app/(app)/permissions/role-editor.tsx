@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
@@ -16,6 +15,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
+import { DrilldownBackButton } from "@/components/common/drilldown-back-button";
 import {
   PermissionStateControl,
   permissionStateMessageKey,
@@ -39,17 +39,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import {
+  capabilityDescription,
+  filterCapabilitiesByDomain,
+  prettifyCapability,
+} from "@/lib/capability-presentation";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { PermissionState, RoleSeedDiff, RoleSummary, UserListItem } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
 import { cn } from "@/lib/utils";
 import { GrantRulesPanel } from "./grant-rules-panel";
-import {
-  capabilityDescription,
-  filterCapabilitiesByDomain,
-  prettifyCapability,
-  userDisplayName,
-} from "./helpers";
+import { userDisplayName } from "./helpers";
 
 const detailsSchema = (t: Translate) =>
   z.object({
@@ -515,23 +515,6 @@ export function RoleEditor({
       {deleteModal}
       {resetModal}
     </div>
-  );
-}
-
-/**
- * This changes only `?role=`/`tab` state rather than routes, so its in-page
- * return behavior stays separate from browser navigation.
- */
-export function DrilldownBackButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
-    >
-      <ArrowLeftIcon aria-hidden="true" className="size-4" />
-      {label}
-    </button>
   );
 }
 

@@ -44,12 +44,15 @@ vi.mock("./offline-queue", () => {
           ReactLib.createElement("span", { key: item.activityName }, item.activityName),
         ),
       ),
-    clearOfflineQueue: mocks.clearOfflineQueue,
-    isStaleOfflineScanError: mocks.staleOfflineScanError,
-    loadOfflineQueue: mocks.loadOfflineQueue,
-    updateOfflineQueue: mocks.updateOfflineQueue,
   };
 });
+
+vi.mock("@/lib/offline-queue", () => ({
+  clearOfflineQueue: mocks.clearOfflineQueue,
+  isStaleOfflineScanError: mocks.staleOfflineScanError,
+  loadOfflineQueue: mocks.loadOfflineQueue,
+  updateOfflineQueue: mocks.updateOfflineQueue,
+}));
 
 import { ActivityScannerCard } from "./activity-scanner";
 

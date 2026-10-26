@@ -40,6 +40,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
+import { DrilldownBackButton } from "@/components/common/drilldown-back-button";
 import { FormActions } from "@/components/common/form-actions";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
@@ -55,16 +56,15 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Section } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { capabilityDescription, prettifyCapability } from "@/lib/capability-presentation";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { capabilityDescription, prettifyCapability } from "../../permissions/helpers";
-import { DrilldownBackButton } from "../../permissions/role-editor";
 import { TimingField } from "./timing-field";
-import { useCategorySaveState } from "./use-category-save-state";
 
 type LiveActivityRole = LiveActivitySettings["roles"][number];
 

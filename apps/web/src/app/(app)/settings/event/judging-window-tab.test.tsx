@@ -2,8 +2,8 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { JudgingWindowTab } from "@/app/(app)/settings/event/judging-window-tab";
 import { getQueueSettings, updateQueueSettings } from "@/lib/queue";
-import { JudgingWindowTab } from "./judging-window-tab";
 
 // H38, H34: the pre-call notice and called-too-long warning minutes are
 // edited with the judging hours, in the category's one save.

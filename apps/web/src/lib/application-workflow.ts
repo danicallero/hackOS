@@ -1,5 +1,5 @@
+import type { ResponseRow } from "@/lib/applications";
 import type { Translate } from "@/lib/i18n";
-import type { ResponseRow } from "./lib";
 
 // Three workspaces instead of four: "review" also makes the internal
 // accept/reject call (score → decide, no separate "decisions" tab that

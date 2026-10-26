@@ -38,11 +38,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
+import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "@/lib/challenges";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
-import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "./shared";
 
 const STEPS = ["basics", "prizes", "judging", "publish"] as const;
 

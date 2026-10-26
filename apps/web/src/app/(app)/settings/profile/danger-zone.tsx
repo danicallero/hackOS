@@ -7,7 +7,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
-import { clearOfflineQueue } from "@/components/logistics/offline-queue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,6 +15,7 @@ import { apiErrorReason } from "@/lib/api-error-reason";
 import { apiErrorText } from "@/lib/api-error-text";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { clearOfflineQueue } from "@/lib/offline-queue";
 import {
   type AccountRemovalEligibility,
   type AccountRemovalProgress,

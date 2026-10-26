@@ -17,10 +17,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { groupFieldsBySections, LOCALES } from "@/lib/application-form";
+import type { FormSection, TemplateField } from "@/lib/applications";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
-import type { FormSection, TemplateField } from "../lib";
-import { groupFieldsBySections, LOCALES } from "./shared";
 
 /** Read-only preview of the form as an applicant sees it (H11). */
 export function FormPreviewModal({

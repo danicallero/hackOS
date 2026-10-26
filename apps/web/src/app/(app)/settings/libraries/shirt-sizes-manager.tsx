@@ -38,12 +38,12 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EventConfig } from "@/lib/types";
-import { useCategorySaveState } from "../event/use-category-save-state";
 import { LibraryAddButton } from "./library-add-button";
 
 const NOOP_DIRTY_CHANGE = () => {};

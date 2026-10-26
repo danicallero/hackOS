@@ -20,7 +20,7 @@ is the account's photo everywhere, not only on the public profile. The mobile ap
 edits the same photo from the Account avatar and the networking profile editor
 (`docs/mobile.md`).
 
-The "Public profile" section (`settings/profile/public-profile-card.tsx`)
+The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
 only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links

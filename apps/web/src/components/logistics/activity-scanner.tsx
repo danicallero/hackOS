@@ -24,15 +24,15 @@ import { useLiveQuery } from "@/hooks/use-event-source";
 import { ApiError } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type ActivityScanResult, logisticsApi, type PersonSearchResult } from "@/lib/logistics";
-import { useSessionContext } from "@/lib/session";
-import { toast } from "@/lib/toast";
 import {
   isStaleOfflineScanError,
   loadOfflineQueue,
-  OfflineQueue,
   type OfflineScan,
   updateOfflineQueue,
-} from "./offline-queue";
+} from "@/lib/offline-queue";
+import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
+import { OfflineQueue } from "./offline-queue";
 import { PersonSearchResults } from "./person-search-results";
 import { ScanResult } from "./scan-result";
 import { errorMessage, Field, InlineError } from "./ui";

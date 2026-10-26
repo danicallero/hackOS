@@ -1,10 +1,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AssignmentsEditor } from "@/components/queue/room-panels";
 import { LocaleProvider } from "@/lib/i18n";
 import type { RoomAssignments } from "@/lib/queue";
 import type { EnterpriseSummary } from "@/lib/types";
-import { AssignmentsEditor } from "./room-panels";
 
 vi.mock("@/lib/session", () => ({ useMe: () => null }));
 

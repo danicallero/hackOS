@@ -29,18 +29,6 @@ import {
   useState,
 } from "react";
 import {
-  type FormSection,
-  fmtScore,
-  type ResponseRow,
-  type ReviewEntry,
-  statusTone,
-  type TemplateField,
-} from "@/app/(app)/applications/lib";
-import {
-  type ApplicationWorkspace,
-  applicationStatusLabel,
-} from "@/app/(app)/applications/workflow";
-import {
   FileViewerDocking,
   type FileViewerSide,
 } from "@/components/applications/review-file-docking";
@@ -85,6 +73,15 @@ import {
   validateFieldOnBlur,
   validationErrorSummary,
 } from "@/lib/application-validation";
+import { type ApplicationWorkspace, applicationStatusLabel } from "@/lib/application-workflow";
+import {
+  type FormSection,
+  fmtScore,
+  type ResponseRow,
+  type ReviewEntry,
+  statusTone,
+  type TemplateField,
+} from "@/lib/applications";
 import { LOCALE_CODES, pickText, type Translate, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useCan, useMe } from "@/lib/session";
@@ -107,7 +104,7 @@ declare global {
 
 /** Synthetic section for the shirt-size/dietary fields, that is never stored in
  *  `application.sections`.
- *  Mirrors `applications/[id]/shared.ts` and `my-applications/lib.ts`. */
+ *  Mirrors `lib/application-form.ts` and `my-applications/lib.ts`. */
 const LOGISTICS_SECTION_KEY = "__logistics__";
 const LOGISTICS_SECTION: FormSection = {
   key: LOGISTICS_SECTION_KEY,

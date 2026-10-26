@@ -1,8 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { pickText, type Translate } from "@/lib/i18n";
-import { type SaveState, saveStateLabel } from "@/lib/save-state";
-import type { Language } from "@/lib/types";
-import type { ResponseRow } from "./lib";
 import {
   applicantTimelineState,
   applicationStatusLabel,
@@ -10,7 +6,11 @@ import {
   defaultApplicationWorkspace,
   generatedFieldKey,
   rowsForWorkspace,
-} from "./workflow";
+} from "@/lib/application-workflow";
+import type { ResponseRow } from "@/lib/applications";
+import { pickText, type Translate } from "@/lib/i18n";
+import { type SaveState, saveStateLabel } from "@/lib/save-state";
+import type { Language } from "@/lib/types";
 
 const translate: Translate = (key) => key;
 const row = (id: number, status: string): ResponseRow => ({

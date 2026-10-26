@@ -27,18 +27,18 @@ import { Label } from "@/components/ui/label";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { type MessageKey, useLocale } from "@/lib/i18n";
-import { useSessionContext } from "@/lib/session";
-import { toast } from "@/lib/toast";
-import type { UserList } from "@/lib/types";
 import {
   type Challenge,
   challengeNextAction,
   challengeState,
   filterChallengesForEnterprise,
   textForDisplay,
-} from "../../challenges/shared";
+} from "@/lib/challenges";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
+import type { UserList } from "@/lib/types";
 import {
   type EnterpriseFormValues,
   EnterpriseKindPriorityFields,

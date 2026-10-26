@@ -1,4 +1,4 @@
-import type { FormSection, TemplateField } from "@/app/(app)/applications/lib";
+import type { FormSection, TemplateField } from "@/lib/applications";
 import { api } from "./api";
 import { invalidateServerState } from "./server-state";
 

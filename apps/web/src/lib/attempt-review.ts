@@ -10,9 +10,9 @@
  */
 
 import type { Question } from "@hackos/shared/questions";
-import { textForDisplay } from "@/app/(app)/challenges/shared";
-import { type Answers, answerHasValue } from "@/components/common/question-field";
+import { textForDisplay } from "@/lib/challenges";
 import type { Translate } from "@/lib/i18n";
+import { type Answers, answerHasValue } from "@/lib/question-answers";
 
 /**
  * How many required questions are still unanswered. Drives the submit gate:

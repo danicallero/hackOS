@@ -422,7 +422,7 @@ old identity-bearing file is not used while it remains present.
 
 ### Web staff scanner
 
-`apps/web/src/components/logistics/offline-queue.tsx` stores pending meal
+`apps/web/src/lib/offline-queue.ts` stores pending meal
 scans as AES-GCM ciphertext in browser `localStorage`, with a non-extractable
 per-owner key in IndexedDB and the owner ID authenticated as additional data.
 The legacy plaintext key is removed rather than migrated or replayed. Queue

@@ -43,7 +43,9 @@ vi.mock("./event-config-context", () => ({
   }) => <div data-provider-refresh={refreshKey}>{children}</div>,
 }));
 vi.mock("./event-tab", () => ({ EventTab: () => <div data-testid="event-form" /> }));
-vi.mock("../../projects/form/project-form-section", () => ({ ProjectFormSection: () => null }));
+vi.mock("@/app/(app)/settings/event/project-form-section", () => ({
+  ProjectFormSection: () => null,
+}));
 vi.mock("./venue-tab", () => ({
   VenueTab: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => (
     <button type="button" data-testid="venue-form" onClick={() => onDirtyChange(true)} />
@@ -55,7 +57,7 @@ vi.mock("./invites-tab", () => ({ InvitesTab: () => null }));
 vi.mock("./live-activities-tab", () => ({ LiveActivitiesTab: () => null }));
 vi.mock("./notifications-tab", () => ({ NotificationsTab: () => null }));
 vi.mock("./reset-judging-data-tab", () => ({ ResetJudgingDataTab: () => null }));
-vi.mock("../../queue/rooms/judging-window-tab", () => ({ JudgingWindowTab: () => null }));
+vi.mock("@/app/(app)/settings/event/judging-window-tab", () => ({ JudgingWindowTab: () => null }));
 
 let confirmSpy: ReturnType<typeof vi.spyOn>;
 let pushState: ReturnType<typeof vi.spyOn>;

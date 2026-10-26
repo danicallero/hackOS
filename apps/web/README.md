@@ -273,6 +273,27 @@ src/
                        *.test.ts(x) run by `pnpm --filter @hackos/web test`
 ```
 
+### Route and shared ownership (#1145)
+
+`app/` owns route entrypoints, redirects and feature-specific assembly. Reused
+views belong in domain folders under `components/`; reusable hooks belong in
+`hooks/`; models, formatting, answer rules and browser storage belong in `lib/`.
+Shared components, hooks and models must not import route files, including erased
+type imports. Routes consume shared owners directly; do not leave forwarding
+modules in the old route directory or import another route's `page.tsx`.
+
+Examples: application models/workflow and form helpers live in `lib/`, while the
+project/application question builder lives in `components/forms/`. Profile photo
+and public-profile controls live in `components/profile/`; the project draft hook
+lives in `hooks/use-project-draft.ts`. Queue route shells render
+`components/queue/room-management.tsx`; the legacy judging-window redirect stays
+in the `/queue/rooms` route. Event settings own the project-form and judging-window
+editors. Offline queue encryption and owner isolation live in `lib/offline-queue.ts`,
+and `components/logistics/offline-queue.tsx` only renders queue status.
+
+Move existing tests alongside extracted owners and update every consumer and test
+mock. Keep route-local helpers in place when they are only used by that feature.
+
 ## The component library — reuse, don't recreate
 
 Three layers, most-specific wins. **Before building UI, check these in order

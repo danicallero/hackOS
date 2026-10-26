@@ -16,6 +16,7 @@ import { z } from "zod";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
+import { DrilldownBackButton } from "@/components/common/drilldown-back-button";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { SectionCard } from "@/components/common/section-card";
@@ -62,7 +63,7 @@ import type {
 } from "@/lib/types";
 import { GrantRulesOverviewModal } from "./grant-rules-overview";
 import { permissionTemplateName } from "./helpers";
-import { DrilldownBackButton, RoleEditor } from "./role-editor";
+import { RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
 import { invalidatePermissionsResources, PERMISSIONS_RESOURCES } from "./server-state";
 
