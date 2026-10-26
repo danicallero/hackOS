@@ -16,6 +16,7 @@ Usage:
   services.sh <environment> deploy <latest|sha-commit> [--api|--web|--both]
   services.sh <environment> shell
   services.sh <environment> superadmin <list|create|grant|revoke> [options]
+  services.sh <environment> backups <create|list|status|verify|restore|undo|unlock|drop-prev> [args]
 
 Environments: staging production
 Services: postgres valkey minio minio-init migrate api worker web
@@ -28,6 +29,10 @@ deploy is explicit and never accepts Docker :latest.
 
 Log event types: all, error, warning, request, health. Use --match TEXT for a
 case-insensitive literal search instead of a built-in event type.
+
+Backups call /opt/hackos/backup.sh (AWS S3 snapshots, timed restore checks and
+audited rollbacks); see docs/backup-restore.md. A restore puts the app in
+maintenance mode, so users see a waiting screen until it finishes.
 
 Superadmin operations use the official server-side scripts in the API image:
   superadmin list
@@ -156,6 +161,15 @@ print_shell_help() {
   printf '%s\n' "  superadmin create --email ... [--password-stdin] --name ... --surname ..."
   printf '%s\n' "  superadmin grant --email ... [--allow-existing-admin]"
   printf '%s\n' "  superadmin revoke --email ..."
+  printf '\n%s\n' "${c_bold}Backup commands${c_reset}"
+  printf '%s\n' "  backups status             Latest snapshot age, maintenance lock, leftover databases."
+  printf '%s\n' "  backups list               Recent S3 snapshots."
+  printf '%s\n' "  backups create             Take a snapshot now."
+  printf '%s\n' "  backups verify [id|latest] Timed restore into a scratch database; live data untouched."
+  printf '%s\n' "  backups restore [id|latest] [--yes] [--no-pre-backup]"
+  printf '%s\n' "                Lock users out, swap the database, sync files, reopen."
+  printf '%s\n' "  backups undo               Swap back to the database the last restore replaced."
+  printf '%s\n' "  backups unlock             Clear a stuck maintenance lock."
   printf '\n%s\n' "${c_bold}Direct SSH examples${c_reset}"
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} status"
   printf '%s\n' "  ssh user@host /opt/hackos/services.sh ${environment} logs --event-type error api > api-errors.log"
@@ -189,7 +203,7 @@ case "$environment" in
   *) usage 2 ;;
 esac
 case "$action" in
-  status|logs|start|recreate|stop|shutdown|release|available|deploy|shell|superadmin) ;;
+  status|logs|start|recreate|stop|shutdown|release|available|deploy|shell|superadmin|backups) ;;
   -h|--help|help) usage 0 ;;
   *) usage 2 ;;
 esac
@@ -1872,6 +1886,53 @@ service_operations_shell() {
   done
 }
 
+backups_shell() {
+  local choices=(
+    "Backup status"
+    "List snapshots"
+    "Take a snapshot now"
+    "Verify a snapshot (scratch restore)"
+    "Restore a snapshot"
+    "Undo the last restore"
+    "Clear a stuck maintenance lock"
+  )
+
+  while [[ "$shell_quit" != true ]]; do
+    if ! menu_select "Backups and restore" "S3 snapshots · ←/Esc/b returns to main menu" "${choices[@]}"; then
+      shell_quit=true
+      return 0
+    fi
+    case "$menu_navigation" in
+      back) return 0 ;;
+      quit)
+        shell_quit=true
+        return 0
+        ;;
+      select)
+        case "$menu_choice" in
+          0) run_action "backup status" backups status ;;
+          1) run_action "snapshots" backups list ;;
+          2) run_action "snapshot" backups create ;;
+          3 | 4)
+            read_shell_input "Snapshot id or latest (b back, q quit): "
+            [[ "$shell_navigation" == value ]] || {
+              [[ "$shell_navigation" == quit ]] && shell_quit=true
+              continue
+            }
+            if ((menu_choice == 3)); then
+              run_action "verify" backups verify "${shell_input:-latest}"
+            else
+              run_action "restore" backups restore "${shell_input:-latest}"
+            fi
+            ;;
+          5) run_action "undo restore" backups undo ;;
+          6) run_action "unlock" backups unlock ;;
+        esac
+        ;;
+    esac
+  done
+}
+
 interactive_shell() {
   [[ -t 0 && -t 1 ]] || die "the interactive shell requires a terminal"
   terminal_setup
@@ -1882,6 +1943,7 @@ interactive_shell() {
     "View logs"
     "Images and releases"
     "Manage superadmins"
+    "Backups and restore"
     "Help"
   )
 
@@ -1911,6 +1973,9 @@ interactive_shell() {
             superadmin_shell
             ;;
           5)
+            backups_shell
+            ;;
+          6)
             print_shell_help
             ;;
         esac
@@ -2079,6 +2144,12 @@ case "$action" in
 
   superadmin)
     run_superadmin "$@"
+    ;;
+
+  backups)
+    # backup.sh takes its own lock and reads the same /etc/hackos files.
+    [[ -x "$app_dir/backup.sh" ]] || die "backup helper is missing: $app_dir/backup.sh"
+    exec "$app_dir/backup.sh" "$environment" "${@:-status}"
     ;;
 
   shell)

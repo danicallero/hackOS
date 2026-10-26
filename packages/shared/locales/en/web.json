@@ -3752,5 +3752,8 @@
   "certificateAllowGuests": "Allow guests without accounts",
   "certificateRequiresTalk": "Require a talk or activity",
   "certificateNoRecipientRoles": "No account roles selected",
-  "certificateAllEventAccess": "Everyone with event access"
+  "certificateAllEventAccess": "Everyone with event access",
+  "maintenanceTitle": "Restoring a backup",
+  "maintenanceBody": "hackOS will be back shortly. This page reloads on its own.",
+  "maintenanceFailedBody": "The restore needs an administrator. This page reloads once it is resolved."
 }

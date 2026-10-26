@@ -175,32 +175,32 @@ if [[ -n "$s3_public_url" && "$s3_public_url" != https://* ]]; then
   die 'S3_PUBLIC_URL must be an https URL when configured'
 fi
 
-r2_backups_enabled="$(value R2_BACKUPS_ENABLED)"
-r2_backups_enabled="${r2_backups_enabled:-false}"
-r2_backup_frequency="$(value R2_BACKUP_FREQUENCY)"
-r2_backup_frequency="${r2_backup_frequency:-disabled}"
-case "$r2_backups_enabled" in
+backups_enabled="$(value BACKUPS_ENABLED)"
+backups_enabled="${backups_enabled:-false}"
+backup_frequency="$(value BACKUP_FREQUENCY)"
+backup_frequency="${backup_frequency:-disabled}"
+case "$backups_enabled" in
   false) ;;
   true)
-    r2_endpoint="$(require_value R2_ENDPOINT)"
-    r2_bucket="$(require_value R2_BUCKET)"
-    r2_prefix="$(require_value R2_PREFIX)"
-    require_value R2_ACCESS_KEY_ID >/dev/null
-    require_value R2_SECRET_ACCESS_KEY >/dev/null
-    [[ "$r2_endpoint" =~ ^https://[A-Za-z0-9.-]+$ ]] || die 'R2_ENDPOINT must be an https host URL'
-    [[ "$r2_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || die 'R2_BUCKET is not a valid bucket name'
-    [[ "$r2_prefix" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die 'R2_PREFIX contains unsafe characters'
-    [[ "$r2_prefix" != */ && "$r2_prefix" != *..* ]] || die 'R2_PREFIX must not end in / or contain ..'
+    s3_region="$(require_value BACKUP_S3_REGION)"
+    backup_bucket="$(require_value BACKUP_S3_BUCKET)"
+    backup_prefix="$(require_value BACKUP_S3_PREFIX)"
+    require_value BACKUP_S3_ACCESS_KEY_ID >/dev/null
+    require_value BACKUP_S3_SECRET_ACCESS_KEY >/dev/null
+    [[ "$s3_region" =~ ^[a-z]{2}(-[a-z]+)+-[0-9]+$ ]] || die 'BACKUP_S3_REGION is not an AWS region name'
+    [[ "$backup_bucket" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || die 'BACKUP_S3_BUCKET is not a valid bucket name'
+    [[ "$backup_prefix" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]] || die 'BACKUP_S3_PREFIX contains unsafe characters'
+    [[ "$backup_prefix" != */ && "$backup_prefix" != *..* ]] || die 'BACKUP_S3_PREFIX must not end in / or contain ..'
     ;;
-  *) die 'R2_BACKUPS_ENABLED must be true or false' ;;
+  *) die 'BACKUPS_ENABLED must be true or false' ;;
 esac
 
-case "$r2_backup_frequency" in
+case "$backup_frequency" in
   disabled|daily|weekly|monthly) ;;
-  *) die 'R2_BACKUP_FREQUENCY must be disabled, daily, weekly or monthly' ;;
+  *) die 'BACKUP_FREQUENCY must be disabled, daily, weekly or monthly' ;;
 esac
-if [[ "$r2_backups_enabled" != true && "$r2_backup_frequency" != disabled ]]; then
-  die 'R2_BACKUP_FREQUENCY requires R2_BACKUPS_ENABLED=true'
+if [[ "$backups_enabled" != true && "$backup_frequency" != disabled ]]; then
+  die 'BACKUP_FREQUENCY requires BACKUPS_ENABLED=true'
 fi
 
 apple_keys=(

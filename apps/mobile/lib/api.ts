@@ -1,7 +1,9 @@
+import { isMaintenanceError, maintenancePhaseOf } from "@hackos/shared/maintenance";
 import { authClient } from "./auth-client";
 import { clientBuildHeaders } from "./client-build";
 import { API_URL } from "./env";
 import { intentKey, settleIntentKey } from "./idempotency-key";
+import { maintenanceStore } from "./maintenance";
 import { isUpgradeRequired, markUpgradeRequired } from "./upgrade-required";
 
 export class ApiError extends Error {
@@ -125,6 +127,9 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
       message?: string;
     };
     if (isUpgradeRequired(error.status, envelope.error?.code)) markUpgradeRequired();
+    if (isMaintenanceError(error.status, envelope.error?.code)) {
+      maintenanceStore.mark(maintenancePhaseOf(envelope.error?.details));
+    }
     throw new ApiError(
       envelope.error?.message ?? envelope.message ?? `Request to ${path} failed (${error.status})`,
       error.status,

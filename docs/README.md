@@ -84,6 +84,7 @@ Architecture & modules:
   `event_config` singleton (identity, doors-open vs hacking window, venue) and
   how the Wallet pass renders from it (field visibility, captions, back fields),
   plus the session-less scoped-token path from the acceptance email.
+- [Backups, restore and the maintenance lock](./backup-restore.md) — S3 backups, restore flow, the restore lock and the waiting screens.
 - [Email delivery with Amazon SES](./email-ses.md) — production sender subdomains, Cloudflare DNS, SES setup and rollout.
 - [Notifications & announcements](./notifications.md) — the announcement
   model (screen placement vs. delivery vs. targeting), the notify-only vs.
