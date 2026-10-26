@@ -149,6 +149,8 @@ cleanup() {
 trap cleanup EXIT
 
 step "start throwaway services"
+# backup.sh starts services with --pull never, as on a deployed host.
+docker pull -q alpine:latest >/dev/null
 c up -d --wait postgres valkey minio fake-s3 >/dev/null
 mc_run 'mc mb --ignore-existing o/hackos-backups; mc mb --ignore-existing l/hackos' >/dev/null
 pg hackos "
