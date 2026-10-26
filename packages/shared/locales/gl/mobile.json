@@ -987,5 +987,8 @@
   "notificationOnboardingTitle": "Escolle como avisarte",
   "notificationOnboardingWithApp": "Con esta app iniciada, estes avisos chegan aquí e non ao correo. Activa o correo se o queres tamén.",
   "notificationOnboardingNoApp": "Sen a app iniciada, as chamadas da cola chégante sempre por correo, e tamén os recordatorios de actividades e os retos salvo que desactives o correo.",
-  "notificationsMandatoryHint": "Os avisos de quenda sempre chegan á app. O correo é opcional mentres este móbil teña a sesión iniciada; sen ela, chégante por correo."
+  "notificationsMandatoryHint": "Os avisos de quenda sempre chegan á app. O correo é opcional mentres este móbil teña a sesión iniciada; sen ela, chégante por correo.",
+  "maintenanceTitle": "Restaurando unha copia",
+  "maintenanceBody": "hackOS volverá en uns minutos. A app continúa soa.",
+  "maintenanceFailedBody": "A restauración precisa dun administrador. A app continúa cando se resolva."
 }

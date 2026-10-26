@@ -38,7 +38,7 @@ En producción, crear y mantener un único fichero combinado:
 
 | Fichero | Debe contener | Protección |
 |---|---|---|
-| `/etc/hackos/hackos.env` | `IMAGE_TAG`, dominios/CORS, puertos, identificadores, credenciales, correo, R2, fixtures y PEM Wallet. | `0600`; nunca se imprime ni se versiona. |
+| `/etc/hackos/hackos.env` | `IMAGE_TAG`, dominios/CORS, puertos, identificadores, credenciales, correo, backups S3, fixtures y PEM Wallet. | `0600`; nunca se imprime ni se versiona. |
 
 En staging, mantener la pareja existente:
 
@@ -71,10 +71,10 @@ siguiente especifica cada variable individualmente.
 | `S3_BUCKET` | configuración | no | Bucket creado por `minio-init`, por defecto `hackos`. |
 | `S3_REGION` | configuración | no | Región S3 para el cliente SDK; por defecto `us-east-1`. |
 | `S3_PUBLIC_URL` | configuration | required in production | Public HTTPS object URL served by the environment's object-storage ingress; Compose publishes only the MinIO S3 API, never its console. |
-| `R2_BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup-r2.sh` antes de `migrate`. |
-| `R2_BACKUP_FREQUENCY` | configuración | no | Frecuencia del timer gestionado por infraestructura: `disabled` (por defecto), `daily`, `weekly` o `monthly`. Requiere `R2_BACKUPS_ENABLED=true` salvo `disabled`. |
-| `R2_ENDPOINT`, `R2_BUCKET`, `R2_PREFIX` | configuración | si R2 está activo | Endpoint S3-compatible HTTPS, bucket privado y prefijo para las copias. |
-| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | secreto | si R2 está activo | Credenciales del token R2 limitado al bucket; nunca se pasan a `api`, `worker` ni `web`. |
+| `BACKUPS_ENABLED` | configuración | no | `false` por defecto; con `true`, el despliegue ejecuta `backup.sh` antes de `migrate`. |
+| `BACKUP_FREQUENCY` | configuración | no | Frecuencia del timer gestionado por infraestructura: `disabled` (por defecto), `daily`, `weekly` o `monthly`. Requiere `BACKUPS_ENABLED=true` salvo `disabled`. |
+| `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET`, `BACKUP_S3_PREFIX` | configuración | si los backups están activos | Región AWS, bucket privado y prefijo para las copias. |
+| `BACKUP_S3_ACCESS_KEY_ID`, `BACKUP_S3_SECRET_ACCESS_KEY` | secreto | si los backups están activos | Clave IAM limitada al bucket (sin `s3:DeleteObject`); nunca se pasan a `api`, `worker` ni `web`. |
 | `MAIL_PROVIDER` | configuración | no | `smtp`; el transporte se mantiene explícito para el despliegue. |
 | `MAIL_FROM_ADDRESS` | configuración | sí | Remitente de los correos. |
 | `MAIL_FROM_NAME` | configuración | no | Nombre del remitente, por defecto `hackOS`. |
@@ -135,7 +135,7 @@ variables agrupadas se detallan en las secciones siguientes.
 `DATABASE_URL` y `VALKEY_URL` se ensamblan dentro de Compose a partir de las
 credenciales del fichero de secretos. El puerto del API (`3000`) y el del web
 (`3001`) están fijados por las imágenes y no son variables de este contrato.
-Las variables R2 sólo las consume el helper de backup en el host; no aparecen
+Las variables `BACKUP_S3_*` sólo las consume el helper de backup en el host; no aparecen
 en ningún contenedor de aplicación.
 
 ### Base de datos, Valkey y almacenamiento
@@ -273,18 +273,25 @@ ni dependencias de datos.
 Los valores PEM se guardan como base64 en el fichero de secretos. Nunca se
 bakean en una imagen ni se añaden al repositorio.
 
-## Backups R2
+## Backups S3
 
-Cuando `R2_BACKUPS_ENABLED=true`, el helper exige un endpoint `https://`, un
-bucket y prefijo válidos, y las dos credenciales R2. Crea un dump custom de
-PostgreSQL, replica el bucket MinIO y escribe un manifiesto bajo
-`R2_PREFIX/<environment>/<timestamp>/`. El token debe limitarse al bucket de
-backups y el bucket debe tener una política de retención configurada fuera del
-repositorio. `R2_BACKUP_FREQUENCY` determina el timer instalado por la
-infraestructura; `disabled` permite mantener la copia previa a migraciones sin
-programar ejecuciones periódicas.
+Cuando `BACKUPS_ENABLED=true`, el helper exige una región AWS, un bucket y
+prefijo válidos, y las dos credenciales IAM. Crea un dump custom de
+PostgreSQL, un manifiesto bajo `BACKUP_S3_PREFIX/<environment>/snapshots/<timestamp>/` y
+refleja el bucket MinIO de forma incremental en
+`BACKUP_S3_PREFIX/<environment>/minio/`. La clave IAM no debe poder borrar
+objetos y el bucket tiene su ciclo de vida configurado fuera del repositorio
+(ver `deploy/README.md`). `BACKUP_FREQUENCY` determina el timer instalado por
+la infraestructura; `disabled` permite mantener la copia previa a migraciones
+sin programar ejecuciones periódicas.
 
 ## Valores fijos deliberados
+
+`MAINTENANCE_DIR` (`/run/hackos/maintenance`, sólo en `api`) apunta al montaje de
+solo lectura de `$HACKOS_DATA_DIR/maintenance`, donde `restore.sh` escribe
+`state.json` mientras sustituye la base de datos. Con el fichero presente, la API
+responde `503 maintenance_in_progress` salvo a las sondas y a
+`GET /api/public/maintenance`; sin variable (desarrollo y tests) no hay puerta.
 
 No existen variables para cambiar los repositorios de imágenes: son
 `ghcr.io/danicallero/hackos-api` y `ghcr.io/danicallero/hackos-web`. Tampoco se
@@ -379,7 +386,7 @@ prerequisite outside this repository.
 Both paths transfer only Compose and deployment scripts. They do not receive
 application secrets, decrypt SOPS, or use Docker Remote API. The host script
 reads the canonical environment files, takes a lock, validates without
-printing values, pulls pinned images, optionally runs the R2 backup and applies
+printing values, pulls pinned images, optionally runs the S3 backup and applies
 migrations only for an API-image change, and waits for healthchecks on each
 changed unit. Rollback selects an earlier SHA and does not automatically
 reverse database migrations.

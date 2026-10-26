@@ -3752,5 +3752,8 @@
   "certificateAllowGuests": "Permitir personas sin cuenta",
   "certificateRequiresTalk": "Exigir una charla o actividad",
   "certificateNoRecipientRoles": "Sin roles seleccionados",
-  "certificateAllEventAccess": "Todas las personas con acceso al evento"
+  "certificateAllEventAccess": "Todas las personas con acceso al evento",
+  "maintenanceTitle": "Restaurando una copia",
+  "maintenanceBody": "hackOS volverá en unos minutos. Esta página se recarga sola.",
+  "maintenanceFailedBody": "La restauración necesita a un administrador. Esta página se recarga cuando se resuelva."
 }

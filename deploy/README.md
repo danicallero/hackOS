@@ -120,7 +120,7 @@ Producción mantiene un único fichero plano fuera del repositorio:
 
 | Fichero | Contenido | Plantilla |
 |---|---|---|
-| `/etc/hackos/hackos.env` (`0600`) | Toda la configuración y los secretos del runtime: imagen, dominios, puertos, credenciales, correo, R2, fixtures y material Wallet. | [`deploy/.env.example`](./.env.example) |
+| `/etc/hackos/hackos.env` (`0600`) | Toda la configuración y los secretos del runtime: imagen, dominios, puertos, credenciales, correo, backups S3, fixtures y material Wallet. | [`deploy/.env.example`](./.env.example) |
 
 No se debe duplicar una clave. La plantilla contiene nombres y valores de
 ejemplo, nunca secretos reales; el fichero real se crea y edita fuera del
@@ -199,10 +199,10 @@ sobrescritura devuelve este valor. Sin clave, el worker sigue enviando las
 Live Updates de Android y omite iOS con un aviso. Alta de la clave y
 credenciales EAS: [docs/live-activities.md](../docs/live-activities.md).
 
-Los backups opcionales de Cloudflare R2 usan `R2_ENDPOINT`, `R2_BUCKET` y
-`R2_PREFIX`, y `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` en el fichero
+Los backups opcionales en AWS S3 usan `BACKUP_S3_REGION`, `BACKUP_S3_BUCKET` y
+`BACKUP_S3_PREFIX`, y `BACKUP_S3_ACCESS_KEY_ID`/`BACKUP_S3_SECRET_ACCESS_KEY` en el fichero
 combinado. El helper exige
-`R2_BACKUPS_ENABLED=true` antes de transmitir nada.
+`BACKUPS_ENABLED=true` antes de transmitir nada.
 
 La pareja `MINIO_ROOT_*` sólo se entrega a `minio` y `minio-init`. El helper
 `minio-init` usa además `S3_ACCESS_KEY`/`S3_SECRET_KEY` para crear, de forma
@@ -468,7 +468,7 @@ and executes the deployment with `incus exec`; the staging workflow uses the
 equivalent SSH transfer on the ARM64 host. The host-local environment files
 are validated without printing values, a `flock` lock prevents concurrent
 deployments, selected images are pulled with Compose's `always` policy and
-their OCI revision label must match the requested commit, the optional R2
+their OCI revision label must match the requested commit, the optional S3
 backup and `migrate` run only for an API-image change, and healthchecks gate
 each changed unit.
 Neither workflow decrypts SOPS, receives application secrets from Actions, or
@@ -538,10 +538,10 @@ COMPOSE=(docker compose --env-file "$CONFIG" -f deploy/docker-compose.yml)
 # 3. Asegurar el bucket S3. Es idempotente.
 "${COMPOSE[@]}" run --rm minio-init
 
-# 4. Si R2_BACKUPS_ENABLED=true, ejecutar el backup antes de modificar el
+# 4. Si BACKUPS_ENABLED=true, ejecutar el backup antes de modificar el
 #    esquema. El script usa los mismos ficheros de entorno y toma el lock.
-if grep -q '^R2_BACKUPS_ENABLED=true$' "$CONFIG"; then
-  /opt/hackos/backup-r2.sh production
+if grep -q '^BACKUPS_ENABLED=true$' "$CONFIG"; then
+  /opt/hackos/backup.sh production
 fi
 
 # 5. Ejecutar explícitamente la migración one-shot.
@@ -747,9 +747,11 @@ outbox; MinIO contiene ficheros y logos. Valkey es deliberadamente efímero:
 BullMQ sólo marca el reloj y la señal realtime, mientras el estado durable
 permanece en PostgreSQL.
 
-Antes de un evento, verificar una restauración de PostgreSQL y MinIO. Con R2
-activado, `backup-r2.sh` guarda un dump custom de PostgreSQL, el bucket MinIO y
-un manifiesto bajo `R2_PREFIX/<environment>/<timestamp>/`. No borrar ni
+Antes de un evento, verificar una restauración de PostgreSQL y MinIO. Con los
+backups activados, `backup.sh` guarda un dump custom de PostgreSQL y un
+manifiesto (imagen, última migración, tamaño y ETag del dump) bajo
+`BACKUP_S3_PREFIX/<environment>/snapshots/<timestamp>/`, y refleja el bucket MinIO de
+forma incremental en `BACKUP_S3_PREFIX/<environment>/minio/`. No borrar ni
 recrear `/mnt/data` para actualizar imágenes.
 
 `S3_PUBLIC_URL` debe ser una URL HTTPS de un ingress de objetos accesible por
@@ -758,44 +760,58 @@ el host; el ingress S3 debe
 proporcionar el camino hasta su API sin publicar la consola. Los ficheros
 privados siguen pasando por el API.
 
-## Backups en Cloudflare R2
+## Backups en AWS S3
 
-R2 expone una API compatible con S3. Crear manualmente un bucket privado y un
-token de API limitado a ese bucket con permisos Object Read & Write; el
-endpoint tiene la forma `https://<account-id>.r2.cloudflarestorage.com`.
-Configurar entonces:
+Crear manualmente un bucket privado en una sola región (sin replicación entre
+regiones) y un usuario IAM exclusivo para backups. El coste esperado es de
+céntimos al mes: el dump está comprimido y el mirror de MinIO es incremental.
+Configuración del bucket, pensada para no pagar de más:
+
+- Bloquear todo acceso público y cifrar con SSE-S3 (gratuito; SSE-KMS cobra
+  por petición y no aporta aquí).
+- Versionado activo, con regla de ciclo de vida: expirar versiones no vigentes a
+  los 7 días, expirar `BACKUP_S3_PREFIX/<environment>/snapshots/` a los 35 días y
+  abortar subidas multipart incompletas a los 2 días. No usar Object Lock ni
+  Glacier: los objetos son pequeños y el mínimo de permanencia costaría más
+  de lo que ahorra.
+- Política IAM mínima: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket`,
+  `s3:GetBucketLocation` y `s3:AbortMultipartUpload` sobre el bucket y el
+  prefijo. Sin `s3:DeleteObject`: un servidor comprometido no puede borrar
+  los backups; la expiración la hace el ciclo de vida.
+- Un presupuesto AWS (Budgets) con aviso a unos pocos euros.
 
 ```text
 # /etc/hackos/hackos.env
-R2_BACKUPS_ENABLED=true
-R2_BACKUP_FREQUENCY=daily # disabled, daily, weekly or monthly
-R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
-R2_BUCKET=hackos-backups
-R2_PREFIX=hackos
+BACKUPS_ENABLED=true
+BACKUP_FREQUENCY=daily # disabled, daily, weekly or monthly
+BACKUP_S3_REGION=eu-west-1
+BACKUP_S3_BUCKET=hackos-backups
+BACKUP_S3_PREFIX=hackos
 
 # /etc/hackos/hackos.env (chmod 600)
-R2_ACCESS_KEY_ID=...
-R2_SECRET_ACCESS_KEY=...
+BACKUP_S3_ACCESS_KEY_ID=...
+BACKUP_S3_SECRET_ACCESS_KEY=...
 ```
 
-La primera copia puede probarse dentro del LXC con:
+La primera copia puede probarse dentro del LXC con (o desde el shell de
+operador: `services.sh production backups create`):
 
 ```sh
-/opt/hackos/backup-r2.sh production
+/opt/hackos/backup.sh production
 ```
 
 La infraestructura instala el timer al aplicar la configuración del LXC. Usa
-`R2_BACKUP_FREQUENCY=disabled` para no programarlo, o `daily`, `weekly` o
+`BACKUP_FREQUENCY=disabled` para no programarlo, o `daily`, `weekly` o
 `monthly` después de validar las credenciales y una restauración. La frecuencia
 no acepta expresiones cron arbitrarias; así una edición del `.env` no puede
 inyectar opciones en systemd. Staging debe usar su propio `.env`, credenciales
 y timer, nunca el de producción.
 
-La política de retención debe configurarse en el bucket R2 (por ejemplo,
-eliminación de objetos antiguos tras 90 días) y debe validarse una restauración
-antes del primer evento. Este helper no descifra SOPS ni imprime credenciales;
-la programación periódica mediante un timer del LXC queda gestionada por la
-configuración de infraestructura, no por un despliegue de aplicación.
+El manifiesto se escribe el último: un snapshot sin `manifest.txt` está
+incompleto y no debe restaurarse. Debe validarse una restauración antes del
+primer evento. Este helper no descifra SOPS ni imprime credenciales; la
+programación periódica queda gestionada por la configuración de
+infraestructura, no por un despliegue de aplicación.
 
 ## Archivos canónicos
 
@@ -805,12 +821,16 @@ configuración de infraestructura, no por un despliegue de aplicación.
 - [`.secrets.example`](./.secrets.example): secretos separados de staging.
 - [`scripts/check-env.sh`](./scripts/check-env.sh): validación previa sin
   revelar secretos.
-- [`scripts/backup-r2.sh`](./scripts/backup-r2.sh): backup opt-in de PostgreSQL
-  y MinIO a R2.
+- [`scripts/backup.sh`](./scripts/backup.sh): backup opt-in de PostgreSQL
+  y MinIO a AWS S3, más `list`, `status`, `verify`, `restore`, `undo` y `unlock`
+  (ver [`docs/backup-restore.md`](../docs/backup-restore.md)); también desde
+  `services.sh <environment> backups …` y el menú del shell.
+- [`qualification/backup-restore-drill.sh`](./qualification/backup-restore-drill.sh):
+  ensayo local de backup, restauración y deshacer; CI lo ejecuta cada mes.
 - [`scripts/services.sh`](./scripts/services.sh): operaciones seguras de estado,
   logs y ciclo de vida para los proyectos staging y production.
 - La infraestructura genera las unidades systemd del backup a partir de
-  `R2_BACKUP_FREQUENCY`.
+  `BACKUP_FREQUENCY`.
 - [`../docs/env-vars.md`](../docs/env-vars.md): contrato de variables por
   proceso.
 

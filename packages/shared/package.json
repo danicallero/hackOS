@@ -13,6 +13,7 @@
     "./event-time": "./src/event-time.ts",
     "./events": "./src/events.ts",
     "./live-activities": "./src/live-activities.ts",
+    "./maintenance": "./src/maintenance.ts",
     "./locale": "./src/locale.ts",
     "./notification-automation": "./src/notification-automation.ts",
     "./notification-channels": "./src/notification-channels.ts",

@@ -309,6 +309,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/public/degrees/propose` | authenticated + email-verification:caller |
 | GET | `/api/public/event` | public:public-content |
 | GET | `/api/public/food-intolerances` | public:public-content |
+| GET | `/api/public/maintenance` | public:health |
 | GET | `/api/public/projects` | public:public-content |
 | GET | `/api/public/projects/:id` | public:public-content |
 | GET | `/api/public/projects/:id/files` | public:public-content |

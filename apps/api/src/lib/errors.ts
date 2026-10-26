@@ -1,3 +1,5 @@
+import { MAINTENANCE_CODE, MAINTENANCE_STATUS } from "@hackos/shared/maintenance";
+
 /**
  * Explicit business-error model (plan/02: "estados de error explícitos, sin
  * silencios"). Route handlers throw AppError subclasses; the global error
@@ -52,6 +54,13 @@ export class ConflictError extends AppError {
 export class UpgradeRequiredError extends AppError {
   constructor(details: { minBuild: number; build: number }) {
     super(426, "upgrade_required", "This version of the app is no longer supported", details);
+  }
+}
+
+/** A database restore holds the maintenance lock; clients show a waiting screen (#539). */
+export class MaintenanceError extends AppError {
+  constructor(details: { phase: string; startedAt: string | null; etaAt: string | null }) {
+    super(MAINTENANCE_STATUS, MAINTENANCE_CODE, "hackOS is being restored from a backup", details);
   }
 }
 

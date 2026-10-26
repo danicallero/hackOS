@@ -987,5 +987,8 @@
   "notificationOnboardingTitle": "Choose how we reach you",
   "notificationOnboardingWithApp": "With this app signed in, these notices arrive here instead of email. Turn email on if you want it as well.",
   "notificationOnboardingNoApp": "Without the app signed in, queue calls always reach you by email; activity reminders and challenges do too unless you turn email off.",
-  "notificationsMandatoryHint": "Queue calls always arrive in the app. Email is optional while this phone is signed in; without it, they reach you by email."
+  "notificationsMandatoryHint": "Queue calls always arrive in the app. Email is optional while this phone is signed in; without it, they reach you by email.",
+  "maintenanceTitle": "Restoring a backup",
+  "maintenanceBody": "hackOS will be back shortly. The app resumes on its own.",
+  "maintenanceFailedBody": "The restore needs an administrator. The app resumes once it is resolved."
 }

@@ -169,6 +169,12 @@ const envSchema = z.object({
    */
   MOBILE_MIN_BUILD: z.coerce.number().int().min(0).max(1_000_000).default(0),
 
+  /**
+   * Directory holding the host-written `state.json` maintenance lock (#539).
+   * Unset disables the gate (local dev and tests); Compose mounts it read-only.
+   */
+  MAINTENANCE_DIR: z.string().min(1).optional(),
+
   LOG_LEVEL: z.string().default("info"),
   /** Emit redacted Expo push ticket metadata, including receipt IDs, when debugging delivery. */
   LOG_EXPO_PUSH_TICKETS: z

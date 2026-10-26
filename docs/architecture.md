@@ -464,7 +464,7 @@ Staging keeps the existing pair `/etc/hackos/hackos.env` and
 LXC must mount the persistent Incus
 volume at `/mnt/data`; the deploy script refuses a production run without that
 mount. It pulls the pinned images, runs `minio-init`, optionally backs up to
-R2, runs `migrate`, then recreates API, worker and web. Compose healthchecks are
+S3, runs `migrate`, then recreates API, worker and web. Compose healthchecks are
 the handoff gate.
 
 The same project can be copied to another isolated host by using a separate
