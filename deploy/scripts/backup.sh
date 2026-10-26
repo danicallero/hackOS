@@ -22,6 +22,12 @@ case "$environment" in
     exit 2
     ;;
 esac
+# Only production is backed up. The drill (deploy/qualification) runs the script
+# under the staging project name against throwaway containers and opts in here.
+if [[ "$environment" != production && "${HACKOS_BACKUP_DRILL:-}" != true ]]; then
+  echo "ERROR: backups are production-only" >&2
+  exit 2
+fi
 command="${2:-create}"
 shift $(($# > 2 ? 2 : $#))
 case "$command" in
@@ -416,10 +422,10 @@ create_snapshot() {
   fi
   rm -f "$pg_error"
 
-  # Objects are written once and keyed by the database, so one incremental mirror
-  # per environment replaces a full copy per snapshot (S3 storage is billed per
-  # GB-month). Nothing is removed: a restored database may reference files that
-  # were deleted after the snapshot. Bucket versioning keeps overwrites recoverable.
+  # Only the latest version of each file is kept: one incremental mirror
+  # replaces a full copy per snapshot (S3 storage is billed per GB-month) and
+  # the bucket is not versioned. Nothing is removed, because a restored database
+  # may still reference a file deleted after the snapshot.
   export BACKUP_S3_OBJECT_PREFIX="$SNAP_ROOT/minio"
   run_quiet "MinIO backup" mc_offsite \
     'mc mirror --overwrite "local/$S3_BUCKET" "offsite/$BACKUP_S3_BUCKET/$BACKUP_S3_OBJECT_PREFIX"'
