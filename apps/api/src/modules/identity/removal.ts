@@ -23,8 +23,8 @@ import {
   type PresenceEvent,
 } from "../logistics/estimate.js";
 import { expireGoogleObject } from "../logistics/google-wallet.js";
-import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet.js";
 import type { GoogleObjectType } from "../logistics/wallet-passes.js";
+import { PASS_TYPE_IDENTIFIER } from "../logistics/wallet-passes.js";
 import { queueEntryFixtureMarkers } from "../queue/broadcast.js";
 import { REPO_MEMBER_RELATION_SQL } from "../queue/membership.js";
 import { type DeletedQueueEntryNotification, notifyDeletedQueueEntries } from "../queue/notify.js";

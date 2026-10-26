@@ -156,7 +156,7 @@ function assertValidDetachedSignature(manifest: Buffer, signature: Buffer) {
 
 describe("H28 Apple Wallet PassKit", () => {
   it("issues a ticket pkpass signed with a real, verifiable signature", async () => {
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const uid = await createUser({ name: "Wallet" });
     await issueTicket(uid, "ticket-wallet-1");
 
@@ -367,7 +367,7 @@ describe("H28 Apple Wallet PassKit", () => {
 
   it("pushes every Apple pass when event config actually changes, but not on a no-op save (H28, H45/H47)", async () => {
     const { pool } = await import("../../src/db/pool.js");
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const uid = await createUser();
     await issueTicket(uid, "ticket-wallet-refresh");
     await app.inject({
@@ -431,7 +431,7 @@ describe("H28 Apple Wallet PassKit", () => {
   });
 
   it("registers and lists changed serials for an Apple device", async () => {
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const uid = await createUser();
     await issueTicket(uid, "ticket-wallet-2");
     await app.inject({
@@ -465,7 +465,7 @@ describe("H28 Apple Wallet PassKit", () => {
   });
 
   it("accepts tokenless polling only for registered device identifiers (H28)", async () => {
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const { pool } = await import("../../src/db/pool.js");
     const owner = await createUser();
     const other = await createUser();
@@ -523,7 +523,7 @@ describe("H28 Apple Wallet PassKit", () => {
     // sequence (poll, change event, poll again with the stored lastUpdated)
     // could answer 204 and the device never refetched, which is how both
     // APNs pushes and pull-to-refresh looked "broken".
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const { pool } = await import("../../src/db/pool.js");
     const uid = await createUser();
     await issueTicket(uid, "ticket-wallet-poll");
@@ -630,7 +630,7 @@ describe("H28 Apple Wallet PassKit", () => {
   });
 
   it("serves Last-Modified and answers 304 until the pass actually changes (H28)", async () => {
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     const { pool } = await import("../../src/db/pool.js");
     const uid = await createUser();
     await issueTicket(uid, "ticket-wallet-304");
@@ -1002,8 +1002,9 @@ describe("H28 Wallet deployment defaults", () => {
     const manager = await createUserWithCapabilities([CAPABILITIES.WALLET_MANAGE]);
     const holder = await createUser({ name: "Artwork" });
     await issueTicket(holder, "ticket-artwork");
-    const { uploadWalletArtwork, readWalletArtwork } = await import(
-      "../../src/modules/logistics/wallet-settings.js"
+    const { readWalletArtwork } = await import("../../src/modules/logistics/wallet-settings.js");
+    const { uploadWalletArtwork } = await import(
+      "../../src/modules/logistics/wallet-settings-update.js"
     );
     const image = await sharp({
       create: { width: 375, height: 98, channels: 4, background: "#112233" },
@@ -1143,7 +1144,7 @@ describe("H28 badge rotation syncs both platforms", () => {
     const { processWalletSync } = await import("../../src/modules/logistics/wallet-sync.js");
     await processWalletSync({ data: { passIds: [applePassId, googlePassId] } } as never);
 
-    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet.js");
+    const { PASS_TYPE_IDENTIFIER } = await import("../../src/modules/logistics/wallet-passes.js");
     expect(pushState.lastRequest).toEqual({
       path: "/3/device/push-sync",
       topic: PASS_TYPE_IDENTIFIER,
