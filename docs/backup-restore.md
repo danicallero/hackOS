@@ -84,9 +84,11 @@ restore time to record as the measured RTO on #539.
 
 ## Cost notes
 
-Dumps are compressed, the MinIO mirror is incremental, and the bucket expires
-snapshots after 35 days, so storage stays at a few GB-months. No Object Lock,
-KMS or cross-region replication (all billed per request or per GB). Stale-backup
+Only production is backed up (`backup.sh` refuses staging). Database dumps are
+compressed and expire after 35 days (the lifecycle rule is the retention limit).
+Files are mirrored incrementally and the bucket is not versioned, so only the
+latest version of each file is stored. No Object Lock, KMS or cross-region
+replication (all billed per request or per GB). Stale-backup
 alerting: `status` exits non-zero when the newest snapshot is too old, so any
 cron or monitor that can run a command can page on it; wiring it into Grafana is
 not done yet.

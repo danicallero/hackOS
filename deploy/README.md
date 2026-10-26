@@ -762,18 +762,19 @@ privados siguen pasando por el API.
 
 ## Backups en AWS S3
 
-Crear manualmente un bucket privado en una sola región (sin replicación entre
-regiones) y un usuario IAM exclusivo para backups. El coste esperado es de
-céntimos al mes: el dump está comprimido y el mirror de MinIO es incremental.
-Configuración del bucket, pensada para no pagar de más:
+Sólo se respalda producción. Crear manualmente un bucket privado en una sola
+región (sin replicación entre regiones) y un usuario IAM exclusivo para
+backups. El coste esperado es de céntimos al mes. Configuración del bucket,
+pensada para no pagar de más:
 
 - Bloquear todo acceso público y cifrar con SSE-S3 (gratuito; SSE-KMS cobra
   por petición y no aporta aquí).
-- Versionado activo, con regla de ciclo de vida: expirar versiones no vigentes a
-  los 7 días, expirar `BACKUP_S3_PREFIX/<environment>/snapshots/` a los 35 días y
-  abortar subidas multipart incompletas a los 2 días. No usar Object Lock ni
-  Glacier: los objetos son pequeños y el mínimo de permanencia costaría más
-  de lo que ahorra.
+- **Sin versionado**: de los ficheros sólo se guarda la última versión
+  (`BACKUP_S3_PREFIX/production/minio/`, mirror incremental que no borra).
+- Regla de ciclo de vida que limita las copias de la base de datos: expirar
+  `BACKUP_S3_PREFIX/production/snapshots/` a los 35 días (unas 35 copias con
+  frecuencia diaria; más en días de evento con copias horarias) y abortar
+  subidas multipart incompletas a los 2 días. No usar Object Lock ni Glacier.
 - Política IAM mínima: `s3:PutObject`, `s3:GetObject`, `s3:ListBucket`,
   `s3:GetBucketLocation` y `s3:AbortMultipartUpload` sobre el bucket y el
   prefijo. Sin `s3:DeleteObject`: un servidor comprometido no puede borrar
@@ -804,8 +805,8 @@ La infraestructura instala el timer al aplicar la configuración del LXC. Usa
 `BACKUP_FREQUENCY=disabled` para no programarlo, o `daily`, `weekly` o
 `monthly` después de validar las credenciales y una restauración. La frecuencia
 no acepta expresiones cron arbitrarias; así una edición del `.env` no puede
-inyectar opciones en systemd. Staging debe usar su propio `.env`, credenciales
-y timer, nunca el de producción.
+inyectar opciones en systemd. Staging no se respalda: `backup.sh` rechaza
+ese entorno.
 
 El manifiesto se escribe el último: un snapshot sin `manifest.txt` está
 incompleto y no debe restaurarse. Debe validarse una restauración antes del
