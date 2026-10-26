@@ -275,52 +275,99 @@ export function codeFromScan(raw: string): string {
   }
 }
 
+class BadgeAssignmentChangedError extends Error {}
+
+async function resolvePersonForScan(db: Queryable, code: string) {
+  try {
+    return { userId: await personForCode(db, code), error: null };
+  } catch (error) {
+    if (
+      !(error instanceof AppError) ||
+      !["diary_code_unknown", "badge_revoked"].includes(error.code)
+    )
+      throw error;
+    return { userId: null, error };
+  }
+}
+
+/** A combined tag keeps the person as the primary entry for older clients. */
+export interface DiaryScanResult extends DiaryEntry {
+  relatedEntries?: DiaryEntry[];
+}
+
 /**
- * Save whatever was scanned: a company tag (NFC UID, QR token or its link),
- * or a person's badge or ticket. A person's badge only ever saves that person
- * (a sponsor rep's badge never grants their company). Nothing about a person
- * is revealed unless their profile is visible right now; otherwise the answer
- * is `profile_not_shared` and nothing is stored. A person scan is mutual
- * (#935): in the same transaction the scanned person's diary also gets the
- * scanner, but only while the scanner's own profile is visible (the scanned
- * person must never learn who did not opt in). No notification is pushed;
- * the scanned person's diary shows the entry on its next refetch.
+ * #935: a UID may identify both a person and an explicitly linked company.
+ * Save each currently public destination in the same transaction. A hidden,
+ * revoked or self person must not prevent collecting an available stand, nor
+ * may an unavailable stand prevent saving a shared person. Only person scans
+ * are reciprocal; a combined result presents the person first.
  */
-export async function saveScanned(owner: number, scanned: string) {
-  const code = codeFromScan(scanned);
-  return withTransaction(async (db) => {
-    // Resolve the code before locking: a person scan locks both accounts in
-    // id order, which needs the target's id first.
-    await assertAttendee(db, owner);
-    const stand = await standEnterpriseForCode(db, code);
-    if (stand !== null) {
-      await lockOwner(db, owner);
-      const { enterpriseId } = stand;
-      // Staff decide which stands can be collected (0703); a stand that is
-      // not scannable answers like an unrevealed sponsor and names no one.
-      const cards = stand.scannable
-        ? await visibleSponsorCards(db, [enterpriseId])
-        : new Map<number, SponsorCard>();
-      if (!cards.has(enterpriseId)) {
-        throw new AppError(409, "stand_unavailable", "This sponsor is not available yet");
-      }
-      return save(db, owner, { enterpriseId });
+export async function saveScanned(
+  owner: number,
+  scanned: string,
+): Promise<{ created: boolean; entry: DiaryScanResult }> {
+  const rawCode = codeFromScan(scanned);
+  const code = /^[0-9a-f]{14}$/i.test(rawCode) ? rawCode.toUpperCase() : rawCode;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await withTransaction(async (db) => {
+        await assertAttendee(db, owner);
+        const stand = await standEnterpriseForCode(db, code);
+        const cards = stand?.scannable
+          ? await visibleSponsorCards(db, [stand.enterpriseId])
+          : new Map<number, SponsorCard>();
+        const collectStand = stand !== null && cards.has(stand.enterpriseId);
+        const resolved = await resolvePersonForScan(db, code);
+        let { userId } = resolved;
+        let personError = resolved.error;
+        if (userId === owner) {
+          personError = new AppError(409, "diary_self", "This is your own badge");
+          userId = null;
+        }
+        // Resolve before locking so mutual scans always lock accounts in id order.
+        const targetUsable = userId !== null ? await lockPair(db, owner, userId) : false;
+        if (userId === null) await lockOwner(db, owner);
+        // #935: the first read may have preceded a concurrent reassignment. Once
+        // both accounts are locked, validate again; retry from scratch to acquire
+        // the latest pair in id order rather than storing the old badge holder.
+        const current = await resolvePersonForScan(db, code);
+        if (current.userId !== resolved.userId || current.error?.code !== resolved.error?.code) {
+          throw new BadgeAssignmentChangedError();
+        }
+        const people = userId !== null ? await visibleDirectoryEntries(db, [userId, owner]) : null;
+        let personSaved: { created: boolean; entry: DiaryEntry } | null = null;
+        if (userId !== null && targetUsable && people?.has(userId)) {
+          personSaved = await save(db, owner, { userId });
+          if (people.has(owner)) await insertEntry(db, userId, { userId: owner });
+        } else if (userId !== null) {
+          personError = new AppError(
+            409,
+            "profile_not_shared",
+            "This person does not share a profile",
+          );
+        }
+        const standSaved =
+          collectStand && stand
+            ? await save(db, owner, { enterpriseId: stand.enterpriseId })
+            : null;
+        if (personSaved) {
+          return {
+            created: personSaved.created || (standSaved?.created ?? false),
+            entry: standSaved
+              ? { ...personSaved.entry, relatedEntries: [standSaved.entry] }
+              : personSaved.entry,
+          };
+        }
+        if (standSaved) return standSaved;
+        if (stand !== null)
+          throw new AppError(409, "stand_unavailable", "This sponsor is not available yet");
+        throw personError ?? new AppError(404, "diary_code_unknown", "Code not recognized");
+      });
+    } catch (error) {
+      if (!(error instanceof BadgeAssignmentChangedError)) throw error;
     }
-    const userId = await personForCode(db, code);
-    if (userId === owner) {
-      throw new AppError(409, "diary_self", "This is your own badge");
-    }
-    const targetUsable = await lockPair(db, owner, userId);
-    const people = await visibleDirectoryEntries(db, [userId, owner]);
-    if (!people.has(userId)) {
-      throw new AppError(409, "profile_not_shared", "This person does not share a profile");
-    }
-    const saved = await save(db, owner, { userId });
-    if (targetUsable && people.has(owner)) {
-      await insertEntry(db, userId, { userId: owner });
-    }
-    return saved;
-  });
+  }
+  throw new ConflictError("Badge assignment changed; scan again");
 }
 
 export async function updateEntry(owner: number, entryId: number, input: UpdateEntryInput) {

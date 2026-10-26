@@ -88,7 +88,7 @@ describe("stand tags", () => {
     expect((await scan("04a1b2c3d4e5f6")).statusCode).toBe(200);
   });
 
-  it("rejects malformed UIDs and codes already used by a stand, badge or ticket", async () => {
+  it("rejects malformed or duplicate stand codes while allowing person badges", async () => {
     expect((await addTag({ kind: "nfc", uid: "04A1" })).statusCode).toBe(400);
     expect((await addTag({ kind: "qr", uid: "04A1B2C3D4E5F6" })).statusCode).toBe(400);
     expect((await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6" })).statusCode).toBe(201);
@@ -99,8 +99,27 @@ describe("stand tags", () => {
       `UPDATE users SET badge_id = '04000000000001', badge_id_history = ARRAY['04000000000002'] WHERE id = $1`,
       [person],
     );
-    expect((await addTag({ kind: "nfc", uid: "04000000000001" })).statusCode).toBe(409);
-    expect((await addTag({ kind: "nfc", uid: "04000000000002" })).statusCode).toBe(409);
+    expect((await addTag({ kind: "nfc", uid: "04000000000001" })).statusCode).toBe(201);
+    expect((await addTag({ kind: "nfc", uid: "04000000000002" })).statusCode).toBe(201);
+  });
+
+  it("returns one successful company claim and one conflict for a concurrent UID assignment", async () => {
+    const { rows } = await pool.query(
+      `INSERT INTO enterprises (name) VALUES ('Other') RETURNING id`,
+    );
+    const results = await Promise.all([
+      addTag({ kind: "nfc", uid: "04000000000003" }),
+      addTag({ kind: "nfc", uid: "04000000000003" }, admin, rows[0].id),
+    ]);
+    expect(results.map((result) => result.statusCode).sort((a, b) => a - b)).toEqual([201, 409]);
+    expect(results.find((result) => result.statusCode === 409)?.json().error.details).toEqual({
+      code: "stand_tag_in_use",
+      usedBy: "stand",
+    });
+    const stored = await pool.query(
+      `SELECT count(*)::int AS count FROM sponsor_stand_tags WHERE code = '04000000000003'`,
+    );
+    expect(stored.rows[0].count).toBe(1);
   });
 
   it("removes a tag and refuses accounts that are neither admin nor rep", async () => {
@@ -206,7 +225,7 @@ describe("stand tags", () => {
     ]);
   });
 
-  it("refuses a stand tag as someone's badge at accreditation", async () => {
+  it("allows a stand tag as someone's badge at accreditation", async () => {
     await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6" });
     const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const uid = await createUser({ name: "Grace" });
@@ -217,16 +236,12 @@ describe("stand tags", () => {
       headers: asUser(staff),
       payload: { ticketToken: token, badgeId: "04A1B2C3D4E5F6", method: "nfc" },
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error).toMatchObject({
-      message: "This wristband is a company tag; use an unassigned one",
-      details: { code: "company_tag" },
-    });
+    expect(res.statusCode).toBe(200);
     const { rows } = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid]);
-    expect(rows[0].badge_id).toBeNull();
+    expect(rows[0].badge_id).toBe("04A1B2C3D4E5F6");
   });
 
-  it("refuses a company-tag wristband when replacing someone's badge", async () => {
+  it("allows a company-tag wristband when replacing someone's badge", async () => {
     await addTag({ kind: "nfc", uid: "04A1B2C3D4E5F6" });
     const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
     const uid = await createUser({ name: "Ada" });
@@ -237,13 +252,12 @@ describe("stand tags", () => {
       headers: asUser(staff),
       payload: { userId: uid, newBadgeId: "04A1B2C3D4E5F6", reason: "lost" },
     });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().error.details).toEqual({ code: "company_tag" });
+    expect(res.statusCode).toBe(200);
     const { rows } = await pool.query(`SELECT badge_id FROM users WHERE id = $1`, [uid]);
-    expect(rows[0].badge_id).toBe("04000000000009");
+    expect(rows[0].badge_id).toBe("04A1B2C3D4E5F6");
   });
 
-  it("says a wristband that is or was a badge is already a badge", async () => {
+  it("accepts current and previous badges without changing their person assignments", async () => {
     const person = await createUser();
     await pool.query(
       `UPDATE users SET badge_id = '04000000000001', badge_id_history = ARRAY['04000000000002'] WHERE id = $1`,
@@ -251,11 +265,12 @@ describe("stand tags", () => {
     );
     for (const uid of ["04000000000001", "04000000000002"]) {
       const res = await addTag({ kind: "nfc", uid });
-      expect(res.statusCode).toBe(409);
-      expect(res.json().error).toMatchObject({
-        message: "This wristband is already a badge; use an unassigned one",
-        details: { code: "stand_tag_in_use", usedBy: "badge" },
-      });
+      expect(res.statusCode).toBe(201);
     }
+    const { rows } = await pool.query(
+      `SELECT badge_id, badge_id_history FROM users WHERE id = $1`,
+      [person],
+    );
+    expect(rows[0]).toEqual({ badge_id: "04000000000001", badge_id_history: ["04000000000002"] });
   });
 });

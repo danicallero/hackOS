@@ -25,7 +25,12 @@ import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView } from "@/components/symbol";
 import { alert } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
-import { type DiaryEntry, diaryScanErrorKey, upsertDiaryEntry } from "@/lib/diary";
+import {
+  type DiaryEntry,
+  type DiaryScanResult,
+  diaryScanErrorKey,
+  upsertDiaryEntry,
+} from "@/lib/diary";
 import {
   enqueuePendingScan,
   flushPendingScans,
@@ -283,11 +288,16 @@ export function DiaryScreen() {
     scanInFlight.current = true;
     setScanning(true);
     try {
-      const entry = await apiFetch<DiaryEntry>("/api/me/diary/scan", {
+      const entry = await apiFetch<DiaryScanResult>("/api/me/diary/scan", {
         method: "POST",
         headers: JSON_HEADERS(),
         body: JSON.stringify({ code: value }),
       });
+      // #935: a combined tag saves the company without a second animation or
+      // switching away from the person. Refresh even while their reveal runs.
+      if (entry.relatedEntries?.some((related) => related.kind === "sponsor")) {
+        void loadCollection();
+      }
       void haptic("success");
       const isNew =
         entry.kind === "person" &&

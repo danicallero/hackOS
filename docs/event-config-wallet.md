@@ -180,6 +180,12 @@ Existing Google objects carry their own background color, so a class color
 change alone does not recolor those objects. The runtime refresh now also
 patches individual objects.
 
+Module ownership avoids an import cycle (#1144): `wallet-settings.ts` holds
+read/format helpers and deployment defaults and imports no provider or worker
+code; `wallet-settings-update.ts` owns save/reset/artwork writes and enqueues
+`wallet-sync.ts`; `PASS_TYPE_IDENTIFIER` lives in `wallet-passes.ts` so the sync
+worker never imports the pass builder.
+
 Pass bookkeeping in `logistics/wallet-passes.ts` shares the role-graph/user
 lock and entitlement check across issuance and Google resource migration. A
 single local helper inserts and audits new pass records inside the caller’s

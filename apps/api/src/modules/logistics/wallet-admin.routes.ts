@@ -18,11 +18,13 @@ import {
   readBundledAppleArtwork,
   readWalletArtwork,
   readWalletSettings,
+} from "./wallet-settings.js";
+import {
   resetWalletArtwork,
   resetWalletSettings,
   saveWalletSettings,
   uploadWalletArtwork,
-} from "./wallet-settings.js";
+} from "./wallet-settings-update.js";
 
 const protectedApple = [
   "formatVersion",

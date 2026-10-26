@@ -1,5 +1,5 @@
 import "./env.js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import {
@@ -108,6 +108,116 @@ async function rowCount(): Promise<number> {
   const { rows } = await pool.query(`SELECT count(*)::int AS n FROM diary_entries`);
   return rows[0].n;
 }
+
+describe("combined badge assignments (#935)", () => {
+  it("saves both destinations atomically, presents the person, and preserves notes on retries", async () => {
+    const ana = await person("Ana");
+    const acme = await enterprise("Acme");
+    await standTag(acme, ana.badge);
+    const first = await scan(ana.badge);
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({
+      kind: "person",
+      person: { userId: ana.id },
+      relatedEntries: [{ kind: "sponsor", sponsor: { enterpriseId: acme } }],
+    });
+    expect((await list()).json().items).toHaveLength(2);
+    const sponsorId = first.json().relatedEntries[0].id;
+    await pool.query(
+      `UPDATE diary_entries SET note = 'Met at lunch', starred = true WHERE id = $1`,
+      [sponsorId],
+    );
+    const again = await scan(ana.badge.toLowerCase());
+    expect(again.statusCode).toBe(200);
+    expect(again.json().relatedEntries[0]).toMatchObject({
+      id: sponsorId,
+      note: "Met at lunch",
+      starred: true,
+    });
+    expect(await rowCount()).toBe(2);
+  });
+
+  it("collects the stand without exposing a hidden person or saving self", async () => {
+    const hidden = await person("Secret", { visible: false });
+    const acme = await enterprise("Acme");
+    await standTag(acme, hidden.badge);
+    const result = await scan(hidden.badge);
+    expect(result.statusCode).toBe(201);
+    expect(result.json()).toMatchObject({ kind: "sponsor", person: null });
+    expect(result.body).not.toContain("Secret");
+    expect((await scan(hidden.badge, hidden.id)).json().kind).toBe("sponsor");
+    expect((await list()).json().items).toHaveLength(1);
+  });
+
+  it("saves a shared person even when the linked company is unavailable", async () => {
+    const ana = await person("Ana");
+    const acme = await enterprise("Hidden company", "hidden");
+    await standTag(acme, ana.badge);
+    const result = await scan(ana.badge);
+    expect(result.statusCode).toBe(201);
+    expect(result.json()).toMatchObject({ kind: "person", person: { userId: ana.id } });
+    expect(result.json()).not.toHaveProperty("relatedEntries");
+    expect(result.body).not.toContain("Hidden company");
+  });
+
+  it("uses the latest owner instead of badge history and leaves the stand assignment intact", async () => {
+    const old = await person("Old owner");
+    const current = await person("Current owner");
+    const acme = await enterprise("Acme");
+    await standTag(acme, old.badge);
+    await pool.query(
+      `UPDATE users SET badge_id_history = ARRAY[badge_id], badge_id = NULL WHERE id = $1`,
+      [old.id],
+    );
+    await pool.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [old.badge, current.id]);
+    const result = await scan(old.badge);
+    expect(result.json()).toMatchObject({
+      person: { userId: current.id },
+      relatedEntries: [{ sponsor: { enterpriseId: acme } }],
+    });
+    expect(result.body).not.toContain("Old owner");
+  });
+
+  it("rechecks the current assignment after waiting for account locks", async () => {
+    const old = await person("Old owner");
+    const current = await person("Current owner");
+    const db = await pool.connect();
+    let pending: Promise<Awaited<ReturnType<typeof scan>>> | undefined;
+    try {
+      await db.query("BEGIN");
+      await db.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [old.id]);
+      pending = scan(old.badge).then((response) => response);
+      await vi.waitFor(
+        async () => {
+          await db.query("SELECT pg_stat_clear_snapshot()");
+          const { rows } = await db.query(
+            `SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%SELECT account_state FROM users%'`,
+          );
+          expect(rows.length).toBeGreaterThan(0);
+        },
+        { timeout: 5000, interval: 20 },
+      );
+      await db.query(
+        `UPDATE users SET badge_id_history = ARRAY[badge_id], badge_id = NULL WHERE id = $1`,
+        [old.id],
+      );
+      await db.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [old.badge, current.id]);
+      await db.query("COMMIT");
+      const result = await pending;
+      expect(result.statusCode).toBe(201);
+      expect(result.json().person.userId).toBe(current.id);
+      expect(
+        (await list())
+          .json()
+          .items.map((entry: { person: { userId: number } }) => entry.person.userId),
+      ).toEqual([current.id]);
+    } finally {
+      await db.query("ROLLBACK");
+      db.release();
+      if (pending) await pending;
+    }
+  });
+});
 
 describe("scanning people", () => {
   it("saves a visible person's public card by badge, and a re-scan is a no-op", async () => {

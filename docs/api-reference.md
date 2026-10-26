@@ -530,7 +530,9 @@ return `403` with `email_not_verified` before event state advances.
 ### Errors
 Route handlers throw `AppError` subclasses from `lib/errors.ts` — never
 return silent success or swallow a failure. The global error handler
-(`app.ts`) maps them to one stable shape:
+(`app.ts`) maps them to one stable shape. Form-answer validation
+(`validateResponses`, `details.fields`/`details.fieldReasons`) lives in
+`lib/form-validation.ts` and is shared by applications and projects:
 
 ```json
 { "error": { "code": "conflict", "message": "...", "details": {} } }

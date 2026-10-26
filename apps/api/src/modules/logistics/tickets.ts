@@ -5,8 +5,7 @@ import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
-import { PASS_TYPE_IDENTIFIER } from "./wallet.js";
-import { voidTicketPasses } from "./wallet-passes.js";
+import { PASS_TYPE_IDENTIFIER, voidTicketPasses } from "./wallet-passes.js";
 
 /**
  * Creates the permanent entrance credential for any attendee category. The

@@ -36,6 +36,11 @@ export interface DiaryEntry {
   sponsor: DiarySponsor | null;
 }
 
+/** #935: the primary person plus the company saved by the same physical tag. */
+export interface DiaryScanResult extends DiaryEntry {
+  relatedEntries?: DiaryEntry[];
+}
+
 /**
  * Milliseconds of an API timestamp. `apiFetch` goes through Better Auth's
  * client, whose JSON parser revives ISO strings into `Date` objects, so a

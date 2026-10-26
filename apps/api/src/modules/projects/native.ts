@@ -6,7 +6,7 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
-import { validateResponses } from "../applications/service.js";
+import { validateResponses } from "../../lib/form-validation.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { syncFieldLibraries, validateLibraryAnswers } from "../form-libraries/service.js";
 import { hasEventAccess } from "../identity/role.js";
