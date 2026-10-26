@@ -273,7 +273,7 @@ ni dependencias de datos.
 Los valores PEM se guardan como base64 en el fichero de secretos. Nunca se
 bakean en una imagen ni se añaden al repositorio.
 
-## Backups S3
+## Backups S3 (sólo producción)
 
 Cuando `BACKUPS_ENABLED=true`, el helper exige una región AWS, un bucket y
 prefijo válidos, y las dos credenciales IAM. Crea un dump custom de

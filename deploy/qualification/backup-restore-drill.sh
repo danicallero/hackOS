@@ -124,7 +124,7 @@ chmod 600 "$work/hackos.env"
 
 export HACKOS_APP_DIR="$work" HACKOS_COMPOSE_FILE="$work/docker-compose.yml" HACKOS_CONFIG_FILE="$work/hackos.env" \
   HACKOS_SECRETS_FILE="$work/none" HACKOS_LOCK_FILE="$work/.lock" HACKOS_BACKUP_S3_ENDPOINT=http://fake-s3:9000 \
-  HACKOS_DRAIN_SECONDS=3
+  HACKOS_DRAIN_SECONDS=3 HACKOS_BACKUP_DRILL=true
 
 c() { docker compose --env-file "$work/hackos.env" -p "$project" -f "$work/docker-compose.yml" "$@"; }
 backup() { "$backup_sh" staging "$@"; }
