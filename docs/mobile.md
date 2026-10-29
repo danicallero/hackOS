@@ -2572,10 +2572,16 @@ credential and the API revalidates tickets on replay, with the same repeat
 confirmation and idempotency as badge scans. Scanner lookup errors appear
 centered below the statistics on both screens and dismiss after six seconds.
 
-Activity/meal scans refresh the shared pending queue immediately after durable local
+All operational scans (activities/meals, presence and badge operations) refresh
+the shared pending queue immediately after durable local
 storage. Reader and manual input availability do not wait for replay, snapshot or
 statistics requests. Sync verdicts update only the matching result, and local
 activity counts remain part of repeat detection when a server snapshot is stale.
+Scanner replay, snapshot and badge-assignment requests time out after five seconds;
+network timeouts retain the original idempotency key and queue the mutation.
+Badge assignment remains authoritative only after server acknowledgement. Contact
+scans and their separate replay queue use the same request deadline and retain
+their existing offline fallback.
 
 ## Switches
 
