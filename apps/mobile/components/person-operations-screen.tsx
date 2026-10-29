@@ -521,6 +521,29 @@ export function PersonOperationsScreen({
     ]);
   }
 
+  async function synchronizePresenceScan(scanId: string) {
+    if (ownerUserId === undefined) return;
+    try {
+      const snapshot = await sync.sync();
+      // The offline queue fails 4xx replays permanently (e.g. an entry while
+      // a session is already open) — without this check the rejection is
+      // invisible and the log just never appears.
+      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+      if (stored?.status === "failed") {
+        void haptic("error");
+        alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
+      } else if (stored?.status === "acknowledged") {
+        void haptic("success");
+      } else {
+        void haptic("light");
+      }
+      if (snapshot) await load(snapshot);
+      await refreshPresence();
+    } catch (cause) {
+      alert(t("requestError"), errorText(cause, t, t("requestError")));
+    }
+  }
+
   async function registerPresence(direction: "in" | "out") {
     if (!person?.badgeId || ownerUserId === undefined || busy) return;
     const scannedAt = new Date();
@@ -541,23 +564,7 @@ export function PersonOperationsScreen({
         lastPresenceAt: scannedAt.toISOString(),
       });
       await sync.refreshLocal();
-      void (async () => {
-        const snapshot = await sync.sync();
-        // The offline queue fails 4xx replays permanently (e.g. an entry while
-        // a session is already open) — without this check the rejection is
-        // invisible and the log just never appears.
-        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-        if (stored?.status === "failed") {
-          void haptic("error");
-          alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
-        } else if (stored?.status === "acknowledged") {
-          void haptic("success");
-        } else {
-          void haptic("light");
-        }
-        if (snapshot) await load(snapshot);
-        await refreshPresence();
-      })().catch((cause) => alert(t("requestError"), errorText(cause, t, t("requestError"))));
+      void synchronizePresenceScan(scanId);
     } finally {
       setBusy(false);
     }
@@ -577,20 +584,7 @@ export function PersonOperationsScreen({
         ownerUserId,
       );
       await sync.refreshLocal();
-      void (async () => {
-        const snapshot = await sync.sync();
-        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-        if (stored?.status === "failed") {
-          void haptic("error");
-          alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
-        } else if (stored?.status === "acknowledged") {
-          void haptic("success");
-        } else {
-          void haptic("light");
-        }
-        if (snapshot) await load(snapshot);
-        await refreshPresence();
-      })().catch((cause) => alert(t("requestError"), errorText(cause, t, t("requestError"))));
+      void synchronizePresenceScan(scanId);
     } finally {
       setBusy(false);
     }
