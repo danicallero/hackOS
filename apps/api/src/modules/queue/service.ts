@@ -315,7 +315,6 @@ export async function callNextForRoom(
       if (await isRepoIneligibleForJudging(client, candidate.repo_id)) continue;
       if (
         await findBusyMemberEntry(client, candidate.repo_id, {
-          roomId,
           excludeEntryId: candidate.id,
           fixtureMarker,
         })
@@ -967,7 +966,6 @@ async function assertEntryCanMove(
   fixtureMarker?: boolean,
 ): Promise<void> {
   const busy = await findBusyMemberEntry(client, entry.repo_id, {
-    roomId: entry.assigned_room_id,
     excludeEntryId: entry.id,
     statuses: EVALUATING_STATUSES,
     fixtureMarker,
@@ -1191,7 +1189,6 @@ export async function manualCall(
     }
     if (
       await findBusyMemberEntry(client, entry.repo_id, {
-        roomId,
         excludeEntryId: entry.id,
         fixtureMarker,
       })

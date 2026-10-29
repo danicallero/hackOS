@@ -1,6 +1,6 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { SCAN_REPLAY_EXPIRED, SCANNER_REPLAY_MAX_AGE_DAYS } from "@hackos/shared/idempotency";
-import { ApiError, apiFetch, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
+import { ApiError, CLOCK_SKEW_TOLERANCE_MS, getClockSkewMs } from "./api";
 import { apiErrorReason, scanFailureCode } from "./api-error-reason";
 import { authClient } from "./auth-client";
 import { createIdempotencyKey } from "./idempotency-key";
@@ -16,6 +16,7 @@ import {
   pendingScans,
 } from "./scanner-db";
 import { requestForPendingScan, requestForScanPayload } from "./scanner-model";
+import { scannerFetch } from "./scanner-request";
 import type { PendingScan, ScannerSnapshot, ScanPayload } from "./scanner-types";
 
 interface SyncState {
@@ -63,7 +64,7 @@ export async function submitScannerMutation(
   const scanId = createIdempotencyKey();
   const request = requestForScanPayload(payload, scanId);
   try {
-    await apiFetch(request.path, {
+    await scannerFetch(request.path, {
       method: request.method,
       headers: request.headers,
       body: JSON.stringify(request.body),
@@ -159,7 +160,7 @@ async function replay(scan: PendingScan, sessionCookie: string): Promise<void> {
   const headers = isDelete
     ? Object.fromEntries(Object.entries(request.headers).filter(([key]) => key !== "content-type"))
     : request.headers;
-  await apiFetch(request.path, {
+  await scannerFetch(request.path, {
     method: request.method,
     headers,
     body: isDelete ? undefined : JSON.stringify(request.body),
@@ -283,7 +284,7 @@ async function doSync(ownerUserId: number, sessionCookie: string): Promise<Scann
     // the UI, but continue with the authoritative read below.
     localError = cause instanceof Error ? cause : new Error("Local scanner storage failed");
   }
-  const snapshot = await apiFetch<ScannerSnapshot>("/api/scanner/snapshot", {
+  const snapshot = await scannerFetch<ScannerSnapshot>("/api/scanner/snapshot", {
     sessionCookie,
   });
   // Do not make the server response depend on SQLite. A broken or locked

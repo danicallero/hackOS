@@ -51,6 +51,30 @@ async function setup(maxInWaitingArea = 1) {
 }
 
 describe("concurrent transitions: exactly one winner", () => {
+  it.each([
+    "called",
+    "in_room",
+    "presenting",
+  ])("H30 skips a shared member already %s in the destination room", async (status) => {
+    const { challengeId, roomId } = await setup(3);
+    const { createUser } = await import("../helpers.js");
+    const { pool } = await import("../../src/db/pool.js");
+    const shared = await createUser();
+    const { repoId: firstRepo } = await createRepoWithTeam([shared]);
+    const { repoId: secondRepo } = await createRepoWithTeam([shared]);
+    const first = await enqueueRepo(challengeId, firstRepo, 1);
+    const second = await enqueueRepo(challengeId, secondRepo, 2);
+    await pool.query("UPDATE queue_entries SET status = $1, assigned_room_id = $2 WHERE id = $3", [
+      status,
+      roomId,
+      first,
+    ]);
+    const { callNextForRoom } = await import("../../src/modules/queue/service.js");
+    expect(await callNextForRoom(operatorId, roomId)).toBeNull();
+    expect((await getEntry(second)).status).toBe("waiting");
+    expect(await historyRows(second)).toHaveLength(0);
+  });
+
   it("two simultaneous call_next with capacity 1: one 200, one 409, one history row", async () => {
     const { challengeId, roomId } = await setup(1);
     const { repoId } = await createRepoWithTeam();

@@ -128,13 +128,17 @@ jest.mock("@/lib/scanner-db", () => ({
   ]),
   pendingScans: jest.fn().mockResolvedValue([{ id: "scan-1", status: "acknowledged" }]),
 }));
+const mockRunSync = jest.fn().mockResolvedValue(undefined);
+const mockRefreshLocal = jest.fn().mockResolvedValue(undefined);
+let mockQueue = [{ id: "scan-1", status: "acknowledged" }];
 jest.mock("@/lib/use-scanner", () => ({
   useScannerSync: () => ({
-    queue: [],
+    queue: mockQueue,
     syncing: false,
     clockSkewMs: null,
     lastSync: null,
-    sync: jest.fn().mockResolvedValue(undefined),
+    sync: mockRunSync,
+    refreshLocal: mockRefreshLocal,
     retryFailed: jest.fn(),
     retryOne: jest.fn(),
     discardScan: jest.fn(),
@@ -158,14 +162,17 @@ import {
   findPersonByTicket,
   getActivityState,
   listScannerActivities,
-  pendingScans,
 } from "@/lib/scanner-db";
 import { renderMobile } from "./render";
 
 beforeEach(() => {
   jest.spyOn(AppState, "addEventListener").mockImplementation(() => ({ remove: jest.fn() }));
 });
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  mockQueue = [{ id: "scan-1", status: "acknowledged" }];
+  mockRunSync.mockResolvedValue(undefined);
+});
 
 it("uses server occupancy across roles and falls back to the roster after a failed refresh (H24)", async () => {
   const originalParams = mockParams;
@@ -225,7 +232,7 @@ it("keeps an offline meal scan saved and asks before another serving", async () 
   jest
     .mocked(listScannerActivities)
     .mockResolvedValueOnce([{ ...activities[0]!, category: "meal" }]);
-  jest.mocked(pendingScans).mockResolvedValueOnce([]);
+  mockQueue = [{ id: "scan-1", status: "pending" }];
   await renderMobile(<ActivityScannerScreen />);
   expect(await screen.findByText("Saved")).toBeTruthy();
   expect(screen.queryByText("Confirmed")).toBeNull();
@@ -441,4 +448,20 @@ describe("embedded scanner pane (H22, H55)", () => {
       mockParams = originalParams;
     }
   });
+});
+
+it("releases input and publishes local work while the server never responds (H25)", async () => {
+  mockParams = { id: "7", manualBadge: "BADGE-1", manualNonce: "offline" };
+  mockFocused = true;
+  mockRunSync.mockImplementation(() => new Promise(() => {}));
+  mockQueue = [{ id: "scan-1", status: "pending" }];
+  jest.mocked(enqueueLocalScan).mockClear();
+  mockRefreshLocal.mockClear();
+  await renderMobile(<ActivityScannerScreen />);
+  expect(await screen.findByText("Saved")).toBeTruthy();
+  await waitFor(() => expect(mockRefreshLocal).toHaveBeenCalled());
+  await fireEvent.press(screen.getByRole("button", { name: "Close" }));
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Close" })).toBeNull());
+  await act(() => mockReaderProps.onValue("BADGE-2"));
+  await waitFor(() => expect(enqueueLocalScan).toHaveBeenCalledTimes(2));
 });

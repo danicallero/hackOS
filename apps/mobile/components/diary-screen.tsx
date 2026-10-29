@@ -47,6 +47,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { scannerFetch } from "@/lib/scanner-request";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -186,7 +187,7 @@ export function DiaryScreen() {
     flushing.current = true;
     try {
       const { sent, remaining } = await flushPendingScans(userId, (code) =>
-        apiFetch<DiaryEntry>("/api/me/diary/scan", {
+        scannerFetch<DiaryEntry>("/api/me/diary/scan", {
           method: "POST",
           headers: JSON_HEADERS(),
           body: JSON.stringify({ code }),
@@ -288,7 +289,7 @@ export function DiaryScreen() {
     scanInFlight.current = true;
     setScanning(true);
     try {
-      const entry = await apiFetch<DiaryScanResult>("/api/me/diary/scan", {
+      const entry = await scannerFetch<DiaryScanResult>("/api/me/diary/scan", {
         method: "POST",
         headers: JSON_HEADERS(),
         body: JSON.stringify({ code: value }),

@@ -201,15 +201,18 @@ export function PresenceManagement({
               },
               ownerUserId,
             );
-            await sync.sync();
-            const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-            if (stored?.status === "failed") {
-              void haptic("error");
-              alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
-            } else {
-              void haptic("warning");
-            }
-            await load();
+            await sync.refreshLocal();
+            void (async () => {
+              await sync.sync();
+              const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+              if (stored?.status === "failed") {
+                void haptic("error");
+                alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
+              } else {
+                void haptic("warning");
+              }
+              await load();
+            })().catch(() => alert(t("presenceCouldNotDelete")));
           })(),
       },
     ]);
@@ -396,8 +399,8 @@ export function PresenceManagement({
           onClose={() => setDraft(null)}
           onSaved={async () => {
             setDraft(null);
+            void haptic("light");
             await load();
-            void haptic("success");
           }}
           ownerUserId={ownerUserId}
           sync={sync}
@@ -949,7 +952,7 @@ function SignalEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
   ownerUserId: number | undefined;
-  sync: { sync: () => Promise<unknown> };
+  sync: { sync: () => Promise<unknown>; refreshLocal: () => Promise<void> };
   userId: number;
 }) {
   useColorScheme();
@@ -969,13 +972,15 @@ function SignalEditor({
     const notes = draft.notes.trim() || null;
     try {
       const scanId = await enqueueLocalScan(buildDraftPayload(draft, userId, notes), ownerUserId);
-      await sync.sync();
-      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-      if (stored?.status === "failed") {
-        setError(stored.lastError ?? t("presenceCouldNotSave"));
-        return;
-      }
-      await onSaved();
+      await sync.refreshLocal();
+      void (async () => {
+        await sync.sync();
+        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+        if (stored?.status === "failed") {
+          alert(t("presenceCouldNotSave"), stored.lastError ?? undefined);
+        }
+      })().catch(() => alert(t("presenceCouldNotSave")));
+      void onSaved();
     } finally {
       setSaving(false);
     }
