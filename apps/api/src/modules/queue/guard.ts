@@ -3,7 +3,8 @@ import { REPO_MEMBER_RELATION_SQL } from "./membership.js";
 
 /**
  * H30 hard invariant: never call a team if any of its members is already
- * `called`, `in_room` or `presenting` in ANOTHER room. Membership includes the
+ * `called`, `in_room` or `presenting` in any room, including the destination.
+ * Membership includes the
  * authoritative submission row and primary-email fallback used by the
  * project/queue roster.
  * This includes another entry for the same repo when that project competes in
@@ -59,7 +60,6 @@ export async function findBusyMemberEntry(
   client: Queryable,
   repoId: number,
   opts: {
-    roomId?: number | null;
     excludeEntryId?: number | null;
     statuses?: readonly string[];
     fixtureMarker?: boolean;
@@ -93,10 +93,10 @@ export async function findBusyMemberEntry(
      candidate_members AS (
        SELECT user_id FROM repo_members
         WHERE repo_id = $1
-          AND ($5::boolean IS NULL OR EXISTS (
+          AND ($4::boolean IS NULL OR EXISTS (
             SELECT 1 FROM repos candidate_repo
              WHERE candidate_repo.id = $1
-               AND candidate_repo.is_test_account = $5::boolean
+               AND candidate_repo.is_test_account = $4::boolean
           ))
      ),
      blocking AS (
@@ -114,16 +114,15 @@ export async function findBusyMemberEntry(
        FROM blocking b
        JOIN queue_entries qe ON qe.id = b.id
        JOIN repos active_repo ON active_repo.id = qe.repo_id
-                              AND ($5::boolean IS NULL OR active_repo.is_test_account = $5::boolean)
+                              AND ($4::boolean IS NULL OR active_repo.is_test_account = $4::boolean)
        JOIN challenges active_challenge ON active_challenge.id = qe.challenge_id
-                                      AND ($5::boolean IS NULL OR active_challenge.is_test_account = $5::boolean)
+                                      AND ($4::boolean IS NULL OR active_challenge.is_test_account = $4::boolean)
        LEFT JOIN rooms r ON r.id = b.assigned_room_id
-      WHERE b.status = ANY($4::queue_status[])
-        AND ($2::int IS NULL OR b.assigned_room_id IS DISTINCT FROM $2::int)
-        AND ($3::int IS NULL OR b.id <> $3::int)
+      WHERE b.status = ANY($3::queue_status[])
+        AND ($2::int IS NULL OR b.id <> $2::int)
       ORDER BY b.id
       LIMIT 1`,
-    [repoId, opts.roomId ?? null, opts.excludeEntryId ?? null, statuses, fixtureMarker],
+    [repoId, opts.excludeEntryId ?? null, statuses, fixtureMarker],
   );
   const row = rows[0];
   return row

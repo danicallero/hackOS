@@ -2572,6 +2572,11 @@ credential and the API revalidates tickets on replay, with the same repeat
 confirmation and idempotency as badge scans. Scanner lookup errors appear
 centered below the statistics on both screens and dismiss after six seconds.
 
+Activity/meal scans refresh the shared pending queue immediately after durable local
+storage. Reader and manual input availability do not wait for replay, snapshot or
+statistics requests. Sync verdicts update only the matching result, and local
+activity counts remain part of repeat detection when a server snapshot is stale.
+
 ## Switches
 
 Every on/off control uses `AppSwitch` (`components/native-ui.tsx`, also behind

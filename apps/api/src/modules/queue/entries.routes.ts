@@ -103,7 +103,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
     {
       preHandler: [operate, idempotencyGuard],
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_OPERATE } },
-      schema: { params: roomIdParam, body: callNextBody },
+      schema: {
+        params: roomIdParam,
+        body: callNextBody,
+        summary: "Call the next available team",
+        description:
+          "Calls the next eligible waiting team, skipping teams whose members are already called, in a room or presenting in any room, including the destination. Skipped teams keep their position. Force bypasses waiting-area capacity only.",
+      },
     },
     async (req) => {
       const entry = await callNextForRoom(actor(req.userId), req.params.roomId, {

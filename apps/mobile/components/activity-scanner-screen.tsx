@@ -44,7 +44,6 @@ import {
   getActivityState,
   listScannerActivities,
   listScannerPeople,
-  pendingScans,
 } from "@/lib/scanner-db";
 import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
@@ -65,6 +64,7 @@ import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens"
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ActivityScanResult {
+  scanId?: string;
   badgeId: string;
   ticketToken?: string;
   count: number;
@@ -111,7 +111,7 @@ export function ActivityScannerScreen({
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const syncState = useScannerSync();
-  const { sync: runSync, lastSync } = syncState;
+  const { sync: runSync, refreshLocal, lastSync } = syncState;
   const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const focused = useIsFocused();
@@ -276,6 +276,7 @@ export function ActivityScannerScreen({
           ownerUserId,
         );
         setResult({
+          scanId,
           badgeId,
           ticketToken,
           count: count + 1,
@@ -286,30 +287,38 @@ export function ActivityScannerScreen({
         void haptic("light");
         // #966: the staff Live Activity counts distinct people (first scans).
         if (!allowRepeat) void bumpActivityScanned(activityId);
-        await runSync();
-        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-        if (stored?.status === "failed") {
-          void haptic("error");
-          setResult((current) =>
-            current
-              ? {
-                  ...current,
-                  error: stored.lastError ?? t("presenceScanRejectedBody"),
-                  state: "attention",
-                }
-              : current,
-          );
-        } else if (stored?.status === "acknowledged") {
-          void haptic("success");
-          setResult((current) => (current ? { ...current, state: "confirmed" } : current));
-        }
-        await loadStats();
+        await refreshLocal();
+        void runSync()
+          .then(() => loadStats())
+          .catch(() => undefined);
       } finally {
         setRegistering(false);
       }
     },
-    [activityId, loadStats, ownerUserId, runSync, t],
+    [activityId, loadStats, ownerUserId, refreshLocal, runSync],
   );
+
+  useEffect(() => {
+    if (!result?.scanId || result.state !== "saved") return;
+    const scan = syncState.queue.find((item) => item.id === result.scanId);
+    if (scan?.status === "failed") {
+      void haptic("error");
+      setResult((current) =>
+        current?.scanId === scan.id
+          ? {
+              ...current,
+              state: "attention",
+              error: scan.lastError ?? t("presenceScanRejectedBody"),
+            }
+          : current,
+      );
+    } else if (scan?.status === "acknowledged") {
+      void haptic("success");
+      setResult((current) =>
+        current?.scanId === scan.id ? { ...current, state: "confirmed" } : current,
+      );
+    }
+  }, [result, syncState.queue, t]);
 
   const scanned = useCallback(
     async (raw: string) => {
@@ -336,6 +345,7 @@ export function ActivityScannerScreen({
           return;
         }
         const ticketToken = found.person.ticketToken === badgeId ? badgeId : undefined;
+        const localState = await getActivityState(found.person.userId, activityId);
         const state = syncState.serverSnapshot
           ? {
               userId: found.person.userId,
@@ -347,22 +357,23 @@ export function ActivityScannerScreen({
                     candidate.activityId === activityId,
                 )?.count ?? 0,
             }
-          : await getActivityState(found.person.userId, activityId);
+          : localState;
         setError(null);
         setRegistering(false);
-        if (state.count > 0) {
+        const count = Math.max(state.count, localState.count);
+        if (count > 0) {
           void haptic("warning");
           setResult({
             badgeId,
             ticketToken,
-            count: state.count,
+            count,
             person: found.person,
             state: "repeat_pending",
             wasRepeat: true,
           });
           return;
         }
-        await store(found.person, badgeId, false, state.count, ticketToken);
+        await store(found.person, badgeId, false, count, ticketToken);
       } finally {
         setRegistering(false);
       }
