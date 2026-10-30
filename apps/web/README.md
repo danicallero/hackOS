@@ -56,7 +56,7 @@ and title scale. `src/app/globals.css` imports it and exposes the standard
 shadcn/Tailwind utilities; every management page inherits it through the root
 layout. Buttons use `rounded-button`, fields use `rounded-control`, navigation
 uses `rounded-frame`, and shared headings use `font-display` via the type classes.
-Light is the default for new visitors; saved light/dark/system preferences survive.
+New visitors follow the system appearance; saved light/dark/system preferences survive.
 
 For the next edition, update the theme and font assets/loaders rather than
 restyling pages. The source landing, token mapping and step-by-step edition

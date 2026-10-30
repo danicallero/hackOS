@@ -12,7 +12,7 @@ import { SessionProvider } from "@/lib/session";
 
 /**
  * Global client providers, mounted once in the root layout:
- * - next-themes: light-first edition theme, with class strategy on <html>.
+ * - next-themes: follows the system appearance by default, class strategy on <html>.
  * - IconContext: shared Phosphor weight, base size and inherited color.
  * - SessionProvider: /api/me + capability gating (H8/H55).
  * - TooltipProvider: required once for all shadcn tooltips.
@@ -30,7 +30,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // dismisses on click would sit there forever, permanently covering rooms.
   const isKiosk = pathname?.startsWith("/tv");
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <IconContext.Provider value={{ size: 24, weight: "regular", color: "currentColor" }}>
         <SessionProvider>
           <LocaleProvider>
