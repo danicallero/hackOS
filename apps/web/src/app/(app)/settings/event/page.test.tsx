@@ -1,4 +1,4 @@
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -114,8 +114,8 @@ describe("EventSettingsPage", () => {
     caps = new Set(["event:manage"]);
     search = "tab=event";
     await render();
-    expect(liveRefresh.stream).toBe("/api/events/stream?topic=content");
-    expect(liveRefresh.events).toContain(EVENTS.DOMAIN_CHANGED);
+    expect(liveRefresh.stream).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
+    expect(liveRefresh.events).toContain(EVENTS.DATA_CHANGED);
 
     liveRefresh.value = 3;
     await render();

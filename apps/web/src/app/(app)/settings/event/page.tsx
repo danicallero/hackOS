@@ -8,7 +8,7 @@
 // Each category retains its own capability and save scope (H8, H39).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS } from "@hackos/shared/events";
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { BellIcon } from "@phosphor-icons/react/dist/csr/Bell";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
@@ -116,8 +116,10 @@ export default function EventSettingsPage() {
   const canProjectForm = useCan(CAPABILITIES.PROJECTS_EDIT);
   const canDanger = useCan(CAPABILITIES.ADMIN_ALL);
   const canReadEventConfig = canEvent || canVenue || canWallet || canPresence || canInvites;
-  const liveRefresh = useAutoRefresh(canReadEventConfig ? "/api/events/stream?topic=content" : "", [
-    EVENTS.DOMAIN_CHANGED,
+  // Content changes reach the browser as the payload-free public invalidation; the legacy
+  // `/api/events/stream` path is not a realtime scope and the multiplexed stream rejects it.
+  const liveRefresh = useAutoRefresh(canReadEventConfig ? REALTIME_SCOPES.PUBLIC_CONTENT : "", [
+    EVENTS.DATA_CHANGED,
   ]);
   const canByCategory: Record<Category, boolean> = {
     event: canEvent,
