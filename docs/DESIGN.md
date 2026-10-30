@@ -144,7 +144,8 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 Focus uses `--ring`: ink in light mode, pale blue in dark mode. Never use red
 for ordinary field hover or focus; reserve it for invalid and destructive states.
 
-The edition defaults to **light** for new visitors. `next-themes` retains an
+The edition follows the **system appearance** for new visitors (Apple HIG:
+respect the person's choice of light or dark). `next-themes` retains an
 existing light/dark/system preference. Dark mode uses a near-black canvas and
 charcoal surfaces; fields, cards, buttons and dividers share one subtle border
 token in both themes. Edition blue is reserved for interactive accents. Light
@@ -1123,8 +1124,9 @@ workspaces with per-device persistence; conventions in
 - File organisation: when a route outgrows a single `page.tsx`, follow the
   "Page structure" rule in `apps/web/README.md` — split by independently
   meaningful parts (tabs, modals, decision logic), never by line count alone.
-- Landing-derived, light-first edition identity; light and dark both fully supported
-  via `next-themes` — every screen must read correctly in both.
+- Landing-derived edition identity; light and dark both fully supported via
+  `next-themes`, following the system appearance by default — every screen must
+  read correctly in both.
 - Navigation: `lib/nav.ts` (`PERSONAL_NAV` + `WORKSPACES`) rendered by
   `AppSidebar`. Workspaces are collapsible groups; the expanded workspace
   persists per device (`localStorage` `hackos-last-workspace`); the icon rail
