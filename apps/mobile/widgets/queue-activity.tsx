@@ -110,7 +110,9 @@ export const QueueActivityLayout = withLiveActivityKit(
     const room = props.roomName ?? "";
     // Compact island: the part that identifies the room ("Room B" -> "B", a long
     // name -> its first three characters), so it fits the vertical island.
-    const roomWords = room.trim().split(/\s+/);
+    // No regex literal here: the widget function is serialized to a string and
+    // the backslash of `\s` is lost, which split "Room B" on `s` and cut it to "Roo".
+    const roomWords = room.split(" ").filter(Boolean);
     const roomCompact =
       roomWords.length > 1
         ? (roomWords[roomWords.length - 1] ?? "").slice(0, 3)
