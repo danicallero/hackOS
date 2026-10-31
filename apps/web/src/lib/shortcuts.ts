@@ -24,8 +24,7 @@ export const SHORTCUTS = {
   commandPalette: { key: "k", mod: true, label: "quickSearch", allowInEditable: true },
   save: { key: "s", mod: true, label: "saveChanges", allowInEditable: true },
   focusSearch: { key: "/", mod: false, label: "searchList", allowInEditable: false },
-  // Handled by ui/sidebar.tsx (SIDEBAR_KEYBOARD_SHORTCUT); listed here so it
-  // is documented and hinted with the rest.
+  // Handled by SidebarProvider (ui/sidebar.tsx), which matches this entry.
   toggleSidebar: { key: "b", mod: true, label: "toggleSidebar", allowInEditable: true },
 } as const satisfies Record<string, Shortcut>;
 

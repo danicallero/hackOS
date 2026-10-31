@@ -4,6 +4,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGl
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useId, useRef } from "react";
 import { IconButton } from "@/components/common/icon-button";
+import { ShortcutKbd } from "@/components/common/shortcut-hint";
 import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
 import { ariaKeyShortcuts, SEARCH_SHORTCUT_ATTR, SHORTCUTS } from "@/lib/shortcuts";
@@ -54,6 +55,14 @@ export function SearchField({
         {...{ [SEARCH_SHORTCUT_ATTR]: "" }}
         aria-keyshortcuts={ariaKeyShortcuts(SHORTCUTS.focusSearch, false)}
       />
+      {/* An input keeps its hint inline: a tooltip would cover the list while typing. */}
+      {!value && (
+        <ShortcutKbd
+          shortcut="focusSearch"
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 pointer-fine:inline-flex"
+        />
+      )}
       {value && (
         <div className="absolute inset-y-0 right-0.5 z-10 flex items-center">
           <IconButton

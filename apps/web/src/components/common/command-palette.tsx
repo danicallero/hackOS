@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { ShortcutKbd } from "@/components/common/shortcut-hint";
 import { useNavVisibility } from "@/components/layout/app-sidebar";
 import {
   CommandDialog,
@@ -15,7 +16,6 @@ import { useLocale } from "@/lib/i18n";
 import { visibleNavGroups } from "@/lib/nav";
 import {
   focusListSearch,
-  formatShortcut,
   HINTED_SHORTCUTS,
   isApplePlatform,
   SHORTCUTS,
@@ -24,7 +24,6 @@ import {
   toggleCommandPalette,
   triggerShortcutSave,
   useCommandPaletteOpen,
-  useIsApplePlatform,
 } from "@/lib/shortcuts";
 
 /**
@@ -37,7 +36,6 @@ export function CommandPalette() {
   const router = useRouter();
   const pathname = usePathname();
   const isVisible = useNavVisibility();
-  const apple = useIsApplePlatform();
 
   useEffect(() => {
     const isApple = isApplePlatform(navigator);
@@ -101,9 +99,7 @@ export function CommandPalette() {
       >
         {HINTED_SHORTCUTS.map((id) => (
           <li key={id} className="flex items-center gap-1.5">
-            <kbd className="rounded-sm border bg-muted px-1.5 font-sans text-[11px] font-medium text-foreground">
-              {formatShortcut(SHORTCUTS[id], apple)}
-            </kbd>
+            <ShortcutKbd shortcut={id} />
             {t(SHORTCUTS[id].label)}
           </li>
         ))}
