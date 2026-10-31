@@ -14,7 +14,7 @@
 
 .form-action-footer {
   position: sticky;
-  bottom: 0;
+  bottom: var(--cookie-notice-inset, 0px);
   z-index: 10;
   min-height: 3.5rem;
   /* Pages sit on the shell; a form inside a card sets --form-footer-bg to the card. */
@@ -35,5 +35,34 @@
 }
 
 html {
-  scroll-padding-block-end: 6rem;
+  scroll-padding-block-end: calc(6rem + var(--cookie-notice-inset, 0px));
+}
+
+/* The cookie notice floats over the viewport; it publishes --cookie-notice-inset
+   so the page can scroll its last content and actions clear of it (#1179). */
+body {
+  padding-bottom: var(--cookie-notice-inset, 0px);
+}
+
+/* Edge shadows on a table's scroller that appear only toward the side it can
+   still scroll, so a clipped table reads as scrollable (#1178). */
+.table-scroll-cue > [data-slot="table-container"] {
+  background:
+    linear-gradient(to right, var(--card) 30%, transparent) left center / 1.5rem 100% no-repeat
+    local,
+    linear-gradient(to left, var(--card) 30%, transparent) right center / 1.5rem 100% no-repeat
+    local,
+    radial-gradient(
+      farthest-side at 0 50%,
+      color-mix(in srgb, var(--foreground) 24%, transparent),
+      transparent
+    )
+    left center / 0.75rem 100% no-repeat scroll,
+    radial-gradient(
+      farthest-side at 100% 50%,
+      color-mix(in srgb, var(--foreground) 24%, transparent),
+      transparent
+    )
+    right center / 0.75rem 100% no-repeat scroll;
+  background-color: var(--card);
 }
