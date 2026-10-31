@@ -368,6 +368,8 @@ export default function QueuePage() {
       data-wide
       data-judging-page
     >
+      {/* The fixed workspace has no room for a PageHeader; the destination still needs its h1 (#1176). */}
+      <h1 className="sr-only">{t("judging")}</h1>
       <JudgingTopBar
         rooms={rooms}
         activeRoomId={activeRoomId}

@@ -8,7 +8,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useLocale } from "@/lib/i18n";
+import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
@@ -108,7 +108,7 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
             className="divide-y divide-border/60 pt-2"
           >
             {item.sections.map((section) => (
-              <ProfileSection key={section.id} section={section}>
+              <ProfileSection key={section.id} section={section} tabTitle={item.title}>
                 {body(section.id)}
               </ProfileSection>
             ))}
@@ -141,20 +141,30 @@ function useDirtySetter(
   );
 }
 
-/** An open section: a heading, then its content; hairlines between sections come from the tab. */
-function ProfileSection({ section, children }: { section: SectionDef; children: React.ReactNode }) {
+/**
+ * An open section: a heading, then its content; hairlines between sections come from the tab.
+ * An untitled section is named by its tab, so its h2 repeats the tab label for assistive
+ * technology only and its h3s keep a valid heading order (#1176).
+ */
+function ProfileSection({
+  section,
+  tabTitle,
+  children,
+}: {
+  section: SectionDef;
+  tabTitle: MessageKey;
+  children: React.ReactNode;
+}) {
   const { t } = useLocale();
   const headingId = useId();
   return (
     <section
-      aria-labelledby={section.title ? headingId : undefined}
+      aria-labelledby={headingId}
       className="min-w-0 space-y-(--space-within-section) py-8 first:pt-6"
     >
-      {section.title && (
-        <h2 id={headingId} className="type-section-title">
-          {t(section.title)}
-        </h2>
-      )}
+      <h2 id={headingId} className={section.title ? "type-section-title" : "sr-only"}>
+        {t(section.title ?? tabTitle)}
+      </h2>
       {children}
     </section>
   );

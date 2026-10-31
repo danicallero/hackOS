@@ -497,7 +497,9 @@ id) → one `primaryAction` + optional `secondaryActions`.
   the actions on their own right-aligned row as soon as the title row wraps.
 - **The page carries its own name.** There is no global workspace title bar;
   every destination has one `h1` in its `PageHeader`. Navigation communicates
-  the containing workspace, so never add a second, competing page title.
+  the containing workspace, so never add a second, competing page title. A
+  fixed operational workspace with no room for a header (Judging) renders its
+  `h1` visually hidden instead (§9).
 - **Persistent utilities belong in the navigation footer.** Account and
   appearance controls stay together below navigation; language is a quick
   setting in the account menu. The top bar is reserved for orientation and the
@@ -1035,6 +1037,14 @@ product bug, not a styling choice.**
   second `main`. Both shells start with `SkipLink` (`skipToContent`), the first
   Tab stop, which moves focus to that main. The app sidebar is the
   `navigationPrimary` `nav`; the cookie notice is a labelled `aside`.
+- Headings: one `h1` per destination and no skipped levels. A fixed workspace
+  without room for a `PageHeader` (Judging) keeps a visually hidden `h1`; an
+  open section that its tab already names (Profile) keeps a visually hidden
+  `h2` so the `h3`s inside it stay in order.
+- Tabs: the active trigger's panel is mounted in a `TabsContent`, so
+  `aria-controls` resolves; render tab bodies inside it, not as siblings of
+  `Tabs`. Table header cells always have a name — an action column gets a
+  visually hidden `actionsColumn`.
 - Labels: all inputs labelled independently of placeholders; helper/error text
   associated via `aria-describedby`.
 - Announcements: critical form errors and sync failures are announced; busy

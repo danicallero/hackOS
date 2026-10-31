@@ -102,6 +102,20 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
+  it("names every section with an h2 so its h3s never skip a level (#1176)", async () => {
+    nav.search = "tab=wallet";
+    await render();
+    const headings = [...openPanel()[0].querySelectorAll("section > h2")];
+    expect(headings.map((h) => [h.textContent, h.className])).toEqual([
+      ["wallet", "sr-only"],
+      ["certificates", "type-section-title"],
+    ]);
+    for (const section of openPanel()[0].querySelectorAll("section[aria-labelledby]")) {
+      const label = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
+      expect(section.contains(label)).toBe(true);
+    }
+  });
+
   it("opens the public profile on its own tab", async () => {
     nav.search = "tab=public";
     await render();

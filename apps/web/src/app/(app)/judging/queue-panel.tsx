@@ -232,9 +232,9 @@ export function QueuePanel({
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-semibold">
+              <h2 className="text-sm font-semibold">
                 {t("challengeQueueCount", { count: waitingEntries.length })}
-              </h3>
+              </h2>
             </div>
             <Button
               size="icon"
@@ -545,7 +545,7 @@ export function QueueList({
   const { t } = useLocale();
   return (
     <div className={cn("flex flex-col gap-3", className)}>
-      {title && <h3 className="text-sm font-semibold">{title}</h3>}
+      {title && <h2 className="text-sm font-semibold">{title}</h2>}
       {entries.length === 0 ? (
         <JudgingEmptyState
           className={emptyClassName}
