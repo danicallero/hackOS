@@ -346,7 +346,7 @@ export function PresenceManagement({
               >
                 {group.label}
               </Text>
-              <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
+              <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                 {group.items.length === 1
                   ? t("presenceRecordsCountOne", { count: "1" })
                   : t("presenceRecordsCountOther", { count: String(group.items.length) })}
@@ -640,7 +640,7 @@ function SignalCard({
             <Text
               selectable
               numberOfLines={1}
-              style={{ ...type.caption, color: colors.tertiaryLabel, marginTop: 1 }}
+              style={{ ...type.caption, color: colors.secondaryLabel, marginTop: 1 }}
             >
               {t("presenceRecordedBy", { name: recordedBy })}
             </Text>
@@ -648,7 +648,7 @@ function SignalCard({
             <Text
               selectable
               numberOfLines={1}
-              style={{ ...type.caption, color: colors.tertiaryLabel, marginTop: 1 }}
+              style={{ ...type.caption, color: colors.secondaryLabel, marginTop: 1 }}
             >
               {t("presenceRecordedBySystem")}
             </Text>

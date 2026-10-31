@@ -39,7 +39,7 @@ function SourceLink({ url }: { url: string }) {
     >
       <Text
         numberOfLines={1}
-        style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}
+        style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
       >
         {url.replace(/^https:\/\//, "")}
       </Text>
@@ -110,7 +110,7 @@ export function LicenseScreen({ name }: { name: string }) {
           <View style={{ gap: 4 }}>
             <Text
               selectable
-              style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}
+              style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
             >
               {entry.version} · {entry.license}
             </Text>

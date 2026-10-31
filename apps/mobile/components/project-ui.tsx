@@ -93,7 +93,7 @@ export function FieldRow({
           {label}
         </Text>
         {required ? (
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
             {required}
           </Text>
         ) : null}

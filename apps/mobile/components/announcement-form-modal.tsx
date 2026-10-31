@@ -515,7 +515,7 @@ export function AnnouncementFormModal({
             </MenuView>
             {!canTargetSpecific ? (
               <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-                <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
+                <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
                   {t("announcementScreenTargetingDisabledHint")}
                 </Text>
               </View>
@@ -786,7 +786,7 @@ function RecipientsField({
     >
       {recipients.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}>
             {t("announcementNoRecipientsYet")}
           </Text>
         </View>

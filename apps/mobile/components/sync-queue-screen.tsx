@@ -412,7 +412,7 @@ const QueueRow = memo(function QueueRow({
         </View>
         <StatusPill tone={status.tone}>{status.label}</StatusPill>
       </View>
-      <Text style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 29 }}>
+      <Text style={{ ...type.caption, color: colors.secondaryLabel, paddingLeft: 29 }}>
         {formatDateTime(scan.createdAt, "")}
         {scan.attempts > 0
           ? ` · ${t("scannerAttemptsCount", { count: String(scan.attempts) })}`
@@ -481,7 +481,7 @@ const ErrorHistoryRow = memo(function ErrorHistoryRow({
         <Text style={{ ...type.compact, color: colors.label, flex: 1, fontWeight: "700" }}>
           {t(entry.type === "rejected" ? "scannerErrorRejected" : "scannerErrorRetryable")}
         </Text>
-        <Text style={{ ...type.caption, color: colors.tertiaryLabel }}>
+        <Text style={{ ...type.caption, color: colors.secondaryLabel }}>
           {formatDateTime(entry.occurredAt, "")}
         </Text>
       </View>
@@ -493,12 +493,12 @@ const ErrorHistoryRow = memo(function ErrorHistoryRow({
       </Text>
       {context ? (
         <Text
-          style={{ ...type.caption, color: colors.tertiaryLabel, lineHeight: 17, paddingLeft: 25 }}
+          style={{ ...type.caption, color: colors.secondaryLabel, lineHeight: 17, paddingLeft: 25 }}
         >
           {context}
         </Text>
       ) : null}
-      <Text style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 25 }}>
+      <Text style={{ ...type.caption, color: colors.secondaryLabel, paddingLeft: 25 }}>
         {t("scannerErrorScanId", { id: entry.scanId })}
       </Text>
     </View>

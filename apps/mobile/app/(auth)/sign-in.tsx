@@ -258,7 +258,7 @@ export default function SignInScreen() {
           >
             <Text
               style={{
-                color: colors.tertiaryLabel,
+                color: colors.secondaryLabel,
                 fontSize: type.caption.fontSize,
                 lineHeight: 18,
               }}

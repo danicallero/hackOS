@@ -224,7 +224,7 @@ export function ManageAnnouncementsView({
                         {item.body}
                       </Text>
                       <Text
-                        style={{ color: colors.tertiaryLabel, fontSize: type.caption.fontSize }}
+                        style={{ color: colors.secondaryLabel, fontSize: type.caption.fontSize }}
                       >
                         {new Date(item.created_at).toLocaleDateString(language, {
                           day: "numeric",

@@ -1082,7 +1082,7 @@ function ScheduleCard({
           <Text
             numberOfLines={1}
             style={{
-              color: colors.tertiaryLabel,
+              color: colors.secondaryLabel,
               fontSize: type.footnote.fontSize,
               fontVariant: ["tabular-nums"],
               fontWeight: "500",
@@ -1210,7 +1210,7 @@ function ScheduleCard({
                 </Text>
               ) : null}
               {item.type && item.location ? (
-                <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
+                <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
                   ·
                 </Text>
               ) : null}

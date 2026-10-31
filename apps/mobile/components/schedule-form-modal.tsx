@@ -828,7 +828,7 @@ function OwnersField({
       </View>
       {owners.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}>
             {t("scheduleOwnersEmpty")}
           </Text>
         </View>

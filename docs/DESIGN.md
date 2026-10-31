@@ -1200,7 +1200,11 @@ architecture: [`mobile.md`](./mobile.md).**
   `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
   spread into a style); screens
   do not write font sizes, hex colours or radii. Android colours resolve at read
-  time, so never freeze a `colors.*` value at module scope.
+  time, so never freeze a `colors.*` value at module scope. Use
+  `secondaryLabel` for readable supporting text; reserve `tertiaryLabel` for
+  placeholders, disabled content and non-text decoration. Semantic label tokens
+  adapt to Increase Contrast, and readable text on tinted surfaces uses that
+  surface's matching `on…Surface` foreground token.
 - **One pressed vocabulary.** `PressableFeedback` (`feedback`: `row` highlight for
   list cells, `opacity` for text/icon buttons, `scale` for filled buttons and
   cards, `none` when the control draws its own) replaces ad-hoc
