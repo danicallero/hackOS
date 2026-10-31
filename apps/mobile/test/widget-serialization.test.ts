@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * #1171: a widget layout is serialized to a string for the extension, and a
  * regex literal loses its backslashes on the way (`/\s+/` became `/s+/`, so

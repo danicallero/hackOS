@@ -54,7 +54,14 @@ export const QueueActivityLayout = withLiveActivityKit(
     "widget";
 
     const { colorMods, islandSide, secondary } = kit;
-    const capped = kit.capped({ compactLeading: { width: 40, alignment: "trailing" } });
+    // Each compact slot hugs its content (HIG: as narrow as possible, snug
+    // against the camera); `compactSlots` is set once the content is known.
+    let compactSlots: Parameters<typeof kit.capped>[0] = {};
+    const capped = <
+      L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+    >(
+      layout: L,
+    ) => kit.capped(compactSlots)(layout);
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the title
     // instead of rendering half-understood fields.
@@ -108,15 +115,21 @@ export const QueueActivityLayout = withLiveActivityKit(
           : adaptive("#007AFF", "#0A84FF");
 
     const room = props.roomName ?? "";
-    // Compact island: the part that identifies the room ("Room B" -> "B", a long
-    // name -> its first three characters), so it fits the vertical island.
+    // Compact island: a short code for the room, so it fits the vertical island:
+    // "Aula 3.0" -> "A3.0", "Room B" -> "RB", "Auditorium Ramón Piñeiro" -> "ARP".
     // No regex literal here: the widget function is serialized to a string and
     // the backslash of `\s` is lost, which split "Room B" on `s` and cut it to "Roo".
     const roomWords = room.split(" ").filter(Boolean);
+    const roomLast = roomWords[roomWords.length - 1] ?? "";
+    const roomInitials = (words: string[]) => words.map((w) => w.charAt(0).toUpperCase()).join("");
     const roomCompact =
-      roomWords.length > 1
-        ? (roomWords[roomWords.length - 1] ?? "").slice(0, 3)
-        : room.trim().slice(0, 3);
+      roomWords.length === 0
+        ? ""
+        : roomWords.length === 1
+          ? room.trim().slice(0, 4)
+          : roomLast.length <= 4
+            ? `${roomInitials(roomWords.slice(0, -1))}${roomLast}`.slice(0, 5)
+            : roomInitials(roomWords).slice(0, 4);
     const position =
       typeof props.position === "number" && Number.isFinite(props.position)
         ? `#${props.position}`
@@ -149,7 +162,12 @@ export const QueueActivityLayout = withLiveActivityKit(
 
     // Count-up since the call (H34 shows operators the same elapsed time).
     const calledMs = typeof props.calledAt === "string" ? Date.parse(props.calledAt) : Number.NaN;
-    const calledTimer = (size: number, weight: "semibold" | "medium", width: number) =>
+    const calledTimer = (
+      size: number,
+      weight: "semibold" | "medium",
+      width: number,
+      align: "leading" | "trailing" = "trailing",
+    ) =>
       Number.isFinite(calledMs) ? (
         <Text
           timerInterval={{
@@ -163,8 +181,8 @@ export const QueueActivityLayout = withLiveActivityKit(
             lineLimit(1),
             minimumScaleFactor(0.6),
             layoutPriority(1),
-            multilineTextAlignment("trailing"),
-            frame({ maxWidth: width, alignment: "trailing" }),
+            multilineTextAlignment(align),
+            frame({ maxWidth: width, alignment: align }),
           ]}
         />
       ) : null;
@@ -385,6 +403,22 @@ export const QueueActivityLayout = withLiveActivityKit(
         <Image systemName="hourglass" color={symbolColor} size={14} />
       );
 
+    const textWidth = (chars: number, size: number) => Math.ceil(chars * size * 0.62) + 4;
+    compactSlots = {
+      compactLeading:
+        called || inRoom || position === null
+          ? { width: 22, alignment: "center" }
+          : { width: textWidth(position.length, 13), alignment: "center" },
+      compactTrailing:
+        called || inRoom
+          ? roomCompact
+            ? { width: textWidth(roomCompact.length, 12), alignment: "center" }
+            : { width: 48, alignment: "center" }
+          : etaCompact
+            ? { width: textWidth(etaCompact.length, 12), alignment: "center" }
+            : { width: 22, alignment: "center" },
+    };
+
     // Minimal: the climb to the front as a ring around the position, or the
     // phase symbol once called.
     const minimal =
@@ -514,10 +548,9 @@ export const QueueActivityLayout = withLiveActivityKit(
       </HStack>
     );
 
-    // The location reads before the room, on its baseline ("Go to / Floor 1
-    // Room B"): on a line of its own it pushed the called banner past the
-    // 160 pt Lock Screen height (#1171).
-    const calledFor = calledTimer(17, "semibold", 72);
+    // The banner shows the room alone: the location is in the app, and on a line
+    // of its own it pushed the called banner past the 160 pt Lock Screen height (#1171).
+    const calledFor = calledTimer(17, "semibold", 72, "leading");
     const hero =
       called || inRoom ? (
         <HStack alignment="bottom" spacing={12}>
@@ -539,7 +572,7 @@ export const QueueActivityLayout = withLiveActivityKit(
             bannerColor,
             28,
             false,
-            props.roomLocation || null,
+            null,
           )}
         </HStack>
       ) : (
