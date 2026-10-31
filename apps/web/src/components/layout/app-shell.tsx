@@ -1,4 +1,5 @@
 import { CommandPalette } from "@/components/common/command-palette";
+import { QuickArrival } from "@/components/common/quick-arrival";
 import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
 import { NotificationOnboardingDialog } from "@/components/layout/notification-onboarding-dialog";
@@ -27,6 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <ProfileTasksDialog />
           <NotificationOnboardingDialog />
           <CommandPalette />
+          <QuickArrival />
           <main
             id={MAIN_CONTENT_ID}
             tabIndex={-1}

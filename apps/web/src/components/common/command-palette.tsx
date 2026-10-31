@@ -100,13 +100,18 @@ export function CommandPalette() {
                     <CommandItem
                       key={item.href}
                       value={item.href}
-                      keywords={[t(item.title), t(parent.title), t(group.label)]}
+                      keywords={[
+                        t(item.title),
+                        t(item.via ?? parent.title),
+                        t(parent.title),
+                        t(group.label),
+                      ]}
                       onSelect={() => go(item.href)}
                     >
                       <Icon aria-hidden="true" />
                       {t(item.title)}
                       <span className="ml-auto truncate text-xs text-muted-foreground">
-                        {t(parent.title)}
+                        {item.via ? `${t(parent.title)} › ${t(item.via)}` : t(parent.title)}
                       </span>
                     </CommandItem>
                   );

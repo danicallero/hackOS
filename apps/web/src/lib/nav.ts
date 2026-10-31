@@ -63,6 +63,8 @@ export interface NavItem {
    * Each carries its own gate and shows only when the parent item does.
    */
   subItems?: NavItem[];
+  /** For a section or action inside a view: the view it lives in, shown beside the result. */
+  via?: import("./i18n").MessageKey;
 }
 
 /**
@@ -181,7 +183,29 @@ const sub = (
   gate: Pick<NavItem, "capability" | "anyCapability" | "hideForPureApplicant"> = {},
 ): NavItem => ({ title, href, icon, ...gate });
 
-const EVENT_SETTINGS_SUBITEMS: NavItem[] = [
+/**
+ * A section, field or action inside a view. `go` is the message key of its
+ * visible label, which QuickArrival finds on the page; `click` also activates
+ * it. It inherits the view's gate.
+ */
+const deep = (
+  view: NavItem | undefined,
+  title: NavItem["title"],
+  options: { go?: NavItem["title"]; click?: boolean } = {},
+): NavItem => {
+  if (!view) throw new Error(`Unknown view for "${title}"`);
+  return {
+    title,
+    icon: view.icon,
+    capability: view.capability,
+    anyCapability: view.anyCapability,
+    hideForPureApplicant: view.hideForPureApplicant,
+    via: view.title,
+    href: `${view.href}&go=${options.go ?? title}${options.click ? "&do=click" : ""}`,
+  };
+};
+
+const EVENT_SETTINGS_TABS: NavItem[] = [
   sub("eventTitle", "/settings/event?tab=event", TagIcon, {
     capability: CAPABILITIES.EVENT_MANAGE,
   }),
@@ -243,6 +267,66 @@ export function visibleSubDestinations(isVisible: (item: NavItem) => boolean): S
   );
 }
 
+const inEventTab = (tab: string) => EVENT_SETTINGS_TABS.find((i) => i.href.endsWith(`tab=${tab}`));
+
+const EVENT_SETTINGS_SUBITEMS: NavItem[] = [
+  ...EVENT_SETTINGS_TABS,
+  deep(inEventTab("event"), "name"),
+  deep(inEventTab("event"), "taglineLabel"),
+  deep(inEventTab("event"), "timezoneLabel"),
+  deep(inEventTab("event"), "countdownToStartLabel"),
+  deep(inEventTab("venue"), "venueNameLabel"),
+  deep(inEventTab("venue"), "venueLatitudeLabel"),
+  deep(inEventTab("venue"), "venueLongitudeLabel"),
+  deep(inEventTab("venue"), "venueWifiSectionTitle"),
+  deep(inEventTab("venue"), "networkNameLabel"),
+  deep(inEventTab("projects"), "projectDraftVisibilityLabel"),
+  deep(inEventTab("projects"), "projectGalleryAudienceLabel"),
+  deep(inEventTab("projects"), "projectGithubRequired"),
+  deep(inEventTab("projects"), "projectMaxTeamSize"),
+  deep(inEventTab("judging"), "judgingStartsLabel"),
+  deep(inEventTab("judging"), "judgingEndsLabel"),
+  deep(inEventTab("presence"), "automaticEntryTime"),
+  deep(inEventTab("presence"), "certaintyWindow"),
+  deep(inEventTab("invites"), "invitesSponsorsGroup"),
+  deep(inEventTab("invites"), "requireSponsorDietaryLabel"),
+  deep(inEventTab("invites"), "requireStaffDietaryLabel"),
+  deep(inEventTab("invites"), "requireStaffShirtSizeLabel"),
+  deep(inEventTab("wallet"), "walletAppearanceTitle"),
+  deep(inEventTab("wallet"), "walletAppleDetailsTitle"),
+  deep(inEventTab("wallet"), "walletGoogleDetailsTitle"),
+  deep(inEventTab("wallet"), "walletAppleArtworkTitle"),
+  deep(inEventTab("wallet"), "walletGoogleArtworkTitle"),
+  deep(inEventTab("wallet"), "walletDeliveryTitle"),
+  deep(inEventTab("certificates"), "certificateIssuerName"),
+  deep(inEventTab("certificates"), "certificateAutomaticIssue"),
+  deep(inEventTab("certificates"), "certificateMinConfirmedHours"),
+  deep(inEventTab("certificates"), "certificateMinReviewHours"),
+  deep(inEventTab("certificates"), "certificatePolicyAwardHours"),
+  deep(inEventTab("liveActivities"), "liveActivitiesMaxConcurrent"),
+  deep(inEventTab("danger"), "resetJudgingDataTitle"),
+];
+
+const profileTab = (id: string) => PROFILE_TABS.find((i) => i.href.endsWith(`tab=${id}`));
+const PROFILE_TABS: NavItem[] = [
+  sub("personalDetails", "/settings/profile?tab=personal", UserIcon),
+  sub("publicProfileTitle", "/settings/profile?tab=public", UserIcon, {
+    hideForPureApplicant: true,
+  }),
+  sub("wallet", "/settings/profile?tab=wallet", WalletIcon, { hideForPureApplicant: true }),
+  sub("accountTitle", "/settings/profile?tab=account", UserIcon),
+];
+const PROFILE_SUBITEMS: NavItem[] = [
+  ...PROFILE_TABS,
+  deep(profileTab("account"), "emailAddressTitle"),
+  // Opens the dialog on arrival: the row's own button.
+  deep(profileTab("account"), "changePassword", { click: true }),
+  deep(profileTab("account"), "rolesTitle"),
+  deep(profileTab("account"), "dangerZone"),
+  deep(profileTab("account"), "deleteMyAccount"),
+  deep(profileTab("wallet"), "certificates"),
+];
+
 /**
  * Stable personal area (audit §3.1): always available to authenticated
  * accounts, independent of any work capability. Order is time-critical work
@@ -271,16 +355,7 @@ export const PERSONAL_NAV: NavItem[] = [
     title: "myProfile",
     href: "/settings/profile",
     icon: UserIcon,
-    subItems: [
-      sub("personalDetails", "/settings/profile?tab=personal", UserIcon),
-      sub("publicProfileTitle", "/settings/profile?tab=public", UserIcon, {
-        hideForPureApplicant: true,
-      }),
-      sub("wallet", "/settings/profile?tab=wallet", WalletIcon, { hideForPureApplicant: true }),
-      sub("accountTitle", "/settings/profile?tab=account", UserIcon),
-      // Opens the password dialog on arrival (`action=password`).
-      sub("changePassword", "/settings/profile?tab=account&action=password", KeyIcon),
-    ],
+    subItems: PROFILE_SUBITEMS,
   },
 ];
 
