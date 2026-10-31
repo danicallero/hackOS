@@ -607,12 +607,12 @@ build a universal page component with domain flags.
 | --- | --- |
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
-| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. |
+| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
 | `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowOnMobile` gives the search its own row below `sm` when the actions are wide (Schedule). |
 | `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
-| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. |
+| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. Save is the scope's ⌘S target (§9). |
 | `Modal` / `AlertModal` / `SidePanelEditor` | Shared geometry and focus/close behavior; content-driven size. Domain dirty/pending guards remain with the editor. |
 
 Users and application responses consume `ListToolbar`; the generic `DataTable`
@@ -1094,6 +1094,47 @@ product bug, not a styling choice.**
 - Honour `prefers-reduced-motion`, `prefers-contrast: more` and
   `prefers-reduced-transparency` through the global rules in §2, not per
   component; verify with Chrome's media emulation in both themes.
+
+### Keyboard shortcuts (web, #1182)
+
+A deliberately small set, owned by `apps/web/src/lib/shortcuts.ts` and handled
+once by `CommandPalette` (mounted in `AppShell`). "⌘" means ⌘ on Apple
+platforms and Ctrl elsewhere; hints render in the matching form.
+
+| Keys | Action | Fires while typing? |
+| --- | --- | --- |
+| ⌘K | Open/close quick search (also the sidebar's search button under the brand): the caller's sidebar destinations (`lib/nav.ts`, same capability/association predicate as the sidebar), grouped by personal area and workspace. | Yes |
+| ⌘S | Submit the `FormActions` save owner that holds focus when it has unsaved changes (a focused clean editor still claims the key so the browser's "Save page" never opens). With focus outside any form, the only dirty owner in the active layer is saved; several dirty owners → the key does nothing. | Yes |
+| / | Focus the first list `SearchField` in the active layer (the open modal, otherwise the page). Without one, the browser keeps the key. | No |
+| ⌘B | Toggle the sidebar (`ui/sidebar.tsx`). | Yes |
+
+Rules:
+
+- Never claim a browser or screen-reader command: ⌘F stays the browser's find,
+  and ⌘L/⌘T/⌘W/⌘R/⌘P/⌘D are off limits. Extra modifiers (⌥, ⌘⇧, Ctrl on a
+  Mac) never match, and IME composition is ignored.
+- Single keys never fire while focus is in an input, textarea, select,
+  contenteditable or textbox/combobox role; only chorded keys may.
+- Save goes through the form's own submit (`requestSubmit`), so validation,
+  pending state and the unsaved-changes guard are unchanged; a pending or
+  disabled Save is never pressed.
+- Every control with a shortcut shows it on hover and keyboard focus, through
+  `components/common/shortcut-hint.tsx` (never a hand-written string):
+  `ShortcutTooltip` wraps the control in the shared `ui/tooltip` and sets its
+  `aria-keyshortcuts` from the same registry entry. A control with a label
+  tooltip (icon-only or collapsed: the sidebar toggle, the rail's search
+  button) reads "Toggle sidebar ⌘B"; a control whose visible text names it
+  (`FormActions` Save) shows just the chip. Shortcuts render as the
+  `ShortcutKbd` chip everywhere: tooltips, the palette footer, inline hints.
+- A visible hint replaces the tooltip rather than repeating it: the expanded
+  sidebar search button shows its chip inline (tooltip only in the icon
+  rail), and an empty `SearchField` shows `/` inside the field on fine
+  pointers, since a tooltip would cover the list while typing.
+- No workspace-switching shortcuts: the natural ⌘1–⌘9 switch browser tabs,
+  and ⌥digits type characters on Apple layouts. Quick search covers
+  jumping between workspaces.
+- Dialogs keep Radix's Return/Esc behavior; do not add per-dialog key handlers.
+- Add a shortcut only to the registry, with a test and a row here.
 
 ## 10. Copy and localization
 

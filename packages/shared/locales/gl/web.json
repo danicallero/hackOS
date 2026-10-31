@@ -3756,5 +3756,9 @@
   "certificateAllEventAccess": "Todas as persoas con acceso ao evento",
   "maintenanceTitle": "Restaurando unha copia",
   "maintenanceBody": "hackOS volverá en uns minutos. Esta páxina recárgase soa.",
-  "maintenanceFailedBody": "A restauración precisa dun administrador. Esta páxina recárgase cando se resolva."
+  "maintenanceFailedBody": "A restauración precisa dun administrador. Esta páxina recárgase cando se resolva.",
+  "quickSearch": "Busca rápida",
+  "quickSearchPlaceholder": "Ir a…",
+  "searchList": "Buscar na lista",
+  "keyboardShortcuts": "Atallos de teclado"
 }
