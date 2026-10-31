@@ -167,7 +167,7 @@ export function PendingRemovalScreen({
             </Text>
             <Text
               accessibilityRole="timer"
-              style={{ color: colors.label, fontSize: type.title2.fontSize, fontWeight: "800" }}
+              style={{ color: colors.label, fontSize: type.title2.fontSize, fontWeight: "700" }}
             >
               {countdown}
             </Text>

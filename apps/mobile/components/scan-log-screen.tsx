@@ -6,7 +6,7 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -19,6 +19,7 @@ import { fetchScanLog, type ScanLogEntry } from "@/lib/scan-log";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
 const PAGE_SIZE = 30;
@@ -315,6 +316,7 @@ function searchableEntryText(entry: ScanLogEntry, t: ReturnType<typeof useLocale
 }
 
 function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => void }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const subject =
     [entry.subjectName, entry.subjectSurname].filter(Boolean).join(" ") ||
@@ -346,7 +348,7 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
         />
         <Text
           selectable
-          numberOfLines={1}
+          numberOfLines={accessibilityText ? undefined : 1}
           style={{ ...type.callout, color: colors.label, flex: 1, fontWeight: "700" }}
         >
           {subject}

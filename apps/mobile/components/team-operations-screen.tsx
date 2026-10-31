@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -35,6 +36,7 @@ import { useMeContext } from "@/lib/me-context";
 import { isPadIdiom } from "@/lib/tabs";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
 interface TeamMember {
@@ -208,6 +210,7 @@ function useMemberCandidateSearch(t: ReturnType<typeof useLocale>["t"], enabled 
 
 /** H29/H31 operator team detail: the participant's own queue card, with the extra context an operator needs. */
 export function TeamOperationsScreen() {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const listColumn = useOperatorListColumn();
   useColorScheme();
   const { entryId, roomId } = useLocalSearchParams<{ entryId: string; roomId: string }>();
@@ -543,7 +546,7 @@ export function TeamOperationsScreen() {
                 accessible={false}
               />
               <Text
-                style={{ ...type.body, color: colors.onSuccessSurface, flex: 1, fontWeight: "800" }}
+                style={{ ...type.body, color: colors.onSuccessSurface, flex: 1, fontWeight: "700" }}
               >
                 {t("teamDetailAtDoor", { room: room.name })}
               </Text>
@@ -579,7 +582,7 @@ export function TeamOperationsScreen() {
                   <View style={{ flex: 1, justifyContent: "center" }}>
                     <Text
                       selectable
-                      numberOfLines={1}
+                      numberOfLines={accessibilityText ? undefined : 1}
                       style={{ ...type.body, color: colors.label }}
                     >
                       {memberDisplayName(member)}
@@ -699,7 +702,7 @@ export function TeamOperationsScreen() {
                       <View style={{ flex: 1 }}>
                         <Text
                           selectable
-                          numberOfLines={1}
+                          numberOfLines={accessibilityText ? undefined : 1}
                           style={{ ...type.body, color: colors.label }}
                         >
                           {memberCandidateName(candidate)}
@@ -870,7 +873,10 @@ export function TeamOperationsScreen() {
                           }}
                         >
                           <View style={{ flex: 1 }}>
-                            <Text numberOfLines={1} style={{ ...type.body, color: colors.label }}>
+                            <Text
+                              numberOfLines={accessibilityText ? undefined : 1}
+                              style={{ ...type.body, color: colors.label }}
+                            >
                               {ch.title}
                             </Text>
                           </View>
@@ -1067,6 +1073,7 @@ function QueueTabBar({
   t: ReturnType<typeof useLocale>["t"];
   scrollRef: React.RefObject<ScrollView | null>;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View style={{ borderBottomWidth: 0.5, borderBottomColor: colors.separator }}>
       <ScrollView
@@ -1095,7 +1102,7 @@ function QueueTabBar({
               }}
             >
               <Text
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{
                   ...type.subhead,
                   color: selected ? colors.accent : colors.secondaryLabel,

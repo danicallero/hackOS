@@ -1079,7 +1079,9 @@ product bug, not a styling choice.**
 - Never rely on colour alone for queue, decision, connection, or scan state.
 - Mobile text follows Dynamic Type at every size, including AX1–AX5: content
   text wraps and its container grows (no fixed heights or truncation around
-  it). Only fixed chrome — the tab bar, React Native titles inside native
+  it). Primary row labels and choices release single-line limits when
+  `isAccessibilityTextSize(fontScale)`; secondary metadata may remain one line.
+  Only fixed chrome — the tab bar, React Native titles inside native
   navigation-bar items, overlays on the live camera — uses the shared cap in
   `apps/mobile/theme/dynamic-type.ts`, and capped single-line labels shrink to
   fit rather than truncate. Side-by-side label/value rows (`InfoRow`) stack
@@ -1245,7 +1247,8 @@ architecture: [`mobile.md`](./mobile.md).**
   the 6/10 UIKit half-steps), `radius` (`control` 12, `container` 14, `sheet` 22,
   `full` capsule, always with `borderCurve: "continuous"`), `type` (Apple text
   styles, plus `compact` 14) and `motion` (durations and springs) are in
-  `theme/tokens.ts`. Text is `AppText` (or `type.*` spread into a style); screens
+  `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
+  spread into a style); screens
   do not write font sizes, hex colours or radii. Android colours resolve at read
   time, so never freeze a `colors.*` value at module scope.
 - **One pressed vocabulary.** `PressableFeedback` (`feedback`: `row` highlight for
@@ -1264,7 +1267,9 @@ architecture: [`mobile.md`](./mobile.md).**
   colours, `fontSize` or `borderRadius` literals beyond
   `scripts/mobile-token-baseline.json`. Migrating a file lowers its count; run
   `node scripts/check-mobile-tokens.mjs --update` to record it. Migrate a screen
-  when you touch it.
+  when you touch it. The font-size budget is zero (#1165); the guard checks
+  numeric values in conditional branches too and rejects weights 800/900.
+  Avatar initials sized proportionally to their artwork remain geometry-derived.
 - **Design for width, not for a device.** Layouts answer to the window the app has
   now (compact < 600 dp, medium < 840 dp, expanded from 840 dp), never to a
   manufacturer, model or fold posture. Bound reading content (720 dp on smaller

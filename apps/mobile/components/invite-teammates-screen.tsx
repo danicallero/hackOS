@@ -14,6 +14,7 @@ import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { type NativeProject, projectMutation } from "@/lib/projects";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -183,7 +184,9 @@ export function InviteTeammatesScreen() {
             paddingHorizontal: 20,
           }}
         >
-          <Text style={{ color: colors.secondaryLabel, fontSize: 17 }}>{`${t("add")}:`}</Text>
+          <Text
+            style={{ color: colors.secondaryLabel, fontSize: type.body.fontSize }}
+          >{`${t("add")}:`}</Text>
           <TextInput
             accessibilityLabel={t("projectEmail")}
             autoCapitalize="none"
@@ -197,7 +200,13 @@ export function InviteTeammatesScreen() {
             placeholder="name@example.com"
             placeholderTextColor={colors.tertiaryLabel}
             returnKeyType="next"
-            style={{ color: colors.label, flex: 1, fontSize: 17, minHeight: 44, padding: 0 }}
+            style={{
+              color: colors.label,
+              flex: 1,
+              fontSize: type.body.fontSize,
+              minHeight: 44,
+              padding: 0,
+            }}
             textContentType="emailAddress"
             value={draft}
           />
@@ -225,7 +234,7 @@ export function InviteTeammatesScreen() {
                           uri={recipient.contact.photoUrl}
                         />
                       ) : null}
-                      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>
+                      <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
                         {recipientLabel(recipient)}
                       </Text>
                       <Pressable
@@ -281,13 +290,16 @@ export function InviteTeammatesScreen() {
                     >
                       <PersonAvatar size={36} name={person.displayName} uri={person.photoUrl} />
                       <View style={{ flex: 1, gap: 2 }}>
-                        <Text style={{ color: colors.label, fontSize: 17 }}>
+                        <Text style={{ color: colors.label, fontSize: type.body.fontSize }}>
                           {person.displayName}
                         </Text>
                         {person.headline ? (
                           <Text
                             numberOfLines={1}
-                            style={{ color: colors.secondaryLabel, fontSize: 14 }}
+                            style={{
+                              color: colors.secondaryLabel,
+                              fontSize: type.compact.fontSize,
+                            }}
                           >
                             {person.headline}
                           </Text>

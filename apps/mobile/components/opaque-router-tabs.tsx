@@ -14,7 +14,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-
 import { GlassView } from "@/components/glass-view";
 import {
   type RouterTabItem,
@@ -45,7 +44,7 @@ import { emitTabReselect } from "@/lib/tab-reselect";
 import { useTabShortcuts } from "@/lib/tab-shortcuts";
 import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
-import { MIN_TARGET } from "@/theme/tokens";
+import { MIN_TARGET, type } from "@/theme/tokens";
 
 type TabLabelKey =
   | "tabAccount"
@@ -701,7 +700,7 @@ function AndroidOverflowMenuRow({
           style={{
             color: selected ? colors.accent : labelColor,
             flex: 1,
-            fontSize: 15,
+            fontSize: type.subhead.fontSize,
             fontWeight: selected ? "600" : "400",
           }}
         >

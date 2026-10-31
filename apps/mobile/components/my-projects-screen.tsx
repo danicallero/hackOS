@@ -1,7 +1,7 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Animated, { SlideInRight, SlideOutRight, useReducedMotion } from "react-native-reanimated";
 import { useBackDismiss } from "@/components/app-back-gesture";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -31,6 +31,7 @@ import { useSideRegion } from "@/lib/side-region";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useParticipantLayout } from "@/theme/layout-participant";
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
@@ -334,6 +335,7 @@ function GlassPill({
   accessibilityLabel?: string;
   onPress: () => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <GlassView
       colorScheme="auto"
@@ -356,8 +358,13 @@ function GlassPill({
       >
         <SymbolView name={icon} tintColor={colors.accent} size={19} accessible={false} />
         <Text
-          numberOfLines={1}
-          style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+          numberOfLines={accessibilityText ? undefined : 1}
+          style={{
+            color: colors.label,
+            fontSize: type.body.fontSize,
+            fontWeight: "600",
+            flexShrink: 1,
+          }}
         >
           {label}
         </Text>

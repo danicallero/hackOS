@@ -20,7 +20,9 @@ import { useSideRegion } from "@/lib/side-region";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 import { type OperatorLayout, scanFrameSize } from "@/theme/layout-screens";
+import { type } from "@/theme/tokens";
 
 export function QrCamera({
   onValue,
@@ -381,7 +383,11 @@ function CameraPreview({
         </View>
       </View>
       {hint === null ? null : (
-        <Text pointerEvents="none" style={[styles.hint, { top: height / 2 + frameSize / 2 + 24 }]}>
+        <Text
+          maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+          pointerEvents="none"
+          style={[styles.hint, { top: height / 2 + frameSize / 2 + 24 }]}
+        >
           {hint ?? t("scannerQrHint")}
         </Text>
       )}
@@ -534,7 +540,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     color: "white",
-    fontSize: 16,
+    fontSize: type.callout.fontSize,
     fontWeight: "600",
     left: 28,
     position: "absolute",
@@ -572,10 +578,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
   },
-  permissionTitle: { color: colors.label, fontSize: 22, fontWeight: "700" },
+  permissionTitle: { color: colors.label, fontSize: type.title2.fontSize, fontWeight: "700" },
   permissionBody: {
     color: colors.secondaryLabel,
-    fontSize: 16,
+    fontSize: type.callout.fontSize,
     lineHeight: 22,
     textAlign: "center",
   },
@@ -589,10 +595,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: colors.accentText,
-    fontSize: 16,
+    fontSize: type.callout.fontSize,
     fontWeight: "700",
     textAlign: "center",
   },
   secondaryButton: { padding: 12 },
-  secondaryButtonText: { color: colors.accent, fontSize: 16, fontWeight: "600" },
+  secondaryButtonText: { color: colors.accent, fontSize: type.callout.fontSize, fontWeight: "600" },
 });

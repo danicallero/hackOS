@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { Stack } from "expo-router/stack";
 import { type ReactElement, type ReactNode, useEffect, useState } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
+import { Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, { type SharedValue, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +22,7 @@ import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-
 import { useSideRegion } from "@/lib/side-region";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 function ClockSkewBanner() {
   const { t } = useLocale();
@@ -591,7 +592,7 @@ export function ScannerTransactionStatus({
         <Text
           style={{
             color: colors.label,
-            fontSize: bare ? 13 : 15,
+            fontSize: bare ? type.footnote.fontSize : type.subhead.fontSize,
             fontWeight: "700",
           }}
         >
@@ -644,6 +645,7 @@ export function ScannerQueueStatus({
   /** Render only the sheet: the caller draws the trigger as a native bar item. */
   triggerless?: boolean;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -821,7 +823,7 @@ export function ScannerQueueStatus({
                         >
                           <View style={{ alignItems: "baseline", flexDirection: "row", gap: 8 }}>
                             <Text
-                              numberOfLines={1}
+                              numberOfLines={accessibilityText ? undefined : 1}
                               style={{
                                 ...type.compact,
                                 color: colors.label,

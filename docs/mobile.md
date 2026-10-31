@@ -345,6 +345,13 @@ the primitives `AppText` and `PressableFeedback` are specified in
 [`DESIGN.md` §12](./DESIGN.md#12-mobile-specifics). `NavRow`, `RowButton`,
 `ActionButton`, `ToggleRow` and `AuthButton` are migrated; remaining screens move
 over as they are touched, guarded by `pnpm check:mobile-tokens` (H55, H59).
+All screen text sizes now use `type.*` tokens, including conditional sizes;
+bold text stops at 700 (#1165). The token guard has a zero font-size budget
+and rejects 800/900 weights. Proportional avatar initials remain geometry-derived.
+Primary row labels, names, and choices release their single-line limit at
+accessibility text sizes (#1166); secondary metadata may stay truncated.
+Fixed navigation titles and live-camera overlays retain the shared chrome cap
+and navigation labels shrink to fit.
 
 Responsive layout: `theme/layout.ts` (size-class gutters, readable widths),
 `theme/layout-screens.ts` (scanner/operator column, stat block and action

@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { AnnouncementFormModal, announcementToForm } from "@/components/announcement-form-modal";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { EmptyState, Section, Separator, StatusPill } from "@/components/native-ui";
@@ -21,6 +21,7 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { colors, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 type AnnouncementStatus = "scheduled" | "live" | "expired";
@@ -73,6 +74,7 @@ export function ManageAnnouncementsView({
   formOpen: "create" | number | null;
   onFormOpenChange: (next: "create" | number | null) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const readable = useParticipantLayout("list");
   const { t, language } = useLocale();
   const { me } = useMeContext();
@@ -202,7 +204,7 @@ export function ManageAnnouncementsView({
                       <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
                         <Text
                           selectable
-                          numberOfLines={1}
+                          numberOfLines={accessibilityText ? undefined : 1}
                           style={{
                             color: colors.label,
                             flex: 1,

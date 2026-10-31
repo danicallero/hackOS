@@ -162,7 +162,7 @@ export function AuthHeader({
             selectable
             style={{
               color: colors.interactiveText,
-              fontSize: 15,
+              fontSize: type.subhead.fontSize,
               fontWeight: "600",
               textAlign: leading ? "left" : "center",
             }}
@@ -175,8 +175,8 @@ export function AuthHeader({
           accessibilityRole="header"
           style={{
             color: colors.label,
-            fontSize: leading ? 32 : 28,
-            fontWeight: "800",
+            fontSize: leading ? type.largeTitle.fontSize : type.title.fontSize,
+            fontWeight: "700",
             textAlign: leading ? "left" : "center",
           }}
         >
@@ -187,7 +187,7 @@ export function AuthHeader({
             selectable
             style={{
               color: colors.secondaryLabel,
-              fontSize: 16,
+              fontSize: type.callout.fontSize,
               textAlign: leading ? "left" : "center",
             }}
           >
@@ -223,7 +223,10 @@ export function AuthField({
 
   return (
     <View style={{ gap: 7 }}>
-      <Text selectable style={{ color: colors.label, fontSize: 15, fontWeight: "600" }}>
+      <Text
+        selectable
+        style={{ color: colors.label, fontSize: type.subhead.fontSize, fontWeight: "600" }}
+      >
         {label}
       </Text>
       <View
@@ -250,7 +253,7 @@ export function AuthField({
             {
               color: colors.label,
               flex: 1,
-              fontSize: 17,
+              fontSize: type.body.fontSize,
               minHeight: 50,
               paddingHorizontal: 14,
               paddingVertical: 12,
@@ -295,7 +298,7 @@ export function AuthField({
         <Text
           selectable
           accessibilityRole="alert"
-          style={{ color: colors.destructive, fontSize: 13, lineHeight: 18 }}
+          style={{ color: colors.destructive, fontSize: type.footnote.fontSize, lineHeight: 18 }}
         >
           {error}
         </Text>
@@ -316,7 +319,10 @@ export function AuthAlert({ message, testID }: { message: string; testID?: strin
         padding: 12,
       }}
     >
-      <Text selectable style={{ color: colors.onDestructiveSurface, fontSize: 14 }}>
+      <Text
+        selectable
+        style={{ color: colors.onDestructiveSurface, fontSize: type.compact.fontSize }}
+      >
         {message}
       </Text>
     </View>

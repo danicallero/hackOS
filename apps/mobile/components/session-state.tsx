@@ -2,11 +2,11 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
-
 import { AuthButton, AuthHeader, AuthScreen } from "@/components/auth-ui";
 import { forceLocalSignOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 /** Recoverable H4 session boundary shown while the authenticated profile is unavailable. */
 export function SessionState({
@@ -56,7 +56,12 @@ export function SessionState({
           <View style={{ alignItems: "center", gap: 6 }}>
             <Text
               selectable
-              style={{ color: colors.label, fontSize: 22, fontWeight: "700", textAlign: "center" }}
+              style={{
+                color: colors.label,
+                fontSize: type.title2.fontSize,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
             >
               {t("sessionRestoringTitle")}
             </Text>
@@ -64,7 +69,7 @@ export function SessionState({
               selectable
               style={{
                 color: colors.secondaryLabel,
-                fontSize: 15,
+                fontSize: type.subhead.fontSize,
                 lineHeight: 21,
                 textAlign: "center",
               }}
@@ -104,7 +109,7 @@ export function SessionState({
             selectable
             style={{
               color: colors.interactiveText,
-              fontSize: 15,
+              fontSize: type.subhead.fontSize,
               fontWeight: "700",
               textAlign: "center",
             }}

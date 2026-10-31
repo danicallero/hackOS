@@ -5,6 +5,7 @@ import { FloatingGlassButton, Separator } from "@/components/native-ui";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 import { RowButton } from "./project-ui";
 import { SymbolView } from "./symbol";
 
@@ -97,7 +98,7 @@ export function FieldLibraryPicker({
           style={{
             color: value.length ? colors.label : colors.tertiaryLabel,
             flex: 1,
-            fontSize: 17,
+            fontSize: type.body.fontSize,
           }}
         >
           {value.length ? value.join(", ") : t("fieldLibrarySearch")}
@@ -127,7 +128,7 @@ export function FieldLibraryPicker({
           >
             <Text
               accessibilityRole="header"
-              style={{ color: colors.label, fontSize: 28, fontWeight: "700" }}
+              style={{ color: colors.label, fontSize: type.title.fontSize, fontWeight: "700" }}
             >
               {heading}
             </Text>
@@ -143,7 +144,7 @@ export function FieldLibraryPicker({
                 backgroundColor: colors.surface,
                 borderRadius: 14,
                 color: colors.label,
-                fontSize: 17,
+                fontSize: type.body.fontSize,
                 minHeight: 44,
                 paddingHorizontal: 16,
               }}
@@ -183,7 +184,9 @@ export function FieldLibraryPicker({
                         paddingHorizontal: 16,
                       }}
                     >
-                      <Text style={{ color: colors.label, flex: 1, fontSize: 17 }}>{name}</Text>
+                      <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>
+                        {name}
+                      </Text>
                       {value.includes(name) && (
                         <SymbolView
                           name="checkmark"

@@ -308,7 +308,7 @@ export default function AccountScreen() {
           <Stack.Toolbar.View hidesSharedBackground>
             <Text
               accessibilityRole="header"
-              style={{ color: colors.label, fontSize: type.title.fontSize, fontWeight: "800" }}
+              style={{ color: colors.label, fontSize: type.title.fontSize, fontWeight: "700" }}
             >
               {t("tabAccount")}
             </Text>

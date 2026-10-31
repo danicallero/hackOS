@@ -1,6 +1,13 @@
 import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useLayoutEffect, useState } from "react";
-import { Platform, ScrollView, Text, useColorScheme, View } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { ActionButton, AppSwitch, EmptyState, Section, Separator } from "@/components/native-ui";
@@ -24,6 +31,7 @@ import type { StandSummary, StandTag } from "@/lib/stands";
 import { canManageStands } from "@/lib/tabs";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { colors, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 const CODE_FONT = Platform.select({ ios: "Menlo", default: "monospace" });
@@ -291,6 +299,7 @@ function TagSection({
  * row on a person); the tag is removed only after the confirmation.
  */
 function TagRow({ tag, busy, onRemove }: { tag: StandTag; busy: boolean; onRemove: () => void }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const removeLabel = t("standsRemoveTagFor", { code: tag.label ?? tag.code });
   return (
@@ -372,19 +381,19 @@ function TagRow({ tag, busy, onRemove }: { tag: StandTag; busy: boolean; onRemov
         <View style={{ flex: 1, gap: 2 }}>
           {tag.label ? (
             <Text
-              numberOfLines={1}
+              numberOfLines={accessibilityText ? undefined : 1}
               style={{ color: colors.label, fontSize: type.callout.fontSize }}
             >
               {tag.label}
             </Text>
           ) : null}
           <Text
-            numberOfLines={1}
+            numberOfLines={accessibilityText ? undefined : 1}
             selectable
             style={{
               color: tag.label ? colors.secondaryLabel : colors.label,
               fontFamily: CODE_FONT,
-              fontSize: tag.label ? 13 : 15,
+              fontSize: tag.label ? type.footnote.fontSize : type.subhead.fontSize,
             }}
           >
             {tag.code}

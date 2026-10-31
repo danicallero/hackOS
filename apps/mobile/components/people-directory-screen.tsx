@@ -7,7 +7,7 @@ import {
 } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, Text, useWindowDimensions, View } from "react-native";
 import Animated, {
   useAnimatedScrollHandler,
   useDerivedValue,
@@ -46,6 +46,7 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
 /**
@@ -513,6 +514,7 @@ const PersonRow = memo(function PersonRow({
   person: ScannerPerson;
   onPress: (person: ScannerPerson) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const fullName = [person.name, person.surname].filter(Boolean).join(" ");
   const displayName = fullName || person.email;
@@ -566,7 +568,7 @@ const PersonRow = memo(function PersonRow({
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text
-          numberOfLines={1}
+          numberOfLines={accessibilityText ? undefined : 1}
           selectable
           style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
         >
@@ -601,7 +603,7 @@ const PersonRow = memo(function PersonRow({
               accessible={false}
             />
             <Text
-              numberOfLines={1}
+              numberOfLines={accessibilityText ? undefined : 1}
               selectable
               style={{
                 color: colors.destructive,

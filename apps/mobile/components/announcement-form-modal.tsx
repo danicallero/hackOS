@@ -4,7 +4,7 @@ import {
   targetingModeOf,
 } from "@hackos/shared/announcement-form";
 import { useEffect, useRef, useState } from "react";
-import { Text, TextInput, View } from "react-native";
+import { Text, TextInput, useWindowDimensions, View } from "react-native";
 import { MenuView } from "@/components/app-menu";
 import { DateTimeField } from "@/components/date-time-field";
 import {
@@ -31,6 +31,7 @@ import {
 } from "@/lib/announcements-admin";
 import { useLocale } from "@/lib/i18n";
 import { colors, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 function channelLabel(channel: AnnouncementChannel, t: ReturnType<typeof useLocale>["t"]): string {
   switch (channel) {
@@ -700,6 +701,7 @@ function RecipientsField({
   recipients: AnnouncementRecipient[];
   onChange: (recipients: AnnouncementRecipient[]) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AnnouncementRecipient[]>([]);
@@ -804,7 +806,7 @@ function RecipientsField({
             >
               <Text
                 selectable
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}
               >
                 {[recipient.name, recipient.surname].filter(Boolean).join(" ").trim() ||

@@ -280,3 +280,29 @@ describe("StandsScreen (#935)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+it("reflows company names at AX5 while keeping counts as secondary metadata (#1166)", async () => {
+  const { Dimensions } = jest.requireActual<typeof import("react-native")>("react-native");
+  const window = Dimensions.get("window");
+  const display = Dimensions.get("screen");
+  try {
+    await act(async () => {
+      Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...display, fontScale: 1 } });
+    });
+    await renderMobile(<StandsScreen />);
+    expect((await screen.findByText("Acme")).props.numberOfLines).toBe(1);
+    await act(async () => {
+      Dimensions.set({
+        window: { ...window, fontScale: 3.571 },
+        screen: { ...display, fontScale: 3.571 },
+      });
+    });
+    expect(screen.getByText("Acme").props.numberOfLines).toBeUndefined();
+    expect(screen.getByText("Acme").props.maxFontSizeMultiplier).toBeUndefined();
+    expect(screen.getByText("standsCounts:0/1").props.numberOfLines).toBe(1);
+  } finally {
+    await act(async () => {
+      Dimensions.set({ window, screen: display });
+    });
+  }
+});
