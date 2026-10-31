@@ -1415,7 +1415,10 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   top slot to stay inside the expanded height budget (4 pt row gaps and bottom
   inset); other
   kinds use 8 pt row gaps and bottom inset. Keep controls clear of the curved
-  corners. Preserve the relative placement of changing values
+  corners. Leading and trailing sit beside the TrueDepth camera: their
+  content must shrink to the region the system gives it (never `fixedSize`),
+  or it grows into the sensor housing; a ratio too wide for it shows only the
+  count. Preserve the relative placement of changing values
   across compact, expanded and Lock Screen presentations.
 - System typography: 17 pt semibold Lock Screen titles, 15 pt semibold
   expanded titles, 28 pt primary metrics, 17 pt secondary values, 12 pt medium

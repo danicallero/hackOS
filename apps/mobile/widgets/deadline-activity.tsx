@@ -33,7 +33,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
   (props: DeadlineLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { colorMods, secondary } = kit;
+    const { colorMods, islandSide, secondary } = kit;
     const capped = kit.capped({
       compactLeading: { width: 36, alignment: "trailing" },
       compactTrailing: { width: 24, alignment: "center" },
@@ -221,20 +221,18 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     // #966: minimal identifies the phase without shrinking a multi-unit timer.
     const minimal = glyph(islandColor, 20);
 
-    // Inset from the island's rounded corners so labels never clip. Submitted
-    // keeps the time left, smaller and neutral.
-    const expandedLeading = (
-      <VStack alignment="leading" spacing={0} modifiers={[padding({ leading: 8, top: 4 })]}>
+    // Submitted keeps the time left, smaller and neutral.
+    const expandedLeading = islandSide(
+      <VStack alignment="leading" spacing={0}>
         {caption(labels.closesIn)}
         {submitted
           ? countdown(17, neutral, 140, "semibold", "leading", "long")
           : // Same hero scale as the other kinds; width fitting handles long hours.
             (countdown(28, valueIsland, 180, "bold", "leading", "long") ?? <Text> </Text>)}
-      </VStack>
+      </VStack>,
+      "leading",
     );
-    const expandedTrailing = (
-      <VStack modifiers={[padding({ trailing: 8, top: 6 })]}>{glyph(islandColor, 24)}</VStack>
-    );
+    const expandedTrailing = islandSide(glyph(islandColor, 24), "trailing", 6);
     const expandedBottom = (
       <VStack
         alignment="leading"
@@ -257,7 +255,9 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     );
 
     // H19/H20 / #966: the primary value leads (as in Luma's pre-event activity),
-    // the status and symbol close the row, then title and project.
+    // the status and symbol close the row, then title and project. Submitted
+    // moves the small time left into that row: as two rows of their own they
+    // pushed the banner past the 160 pt Lock Screen height (#1171).
     const banner = (
       <VStack
         alignment="leading"
@@ -285,15 +285,20 @@ export const DeadlineActivityLayout = withLiveActivityKit(
             )}
           </VStack>
           <Spacer />
-          {submitted ? null : status(12, false)}
+          {submitted ? (
+            <VStack alignment="trailing" spacing={0}>
+              {caption(labels.closesIn, "trailing")}
+              {countdown(17, null, 140, "semibold", "trailing", "full")}
+            </VStack>
+          ) : (
+            status(12, false)
+          )}
           {glyph(bannerColor, 17)}
         </HStack>
         <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(2)]}>
           {labels.title}
         </Text>
         {caption(props.projectName)}
-        {submitted ? caption(labels.closesIn) : null}
-        {submitted ? countdown(17, null, 140, "semibold", "leading", "full") : null}
         {bar(valueBanner)}
       </VStack>
     );

@@ -40,11 +40,15 @@ export const AttendeeActivityLayout = withLiveActivityKit(
   ) => {
     "widget";
 
-    const { caption, colorMods, secondary } = kit;
-    const capped = kit.capped({
-      compactLeading: { width: 36, alignment: "trailing" },
-      compactTrailing: { width: 24, alignment: "center" },
-    });
+    const { caption, colorMods, islandSide, secondary } = kit;
+    // "Live" is wider than a one-unit countdown ("En curso" in es/gl did not
+    // fit 36 pt and spilled past the island's edge, #1171), so live takes the
+    // wider leading slot: 56 + 24 pt, the staff activity's total width.
+    const cappedTo = (wide: boolean) =>
+      kit.capped({
+        compactLeading: { width: wide ? 56 : 36, alignment: "trailing" },
+        compactTrailing: { width: 24, alignment: "center" },
+      });
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
     // instead of rendering half-understood fields (or an invalid timer range).
@@ -55,7 +59,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
         </Text>
       );
       const symbol = <Image systemName="calendar" color="#0A84FF" size={15} />;
-      return capped({
+      return cappedTo(false)({
         banner: (
           <VStack
             alignment="leading"
@@ -233,15 +237,11 @@ export const AttendeeActivityLayout = withLiveActivityKit(
       glyph(islandAccent, 20)
     );
 
-    // Inset from the island's rounded corners so labels never clip.
-    const expandedLeading = (
-      <VStack alignment="leading" modifiers={[padding({ leading: 8, top: 4 })]}>
-        {countdownStat(28, live ? null : islandAccent, 160) ?? <Text> </Text>}
-      </VStack>
+    const expandedLeading = islandSide(
+      countdownStat(28, live ? null : islandAccent, 160) ?? <Text> </Text>,
+      "leading",
     );
-    const expandedTrailing = (
-      <VStack modifiers={[padding({ trailing: 8, top: 6 })]}>{glyph(islandAccent, 24)}</VStack>
-    );
+    const expandedTrailing = islandSide(glyph(islandAccent, 24), "trailing", 6);
     const expandedBottom = (
       <VStack
         alignment="leading"
@@ -341,7 +341,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
       </VStack>
     );
 
-    return capped({
+    return cappedTo(live && Boolean(liveLabel))({
       banner,
       bannerSmall,
       compactLeading,

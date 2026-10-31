@@ -1,7 +1,5 @@
 import { Gauge, HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  allowsTightening,
-  contentTransition,
   dynamicTypeSize,
   fixedSize,
   font,
@@ -11,7 +9,6 @@ import {
   labelsHidden,
   lineLimit,
   minimumScaleFactor,
-  monospacedDigit,
   padding,
   scaleEffect,
   tint,
@@ -44,7 +41,7 @@ export const StaffActivityLayout = withLiveActivityKit(
   (props: ActivityLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { caption, colorMods, secondary } = kit;
+    const { caption, colorMods, counter, islandSide, secondary } = kit;
     const capped = kit.capped();
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
@@ -174,56 +171,28 @@ export const StaffActivityLayout = withLiveActivityKit(
       );
     };
 
-    const counter = (value: string, size: number, color: string | null, weight = "bold") => (
-      <Text
-        modifiers={[
-          font({ size, weight: weight as "bold" | "semibold" }),
-          monospacedDigit(),
-          contentTransition("numericText"),
-          lineLimit(1),
-          allowsTightening(true),
-          fixedSize({ horizontal: true }),
-          ...colorMods(color),
-        ]}
-      >
-        {value}
-      </Text>
-    );
-
     // "42/180": the scanned count with its denominator, smaller and secondary
-    // (as the accreditation desk's `accredited/eligible`).
+    // (as the accreditation desk's `accredited/eligible`). Inside the island a
+    // ratio past seven characters (`1142/1380`) keeps only the count.
     const ratio = (
       size: number,
       denominatorSize: number,
       color: string | null,
       weight = "bold",
-    ) => (
-      <HStack
-        alignment="firstTextBaseline"
-        spacing={1}
-        modifiers={[fixedSize({ horizontal: true })]}
-      >
-        {counter(scanned, size, color, weight)}
-        {accredited ? (
-          <Text
-            modifiers={[
-              font({ size: denominatorSize, weight: "semibold" }),
-              monospacedDigit(),
-              contentTransition("numericText"),
-              secondary,
-              lineLimit(1),
-            ]}
-          >
-            {`/${accredited}`}
-          </Text>
-        ) : null}
-      </HStack>
-    );
+      fixed = true,
+    ) =>
+      kit.ratioView(
+        fixed
+          ? { count: scanned, total: accredited ? `/${accredited}` : null }
+          : kit.ratioParts(scannedCount, accredited || null),
+        { size, denominatorSize, spacing: 1, color, weight, fixed, animateTotal: true },
+      );
 
     const stat = (
       label: string | undefined,
       color: string | null,
       align: "leading" | "trailing",
+      fixed = true,
     ) => (
       <VStack alignment={align} spacing={0}>
         {label ? (
@@ -231,7 +200,7 @@ export const StaffActivityLayout = withLiveActivityKit(
             {label}
           </Text>
         ) : null}
-        {ratio(28, 15, color)}
+        {ratio(28, 15, color, "bold", fixed)}
       </VStack>
     );
 
@@ -301,9 +270,7 @@ export const StaffActivityLayout = withLiveActivityKit(
     const compactTrailing = !live
       ? countdown(12, islandAccent, 56, "short")
       : accredited || !liveText
-        ? `${scanned}/${accredited ?? ""}`.length > 7
-          ? counter(scanned, 12, islandAccent, "semibold")
-          : ratio(12, 9, islandAccent, "semibold")
+        ? ratio(12, 9, islandAccent, "semibold", false)
         : liveText;
 
     // Minimal: the scanned share as a ring; live without it, the symbol with a
@@ -326,30 +293,28 @@ export const StaffActivityLayout = withLiveActivityKit(
           <Image systemName="circle.fill" color={islandAccent} size={5} />
         </HStack>
       ) : live ? (
-        counter(scanned, 13, islandAccent, "semibold")
+        counter(scanned, 13, islandAccent, "semibold", false)
       ) : (
         glyph(islandAccent, 20)
       );
 
-    const expandedLeading = (
-      <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
-        {scanButton(islandAccent) ?? glyph(islandAccent, 24)}
-      </VStack>
+    const expandedLeading = islandSide(
+      scanButton(islandAccent) ?? glyph(islandAccent, 24),
+      "leading",
+      6,
     );
-    // Inset from the island's rounded corners so labels never clip.
-    const expandedTrailing = (
-      <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-        {live ? (
-          stat(labels.scanned, islandAccent, "trailing")
-        ) : (
-          <VStack alignment="trailing" spacing={0}>
-            <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
-              {labels.startsIn}
-            </Text>
-            {countdown(28, islandAccent, 160, "long")}
-          </VStack>
-        )}
-      </VStack>
+    const expandedTrailing = islandSide(
+      live ? (
+        stat(labels.scanned, islandAccent, "trailing", false)
+      ) : (
+        <VStack alignment="trailing" spacing={0}>
+          <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
+            {labels.startsIn}
+          </Text>
+          {countdown(28, islandAccent, 160, "long")}
+        </VStack>
+      ),
+      "trailing",
     );
 
     const expandedBottom = (
