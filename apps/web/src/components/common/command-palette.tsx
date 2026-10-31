@@ -13,7 +13,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useLocale } from "@/lib/i18n";
-import { visibleNavGroups } from "@/lib/nav";
+import { visibleNavGroups, visibleSubDestinations } from "@/lib/nav";
 import {
   focusListSearch,
   HINTED_SHORTCUTS,
@@ -56,6 +56,8 @@ export function CommandPalette() {
     };
   }, []);
 
+  const subDestinations = open ? visibleSubDestinations(isVisible) : [];
+
   function go(href: string) {
     setCommandPaletteOpen(false);
     if (href !== pathname) router.push(href);
@@ -90,6 +92,30 @@ export function CommandPalette() {
                   </CommandItem>
                 );
               })}
+              {subDestinations
+                .filter((entry) => entry.groupId === group.id)
+                .map(({ item, parent }) => {
+                  const Icon = item.icon;
+                  return (
+                    <CommandItem
+                      key={item.href}
+                      value={item.href}
+                      keywords={[
+                        t(item.title),
+                        t(item.via ?? parent.title),
+                        t(parent.title),
+                        t(group.label),
+                      ]}
+                      onSelect={() => go(item.href)}
+                    >
+                      <Icon aria-hidden="true" />
+                      {t(item.title)}
+                      <span className="ml-auto truncate text-xs text-muted-foreground">
+                        {item.via ? `${t(parent.title)} › ${t(item.via)}` : t(parent.title)}
+                      </span>
+                    </CommandItem>
+                  );
+                })}
             </CommandGroup>
           ))}
       </CommandList>

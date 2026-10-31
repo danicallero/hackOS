@@ -1103,7 +1103,7 @@ platforms and Ctrl elsewhere; hints render in the matching form.
 
 | Keys | Action | Fires while typing? |
 | --- | --- | --- |
-| ⌘K | Open/close quick search (also the sidebar's search button under the brand): the caller's sidebar destinations (`lib/nav.ts`, same capability/association predicate as the sidebar), grouped by personal area and workspace. | Yes |
+| ⌘K | Open/close quick search (also the sidebar's search button under the brand): the caller's sidebar destinations (`lib/nav.ts`, same capability/association predicate as the sidebar), grouped by personal area and workspace, plus the views inside them and the sections, fields and actions within a view (`NavItem.subItems`, each with its own gate). A result opens `?tab=<view>&go=<message key of the label>`; `QuickArrival` finds that label on the page, scrolls and focuses it, and `do=click` also activates its row's button (e.g. Change password). To make something findable, add a `deep()` entry in `lib/nav.ts` using the label's existing message key. | Yes |
 | ⌘S | Submit the `FormActions` save owner that holds focus when it has unsaved changes (a focused clean editor still claims the key so the browser's "Save page" never opens). With focus outside any form, the only dirty owner in the active layer is saved; several dirty owners → the key does nothing. | Yes |
 | / | Focus the first list `SearchField` in the active layer (the open modal, otherwise the page). Without one, the browser keeps the key. | No |
 | ⌘B | Toggle the sidebar (`ui/sidebar.tsx`). | Yes |

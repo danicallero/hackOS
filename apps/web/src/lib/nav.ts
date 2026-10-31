@@ -1,10 +1,14 @@
 import { CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
+import { BellIcon } from "@phosphor-icons/react/dist/ssr/Bell";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
+import { ClockIcon } from "@phosphor-icons/react/dist/ssr/Clock";
+import { DeviceMobileIcon } from "@phosphor-icons/react/dist/ssr/DeviceMobile";
+import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/ssr/EnvelopeSimple";
 import { FileTextIcon } from "@phosphor-icons/react/dist/ssr/FileText";
 import { FlagIcon } from "@phosphor-icons/react/dist/ssr/Flag";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/ssr/FolderSimple";
@@ -12,18 +16,24 @@ import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
 import { HouseIcon } from "@phosphor-icons/react/dist/ssr/House";
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
 import { LogIcon } from "@phosphor-icons/react/dist/ssr/Log";
+import { MapPinIcon } from "@phosphor-icons/react/dist/ssr/MapPin";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/ssr/Megaphone";
 import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package";
 import { QuestionIcon } from "@phosphor-icons/react/dist/ssr/Question";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/ssr/SealCheck";
 import { ShieldCheckIcon } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront";
+import { TagIcon } from "@phosphor-icons/react/dist/ssr/Tag";
 import { TelevisionSimpleIcon } from "@phosphor-icons/react/dist/ssr/TelevisionSimple";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
 import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
+import { UserCheckIcon } from "@phosphor-icons/react/dist/ssr/UserCheck";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
+import { WalletIcon } from "@phosphor-icons/react/dist/ssr/Wallet";
+import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 
 export interface NavItem {
   title: import("./i18n").MessageKey;
@@ -48,6 +58,13 @@ export interface NavItem {
   soon?: boolean;
   /** Dynamic Statistics ACL may expose the workspace without a global capability. */
   statisticsVisible?: boolean;
+  /**
+   * Views inside the page, opened with `?tab=` (quick search lists them too).
+   * Each carries its own gate and shows only when the parent item does.
+   */
+  subItems?: NavItem[];
+  /** For a section or action inside a view: the view it lives in, shown beside the result. */
+  via?: import("./i18n").MessageKey;
 }
 
 /**
@@ -159,6 +176,157 @@ export function visibleNavGroups(isVisible: (item: NavItem) => boolean): NavGrou
     .filter((group) => group.items.length > 0);
 }
 
+const sub = (
+  title: NavItem["title"],
+  href: string,
+  icon: PhosphorIcon,
+  gate: Pick<NavItem, "capability" | "anyCapability" | "hideForPureApplicant"> = {},
+): NavItem => ({ title, href, icon, ...gate });
+
+/**
+ * A section, field or action inside a view. `go` is the message key of its
+ * visible label, which QuickArrival finds on the page; `click` also activates
+ * it. It inherits the view's gate.
+ */
+const deep = (
+  view: NavItem | undefined,
+  title: NavItem["title"],
+  options: { go?: NavItem["title"]; click?: boolean } = {},
+): NavItem => {
+  if (!view) throw new Error(`Unknown view for "${title}"`);
+  return {
+    title,
+    icon: view.icon,
+    capability: view.capability,
+    anyCapability: view.anyCapability,
+    hideForPureApplicant: view.hideForPureApplicant,
+    via: view.title,
+    href: `${view.href}&go=${options.go ?? title}${options.click ? "&do=click" : ""}`,
+  };
+};
+
+const EVENT_SETTINGS_TABS: NavItem[] = [
+  sub("eventTitle", "/settings/event?tab=event", TagIcon, {
+    capability: CAPABILITIES.EVENT_MANAGE,
+  }),
+  sub("venueSectionTitle", "/settings/event?tab=venue", MapPinIcon, {
+    capability: CAPABILITIES.VENUE_MANAGE,
+  }),
+  sub("eventDatesTitle", "/settings/event?tab=schedule", CalendarDotsIcon, {
+    capability: CAPABILITIES.EVENT_MANAGE,
+  }),
+  sub("projectDeadlinesTitle", "/settings/event?tab=projects", FolderSimpleIcon, {
+    capability: CAPABILITIES.EVENT_MANAGE,
+  }),
+  sub("judgingWindowTitle", "/settings/event?tab=judging", ClockIcon, {
+    capability: CAPABILITIES.QUEUE_ADMIN,
+  }),
+  sub("presencePolicyTitle", "/settings/event?tab=presence", UserCheckIcon, {
+    capability: CAPABILITIES.PRESENCE_MANAGE,
+  }),
+  sub("projectFormTitle", "/settings/event?tab=projectForm", FileTextIcon, {
+    capability: CAPABILITIES.PROJECTS_EDIT,
+  }),
+  sub("invitesSectionTitle", "/settings/event?tab=invites", EnvelopeSimpleIcon, {
+    capability: CAPABILITIES.INVITES_MANAGE,
+  }),
+  sub("walletPassSectionTitle", "/settings/event?tab=wallet", WalletIcon, {
+    capability: CAPABILITIES.WALLET_MANAGE,
+  }),
+  sub("certificates", "/settings/event?tab=certificates", SealCheckIcon, {
+    capability: CAPABILITIES.PRESENCE_MANAGE,
+  }),
+  sub("notificationsAutomationTitle", "/settings/event?tab=notifications", BellIcon, {
+    capability: CAPABILITIES.EVENT_MANAGE,
+  }),
+  sub("liveActivitiesTitle", "/settings/event?tab=liveActivities", DeviceMobileIcon, {
+    capability: CAPABILITIES.EVENT_MANAGE,
+  }),
+  sub("dangerZone", "/settings/event?tab=danger", WarningIcon, {
+    capability: CAPABILITIES.ADMIN_ALL,
+  }),
+];
+
+export interface SubDestination {
+  item: NavItem;
+  parent: NavItem;
+  groupId: string;
+}
+
+/**
+ * Views inside the visible destinations (`?tab=` sections), for quick search.
+ * A view needs its destination and its own gate (#1182).
+ */
+export function visibleSubDestinations(isVisible: (item: NavItem) => boolean): SubDestination[] {
+  return visibleNavGroups(isVisible).flatMap((group) =>
+    group.items.flatMap((parent) =>
+      (parent.subItems ?? [])
+        .filter((item) => isVisible(item))
+        .map((item) => ({ item, parent, groupId: group.id })),
+    ),
+  );
+}
+
+const inEventTab = (tab: string) => EVENT_SETTINGS_TABS.find((i) => i.href.endsWith(`tab=${tab}`));
+
+const EVENT_SETTINGS_SUBITEMS: NavItem[] = [
+  ...EVENT_SETTINGS_TABS,
+  deep(inEventTab("event"), "name"),
+  deep(inEventTab("event"), "taglineLabel"),
+  deep(inEventTab("event"), "timezoneLabel"),
+  deep(inEventTab("event"), "countdownToStartLabel"),
+  deep(inEventTab("venue"), "venueNameLabel"),
+  deep(inEventTab("venue"), "venueLatitudeLabel"),
+  deep(inEventTab("venue"), "venueLongitudeLabel"),
+  deep(inEventTab("venue"), "venueWifiSectionTitle"),
+  deep(inEventTab("venue"), "networkNameLabel"),
+  deep(inEventTab("projects"), "projectDraftVisibilityLabel"),
+  deep(inEventTab("projects"), "projectGalleryAudienceLabel"),
+  deep(inEventTab("projects"), "projectGithubRequired"),
+  deep(inEventTab("projects"), "projectMaxTeamSize"),
+  deep(inEventTab("judging"), "judgingStartsLabel"),
+  deep(inEventTab("judging"), "judgingEndsLabel"),
+  deep(inEventTab("presence"), "automaticEntryTime"),
+  deep(inEventTab("presence"), "certaintyWindow"),
+  deep(inEventTab("invites"), "invitesSponsorsGroup"),
+  deep(inEventTab("invites"), "requireSponsorDietaryLabel"),
+  deep(inEventTab("invites"), "requireStaffDietaryLabel"),
+  deep(inEventTab("invites"), "requireStaffShirtSizeLabel"),
+  deep(inEventTab("wallet"), "walletAppearanceTitle"),
+  deep(inEventTab("wallet"), "walletAppleDetailsTitle"),
+  deep(inEventTab("wallet"), "walletGoogleDetailsTitle"),
+  deep(inEventTab("wallet"), "walletAppleArtworkTitle"),
+  deep(inEventTab("wallet"), "walletGoogleArtworkTitle"),
+  deep(inEventTab("wallet"), "walletDeliveryTitle"),
+  deep(inEventTab("certificates"), "certificateIssuerName"),
+  deep(inEventTab("certificates"), "certificateAutomaticIssue"),
+  deep(inEventTab("certificates"), "certificateMinConfirmedHours"),
+  deep(inEventTab("certificates"), "certificateMinReviewHours"),
+  deep(inEventTab("certificates"), "certificatePolicyAwardHours"),
+  deep(inEventTab("liveActivities"), "liveActivitiesMaxConcurrent"),
+  deep(inEventTab("danger"), "resetJudgingDataTitle"),
+];
+
+const profileTab = (id: string) => PROFILE_TABS.find((i) => i.href.endsWith(`tab=${id}`));
+const PROFILE_TABS: NavItem[] = [
+  sub("personalDetails", "/settings/profile?tab=personal", UserIcon),
+  sub("publicProfileTitle", "/settings/profile?tab=public", UserIcon, {
+    hideForPureApplicant: true,
+  }),
+  sub("wallet", "/settings/profile?tab=wallet", WalletIcon, { hideForPureApplicant: true }),
+  sub("accountTitle", "/settings/profile?tab=account", UserIcon),
+];
+const PROFILE_SUBITEMS: NavItem[] = [
+  ...PROFILE_TABS,
+  deep(profileTab("account"), "emailAddressTitle"),
+  // Opens the dialog on arrival: the row's own button.
+  deep(profileTab("account"), "changePassword", { click: true }),
+  deep(profileTab("account"), "rolesTitle"),
+  deep(profileTab("account"), "dangerZone"),
+  deep(profileTab("account"), "deleteMyAccount"),
+  deep(profileTab("wallet"), "certificates"),
+];
+
 /**
  * Stable personal area (audit §3.1): always available to authenticated
  * accounts, independent of any work capability. Order is time-critical work
@@ -183,7 +351,12 @@ export const PERSONAL_NAV: NavItem[] = [
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
-  { title: "myProfile", href: "/settings/profile", icon: UserIcon },
+  {
+    title: "myProfile",
+    href: "/settings/profile",
+    icon: UserIcon,
+    subItems: PROFILE_SUBITEMS,
+  },
 ];
 
 /**
@@ -235,6 +408,13 @@ export const WORKSPACES: Workspace[] = [
         title: "queueOperations",
         href: "/queue",
         icon: ListNumbersIcon,
+        subItems: [
+          sub("allRoomsOverview", "/queue?tab=rooms", ListNumbersIcon),
+          sub("judgingQueues", "/queue?tab=queues", ListNumbersIcon),
+          sub("roomConfigurationTitle", "/queue?tab=configuration", ListNumbersIcon, {
+            capability: CAPABILITIES.QUEUE_ADMIN,
+          }),
+        ],
         anyCapability: [
           CAPABILITIES.QUEUE_OPERATE,
           CAPABILITIES.QUEUE_ADMIN,
@@ -276,6 +456,19 @@ export const WORKSPACES: Workspace[] = [
         title: "accreditationAndPresence",
         href: "/logistics/presence",
         icon: SealCheckIcon,
+        subItems: [
+          sub("certificates", "/logistics/presence?tab=certificates", SealCheckIcon, {
+            capability: CAPABILITIES.PRESENCE_MANAGE,
+          }),
+          sub("presenceScanTab", "/logistics/presence?tab=scan", SealCheckIcon),
+          sub("peopleTab", "/logistics/presence?tab=people", SealCheckIcon),
+          sub("presenceSessionsTab", "/logistics/presence?tab=sessions", SealCheckIcon, {
+            capability: CAPABILITIES.PRESENCE_SCAN,
+          }),
+          sub("presenceHoursTab", "/logistics/presence?tab=hours", SealCheckIcon, {
+            capability: CAPABILITIES.PRESENCE_SCAN,
+          }),
+        ],
         anyCapability: [
           CAPABILITIES.ACCREDIT_SCAN,
           CAPABILITIES.PRESENCE_SCAN,
@@ -288,6 +481,10 @@ export const WORKSPACES: Workspace[] = [
         title: "mealsAndActivities",
         href: "/logistics/activities",
         icon: ClipboardTextIcon,
+        subItems: [
+          sub("activities", "/logistics/activities?tab=activity", ClipboardTextIcon),
+          sub("meals", "/logistics/activities?tab=meal", ClipboardTextIcon),
+        ],
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
@@ -370,6 +567,7 @@ export const WORKSPACES: Workspace[] = [
         title: "eventSettings",
         href: "/settings/event",
         icon: GearIcon,
+        subItems: EVENT_SETTINGS_SUBITEMS,
         anyCapability: [
           CAPABILITIES.EVENT_MANAGE,
           CAPABILITIES.VENUE_MANAGE,
@@ -385,6 +583,12 @@ export const WORKSPACES: Workspace[] = [
         href: "/settings/libraries",
         icon: BooksIcon,
         capability: CAPABILITIES.INTOLERANCES_MANAGE,
+        subItems: [
+          sub("foodIntolerances", "/settings/libraries?tab=intolerances", BooksIcon),
+          sub("shirtSizesGroup", "/settings/libraries?tab=shirt-sizes", BooksIcon),
+          sub("universitiesTab", "/settings/libraries?tab=universities", BooksIcon),
+          sub("degreesTab", "/settings/libraries?tab=degrees", BooksIcon),
+        ],
       },
     ],
   },

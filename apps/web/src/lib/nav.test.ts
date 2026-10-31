@@ -7,6 +7,7 @@ import {
   PERSONAL_NAV,
   readLastWorkspace,
   visibleNavGroups,
+  visibleSubDestinations,
   WORKSPACES,
   workspaceForPath,
   writeLastWorkspace,
@@ -429,5 +430,31 @@ describe("visibleNavGroups (quick search, #1182)", () => {
     const ctx = contextFor([CAPABILITIES.ADMIN_ALL]);
     const ids = groupsFor(ctx).map((group) => group.id);
     expect(ids).toEqual(["personal", ...visibleWorkspaceIds(ctx)]);
+  });
+});
+
+describe("quick search sub-destinations (#1182)", () => {
+  const hrefsFor = (ctx: NavVisibilityContext) =>
+    visibleSubDestinations((item) => isNavItemVisible(item, ctx)).map((entry) => entry.item.href);
+
+  it("lists only the event settings sections the caller can manage", () => {
+    const hrefs = hrefsFor(contextFor([CAPABILITIES.WALLET_MANAGE]));
+    expect(hrefs).toContain("/settings/event?tab=wallet");
+    expect(hrefs).not.toContain("/settings/event?tab=venue");
+    expect(hrefs).not.toContain("/settings/event?tab=danger");
+  });
+
+  it("lists only profile views for a caller without capabilities", () => {
+    const hrefs = hrefsFor(contextFor([]));
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs.every((href) => href.startsWith("/settings/profile?tab="))).toBe(true);
+  });
+
+  it("points every view at its destination with a tab", () => {
+    for (const item of WORKSPACES.flatMap((w) => w.items)) {
+      for (const subItem of item.subItems ?? []) {
+        expect(subItem.href.startsWith(`${item.href}?tab=`)).toBe(true);
+      }
+    }
   });
 });
