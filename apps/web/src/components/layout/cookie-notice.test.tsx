@@ -114,6 +114,23 @@ describe("CookieNotice", () => {
     expect(window.localStorage.getItem("hackos.cookie-notice.dismissed")).toBe("true");
   });
 
+  it("publishes its footprint as page inset while visible and clears it on dismissal (#1179)", async () => {
+    const root_ = document.documentElement;
+    act(() => root.render(<CookieNotice />));
+
+    // jsdom has no layout: height 0 plus the 16 px viewport margin on both sides.
+    expect(root_.style.getPropertyValue("--cookie-notice-inset")).toBe("32px");
+
+    const user = userEvent.setup();
+    await act(async () => {
+      await user.click(
+        container.querySelector('button[aria-label="Dismiss cookie notice"]') as HTMLButtonElement,
+      );
+    });
+
+    expect(root_.style.getPropertyValue("--cookie-notice-inset")).toBe("");
+  });
+
   it("uses the server snapshot during hydration before applying a saved dismissal", () => {
     window.localStorage.setItem("hackos.cookie-notice.dismissed", "true");
     const serverMarkup = renderToString(<CookieNotice />);

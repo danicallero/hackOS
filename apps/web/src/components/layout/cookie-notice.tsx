@@ -3,11 +3,12 @@
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Image from "next/image";
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { useLocale } from "@/lib/i18n";
 
 const STORAGE_KEY = "hackos.cookie-notice.dismissed";
+const NOTICE_MARGIN_PX = 16;
 
 function subscribeToDismissal(onStoreChange: () => void) {
   window.addEventListener("storage", onStoreChange);
@@ -32,6 +33,28 @@ export function CookieNotice() {
     getServerDismissalSnapshot,
   );
 
+  const asideRef = useRef<HTMLElement>(null);
+
+  // The notice floats over the viewport, so it publishes its footprint and the
+  // page reserves that much bottom space: primary actions stay reachable (#1179).
+  useEffect(() => {
+    const node = asideRef.current;
+    if (isDismissed || !node) return;
+    const root = document.documentElement;
+    const publish = () =>
+      root.style.setProperty(
+        "--cookie-notice-inset",
+        `${Math.ceil(node.getBoundingClientRect().height + NOTICE_MARGIN_PX * 2)}px`,
+      );
+    publish();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
+    observer?.observe(node);
+    return () => {
+      observer?.disconnect();
+      root.style.removeProperty("--cookie-notice-inset");
+    };
+  }, [isDismissed]);
+
   function dismiss() {
     window.localStorage.setItem(STORAGE_KEY, "true");
     window.dispatchEvent(new StorageEvent("storage", { key: STORAGE_KEY, newValue: "true" }));
@@ -43,6 +66,7 @@ export function CookieNotice() {
 
   return (
     <aside
+      ref={asideRef}
       aria-labelledby="cookie-notice-title"
       className="bg-card text-card-foreground fixed z-50 w-[calc(100vw-2rem)] max-w-2xl overflow-hidden rounded-surface border shadow-xl"
       style={{

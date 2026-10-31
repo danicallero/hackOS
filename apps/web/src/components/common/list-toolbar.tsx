@@ -14,6 +14,7 @@ export function ListToolbar({
   actions,
   actionsBeforeFilters = false,
   feedback,
+  searchOwnRowOnMobile = false,
 }: {
   search: SearchFieldProps;
   filters?: readonly FilterDefinition[];
@@ -21,6 +22,8 @@ export function ListToolbar({
   /** Puts the actions right after the search field, e.g. the button that submits it. */
   actionsBeforeFilters?: boolean;
   feedback?: React.ReactNode;
+  /** Below `sm` the search takes its own row so wide actions cannot shrink it (#1178). */
+  searchOwnRowOnMobile?: boolean;
 }) {
   const { t } = useLocale();
   const isMobile = useIsMobile();
@@ -36,16 +39,23 @@ export function ListToolbar({
             : hasFilters || actions
               ? "grid-cols-[minmax(0,1fr)_auto]"
               : "grid-cols-1",
+          searchOwnRowOnMobile && hasFilters && actions && "max-sm:grid-cols-[auto_minmax(0,1fr)]",
         )}
       >
-        <SearchField {...search} />
+        <SearchField
+          {...search}
+          className={cn(searchOwnRowOnMobile && "max-sm:col-span-full", search.className)}
+        />
         {actionsBeforeFilters && actions}
         {hasFilters && (
           <FilterMenu
             filters={filters!}
             iconOnly={isMobile}
             className="contents"
-            chipsClassName="col-span-full row-start-2 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-1"
+            chipsClassName={cn(
+              "col-span-full row-start-2 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-1",
+              searchOwnRowOnMobile && actions && "max-sm:row-start-3",
+            )}
           />
         )}
         {!actionsBeforeFilters && actions}

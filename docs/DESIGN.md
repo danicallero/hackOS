@@ -589,7 +589,7 @@ build a universal page component with domain flags.
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
 | `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. |
-| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. |
+| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowOnMobile` gives the search its own row below `sm` when the actions are wide (Schedule). |
 | `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
@@ -735,6 +735,12 @@ Keep actual multi-record objects independently bounded when ownership matters.
 | Side editor / fixed operational pane | Fixed footer outside the scrolling body; no nested sticky bar. |
 | Long, frequently extended operational table | Keep its existing compact trailing sticky create action (Schedule/Rooms). Do not add a floating create button to every short/paginated catalogue. |
 | Immediate cell edit / autosave | Show saving/saved/error at the cell or its shared scope, not a page-level claim that unrelated data is saved. |
+
+The first-visit cookie notice floats over the viewport, so it publishes its
+footprint as `--cookie-notice-inset` on `<html>`. The page reserves that space
+(`body` bottom padding), and anything sticky or floating at the bottom edge
+adds it to its offset (`.form-action-footer`, Schedule's create button), so a
+primary action is never hidden behind the notice at any width (#1179).
 
 `FormActions` places the scope's current save status at the leading edge;
 secondary actions (Cancel/Reset) and the primary Save follow at the trailing
@@ -942,7 +948,9 @@ Tables and lists:
 - A page whose primary action creates rows in a long table keeps that action
   reachable from anywhere in the scroll (a sticky button over the table's
   bottom corner), instead of only in the page header where a scrolled-down
-  user can't see it.
+  user can't see it. The table block keeps bottom padding so that button never
+  rests on the last rows, and a table that scrolls sideways at narrow widths
+  uses `.table-scroll-cue` (edge shadows toward the side it can still scroll).
 
 Forms:
 
