@@ -156,8 +156,8 @@ index 7dfe0a9..6b7caa1 100644
 +            unit("min", scale: 0.72)
 +          }
 +        }
-+        // Inset from the island's rounded corner, which cut the first stroke of the label.
-+        .frame(width: stackWidth + 8, alignment: .trailing)
++        // A small inset from the island's rounded corner, which cut the first stroke of the label.
++        .frame(width: stackWidth + 4, alignment: .trailing)
 +      } else if left >= 3600 {
 +        // `2h 34m` (also the compact island's form past an hour); minutes-of-hour under ten drop their zero: `1h 5m`.
 +        let shortMinutes = (Int(left) % 3600) / 60 < 10
