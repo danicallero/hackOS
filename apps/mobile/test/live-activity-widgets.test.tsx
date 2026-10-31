@@ -785,7 +785,7 @@ describe("New Live Activity kinds (#966)", () => {
             ? 56
             : leading
               ? 36
-              : 24,
+              : 22,
         compactTrailing: leading ? 24 : 56,
         minimal: 36,
       } as const;
@@ -794,6 +794,12 @@ describe("New Live Activity kinds (#966)", () => {
         const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
         const frame = modifiers.find((m) => m.modifier === "frame");
         const box = frame?.args[0] as { maxWidth?: number; idealWidth?: number };
+        // The queue's compact slots hug their content, never past the old cap.
+        if (name.startsWith("queue") && slot !== "minimal") {
+          expect(box.maxWidth).toBeLessThanOrEqual(width);
+          expect(box.idealWidth).toBe(box.maxWidth);
+          continue;
+        }
         expect(box.maxWidth).toBe(width);
         // Under `fixedSize` only an ideal width makes the cap the content's
         // proposal, so text scales instead of spilling past the island (#1171).
@@ -1188,7 +1194,7 @@ describe("Dynamic Island safe areas (#1171)", () => {
     ).toBe(24);
   });
 
-  it("keeps the room's location on the room's line in the called Lock Screen", () => {
+  it("shows only the room in the called Lock Screen, with the count-up under Called", () => {
     const layout = QueueActivityLayout(
       queue({
         phase: "called",
@@ -1200,12 +1206,9 @@ describe("Dynamic Island safe areas (#1171)", () => {
       }),
       environment,
     );
-    const rows = nodes(layout.banner, "HStack").filter((row) => {
-      const own = texts(row);
-      return own.length === 2 && own[0] === "Floor 1" && own[1] === "Room B";
-    });
-    expect(rows).toHaveLength(1);
-    // Header, hero, track: no fourth row for the location.
+    expect(texts(layout.banner)).not.toContain("Floor 1");
+    expect(texts(layout.banner)).toContain("Room B");
+    // Header, hero, track.
     const children = (layout.banner as Node).props?.children as unknown[];
     expect(children.filter(Boolean)).toHaveLength(3);
   });

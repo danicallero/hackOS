@@ -2035,7 +2035,13 @@ the layouts read `environment.isStale` as live. See
 `widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
 `'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
 use only `@expo/ui/swift-ui` and declare every helper and colour inside the
-function. Pieces every kind repeats (island slot caps, `secondary`/`colorMods`,
+function. Never write a regex literal in a layout: serialization drops its
+backslashes (`/\s+/` became `/s+/` and the compact island showed "Roo" for
+"Room B"); `test/widget-serialization.test.ts` enforces it (#1171). The compact island hugs its content (HIG: as narrow as possible, snug
+against the camera): slots are sized to their text and centred, and the queue
+shows a short room code ("Aula 3.0" -> "A3.0", "Room B" -> "RB"). The called
+Lock Screen banner shows the room without its location, and the count-up sits
+left-aligned under "Called". Pieces every kind repeats (island slot caps, `secondary`/`colorMods`,
 the caption, the **Scan** circle) live in `widgets/live-activity-kit.tsx`
 (#1134): the kit is itself a `'widget'` function and `withLiveActivityKit`
 concatenates its source with each layout's, passing its result as the layout's

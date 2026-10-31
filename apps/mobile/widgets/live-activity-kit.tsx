@@ -65,7 +65,7 @@ export const liveActivityKit = () => {
       ...layout,
       compactLeading: islandSlot(
         layout.compactLeading as never,
-        slots?.compactLeading ?? { width: 24, alignment: "trailing" },
+        slots?.compactLeading ?? { width: 22, alignment: "center" },
       ),
       compactTrailing: islandSlot(
         layout.compactTrailing as never,
