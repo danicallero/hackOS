@@ -86,6 +86,8 @@ describe("DataTable accessibility and interactions", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+    delete (HTMLTableCellElement.prototype as { clientWidth?: number }).clientWidth;
+    delete (HTMLTableCellElement.prototype as { scrollWidth?: number }).scrollWidth;
   });
 
   function render(table: React.ReactNode) {
@@ -123,6 +125,30 @@ describe("DataTable accessibility and interactions", () => {
       await userEvent.keyboard("{Enter}");
     });
     expect(activated).toHaveBeenCalledOnce();
+  });
+
+  it("reveals overflowing cell text on keyboard focus and touch", async () => {
+    Object.defineProperties(HTMLTableCellElement.prototype, {
+      clientWidth: { configurable: true, get: () => 20 },
+      scrollWidth: { configurable: true, get: () => 120 },
+    });
+    render(<DataTable columns={columns} data={rows} getRowId={(row) => row.id} />);
+
+    const cell = container.querySelector<HTMLTableCellElement>("tbody td");
+    expect(cell?.getAttribute("tabindex")).toBe("0");
+    expect(cell?.getAttribute("aria-label")).toBeNull();
+    expect(cell?.textContent).toBe("Ada");
+    act(() => cell?.focus());
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Ada");
+    const descriptionId = cell?.getAttribute("aria-describedby");
+    expect(descriptionId).toBeTruthy();
+    expect(document.getElementById(descriptionId ?? "")?.textContent).toBe("Ada");
+
+    act(() => {
+      cell?.blur();
+      cell?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("Ada");
   });
 
   it("navigates via the router when a row with an href is clicked", async () => {

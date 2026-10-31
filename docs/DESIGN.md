@@ -910,7 +910,10 @@ Tables and lists:
 - Bulk actions appear only after selection and state what set they affect.
 - Wide operational tables preserve readable column widths and scroll
   horizontally instead of compressing every field into an overlapping grid.
-  Long free-text cells truncate with a native title, while row actions stay in
+  Long free-text cells may truncate to preserve dense table geometry. When a
+  cell's content overflows, the cell becomes keyboard-focusable and opens the
+  full value on focus or press; its accessible name remains the visible cell
+  text. Use wrapping or clamping when the column allows it. Row actions stay in
   a stable trailing column. Primary create actions for a table align to that
   trailing edge, close to the side-panel origin.
 - User tables stay text-first when no profile image exists; do not synthesize
