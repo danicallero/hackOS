@@ -7,6 +7,7 @@ import {
   font,
   frame,
   gaugeStyle,
+  layoutPriority,
   lineLimit,
   monospacedDigit,
   padding,
@@ -33,7 +34,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
   (props: AccreditationLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { caption, colorMods, secondary } = kit;
+    const { caption, colorMods, islandSide, secondary } = kit;
     const capped = kit.capped();
     // A newer, incompatible props shape degrades to a bare symbol.
     if (props.v !== 1 || !props.labels) {
@@ -80,7 +81,16 @@ export const AccreditationActivityLayout = withLiveActivityKit(
     const endsAt = new Date(props.endsAt);
     const validEnd = Number.isFinite(endsAt.getTime());
 
-    const number = (value: string, size: number, color: string | null, weight = "bold") => (
+    // Full width on the Lock Screen (`fixed`); inside the island nothing is
+    // fixed, so a value shrinks to its slot instead of spilling under the
+    // camera (#1171).
+    const number = (
+      value: string,
+      size: number,
+      color: string | null,
+      weight = "bold",
+      fixed = true,
+    ) => (
       <Text
         modifiers={[
           font({ size, weight: weight as "bold" | "semibold" }),
@@ -88,7 +98,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
           contentTransition("numericText"),
           lineLimit(1),
           allowsTightening(true),
-          fixedSize({ horizontal: true }),
+          ...(fixed ? [fixedSize({ horizontal: true })] : [layoutPriority(1)]),
           ...colorMods(color),
         ]}
       >
@@ -97,27 +107,34 @@ export const AccreditationActivityLayout = withLiveActivityKit(
     );
 
     // "412 /600": the hero count with its denominator, smaller and secondary.
-    const accreditedValue = (size: number, color: string | null) => (
-      <HStack
-        alignment="firstTextBaseline"
-        spacing={2}
-        modifiers={[fixedSize({ horizontal: true })]}
-      >
-        {number(String(accredited), size, color)}
-        {eligible !== null ? (
-          <Text
-            modifiers={[
-              font({ size: Math.round(size * 0.55), weight: "semibold" }),
-              monospacedDigit(),
-              secondary,
-              lineLimit(1),
-            ]}
-          >
-            {`/${eligible}`}
-          </Text>
-        ) : null}
-      </HStack>
-    );
+    // Beside the camera a ratio past seven characters (`1412/1600`) keeps
+    // only the count; the bar below still shows the share.
+    const accreditedValue = (size: number, color: string | null, fixed = true) => {
+      const parts = fixed
+        ? { count: String(accredited), total: eligible !== null ? `/${eligible}` : null }
+        : kit.ratioParts(accredited, eligible);
+      return (
+        <HStack
+          alignment="firstTextBaseline"
+          spacing={2}
+          modifiers={fixed ? [fixedSize({ horizontal: true })] : []}
+        >
+          {number(parts.count, size, color, "bold", fixed)}
+          {parts.total ? (
+            <Text
+              modifiers={[
+                font({ size: Math.round(size * 0.55), weight: "semibold" }),
+                monospacedDigit(),
+                secondary,
+                lineLimit(1),
+              ]}
+            >
+              {parts.total}
+            </Text>
+          ) : null}
+        </HStack>
+      );
+    };
     const stat = (
       label: string | undefined,
       value: ReturnType<typeof number>,
@@ -150,7 +167,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
       ) : null;
 
     const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-    const compactTrailing = number(String(accredited), 12, islandAccent, "semibold");
+    const compactTrailing = number(String(accredited), 12, islandAccent, "semibold", false);
 
     // Minimal: the accredited share as a ring.
     const minimal =
@@ -165,18 +182,17 @@ export const AccreditationActivityLayout = withLiveActivityKit(
           ]}
         />
       ) : (
-        number(String(accredited), 13, islandAccent, "semibold")
+        number(String(accredited), 13, islandAccent, "semibold", false)
       );
 
-    const expandedLeading = (
-      <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
-        {scanButton(islandAccent) ?? <Image systemName={symbol} color={islandAccent} size={24} />}
-      </VStack>
+    const expandedLeading = islandSide(
+      scanButton(islandAccent) ?? <Image systemName={symbol} color={islandAccent} size={24} />,
+      "leading",
+      6,
     );
-    const expandedTrailing = (
-      <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-        {stat(labels.accredited, accreditedValue(28, islandAccent), "trailing")}
-      </VStack>
+    const expandedTrailing = islandSide(
+      stat(labels.accredited, accreditedValue(28, islandAccent, false), "trailing"),
+      "trailing",
     );
     const secondaryStats = (
       <HStack alignment="top" spacing={12}>

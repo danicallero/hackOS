@@ -2031,7 +2031,7 @@ Apple's HIG:
 | Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
 | Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: category symbol (20 pt) |
 | Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: challenge · +N more queues, location · called count-up, stage track | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: circular **Scan** / Scanned `42/180`, name + live state, ends-in, then scanned-share bar (elapsed time without a denominator) |
-| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
+| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" over location + room (green) on one baseline trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge · hero `#4`, line `~12 min`; called: "Go to" room + location; in room: room | name · countdown, or `42/180` + "Scanned"; no buttons |
 
 Lock Screen banners keep the system's black card (design decision: it makes
@@ -2043,10 +2043,10 @@ centred box, so both sit on the axis of the vertical island of a foldable
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" / symbol (blue) | countdown (white; grey once submitted, never red) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.badge.key` / accredited count |
+| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" (56 pt slot) / symbol (blue) | countdown (white; grey once submitted, never red) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.badge.key` / accredited count |
 | Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
 | Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
-| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red only on the symbol and "Not submitted"; countdown and bar stay neutral. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
+| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red only on the symbol and "Not submitted"; countdown and bar stay neutral. Submitted: green "Submitted" leading, small "Closes in" time left trailing in the same row, then title, project, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
 | Watch / CarPlay | name · countdown (live: "Live" + "Ends in" time left) | title · countdown, with a "Not submitted" line (the one red element) only while closing; submitted: "Submitted" + time left | title · `412 /600` + "Accredited" |
 
 **Watch (`.small` family).** `expo-widgets` registers
@@ -2108,13 +2108,31 @@ Numbers use `monospacedDigit` with numeric content transitions; countdowns,
 the count-up since the call and the elapsed-time bar are SwiftUI timers, so
 they tick without updates.
 
-**Fitting the Dynamic Island (#966).** Every widget wraps its compact
+**Fitting the Dynamic Island (#966, #1171).** Every widget wraps its compact
 leading, compact trailing and minimal views in hard width caps of 24, 56 and
-36 pt (the queue's compact leading is 40 pt, so a three-digit position fits) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+36 pt (the queue's compact leading is 40 pt, so a three-digit position fits;
+a live attendee activity's is 56 pt, so "Live"/"En curso" fits, keeping the
+staff activity's 80 pt total) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
 value, locale or text size can widen the island; text scales down
-(`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
-leading / 7 pt trailing inset so the glyph and the time sit on the pill's
-concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
+(`minimumScaleFactor(0.6)`) instead of truncating. The cap is
+`frame(idealWidth: cap, maxWidth: cap)` under `fixedSize`: without the ideal
+width, `fixedSize`'s open proposal passed through the frame, the content kept
+its full width and spilled past the island's edge, and the scale factor never
+applied (#1171). Expanded leading and trailing sit beside the TrueDepth camera
+in regions the system sizes; anything there that refuses its proposal
+(`fixedSize`) grows into the sensor housing. So the kit's `islandSide` wraps
+both regions (8 pt off the curved corners, `minimumScaleFactor(0.6)`, fixed
+type size) and nothing inside them, or inside a compact/minimal slot, is
+`fixedSize`; numbers keep their full width only on the Lock Screen. Beside the
+camera and in compact slots a ratio past seven characters (`1142/1380`) shows
+only the count (`ratioParts`); the bar keeps the share. Fonts are fixed point
+sizes (`Font.system(size:)`), so accessibility text sizes do not grow them.
+The Lock Screen (also the banner on iPhones without a Dynamic Island) stays
+within 160 pt: the called queue puts the location on the room's baseline and
+the submitted deadline puts its time left in the hero row, instead of extra
+rows. `test/live-activity-widgets.test.tsx` ("Dynamic Island safe areas")
+asserts these structural rules; it cannot show pixels, so device screenshots
+with two simultaneous activities remain the visual check. Every countdown surface uses `2h 34m` / `34m`
 normally, colon notation in the last five minutes (`4:59`), then `48s` below a
 minute (including `bannerSmall`). A value beside a unit never has a leading zero
 (`1h 5m`, `9m`, `9s`): the fields are as wide as their digits, and zero padding

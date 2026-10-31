@@ -53,7 +53,7 @@ export const QueueActivityLayout = withLiveActivityKit(
   (props: QueueLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { colorMods, secondary } = kit;
+    const { colorMods, islandSide, secondary } = kit;
     const capped = kit.capped({ compactLeading: { width: 40, alignment: "trailing" } });
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the title
@@ -260,22 +260,21 @@ export const QueueActivityLayout = withLiveActivityKit(
       );
     };
 
-    // Caption above a large value. Numbers keep their full width (`fixedSize`);
-    // a room name can be long, so it shrinks and then truncates.
+    // Caption above a large value. On the Lock Screen numbers keep their full
+    // width (`fixed`); a room name can be long, so it shrinks and then
+    // truncates. Beside the camera nothing is fixed (#1171): a 28 pt
+    // `~12 min` can be wider than that region. `place` sits on the value's
+    // baseline, before it, and gives way first.
     const metric = (
       label: string | null,
       value: string,
       align: "leading" | "trailing",
       color: string | null,
       size: number,
-      numeric = true,
-    ) => (
-      <VStack alignment={align} spacing={0}>
-        {label ? (
-          <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
-            {label}
-          </Text>
-        ) : null}
+      fixed = true,
+      place: string | null = null,
+    ) => {
+      const text = (
         <Text
           modifiers={[
             font({ size, weight: "bold" }),
@@ -283,21 +282,46 @@ export const QueueActivityLayout = withLiveActivityKit(
             contentTransition("numericText", { countsDown: true }),
             lineLimit(1),
             allowsTightening(true),
-            ...(numeric ? [fixedSize({ horizontal: true })] : [minimumScaleFactor(0.6)]),
+            ...(fixed ? [fixedSize({ horizontal: true })] : [minimumScaleFactor(0.6)]),
+            layoutPriority(1),
             ...colorMods(color),
           ]}
         >
           {value}
         </Text>
-      </VStack>
-    );
+      );
+      return (
+        <VStack alignment={align} spacing={0}>
+          {label ? (
+            <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
+              {label}
+            </Text>
+          ) : null}
+          {place ? (
+            <HStack alignment="firstTextBaseline" spacing={6}>
+              <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+                {place}
+              </Text>
+              {text}
+            </HStack>
+          ) : (
+            text
+          )}
+        </VStack>
+      );
+    };
     // The ETA metric: an estimate (`~12 min`, never a ticking timer), or the
     // smaller "Estimating…" placeholder.
-    const etaMetric = (align: "leading" | "trailing", color: string | null, size: number) =>
+    const etaMetric = (
+      align: "leading" | "trailing",
+      color: string | null,
+      size: number,
+      fixed = true,
+    ) =>
       etaOrEstimating === null
         ? null
         : etaLong
-          ? metric(labels.wait, etaLong, align, color, size)
+          ? metric(labels.wait, etaLong, align, color, size, fixed)
           : metric(labels.wait, etaOrEstimating, align, color, Math.round(size * 0.62), false);
 
     const symbol = inRoom
@@ -390,40 +414,26 @@ export const QueueActivityLayout = withLiveActivityKit(
         </ZStack>
       );
 
-    const expandedLeading = called ? (
-      <Image
-        systemName={symbol}
-        color={symbolColor}
-        size={24}
-        modifiers={[padding({ leading: 8, top: 6 })]}
-      />
-    ) : inRoom ? (
-      <Image
-        systemName={symbol}
-        color={neutral}
-        size={24}
-        modifiers={[padding({ leading: 8, top: 6 })]}
-      />
-    ) : (
-      <VStack modifiers={[padding({ leading: 8, top: 4 })]}>
-        {metric(labels.position, position ?? "–", "leading", null, 17)}
-      </VStack>
-    );
+    const expandedLeading =
+      called || inRoom
+        ? islandSide(<Image systemName={symbol} color={symbolColor} size={24} />, "leading", 6)
+        : islandSide(
+            metric(labels.position, position ?? "–", "leading", null, 17, false),
+            "leading",
+          );
 
-    // Inset from the island's rounded corners so labels never clip.
-    const expandedTrailing = (
-      <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-        {called || inRoom
-          ? metric(
-              called ? labels.goTo : labels.inRoom,
-              room || "–",
-              "trailing",
-              islandColor,
-              28,
-              false,
-            )
-          : etaMetric("trailing", islandColor, 28)}
-      </VStack>
+    const expandedTrailing = islandSide(
+      called || inRoom
+        ? metric(
+            called ? labels.goTo : labels.inRoom,
+            room || "–",
+            "trailing",
+            islandColor,
+            28,
+            false,
+          )
+        : etaMetric("trailing", islandColor, 28, false),
+      "trailing",
     );
 
     const calledSince = calledTimer(17, "medium", 72);
@@ -502,6 +512,9 @@ export const QueueActivityLayout = withLiveActivityKit(
       </HStack>
     );
 
+    // The location reads before the room, on its baseline ("Go to / Floor 1
+    // Room B"): on a line of its own it pushed the called banner past the
+    // 160 pt Lock Screen height (#1171).
     const calledFor = calledTimer(17, "semibold", 72);
     const hero =
       called || inRoom ? (
@@ -517,21 +530,15 @@ export const QueueActivityLayout = withLiveActivityKit(
             </VStack>
           ) : null}
           <Spacer />
-          <VStack alignment="trailing" spacing={0}>
-            {metric(
-              called ? labels.goTo : labels.inRoom,
-              room || "–",
-              "trailing",
-              bannerColor,
-              28,
-              false,
-            )}
-            {props.roomLocation ? (
-              <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-                {props.roomLocation}
-              </Text>
-            ) : null}
-          </VStack>
+          {metric(
+            called ? labels.goTo : labels.inRoom,
+            room || "–",
+            "trailing",
+            bannerColor,
+            28,
+            false,
+            props.roomLocation || null,
+          )}
         </HStack>
       ) : (
         <HStack alignment="bottom" spacing={12}>
