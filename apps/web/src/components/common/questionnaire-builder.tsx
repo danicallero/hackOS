@@ -918,13 +918,13 @@ function Field({
 function FieldHint({ text }: { text: string }) {
   const { t } = useLocale();
   return (
-    <TooltipProvider delayDuration={150}>
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
             aria-label={t("moreInformationAria")}
-            className="button-interaction text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex"
+            className="button-interaction touch-target text-muted-foreground hover:text-foreground focus-visible:text-foreground inline-flex size-(--target-min) items-center justify-center rounded-full"
           >
             <QuestionMarkIcon className="size-3.5" aria-hidden="true" />
           </button>

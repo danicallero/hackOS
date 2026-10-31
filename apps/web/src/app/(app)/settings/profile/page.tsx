@@ -119,10 +119,16 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         aria-label={t("legalLinksLabel")}
         className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-sm"
       >
-        <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
+        <Link
+          className="inline-flex min-h-(--target-min) items-center underline underline-offset-4 hover:text-foreground"
+          href="/terms"
+        >
           {t("termsAndConditions")}
         </Link>
-        <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
+        <Link
+          className="inline-flex min-h-(--target-min) items-center underline underline-offset-4 hover:text-foreground"
+          href="/privacy"
+        >
           {t("privacyPolicy")}
         </Link>
       </nav>

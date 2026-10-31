@@ -92,7 +92,7 @@ Each row: value → intent → boundary.
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
 | Meta | 12/16 muted (`type-meta`) | Timestamps, counts, secondary facts. **No artificial tracking** — never add `tracking-*` to shared headings or metadata. |
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
-| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px field radius, pill buttons | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. |
+| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px field radius, pill buttons | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. Every interactive target is at least 24×24 CSS px (`--target-min`, WCAG 2.2 AA 2.5.8): checkboxes and switches paint a smaller box inside a 24 px button, sort headings and column resize handles meet it, and inline links in lists use `min-h-(--target-min)`. When the primary pointer is coarse (`@media (pointer: coarse)`) the four control-height tokens become 44 px (`--target-touch`) and checkboxes, switches and sort headings extend their hit area to 44 px with the `touch-target` class instead of growing, so dense desktop layouts do not change. |
 | Surfaces | 8 px radius, semantic border + background | **No shadow for inline grouping** — border-only. |
 | App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
@@ -103,6 +103,22 @@ capital height (`heading-row`), rather than the different fonts’ line boxes.
 Section icons belong in the title row so descriptions never shift them.
 Schedule grid lines start after the hour-label gutter; labels use the shell
 background to keep the time axis clear in both themes.
+
+Motion, contrast and transparency follow the system preferences, in
+`apps/web/src/app/globals.css` and `apps/web/src/styles/theme.css`:
+
+- `prefers-reduced-motion: reduce` removes every `animate-in`/`animate-out`
+  overlay animation (dialog, sheet, menus, popover, select, tooltip) and the
+  `animate-pulse`/`animate-spin` loops globally, so a primitive needs no
+  `motion-reduce:` variant. A spinner stays visible, only static.
+- `prefers-contrast: more` darkens `--border` and `--muted-foreground` and
+  makes `--ring` the full foreground colour, in both themes.
+- `prefers-reduced-transparency: reduce` makes blurred or translucent surfaces
+  (public top bar, notification trigger, sheet) opaque. The dimming scrim
+  behind modals is not a surface and stays.
+- Tooltips open after 500 ms (instantly for an adjacent one) and on keyboard
+  focus, through the shared `TooltipProvider`; do not set a shorter delay per
+  provider.
 
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
@@ -1070,6 +1086,12 @@ product bug, not a styling choice.**
   the value under its label at accessibility sizes.
 - Charts expose exact values outside hover-only tooltips (table or text
   alternative for every chart).
+- Pointer targets are at least 24×24 CSS px everywhere and 44 px on coarse
+  pointers (§2 Controls); `axe` `target-size` must report nothing on the
+  dense tables (`/schedule`, `/users`).
+- Honour `prefers-reduced-motion`, `prefers-contrast: more` and
+  `prefers-reduced-transparency` through the global rules in §2, not per
+  component; verify with Chrome's media emulation in both themes.
 
 ## 10. Copy and localization
 

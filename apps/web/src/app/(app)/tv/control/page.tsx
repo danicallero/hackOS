@@ -266,7 +266,7 @@ export default function TvControlPage() {
                 className="has-checked:border-primary has-checked:bg-muted flex cursor-pointer gap-3 rounded-lg border p-4"
               >
                 <input
-                  className="mt-1"
+                  className="-mt-0.5 self-start"
                   type="radio"
                   name="tv-mode"
                   value={item.value}
