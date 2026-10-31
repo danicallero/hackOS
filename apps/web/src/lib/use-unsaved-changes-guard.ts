@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { useContext, useEffect, useRef } from "react";
+import {
+  requestDiscardConfirmation,
+  UnsavedChangesContext,
+} from "@/components/common/unsaved-changes-provider";
+import type { Translate } from "@/lib/i18n";
 
 /**
  * Warns before losing unsaved edits (settings audit: "warn before navigating
@@ -13,7 +17,8 @@ import { type Translate, useLocale } from "@/lib/i18n";
  * Browser Back / swipe-back is covered only when `guardBrowserBack` is set
  * (off by default; event settings opts in): a sentinel history entry is pushed
  * while dirty, Back first pops it (same URL, nothing unmounts), and the popstate
- * handler either confirms and steps back once more or re-arms the sentinel. It
+ * handler re-arms it before opening the alert, so repeated Back stays safe;
+ * accepting skips both current-page entries. It
  * is pushed once per dirty period, never on rerender (R003); after a save the
  * spent entry stays, so one extra Back lands on the same URL. Without the
  * option no history entry is pushed and no popstate listener is registered.
@@ -26,13 +31,23 @@ export function useUnsavedChangesGuard(
   dirty: boolean,
   { guardBrowserBack = false }: { guardBrowserBack?: boolean } = {},
 ) {
-  const { t } = useLocale();
-  // Read through a ref so a locale change never re-runs the effect and re-arms history.
-  const tRef = useRef(t);
-  tRef.current = t;
+  const { register, confirm, navigate } = useContext(UnsavedChangesContext);
+  const owner = useRef({});
+  const armed = useRef(false);
+  const confirmRef = useRef(confirm);
+  confirmRef.current = confirm;
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
 
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty) {
+      armed.current = false;
+      return;
+    }
+    const unregister = register(owner.current);
+    let active = true;
+    let leaving = false;
+    let decidingBack = false;
 
     function onBeforeUnload(event: BeforeUnloadEvent) {
       event.preventDefault();
@@ -44,28 +59,44 @@ export function useUnsavedChangesGuard(
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = (event.target as Element).closest?.("a[href]");
       if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (anchor.hasAttribute("download")) return;
       if (anchor.target && anchor.target !== "_self") return;
       const url = new URL(anchor.href, window.location.href);
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname && url.search === window.location.search)
         return;
-      if (!window.confirm(tRef.current("unsavedChangesConfirm"))) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      void confirmRef.current().then((accepted) => {
+        if (!active || !accepted || leaving) return;
+        leaving = true;
+        window.removeEventListener("beforeunload", onBeforeUnload);
+        navigateRef.current(url.href);
+      });
     }
 
     function arm() {
+      if (armed.current) return;
+      armed.current = true;
       window.history.pushState(window.history.state, "", window.location.href);
     }
 
     function onPopState() {
-      if (window.confirm(tRef.current("unsavedChangesConfirm"))) {
-        window.removeEventListener("popstate", onPopState);
-        window.history.back();
-      } else {
-        arm();
-      }
+      if (leaving) return;
+      armed.current = false;
+      arm();
+      if (decidingBack) return;
+      decidingBack = true;
+      void confirmRef.current().then((accepted) => {
+        if (!active || leaving) return;
+        decidingBack = false;
+        if (accepted) {
+          leaving = true;
+          window.removeEventListener("beforeunload", onBeforeUnload);
+          window.removeEventListener("popstate", onPopState);
+          window.history.go(-2);
+        }
+      });
     }
 
     if (guardBrowserBack) {
@@ -75,15 +106,17 @@ export function useUnsavedChangesGuard(
     window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("click", onClickCapture, true);
     return () => {
+      active = false;
+      unregister();
       window.removeEventListener("popstate", onPopState);
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClickCapture, true);
     };
-  }, [dirty, guardBrowserBack]);
+  }, [dirty, guardBrowserBack, register]);
 }
 
 /** Category-switch guard: returns false (and blocks the switch) when the user cancels. */
-export function confirmDiscardUnsavedChanges(dirty: boolean, t: Translate) {
+export async function confirmDiscardUnsavedChanges(dirty: boolean, _t: Translate) {
   if (!dirty) return true;
-  return window.confirm(t("unsavedChangesConfirm"));
+  return requestDiscardConfirmation();
 }
