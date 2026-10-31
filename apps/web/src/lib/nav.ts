@@ -134,6 +134,31 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   return true;
 }
 
+export interface NavGroup {
+  id: string;
+  label: import("./i18n").MessageKey;
+  items: NavItem[];
+}
+
+/**
+ * Every destination the caller can open, grouped like the sidebar: the
+ * personal area, then each workspace with a visible item. Unbuilt (`soon`)
+ * items are left out because they cannot be opened (quick search, #1182).
+ */
+export function visibleNavGroups(isVisible: (item: NavItem) => boolean): NavGroup[] {
+  const groups: NavGroup[] = [
+    { id: "personal", label: "navigationPersonal", items: PERSONAL_NAV },
+    ...WORKSPACES,
+  ];
+  return groups
+    .map((group) => ({
+      id: group.id,
+      label: group.label,
+      items: group.items.filter((item) => !item.soon && isVisible(item)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
 /**
  * Stable personal area (audit §3.1): always available to authenticated
  * accounts, independent of any work capability. Order is time-critical work

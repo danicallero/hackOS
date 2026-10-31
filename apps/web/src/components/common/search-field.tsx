@@ -6,6 +6,7 @@ import { useId, useRef } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
+import { ariaKeyShortcuts, SEARCH_SHORTCUT_ATTR, SHORTCUTS } from "@/lib/shortcuts";
 import { cn } from "@/lib/utils";
 
 export interface SearchFieldProps {
@@ -18,7 +19,7 @@ export interface SearchFieldProps {
   inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-/** Labelled shadcn search input with one shared icon, clear action and focus behavior. */
+/** Labelled shadcn search input with one shared icon, clear action and focus behavior; `/` focuses it (#1182). */
 export function SearchField({
   id,
   label,
@@ -50,6 +51,8 @@ export function SearchField({
         onChange={(event) => onValueChange(event.target.value)}
         placeholder={placeholder ?? label}
         className="pr-9 pl-9"
+        {...{ [SEARCH_SHORTCUT_ATTR]: "" }}
+        aria-keyshortcuts={ariaKeyShortcuts(SHORTCUTS.focusSearch, false)}
       />
       {value && (
         <div className="absolute inset-y-0 right-0.5 z-10 flex items-center">

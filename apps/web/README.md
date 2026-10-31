@@ -362,6 +362,9 @@ Use one `PageHeader`, then optional `TabBar`, `PageToolbar`, and content.
 `ListToolbar` provides the Users composition: a broad `SearchField`, shared
 `FilterMenu`, trailing actions and a separate active-chip row. `SearchField` owns
 its label/icon/clear control; pages keep filtering and query semantics.
+Keyboard shortcuts (⌘K quick search, ⌘S save, `/` list search) live only in
+`src/lib/shortcuts.ts` and are handled by `CommandPalette`; `SearchField` and
+`FormActions` opt in automatically. Rules: `docs/DESIGN.md` §9.
 `PageToolbar` is a labelled region for specialized search/filter/view controls.
 `TabBar`
 uses the same segmented style everywhere: `width="full"` stretches it and

@@ -25,6 +25,7 @@ vi.mock("@/components/layout/app-sidebar", () => ({
   ),
   NotificationSidebarTrigger: () => <button type="button">toggleSidebar</button>,
 }));
+vi.mock("@/components/common/command-palette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/layout/verification-banner", () => ({ VerificationBanner: () => null }));
 vi.mock("@/components/layout/profile-tasks-dialog", () => ({ ProfileTasksDialog: () => null }));
 vi.mock("@/components/layout/notification-onboarding-dialog", () => ({

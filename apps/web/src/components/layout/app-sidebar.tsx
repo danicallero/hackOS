@@ -56,7 +56,8 @@ function UnreadLabelDot() {
   );
 }
 
-function useVisible() {
+/** Sidebar visibility predicate (H8/H55), shared with quick search (#1182). */
+export function useNavVisibility() {
   const { can, canAny, me, isPureApplicant } = useSessionContext();
   return (item: NavItem) =>
     isNavItemVisible(item, {
@@ -253,7 +254,7 @@ function WorkspaceGroup({
 export function AppSidebar() {
   const pathname = usePathname();
   const { t } = useLocale();
-  const isVisible = useVisible();
+  const isVisible = useNavVisibility();
   const unreadCount = useUnreadCount();
   const [lastWorkspace, setLastWorkspace] = useState(() => readLastWorkspace());
   const [recentWorkspaceId, setRecentWorkspaceId] = useState<string | null>(null);

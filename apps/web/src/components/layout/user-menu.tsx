@@ -1,5 +1,6 @@
 "use client";
 
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { MonitorIcon } from "@phosphor-icons/react/dist/csr/Monitor";
 import { MoonIcon } from "@phosphor-icons/react/dist/csr/Moon";
 import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
@@ -18,6 +19,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -27,6 +29,12 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { signOut } from "@/lib/auth-client";
 import { languageName, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
+import {
+  formatShortcut,
+  SHORTCUTS,
+  setCommandPaletteOpen,
+  useIsApplePlatform,
+} from "@/lib/shortcuts";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +44,7 @@ export function UserMenu({ className }: { className?: string }) {
   const { language, setLanguage, t } = useLocale();
   const { setTheme, theme } = useTheme();
   const { state: sidebarState } = useSidebar();
+  const apple = useIsApplePlatform();
   if (!me) return null;
   const displayName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
 
@@ -91,6 +100,12 @@ export function UserMenu({ className }: { className?: string }) {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setCommandPaletteOpen(true)}>
+          <MagnifyingGlassIcon aria-hidden="true" className="size-4" /> {t("quickSearch")}
+          <DropdownMenuShortcut>
+            {formatShortcut(SHORTCUTS.commandPalette, apple)}
+          </DropdownMenuShortcut>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/settings/profile">
             <UserIcon aria-hidden="true" className="size-4" /> {t("profile")}

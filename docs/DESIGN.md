@@ -607,12 +607,12 @@ build a universal page component with domain flags.
 | --- | --- |
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
-| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. |
+| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
 | `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowOnMobile` gives the search its own row below `sm` when the actions are wide (Schedule). |
 | `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
-| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. |
+| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. Save is the scope's ⌘S target (§9). |
 | `Modal` / `AlertModal` / `SidePanelEditor` | Shared geometry and focus/close behavior; content-driven size. Domain dirty/pending guards remain with the editor. |
 
 Users and application responses consume `ListToolbar`; the generic `DataTable`
@@ -1092,6 +1092,35 @@ product bug, not a styling choice.**
 - Honour `prefers-reduced-motion`, `prefers-contrast: more` and
   `prefers-reduced-transparency` through the global rules in §2, not per
   component; verify with Chrome's media emulation in both themes.
+
+### Keyboard shortcuts (web, #1182)
+
+A deliberately small set, owned by `apps/web/src/lib/shortcuts.ts` and handled
+once by `CommandPalette` (mounted in `AppShell`). "⌘" means ⌘ on Apple
+platforms and Ctrl elsewhere; hints render in the matching form.
+
+| Keys | Action | Fires while typing? |
+| --- | --- | --- |
+| ⌘K | Open/close quick search: the caller's sidebar destinations (`lib/nav.ts`, same capability/association predicate as the sidebar), grouped by personal area and workspace. | Yes |
+| ⌘S | Submit the `FormActions` save owner that holds focus when it has unsaved changes (a focused clean editor still claims the key so the browser's "Save page" never opens). With focus outside any form, the only dirty owner in the active layer is saved; several dirty owners → the key does nothing. | Yes |
+| / | Focus the first list `SearchField` in the active layer (the open modal, otherwise the page). Without one, the browser keeps the key. | No |
+| ⌘B | Toggle the sidebar (`ui/sidebar.tsx`). | Yes |
+
+Rules:
+
+- Never claim a browser or screen-reader command: ⌘F stays the browser's find,
+  and ⌘L/⌘T/⌘W/⌘R/⌘P/⌘D are off limits. Extra modifiers (⌥, ⌘⇧, Ctrl on a
+  Mac) never match, and IME composition is ignored.
+- Single keys never fire while focus is in an input, textarea, select,
+  contenteditable or textbox/combobox role; only chorded keys may.
+- Save goes through the form's own submit (`requestSubmit`), so validation,
+  pending state and the unsaved-changes guard are unchanged; a pending or
+  disabled Save is never pressed.
+- Expose shortcuts where the action lives: the target carries
+  `aria-keyshortcuts`; quick search is also in the user menu with its
+  `DropdownMenuShortcut` hint, and its footer lists the other shortcuts.
+- Dialogs keep Radix's Return/Esc behavior; do not add per-dialog key handlers.
+- Add a shortcut only to the registry, with a test and a row here.
 
 ## 10. Copy and localization
 
