@@ -42,7 +42,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
     // Slots hug their content up to a cap; "En curso" in es/gl and `2h 40m`
     // need the 56 pt one (#1171).
     const capped = kit.capped({
-      compactLeading: { width: 56, alignment: "trailing" },
+      compactLeading: { width: 56, alignment: "center" },
       compactTrailing: { width: 24, alignment: "center" },
     });
     // APNs delivers props straight to this layout, so a newer, incompatible
@@ -98,7 +98,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
       width: number | null,
       weight: "semibold" | "bold" = "semibold",
       form: "full" | "short" | "long" = "full",
-      align: "leading" | "trailing" = "trailing",
+      align: "leading" | "center" | "trailing" = "trailing",
     ) =>
       (live ? validEnd : validStart) ? (
         <Text
@@ -197,7 +197,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
       ) : null;
     const compactLeading = (live
       ? liveText(12)
-      : timer(12, islandAccent, 56, "semibold", "short")) ?? <Text> </Text>;
+      : timer(12, islandAccent, 56, "semibold", "short", "center")) ?? <Text> </Text>;
 
     // #966: minimal keeps the category recognizable; live adds a status dot.
     const minimal = live ? (

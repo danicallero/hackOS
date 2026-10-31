@@ -33,7 +33,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
 
     const { colorMods, islandSide, secondary } = kit;
     const capped = kit.capped({
-      compactLeading: { width: 56, alignment: "trailing" },
+      compactLeading: { width: 56, alignment: "center" },
       compactTrailing: { width: 24, alignment: "center" },
     });
     // A newer, incompatible props shape degrades to the title.
@@ -96,7 +96,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
       color: string | null,
       width: number | null,
       weight: "semibold" | "bold" = "bold",
-      align: "leading" | "trailing" = "trailing",
+      align: "leading" | "center" | "trailing" = "trailing",
       form: "full" | "short" | "long" = "full",
     ) =>
       validEnd ? (
@@ -185,7 +185,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     // Compact, like Luma's pre-event activity: the countdown leads, snug to the
     // camera: `2h 40m` from an hour, a number over `min` below it (reminders
     // never exceed an hour); the status symbol sits opposite.
-    const compactLeading = countdown(12, valueIsland, 56, "semibold", "trailing", "short") ?? (
+    const compactLeading = countdown(12, valueIsland, 56, "semibold", "center", "short") ?? (
       <Text> </Text>
     );
     const compactTrailing = glyph(islandColor, 15);

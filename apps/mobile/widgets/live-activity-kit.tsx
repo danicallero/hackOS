@@ -70,7 +70,7 @@ export const liveActivityKit = () => {
       ),
       compactTrailing: islandSlot(
         layout.compactTrailing as never,
-        slots?.compactTrailing ?? { width: 56, alignment: "leading" },
+        slots?.compactTrailing ?? { width: 56, alignment: "center" },
       ),
       minimal: islandSlot(layout.minimal as never, { width: 36, alignment: "center" }),
     });

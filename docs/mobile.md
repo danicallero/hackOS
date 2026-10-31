@@ -2375,7 +2375,7 @@ reachable only while it is on, because nothing shows on this device then and
 the rows would be inert.
 
 **Development samples.** Debug builds only: opening
-`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-last-seconds|deadline-submitted|accreditation|all|end>`
 (for example `xcrun simctl openurl booted …`; any scheme works, and
 `com.hackudc.os.debug://dev/…` avoids opening another installed hackOS build,
 which would overwrite the App Group's shared Live Activity layouts) renders sample states without a

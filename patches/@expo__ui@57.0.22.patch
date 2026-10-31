@@ -56,7 +56,7 @@ index 7dfe0a9..6b7caa1 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +88,127 @@
+@@ -73,3 +88,136 @@
      return result
    }
  }
@@ -110,6 +110,13 @@ index 7dfe0a9..6b7caa1 100644
 +    (s as NSString).size(withAttributes: [.font: uiFont]).width
 +  }
 +  private var digit: CGFloat { advance("0000000000") / 10 }
++  // The stacked number is bold and larger than the row: measure it with that
++  // font, not the row's, or its box is wider than its digits and the number
++  // sits off-centre. A single digit is a little smaller than two.
++  private func bigFont(_ scale: Double) -> UIFont { UIFont.monospacedDigitSystemFont(ofSize: size * scale, weight: .bold) }
++  private func bigDigit(_ scale: Double) -> CGFloat { ((("0000000000" as NSString).size(withAttributes: [.font: bigFont(scale)]).width) / 10) }
++  private func bigColon(_ scale: Double) -> CGFloat { ((":" as NSString).size(withAttributes: [.font: bigFont(scale)]).width) }
++  private func bigDigits(_ count: Int, _ scale: Double) -> CGFloat { ceil(CGFloat(count) * bigDigit(scale)) }
 +  private var colon: CGFloat { advance(":") }
 +  private func digitsWidth(_ count: Int) -> CGFloat { ceil(CGFloat(count) * digit) }
 +
@@ -134,30 +141,32 @@ index 7dfe0a9..6b7caa1 100644
 +
 +  var body: some View {
 +    let left = max(0, end.timeIntervalSinceNow)
-+    // The stacked form is as wide as its widest line: the  label is wider
++    // The stacked form is as wide as its widest line: the min label is wider
 +    // than a one-digit number and was clipped at the island's edge.
 +    let seconds = left <= 30 && !reduced
++    let twoDigits = seconds ? left >= 10 : left >= 600
++    let bigScale: Double = twoDigits ? 1.35 : 1.2
 +    let stackWidth = seconds
-+      ? digitsWidth(left >= 10 ? 2 : 1) * 1.35
-+      : max(digitsWidth(left >= 600 ? 2 : 1) * 1.35, ceil(advance("min") * 0.9) + 8)
++      ? bigDigits(twoDigits ? 2 : 1, bigScale)
++      : max(bigDigits(twoDigits ? 2 : 1, bigScale), ceil(advance("min") * 0.72) + 2)
 +    HStack(spacing: 0) {
 +      if short && left < 3600 {
 +        // Compact island, Luma style: a big number over a small unit label
-+        // (`41` over `min`). Colon notation keeps the last five minutes.
++        // (`41` over `min`); minutes only, `<1` under a minute, the seconds alone in the last half minute.
 +        VStack(spacing: -2) {
 +          if seconds {
 +            // The last half minute: just the seconds going down, 30, 29, 28…
-+            field(skip: 0, width: digitsWidth(left >= 10 ? 2 : 1) * 1.35, scale: 1.35)
++            field(skip: 0, width: bigDigits(twoDigits ? 2 : 1, bigScale), scale: bigScale)
 +          } else if left < 60 {
-+            unit("<1", scale: 1.35, bold: true)
++            unit("<1", scale: 1.2, bold: true)
 +            unit("min", scale: 0.72)
 +          } else {
-+            field(skip: (colon + 2 * digit) * 1.35, width: digitsWidth(left >= 600 ? 2 : 1) * 1.35, scale: 1.35)
++            field(skip: bigColon(bigScale) + 2 * bigDigit(bigScale), width: bigDigits(twoDigits ? 2 : 1, bigScale), scale: bigScale)
 +            unit("min", scale: 0.72)
 +          }
 +        }
-+        // A small inset from the island's rounded corner, which cut the first stroke of the label.
-+        .frame(width: stackWidth + 4, alignment: .trailing)
++        // Two points of air so the island's rounded corner does not cut the label.
++        .frame(width: stackWidth + 2, alignment: .center)
 +      } else if left >= 3600 {
 +        // `2h 34m` (also the compact island's form past an hour); minutes-of-hour under ten drop their zero: `1h 5m`.
 +        let shortMinutes = (Int(left) % 3600) / 60 < 10

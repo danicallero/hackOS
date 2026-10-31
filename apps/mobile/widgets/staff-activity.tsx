@@ -96,6 +96,7 @@ export const StaffActivityLayout = withLiveActivityKit(
       color: string | null,
       width: number | null,
       form: "full" | "short" | "long" = "full",
+      align: "center" | "trailing" = "trailing",
     ) => (
       <Text
         timerInterval={{ lower, upper: startsAt }}
@@ -105,7 +106,7 @@ export const StaffActivityLayout = withLiveActivityKit(
         modifiers={[
           lineLimit(1),
           minimumScaleFactor(0.6),
-          ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
+          ...(width ? [frame({ maxWidth: width, alignment: align })] : []),
           ...colorMods(color),
         ]}
       />
@@ -242,7 +243,7 @@ export const StaffActivityLayout = withLiveActivityKit(
     // Past `142/180` the ratio no longer fits the 56 pt slot (`1142/1380`
     // clipped its denominator), so four-digit counts show the scanned count alone.
     const compactTrailing = !live
-      ? countdown(12, islandAccent, 56, "short")
+      ? countdown(12, islandAccent, 56, "short", "center")
       : accredited || !liveText
         ? ratio(12, 9, islandAccent, "semibold", false)
         : liveText;
