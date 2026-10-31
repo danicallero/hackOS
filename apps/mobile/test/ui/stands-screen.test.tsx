@@ -6,7 +6,7 @@ jest.mock("@/lib/use-nfc-supported", () => ({
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, AppState, Dimensions } from "react-native";
+import { Alert, AppState } from "react-native";
 import { StandsScreen } from "@/components/stands-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { StandSummary } from "@/lib/stands";
@@ -282,6 +282,7 @@ describe("StandsScreen (#935)", () => {
 });
 
 it("reflows company names at AX5 while keeping counts as secondary metadata (#1166)", async () => {
+  const { Dimensions } = jest.requireActual<typeof import("react-native")>("react-native");
   const window = Dimensions.get("window");
   const display = Dimensions.get("screen");
   try {
