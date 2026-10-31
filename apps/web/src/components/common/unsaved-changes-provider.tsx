@@ -77,7 +77,12 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
       href: string,
       options?: Parameters<typeof router.push>[1],
     ) => {
-      if (new URL(href, window.location.href).href === window.location.href) return;
+      const target = new URL(href, window.location.href);
+      if (target.href === window.location.href) return;
+      // Query-only changes on the same route (tab/view sync) keep the page and
+      // its edits mounted, so they are state, not navigation.
+      if (target.origin === window.location.origin && target.pathname === window.location.pathname)
+        return router[method](href, options);
       if (navigating.current) return;
       navigating.current = true;
       try {

@@ -22,6 +22,12 @@ function Probe({ dirty, guardBrowserBack }: { dirty: boolean; guardBrowserBack?:
       <button type="button" onClick={() => router?.push("/other")}>
         Push
       </button>
+      <button
+        type="button"
+        onClick={() => router?.replace(`${window.location.pathname}?tab=other`)}
+      >
+        Query only
+      </button>
       <button type="button" onClick={() => router?.push(window.location.href)}>
         Same route
       </button>
@@ -139,6 +145,16 @@ describe("unsaved changes confirmation (#1180)", () => {
     await click("Push");
     await click("discardLibraryChanges");
     expect(router.push).toHaveBeenCalledExactlyOnceWith("/other", undefined);
+  });
+
+  it("passes same-route query changes through without asking", async () => {
+    await render({ dirty: true });
+    await click("Query only");
+    expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+    expect(router.replace).toHaveBeenCalledExactlyOnceWith(
+      `${window.location.pathname}?tab=other`,
+      undefined,
+    );
   });
 
   it("rearms Back on cancel and steps back only on acceptance", async () => {
