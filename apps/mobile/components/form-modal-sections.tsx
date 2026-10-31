@@ -260,10 +260,15 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
             placeholderTextColor={colors.tertiaryLabel}
             returnKeyType="search"
             value={query}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize, minHeight: 36 }}
           />
           {query.length > 0 ? (
-            <Pressable accessibilityLabel={t("cancel")} onPress={onClear} hitSlop={8}>
+            <Pressable
+              accessibilityLabel={t("cancel")}
+              onPress={onClear}
+              hitSlop={{ top: 14, bottom: 14, left: 0, right: 28 }}
+            >
               <SymbolView
                 name="xmark.circle.fill"
                 tintColor={colors.tertiaryLabel}

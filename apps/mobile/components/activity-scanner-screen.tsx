@@ -29,7 +29,6 @@ import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
-import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { bumpActivityScanned } from "@/lib/live-activities/sync";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
@@ -37,6 +36,7 @@ import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import { queueStatusBarItem, statusShowsLabel } from "@/lib/pane-header-items";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
+import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
@@ -284,7 +284,7 @@ export function ActivityScannerScreen({
           state: "saved",
           wasRepeat: allowRepeat,
         });
-        void haptic("light");
+        void scanOutcomeHaptic("queued");
         // #966: the staff Live Activity counts distinct people (first scans).
         if (!allowRepeat) void bumpActivityScanned(activityId);
         await refreshLocal();
@@ -302,7 +302,7 @@ export function ActivityScannerScreen({
     if (!result?.scanId || result.state !== "saved") return;
     const scan = syncState.queue.find((item) => item.id === result.scanId);
     if (scan?.status === "failed") {
-      void haptic("error");
+      void scanOutcomeHaptic("rejected");
       setResult((current) =>
         current?.scanId === scan.id
           ? {
@@ -313,7 +313,7 @@ export function ActivityScannerScreen({
           : current,
       );
     } else if (scan?.status === "acknowledged") {
-      void haptic("success");
+      void scanOutcomeHaptic("accepted");
       setResult((current) =>
         current?.scanId === scan.id ? { ...current, state: "confirmed" } : current,
       );
@@ -342,6 +342,7 @@ export function ActivityScannerScreen({
         if (!found.person) {
           setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
           setResult(null);
+          void scanOutcomeHaptic("unknown");
           return;
         }
         const ticketToken = found.person.ticketToken === badgeId ? badgeId : undefined;
@@ -362,7 +363,7 @@ export function ActivityScannerScreen({
         setRegistering(false);
         const count = Math.max(state.count, localState.count);
         if (count > 0) {
-          void haptic("warning");
+          void scanOutcomeHaptic("duplicate");
           setResult({
             badgeId,
             ticketToken,

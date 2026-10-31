@@ -2517,6 +2517,11 @@ an id's first post).
   while the app runs (`xcrun simctl ui booted content_size
   accessibility-extra-extra-extra-large`), then switch tabs: a cold start at
   the large size does not exercise the re-measure path.
+- **44 pt hit area (#1168).** A control whose visible shape is smaller than 44 pt
+  (inline search/clear glyphs, 28–40 pt text fields and rows, compact retry
+  buttons) keeps its look and reaches 44×44 through `hitSlop` — extended away
+  from neighbouring controls, never into them — or `minHeight`/`minWidth` when
+  the layout has room. Decorative badges and the sheet grabber are exempt.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error
@@ -2524,6 +2529,22 @@ an id's first post).
   H51). Native `Switch`, segmented `Picker`, Wallet controls and system menus
   keep their platform-provided feedback, and passive navigation/QR frame
   detection stays silent.
+  The OS decides whether a haptic plays: iOS drops it when System Haptics is
+  off and Android when touch feedback is off, so no screen reads or overrides
+  the setting (#1170).
+  **Scanner and queue mapping** (`lib/scan-haptics.ts`, routed through
+  `haptic()`; mapped by `lib/scan-haptics.test.ts`):
+
+  | Outcome | Haptic | Where |
+  |---|---|---|
+  | Code recognised and accepted | success | general scanner, activity scanner (server-confirmed), person screen (acknowledged) |
+  | Stored offline, not yet confirmed | light | activity scanner, person screen |
+  | Already registered (repeat needs a decision) | warning | activity scanner |
+  | Server rejected the scan | error | activity scanner, person screen |
+  | Unknown or revoked code | error | general and activity scanner |
+  | Queue entry confirmed / rejected by a sync | success / error | `useQueueTransitionHaptics` on the sync queue screen; one haptic per refresh, error wins over success, first snapshot and newly queued entries are silent |
+  | Queue retry / discard | light / warning | the button itself |
+  | Queue "notify team" fails | error | queue operations screen |
 - `expo-network` is installed as a required peer of `@better-auth/expo`; it
   lets the auth client refresh session state when the device regains network
   connectivity. As with every native dependency change, an existing dev client

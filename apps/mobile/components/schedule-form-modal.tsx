@@ -796,6 +796,7 @@ function OwnersField({
           placeholderTextColor={colors.tertiaryLabel}
           returnKeyType="done"
           value={freeTextName}
+          hitSlop={{ top: 4, bottom: 4 }}
           style={{
             backgroundColor: colors.elevatedSurface,
             borderCurve: "continuous",
@@ -816,7 +817,7 @@ function OwnersField({
             accessibilityLabel={t("scheduleOwnerAdd")}
             disabled={mutation !== null || !freeTextName.trim()}
             onPress={() => void addFreeText()}
-            hitSlop={8}
+            hitSlop={{ top: 12, bottom: 12, left: 7, right: 7 }}
           >
             <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
               {t("add")}

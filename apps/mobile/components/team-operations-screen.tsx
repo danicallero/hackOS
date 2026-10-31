@@ -622,7 +622,9 @@ export function TeamOperationsScreen() {
                     accessibilityLabel={t("teamDetailMemberSearch")}
                     accessibilityRole="button"
                     onPress={() => void memberSearch.search()}
-                    hitSlop={8}
+                    // 15pt glyph in a 36pt field: stretch the touch box to 44x44 leftwards
+                    // and vertically so it never overlaps the text input.
+                    hitSlop={{ top: 15, bottom: 14, left: 29, right: 0 }}
                   >
                     <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
                   </Pressable>
@@ -640,6 +642,7 @@ export function TeamOperationsScreen() {
                     placeholderTextColor={colors.tertiaryLabel}
                     returnKeyType="search"
                     value={memberSearch.query}
+                    hitSlop={{ top: 4, bottom: 4 }}
                     style={{
                       ...type.body,
                       color: colors.label,
@@ -657,7 +660,8 @@ export function TeamOperationsScreen() {
                         memberSearch.setError(null);
                         memberSearch.setSearched(false);
                       }}
-                      hitSlop={8}
+                      // 16pt glyph at the field's trailing edge: stretch to 44x44 inward-out.
+                      hitSlop={{ top: 14, bottom: 14, left: 0, right: 28 }}
                     >
                       <SymbolView
                         name="xmark.circle.fill"

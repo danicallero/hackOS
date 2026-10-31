@@ -83,6 +83,7 @@ export function FieldLibraryPicker({
         accessibilityLabel={heading}
         disabled={disabled}
         onPress={() => setOpen(true)}
+        hitSlop={{ top: 8, bottom: 8 }}
         style={({ pressed }) => ({
           alignItems: "center",
           flexDirection: "row",

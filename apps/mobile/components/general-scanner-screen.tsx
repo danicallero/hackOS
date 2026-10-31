@@ -35,6 +35,7 @@ import {
   roleDisplayName,
   roleFilterOptionsFromRoster,
 } from "@/lib/role-filters";
+import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import {
   backAction,
   nextSelection,
@@ -262,10 +263,11 @@ export function GeneralScannerScreen() {
         : (byTicket ?? badge?.person ?? null);
       if (!person) {
         setError(badge?.revoked ? t("scannerBadgeRevoked") : t("scannerUnknownQr"));
+        void scanOutcomeHaptic("unknown");
         return;
       }
       setError(null);
-      void haptic("light");
+      void scanOutcomeHaptic("accepted");
       if (scanDestination(twoPane) === "pane") {
         const scanned = { userId: person.userId };
         setSelection((current) => nextSelection(current, scanned));
