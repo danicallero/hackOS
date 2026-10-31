@@ -56,7 +56,7 @@ index 7dfe0a9..6b7caa1 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +88,136 @@
+@@ -73,3 +88,168 @@
      return result
    }
  }
@@ -149,6 +149,37 @@ index 7dfe0a9..6b7caa1 100644
 +    let stackWidth = seconds
 +      ? bigDigits(twoDigits ? 2 : 1, bigScale)
 +      : max(bigDigits(twoDigits ? 2 : 1, bigScale), ceil(advance("min") * 0.72) + 2)
++    if short && left >= 3600 {
++      // Compact island, an hour or more:  on one line; where the island
++      // is too narrow for it (the vertical island of a foldable) the hours stack
++      // over the minutes. No outer fixedSize here: ViewThatFits needs the
++      // island's real width as its proposal.
++      let shortMinutes = (Int(left) % 3600) / 60 < 10
++      let hoursField = field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
++      let minutesField = field(skip: colon + 2 * digit, width: digitsWidth(shortMinutes ? 1 : 2))
++      ViewThatFits(in: .horizontal) {
++        HStack(spacing: 0) {
++          hoursField
++          unit("h ")
++          minutesField
++          unit("m")
++        }
++        .fixedSize()
++        VStack(spacing: -1) {
++          HStack(spacing: 0) {
++            hoursField
++            unit("h")
++          }
++          .fixedSize()
++          HStack(spacing: 0) {
++            minutesField
++            unit("m")
++          }
++          .fixedSize()
++        }
++        .fixedSize()
++      }
++    } else {
 +    HStack(spacing: 0) {
 +      if short && left < 3600 {
 +        // Compact island, Luma style: a big number over a small unit label
@@ -191,6 +222,7 @@ index 7dfe0a9..6b7caa1 100644
 +      }
 +    }
 +    .fixedSize()
++    }
 +  }
 +}
 diff --git a/src/swift-ui/Text/index.tsx b/src/swift-ui/Text/index.tsx
