@@ -269,115 +269,117 @@ export function AppSidebar() {
 
   return (
     <Sidebar variant="floating" collapsible="icon">
-      <SidebarHeader className="h-14 shrink-0 justify-center border-b px-3">
-        <SidebarMenu className="flex-row items-center">
-          <SidebarMenuItem className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <SidebarMenuButton
-              asChild
-              size="lg"
-              tooltip="hackOS"
-              className="flex-1 gap-2.5 px-1 hover:bg-transparent"
-            >
-              <Link href="/event">
-                <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
-                <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-                  hackOS
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
-            <SidebarTrigger hasUnreadNotifications={unreadCount > 0} />
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-
-      <SidebarContent className="gap-3 px-2 py-3">
-        <SidebarGroup className="p-0">
-          <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
-            {t("navigationPersonal")}
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {personalItems.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                showUnreadDot={item.href === "/event" && unreadCount > 0}
-              />
-            ))}
+      {/* `contents` keeps the sidebar's flex layout while exposing it as a landmark (#1177). */}
+      <nav aria-label={t("navigationPrimary")} className="contents">
+        <SidebarHeader className="h-14 shrink-0 justify-center border-b px-3">
+          <SidebarMenu className="flex-row items-center">
+            <SidebarMenuItem className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+              <SidebarMenuButton
+                asChild
+                size="lg"
+                tooltip="hackOS"
+                className="flex-1 gap-2.5 px-1 hover:bg-transparent"
+              >
+                <Link href="/event">
+                  <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
+                  <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                    hackOS
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
+              <SidebarTrigger hasUnreadNotifications={unreadCount > 0} />
+            </SidebarMenuItem>
           </SidebarMenu>
-        </SidebarGroup>
+        </SidebarHeader>
 
-        <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
-
-        <SidebarGroup className="shrink-0 gap-1 p-0">
-          <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
-            {t("navigationWorkspaces")}
-          </SidebarGroupLabel>
-
-          {(() => {
-            const visibleWorkspaces = WORKSPACES.map((workspace) => ({
-              items: workspace.items.filter(isVisible),
-              workspace,
-            })).filter(({ items }) => items.length > 0);
-            const isActiveItem = (item: NavItem) =>
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const anyWorkspaceMatchesRoute = visibleWorkspaces.some(({ items }) =>
-              items.some(isActiveItem),
-            );
-
-            return visibleWorkspaces.map(({ workspace, items }) => {
-              if (items.length === 1) {
-                // A single visible item has nothing to collapse: an accordion
-                // with one row is just a link wearing an extra click.
-                return (
-                  <SidebarGroup key={workspace.id} className="p-0">
-                    <SidebarMenu>
-                      <NavLink item={items[0]} showUnreadDot={false} />
-                    </SidebarMenu>
-                  </SidebarGroup>
-                );
-              }
-              const containsActiveRoute = items.some(isActiveItem);
-              const shouldOpenInitially =
-                containsActiveRoute ||
-                (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
-              return (
-                <WorkspaceGroup
-                  key={workspace.id}
-                  workspace={workspace}
-                  items={items}
-                  active={containsActiveRoute}
-                  open={
-                    workspace.id === activeWorkspaceId ||
-                    workspace.id === recentWorkspaceId ||
-                    (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially)
-                  }
-                  onOpen={(id, nextOpen) => {
-                    if (nextOpen) {
-                      setRecentWorkspaceId(id);
-                      setLastWorkspace(id);
-                      writeLastWorkspace(id);
-                    } else if (id !== activeWorkspaceId) {
-                      setRecentWorkspaceId((current) => (current === id ? null : current));
-                    }
-                  }}
+        <SidebarContent className="gap-3 px-2 py-3">
+          <SidebarGroup className="p-0">
+            <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+              {t("navigationPersonal")}
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {personalItems.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  showUnreadDot={item.href === "/event" && unreadCount > 0}
                 />
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+
+          <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
+
+          <SidebarGroup className="shrink-0 gap-1 p-0">
+            <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+              {t("navigationWorkspaces")}
+            </SidebarGroupLabel>
+
+            {(() => {
+              const visibleWorkspaces = WORKSPACES.map((workspace) => ({
+                items: workspace.items.filter(isVisible),
+                workspace,
+              })).filter(({ items }) => items.length > 0);
+              const isActiveItem = (item: NavItem) =>
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const anyWorkspaceMatchesRoute = visibleWorkspaces.some(({ items }) =>
+                items.some(isActiveItem),
               );
-            });
-          })()}
-        </SidebarGroup>
-      </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">
-        <div className="flex items-center gap-1">
-          <UserMenu className="min-w-0" />
-          <div className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
-            <ThemeToggle />
+              return visibleWorkspaces.map(({ workspace, items }) => {
+                if (items.length === 1) {
+                  // A single visible item has nothing to collapse: an accordion
+                  // with one row is just a link wearing an extra click.
+                  return (
+                    <SidebarGroup key={workspace.id} className="p-0">
+                      <SidebarMenu>
+                        <NavLink item={items[0]} showUnreadDot={false} />
+                      </SidebarMenu>
+                    </SidebarGroup>
+                  );
+                }
+                const containsActiveRoute = items.some(isActiveItem);
+                const shouldOpenInitially =
+                  containsActiveRoute ||
+                  (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
+                return (
+                  <WorkspaceGroup
+                    key={workspace.id}
+                    workspace={workspace}
+                    items={items}
+                    active={containsActiveRoute}
+                    open={
+                      workspace.id === activeWorkspaceId ||
+                      workspace.id === recentWorkspaceId ||
+                      (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially)
+                    }
+                    onOpen={(id, nextOpen) => {
+                      if (nextOpen) {
+                        setRecentWorkspaceId(id);
+                        setLastWorkspace(id);
+                        writeLastWorkspace(id);
+                      } else if (id !== activeWorkspaceId) {
+                        setRecentWorkspaceId((current) => (current === id ? null : current));
+                      }
+                    }}
+                  />
+                );
+              });
+            })()}
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">
+          <div className="flex items-center gap-1">
+            <UserMenu className="min-w-0" />
+            <div className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
+              <ThemeToggle />
+            </div>
           </div>
-        </div>
-      </SidebarFooter>
-
+        </SidebarFooter>
+      </nav>
       <SidebarRail />
     </Sidebar>
   );

@@ -236,6 +236,9 @@ describe("DataTable accessibility and interactions", () => {
       />,
     );
 
+    // The trailing row-actions column still names itself to screen readers (#1177).
+    const headers = [...container.querySelectorAll("thead th")];
+    expect(headers.at(-1)?.textContent).toBe("actionsColumn");
     const action = container.querySelector<HTMLButtonElement>('button[aria-label="Review Ada"]');
     expect(action?.tagName).toBe("BUTTON");
     expect(action?.type).toBe("button");

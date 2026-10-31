@@ -11,7 +11,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { StatCard } from "@/components/common/stat-card";
 import { TabBar } from "@/components/common/tab-bar";
 import { PresenceExportPanel } from "@/components/exports/presence-export-panel";
-import { Tabs, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLiveQuery } from "@/hooks/use-event-source";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -117,7 +117,11 @@ export default function PresencePage() {
         title={t("accreditationAndPresence")}
         secondaryActions={canStats ? <PresenceExportPanel /> : undefined}
       />
-      <Tabs value={tab} onValueChange={(value) => setTab(value)}>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => setTab(value)}
+        className="gap-(--page-section-gap)"
+      >
         <TabBar aria-label={t("presenceSections")}>
           {canManage && <TabsTrigger value="certificates">{t("certificates")}</TabsTrigger>}
           <TabsTrigger value="scan">{t("presenceScanTab")}</TabsTrigger>
@@ -125,62 +129,64 @@ export default function PresencePage() {
           {canPresence && <TabsTrigger value="sessions">{t("presenceSessionsTab")}</TabsTrigger>}
           {canPresence && <TabsTrigger value="hours">{t("presenceHoursTab")}</TabsTrigger>}
         </TabBar>
-      </Tabs>
+        {/* Mount the active panel so each trigger's aria-controls resolves (#1177). */}
+        <TabsContent value={tab} className="space-y-(--page-section-gap)">
+          {tab === "scan" && canAccredit && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+              <StatCard
+                label={t("checkedInSession")}
+                value={sessionCount}
+                icon={SealCheckIcon}
+                hint={t("onThisDevice")}
+              />
+              {roleCounts.map((item) => (
+                <StatCard
+                  key={item.role ?? "unassigned"}
+                  label={item.role ?? t("roleUnassigned")}
+                  value={item.count}
+                  icon={SealCheckIcon}
+                  hint={t("accredited")}
+                />
+              ))}
+            </div>
+          )}
 
-      {tab === "scan" && canAccredit && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <StatCard
-            label={t("checkedInSession")}
-            value={sessionCount}
-            icon={SealCheckIcon}
-            hint={t("onThisDevice")}
-          />
-          {roleCounts.map((item) => (
-            <StatCard
-              key={item.role ?? "unassigned"}
-              label={item.role ?? t("roleUnassigned")}
-              value={item.count}
-              icon={SealCheckIcon}
-              hint={t("accredited")}
+          {tab === "scan" && (canAccredit || canPresence) && (
+            <ScanTab
+              canAccredit={canAccredit}
+              canPresence={canPresence}
+              onAccredited={() => {
+                setSessionCount((n) => n + 1);
+                loadAccreditationCounts();
+              }}
+              onPresenceScanned={() => {
+                estimate.refetch();
+                hours.refetch();
+                openSessions.refetch();
+              }}
             />
-          ))}
-        </div>
-      )}
+          )}
 
-      {tab === "scan" && (canAccredit || canPresence) && (
-        <ScanTab
-          canAccredit={canAccredit}
-          canPresence={canPresence}
-          onAccredited={() => {
-            setSessionCount((n) => n + 1);
-            loadAccreditationCounts();
-          }}
-          onPresenceScanned={() => {
-            estimate.refetch();
-            hours.refetch();
-            openSessions.refetch();
-          }}
-        />
-      )}
+          {tab === "certificates" && canManage && <AttendanceCertificatesTab />}
 
-      {tab === "certificates" && canManage && <AttendanceCertificatesTab />}
+          {tab === "people" && <PeopleTab onOpenPerson={openPersonFromDirectory} />}
 
-      {tab === "people" && <PeopleTab onOpenPerson={openPersonFromDirectory} />}
+          {tab === "hours" && canPresence && (
+            <HoursTab hours={hours.data ?? []} loading={hours.loading} hoursError={hoursError} />
+          )}
 
-      {tab === "hours" && canPresence && (
-        <HoursTab hours={hours.data ?? []} loading={hours.loading} hoursError={hoursError} />
-      )}
-
-      {tab === "sessions" && canPresence && (
-        <SessionsTab
-          presentCount={estimate.data?.presentCount}
-          estimateConnected={estimate.connected}
-          estimateError={estimateError}
-          sessions={openSessions.data ?? []}
-          loading={openSessions.loading}
-          sessionsError={openSessionsError}
-        />
-      )}
+          {tab === "sessions" && canPresence && (
+            <SessionsTab
+              presentCount={estimate.data?.presentCount}
+              estimateConnected={estimate.connected}
+              estimateError={estimateError}
+              sessions={openSessions.data ?? []}
+              loading={openSessions.loading}
+              sessionsError={openSessionsError}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
     </PageLayout>
   );
 }
