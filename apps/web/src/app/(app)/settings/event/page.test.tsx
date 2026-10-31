@@ -2,6 +2,7 @@ import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { UnsavedChangesContext } from "@/components/common/unsaved-changes-provider";
 import EventSettingsPage from "./page";
 
 // #932: the section list and `?tab=` deep links replace the vertical rail.
@@ -59,7 +60,8 @@ vi.mock("./notifications-tab", () => ({ NotificationsTab: () => null }));
 vi.mock("./reset-judging-data-tab", () => ({ ResetJudgingDataTab: () => null }));
 vi.mock("@/app/(app)/settings/event/judging-window-tab", () => ({ JudgingWindowTab: () => null }));
 
-let confirmSpy: ReturnType<typeof vi.spyOn>;
+const confirmSpy = vi.fn();
+const register = () => () => {};
 let pushState: ReturnType<typeof vi.spyOn>;
 let historyBack: ReturnType<typeof vi.spyOn>;
 let container: HTMLDivElement;
@@ -67,7 +69,11 @@ let root: Root;
 
 async function render() {
   await act(async () => {
-    root.render(<EventSettingsPage />);
+    root.render(
+      <UnsavedChangesContext.Provider value={{ register, confirm: confirmSpy, navigate: push }}>
+        <EventSettingsPage />
+      </UnsavedChangesContext.Provider>,
+    );
   });
 }
 
@@ -79,9 +85,9 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   search = "";
-  confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+  confirmSpy.mockReset().mockResolvedValue(false);
   pushState = vi.spyOn(window.history, "pushState");
-  historyBack = vi.spyOn(window.history, "back").mockImplementation(() => {});
+  historyBack = vi.spyOn(window.history, "go").mockImplementation(() => {});
   caps = new Set(["event:manage", "wallet:manage"]);
   replace.mockClear();
   push.mockClear();
@@ -169,29 +175,32 @@ describe("EventSettingsPage", () => {
     };
 
     // Counts clicks that get past the guard's capture-phase interception.
-    function clickBack() {
+    async function clickBack() {
       let reached = 0;
       const onClick = (e: Event) => {
         reached++;
         e.preventDefault();
       };
       container.addEventListener("click", onClick);
-      act(() => container.querySelector<HTMLElement>("a")?.click());
+      await act(async () => {
+        container.querySelector<HTMLElement>("a")?.click();
+      });
       container.removeEventListener("click", onClick);
       return reached;
     }
 
     it("confirms before the back link leaves a dirty section", async () => {
       await dirtyVenue();
-      expect(clickBack()).toBe(0);
+      expect(await clickBack()).toBe(0);
       expect(confirmSpy).toHaveBeenCalledTimes(1);
-      confirmSpy.mockReturnValue(true);
-      expect(clickBack()).toBe(1);
+      confirmSpy.mockResolvedValue(true);
+      expect(await clickBack()).toBe(0);
+      expect(push).toHaveBeenCalledTimes(1);
     });
 
     it("does not ask while the section is clean, and pushes no history entry", async () => {
       await render();
-      expect(clickBack()).toBe(1);
+      expect(await clickBack()).toBe(1);
       expect(confirmSpy).not.toHaveBeenCalled();
       expect(pushState).not.toHaveBeenCalled();
     });
@@ -202,30 +211,36 @@ describe("EventSettingsPage", () => {
       await render();
       expect(pushState).toHaveBeenCalledTimes(1);
 
-      act(() => window.dispatchEvent(new PopStateEvent("popstate")));
+      await act(async () => {
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
       expect(confirmSpy).toHaveBeenCalledTimes(1);
       expect(historyBack).not.toHaveBeenCalled();
       expect(pushState).toHaveBeenCalledTimes(2);
       expect(container.querySelector("[data-testid=venue-form]")).not.toBeNull();
 
-      confirmSpy.mockReturnValue(true);
-      act(() => window.dispatchEvent(new PopStateEvent("popstate")));
+      confirmSpy.mockResolvedValue(true);
+      await act(async () => {
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
       expect(historyBack).toHaveBeenCalledTimes(1);
     });
 
     it("clears the flag once the section is left", async () => {
       await dirtyVenue();
-      confirmSpy.mockReturnValue(true);
+      confirmSpy.mockResolvedValue(true);
       search = "";
       await render();
       confirmSpy.mockClear();
-      act(() => window.dispatchEvent(new PopStateEvent("popstate")));
+      await act(async () => {
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
       expect(confirmSpy).not.toHaveBeenCalled();
 
       // Reopening the section starts clean.
       search = "tab=venue";
       await render();
-      expect(clickBack()).toBe(1);
+      expect(await clickBack()).toBe(1);
       expect(confirmSpy).not.toHaveBeenCalled();
     });
   });

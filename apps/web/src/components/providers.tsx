@@ -3,6 +3,7 @@
 import { IconContext } from "@phosphor-icons/react/dist/lib/context";
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
+import { UnsavedChangesProvider } from "@/components/common/unsaved-changes-provider";
 import { CookieNotice } from "@/components/layout/cookie-notice";
 import { MaintenanceGate } from "@/components/layout/maintenance-gate";
 import { Toaster } from "@/components/ui/sileo";
@@ -35,7 +36,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <SessionProvider>
           <LocaleProvider>
             <TooltipProvider>
-              <MaintenanceGate>{children}</MaintenanceGate>
+              <UnsavedChangesProvider>
+                <MaintenanceGate>{children}</MaintenanceGate>
+              </UnsavedChangesProvider>
             </TooltipProvider>
             {!isKiosk && <CookieNotice />}
             <Toaster position="top-right" />

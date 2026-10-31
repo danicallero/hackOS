@@ -1879,6 +1879,7 @@
   "judgingWindowDesc": "Sizes how much time judging rooms have per project. Room pacing tightens automatically as this window's end approaches.",
   "judgingStartsLabel": "Judging starts",
   "judgingEndsLabel": "Judging ends",
+  "keepEditing": "Keep editing",
   "unsavedChangesConfirm": "There are unsaved changes in this section. Leave anyway?",
   "searchTimezonePlaceholder": "Search timezone…",
   "noTimezoneMatch": "No timezone matches.",

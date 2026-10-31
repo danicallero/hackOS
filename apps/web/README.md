@@ -797,3 +797,8 @@ component `.test.tsx` suites in jsdom. Browser-state suites written as `.test.ts
 (nav, privacy removal, URL tabs and the offline queue) are listed explicitly in
 `vitest.config.ts` so they retain their browser environment. Keep browser-only
 coverage in that project when adding suites that use DOM or storage APIs.
+
+Unsaved-change guards (#1180) use the shared `UnsavedChangesProvider` and
+`AlertModal` for links, router push/replace and opted-in browser Back. Keep editing
+receives initial focus. Tab close/reload retains native `beforeunload`; in-page
+category switches await `confirmDiscardUnsavedChanges` before changing state.

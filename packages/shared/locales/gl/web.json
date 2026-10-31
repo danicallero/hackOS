@@ -1879,6 +1879,7 @@
   "judgingWindowDesc": "Determina canto tempo teñen as salas de avaliación por proxecto. O ritmo de sala axústase automaticamente a medida que se achega o final desta ventá.",
   "judgingStartsLabel": "Comeza a avaliación",
   "judgingEndsLabel": "Remata a avaliación",
+  "keepEditing": "Seguir editando",
   "unsavedChangesConfirm": "Hai cambios sen gardar nesta sección. ¿Saír de todos os xeitos?",
   "searchTimezonePlaceholder": "Buscar fuso horario…",
   "noTimezoneMatch": "Ningún fuso horario coincide.",
