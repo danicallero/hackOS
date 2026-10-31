@@ -2041,11 +2041,21 @@ backslashes (`/\s+/` became `/s+/` and the compact island showed "Roo" for
 against the camera): slots are sized to their text and centred, and the queue
 shows a short room code ("Aula 3.0" -> "A3.0", "Room B" -> "RB"). The called
 Lock Screen banner shows the room without its location, and the count-up sits
-left-aligned under "Called". Pieces every kind repeats (island slot caps, `secondary`/`colorMods`,
-the caption, the **Scan** circle) live in `widgets/live-activity-kit.tsx`
-(#1134): the kit is itself a `'widget'` function and `withLiveActivityKit`
-concatenates its source with each layout's, passing its result as the layout's
-third argument, so nothing is imported inside the extension. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+left-aligned under "Called". Pieces every kind repeats live in `widgets/live-activity-kit.tsx`
+(#1134): island slot caps and `islandSide`, `secondary`/`colorMods`, the
+accent palette (`islandAccent`, `neutral`, `bannerAccent`), the counter and
+ratio views, the caption, the **Scan** circle, the layout modifiers
+(`bannerMods`, `bottomMods`, `watchMods`), `watchHeader` and the `fallback`
+shown for an unknown props version. `ExpoWidgets` serializes each `'widget'`
+function on its own into `ExpoWidgets.bundle`, so a module import (or a
+helper declared outside the function) does not exist in the extension. The kit
+is therefore itself a `'widget'` function: `withLiveActivityKit` concatenates
+its source with each layout's and passes its result as the layout's third
+argument, so nothing is imported inside the extension. Shared pieces return
+modifier lists or single elements, never wrapper components or fragments
+(the extension's JSX runtime is not guaranteed to support them), and each
+activity keeps its own JSX tree and content. The names must equal
+`LIVE_ACTIVITY_WIDGET_NAMES`. Each state
 answers one question with one hero value; everything else is secondary.
 Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
 neutral grey; Always-On drops the accent fills. Lock Screen colours are
@@ -2064,17 +2074,19 @@ Apple's HIG:
 
 Lock Screen banners keep the system's black card (design decision: it makes
 the activity stand out; a transparent tint was tried and dropped). The attendee and
-deadline compact slots keep the countdown as one unit in a 12 pt box (the
-patched `compactCountdown="short"`, no scaling) and the symbol in a fixed,
-centred box, so both sit on the axis of the vertical island of a foldable
-(checked on the iPhone Duo and iPhone 18 Pro simulators).
+deadline compact slots use the patched `compactCountdown="short"`: from one
+hour `2h 40m` (both units, 12 pt, never just `2h`); under an hour, as in Luma,
+a bold number over a small unit label (`41`/`min`, `<1`/`min` under a minute, then the bare seconds `30, 29, 28…` in the last half minute;
+reminders never exceed an hour). Compact slots only cap their width
+(`frame(maxWidth:)`, no ideal width or `fixedSize`), so each hugs its content
+with no empty space beside the figure, the "Live" label or the count (#1171).
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" (56 pt slot) / symbol (blue) | countdown (white; grey once submitted, never red) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.badge.key` / accredited count |
+| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" (56 pt slot) / symbol (blue) | countdown in the phase hue (blue open, red closing, green submitted) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.fill.checkmark` / accredited count |
 | Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
-| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
-| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red only on the symbol and "Not submitted"; countdown and bar stay neutral. Submitted: green "Submitted" leading, small "Closes in" time left trailing in the same row, then title, project, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small once submitted; red while closing, green once submitted); bottom: title + status, window bar (never the project name) | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
+| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; "Closes in" countdown (28 pt) leading; status in the header; window bar. Closing: the symbol, countdown, bar and "Not submitted" are red. Submitted: green "Submitted" leading, small "Closes in" time left trailing in the same row, then title, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
 | Watch / CarPlay | name · countdown (live: "Live" + "Ends in" time left) | title · countdown, with a "Not submitted" line (the one red element) only while closing; submitted: "Submitted" + time left | title · `412 /600` + "Accredited" |
 
 **Watch (`.small` family).** `expo-widgets` registers
@@ -2230,9 +2242,9 @@ rank change alone changes the props signature, so it re-applies the score.
 | Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
 | Attendee upcoming (H59) | countdown to `startsAt` in one unit (`2h`, `38m`) on the camera's leading side, category glyph opposite | "Starts in" + countdown (leading, as in Luma's pre-event activity) · category glyph / name / `hh:mm–hh:mm · location` | Starts in + countdown (blue, leading) · glyph; name; time · location |
 | Attendee live | **Now** leading, glyph opposite | "Ends in" + countdown (leading) · **Now** · glyph / name / time · location; elapsed-time track | Ends in + countdown (leading) · Now · glyph; name; time · location; elapsed-time track |
-| Deadline open (H19) | countdown to `endsAt` in one unit on the camera's leading side, status symbol opposite | "Closes in" + countdown (leading) · status · symbol / title / project; hacking-window track (none without `startsAt`) | Closes in + countdown (blue, leading) · status · symbol; title; project (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Deadline open (H19) | countdown to `endsAt` in one unit on the camera's leading side, status symbol opposite | "Closes in" + countdown (leading) · status · symbol / title; hacking-window track (none without `startsAt`) | Closes in + countdown (blue, leading) · status (amber "Not submitted", green "Submitted", none when unknown) · symbol; title; window track |
 | Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
-| Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
+| Deadline submitted | countdown (time left) | Submitted · "Closes in" + countdown; check, green; no track | Submitted (green) · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
 
 **Tracks.** Like the iOS bars: each stage fills in its colour up to the
@@ -2363,7 +2375,7 @@ reachable only while it is on, because nothing shows on this device then and
 the rows would be inert.
 
 **Development samples.** Debug builds only: opening
-`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-last-seconds|deadline-submitted|accreditation|all|end>`
 (for example `xcrun simctl openurl booted …`; any scheme works, and
 `com.hackudc.os.debug://dev/…` avoids opening another installed hackOS build,
 which would overwrite the App Group's shared Live Activity layouts) renders sample states without a

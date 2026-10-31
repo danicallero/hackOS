@@ -594,8 +594,12 @@ describe("New Live Activity kinds (#966)", () => {
     it("shows a known draft as not submitted and an unknown status not at all", () => {
       const draft = DeadlineActivityLayout(deadline(), environment);
       expect(texts(draft.banner)).toEqual(
-        expect.arrayContaining(["Submissions close", "Closes in", "Tidewatch", "Not submitted"]),
+        expect.arrayContaining(["Submissions close", "Closes in", "Not submitted"]),
       );
+      // The project name never appears on the deadline, in any presentation.
+      for (const slot of ["banner", "expandedBottom", "bannerSmall"]) {
+        expect(texts(draft[slot])).not.toContain("Tidewatch");
+      }
       // The window's elapsed share is a real timer bar.
       expect(nodes(draft.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
 
@@ -772,20 +776,14 @@ describe("New Live Activity kinds (#966)", () => {
       string,
       Record<string, unknown>,
     ][])("%s: hard island caps, whatever the value", (name, layout) => {
-      // The queue's leading slot is wider so a three-digit position fits;
-      // a live attendee activity's so its "Live" label fits (#1171).
+      // The queue's leading slot is wider so a three-digit position fits; the
+      // attendee and deadline ones so `2h 40m` and "En curso" fit (#1171).
       const leading =
         name.startsWith("attendee") ||
         name.startsWith("deadline") ||
         name.startsWith("future props");
       const caps = {
-        compactLeading: name.startsWith("queue")
-          ? 40
-          : name === "attendee live"
-            ? 56
-            : leading
-              ? 36
-              : 22,
+        compactLeading: name.startsWith("queue") ? 40 : leading ? 56 : 32,
         compactTrailing: leading ? 24 : 56,
         minimal: 36,
       } as const;
@@ -794,16 +792,15 @@ describe("New Live Activity kinds (#966)", () => {
         const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
         const frame = modifiers.find((m) => m.modifier === "frame");
         const box = frame?.args[0] as { maxWidth?: number; idealWidth?: number };
-        // The queue's compact slots hug their content, never past the old cap.
+        // Slots only cap: no ideal width, no `fixedSize`, so each hugs its
+        // content and text scales at the cap instead of spilling (#1171).
         if (name.startsWith("queue") && slot !== "minimal") {
           expect(box.maxWidth).toBeLessThanOrEqual(width);
-          expect(box.idealWidth).toBe(box.maxWidth);
-          continue;
+        } else {
+          expect(box.maxWidth).toBe(width);
         }
-        expect(box.maxWidth).toBe(width);
-        // Under `fixedSize` only an ideal width makes the cap the content's
-        // proposal, so text scales instead of spilling past the island (#1171).
-        expect(box.idealWidth).toBe(width);
+        expect(box.idealWidth).toBeUndefined();
+        expect(modifiers.map((m) => m.modifier)).not.toContain("fixedSize");
         expect(modifiers.map((m) => m.modifier)).toEqual(
           expect.arrayContaining(["minimumScaleFactor", "dynamicTypeSize"]),
         );
@@ -969,19 +966,21 @@ describe("New Live Activity kinds (#966)", () => {
       expect(texts(closing.bannerSmall)).toContain("Not submitted");
     });
 
-    it("keeps red off the iPhone countdowns and bars while closing", () => {
-      const closing = DeadlineActivityLayout(deadline({ phase: "closing" }), environment);
-      for (const slot of ["compactTrailing", "expandedTrailing", "banner"]) {
-        for (const text of nodes(closing[slot], "Text").filter((t) => t.props?.compactCountdown)) {
-          expect(colors(text)).toEqual([]);
+    it("colours every iPhone countdown with the phase hue in each state", () => {
+      const expected = { open: /0A84FF/, closing: /FF453A/, submitted: /30D158/ };
+      for (const [phase, hue] of Object.entries(expected)) {
+        const layout = DeadlineActivityLayout(
+          deadline({
+            phase: phase as "open",
+            submission: phase === "submitted" ? "submitted" : "draft",
+          }),
+          environment,
+        );
+        for (const slot of ["compactLeading", "expandedLeading"]) {
+          const timers = nodes(layout[slot], "Text").filter((t) => t.props?.compactCountdown);
+          expect(timers.length).toBeGreaterThan(0);
+          for (const text of timers) expect(JSON.stringify(colors(text))).toMatch(hue);
         }
-      }
-      for (const bar of nodes(closing.banner, "ProgressView")) {
-        const tints = (bar.props?.modifiers as { modifier: string; args: unknown[] }[])
-          .filter((modifier) => modifier.modifier === "tint")
-          .map((modifier) => modifier.args[0]);
-        expect(tints).toHaveLength(1);
-        expect(JSON.stringify(tints)).not.toMatch(/D70015|FF453A/);
       }
     });
   });
@@ -1172,7 +1171,7 @@ describe("Dynamic Island safe areas (#1171)", () => {
     }
   });
 
-  it("widens the attendee leading slot only while it reads Live", () => {
+  it("gives the attendee leading slot room for Live and 2h 40m", () => {
     const cap = (layout: Record<string, unknown>) =>
       (
         modifiersOf(layout.compactLeading as Node).find((m) => m.modifier === "frame")?.args[0] as {
@@ -1180,7 +1179,7 @@ describe("Dynamic Island safe areas (#1171)", () => {
         }
       )?.maxWidth;
     const labels = attendeeActivityLiveLabels("es");
-    expect(cap(AttendeeActivityLayout(attendee({ labels }), environment))).toBe(36);
+    expect(cap(AttendeeActivityLayout(attendee({ labels }), environment))).toBe(56);
     const live = AttendeeActivityLayout(attendee({ phase: "live", labels }), environment);
     expect(texts(live.compactLeading)).toEqual([labels.live]);
     expect(cap(live)).toBe(56);
@@ -1221,7 +1220,7 @@ describe("Dynamic Island safe areas (#1171)", () => {
     const [hero, ...rest] = ((layout.banner as Node).props?.children as unknown[]).filter(Boolean);
     expect(texts(hero)).toEqual(expect.arrayContaining(["Submitted", "Closes in"]));
     expect(nodes(hero, "Text").some((text) => text.props?.compactCountdown === "full")).toBe(true);
-    // Hero, title, project, window bar.
-    expect(rest).toHaveLength(3);
+    // Hero, title, window bar (no project name).
+    expect(rest).toHaveLength(2);
   });
 });

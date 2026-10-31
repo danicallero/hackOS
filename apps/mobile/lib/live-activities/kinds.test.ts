@@ -250,6 +250,7 @@ describe("no leading zero beside a unit (#966)", () => {
       countdownUnderTenMinutes: false,
       countdownLastFiveMinutes: false,
       countdownLastMinute: false,
+      countdownLastHalfMinute: false,
       countdownLastTenSeconds: false,
     });
   });
@@ -257,7 +258,7 @@ describe("no leading zero beside a unit (#966)", () => {
   it("nextCountdownBoundary walks every width change down to the last ten seconds", () => {
     const walk: string[] = [];
     let now = left(2 * HOUR + 30 * MIN);
-    for (let i = 0; i < 9; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       const next = nextCountdownBoundary(target, now);
       if (next === null) break;
       walk.push(new Date(next).toISOString().slice(11, 19));
@@ -270,7 +271,8 @@ describe("no leading zero beside a unit (#966)", () => {
       "13:00:00", // 1h: `59m`
       "13:50:00", // 10m: `9m`
       "13:55:00", // 5m: `4:59`
-      "13:59:00", // 1m: `59s`
+      "13:59:00", // 1m: `<1 min`
+      "13:59:30", // 30s: the bare seconds countdown
       "13:59:50", // 10s: `9s`
     ]);
     expect(nextCountdownBoundary(target, left(9_000))).toBeNull();

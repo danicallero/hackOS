@@ -725,7 +725,7 @@ Accreditation desk:
 
 | Presentation | Content |
 |---|---|
-| Compact leading | `person.badge.key` |
+| Compact leading | `person.fill.checkmark` (`person.badge.key` is clipped in the compact slot) |
 | Compact trailing | `accredited` |
 | Minimal | progress ring `accredited / eligible` |
 | Expanded | symbol / `accredited / eligible`; title and closing time, smaller `inside` and arrivals in the last 10 min beside **Scan**; share bar |

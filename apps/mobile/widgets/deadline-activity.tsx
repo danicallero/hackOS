@@ -1,6 +1,5 @@
 import { HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  dynamicTypeSize,
   fixedSize,
   font,
   frame,
@@ -8,7 +7,6 @@ import {
   layoutPriority,
   lineLimit,
   minimumScaleFactor,
-  padding,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
 import type { DeadlineLiveProps } from "@hackos/shared/live-activities";
@@ -35,34 +33,12 @@ export const DeadlineActivityLayout = withLiveActivityKit(
 
     const { colorMods, islandSide, secondary } = kit;
     const capped = kit.capped({
-      compactLeading: { width: 36, alignment: "trailing" },
+      compactLeading: { width: 56, alignment: "center" },
       compactTrailing: { width: 24, alignment: "center" },
     });
     // A newer, incompatible props shape degrades to the title.
     if (props.v !== 1 || !props.labels) {
-      const title = (
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-          {typeof props.projectName === "string" ? props.projectName : ""}
-        </Text>
-      );
-      const symbol = <Image systemName="hourglass" color="#0A84FF" size={15} />;
-      return capped({
-        banner: (
-          <VStack
-            alignment="leading"
-            modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-          >
-            {title}
-          </VStack>
-        ),
-        bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
-        compactLeading: symbol,
-        compactTrailing: <Text> </Text>,
-        minimal: symbol,
-        expandedLeading: symbol,
-        expandedTrailing: <Text> </Text>,
-        expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-      });
+      return capped(kit.fallback(props.projectName, "hourglass"));
     }
     const labels = props.labels;
     const closing = props.phase === "closing";
@@ -72,7 +48,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     // Lock Screen ones are dynamic (accessible light variants). Always-On
     // drops the accents and lets the system dim.
     const reduced = environment.isLuminanceReduced === true;
-    const neutral = "#8E8E93";
+    const { neutral } = kit;
     const adaptive = (light: string, dark: string) =>
       ({ dynamic: { light, dark } }) as unknown as string;
     const island = { blue: "#0A84FF", red: "#FF453A", green: "#30D158", amber: "#FF9F0A" };
@@ -85,11 +61,12 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     const tone = submitted ? "green" : closing ? "red" : "blue";
     const islandColor = island[tone];
     const bannerColor = reduced ? null : lock[tone];
-    // Closing is urgent, not alarming: red marks only the symbol and the
-    // "Not submitted" status. The countdown and the bar keep the primary and
-    // neutral colours, so one glance still finds the number.
-    const valueIsland = closing ? null : islandColor;
-    const valueBanner = closing ? null : bannerColor;
+    // The countdown, bar and symbol share the phase colour in every state:
+    // blue open, red closing, green submitted. Neutral grey on black was
+    // unreadable once submitted, and a primary-colour countdown while closing
+    // read as near-white next to the red symbol.
+    const valueIsland = islandColor;
+    const valueBanner = bannerColor;
     const symbol = submitted
       ? "checkmark.circle.fill"
       : closing
@@ -119,7 +96,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
       color: string | null,
       width: number | null,
       weight: "semibold" | "bold" = "bold",
-      align: "leading" | "trailing" = "trailing",
+      align: "leading" | "center" | "trailing" = "trailing",
       form: "full" | "short" | "long" = "full",
     ) =>
       validEnd ? (
@@ -206,27 +183,22 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     );
 
     // Compact, like Luma's pre-event activity: the countdown leads, snug to the
-    // camera, one unit (`2h`, `38m`) at a fixed 12 pt and narrow enough for
-    // the vertical island of a foldable; the status symbol sits opposite.
-    const compactLeading = countdown(
-      12,
-      submitted ? neutral : valueIsland,
-      56,
-      "semibold",
-      "trailing",
-      "short",
-    ) ?? <Text> </Text>;
+    // camera: `2h 40m` from an hour, a number over `min` below it (reminders
+    // never exceed an hour); the status symbol sits opposite.
+    const compactLeading = countdown(12, valueIsland, 56, "semibold", "center", "short") ?? (
+      <Text> </Text>
+    );
     const compactTrailing = glyph(islandColor, 15);
 
     // #966: minimal identifies the phase without shrinking a multi-unit timer.
     const minimal = glyph(islandColor, 20);
 
-    // Submitted keeps the time left, smaller and neutral.
+    // Submitted keeps the time left, smaller.
     const expandedLeading = islandSide(
       <VStack alignment="leading" spacing={0}>
         {caption(labels.closesIn)}
         {submitted
-          ? countdown(17, neutral, 140, "semibold", "leading", "long")
+          ? countdown(17, valueIsland, 140, "semibold", "leading", "long")
           : // Same hero scale as the other kinds; width fitting handles long hours.
             (countdown(28, valueIsland, 180, "bold", "leading", "long") ?? <Text> </Text>)}
       </VStack>,
@@ -234,14 +206,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     );
     const expandedTrailing = islandSide(glyph(islandColor, 24), "trailing", 6);
     const expandedBottom = (
-      <VStack
-        alignment="leading"
-        spacing={8}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 8, bottom: 8 }),
-        ]}
-      >
+      <VStack alignment="leading" spacing={8} modifiers={kit.bottomMods(8)}>
         <HStack spacing={8}>
           <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
             {labels.title}
@@ -249,21 +214,16 @@ export const DeadlineActivityLayout = withLiveActivityKit(
           <Spacer />
           {status(12, true)}
         </HStack>
-        {caption(props.projectName)}
         {bar(valueIsland)}
       </VStack>
     );
 
     // H19/H20 / #966: the primary value leads (as in Luma's pre-event activity),
-    // the status and symbol close the row, then title and project. Submitted
+    // the status and symbol close the row, then the title (never the project name). Submitted
     // moves the small time left into that row: as two rows of their own they
     // pushed the banner past the 160 pt Lock Screen height (#1171).
     const banner = (
-      <VStack
-        alignment="leading"
-        spacing={8}
-        modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-      >
+      <VStack alignment="leading" spacing={8} modifiers={kit.bannerMods}>
         <HStack alignment="top" spacing={8}>
           <VStack alignment="leading" spacing={0} modifiers={[layoutPriority(1)]}>
             {submitted ? (
@@ -298,7 +258,6 @@ export const DeadlineActivityLayout = withLiveActivityKit(
         <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(2)]}>
           {labels.title}
         </Text>
-        {caption(props.projectName)}
         {bar(valueBanner)}
       </VStack>
     );
@@ -344,25 +303,12 @@ export const DeadlineActivityLayout = withLiveActivityKit(
         </HStack>
       ) : null;
     const bannerSmall = (
-      <VStack
-        alignment="leading"
-        spacing={2}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 10, vertical: 8 }),
-          dynamicTypeSize({ max: "xLarge" }),
-        ]}
-      >
-        <HStack spacing={5}>
-          <Image
-            systemName={submitted ? "checkmark.circle.fill" : "hourglass"}
-            color={watchGlyph ?? neutral}
-            size={13}
-          />
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-            {labels.title}
-          </Text>
-        </HStack>
+      <VStack alignment="leading" spacing={2} modifiers={kit.watchMods}>
+        {kit.watchHeader(
+          submitted ? "checkmark.circle.fill" : "hourglass",
+          watchGlyph,
+          labels.title,
+        )}
         {submitted ? (
           <Text
             modifiers={[

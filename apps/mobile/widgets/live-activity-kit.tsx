@@ -17,7 +17,9 @@ import {
   padding,
 } from "@expo/ui/swift-ui/modifiers";
 import type { LiveActivityEnvironment } from "expo-widgets";
+import type { ComponentProps } from "react";
 
+type SFSymbol = ComponentProps<typeof Image>["systemName"];
 type Slot = { width: number; alignment: "leading" | "center" | "trailing" };
 
 /**
@@ -33,14 +35,14 @@ export const liveActivityKit = () => {
   const secondary = foregroundStyle({ type: "hierarchical", style: "secondary" });
   const colorMods = (color: string | null) => (color ? [foregroundStyle(color)] : []);
 
-  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
-  // the camera): whatever the value, locale or text size, the island never
-  // grows past them. Each slot is as wide as its content up to the cap; text
-  // scales down rather than truncating, and the type size stays fixed.
-  // `fixedSize` asks the frame for its ideal width: without `idealWidth` the
-  // frame passed that open request on, the content kept its full width and
-  // spilled past the island's edge, and `minimumScaleFactor` never applied
-  // (#1171). The ideal width turns the cap into the content's proposal.
+  // Hard caps for the Dynamic Island (HIG: compact regions hug their content,
+  // snug against the camera): whatever the value, locale or text size, the
+  // island never grows past them. The frame only caps (`maxWidth`): it carries
+  // no ideal width, so a slot is exactly as wide as its content (a 24 pt
+  // figure no longer sits in a 56 pt box with empty space beside it, #1171)
+  // and text scales down rather than truncating at the cap. `fixedSize` is
+  // not used here: it asked for an open width and the content spilled past the
+  // island's edge.
   const islandSlot = (
     view: Parameters<typeof HStack>[0]["children"],
     { width, alignment }: Slot,
@@ -48,8 +50,7 @@ export const liveActivityKit = () => {
     <HStack
       spacing={0}
       modifiers={[
-        frame({ idealWidth: width, maxWidth: width, alignment }),
-        fixedSize({ horizontal: true }),
+        frame({ maxWidth: width, alignment }),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -65,11 +66,11 @@ export const liveActivityKit = () => {
       ...layout,
       compactLeading: islandSlot(
         layout.compactLeading as never,
-        slots?.compactLeading ?? { width: 22, alignment: "center" },
+        slots?.compactLeading ?? { width: 32, alignment: "center" },
       ),
       compactTrailing: islandSlot(
         layout.compactTrailing as never,
-        slots?.compactTrailing ?? { width: 56, alignment: "leading" },
+        slots?.compactTrailing ?? { width: 56, alignment: "center" },
       ),
       minimal: islandSlot(layout.minimal as never, { width: 36, alignment: "center" }),
     });
@@ -191,16 +192,78 @@ export const liveActivityKit = () => {
       </Link>
     ) : null;
 
+  // Presentation pieces every kind repeats. Callers keep their own JSX tree and
+  // pass only their content.
+  const islandAccent = "#0A84FF";
+  const neutral = "#8E8E93";
+  // Lock Screen accent: dynamic light/dark, dropped in Always-On.
+  const bannerAccent = (reduced?: boolean) =>
+    reduced ? null : ({ dynamic: { light: "#007AFF", dark: "#0A84FF" } } as unknown as string);
+
+  // Lock Screen banner: one 14 pt margin on every edge.
+  const bannerMods = [frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })];
+  const bottomMods = (bottom: number) => [
+    frame({ maxWidth: 10000, alignment: "leading" }),
+    padding({ horizontal: 8, bottom }),
+  ];
+  // watchOS Smart Stack / CarPlay (`.small`).
+  const watchMods = [
+    frame({ maxWidth: 10000, alignment: "leading" }),
+    padding({ horizontal: 10, vertical: 8 }),
+    dynamicTypeSize({ max: "xLarge" }),
+  ];
+  const watchHeader = (glyph: SFSymbol, glyphColor: string | null, title: string | undefined) => (
+    <HStack spacing={5}>
+      <Image systemName={glyph} color={glyphColor ?? neutral} size={13} />
+      <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
+        {title}
+      </Text>
+    </HStack>
+  );
+
+  // A newer, incompatible props shape (`v` bumped) degrades to the name and a
+  // symbol; the caller wraps the result in its `capped(...)`.
+  const fallback = (name: unknown, symbolName: SFSymbol) => {
+    const title = (
+      <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
+        {typeof name === "string" ? name : ""}
+      </Text>
+    );
+    const symbol = <Image systemName={symbolName} color={islandAccent} size={15} />;
+    return {
+      banner: (
+        <VStack alignment="leading" modifiers={bannerMods}>
+          {title}
+        </VStack>
+      ),
+      bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
+      compactLeading: symbol,
+      compactTrailing: <Text> </Text>,
+      minimal: symbol,
+      expandedLeading: symbol,
+      expandedTrailing: <Text> </Text>,
+      expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
+    };
+  };
+
   return {
+    bannerAccent,
+    bannerMods,
+    bottomMods,
     capped,
     caption,
     colorMods,
     counter,
+    fallback,
+    islandAccent,
     islandSide,
+    neutral,
     ratioParts,
     ratioView,
     scanButton,
     secondary,
+    watchHeader,
+    watchMods,
   };
 };
 
