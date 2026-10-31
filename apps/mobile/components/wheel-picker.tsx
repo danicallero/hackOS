@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ScrollView, Text, View } from "react-native";
-import { colors, radius, type } from "@/theme";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { colors, isAccessibilityTextSize, radius, space, type } from "@/theme";
 
 export const WHEEL_ITEM_HEIGHT = 36;
 const VISIBLE_ROWS = 5;
@@ -29,21 +29,28 @@ export function WheelPicker({
   flex?: number;
 }) {
   const scroll = useRef<ScrollView>(null);
-  const settled = useRef(selectedIndex);
+  const { fontScale, height } = useWindowDimensions();
+  const accessibilityText = isAccessibilityTextSize(fontScale);
+  const itemHeight = Math.max(
+    WHEEL_ITEM_HEIGHT,
+    Math.ceil(type.body.lineHeight * fontScale * (accessibilityText ? 2 : 1) + space.md),
+  );
+
+  // Keep the wheel inside the sheet when two-line AX rows grow (#1166).
+  const visibleRows = accessibilityText ? (itemHeight * 3 + 100 <= height ? 3 : 1) : VISIBLE_ROWS;
+  const edgeRows = (visibleRows - 1) / 2;
 
   // Follow external changes (a clamped min/max, a month with fewer days).
   useEffect(() => {
-    if (settled.current === selectedIndex) return;
-    settled.current = selectedIndex;
-    scroll.current?.scrollTo({ y: selectedIndex * WHEEL_ITEM_HEIGHT, animated: true });
-  }, [selectedIndex]);
+    scroll.current?.scrollTo({ y: selectedIndex * itemHeight, animated: true });
+  }, [selectedIndex, itemHeight]);
 
   return (
     <View
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="adjustable"
       accessibilityValue={{ text: options[selectedIndex]?.label }}
-      style={{ flex, height: WHEEL_ITEM_HEIGHT * VISIBLE_ROWS }}
+      style={{ flex, height: itemHeight * visibleRows }}
     >
       <View
         pointerEvents="none"
@@ -51,37 +58,36 @@ export function WheelPicker({
           backgroundColor: colors.elevatedSurface,
           borderCurve: "continuous",
           borderRadius: radius.chip,
-          height: WHEEL_ITEM_HEIGHT,
+          height: itemHeight,
           left: 0,
           position: "absolute",
           right: 0,
-          top: WHEEL_ITEM_HEIGHT * 2,
+          top: itemHeight * edgeRows,
         }}
       />
       <ScrollView
         ref={scroll}
-        contentContainerStyle={{ paddingVertical: WHEEL_ITEM_HEIGHT * 2 }}
-        contentOffset={{ x: 0, y: selectedIndex * WHEEL_ITEM_HEIGHT }}
+        contentContainerStyle={{ paddingVertical: itemHeight * edgeRows }}
+        contentOffset={{ x: 0, y: selectedIndex * itemHeight }}
         decelerationRate="fast"
         onMomentumScrollEnd={({ nativeEvent }) => {
           const index = Math.min(
             options.length - 1,
-            Math.max(0, Math.round(nativeEvent.contentOffset.y / WHEEL_ITEM_HEIGHT)),
+            Math.max(0, Math.round(nativeEvent.contentOffset.y / itemHeight)),
           );
-          settled.current = index;
           if (index !== selectedIndex) onChange(index);
         }}
         overScrollMode="never"
         showsVerticalScrollIndicator={false}
-        snapToInterval={WHEEL_ITEM_HEIGHT}
+        snapToInterval={itemHeight}
       >
         {options.map((option, index) => (
           <View
             key={option.value}
-            style={{ alignItems: "center", height: WHEEL_ITEM_HEIGHT, justifyContent: "center" }}
+            style={{ alignItems: "center", height: itemHeight, justifyContent: "center" }}
           >
             <Text
-              numberOfLines={1}
+              numberOfLines={accessibilityText ? 2 : 1}
               style={{
                 ...type.body,
                 color: index === selectedIndex ? colors.label : colors.secondaryLabel,

@@ -616,7 +616,7 @@ function DevelopmentIndicator() {
         style={{
           color: "#ffffff",
           fontSize: type.caption.fontSize,
-          fontWeight: "800",
+          fontWeight: "700",
           letterSpacing: 0.5,
         }}
       >

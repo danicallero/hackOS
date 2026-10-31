@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 /** Contacts-style action tile: icon above a short label. */
 export function QuickAction({
@@ -34,6 +35,7 @@ export function QuickAction({
   /** Sits in the tile's top corner, outside the dimming (the owner's eye). */
   accessory?: ReactNode;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View style={{ flex: 1 }}>
       <PressableFeedback
@@ -64,7 +66,7 @@ export function QuickAction({
           (iconNode ?? <SymbolView accessible={false} name={icon} size={22} tintColor={iconTint} />)
         )}
         <Text
-          numberOfLines={1}
+          numberOfLines={accessibilityText ? undefined : 1}
           style={{ color: colors.accent, fontSize: type.footnote.fontSize, fontWeight: "600" }}
         >
           {title}

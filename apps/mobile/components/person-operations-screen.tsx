@@ -7,7 +7,15 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { InteractionManager, Modal, Platform, ScrollView, Text, View } from "react-native";
+import {
+  InteractionManager,
+  Modal,
+  Platform,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
@@ -41,6 +49,7 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { SCAN_DETAIL_TOP_GAP } from "@/theme/layout-scan-pane";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
@@ -177,6 +186,7 @@ export function PersonOperationsScreen({
   topInset?: number;
   userId?: number;
 } = {}) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const listColumn = useOperatorListColumn();
   const params = useLocalSearchParams<{
     id: string;
@@ -964,8 +974,8 @@ export function PersonOperationsScreen({
               <Text
                 selectable
                 accessibilityRole="header"
-                numberOfLines={1}
-                style={{ ...type.title, color: colors.label, fontWeight: "800" }}
+                numberOfLines={accessibilityText ? undefined : 1}
+                style={{ ...type.title, color: colors.label, fontWeight: "700" }}
               >
                 {fullName}
               </Text>

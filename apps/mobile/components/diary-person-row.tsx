@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Text, useWindowDimensions, View } from "react-native";
 import { MenuView } from "@/components/app-menu";
 import { FavouriteStar } from "@/components/favourite-star";
 import { MenuTriggerIcon } from "@/components/native-ui";
@@ -6,6 +6,7 @@ import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { useLocale } from "@/lib/i18n";
 import { colors, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export const PERSON_ROW_TEXT_INSET = 76;
 /** Star + menu; a row with only the menu needs one target. */
@@ -48,6 +49,7 @@ export function DiaryPersonRow({
   onRemove?: () => void;
   testID?: string;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const lines = [headline, detail].filter(Boolean) as string[];
   const trailingWidth = onToggleStar ? TRAILING_WIDTH : MENU_ONLY_WIDTH;
@@ -56,7 +58,7 @@ export function DiaryPersonRow({
       <PersonAvatar size={48} name={available ? name : null} uri={photoUrl} />
       <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
         <Text
-          numberOfLines={1}
+          numberOfLines={accessibilityText ? undefined : 1}
           style={{
             color: available ? colors.label : colors.secondaryLabel,
             fontSize: type.body.fontSize,

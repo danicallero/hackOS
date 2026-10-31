@@ -6,6 +6,7 @@ import { alert } from "@/lib/alert";
 import { useLocale } from "@/lib/i18n";
 import { startNfcRead } from "@/lib/nfc-reader";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 export function NfcReader({
   visible,
@@ -102,11 +103,17 @@ export function NfcReader({
           <SymbolView accessible={false} name="wave.3.right" size={48} tintColor={colors.accent} />
           <Text
             accessibilityRole="header"
-            style={{ color: colors.label, fontSize: 22, fontWeight: "700" }}
+            style={{ color: colors.label, fontSize: type.title2.fontSize, fontWeight: "700" }}
           >
             {t("scannerNfcScan")}
           </Text>
-          <Text style={{ color: colors.secondaryLabel, fontSize: 17, textAlign: "center" }}>
+          <Text
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: type.body.fontSize,
+              textAlign: "center",
+            }}
+          >
             {message}
           </Text>
           <Pressable
@@ -114,7 +121,9 @@ export function NfcReader({
             onPress={onClose}
             style={{ minHeight: 48, justifyContent: "center", alignSelf: "stretch" }}
           >
-            <Text style={{ color: colors.accent, fontSize: 17, textAlign: "center" }}>
+            <Text
+              style={{ color: colors.accent, fontSize: type.body.fontSize, textAlign: "center" }}
+            >
               {t("cancel")}
             </Text>
           </Pressable>

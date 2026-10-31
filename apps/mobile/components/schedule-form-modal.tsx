@@ -5,7 +5,7 @@ import {
 } from "@hackos/shared/activity-kinds";
 import type { Language } from "@hackos/shared/locale";
 import { useEffect, useRef, useState } from "react";
-import { type ScrollView, Text, TextInput, View } from "react-native";
+import { type ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { MenuView } from "@/components/app-menu";
 import { DateTimeField } from "@/components/date-time-field";
@@ -36,6 +36,7 @@ import {
 } from "@/lib/schedule";
 import { prepareScheduleSubmission, scheduleSaveError } from "@/lib/schedule-save";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 const LANGUAGES: Language[] = ["es", "gl", "en"];
 
@@ -624,6 +625,7 @@ function OwnersField({
   onChange: (owners: ScheduleOwner[]) => void;
   scheduleId?: number;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [freeTextName, setFreeTextName] = useState("");
@@ -846,7 +848,7 @@ function OwnersField({
             >
               <Text
                 selectable
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}
               >
                 {owner.freeTextName ??

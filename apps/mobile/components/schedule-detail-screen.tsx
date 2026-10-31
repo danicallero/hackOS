@@ -39,6 +39,7 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors, radius, type } from "@/theme";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 const CONTENT_PADDING = 20;
@@ -237,6 +238,9 @@ export function ScheduleDetailScreen({
           <Text
             ellipsizeMode="tail"
             numberOfLines={1}
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            adjustsFontSizeToFit
+            minimumFontScale={CHROME_MIN_FONT_SCALE}
             selectable
             style={[
               noTextShadow,
@@ -245,7 +249,7 @@ export function ScheduleDetailScreen({
                 flex: 1,
                 flexBasis: 0,
                 fontSize: type.title2.fontSize,
-                fontWeight: "800",
+                fontWeight: "700",
                 flexShrink: 1,
                 height: 30,
                 includeFontPadding: false,

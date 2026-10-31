@@ -7,6 +7,7 @@ import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { useLocale } from "@/lib/i18n";
 import type { ProjectFile } from "@/lib/projects";
+import { type } from "@/theme/tokens";
 
 function Page({ photo, width, height }: { photo: ProjectFile; width: number; height: number }) {
   const full = useApiImage(photo.url);
@@ -84,7 +85,7 @@ export function PhotoCarousel({
               top: insets.top + 26,
             }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
+            <Text style={{ color: "#fff", fontSize: type.subhead.fontSize, fontWeight: "600" }}>
               {`${index + 1} / ${photos.length}`}
             </Text>
           </View>

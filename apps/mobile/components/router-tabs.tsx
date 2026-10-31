@@ -46,6 +46,7 @@ import {
 } from "@/lib/router-tabs-inset";
 import { useSideRegion } from "@/lib/side-region";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
+import { type } from "@/theme/tokens";
 
 export type { RouterTabBarInsets } from "@/lib/router-tabs-inset";
 export {
@@ -678,11 +679,13 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
         {labelled ? (
           <Text
             maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            adjustsFontSizeToFit
+            minimumFontScale={CHROME_MIN_FONT_SCALE}
             numberOfLines={1}
             style={{
               color: theme.label,
               flex: 1,
-              fontSize: 16,
+              fontSize: type.callout.fontSize,
               fontWeight: isFocused ? "600" : "400",
             }}
           >
@@ -729,7 +732,7 @@ const RouterTabButton = forwardRef<View, RouterTabButtonProps>(function RouterTa
           alignSelf: "stretch",
           color: isFocused ? theme.selectedLabel : theme.label,
           flexShrink: 1,
-          fontSize: 12,
+          fontSize: type.caption.fontSize,
           fontWeight: isFocused ? "600" : "500",
           lineHeight: 15,
           maxWidth: "100%",

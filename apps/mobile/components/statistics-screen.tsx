@@ -2,7 +2,6 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ScrollView, Text, type TextStyle, useColorScheme, View } from "react-native";
 import { AppRefreshControl } from "@/components/app-refresh-control";
-
 import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { useLocale } from "@/lib/i18n";
@@ -14,6 +13,7 @@ import { canViewStaffStatistics } from "@/lib/tabs";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 /** Personal scan statistics and staff operations (H22-H27). */
 export default function StatisticsScreen() {
@@ -108,7 +108,12 @@ export default function StatisticsScreen() {
       }
     >
       <Text
-        style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 21, paddingHorizontal: 4 }}
+        style={{
+          color: colors.secondaryLabel,
+          fontSize: type.subhead.fontSize,
+          lineHeight: 21,
+          paddingHorizontal: 4,
+        }}
       >
         {t("statisticsOverviewDescription")}
       </Text>

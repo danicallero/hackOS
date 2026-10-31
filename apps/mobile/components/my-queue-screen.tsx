@@ -416,7 +416,7 @@ export function QueueTutorial({
                 style={{
                   color: colors.label,
                   fontSize: type.title.fontSize,
-                  fontWeight: "800",
+                  fontWeight: "700",
                   textAlign: "center",
                 }}
               >
@@ -490,7 +490,7 @@ export function QueueTutorial({
                   style={{
                     color: colors.label,
                     fontSize: type.title2.fontSize,
-                    fontWeight: "800",
+                    fontWeight: "700",
                     textAlign: "center",
                   }}
                 >
@@ -698,7 +698,7 @@ const QueueCard = memo(function QueueCard({
                 color: colors.onSuccessSurface,
                 flex: 1,
                 fontSize: type.body.fontSize,
-                fontWeight: "800",
+                fontWeight: "700",
               }}
             >
               {item.room ? `${t("queueBeInRoom")} · ${item.room.name}` : t("queueBeInRoom")}
@@ -741,7 +741,7 @@ const QueueCard = memo(function QueueCard({
                 color: colors.onSuccessSurface,
                 flex: 1,
                 fontSize: type.body.fontSize,
-                fontWeight: "800",
+                fontWeight: "700",
               }}
             >
               {t("queueCalled", { room: calledRoom.name })}

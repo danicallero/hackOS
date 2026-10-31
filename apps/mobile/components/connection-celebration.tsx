@@ -24,6 +24,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 /** Who was just met (#935): the scanned person's name and photo route. */
 export interface ConnectionCelebrationTarget {
@@ -288,7 +289,7 @@ function Celebration({
           accessible={false}
           style={{
             color: colors.label,
-            fontSize: 17,
+            fontSize: type.body.fontSize,
             fontWeight: "600",
             marginTop: 8,
             paddingHorizontal: 32,

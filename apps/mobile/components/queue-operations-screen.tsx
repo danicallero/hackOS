@@ -28,6 +28,7 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 const JUST_CALLED_HIGHLIGHT_MS = 12_000;
 
@@ -444,6 +445,7 @@ const TeamQueueCard = memo(function TeamQueueCard({
   highlighted: boolean;
   onPress: (entryId: number, roomId: number) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const { entry, rooms, challengeTitle } = result;
   // A called team is at one specific door; a waiting one may be judged in any
@@ -470,7 +472,7 @@ const TeamQueueCard = memo(function TeamQueueCard({
         <View style={{ flex: 1, gap: 3 }}>
           <Text
             selectable
-            numberOfLines={1}
+            numberOfLines={accessibilityText ? undefined : 1}
             style={{ ...type.body, color: colors.label, fontWeight: "700" }}
           >
             {challengeTitle ?? t("queueOpsNoChallenge")}
@@ -556,6 +558,7 @@ function QueueMetric({
   label: string;
   value: string;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View
       style={{
@@ -578,7 +581,7 @@ function QueueMetric({
       </View>
       <Text
         selectable
-        numberOfLines={1}
+        numberOfLines={accessibilityText ? undefined : 1}
         style={{ color: colors.label, ...type.headline, fontWeight: "700" }}
       >
         {value}
@@ -631,6 +634,7 @@ const RoomCard = memo(function RoomCard({
   onNotify: (entryId: number) => void;
   onOpenTeam: (entryId: number, roomId: number) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const next = room.next[0] ?? null;
   const paused = room.state?.is_paused ?? true;
@@ -656,7 +660,7 @@ const RoomCard = memo(function RoomCard({
         <View style={{ flex: 1, gap: 3 }}>
           <Text
             selectable
-            numberOfLines={1}
+            numberOfLines={accessibilityText ? undefined : 1}
             style={{ color: colors.label, ...type.headline, fontWeight: "700" }}
           >
             {room.room.name}
@@ -768,7 +772,7 @@ const RoomCard = memo(function RoomCard({
                 >
                   <Text
                     selectable
-                    numberOfLines={1}
+                    numberOfLines={accessibilityText ? undefined : 1}
                     style={{ ...type.subhead, color: colors.label, flex: 1, fontWeight: "700" }}
                   >
                     {entry.repo_name ?? t("queueOpsUnnamedTeam")}
@@ -839,6 +843,7 @@ function QueueSlot({
   highlighted?: boolean;
   onPress?: () => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const content = (
     <>
@@ -861,7 +866,7 @@ function QueueSlot({
       </View>
       <Text
         selectable
-        numberOfLines={1}
+        numberOfLines={accessibilityText ? undefined : 1}
         style={{ ...type.callout, color: colors.label, fontWeight: "700" }}
       >
         {entry?.repo_name ?? empty}

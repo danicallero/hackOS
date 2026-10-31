@@ -60,7 +60,11 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { listDetailLayout } from "@/lib/window-size";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
-import { CHROME_MAX_FONT_SIZE_MULTIPLIER, isAccessibilityTextSize } from "@/theme/dynamic-type";
+import {
+  CHROME_MAX_FONT_SIZE_MULTIPLIER,
+  CHROME_MIN_FONT_SCALE,
+  isAccessibilityTextSize,
+} from "@/theme/dynamic-type";
 import { SCAN_DETAIL_MAX_WIDTH, SCAN_DETAIL_TITLE_INSET } from "@/theme/layout-scan-pane";
 import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
 import { SCREEN_TITLE, SCREEN_TITLE_CENTER, twoPaneBandHeight } from "@/theme/screen-title";
@@ -503,6 +507,9 @@ export function GeneralScannerScreen() {
                     <Text
                       accessibilityRole="header"
                       numberOfLines={1}
+                      maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                      adjustsFontSizeToFit
+                      minimumFontScale={CHROME_MIN_FONT_SCALE}
                       style={{ color: colors.label, ...SCREEN_TITLE }}
                     >
                       {detailTitle}

@@ -1,12 +1,12 @@
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
-
 import { SymbolView } from "@/components/symbol";
 import { ApiError } from "@/lib/api";
 import { apiErrorCopy } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 function errorKey(error: Error) {
   if (error instanceof ApiError) {
@@ -145,7 +145,7 @@ export function RequestFeedback({
 const styles = StyleSheet.create({
   container: { alignItems: "center", gap: 10, padding: 16 },
   offlineContainer: { gap: 8, paddingVertical: 32 },
-  offlineTitle: { fontSize: 17, fontWeight: "600", textAlign: "center" },
+  offlineTitle: { fontSize: type.body.fontSize, fontWeight: "600", textAlign: "center" },
   errorContainer: { borderCurve: "continuous", borderRadius: 12 },
   message: { opacity: 0.7, textAlign: "center" },
   error: { textAlign: "center" },

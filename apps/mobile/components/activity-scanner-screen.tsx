@@ -53,7 +53,11 @@ import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
-import { isAccessibilityTextSize } from "@/theme/dynamic-type";
+import {
+  CHROME_MAX_FONT_SIZE_MULTIPLIER,
+  CHROME_MIN_FONT_SCALE,
+  isAccessibilityTextSize,
+} from "@/theme/dynamic-type";
 import {
   PANE_BAND_INSET,
   PANE_CONTROL_HEIGHT,
@@ -539,6 +543,9 @@ export function ActivityScannerScreen({
             <Text
               accessibilityRole="header"
               numberOfLines={1}
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              adjustsFontSizeToFit
+              minimumFontScale={CHROME_MIN_FONT_SCALE}
               testID={UI_TEST_IDS.scanner.result}
               style={{ color: colors.label, flex: 1, ...SCREEN_TITLE }}
             >
@@ -570,6 +577,9 @@ export function ActivityScannerScreen({
             <Text
               accessibilityRole="header"
               numberOfLines={1}
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              adjustsFontSizeToFit
+              minimumFontScale={CHROME_MIN_FONT_SCALE}
               testID={UI_TEST_IDS.scanner.result}
               style={{ color: colors.label, ...SCREEN_TITLE }}
             >
@@ -596,6 +606,9 @@ export function ActivityScannerScreen({
           <Text
             selectable
             numberOfLines={1}
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            adjustsFontSizeToFit
+            minimumFontScale={CHROME_MIN_FONT_SCALE}
             style={{ ...type.callout, color: colors.label, fontWeight: "700", textAlign: "center" }}
           >
             {activityName}
@@ -902,7 +915,7 @@ function ActivityResultPanel({
                       : result.state === "confirmed"
                         ? colors.success
                         : colors.label,
-                    fontSize: 40,
+                    fontSize: type.largeTitle.fontSize,
                     fontVariant: ["tabular-nums"],
                     fontWeight: "600",
                   }}

@@ -77,7 +77,7 @@ export function PresenceScreen() {
         <Text
           selectable
           accessibilityRole="header"
-          style={{ ...type.title, color: colors.label, fontWeight: "800" }}
+          style={{ ...type.title, color: colors.label, fontWeight: "700" }}
         >
           {personName}
         </Text>

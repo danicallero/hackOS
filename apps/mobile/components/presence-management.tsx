@@ -1,7 +1,15 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, Text, TextInput, useColorScheme, View, type ViewStyle } from "react-native";
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -32,6 +40,7 @@ import { has } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export type SignalKind = "in" | "out" | "activity";
 
@@ -557,6 +566,7 @@ function SignalCard({
   focused: boolean;
   onFocusedLayout?: (target: View) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const cardRef = useRef<View>(null);
   const title =
@@ -614,7 +624,7 @@ function SignalCard({
         <View style={{ flex: 1 }}>
           <Text
             selectable
-            numberOfLines={1}
+            numberOfLines={accessibilityText ? undefined : 1}
             style={{ ...type.body, color: colors.label, fontWeight: "600" }}
           >
             {title}
@@ -799,6 +809,7 @@ function ActivityPicker({
   selectedId: number | null;
   onSelect: (activityId: number) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
@@ -832,7 +843,7 @@ function ActivityPicker({
       >
         <Text
           selectable
-          numberOfLines={1}
+          numberOfLines={accessibilityText ? undefined : 1}
           style={{ ...type.callout, color: colors.label, flex: 1 }}
         >
           {selected ? `${selected.name} · ${selected.category}` : t("presenceChooseActivity")}
@@ -908,7 +919,7 @@ function ActivityPicker({
                       }}
                     >
                       <Text
-                        numberOfLines={1}
+                        numberOfLines={accessibilityText ? undefined : 1}
                         style={{ ...type.callout, color: colors.label, flex: 1 }}
                       >
                         {`${activity.name} · ${activity.category}`}

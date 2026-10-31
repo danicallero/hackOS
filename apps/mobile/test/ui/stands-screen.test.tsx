@@ -6,7 +6,7 @@ jest.mock("@/lib/use-nfc-supported", () => ({
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, AppState } from "react-native";
+import { Alert, AppState, Dimensions } from "react-native";
 import { StandsScreen } from "@/components/stands-screen";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { StandSummary } from "@/lib/stands";
@@ -279,4 +279,29 @@ describe("StandsScreen (#935)", () => {
     expect(screen.getByText("requestUnavailable")).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+});
+
+it("reflows company names at AX5 while keeping counts as secondary metadata (#1166)", async () => {
+  const window = Dimensions.get("window");
+  const display = Dimensions.get("screen");
+  try {
+    await act(async () => {
+      Dimensions.set({ window: { ...window, fontScale: 1 }, screen: { ...display, fontScale: 1 } });
+    });
+    await renderMobile(<StandsScreen />);
+    expect((await screen.findByText("Acme")).props.numberOfLines).toBe(1);
+    await act(async () => {
+      Dimensions.set({
+        window: { ...window, fontScale: 3.571 },
+        screen: { ...display, fontScale: 3.571 },
+      });
+    });
+    expect(screen.getByText("Acme").props.numberOfLines).toBeUndefined();
+    expect(screen.getByText("Acme").props.maxFontSizeMultiplier).toBeUndefined();
+    expect(screen.getByText("standsCounts:0/1").props.numberOfLines).toBe(1);
+  } finally {
+    await act(async () => {
+      Dimensions.set({ window, screen: display });
+    });
+  }
 });

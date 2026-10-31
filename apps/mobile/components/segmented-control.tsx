@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
-
 import { haptic } from "@/lib/haptics";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 export interface SegmentedControlProps {
   values: string[];
@@ -63,7 +63,7 @@ export function SegmentedControl({
             <Text
               style={{
                 color: colors.label,
-                fontSize: 13,
+                fontSize: type.footnote.fontSize,
                 fontWeight: selected ? "600" : "500",
                 flexShrink: 1,
                 textAlign: "center",

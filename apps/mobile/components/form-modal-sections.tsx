@@ -1,5 +1,13 @@
 import type { ReactNode, Ref } from "react";
-import { Pressable, ScrollView, Text, TextInput, View, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { SheetModal } from "@/components/app-sheet";
@@ -9,6 +17,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export function FormModalShell({
   children,
@@ -226,6 +235,7 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
   searched: boolean;
   title: string;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
 
   return (
@@ -293,7 +303,7 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
             <View style={{ flex: 1 }}>
               <Text
                 selectable
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{ color: colors.label, fontSize: type.callout.fontSize }}
               >
                 {personCandidateName(candidate)}

@@ -742,7 +742,7 @@ export function DiaryScreen() {
                 // which turned the title white over the blue scan pill.
                 color: colorScheme === "dark" ? "#ffffff" : "#000000",
                 fontSize: type.title.fontSize,
-                fontWeight: "800",
+                fontWeight: "700",
               }}
             >
               {wallet.open ? "" : t("tabDiary")}

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, Text, type TextStyle, View } from "react-native";
+import { ScrollView, Text, type TextStyle, useWindowDimensions, View } from "react-native";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import {
@@ -40,6 +40,7 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
 type QueueFilter = "all" | "errors" | "waiting" | "confirmed";
@@ -387,6 +388,7 @@ const QueueRow = memo(function QueueRow({
   onRetry: (id: string) => void;
   onDiscard: (id: string) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const subject = subjectLabel(scan, peopleIndex);
   const status = queueStatus(scan, t);
@@ -396,7 +398,7 @@ const QueueRow = memo(function QueueRow({
         <SymbolView name={status.icon} tintColor={status.color} size={19} accessible={false} />
         <View style={{ flex: 1, gap: 2 }}>
           <Text
-            numberOfLines={1}
+            numberOfLines={accessibilityText ? undefined : 1}
             style={{ ...type.subhead, color: colors.label, fontWeight: "700" }}
           >
             {subject ?? scannerOperationLabel(scan, t)}

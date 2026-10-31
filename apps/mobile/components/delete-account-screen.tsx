@@ -1059,7 +1059,7 @@ function OtpInput({
               <Text
                 style={{
                   color: colors.label,
-                  fontSize: compact ? 22 : 24,
+                  fontSize: type.title2.fontSize,
                   fontVariant: ["tabular-nums"],
                   fontWeight: "500",
                 }}
@@ -1112,7 +1112,11 @@ function BulletList({ items, compact = false }: { items: string[]; compact?: boo
         <View key={item} style={{ alignItems: "flex-start", flexDirection: "row", gap: 10 }}>
           <Text
             selectable
-            style={{ color: colors.secondaryLabel, fontSize: compact ? 14 : 16, lineHeight: 22 }}
+            style={{
+              color: colors.secondaryLabel,
+              fontSize: compact ? type.compact.fontSize : type.callout.fontSize,
+              lineHeight: 22,
+            }}
           >
             •
           </Text>
@@ -1121,7 +1125,7 @@ function BulletList({ items, compact = false }: { items: string[]; compact?: boo
             style={{
               color: compact ? colors.secondaryLabel : colors.label,
               flex: 1,
-              fontSize: compact ? 14 : 16,
+              fontSize: compact ? type.compact.fontSize : type.callout.fontSize,
               lineHeight: compact ? 20 : 23,
             }}
           >
@@ -1171,7 +1175,11 @@ function DestructiveNotice({
         style={{
           color: colors.destructive,
           flex: 1,
-          fontSize: dense ? 14 : compact ? 15 : 14,
+          fontSize: dense
+            ? type.compact.fontSize
+            : compact
+              ? type.subhead.fontSize
+              : type.compact.fontSize,
           fontWeight: urgent ? "500" : "400",
           lineHeight: dense ? 19 : compact ? 21 : 20,
         }}
