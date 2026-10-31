@@ -444,8 +444,10 @@ describe("quick search sub-destinations (#1182)", () => {
     expect(hrefs).not.toContain("/settings/event?tab=danger");
   });
 
-  it("lists nothing for a destination the caller cannot open", () => {
-    expect(hrefsFor(contextFor([]))).toEqual([]);
+  it("lists only profile views for a caller without capabilities", () => {
+    const hrefs = hrefsFor(contextFor([]));
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs.every((href) => href.startsWith("/settings/profile?tab="))).toBe(true);
   });
 
   it("points every view at its destination with a tab", () => {

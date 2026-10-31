@@ -2,7 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
-import { useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Modal } from "@/components/common/modal";
@@ -41,6 +42,26 @@ type Values = z.infer<ReturnType<typeof passwordSchema>>;
 export function PasswordRow() {
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
+  // Quick search opens this dialog through `?action=password`; the param is
+  // consumed on arrival so reloads and shared links do not reopen it (#1182, R003).
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedAction = searchParams.get("action");
+  const consumed = useRef(false);
+  useEffect(() => {
+    if (requestedAction !== "password") {
+      consumed.current = false;
+      return;
+    }
+    if (consumed.current) return;
+    consumed.current = true;
+    setOpen(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("action");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [requestedAction, searchParams, pathname, router]);
   const schema = useMemo(() => passwordSchema(t), [t]);
   const form = useForm<Values>({
     mode: "onBlur",
@@ -92,7 +113,7 @@ export function PasswordRow() {
       >
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid items-start gap-4 sm:grid-cols-2">
               <FormField
                 control={form.control}
                 name="currentPassword"

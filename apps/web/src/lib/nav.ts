@@ -16,6 +16,7 @@ import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
 import { HouseIcon } from "@phosphor-icons/react/dist/ssr/House";
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
 import { LogIcon } from "@phosphor-icons/react/dist/ssr/Log";
 import { MapPinIcon } from "@phosphor-icons/react/dist/ssr/MapPin";
@@ -177,7 +178,7 @@ const sub = (
   title: NavItem["title"],
   href: string,
   icon: PhosphorIcon,
-  gate: Pick<NavItem, "capability" | "anyCapability"> = {},
+  gate: Pick<NavItem, "capability" | "anyCapability" | "hideForPureApplicant"> = {},
 ): NavItem => ({ title, href, icon, ...gate });
 
 const EVENT_SETTINGS_SUBITEMS: NavItem[] = [
@@ -266,7 +267,21 @@ export const PERSONAL_NAV: NavItem[] = [
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
-  { title: "myProfile", href: "/settings/profile", icon: UserIcon },
+  {
+    title: "myProfile",
+    href: "/settings/profile",
+    icon: UserIcon,
+    subItems: [
+      sub("personalDetails", "/settings/profile?tab=personal", UserIcon),
+      sub("publicProfileTitle", "/settings/profile?tab=public", UserIcon, {
+        hideForPureApplicant: true,
+      }),
+      sub("wallet", "/settings/profile?tab=wallet", WalletIcon, { hideForPureApplicant: true }),
+      sub("accountTitle", "/settings/profile?tab=account", UserIcon),
+      // Opens the password dialog on arrival (`action=password`).
+      sub("changePassword", "/settings/profile?tab=account&action=password", KeyIcon),
+    ],
+  },
 ];
 
 /**
