@@ -56,7 +56,7 @@ index 7dfe0a9..6b7caa1 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +88,126 @@
+@@ -73,3 +88,127 @@
      return result
    }
  }
@@ -144,7 +144,7 @@ index 7dfe0a9..6b7caa1 100644
 +      if short && left < 3600 {
 +        // Compact island, Luma style: a big number over a small unit label
 +        // (`41` over `min`). Colon notation keeps the last five minutes.
-+        VStack(spacing: -1) {
++        VStack(spacing: -2) {
 +          if seconds {
 +            // The last half minute: just the seconds going down, 30, 29, 28…
 +            field(skip: 0, width: digitsWidth(left >= 10 ? 2 : 1) * 1.35, scale: 1.35)
@@ -156,7 +156,8 @@ index 7dfe0a9..6b7caa1 100644
 +            unit("min", scale: 0.72)
 +          }
 +        }
-+        .frame(width: stackWidth)
++        // Inset from the island's rounded corner, which cut the first stroke of the label.
++        .frame(width: stackWidth + 8, alignment: .trailing)
 +      } else if left >= 3600 {
 +        // `2h 34m` (also the compact island's form past an hour); minutes-of-hour under ten drop their zero: `1h 5m`.
 +        let shortMinutes = (Int(left) % 3600) / 60 < 10
