@@ -120,13 +120,15 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => {
     if (content?.event.name) document.title = content.event.name;
   }, [content]);
+  const Landmark = embedded ? "div" : "main";
   return (
     <div className="relative overflow-x-clip">
       {!embedded && <PublicTopBar />}
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className={embedded ? "outline-none" : "mx-auto max-w-7xl px-4 outline-none sm:px-6"}
+      {/* Embedded in the app shell, whose canvas is already the page's only <main> (#1172). */}
+      <Landmark
+        id={embedded ? undefined : "main-content"}
+        tabIndex={embedded ? undefined : -1}
+        className={embedded ? undefined : "mx-auto max-w-7xl px-4 outline-none sm:px-6"}
       >
         {!content && !error && (
           <div className="grid py-24" role="status" aria-busy="true">
@@ -163,7 +165,7 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
               now={now}
             />
           ))}
-      </main>
+      </Landmark>
       {!embedded && <PublicFooter />}
     </div>
   );

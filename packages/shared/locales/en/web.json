@@ -215,6 +215,7 @@
   "mobileSidebarDescription": "Personal links and workspaces.",
   "navigationPersonal": "Personal",
   "navigationWorkspaces": "Workspaces",
+  "navigationPrimary": "Primary",
   "selectAll": "Select all",
   "selectRow": "Select row",
   "openRow": "Open row",
