@@ -353,6 +353,7 @@ describe("submission deadline (H19, H20)", () => {
       countdownUnderTenMinutes: false,
       countdownLastFiveMinutes: false,
       countdownLastMinute: false,
+      countdownLastHalfMinute: false,
       countdownLastTenSeconds: false,
     });
     expect(result.deadline?.startsAt).not.toBeNull();

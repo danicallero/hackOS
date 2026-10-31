@@ -35,14 +35,14 @@ export const liveActivityKit = () => {
   const secondary = foregroundStyle({ type: "hierarchical", style: "secondary" });
   const colorMods = (color: string | null) => (color ? [foregroundStyle(color)] : []);
 
-  // Hard caps for the Dynamic Island (HIG: narrow, balanced, snug against
-  // the camera): whatever the value, locale or text size, the island never
-  // grows past them. Each slot is as wide as its content up to the cap; text
-  // scales down rather than truncating, and the type size stays fixed.
-  // `fixedSize` asks the frame for its ideal width: without `idealWidth` the
-  // frame passed that open request on, the content kept its full width and
-  // spilled past the island's edge, and `minimumScaleFactor` never applied
-  // (#1171). The ideal width turns the cap into the content's proposal.
+  // Hard caps for the Dynamic Island (HIG: compact regions hug their content,
+  // snug against the camera): whatever the value, locale or text size, the
+  // island never grows past them. The frame only caps (`maxWidth`): it carries
+  // no ideal width, so a slot is exactly as wide as its content (a 24 pt
+  // figure no longer sits in a 56 pt box with empty space beside it, #1171)
+  // and text scales down rather than truncating at the cap. `fixedSize` is
+  // not used here: it asked for an open width and the content spilled past the
+  // island's edge.
   const islandSlot = (
     view: Parameters<typeof HStack>[0]["children"],
     { width, alignment }: Slot,
@@ -50,8 +50,7 @@ export const liveActivityKit = () => {
     <HStack
       spacing={0}
       modifiers={[
-        frame({ idealWidth: width, maxWidth: width, alignment }),
-        fixedSize({ horizontal: true }),
+        frame({ maxWidth: width, alignment }),
         minimumScaleFactor(0.6),
         dynamicTypeSize("large"),
       ]}
@@ -67,7 +66,7 @@ export const liveActivityKit = () => {
       ...layout,
       compactLeading: islandSlot(
         layout.compactLeading as never,
-        slots?.compactLeading ?? { width: 22, alignment: "center" },
+        slots?.compactLeading ?? { width: 32, alignment: "center" },
       ),
       compactTrailing: islandSlot(
         layout.compactTrailing as never,

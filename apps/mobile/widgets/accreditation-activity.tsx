@@ -98,7 +98,16 @@ export const AccreditationActivityLayout = withLiveActivityKit(
         </HStack>
       ) : null;
 
-    const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
+    // `person.badge.key` draws its key past the symbol's own bounds, which cut
+    // it flat: a wider frame leaves room for the whole glyph.
+    const compactLeading = (
+      <Image
+        systemName={symbol}
+        color={islandAccent}
+        size={15}
+        modifiers={[frame({ width: 24, height: 20, alignment: "center" })]}
+      />
+    );
     const compactTrailing = number(String(accredited), 12, islandAccent, "semibold", false);
 
     // Minimal: the accredited share as a ring.

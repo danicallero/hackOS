@@ -303,6 +303,7 @@ describe("GET /api/me/live-activities", () => {
       countdownUnderTenMinutes: true,
       countdownLastFiveMinutes: true,
       countdownLastMinute: false,
+      countdownLastHalfMinute: false,
       countdownLastTenSeconds: false,
     });
 

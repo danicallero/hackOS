@@ -33,7 +33,7 @@ export const DeadlineActivityLayout = withLiveActivityKit(
 
     const { colorMods, islandSide, secondary } = kit;
     const capped = kit.capped({
-      compactLeading: { width: 36, alignment: "trailing" },
+      compactLeading: { width: 56, alignment: "trailing" },
       compactTrailing: { width: 24, alignment: "center" },
     });
     // A newer, incompatible props shape degrades to the title.
@@ -61,11 +61,12 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     const tone = submitted ? "green" : closing ? "red" : "blue";
     const islandColor = island[tone];
     const bannerColor = reduced ? null : lock[tone];
-    // Closing is urgent, not alarming: red marks only the symbol and the
-    // "Not submitted" status. The countdown and the bar keep the primary and
-    // neutral colours, so one glance still finds the number.
-    const valueIsland = closing ? null : islandColor;
-    const valueBanner = closing ? null : bannerColor;
+    // The countdown, bar and symbol share the phase colour in every state:
+    // blue open, red closing, green submitted. Neutral grey on black was
+    // unreadable once submitted, and a primary-colour countdown while closing
+    // read as near-white next to the red symbol.
+    const valueIsland = islandColor;
+    const valueBanner = bannerColor;
     const symbol = submitted
       ? "checkmark.circle.fill"
       : closing
@@ -182,27 +183,22 @@ export const DeadlineActivityLayout = withLiveActivityKit(
     );
 
     // Compact, like Luma's pre-event activity: the countdown leads, snug to the
-    // camera, one unit (`2h`, `38m`) at a fixed 12 pt and narrow enough for
-    // the vertical island of a foldable; the status symbol sits opposite.
-    const compactLeading = countdown(
-      12,
-      submitted ? neutral : valueIsland,
-      56,
-      "semibold",
-      "trailing",
-      "short",
-    ) ?? <Text> </Text>;
+    // camera: `2h 40m` from an hour, a number over `min` below it (reminders
+    // never exceed an hour); the status symbol sits opposite.
+    const compactLeading = countdown(12, valueIsland, 56, "semibold", "trailing", "short") ?? (
+      <Text> </Text>
+    );
     const compactTrailing = glyph(islandColor, 15);
 
     // #966: minimal identifies the phase without shrinking a multi-unit timer.
     const minimal = glyph(islandColor, 20);
 
-    // Submitted keeps the time left, smaller and neutral.
+    // Submitted keeps the time left, smaller.
     const expandedLeading = islandSide(
       <VStack alignment="leading" spacing={0}>
         {caption(labels.closesIn)}
         {submitted
-          ? countdown(17, neutral, 140, "semibold", "leading", "long")
+          ? countdown(17, valueIsland, 140, "semibold", "leading", "long")
           : // Same hero scale as the other kinds; width fitting handles long hours.
             (countdown(28, valueIsland, 180, "bold", "leading", "long") ?? <Text> </Text>)}
       </VStack>,
@@ -218,13 +214,12 @@ export const DeadlineActivityLayout = withLiveActivityKit(
           <Spacer />
           {status(12, true)}
         </HStack>
-        {caption(props.projectName)}
         {bar(valueIsland)}
       </VStack>
     );
 
     // H19/H20 / #966: the primary value leads (as in Luma's pre-event activity),
-    // the status and symbol close the row, then title and project. Submitted
+    // the status and symbol close the row, then the title (never the project name). Submitted
     // moves the small time left into that row: as two rows of their own they
     // pushed the banner past the 160 pt Lock Screen height (#1171).
     const banner = (
@@ -263,7 +258,6 @@ export const DeadlineActivityLayout = withLiveActivityKit(
         <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(2)]}>
           {labels.title}
         </Text>
-        {caption(props.projectName)}
         {bar(valueBanner)}
       </VStack>
     );

@@ -39,19 +39,17 @@ export const AttendeeActivityLayout = withLiveActivityKit(
     "widget";
 
     const { caption, colorMods, islandSide, secondary } = kit;
-    // "Live" is wider than a one-unit countdown ("En curso" in es/gl did not
-    // fit 36 pt and spilled past the island's edge, #1171), so live takes the
-    // wider leading slot: 56 + 24 pt, the staff activity's total width.
-    const cappedTo = (wide: boolean) =>
-      kit.capped({
-        compactLeading: { width: wide ? 56 : 36, alignment: "trailing" },
-        compactTrailing: { width: 24, alignment: "center" },
-      });
+    // Slots hug their content up to a cap; "En curso" in es/gl and `2h 40m`
+    // need the 56 pt one (#1171).
+    const capped = kit.capped({
+      compactLeading: { width: 56, alignment: "trailing" },
+      compactTrailing: { width: 24, alignment: "center" },
+    });
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
     // instead of rendering half-understood fields (or an invalid timer range).
     if (props.v !== 1 || !props.labels) {
-      return cappedTo(false)(kit.fallback(props.name, "calendar"));
+      return capped(kit.fallback(props.name, "calendar"));
     }
     const labels = props.labels;
     // Same colour logic as the staff activity: the island is always dark, the
@@ -291,7 +289,7 @@ export const AttendeeActivityLayout = withLiveActivityKit(
       </VStack>
     );
 
-    return cappedTo(live && Boolean(liveLabel))({
+    return capped({
       banner,
       bannerSmall,
       compactLeading,

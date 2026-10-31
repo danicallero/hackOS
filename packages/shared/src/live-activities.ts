@@ -254,6 +254,11 @@ export function countdownLastMinute(target: string | Date, now: Date | number): 
   return countdownMsLeft(target, now) < 60_000;
 }
 
+/** #966: re-render at thirty seconds, where the compact island turns `<1 min` into the seconds countdown. */
+export function countdownLastHalfMinute(target: string | Date, now: Date | number): boolean {
+  return countdownMsLeft(target, now) <= 30_000;
+}
+
 /** #966: re-render under ten minutes, when the minutes field shrinks to one digit (`9m`). */
 export function countdownUnderTenMinutes(target: string | Date, now: Date | number): boolean {
   return countdownMsLeft(target, now) < LIVE_COUNTDOWN_TEN_MINUTES_MS;
@@ -283,6 +288,7 @@ export interface CountdownFlags {
   countdownUnderTenMinutes: boolean;
   countdownLastFiveMinutes: boolean;
   countdownLastMinute: boolean;
+  countdownLastHalfMinute: boolean;
   countdownLastTenSeconds: boolean;
 }
 
@@ -292,6 +298,7 @@ export const COUNTDOWN_FLAG_KEYS = [
   "countdownUnderTenMinutes",
   "countdownLastFiveMinutes",
   "countdownLastMinute",
+  "countdownLastHalfMinute",
   "countdownLastTenSeconds",
 ] as const satisfies readonly (keyof CountdownFlags)[];
 
@@ -302,11 +309,18 @@ export function countdownFlags(target: string | Date, now: Date | number): Count
     countdownUnderTenMinutes: countdownUnderTenMinutes(target, now),
     countdownLastFiveMinutes: countdownLastFiveMinutes(target, now),
     countdownLastMinute: countdownLastMinute(target, now),
+    countdownLastHalfMinute: countdownLastHalfMinute(target, now),
     countdownLastTenSeconds: countdownLastTenSeconds(target, now),
   };
 }
 
-const SMALL_COUNTDOWN_THRESHOLDS_MS = [10_000, 60_000, 300_000, LIVE_COUNTDOWN_TEN_MINUTES_MS];
+const SMALL_COUNTDOWN_THRESHOLDS_MS = [
+  10_000,
+  30_000,
+  60_000,
+  300_000,
+  LIVE_COUNTDOWN_TEN_MINUTES_MS,
+];
 
 /**
  * The next instant (epoch ms) at which a countdown to `target` crosses a
@@ -385,6 +399,7 @@ export interface ActivityLiveProps {
   countdownLastFiveMinutes?: boolean;
   /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
   countdownLastMinute?: boolean;
+  countdownLastHalfMinute?: boolean;
   /** Under ten seconds the seconds field is one digit (`9s`). */
   countdownLastTenSeconds?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). Optional (post-v1). */
@@ -448,6 +463,7 @@ export interface AttendeeActivityLiveProps {
   countdownLastFiveMinutes?: boolean;
   /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
   countdownLastMinute?: boolean;
+  countdownLastHalfMinute?: boolean;
   /** Under ten seconds the seconds field is one digit (`9s`). */
   countdownLastTenSeconds?: boolean;
   /** Device rank among the Live Activities it shows (0 = most important). */
@@ -506,6 +522,7 @@ export interface DeadlineLiveProps {
   countdownLastFiveMinutes?: boolean;
   /** Re-render below a minute, with seconds alone or `<1m` in Always-On. */
   countdownLastMinute?: boolean;
+  countdownLastHalfMinute?: boolean;
   /** Under ten seconds the seconds field is one digit (`9s`). */
   countdownLastTenSeconds?: boolean;
   rank?: number;
