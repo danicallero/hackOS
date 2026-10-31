@@ -1,7 +1,5 @@
 import { Gauge, HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  allowsTightening,
-  contentTransition,
   dynamicTypeSize,
   fixedSize,
   font,
@@ -9,10 +7,8 @@ import {
   frame,
   gaugeStyle,
   labelsHidden,
-  layoutPriority,
   lineLimit,
   minimumScaleFactor,
-  monospacedDigit,
   padding,
   scaleEffect,
   tint,
@@ -45,7 +41,7 @@ export const StaffActivityLayout = withLiveActivityKit(
   (props: ActivityLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { caption, colorMods, islandSide, secondary } = kit;
+    const { caption, colorMods, counter, islandSide, secondary } = kit;
     const capped = kit.capped();
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
@@ -175,31 +171,6 @@ export const StaffActivityLayout = withLiveActivityKit(
       );
     };
 
-    // Full width on the Lock Screen (`fixed`); inside the island nothing is
-    // fixed, so a value shrinks to its slot instead of spilling under the
-    // camera (#1171).
-    const counter = (
-      value: string,
-      size: number,
-      color: string | null,
-      weight = "bold",
-      fixed = true,
-    ) => (
-      <Text
-        modifiers={[
-          font({ size, weight: weight as "bold" | "semibold" }),
-          monospacedDigit(),
-          contentTransition("numericText"),
-          lineLimit(1),
-          allowsTightening(true),
-          ...(fixed ? [fixedSize({ horizontal: true })] : [layoutPriority(1)]),
-          ...colorMods(color),
-        ]}
-      >
-        {value}
-      </Text>
-    );
-
     // "42/180": the scanned count with its denominator, smaller and secondary
     // (as the accreditation desk's `accredited/eligible`). Inside the island a
     // ratio past seven characters (`1142/1380`) keeps only the count.
@@ -209,33 +180,13 @@ export const StaffActivityLayout = withLiveActivityKit(
       color: string | null,
       weight = "bold",
       fixed = true,
-    ) => {
-      const parts = fixed
-        ? { count: scanned, total: accredited ? `/${accredited}` : null }
-        : kit.ratioParts(scannedCount, accredited || null);
-      return (
-        <HStack
-          alignment="firstTextBaseline"
-          spacing={1}
-          modifiers={fixed ? [fixedSize({ horizontal: true })] : []}
-        >
-          {counter(parts.count, size, color, weight, fixed)}
-          {parts.total ? (
-            <Text
-              modifiers={[
-                font({ size: denominatorSize, weight: "semibold" }),
-                monospacedDigit(),
-                contentTransition("numericText"),
-                secondary,
-                lineLimit(1),
-              ]}
-            >
-              {parts.total}
-            </Text>
-          ) : null}
-        </HStack>
+    ) =>
+      kit.ratioView(
+        fixed
+          ? { count: scanned, total: accredited ? `/${accredited}` : null }
+          : kit.ratioParts(scannedCount, accredited || null),
+        { size, denominatorSize, spacing: 1, color, weight, fixed, animateTotal: true },
       );
-    };
 
     const stat = (
       label: string | undefined,

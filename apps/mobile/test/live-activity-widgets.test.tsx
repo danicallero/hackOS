@@ -1010,6 +1010,24 @@ describe("Dynamic Island safe areas (#1171)", () => {
       total: number | null,
       maxChars?: number,
     ) => { count: string; total: string | null };
+    counter: (
+      value: string,
+      size: number,
+      color: string | null,
+      weight?: string,
+      fixed?: boolean,
+    ) => Node;
+    ratioView: (
+      parts: { count: string; total: string | null },
+      options: {
+        size: number;
+        denominatorSize: number;
+        spacing: number;
+        color: string | null;
+        fixed?: boolean;
+        animateTotal?: boolean;
+      },
+    ) => Node;
   };
 
   it.each([
@@ -1019,6 +1037,28 @@ describe("Dynamic Island safe areas (#1171)", () => {
     [1412, null, { count: "1412", total: null }],
   ] as const)("keeps a ratio only while it fits: %s/%s", (count, total, expected) => {
     expect(kit().ratioParts(count, total)).toEqual(expected);
+  });
+
+  it("counter fixes its width on the Lock Screen and shrinks inside the island", () => {
+    const names = (fixed: boolean) =>
+      modifiersOf(kit().counter("42", 28, null, "bold", fixed)).map((m) => m.modifier);
+    expect(names(true)).toContain("fixedSize");
+    expect(names(true)).not.toContain("layoutPriority");
+    expect(names(false)).toContain("layoutPriority");
+    expect(names(false)).not.toContain("fixedSize");
+  });
+
+  it("ratioView drops the denominator when absent and animates it on request", () => {
+    const base = { size: 28, denominatorSize: 15, spacing: 1, color: null };
+    const none = kit().ratioView({ count: "42", total: null }, base);
+    expect(none.props?.children).toHaveLength(2);
+    expect((none.props?.children as unknown[])[1]).toBeNull();
+    const total = (animateTotal: boolean) => {
+      const view = kit().ratioView({ count: "42", total: "/180" }, { ...base, animateTotal });
+      return modifiersOf((view.props?.children as Node[])[1]).map((m) => m.modifier);
+    };
+    expect(total(true)).toContain("contentTransition");
+    expect(total(false)).not.toContain("contentTransition");
   });
 
   type Modifier = { modifier: string; args: unknown[] };

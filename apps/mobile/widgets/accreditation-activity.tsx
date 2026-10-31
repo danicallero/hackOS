@@ -1,13 +1,10 @@
 import { Gauge, HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  allowsTightening,
-  contentTransition,
   dynamicTypeSize,
   fixedSize,
   font,
   frame,
   gaugeStyle,
-  layoutPriority,
   lineLimit,
   monospacedDigit,
   padding,
@@ -34,7 +31,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
   (props: AccreditationLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { caption, colorMods, islandSide, secondary } = kit;
+    const { caption, counter: number, islandSide, secondary } = kit;
     const capped = kit.capped();
     // A newer, incompatible props shape degrades to a bare symbol.
     if (props.v !== 1 || !props.labels) {
@@ -81,60 +78,16 @@ export const AccreditationActivityLayout = withLiveActivityKit(
     const endsAt = new Date(props.endsAt);
     const validEnd = Number.isFinite(endsAt.getTime());
 
-    // Full width on the Lock Screen (`fixed`); inside the island nothing is
-    // fixed, so a value shrinks to its slot instead of spilling under the
-    // camera (#1171).
-    const number = (
-      value: string,
-      size: number,
-      color: string | null,
-      weight = "bold",
-      fixed = true,
-    ) => (
-      <Text
-        modifiers={[
-          font({ size, weight: weight as "bold" | "semibold" }),
-          monospacedDigit(),
-          contentTransition("numericText"),
-          lineLimit(1),
-          allowsTightening(true),
-          ...(fixed ? [fixedSize({ horizontal: true })] : [layoutPriority(1)]),
-          ...colorMods(color),
-        ]}
-      >
-        {value}
-      </Text>
-    );
-
     // "412 /600": the hero count with its denominator, smaller and secondary.
     // Beside the camera a ratio past seven characters (`1412/1600`) keeps
     // only the count; the bar below still shows the share.
-    const accreditedValue = (size: number, color: string | null, fixed = true) => {
-      const parts = fixed
-        ? { count: String(accredited), total: eligible !== null ? `/${eligible}` : null }
-        : kit.ratioParts(accredited, eligible);
-      return (
-        <HStack
-          alignment="firstTextBaseline"
-          spacing={2}
-          modifiers={fixed ? [fixedSize({ horizontal: true })] : []}
-        >
-          {number(parts.count, size, color, "bold", fixed)}
-          {parts.total ? (
-            <Text
-              modifiers={[
-                font({ size: Math.round(size * 0.55), weight: "semibold" }),
-                monospacedDigit(),
-                secondary,
-                lineLimit(1),
-              ]}
-            >
-              {parts.total}
-            </Text>
-          ) : null}
-        </HStack>
+    const accreditedValue = (size: number, color: string | null, fixed = true) =>
+      kit.ratioView(
+        fixed
+          ? { count: String(accredited), total: eligible !== null ? `/${eligible}` : null }
+          : kit.ratioParts(accredited, eligible),
+        { size, denominatorSize: Math.round(size * 0.55), spacing: 2, color, fixed },
       );
-    };
     const stat = (
       label: string | undefined,
       value: ReturnType<typeof number>,

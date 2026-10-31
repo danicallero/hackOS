@@ -1,14 +1,18 @@
 import { HStack, Image, Link, Text, VStack } from "@expo/ui/swift-ui";
 import {
   accessibilityLabel,
+  allowsTightening,
   background,
+  contentTransition,
   dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
   frame,
+  layoutPriority,
   lineLimit,
   minimumScaleFactor,
+  monospacedDigit,
   multilineTextAlignment,
   padding,
 } from "@expo/ui/swift-ui/modifiers";
@@ -95,6 +99,69 @@ export const liveActivityKit = () => {
       ? { count: String(count), total: `/${total}` }
       : { count: String(count), total: null };
 
+  // Full width on the Lock Screen (`fixed`); inside the island nothing is
+  // fixed, so a value shrinks to its slot instead of spilling under the
+  // camera (#1171).
+  const counter = (
+    value: string,
+    size: number,
+    color: string | null,
+    weight = "bold",
+    fixed = true,
+  ) => (
+    <Text
+      modifiers={[
+        font({ size, weight: weight as "bold" | "semibold" }),
+        monospacedDigit(),
+        contentTransition("numericText"),
+        lineLimit(1),
+        allowsTightening(true),
+        ...(fixed ? [fixedSize({ horizontal: true })] : [layoutPriority(1)]),
+        ...colorMods(color),
+      ]}
+    >
+      {value}
+    </Text>
+  );
+
+  // A hero count with its denominator, smaller and secondary (`42/180`).
+  const ratioView = (
+    parts: { count: string; total: string | null },
+    o: {
+      size: number;
+      denominatorSize: number;
+      spacing: number;
+      color: string | null;
+      weight?: string;
+      fixed?: boolean;
+      animateTotal?: boolean;
+    },
+  ) => {
+    const fixed = o.fixed ?? true;
+    return (
+      <HStack
+        alignment="firstTextBaseline"
+        spacing={o.spacing}
+        modifiers={fixed ? [fixedSize({ horizontal: true })] : []}
+      >
+        {counter(parts.count, o.size, o.color, o.weight ?? "bold", fixed)}
+        {parts.total ? (
+          <Text
+            modifiers={[
+              font({ size: o.denominatorSize, weight: "semibold" }),
+              monospacedDigit(),
+              ...(o.animateTotal ? [contentTransition("numericText")] : []),
+              secondary,
+              lineLimit(1),
+            ]}
+          >
+            {parts.total}
+          </Text>
+        ) : null}
+      </HStack>
+    );
+  };
+
   const caption = (text: string | null | undefined, align?: "leading" | "trailing") =>
     text ? (
       <Text
@@ -124,7 +191,17 @@ export const liveActivityKit = () => {
       </Link>
     ) : null;
 
-  return { capped, caption, colorMods, islandSide, ratioParts, scanButton, secondary };
+  return {
+    capped,
+    caption,
+    colorMods,
+    counter,
+    islandSide,
+    ratioParts,
+    ratioView,
+    scanButton,
+    secondary,
+  };
 };
 
 export type LiveActivityKit = ReturnType<typeof liveActivityKit>;
