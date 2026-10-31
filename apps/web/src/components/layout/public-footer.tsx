@@ -10,12 +10,18 @@ export function PublicFooter() {
     <footer className="text-muted-foreground border-t text-sm">
       <nav
         aria-label={t("legalLinksLabel")}
-        className="mx-auto flex w-full max-w-7xl flex-wrap justify-center gap-x-5 gap-y-2 px-4 py-6 sm:px-6"
+        className="mx-auto flex w-full max-w-7xl flex-wrap justify-center gap-x-5 gap-y-1 px-4 py-6 sm:px-6"
       >
-        <Link className="underline underline-offset-4 hover:text-foreground" href="/terms">
+        <Link
+          className="inline-flex min-h-(--target-min) items-center underline underline-offset-4 hover:text-foreground"
+          href="/terms"
+        >
           {t("termsAndConditions")}
         </Link>
-        <Link className="underline underline-offset-4 hover:text-foreground" href="/privacy">
+        <Link
+          className="inline-flex min-h-(--target-min) items-center underline underline-offset-4 hover:text-foreground"
+          href="/privacy"
+        >
           {t("privacyPolicy")}
         </Link>
       </nav>

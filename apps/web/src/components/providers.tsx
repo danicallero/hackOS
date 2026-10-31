@@ -34,7 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <IconContext.Provider value={{ size: 24, weight: "regular", color: "currentColor" }}>
         <SessionProvider>
           <LocaleProvider>
-            <TooltipProvider delayDuration={200}>
+            <TooltipProvider>
               <MaintenanceGate>{children}</MaintenanceGate>
             </TooltipProvider>
             {!isKiosk && <CookieNotice />}

@@ -49,6 +49,9 @@
   --control-height-default: 2.25rem;
   --control-height-prominent: 2.5rem;
   --control-height-textarea: 4rem;
+  /* WCAG 2.2 AA minimum pointer target (2.5.8) and the touch target used when the primary pointer is coarse. */
+  --target-min: 1.5rem;
+  --target-touch: 2.75rem;
   --hackos-radius-button: 999px;
   --hackos-radius-control: 0.375rem;
   --hackos-radius-surface: 0.5rem;
@@ -178,4 +181,39 @@
   --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
   --sidebar-ring: var(--ring);
+}
+
+/*
+ * Touch: controls grow to the 44 px touch target. Dense desktop geometry is
+ * untouched because only a coarse primary pointer matches. Checkboxes,
+ * switches, sort headings and resize handles extend their hit area instead of
+ * their painted size (`touch-target` in globals.css).
+ */
+@media (pointer: coarse) {
+  :root {
+    --control-height-tiny: var(--target-touch);
+    --control-height-compact: var(--target-touch);
+    --control-height-default: var(--target-touch);
+    --control-height-prominent: var(--target-touch);
+  }
+}
+
+/*
+ * prefers-contrast: more strengthens the low-contrast neutrals: borders,
+ * muted text and the focus ring. Declared after both themes so each override
+ * wins at equal specificity.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --border: color-mix(in srgb, var(--brand-ink) 60%, var(--brand-cream));
+    --muted-foreground: color-mix(in srgb, var(--brand-ink) 90%, var(--brand-cream));
+    --ring: var(--foreground);
+    --button-outline-border: var(--foreground);
+  }
+
+  .dark {
+    --border: #8b93a5;
+    --muted-foreground: #d3d8e2;
+    --ring: var(--foreground);
+  }
 }
