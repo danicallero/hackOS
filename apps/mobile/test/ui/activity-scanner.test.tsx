@@ -156,6 +156,7 @@ jest.mock("@/theme/colors", () => ({
 
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
 import { apiFetch } from "@/lib/api";
+import { haptic } from "@/lib/haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
@@ -263,6 +264,14 @@ it("accepts a ticket QR and preserves it in the offline activity payload", async
     expect.objectContaining({ ticketToken: "BADGE-1", kind: "activity" }),
     11,
   );
+});
+
+it("gives an unrecognised badge the error haptic", async () => {
+  jest.mocked(haptic).mockClear();
+  jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
+  await renderMobile(<ActivityScannerScreen />);
+  await screen.findByRole("button", { name: "scannerBadgeUnknown" });
+  expect(haptic).toHaveBeenCalledWith("error");
 });
 
 it("automatically dismisses lookup errors after six seconds", async () => {

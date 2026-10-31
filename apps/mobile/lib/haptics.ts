@@ -5,6 +5,10 @@ export type HapticIntent = "selection" | "light" | "medium" | "success" | "warni
 /**
  * H22-H26/H51: tactile feedback is best-effort and must never make an
  * interaction fail when the device or platform has no haptic engine.
+ * Expo Haptics goes through UIFeedbackGenerator on iOS and `performHapticFeedback`
+ * on Android, so the OS drops the call when System Haptics / touch feedback is
+ * off (#1170); nothing here overrides that setting. Scanner and queue outcomes
+ * map to intents in `scan-haptics.ts`.
  */
 export async function haptic(intent: HapticIntent): Promise<void> {
   if (process.env.EXPO_OS === "web") return;

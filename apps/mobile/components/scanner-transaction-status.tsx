@@ -872,6 +872,7 @@ export function ScannerQueueStatus({
                                   void haptic("light");
                                   onRetryOne(scan.id);
                                 }}
+                                hitSlop={{ top: 5, bottom: 5 }}
                                 style={{
                                   alignItems: "center",
                                   alignSelf: "flex-end",

@@ -518,6 +518,7 @@ export function ProjectEditor({
               onEndEditing={() => void saveName(name).catch((cause) => setError(cause as Error))}
               editable={!blocked}
               returnKeyType="done"
+              hitSlop={{ top: 8, bottom: 8 }}
               style={{
                 color: colors.label,
                 fontSize: type.body.fontSize,

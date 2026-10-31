@@ -30,6 +30,7 @@ import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import { enqueueLocalScan, findPersonById, pendingScans } from "@/lib/scanner-db";
 import { scannerFetch } from "@/lib/scanner-request";
 import { submitScannerMutation } from "@/lib/scanner-sync";
@@ -393,7 +394,7 @@ export function PersonOperationsScreen({
           current ? { ...current, badgeId: nextBadge, currentBadge: nextBadge } : current,
         );
       }
-      void haptic(result.state === "acknowledged" ? "success" : "light");
+      void scanOutcomeHaptic(result.state === "acknowledged" ? "accepted" : "queued");
       // Refresh the authoritative snapshot after an online mutation. A local
       // cache failure is intentionally contained by useScannerSync, so it
       // cannot turn a successful server assignment into an error state.
@@ -401,7 +402,7 @@ export function PersonOperationsScreen({
       void sync.sync().then((snapshot) => snapshot && load(snapshot));
       if (claimFailed) alert(t("personLinkBadge"), t("scannerNfcWriteFailed"));
     } catch (cause) {
-      void haptic("error");
+      void scanOutcomeHaptic("rejected");
       const message = errorText(cause, t, t("requestError"));
       alert(cause instanceof ApiError ? t("scannerBusinessRejected") : t("requestError"), message);
     } finally {
@@ -530,12 +531,12 @@ export function PersonOperationsScreen({
       // invisible and the log just never appears.
       const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
       if (stored?.status === "failed") {
-        void haptic("error");
+        void scanOutcomeHaptic("rejected");
         alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
       } else if (stored?.status === "acknowledged") {
-        void haptic("success");
+        void scanOutcomeHaptic("accepted");
       } else {
-        void haptic("light");
+        void scanOutcomeHaptic("queued");
       }
       if (snapshot) await load(snapshot);
       await refreshPresence();

@@ -36,6 +36,7 @@ import type {
   ScannerSyncErrorEntry,
 } from "@/lib/scanner-types";
 import { canViewStaffStatistics, isOperator } from "@/lib/tabs";
+import { useQueueTransitionHaptics } from "@/lib/use-queue-haptics";
 import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { radius, type } from "@/theme";
@@ -50,6 +51,7 @@ export default function SyncQueueScreen() {
   const { t } = useLocale();
   const { me, loading, error, refetch } = useMeContext();
   const sync = useScannerSync();
+  useQueueTransitionHaptics(sync.queue);
   const scrollRef = useRef<ScrollView>(null);
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const [filters, setFilters] = useState<Exclude<QueueFilter, "all">[]>([]);
@@ -523,6 +525,7 @@ function CompactAction({
         void haptic("light");
         onPress();
       }}
+      hitSlop={{ top: 2, bottom: 2 }}
       style={{
         alignItems: "center",
         borderColor: destructive ? colors.destructive : colors.separator,
