@@ -350,6 +350,9 @@ bold text stops at 700 (#1165). The token guard has a zero font-size budget
 and rejects 800/900 weights. Proportional avatar initials remain geometry-derived.
 Primary row labels, names, and choices release their single-line limit at
 accessibility text sizes (#1166); secondary metadata may stay truncated.
+Readable supporting text uses `colors.secondaryLabel`; `colors.tertiaryLabel`
+is reserved for placeholders, disabled content and non-text decoration. Text
+on tinted surfaces uses the corresponding `on…Surface` foreground token.
 Fixed navigation titles and live-camera overlays retain the shared chrome cap
 and navigation labels shrink to fit.
 

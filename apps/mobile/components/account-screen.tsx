@@ -622,7 +622,7 @@ export default function AccountScreen() {
           onPress={revealDeveloperMode}
           style={{ alignSelf: "center", padding: 8 }}
         >
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.caption.fontSize }}>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.caption.fontSize }}>
             {appVersionLabel}
           </Text>
         </Pressable>

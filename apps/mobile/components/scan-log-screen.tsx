@@ -374,7 +374,7 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
       {method ? (
         <Text
           numberOfLines={1}
-          style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 32 }}
+          style={{ ...type.caption, color: colors.secondaryLabel, paddingLeft: 32 }}
         >
           {method}
         </Text>
@@ -383,7 +383,7 @@ function ScanLogRow({ entry, onPress }: { entry: ScanLogEntry; onPress: () => vo
         <Text
           numberOfLines={1}
           selectable
-          style={{ ...type.caption, color: colors.tertiaryLabel, paddingLeft: 32 }}
+          style={{ ...type.caption, color: colors.secondaryLabel, paddingLeft: 32 }}
         >
           {entry.notes}
         </Text>

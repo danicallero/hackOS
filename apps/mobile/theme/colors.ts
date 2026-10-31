@@ -54,11 +54,13 @@ const SPECS = {
     android: () => schemeHex("#000000", "#ffffff"),
     web: "#171717",
   },
+  /** Readable supporting text; UIKit adapts this semantic role for Increase Contrast. (#1167) */
   secondaryLabel: {
     ios: () => Color.ios.secondaryLabel,
     android: () => schemeHex("#6c6c70", "#98989e"),
     web: "#5f6368",
   },
+  /** Placeholders, disabled content and non-text decoration only. (#1167) */
   tertiaryLabel: {
     ios: () => Color.ios.tertiaryLabel,
     android: () => schemeHex("#b1b1b6", "#6d6d72"),

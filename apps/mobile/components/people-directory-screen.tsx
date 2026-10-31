@@ -579,7 +579,7 @@ const PersonRow = memo(function PersonRow({
             numberOfLines={1}
             selectable
             style={{
-              color: colors.tertiaryLabel,
+              color: colors.secondaryLabel,
               fontSize: type.footnote.fontSize,
               fontWeight: "400",
             }}

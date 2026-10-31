@@ -1113,7 +1113,7 @@ function QueueTabBar({
                 {qc.title}
               </Text>
               {qc.room_name ? (
-                <Text numberOfLines={1} style={{ ...type.caption, color: colors.tertiaryLabel }}>
+                <Text numberOfLines={1} style={{ ...type.caption, color: colors.secondaryLabel }}>
                   {qc.room_name}
                 </Text>
               ) : null}
@@ -1319,7 +1319,7 @@ function QueueDetailView({
                     {new Date(row.created_at).toLocaleString()}
                   </Text>
                   {row.reason ? (
-                    <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
+                    <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                       {row.reason}
                     </Text>
                   ) : null}
