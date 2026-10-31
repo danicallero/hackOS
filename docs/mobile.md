@@ -2041,11 +2041,21 @@ backslashes (`/\s+/` became `/s+/` and the compact island showed "Roo" for
 against the camera): slots are sized to their text and centred, and the queue
 shows a short room code ("Aula 3.0" -> "A3.0", "Room B" -> "RB"). The called
 Lock Screen banner shows the room without its location, and the count-up sits
-left-aligned under "Called". Pieces every kind repeats (island slot caps, `secondary`/`colorMods`,
-the caption, the **Scan** circle) live in `widgets/live-activity-kit.tsx`
-(#1134): the kit is itself a `'widget'` function and `withLiveActivityKit`
-concatenates its source with each layout's, passing its result as the layout's
-third argument, so nothing is imported inside the extension. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+left-aligned under "Called". Pieces every kind repeats live in `widgets/live-activity-kit.tsx`
+(#1134): island slot caps and `islandSide`, `secondary`/`colorMods`, the
+accent palette (`islandAccent`, `neutral`, `bannerAccent`), the counter and
+ratio views, the caption, the **Scan** circle, the layout modifiers
+(`bannerMods`, `bottomMods`, `watchMods`), `watchHeader` and the `fallback`
+shown for an unknown props version. `ExpoWidgets` serializes each `'widget'`
+function on its own into `ExpoWidgets.bundle`, so a module import (or a
+helper declared outside the function) does not exist in the extension. The kit
+is therefore itself a `'widget'` function: `withLiveActivityKit` concatenates
+its source with each layout's and passes its result as the layout's third
+argument, so nothing is imported inside the extension. Shared pieces return
+modifier lists or single elements, never wrapper components or fragments
+(the extension's JSX runtime is not guaranteed to support them), and each
+activity keeps its own JSX tree and content. The names must equal
+`LIVE_ACTIVITY_WIDGET_NAMES`. Each state
 answers one question with one hero value; everything else is secondary.
 Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
 neutral grey; Always-On drops the accent fills. Lock Screen colours are

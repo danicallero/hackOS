@@ -12,7 +12,6 @@ import {
 import {
   allowsTightening,
   contentTransition,
-  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -66,29 +65,7 @@ export const QueueActivityLayout = withLiveActivityKit(
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the title
     // instead of rendering half-understood fields.
     if (props.v !== 1 || !props.labels) {
-      const title = (
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-          {typeof props.challengeTitle === "string" ? props.challengeTitle : ""}
-        </Text>
-      );
-      const symbol = <Image systemName="person.3.sequence.fill" color="#0A84FF" size={15} />;
-      return capped({
-        banner: (
-          <VStack
-            alignment="leading"
-            modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-          >
-            {title}
-          </VStack>
-        ),
-        bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
-        compactLeading: symbol,
-        compactTrailing: <Text> </Text>,
-        minimal: symbol,
-        expandedLeading: symbol,
-        expandedTrailing: <Text> </Text>,
-        expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-      });
+      return capped(kit.fallback(props.challengeTitle, "person.3.sequence.fill"));
     }
     const labels = props.labels;
     const called = props.phase === "called";
@@ -103,7 +80,7 @@ export const QueueActivityLayout = withLiveActivityKit(
     // luminance) drops accent fills and lets the system dim.
     // Waiting = blue, called = green (go), in room = neutral.
     const reduced = environment.isLuminanceReduced === true;
-    const neutral = "#8E8E93";
+    const { neutral } = kit;
     const islandColor = inRoom ? null : called ? "#30D158" : "#0A84FF";
     const adaptive = (light: string, dark: string) =>
       ({ dynamic: { light, dark } }) as unknown as string;
@@ -474,14 +451,7 @@ export const QueueActivityLayout = withLiveActivityKit(
 
     const calledSince = calledTimer(17, "medium", 72);
     const expandedBottom = (
-      <VStack
-        alignment="leading"
-        spacing={8}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 8, bottom: 8 }),
-        ]}
-      >
+      <VStack alignment="leading" spacing={8} modifiers={kit.bottomMods(8)}>
         <HStack spacing={8}>
           <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
             {props.challengeTitle}
@@ -584,11 +554,7 @@ export const QueueActivityLayout = withLiveActivityKit(
       );
 
     const banner = (
-      <VStack
-        alignment="leading"
-        spacing={10}
-        modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-      >
+      <VStack alignment="leading" spacing={10} modifiers={kit.bannerMods}>
         {header}
         {hero}
         {track(bannerColor, true)}
@@ -633,21 +599,8 @@ export const QueueActivityLayout = withLiveActivityKit(
           ? etaOrEstimating
           : null;
     const bannerSmall = (
-      <VStack
-        alignment="leading"
-        spacing={2}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 10, vertical: 8 }),
-          dynamicTypeSize({ max: "xLarge" }),
-        ]}
-      >
-        <HStack spacing={5}>
-          <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-            {props.challengeTitle}
-          </Text>
-        </HStack>
+      <VStack alignment="leading" spacing={2} modifiers={kit.watchMods}>
+        {kit.watchHeader(symbol, watchGlyph, props.challengeTitle)}
         {watchHero(watchHeroText)}
         {watchLine(watchLineText)}
       </VStack>

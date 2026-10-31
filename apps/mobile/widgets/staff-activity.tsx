@@ -1,6 +1,5 @@
 import { Gauge, HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -9,7 +8,6 @@ import {
   labelsHidden,
   lineLimit,
   minimumScaleFactor,
-  padding,
   scaleEffect,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
@@ -47,40 +45,16 @@ export const StaffActivityLayout = withLiveActivityKit(
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
     // instead of rendering half-understood fields (or an invalid timer range).
     if (props.v !== 1 || !props.labels) {
-      const title = (
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-          {typeof props.name === "string" ? props.name : ""}
-        </Text>
-      );
-      const symbol = <Image systemName="person.3.fill" color="#0A84FF" size={15} />;
-      return capped({
-        banner: (
-          <VStack
-            alignment="leading"
-            modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-          >
-            {title}
-          </VStack>
-        ),
-        bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
-        compactLeading: symbol,
-        compactTrailing: <Text> </Text>,
-        minimal: symbol,
-        expandedLeading: symbol,
-        expandedTrailing: <Text> </Text>,
-        expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-      });
+      return capped(kit.fallback(props.name, "person.3.fill"));
     }
     const labels = props.labels;
     // Dynamic Island is always dark; the Lock Screen follows the system scheme,
     // which `environment.colorScheme` does not reliably report, so the Lock
     // Screen accent is a dynamic colour resolved by the view's own appearance.
     // Always-On (reduced luminance) drops accent fills and lets the system dim.
-    const islandAccent = "#0A84FF";
-    const neutral = "#8E8E93";
-    const bannerAccent = environment.isLuminanceReduced
-      ? null
-      : ({ dynamic: { light: "#007AFF", dark: "#0A84FF" } } as unknown as string);
+    const { islandAccent } = kit;
+    const { neutral } = kit;
+    const bannerAccent = kit.bannerAccent(environment.isLuminanceReduced);
     // An upcoming state goes stale at the start: it is live from then on, even
     // before the push that flips `phase` (and brings the counts) arrives.
     const live =
@@ -318,14 +292,7 @@ export const StaffActivityLayout = withLiveActivityKit(
     );
 
     const expandedBottom = (
-      <VStack
-        alignment="leading"
-        spacing={4}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 8, bottom: 4 }),
-        ]}
-      >
+      <VStack alignment="leading" spacing={4} modifiers={kit.bottomMods(4)}>
         <HStack spacing={8}>
           <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
             {props.name}
@@ -348,11 +315,7 @@ export const StaffActivityLayout = withLiveActivityKit(
 
     // H25/H26 / #966: preserve the trailing hero across all presentations.
     const banner = (
-      <VStack
-        alignment="leading"
-        spacing={10}
-        modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-      >
+      <VStack alignment="leading" spacing={10} modifiers={kit.bannerMods}>
         <HStack spacing={8}>
           {glyph(bannerAccent, 17)}
           <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
@@ -394,21 +357,8 @@ export const StaffActivityLayout = withLiveActivityKit(
     // tints the glyph only; Always-On drops it.
     const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
     const bannerSmall = (
-      <VStack
-        alignment="leading"
-        spacing={2}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 10, vertical: 8 }),
-          dynamicTypeSize({ max: "xLarge" }),
-        ]}
-      >
-        <HStack spacing={5}>
-          <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-            {props.name}
-          </Text>
-        </HStack>
+      <VStack alignment="leading" spacing={2} modifiers={kit.watchMods}>
+        {kit.watchHeader(symbol, watchGlyph, props.name)}
         {live ? (
           ratio(26, 14, null)
         ) : (
