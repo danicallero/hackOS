@@ -17,6 +17,25 @@ import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { useAuthFrameExtra } from "@/lib/auth-frame";
 import { colors, radius, space, type } from "@/theme";
 
+/**
+ * The gutters and the frame's extra padding sit OUTSIDE the form's 440 pt cap. Put on the capped
+ * View itself they ate its width: a book pose's ~416 pt crease padding left a 0 pt form (H4, H55).
+ */
+const formColumn = { alignSelf: "center", maxWidth: 440, width: "100%" } as const;
+
+function AuthFooter({ children }: { children?: ReactNode }) {
+  if (!children) return null;
+  return (
+    <View style={{ borderTopColor: colors.separator, borderTopWidth: 1, paddingTop: 14 }}>
+      {children}
+    </View>
+  );
+}
+
+function authGutters(extra: { left: number; right: number }) {
+  return { paddingLeft: 24 + extra.left, paddingRight: 24 + extra.right };
+}
+
 export function AuthScreen({
   children,
   footer,
@@ -44,8 +63,7 @@ export function AuthScreen({
       contentInsetAdjustmentBehavior="never"
       contentContainerStyle={{
         flexGrow: 1,
-        paddingLeft: 24 + extra.left,
-        paddingRight: 24 + extra.right,
+        ...authGutters(extra),
         paddingTop: safe.top + 56,
         paddingBottom: safe.bottom + 40,
       }}
@@ -53,19 +71,9 @@ export function AuthScreen({
       keyboardShouldPersistTaps="handled"
       style={{ backgroundColor: colors.background }}
     >
-      <View style={{ alignSelf: "center", gap: 24, maxWidth: 440, width: "100%" }}>
+      <View style={[formColumn, { gap: 24 }]}>
         {children}
-        {footer ? (
-          <View
-            style={{
-              borderTopColor: colors.separator,
-              borderTopWidth: 1,
-              paddingTop: 14,
-            }}
-          >
-            {footer}
-          </View>
-        ) : null}
+        <AuthFooter>{footer}</AuthFooter>
       </View>
     </ScrollView>
   );
@@ -93,32 +101,13 @@ function FixedAuthScreen({
   return (
     <SafeAreaView edges={["top", "bottom"]} style={{ backgroundColor: colors.background, flex: 1 }}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
-        <View
-          style={{
-            alignSelf: "center",
-            flex: 1,
-            maxWidth: 440,
-            paddingBottom: 16,
-            paddingLeft: 24 + extra.left,
-            paddingRight: 24 + extra.right,
-            paddingTop: 24,
-            width: "100%",
-          }}
-        >
-          <Animated.View style={[{ flex: 1, justifyContent: "center" }, formStyle]}>
-            <View style={{ gap: 24 }}>{children}</View>
-          </Animated.View>
-          {footer ? (
-            <View
-              style={{
-                borderTopColor: colors.separator,
-                borderTopWidth: 1,
-                paddingTop: 14,
-              }}
-            >
-              {footer}
-            </View>
-          ) : null}
+        <View style={{ flex: 1, paddingBottom: 16, paddingTop: 24, ...authGutters(extra) }}>
+          <View style={[formColumn, { flex: 1 }]}>
+            <Animated.View style={[{ flex: 1, justifyContent: "center" }, formStyle]}>
+              <View style={{ gap: 24 }}>{children}</View>
+            </Animated.View>
+            <AuthFooter>{footer}</AuthFooter>
+          </View>
         </View>
       </TouchableWithoutFeedback>
     </SafeAreaView>
