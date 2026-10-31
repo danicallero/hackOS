@@ -432,6 +432,18 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   with their content without double-padding screens, sheets through `SheetFrame` (which measures the
   sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
   same side.
+- **Auth and status screens.** `AuthScreen` (`components/auth-ui.tsx`) centres its form with
+  `authFrameExtra` (`lib/auth-frame.ts`): on the window beside the system's column, or on the
+  first page of a book pose (the crease is in window points; a left column is subtracted because
+  the screen's content starts after it). Rule: that extra and the 24 pt gutters pad a full-width
+  frame *outside* the form's 440 pt cap, never the capped View itself. The non-scrolling variant
+  once padded the capped View, so on the iPhone Duo in book pose (951 pt window, 64 pt right
+  column, crease at ~471 pt, extra ~416 pt) the padding consumed all 440 pt: sign-in showed only
+  field borders, the reveal eye and a sliver of button on a black page. The extra also assumes the
+  side column is already padded, as the root Stack's `contentStyle` does for sign-in; screens drawn
+  instead of the Stack (session restore/offline, pending removal, maintenance, upgrade) get the
+  same padding through `StacklessScreen` in `app/_layout.tsx`, or their form straddled the crease.
+  `test/ui/auth-frame-layout.test.tsx` lays out both variants for book, flat, iPad and phone windows.
 - **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
   (outer display, inner display in landscape, the outer edge of a Split View half) and
   keeps horizontal bars on the inner display in portrait. The system only moves bars it
