@@ -26,6 +26,30 @@ import {
   useCommandPaletteOpen,
 } from "@/lib/shortcuts";
 
+function normalize(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Title-first ranking (#1182): cmdk's default fuzzy match scatters letters
+ * across the href and group labels, so "stats" matched unrelated pages and
+ * outranked the real one. Keywords[0] is always the item title.
+ */
+export function rankDestination(_value: string, search: string, keywords: string[] = []): number {
+  const query = normalize(search);
+  if (!query) return 1;
+  const [title = "", ...rest] = keywords.map(normalize);
+  if (title.startsWith(query)) return 1;
+  if (title.split(/[\s›/-]+/).some((word) => word.startsWith(query))) return 0.9;
+  if (title.includes(query)) return 0.7;
+  if (rest.some((keyword) => keyword.includes(query))) return 0.4;
+  return 0;
+}
+
 /**
  * Global keyboard shortcuts (#1182, docs/DESIGN.md §9) and the quick-search
  * palette over the caller's sidebar destinations. Mounted once by AppShell.
@@ -70,6 +94,7 @@ export function CommandPalette() {
       title={t("quickSearch")}
       description={t("quickSearchPlaceholder")}
       showCloseButton={false}
+      filter={rankDestination}
       className="top-[18%] translate-y-0"
     >
       <CommandInput placeholder={t("quickSearchPlaceholder")} />
