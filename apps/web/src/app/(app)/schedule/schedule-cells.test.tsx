@@ -1,9 +1,11 @@
+import { getByRole } from "@testing-library/dom";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { toast } from "@/lib/toast";
-import { EditableOwnersCell } from "./schedule-cells";
+import { EditableOwnersCell, EditableTextCell, EditableTimeCell } from "./schedule-cells";
 
 // #1118: owner add/remove failures must be reported, not left unhandled.
 
@@ -64,6 +66,7 @@ describe("EditableOwnersCell", () => {
       'input[placeholder="ownerFreeTextPlaceholder"]',
     );
     expect(input).not.toBeNull();
+    expect(input?.getAttribute("aria-label")).toBe("ownerFreeTextPlaceholder");
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
       setter?.call(input, "Luis");
@@ -85,4 +88,54 @@ describe("EditableOwnersCell", () => {
     expect(toast.error).toHaveBeenCalledTimes(1);
     cleanup();
   });
+});
+
+describe("schedule inline editor accessible names (H59)", () => {
+  for (const kind of ["text", "time"] as const) {
+    it(`names the ${kind} editor and preserves keyboard save/cancel`, async () => {
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      const onSave = vi.fn().mockResolvedValue(true);
+      const user = userEvent.setup();
+      const fieldLabel = kind === "text" ? "Notes" : "Starts";
+      const value = kind === "text" ? "Existing notes" : "09:00";
+      act(() =>
+        root.render(
+          kind === "text" ? (
+            <EditableTextCell value={value} fieldLabel={fieldLabel} onSave={onSave} />
+          ) : (
+            <EditableTimeCell value={value} fieldLabel={fieldLabel} onSave={onSave} />
+          ),
+        ),
+      );
+      try {
+        const trigger = getByRole(container, "button", { name: `editScheduleFieldAria: ${value}` });
+        trigger.focus();
+        await act(async () => {
+          await user.keyboard("{Enter}");
+        });
+        const input = getByRole(container, "textbox", { name: fieldLabel });
+        expect(document.activeElement).toBe(input);
+        await act(async () => {
+          await user.clear(input);
+          await user.type(input, kind === "text" ? "Updated" : "10:30");
+          await user.keyboard("{Enter}");
+        });
+        expect(onSave).toHaveBeenCalledWith(kind === "text" ? "Updated" : "10:30");
+        getByRole(container, "button").focus();
+        await act(async () => {
+          await user.keyboard("{Enter}");
+        });
+        await act(async () => {
+          await user.keyboard("{Escape}");
+        });
+        expect(container.querySelector("input")).toBeNull();
+        expect(onSave).toHaveBeenCalledTimes(1);
+      } finally {
+        act(() => root.unmount());
+        container.remove();
+      }
+    });
+  }
 });

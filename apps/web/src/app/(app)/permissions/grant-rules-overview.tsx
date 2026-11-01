@@ -96,6 +96,7 @@ export function GrantRulesOverviewModal({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("allGrantRulesSearchPlaceholder")}
+            aria-label={t("allGrantRulesSearchPlaceholder")}
             className="pl-8"
           />
         </div>

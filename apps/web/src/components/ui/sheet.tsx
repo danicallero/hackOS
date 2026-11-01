@@ -4,6 +4,7 @@ import * as React from "react"
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Dialog as SheetPrimitive } from "radix-ui"
 
+import { useFocusRestore } from "@/components/ui/use-focus-restore"
 import { cn } from "@/lib/utils"
 import { useLocale } from "@/lib/i18n"
 import { dialogIconButtonClass } from "@/components/ui/dialog"
@@ -38,7 +39,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:transition-none",
+        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:transition-none! motion-reduce:animate-none!",
         className
       )}
       {...props}
@@ -54,11 +55,14 @@ function SheetContent({
   onInteractOutside,
   onPointerDownOutside,
   onFocusOutside,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const focusRestore = useFocusRestore({ onOpenAutoFocus, onCloseAutoFocus })
   const { t } = useLocale()
   // The unsaved-changes alert (#1180) is portaled outside this sheet; clicking
   // it must not read as an outside dismissal that asks again.
@@ -78,7 +82,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 border-border/60 bg-popover/96 shadow-overlay transition ease-out data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300 motion-reduce:transition-none",
+          "fixed z-50 flex flex-col gap-4 border-border/60 bg-popover/96 shadow-overlay transition ease-out data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:animate-in data-[state=open]:duration-300 motion-reduce:transition-none! motion-reduce:animate-none!",
           side === "right" &&
             "inset-y-0 right-0 h-dvh w-full sm:w-[min(var(--editor-width),calc(100vw-1.5rem))] border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:inset-y-3 sm:right-3 sm:h-[calc(100dvh-1.5rem)] sm:rounded-overlay sm:border",
           side === "left" &&
@@ -101,6 +105,7 @@ function SheetContent({
           if (isToastTarget(event.target)) event.preventDefault()
           onFocusOutside?.(event)
         }}
+        {...focusRestore}
         {...props}
       >
         <div

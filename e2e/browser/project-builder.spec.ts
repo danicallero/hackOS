@@ -12,6 +12,7 @@ test("project form reuses section builder and saves without application reserved
       label: { en: "Summary", es: "Resumen", gl: "Resumo" },
       kind: "textarea",
       required: true,
+      validation: { text_condition: "contains", text_value: "demo" },
       section_key: "content",
     },
   ];
@@ -41,6 +42,12 @@ test("project form reuses section builder and saves without application reserved
   await page.getByRole("button", { name: "Edit: Summary" }).click();
   await page.getByText("Advanced", { exact: true }).click();
   await expect(page.locator("input[id^=field-key-]")).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Validation type", exact: true })).toBeVisible();
+  const condition = page.getByRole("combobox", { name: "Condition", exact: true });
+  await condition.focus();
+  await page.keyboard.press("Space");
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByText("Integrate into Logistics statistics")).toHaveCount(0);
   await expect(page.getByText("Anonymous audit data")).toHaveCount(0);
   await page.getByRole("button", { name: "Add section", exact: true }).first().click();

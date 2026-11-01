@@ -4,16 +4,14 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { type ComponentProps, useEffect, useId, useRef, useState } from "react";
 import { ActionGroup } from "@/components/common/action-group";
-import { Brand } from "@/components/common/brand";
 import { DataTable } from "@/components/common/data-table";
 import { IconButton } from "@/components/common/icon-button";
-import { LanguageSelect } from "@/components/common/language-select";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { TabBar } from "@/components/common/tab-bar";
-import { ThemeToggle } from "@/components/common/theme-toggle";
+import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
 import { DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -55,14 +53,12 @@ export default function DesignSystemPage() {
   const { t } = useLocale();
   return (
     <div className="min-h-dvh bg-shell">
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <Brand />
-          <ActionGroup>
-            <LanguageSelect />
-            <ThemeToggle />
-          </ActionGroup>
-        </header>
+      <PublicTopBar />
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="mx-auto max-w-5xl space-y-6 px-4 py-6 outline-none sm:px-6"
+      >
         <h1 className="type-page-title">{t("designSystemTitle")}</h1>
         <SectionCard title={t("designSystemLiveActions")} variant="plain">
           <p className="type-meta">{t("designSystemLiveActionsHelp")}</p>
@@ -212,7 +208,7 @@ export default function DesignSystemPage() {
             searchable={(row) => `${row.name} ${row.email}`}
           />
         </SectionCard>
-      </div>
+      </main>
     </div>
   );
 }

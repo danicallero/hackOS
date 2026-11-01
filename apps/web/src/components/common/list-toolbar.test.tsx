@@ -33,7 +33,7 @@ function render(searchOwnRowOnMobile: boolean) {
 
 describe("ListToolbar", () => {
   it("keeps the inline search by default", () => {
-    const toolbar = render(false).querySelector("section");
+    const toolbar = render(false).querySelector("[data-slot=page-toolbar]");
     expect(toolbar?.className).not.toContain("max-sm:grid-cols");
     expect(toolbar?.querySelector("input")?.parentElement?.className).not.toContain(
       "col-span-full",
@@ -42,7 +42,7 @@ describe("ListToolbar", () => {
 
   it("gives the search its own row on mobile and moves chips below the actions (#1178)", () => {
     const container = render(true);
-    expect(container.querySelector("section")?.className).toContain(
+    expect(container.querySelector("[data-slot=page-toolbar]")?.className).toContain(
       "max-sm:grid-cols-[auto_minmax(0,1fr)]",
     );
     expect(container.querySelector("input")?.parentElement?.className).toContain(

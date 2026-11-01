@@ -37,3 +37,5 @@ patchedDependencies:
   expo-widgets@57.0.23: patches/expo-widgets@57.0.23.patch
   react-native@0.86.3: patches/react-native@0.86.3.patch
   react-native-nfc-manager@3.17.2: patches/react-native-nfc-manager@3.17.2.patch
+  # Toast root is a div with native action/close buttons and focus expansion (accessibility audit).
+  sileo@0.1.5: patches/sileo@0.1.5.patch

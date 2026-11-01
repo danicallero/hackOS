@@ -97,6 +97,12 @@ describe("GrantRulesOverviewModal row navigation", () => {
     container.remove();
   });
 
+  it("names the grant-rule search independently of its placeholder", () => {
+    expect(
+      document.querySelector('input[aria-label="allGrantRulesSearchPlaceholder"]'),
+    ).not.toBeNull();
+  });
+
   it("calls onSelectRule with the clicked rule", async () => {
     const buttons = [...document.body.querySelectorAll("button")];
     const eventDirectorRow = buttons.find((b) => b.textContent?.includes("Event Director"));

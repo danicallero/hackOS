@@ -116,6 +116,9 @@ const DurationInput = React.forwardRef<HTMLInputElement, DurationInputProps>(
             disabled={disabled}
             className="pr-12 tabular-nums"
             aria-label={t("presentationSecondsAria")}
+            aria-required={inputProps["aria-required"]}
+            readOnly={inputProps.readOnly}
+            onBlur={inputProps.onBlur}
             onChange={(event) => updateSeconds(event.target.value)}
           />
           <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-muted-foreground text-sm">

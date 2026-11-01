@@ -163,8 +163,11 @@ for ordinary field hover or focus; reserve it for invalid and destructive states
 The edition follows the **system appearance** for new visitors (Apple HIG:
 respect the person's choice of light or dark). `next-themes` retains an
 existing light/dark/system preference. Dark mode uses a near-black canvas and
-charcoal surfaces; fields, cards, buttons and dividers share one subtle border
-token in both themes. Edition blue is reserved for interactive accents. Light
+charcoal surfaces. Decorative cards and dividers use the quiet `--border` token;
+interactive field and unchecked-checkbox boundaries use `--input`, resolved from
+the stronger outline-action boundary (`--button-outline-border`). Keep at least
+3:1 boundary contrast against background, card, shell and secondary surfaces in
+both themes; do not darken decorative framing to meet control requirements. Edition blue is reserved for interactive accents. Light
 mode retains its edition palette. Shared `Input` and `Textarea` controls use
 `--field-foreground`: neutral black text in light mode and the foreground token
 in dark mode. Native date/time
@@ -328,7 +331,7 @@ keys remain stable and map to Phosphor components in `schedule-model.ts`.
    inspect real auth, table/form and judging screens for content-specific fit.
 4. Run `pnpm lint`, web typecheck/tests and the Chromium UI smoke suite.
    `src/lib/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces
-   and status washes, plus a shared field/border token in both themes.
+   and status washes, plus 3:1 field-boundary contrast across adjacent surfaces in both themes.
    Capture screenshots outside the source branch per `docs/ui-testing.md`.
 5. Update this edition section's reference and the web README in the same change.
    Keep event names, dates, logos and copy in their existing configuration/i18n
@@ -387,7 +390,9 @@ challenge pages, terms/privacy, certificate verification, company-tag
 landing, sign-in/sign-up flows) shares one `PublicTopBar`
 (`components/layout/public-top-bar.tsx`). Do not hand-roll a `<header>`.
 
-- **Sticky, 64 px, hairline bottom border.** `sticky top-0` with a blurred
+- **Sticky, at least 64 px, hairline bottom border.** The header wraps at narrow
+  widths and enlarged text, and publishes its measured height for unobscured
+  skip/section targets. `sticky top-0` with a blurred
   `background` wash so content scrolls beneath it; it never hides on scroll.
   Pages that own the viewport (certificate PDF) keep it as a fixed row.
 - **Wordmark leading, controls trailing.** `Brand` at the default size, always
@@ -1072,6 +1077,12 @@ product bug, not a styling choice.**
   `aria-controls` resolves; render tab bodies inside it, not as siblings of
   `Tabs`. Table header cells always have a name — an action column gets a
   visually hidden `actionsColumn`.
+- Focus after navigation: forward route changes move focus to the main
+  (`RouteFocus`); Back/Forward keep their scroll position. Same-page heading
+  targets accept programmatic focus, clear sticky chrome, and show a focus
+  indicator; static headings stay out of the Tab sequence. In scrollable
+  sidebar lists, keep the whole focus ring inside the row so overflow cannot
+  clip it.
 - Labels: all inputs labelled independently of placeholders; helper/error text
   associated via `aria-describedby`.
 - Announcements: critical form errors and sync failures are announced; busy

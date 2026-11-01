@@ -76,6 +76,8 @@ describe("UserMenu account photo (#934)", () => {
   it("stays text-first without a photo: no initials avatar is fabricated", async () => {
     await act(async () => root.render(<UserMenu />));
     expect(trigger().querySelector('[data-slot="avatar"]')).toBeNull();
+    // H55: the visible name/email must also occur, with spacing, in the accessible name.
+    expect(trigger().textContent).toBe("Lucía lucia@example.com");
     // The icon only appears on the collapsed rail, where the text is hidden.
     expect(trigger().querySelector("svg")?.getAttribute("class")).toContain(
       "group-data-[collapsible=icon]:block",
@@ -84,6 +86,7 @@ describe("UserMenu account photo (#934)", () => {
     session.me.name = null;
     await act(async () => root.render(<UserMenu />));
     expect(trigger().getAttribute("aria-label")).toBe("lucia@example.com");
+    expect(trigger().textContent).toBe("lucia@example.com");
 
     const user = userEvent.setup();
     await act(async () => user.click(trigger()));

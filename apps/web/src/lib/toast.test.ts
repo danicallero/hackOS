@@ -79,14 +79,14 @@ describe("toast adapter", () => {
     expect(options?.autopilot).toBeUndefined();
   });
 
-  it("uses short defaults for routine feedback while preserving more time for errors", () => {
+  it("uses short routine feedback while keeping errors until dismissed", () => {
     toast.success("Saved");
     toast.info("Heads up");
     toast.error("Could not save");
 
     expect(sileoMock.success).toHaveBeenCalledWith(expect.objectContaining({ duration: 2_400 }));
     expect(sileoMock.info).toHaveBeenCalledWith(expect.objectContaining({ duration: 2_000 }));
-    expect(sileoMock.error).toHaveBeenCalledWith(expect.objectContaining({ duration: 5_000 }));
+    expect(sileoMock.error).toHaveBeenCalledWith(expect.objectContaining({ duration: null }));
   });
 
   it("keeps a brief error compact even when an action heading is defined", () => {
@@ -94,7 +94,7 @@ describe("toast adapter", () => {
     expect(sileoMock.error).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Judging has started.",
-        duration: 5_000,
+        duration: null,
       }),
     );
     expect(sileoMock.error).toHaveBeenCalledWith(
@@ -140,7 +140,7 @@ describe("toast adapter", () => {
       compactTitle: "Guardar perfil",
     });
     expect(sileoMock.error).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Try again.", duration: 5_000 }),
+      expect.objectContaining({ title: "Try again.", duration: null }),
     );
     expect(sileoMock.error).toHaveBeenCalledWith(
       expect.not.objectContaining({ description: expect.anything() }),
@@ -313,7 +313,7 @@ describe("toast adapter", () => {
       expect.objectContaining({
         title: "Invite sent",
         button: expect.objectContaining({ title: "Copy link" }),
-        duration: 8_000,
+        duration: null,
         autopilot: { expand: 150, collapse: 60_000 },
       }),
     );
@@ -369,7 +369,7 @@ describe("toast adapter", () => {
     };
     expect(promiseOptions.success?.("done")).toMatchObject({
       autopilot: { expand: 150, collapse: 60_000 },
-      duration: 8_000,
+      duration: null,
     });
   });
 });

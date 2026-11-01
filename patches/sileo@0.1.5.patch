@@ -1,0 +1,230 @@
+diff --git a/dist/index.js b/dist/index.js
+index 253c3eac406861c781b552d6ecd330224fe09c15..641334dc3fb09dd7269a8bab27e774dd77f6953f 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -584,9 +584,8 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+         exiting,
+         onDismiss
+     ]);
+-    /* --------------------------------- Render --------------------------------- */ return /*#__PURE__*/ jsxRuntime.jsxs("button", {
++    /* --------------------------------- Render --------------------------------- */ return /*#__PURE__*/ jsxRuntime.jsxs("div", {
+         ref: buttonRef,
+-        type: "button",
+         "data-sileo-toast": true,
+         "data-ready": ready,
+         "data-expanded": open,
+@@ -597,12 +596,19 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+         className: className,
+         style: rootStyle,
+         onMouseEnter: handleEnter,
+-        onMouseLeave: handleLeave,
++        onMouseLeave: (event)=>{
++            if (!event.currentTarget.contains(document.activeElement)) handleLeave(event);
++        },
++        onFocus: handleEnter,
++        onBlur: (event)=>{
++            if (!event.currentTarget.contains(event.relatedTarget)) handleLeave(event);
++        },
+         onTransitionEnd: handleTransitionEnd,
+         onPointerDown: handlePointerDown,
+         children: [
+             /*#__PURE__*/ jsxRuntime.jsx("div", {
+                 "data-sileo-canvas": true,
++                "aria-hidden": true,
+                 "data-edge": expand,
+                 style: canvasStyle,
+                 children: /*#__PURE__*/ jsxRuntime.jsxs("svg", {
+@@ -641,8 +647,14 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+                     ]
+                 })
+             }),
+-            /*#__PURE__*/ jsxRuntime.jsx("div", {
++            /*#__PURE__*/ jsxRuntime.jsx(hasDesc ? "button" : "div", {
+                 ref: headerRef,
++                type: hasDesc ? "button" : undefined,
++                "aria-label": hasDesc ? view.title : undefined,
++                "aria-expanded": hasDesc ? open : undefined,
++                "aria-controls": hasDesc ? `sileo-content-${id}` : undefined,
++                onClick: hasDesc ? ()=>setIsExpanded((previous)=>!previous) : undefined,
++                style: { background: "transparent", border: 0, color: "inherit", textAlign: "left" },
+                 "data-sileo-header": true,
+                 "data-edge": expand,
+                 children: /*#__PURE__*/ jsxRuntime.jsxs("div", {
+@@ -655,6 +667,7 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+                             children: [
+                                 /*#__PURE__*/ jsxRuntime.jsx("div", {
+                                     "data-sileo-badge": true,
++                                    "aria-hidden": true,
+                                     "data-state": headerLayer.current.view.state,
+                                     className: (_headerLayer_current_view_styles = headerLayer.current.view.styles) == null ? void 0 : _headerLayer_current_view_styles.badge,
+                                     children: (_headerLayer_current_view_icon = headerLayer.current.view.icon) != null ? _headerLayer_current_view_icon : STATE_ICON[headerLayer.current.view.state]
+@@ -670,10 +683,12 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+                         headerLayer.prev && /*#__PURE__*/ jsxRuntime.jsxs("div", {
+                             "data-sileo-header-inner": true,
+                             "data-layer": "prev",
++                            "aria-hidden": true,
+                             "data-exiting": "true",
+                             children: [
+                                 /*#__PURE__*/ jsxRuntime.jsx("div", {
+                                     "data-sileo-badge": true,
++                                    "aria-hidden": true,
+                                     "data-state": headerLayer.prev.view.state,
+                                     className: (_headerLayer_prev_view_styles = headerLayer.prev.view.styles) == null ? void 0 : _headerLayer_prev_view_styles.badge,
+                                     children: (_headerLayer_prev_view_icon = headerLayer.prev.view.icon) != null ? _headerLayer_prev_view_icon : STATE_ICON[headerLayer.prev.view.state]
+@@ -691,6 +706,9 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+             }),
+             hasDesc && /*#__PURE__*/ jsxRuntime.jsx("div", {
+                 "data-sileo-content": true,
++                id: `sileo-content-${id}`,
++                "aria-hidden": !open,
++                inert: !open ? true : undefined,
+                 "data-edge": expand,
+                 "data-visible": open,
+                 children: /*#__PURE__*/ jsxRuntime.jsxs("div", {
+@@ -699,9 +717,8 @@ const Check = ()=>/*#__PURE__*/ jsxRuntime.jsx(Icon, {
+                     className: (_view_styles = view.styles) == null ? void 0 : _view_styles.description,
+                     children: [
+                         view.description,
+-                        view.button && // biome-ignore lint/a11y/useValidAnchor: cannot use button inside a button
+-                        /*#__PURE__*/ jsxRuntime.jsx("a", {
+-                            href: "#",
++                        view.button &&
++                        /*#__PURE__*/ jsxRuntime.jsx("button", {
+                             type: "button",
+                             "data-sileo-button": true,
+                             "data-state": view.state,
+@@ -746,6 +763,10 @@ const resolveAutopilot = (opts, duration)=>{
+     var _ref, _ref1;
+     if (opts.autopilot === false || !duration || duration <= 0) return {};
+     const cfg = typeof opts.autopilot === "object" ? opts.autopilot : undefined;
++    if (opts.duration === null) return {
++        expandDelayMs: cfg && cfg.expand !== undefined ? cfg.expand : AUTO_EXPAND_DELAY,
++        collapseDelayMs: undefined
++    };
+     const clamp = (v)=>Math.min(duration, Math.max(0, v));
+     return {
+         expandDelayMs: clamp((_ref = cfg == null ? void 0 : cfg.expand) != null ? _ref : AUTO_EXPAND_DELAY),
+@@ -1000,7 +1021,7 @@ function Toaster({ children, position = "top-right", offset, options, theme }) {
+         offset
+     ]);
+     const activePositions = react.useMemo(()=>{
+-        const map = new Map();
++        const map = new Map([[position, []]]);
+         for (const t of toasts){
+             var _t_position;
+             const pos = (_t_position = t.position) != null ? _t_position : position;
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 275118b7f838d1910fd03586bcc7c3de4736db7f..ac2a3f80783ea893228791c49c13a49b464d3f9b 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -582,9 +582,8 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+         exiting,
+         onDismiss
+     ]);
+-    /* --------------------------------- Render --------------------------------- */ return /*#__PURE__*/ jsxs("button", {
++    /* --------------------------------- Render --------------------------------- */ return /*#__PURE__*/ jsxs("div", {
+         ref: buttonRef,
+-        type: "button",
+         "data-sileo-toast": true,
+         "data-ready": ready,
+         "data-expanded": open,
+@@ -595,12 +594,19 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+         className: className,
+         style: rootStyle,
+         onMouseEnter: handleEnter,
+-        onMouseLeave: handleLeave,
++        onMouseLeave: (event)=>{
++            if (!event.currentTarget.contains(document.activeElement)) handleLeave(event);
++        },
++        onFocus: handleEnter,
++        onBlur: (event)=>{
++            if (!event.currentTarget.contains(event.relatedTarget)) handleLeave(event);
++        },
+         onTransitionEnd: handleTransitionEnd,
+         onPointerDown: handlePointerDown,
+         children: [
+             /*#__PURE__*/ jsx("div", {
+                 "data-sileo-canvas": true,
++                "aria-hidden": true,
+                 "data-edge": expand,
+                 style: canvasStyle,
+                 children: /*#__PURE__*/ jsxs("svg", {
+@@ -639,8 +645,14 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+                     ]
+                 })
+             }),
+-            /*#__PURE__*/ jsx("div", {
++            /*#__PURE__*/ jsx(hasDesc ? "button" : "div", {
+                 ref: headerRef,
++                type: hasDesc ? "button" : undefined,
++                "aria-label": hasDesc ? view.title : undefined,
++                "aria-expanded": hasDesc ? open : undefined,
++                "aria-controls": hasDesc ? `sileo-content-${id}` : undefined,
++                onClick: hasDesc ? ()=>setIsExpanded((previous)=>!previous) : undefined,
++                style: { background: "transparent", border: 0, color: "inherit", textAlign: "left" },
+                 "data-sileo-header": true,
+                 "data-edge": expand,
+                 children: /*#__PURE__*/ jsxs("div", {
+@@ -653,6 +665,7 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+                             children: [
+                                 /*#__PURE__*/ jsx("div", {
+                                     "data-sileo-badge": true,
++                                    "aria-hidden": true,
+                                     "data-state": headerLayer.current.view.state,
+                                     className: (_headerLayer_current_view_styles = headerLayer.current.view.styles) == null ? void 0 : _headerLayer_current_view_styles.badge,
+                                     children: (_headerLayer_current_view_icon = headerLayer.current.view.icon) != null ? _headerLayer_current_view_icon : STATE_ICON[headerLayer.current.view.state]
+@@ -668,10 +681,12 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+                         headerLayer.prev && /*#__PURE__*/ jsxs("div", {
+                             "data-sileo-header-inner": true,
+                             "data-layer": "prev",
++                            "aria-hidden": true,
+                             "data-exiting": "true",
+                             children: [
+                                 /*#__PURE__*/ jsx("div", {
+                                     "data-sileo-badge": true,
++                                    "aria-hidden": true,
+                                     "data-state": headerLayer.prev.view.state,
+                                     className: (_headerLayer_prev_view_styles = headerLayer.prev.view.styles) == null ? void 0 : _headerLayer_prev_view_styles.badge,
+                                     children: (_headerLayer_prev_view_icon = headerLayer.prev.view.icon) != null ? _headerLayer_prev_view_icon : STATE_ICON[headerLayer.prev.view.state]
+@@ -689,6 +704,9 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+             }),
+             hasDesc && /*#__PURE__*/ jsx("div", {
+                 "data-sileo-content": true,
++                id: `sileo-content-${id}`,
++                "aria-hidden": !open,
++                inert: !open ? true : undefined,
+                 "data-edge": expand,
+                 "data-visible": open,
+                 children: /*#__PURE__*/ jsxs("div", {
+@@ -697,9 +715,8 @@ const Check = ()=>/*#__PURE__*/ jsx(Icon, {
+                     className: (_view_styles = view.styles) == null ? void 0 : _view_styles.description,
+                     children: [
+                         view.description,
+-                        view.button && // biome-ignore lint/a11y/useValidAnchor: cannot use button inside a button
+-                        /*#__PURE__*/ jsx("a", {
+-                            href: "#",
++                        view.button &&
++                        /*#__PURE__*/ jsx("button", {
+                             type: "button",
+                             "data-sileo-button": true,
+                             "data-state": view.state,
+@@ -744,6 +761,10 @@ const resolveAutopilot = (opts, duration)=>{
+     var _ref, _ref1;
+     if (opts.autopilot === false || !duration || duration <= 0) return {};
+     const cfg = typeof opts.autopilot === "object" ? opts.autopilot : undefined;
++    if (opts.duration === null) return {
++        expandDelayMs: cfg && cfg.expand !== undefined ? cfg.expand : AUTO_EXPAND_DELAY,
++        collapseDelayMs: undefined
++    };
+     const clamp = (v)=>Math.min(duration, Math.max(0, v));
+     return {
+         expandDelayMs: clamp((_ref = cfg == null ? void 0 : cfg.expand) != null ? _ref : AUTO_EXPAND_DELAY),
+@@ -998,7 +1019,7 @@ function Toaster({ children, position = "top-right", offset, options, theme }) {
+         offset
+     ]);
+     const activePositions = useMemo(()=>{
+-        const map = new Map();
++        const map = new Map([[position, []]]);
+         for (const t of toasts){
+             var _t_position;
+             const pos = (_t_position = t.position) != null ? _t_position : position;

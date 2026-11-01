@@ -4,6 +4,7 @@ import { AlertDialog } from "radix-ui";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { overlayVariants } from "@/components/ui/surface";
+import { useFocusRestore } from "@/components/ui/use-focus-restore";
 import { cn } from "@/lib/utils";
 
 export function AlertModal({
@@ -45,6 +46,7 @@ export function AlertModal({
    */
   reverseActions?: boolean;
 }) {
+  const focusRestore = useFocusRestore({});
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = open ?? uncontrolledOpen;
   const setOpen = onOpenChange ?? setUncontrolledOpen;
@@ -80,6 +82,7 @@ export function AlertModal({
           }}
         />
         <AlertDialog.Content
+          {...focusRestore}
           data-slot="alert-dialog-content"
           className={cn(
             overlayVariants({ elevation: "modal" }),

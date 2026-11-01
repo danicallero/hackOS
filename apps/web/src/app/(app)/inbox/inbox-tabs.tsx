@@ -619,7 +619,7 @@ export function PreferencesTab() {
                       variant="ghost"
                       disabled={busy || pendingRemovalCount > 0}
                       className="max-w-full justify-between text-muted-foreground"
-                      aria-label={t("notificationChannelsFor", { label: row.label })}
+                      aria-label={`${enabledChannels.length > 0 ? enabledChannels.map((channel) => channelLabels[channel]).join(", ") : t("notificationsOff")}: ${t("notificationChannelsFor", { label: row.label })}`}
                     >
                       <span className="min-w-0 whitespace-normal text-end">
                         {enabledChannels.length > 0
@@ -660,7 +660,11 @@ export function PreferencesTab() {
         action={
           <Modal
             trigger={
-              <Button variant="outline" disabled={busy || pendingRemovalCount > 0}>
+              <Button
+                variant="outline"
+                className="h-auto min-h-(--control-height-default) max-w-full whitespace-normal"
+                disabled={busy || pendingRemovalCount > 0}
+              >
                 <PlusIcon className="size-4" aria-hidden="true" />
                 {t("addReminder")}
               </Button>
@@ -767,7 +771,7 @@ export function PreferencesTab() {
                         size="sm"
                         disabled={busy || removalState === "queued" || removalState === "removing"}
                         onClick={() => enqueueReminderRemoval(category, prefs.channels)}
-                        aria-label={t("removeReminderAria", { label })}
+                        aria-label={`${removalState === "failed" ? t("retry") : t("turnOff")}: ${label}`}
                         loading={busy}
                       >
                         {removalState === "failed" ? t("retry") : t("turnOff")}

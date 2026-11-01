@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { UnsavedChangesProvider } from "@/components/common/unsaved-changes-provider";
 import { CookieNotice } from "@/components/layout/cookie-notice";
 import { MaintenanceGate } from "@/components/layout/maintenance-gate";
+import { RouteFocus } from "@/components/layout/route-focus";
 import { Toaster } from "@/components/ui/sileo";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n";
@@ -36,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <SessionProvider>
           <LocaleProvider>
             <TooltipProvider>
+              <RouteFocus />
               <UnsavedChangesProvider>
                 <MaintenanceGate>{children}</MaintenanceGate>
               </UnsavedChangesProvider>

@@ -120,9 +120,15 @@ export function DegreePicker({
             if (!open) onBlur?.();
           }}
           role="combobox"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
           aria-controls={listboxId}
           aria-expanded={open}
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           {...aria}
           className="w-full justify-between rounded-control font-normal"
         >

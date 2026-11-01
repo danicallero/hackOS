@@ -135,6 +135,11 @@ Frontend (web & mobile):
   the copy rules `pnpm check:copy` enforces, web- and mobile-specific
   constraints, and an explicit don'ts list. Read before building or styling
   any screen; `apps/web/README.md` covers the component library itself.
+- [Web accessibility audit](./accessibility-audit.md) — the 2026-11-01 audit of
+  `apps/web`: fixed defects by WCAG principle with before/after and user
+  impact, the Safari Tab-key note, honest per-route coverage of all 72 routes,
+  the regression specs, and explicit limitations (no screen-reader
+  certification, no conformance claim).
 - [Navigation: capability-based workspaces](./navigation.md) — the personal
   area + additive work-workspace model on web, and the one-action mobile scan
   entry, with the full capability-to-workspace mapping.

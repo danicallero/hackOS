@@ -72,8 +72,13 @@ export function UserMenu({ className }: { className?: string }) {
             />
           )}
           <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <span className="block truncate text-sm font-medium">{me.name ?? me.email}</span>
-            <span className="text-muted-foreground block truncate text-xs">{me.email}</span>
+            <span className="block truncate text-sm font-medium">{me.name || me.email}</span>
+            {me.name && (
+              <>
+                {" "}
+                <span className="text-muted-foreground block truncate text-xs">{me.email}</span>
+              </>
+            )}
           </span>
         </Button>
       </DropdownMenuTrigger>

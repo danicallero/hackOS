@@ -5,12 +5,12 @@ export function PageToolbar({
   label,
   className,
   ...props
-}: React.ComponentProps<"section"> & { label: string }) {
+}: React.ComponentProps<"fieldset"> & { label: string }) {
   return (
-    <section
+    <fieldset
       aria-label={label}
       data-slot="page-toolbar"
-      className={cn("flex flex-wrap items-center gap-2", className)}
+      className={cn("min-w-0 flex flex-wrap items-center gap-2", className)}
       {...props}
     />
   );

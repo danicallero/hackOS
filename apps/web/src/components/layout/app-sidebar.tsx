@@ -96,6 +96,7 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const { t } = useLocale();
+  const { isMobile, setOpenMobile } = useSidebar();
   const active =
     isActive ??
     (matchesPath(pathname, item.href) ||
@@ -126,9 +127,17 @@ function NavLink({
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={active} tooltip={t(item.title)} className={className}>
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        tooltip={t(item.title)}
+        className={`${className ?? ""} focus-visible:ring-inset`}
+      >
         <Link
           href={item.href}
+          onNavigate={() => {
+            if (isMobile) setOpenMobile(false);
+          }}
           aria-current={active ? "page" : undefined}
           className="flex h-full w-full items-center gap-2"
         >
@@ -211,7 +220,8 @@ function WorkspaceGroup({
   const isIconRail = railState === "collapsed" && !isMobile;
 
   const Icon = workspace.icon;
-  const effectiveOpen = isIconRail || open;
+  const alwaysOpen = isIconRail || isMobile;
+  const effectiveOpen = alwaysOpen || open;
   const activeItem = items.reduce<NavItem | null>(
     (closest, item) =>
       matchesPath(pathname, item.href) && (!closest || item.href.length > closest.href.length)
@@ -224,16 +234,14 @@ function WorkspaceGroup({
     <CollapsiblePrimitive.Root
       open={effectiveOpen}
       onOpenChange={(next) => {
-        if (isIconRail) return;
+        if (alwaysOpen) return;
         onOpen(workspace.id, next);
       }}
     >
       <SidebarGroup className="p-0">
-        {isIconRail ? (
-          // No interactive trigger in the icon rail: nothing to expand or
-          // collapse there, so a focusable-but-invisible control would only
-          // trap keyboard focus (matches the pre-#187 rail label, which was
-          // a plain non-interactive div too).
+        {alwaysOpen ? (
+          // The icon rail and mobile sheet expose every destination directly;
+          // their workspace labels have no disclosure action.
           <SidebarGroupLabel>
             <Icon className="mr-2 size-4 shrink-0" />
             {t(workspace.label)}
@@ -297,10 +305,17 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { t } = useLocale();
   const isVisible = useNavVisibility();
+  const { isMobile, setOpenMobile } = useSidebar();
   const unreadCount = useUnreadCount();
   const [lastWorkspace, setLastWorkspace] = useState(() => readLastWorkspace());
   const [recentWorkspaceId, setRecentWorkspaceId] = useState<string | null>(null);
+  const [closedWorkspaceId, setClosedWorkspaceId] = useState<string | null>(null);
   const activeWorkspaceId = workspaceForPath(pathname)?.id ?? null;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reveal the active destination after navigation.
+  useEffect(() => {
+    setClosedWorkspaceId(null);
+  }, [pathname]);
 
   useEffect(() => {
     if (!activeWorkspaceId) return;
@@ -323,7 +338,12 @@ export function AppSidebar() {
                 tooltip="hackOS"
                 className="flex-1 gap-2.5 px-1 hover:bg-transparent"
               >
-                <Link href="/event">
+                <Link
+                  href="/event"
+                  onNavigate={() => {
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                >
                   <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
                   <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
                     hackOS
@@ -396,16 +416,19 @@ export function AppSidebar() {
                     items={items}
                     active={containsActiveRoute}
                     open={
-                      workspace.id === activeWorkspaceId ||
-                      workspace.id === recentWorkspaceId ||
-                      (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially)
+                      workspace.id !== closedWorkspaceId &&
+                      (workspace.id === activeWorkspaceId ||
+                        workspace.id === recentWorkspaceId ||
+                        (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially))
                     }
                     onOpen={(id, nextOpen) => {
                       if (nextOpen) {
+                        setClosedWorkspaceId(null);
                         setRecentWorkspaceId(id);
                         setLastWorkspace(id);
                         writeLastWorkspace(id);
-                      } else if (id !== activeWorkspaceId) {
+                      } else {
+                        setClosedWorkspaceId(id);
                         setRecentWorkspaceId((current) => (current === id ? null : current));
                       }
                     }}

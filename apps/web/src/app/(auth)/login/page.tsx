@@ -11,7 +11,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -124,7 +124,7 @@ function LoginInner() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("welcomeBack")}</CardTitle>
+        <h1 className="type-section-title text-balance">{t("welcomeBack")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -182,7 +182,7 @@ function LoginInner() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <FormLabel>{t("password")}</FormLabel>
                     <Link
                       href={forgotHref}

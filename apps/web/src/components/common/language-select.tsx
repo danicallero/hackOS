@@ -18,7 +18,11 @@ export function LanguageSelect() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label={t("language")}>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`${t("language")}: ${language.toUpperCase()}`}
+        >
           <GlobeIcon aria-hidden="true" className="size-4" />
           <span className="max-sm:sr-only">{language.toUpperCase()}</span>
         </Button>

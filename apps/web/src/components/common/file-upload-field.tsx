@@ -135,7 +135,7 @@ export function FileUploadField({
   const describedBy = [ariaDescribedBy, uploadError ? uploadErrorId : null]
     .filter(Boolean)
     .join(" ");
-  const invalid = ariaInvalid ?? (uploadError ? true : undefined);
+  const invalid = uploadError ? true : ariaInvalid;
 
   return (
     <div className="space-y-2">
@@ -145,6 +145,7 @@ export function FileUploadField({
         type="file"
         accept={accept}
         className="sr-only"
+        tabIndex={-1}
         disabled={disabled || uploading}
         aria-labelledby={ariaLabelledBy}
         aria-label={ariaLabel}

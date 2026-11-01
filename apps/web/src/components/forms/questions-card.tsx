@@ -1841,12 +1841,14 @@ function ValidationEditor({
     return (
       <div className="space-y-3 border-t pt-4">
         <div className="space-y-1.5">
-          <Label className="text-xs">{t("validationCategoryLabel")}</Label>
+          <Label htmlFor={`validation-${uid}-category`} className="text-xs">
+            {t("validationCategoryLabel")}
+          </Label>
           <Select
             value={category}
             onValueChange={(val) => setCategory(val as TextValidationCategory)}
           >
-            <SelectTrigger size="sm" className="w-full">
+            <SelectTrigger id={`validation-${uid}-category`} size="sm" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -1860,7 +1862,9 @@ function ValidationEditor({
         {category === "text" && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">{t("conditionLabel")}</Label>
+              <Label htmlFor={`validation-${uid}-condition`} className="text-xs">
+                {t("conditionLabel")}
+              </Label>
               <Select
                 value={v.text_condition ?? "contains"}
                 onValueChange={(cond) =>
@@ -1873,7 +1877,7 @@ function ValidationEditor({
                   })
                 }
               >
-                <SelectTrigger size="sm" className="w-full">
+                <SelectTrigger id={`validation-${uid}-condition`} size="sm" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1944,12 +1948,14 @@ function ValidationEditor({
       <div className="space-y-3 border-t pt-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-xs">{t("selectConditionLabel")}</Label>
+            <Label htmlFor={`validation-${uid}-select-condition`} className="text-xs">
+              {t("selectConditionLabel")}
+            </Label>
             <Select
               value={condition}
               onValueChange={(c) => setCondition(c as SelectCountCondition, count)}
             >
-              <SelectTrigger size="sm" className="w-full">
+              <SelectTrigger id={`validation-${uid}-select-condition`} size="sm" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

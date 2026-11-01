@@ -196,9 +196,15 @@ export function UserPicker({
           variant="outline"
           disabled={disabled}
           role="combobox"
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setOpen(true);
+            }
+          }}
           aria-controls={listboxId}
           aria-expanded={open}
-          aria-haspopup="listbox"
+          aria-haspopup="dialog"
           aria-labelledby={ariaLabelledBy}
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
