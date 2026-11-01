@@ -18,7 +18,7 @@ export default function InboxPage() {
     <PageLayout>
       <HomeSectionHeader />
       <Tabs value={tab} onValueChange={setTab}>
-        <TabBar>
+        <TabBar className="h-auto flex-wrap [&_[data-slot=tabs-trigger]]:flex-auto [&_[data-slot=tabs-trigger]]:whitespace-normal">
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
           <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
         </TabBar>

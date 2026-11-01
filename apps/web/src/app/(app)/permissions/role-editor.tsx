@@ -350,6 +350,7 @@ export function RoleEditor({
             value={capQuery}
             onChange={(e) => setCapQuery(e.target.value)}
             placeholder={t("searchCapabilitiesPlaceholder")}
+            aria-label={t("searchCapabilitiesPlaceholder")}
             className="pl-8"
           />
         </div>

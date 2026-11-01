@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
@@ -12,14 +12,7 @@ import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -91,6 +84,10 @@ function SignUpInner() {
   const rawNext = useSearchParams().get("next");
   const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const confirmationHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (submittedEmail) confirmationHeading.current?.focus();
+  }, [submittedEmail]);
   const verificationCallbackURL = next
     ? `/verify-email?verified=1&next=${encodeURIComponent(next)}`
     : undefined;
@@ -158,7 +155,9 @@ function SignUpInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
-          <CardTitle>{t("checkInbox")}</CardTitle>
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+            {t("checkInbox")}
+          </h1>
           <CardDescription>{t("verificationSent", { email: submittedEmail })}</CardDescription>
         </CardHeader>
         <CardContent className="text-muted-foreground space-y-2 text-center text-sm">
@@ -185,7 +184,7 @@ function SignUpInner() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("createYourAccount")}</CardTitle>
+        <h1 className="type-section-title text-balance">{t("createYourAccount")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>

@@ -1,4 +1,5 @@
 {
+  "statsChartData": "Datos y filtros del gráfico",
   "eventReminderTitle": "Recordatorio por correo",
   "eventReminderAudience": "Se envía a todas las personas con acceso al evento, con su entrada.",
   "eventReminderQueued": "Enviando a {count} personas.",
@@ -116,6 +117,7 @@
   "backHome": "Volver al inicio",
   "lastUpdated": "Última actualización",
   "legalLinksLabel": "Enlaces legales",
+  "onThisPage": "En esta página",
   "skipToContent": "Saltar al contenido",
   "signUpLegalPrefix": "Al crear una cuenta, aceptas los",
   "signUpLegalJoin": "y confirmas que has leído la",
@@ -887,7 +889,6 @@
   "noUpcomingActivityKinds": "No hay tipos de actividad próximos disponibles para activar ahora mismo.",
   "activeReminders": "Recordatorios activos",
   "noActiveReminders": "Aún no te has apuntado a ningún recordatorio.",
-  "removeReminderAria": "Quitar recordatorio: {label}",
   "couldNotMarkRead": "No se ha podido marcar como leído.",
   "couldNotLoadInboxTitle": "No se ha podido cargar tu bandeja de entrada",
   "couldNotLoadInboxDesc": "Algo ha fallado al cargar tus mensajes.",

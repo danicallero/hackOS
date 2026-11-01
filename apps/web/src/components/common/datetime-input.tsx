@@ -193,6 +193,9 @@ export function DateTimeInput({
               step={step}
               {...timeFocusHandlers}
               aria-label={t("timeLabel")}
+              aria-describedby={props["aria-describedby"]}
+              aria-invalid={props["aria-invalid"]}
+              aria-required={props["aria-required"]}
               className={cn("min-w-0 max-w-full sm:min-w-26", value && "pr-9", className)}
             />
           )}
@@ -201,7 +204,6 @@ export function DateTimeInput({
               type="button"
               variant="ghost"
               size="icon-sm"
-              tabIndex={-1}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 onChange("");

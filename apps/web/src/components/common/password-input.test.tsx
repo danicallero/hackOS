@@ -47,3 +47,19 @@ describe("PasswordInput", () => {
     expect(toggle?.getAttribute("aria-label")).toBe("Hide password");
   });
 });
+
+it("disables password reveal with the field", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    act(() => root.render(<PasswordInput aria-label="Password" disabled />));
+    const toggle = host.querySelector("button") as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    await userEvent.click(toggle);
+    expect(host.querySelector("input")?.type).toBe("password");
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

@@ -358,7 +358,11 @@ export function DataTable<T>({
                       <span className="sr-only">{t("openRow")}</span>
                     </TableHead>
                   )}
-                  {rowActions && <TableHead className="w-12" />}
+                  {rowActions && (
+                    <TableHead className="w-12">
+                      <span className="sr-only">{t("actionsColumn")}</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>

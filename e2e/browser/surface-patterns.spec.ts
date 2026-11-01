@@ -96,7 +96,9 @@ test("short decisions fit and actionable feedback is available without hover", a
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Show feedback with an action" }).click();
   await expect(page.locator("[data-preview-notice]")).toHaveCount(0);
-  const undo = page.locator("[data-sileo-toast]").getByRole("link", { name: "Undo", exact: true });
+  const undo = page
+    .locator("[data-sileo-toast]")
+    .getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeVisible();
   await undo.click();
   await expect(page.locator("[data-preview-notice]")).toBeVisible();

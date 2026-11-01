@@ -425,3 +425,28 @@ describe("DataTable accessibility and interactions", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 });
+
+it("names the trailing row-actions column", async () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <DataTable
+          columns={[{ id: "name", header: "Name", cell: (row: { id: string }) => row.id }]}
+          data={[{ id: "Ada" }]}
+          getRowId={(row) => row.id}
+          rowActions={() => <button type="button">Edit Ada</button>}
+        />,
+      ),
+    );
+    expect([...host.querySelectorAll("th")].map((header) => header.textContent)).toEqual([
+      "Name",
+      "actionsColumn",
+    ]);
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+  }
+});

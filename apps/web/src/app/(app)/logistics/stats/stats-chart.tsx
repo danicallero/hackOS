@@ -21,7 +21,8 @@ import {
 import type { ComposeOption, ECElementEvent, EChartsType } from "echarts/core";
 import * as echarts from "echarts/core";
 import { SVGRenderer } from "echarts/renderers";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocale } from "@/lib/i18n";
 
 export type StatsChartType = "bar" | "pie" | "line";
 
@@ -79,6 +80,10 @@ export function StatsChart({
   title: string;
   height?: number | string;
 }) {
+  const { t } = useLocale();
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const selectedRef = useRef<Record<string, boolean>>({});
+  const legendNames = [...new Set(data.map((row) => chartLegendName(row, type, title)))];
   const chartElement = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<EChartsType | null>(null);
   const chartHeight =
@@ -113,8 +118,15 @@ export function StatsChart({
         notMerge: true,
         lazyUpdate: true,
       });
+      chart.setOption({ legend: { selected: selectedRef.current } }, { silent: true });
     };
     renderChart();
+    const onLegendSelect = (event: unknown) => {
+      const { selected } = event as { selected: Record<string, boolean> };
+      selectedRef.current = selected;
+      setSelected(selected);
+    };
+    chart.on("legendselectchanged", onLegendSelect);
     // H27: next-themes can update the root class after React's theme effect.
     const themeObserver = new MutationObserver(renderChart);
     themeObserver.observe(element.ownerDocument.documentElement, {
@@ -144,6 +156,7 @@ export function StatsChart({
     chart.on("globalout", clearLegend);
     return () => {
       themeObserver.disconnect();
+      chart.off("legendselectchanged", onLegendSelect);
       chart.off("mouseover", onMouseOver);
       chart.off("mouseout", clearLegend);
       chart.off("globalout", clearLegend);
@@ -167,15 +180,44 @@ export function StatsChart({
           style={{ height: chartHeight }}
         />
       </div>
-      <ul aria-label={title} className="sr-only">
-        {data.map((row) => (
-          <li key={`${row.series ?? ""}:${row.label}`}>
-            {row.series ? `${row.series}: ${row.label}` : row.label}: {row.n}
-          </li>
-        ))}
-      </ul>
+      <details className="mt-2 text-sm">
+        <summary className="button-interaction cursor-pointer rounded px-1 py-1">
+          {t("statsChartData")}
+        </summary>
+        <fieldset className="mt-2 min-w-0 space-y-2">
+          <legend className="sr-only">{title}</legend>
+          {legendNames.map((name) => (
+            <label key={name} className="flex items-start gap-2 py-1">
+              <input
+                type="checkbox"
+                className="mt-1 shrink-0"
+                checked={selected[name] !== false}
+                onChange={() =>
+                  chartInstance.current?.dispatchAction({ type: "legendToggleSelect", name })
+                }
+              />
+              <span className="min-w-0 break-words">{name}</span>
+            </label>
+          ))}
+        </fieldset>
+        <ul aria-label={title} className="mt-3 space-y-1">
+          {data.map((row) => (
+            <li key={`${row.series ?? ""}:${row.label}`} className="break-words">
+              {row.series ? `${row.series}: ${row.label}` : row.label}: {row.n}
+            </li>
+          ))}
+        </ul>
+      </details>
     </div>
   );
+}
+
+function chartLegendName(row: StatsChartDatum, type: StatsChartType, title: string): string {
+  return type === "line"
+    ? row.series || title
+    : row.series
+      ? `${row.series}: ${row.label}`
+      : row.label;
 }
 
 function createStatsChartOption(
@@ -186,12 +228,7 @@ function createStatsChartOption(
 ): StatsChartOption {
   const legendCounts = new Map<string, number>();
   for (const row of data) {
-    const name =
-      type === "line"
-        ? row.series || title
-        : row.series
-          ? `${row.series}: ${row.label}`
-          : row.label;
+    const name = chartLegendName(row, type, title);
     legendCounts.set(name, (legendCounts.get(name) ?? 0) + row.n);
   }
   const common: StatsChartOption = {

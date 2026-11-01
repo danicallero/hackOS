@@ -90,7 +90,7 @@
   --destructive: var(--brand-red);
   --destructive-foreground: var(--brand-cream);
   --border: color-mix(in srgb, var(--brand-ink) 20%, var(--brand-cream));
-  --input: var(--border);
+  --input: var(--button-outline-border);
   --ring: var(--brand-ink);
   /* Shared action states; derived from semantic colors so every edition inherits them. */
   --button-primary-hover: color-mix(in srgb, var(--primary) 70%, var(--primary-foreground));
@@ -157,7 +157,7 @@
   --button-destructive-pressed: color-mix(in srgb, var(--destructive) 80%, var(--brand-cream));
   /* Subtle neutral framing follows shadcn's low-contrast dark border treatment. */
   --border: #292d37;
-  --input: var(--border);
+  --input: var(--button-outline-border);
   --ring: var(--brand-blue);
   --info: var(--brand-blue);
   --success: #7dd9ae;

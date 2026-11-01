@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 import { CookieNotice } from "@/components/layout/cookie-notice";
 import { MaintenanceGate } from "@/components/layout/maintenance-gate";
+import { RouteFocus } from "@/components/layout/route-focus";
 import { Toaster } from "@/components/ui/sileo";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LocaleProvider } from "@/lib/i18n";
@@ -35,6 +36,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <SessionProvider>
           <LocaleProvider>
             <TooltipProvider delayDuration={200}>
+              <RouteFocus />
               <MaintenanceGate>{children}</MaintenanceGate>
             </TooltipProvider>
             {!isKiosk && <CookieNotice />}

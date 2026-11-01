@@ -456,3 +456,14 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover,
 input[type="time"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
 }
+
+/* H49/H55: anchors clear public sticky chrome and expose programmatic heading focus. */
+#main-content,
+.landing-section-heading {
+  scroll-margin-top: calc(var(--public-header-height, 0px) + 1rem);
+}
+
+.landing-section-heading:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}

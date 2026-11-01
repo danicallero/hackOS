@@ -25,6 +25,7 @@ export function PasswordInput({ className, ...props }: React.ComponentProps<type
         onClick={() => setVisible((v) => !v)}
         className="text-muted-foreground absolute inset-y-0 right-1 my-auto active:translate-y-0"
         label={visible ? t("hidePassword") : t("showPassword")}
+        disabled={props.disabled}
         aria-pressed={visible}
       >
         {visible ? (

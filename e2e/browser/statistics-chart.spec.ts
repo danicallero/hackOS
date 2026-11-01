@@ -43,6 +43,40 @@ test("statistics legends show counts and follow the active theme", async ({ page
   const chart = page.getByRole("img", { name: "T-shirt size distribution", exact: true });
   const legend = chart.locator("svg text").filter({ hasText: /^M$/ }).last();
   await expect(legend).toBeVisible();
+  const dataView = chart.locator("../..").locator("details");
+  const summary = dataView.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(dataView).toHaveAttribute("open", "");
+  await expect(dataView.getByRole("list")).toContainText("M: 10");
+  const mediumFilter = dataView.getByRole("checkbox", { name: "M", exact: true });
+  await mediumFilter.focus();
+  await page.keyboard.press("Space");
+  await expect(mediumFilter).not.toBeChecked();
+  await page.keyboard.press("Space");
+  await expect(mediumFilter).toBeChecked();
+  // ECharts re-animates after each toggle and can miss a click that lands mid-transition;
+  // click only while the checkbox is not yet in the target state, so a retry never overshoots.
+  const clickLegendUntil = async (checked: boolean) =>
+    expect(async () => {
+      if ((await mediumFilter.isChecked()) !== checked) {
+        const [x, y] = await legend.evaluate((element) => {
+          const text = element as SVGGraphicsElement;
+          const box = text.getBBox();
+          const matrix = text.getScreenCTM();
+          if (!matrix) throw new Error("Legend is not painted");
+          const point = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2).matrixTransform(
+            matrix,
+          );
+          return [point.x, point.y];
+        });
+        await page.mouse.click(x, y);
+      }
+      expect(await mediumFilter.isChecked()).toBe(checked);
+    }).toPass({ intervals: [750, 1000, 1500], timeout: 10_000 });
+  await clickLegendUntil(false);
+  await clickLegendUntil(true);
+  await page.screenshot({ path: testInfo.outputPath("statistics-keyboard-data.png") });
   for (const theme of ["light", "dark", "light"] as const) {
     await page.evaluate(
       (value) => document.documentElement.classList.toggle("dark", value === "dark"),

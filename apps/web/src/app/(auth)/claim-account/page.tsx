@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -13,7 +13,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -96,6 +96,10 @@ function ClaimInner() {
   const { refresh } = useSessionContext();
   const [lookup, setLookup] = useState<InviteLookup | null | "error">(null);
   const [done, setDone] = useState(false);
+  const confirmationHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (done) confirmationHeading.current?.focus();
+  }, [done]);
   const { sizes: shirtSizes, error: shirtSizesError, reload: reloadShirtSizes } = useShirtSizes();
   const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
 
@@ -200,7 +204,7 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{t("inviteUnavailable")}</CardTitle>
+          <h1 className="type-section-title text-balance">{t("inviteUnavailable")}</h1>
         </CardHeader>
         <CardContent>
           <Link href="/login" className="text-sm underline underline-offset-4">
@@ -218,7 +222,9 @@ function ClaimInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
-          <CardTitle>{t("accountCreated")}</CardTitle>
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+            {t("accountCreated")}
+          </h1>
         </CardHeader>
         <CardContent className="text-center">
           <SubmitButton
@@ -249,7 +255,7 @@ function ClaimInner() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("createYourAccount")}</CardTitle>
+        <h1 className="type-section-title text-balance">{t("createYourAccount")}</h1>
         {lookup.reusable && (
           <p className="text-muted-foreground text-pretty text-sm">
             {t("reusableInviteRole", { role: inviteRole })}

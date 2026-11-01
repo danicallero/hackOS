@@ -4,6 +4,7 @@ import * as React from "react"
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { Dialog as DialogPrimitive } from "radix-ui"
 
+import { useFocusRestore } from "@/components/ui/use-focus-restore"
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { overlayVariants } from "@/components/ui/surface"
@@ -48,7 +49,7 @@ function DialogOverlay({
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:transition-none",
+        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 motion-reduce:transition-none! motion-reduce:animate-none!",
         className
       )}
       {...props}
@@ -65,6 +66,8 @@ function DialogContent({
   onInteractOutside,
   onPointerDownOutside,
   onFocusOutside,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -73,6 +76,7 @@ function DialogContent({
   /** Whether the detached content needs to escape Radix's modal focus trap. */
   floatingFocus?: boolean
 }) {
+  const focusRestore = useFocusRestore({ onOpenAutoFocus, onCloseAutoFocus })
   const { t } = useLocale()
   function isFloatingTarget(target: EventTarget | null) {
     return (
@@ -97,7 +101,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           overlayVariants({ elevation: "modal" }),
-          "fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden border-border/60 bg-popover p-6 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:transition-none sm:max-w-lg",
+          "fixed top-[50%] left-[50%] z-50 flex max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 overflow-hidden border-border/60 bg-popover p-6 duration-200 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 motion-reduce:transition-none! motion-reduce:animate-none! sm:max-w-lg",
           className
         )}
         onInteractOutside={(event) => {
@@ -112,6 +116,7 @@ function DialogContent({
           if (floatingContent && isFloatingTarget(event.target)) event.preventDefault()
           onFocusOutside?.(event)
         }}
+        {...focusRestore}
         {...props}
       >
         <div
