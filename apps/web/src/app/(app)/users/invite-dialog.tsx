@@ -238,7 +238,12 @@ export function InviteUserDialog({
           {result.url && (
             <>
               <div className="flex gap-2">
-                <Input value={result.url} readOnly className="font-mono text-xs" />
+                <Input
+                  aria-label={t("inviteLink")}
+                  value={result.url}
+                  readOnly
+                  className="font-mono text-xs"
+                />
                 <Button variant="outline" onClick={() => void copy(result.url as string)}>
                   <CopyIcon className="size-4" aria-hidden="true" /> {t("copyInviteLink")}
                 </Button>
@@ -250,10 +255,11 @@ export function InviteUserDialog({
       ) : (
         <div className="space-y-6">
           {!sponsorOnly && (
-            <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t("inviteUser")}>
+            <fieldset className="grid min-w-0 grid-cols-2 gap-2" aria-label={t("inviteUser")}>
               <Button
                 type="button"
                 variant={method === "email" ? "default" : "outline"}
+                aria-pressed={method === "email"}
                 onClick={() => setMethod("email")}
               >
                 <EnvelopeSimpleIcon className="size-4" aria-hidden="true" /> {t("emailInvitation")}
@@ -261,11 +267,12 @@ export function InviteUserDialog({
               <Button
                 type="button"
                 variant={method === "link" ? "default" : "outline"}
+                aria-pressed={method === "link"}
                 onClick={() => setMethod("link")}
               >
                 <LinkIcon className="size-4" aria-hidden="true" /> {t("inviteLink")}
               </Button>
-            </div>
+            </fieldset>
           )}
           {method === "email" && (
             <div className={fieldClass}>
@@ -354,6 +361,7 @@ export function InviteUserDialog({
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
+                      name="invite-uses"
                       checked={uses === "unlimited"}
                       onChange={() => setUses("unlimited")}
                     />{" "}
@@ -362,6 +370,7 @@ export function InviteUserDialog({
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
+                      name="invite-uses"
                       checked={uses === "limited"}
                       onChange={() => setUses("limited")}
                     />{" "}
@@ -372,6 +381,7 @@ export function InviteUserDialog({
                       className="w-20"
                       type="number"
                       min="1"
+                      aria-label={t("uses")}
                       value={maxUses}
                       onChange={(event) => setMaxUses(event.target.value)}
                     />
@@ -384,6 +394,7 @@ export function InviteUserDialog({
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
+                      name="invite-expiration"
                       checked={expiration === "week"}
                       onChange={() => setExpiration("week")}
                     />{" "}
@@ -392,6 +403,7 @@ export function InviteUserDialog({
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
+                      name="invite-expiration"
                       checked={expiration === "custom"}
                       onChange={() => setExpiration("custom")}
                     />{" "}
@@ -400,6 +412,7 @@ export function InviteUserDialog({
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
+                      name="invite-expiration"
                       checked={expiration === "never"}
                       onChange={() => setExpiration("never")}
                     />{" "}
@@ -407,7 +420,11 @@ export function InviteUserDialog({
                   </label>
                 </div>
                 {expiration === "custom" && (
-                  <DateTimeInput value={customExpiresAt} onChange={setCustomExpiresAt} />
+                  <DateTimeInput
+                    aria-label={t("expiration")}
+                    value={customExpiresAt}
+                    onChange={setCustomExpiresAt}
+                  />
                 )}
               </div>
             </section>

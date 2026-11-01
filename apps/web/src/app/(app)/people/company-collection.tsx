@@ -72,7 +72,7 @@ function ProgressRing({ collected, total }: { collected: number; total: number }
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - ratio)}
           className={cn(
-            "transition-[stroke-dashoffset] duration-700 ease-out",
+            "transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none",
             ratio === 1 ? "stroke-success" : "stroke-primary",
           )}
         />

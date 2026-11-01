@@ -1,14 +1,13 @@
 import { Text, type TextProps } from "react-native";
 import { colors, type TypeVariant, type } from "@/theme";
 
-type Tone = "primary" | "secondary" | "tertiary" | "accent" | "destructive";
+type Tone = "primary" | "secondary" | "accent" | "destructive";
 
 // Keys, not values: Android colours resolve against the scheme when read, so a
 // module-scope palette would freeze the launch scheme (see theme/colors.ts).
 const TONE_KEY = {
   primary: "label",
   secondary: "secondaryLabel",
-  tertiary: "tertiaryLabel",
   accent: "interactiveText",
   destructive: "destructive",
 } as const;

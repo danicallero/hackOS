@@ -9,7 +9,7 @@ import { z } from "zod";
 import { PasswordInput } from "@/components/common/password-input";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -87,7 +87,7 @@ function ResetPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("setNewPassword")}</CardTitle>
+        <h1 className="type-section-title text-balance">{t("setNewPassword")}</h1>
       </CardHeader>
       <CardContent>
         {!token ? (

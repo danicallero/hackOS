@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { type ComponentProps, useEffect, useRef, useState } from "react";
+import { type ComponentProps, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Toaster as SileoToaster, sileo } from "sileo";
 import { useLocale } from "@/lib/i18n";
 
@@ -75,12 +75,12 @@ function ToastCloseLayer({
     const mounted = targets
       .filter(({ node }) => node.dataset.exiting !== "true")
       .map(({ id, node }) => {
-        // Sileo's toast root is a button and owns its mouseleave handler. Mount
+        // Sileo's toast root owns its mouseleave handler. Mount
         // the dismiss control as a real DOM child so moving onto it stays
         // inside that same hit area (a React portal only looks nested visually;
         // it is not part of Sileo's event ancestry).
-        const close = document.createElement("span");
-        close.setAttribute("role", "button");
+        const close = document.createElement("button");
+        close.type = "button";
         close.setAttribute("aria-label", t("close"));
         close.setAttribute("tabindex", "0");
         close.dataset.hackosToastClose = "";
@@ -133,12 +133,22 @@ function ToastCloseLayer({
   return null;
 }
 
+const noopSubscribe = () => () => {};
+
 const Toaster = ({ options, theme: requestedTheme, ...props }: SileoToasterProps) => {
   const { resolvedTheme } = useTheme();
+  // The patched viewport is server-rendered empty so screen readers already
+  // observe its live region before the first toast; until hydration completes,
+  // use the app's default theme so server and client markup match.
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
   const theme =
     requestedTheme === "light" || requestedTheme === "dark"
       ? requestedTheme
-      : resolvedTheme === "light"
+      : !hydrated || resolvedTheme === "light"
         ? "light"
         : "dark";
   const rootRef = useRef<HTMLDivElement>(null);

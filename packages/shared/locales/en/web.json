@@ -1,4 +1,5 @@
 {
+  "statsChartData": "Chart data and filters",
   "eventReminderTitle": "Email reminder",
   "eventReminderAudience": "Sent to everyone with event access, with their ticket.",
   "eventReminderQueued": "Sending to {count} people.",
@@ -116,6 +117,7 @@
   "backHome": "Back to home",
   "lastUpdated": "Last updated",
   "legalLinksLabel": "Legal links",
+  "onThisPage": "On this page",
   "skipToContent": "Skip to content",
   "signUpLegalPrefix": "By creating an account, you agree to the",
   "signUpLegalJoin": "and acknowledge that you have read the",
@@ -215,6 +217,7 @@
   "mobileSidebarDescription": "Personal links and workspaces.",
   "navigationPersonal": "Personal",
   "navigationWorkspaces": "Workspaces",
+  "navigationPrimary": "Primary",
   "selectAll": "Select all",
   "selectRow": "Select row",
   "openRow": "Open row",
@@ -887,7 +890,6 @@
   "noUpcomingActivityKinds": "No upcoming activity kinds available to opt into right now.",
   "activeReminders": "Active reminders",
   "noActiveReminders": "You haven't opted into any reminders yet.",
-  "removeReminderAria": "Remove reminder: {label}",
   "couldNotMarkRead": "Could not mark this as read.",
   "couldNotLoadInboxTitle": "Could not load your inbox",
   "couldNotLoadInboxDesc": "Something went wrong loading your messages.",
@@ -1878,6 +1880,7 @@
   "judgingWindowDesc": "Sizes how much time judging rooms have per project. Room pacing tightens automatically as this window's end approaches.",
   "judgingStartsLabel": "Judging starts",
   "judgingEndsLabel": "Judging ends",
+  "keepEditing": "Keep editing",
   "unsavedChangesConfirm": "There are unsaved changes in this section. Leave anyway?",
   "searchTimezonePlaceholder": "Search timezone…",
   "noTimezoneMatch": "No timezone matches.",
@@ -3755,5 +3758,9 @@
   "certificateAllEventAccess": "Everyone with event access",
   "maintenanceTitle": "Restoring a backup",
   "maintenanceBody": "hackOS will be back shortly. This page reloads on its own.",
-  "maintenanceFailedBody": "The restore needs an administrator. This page reloads once it is resolved."
+  "maintenanceFailedBody": "The restore needs an administrator. This page reloads once it is resolved.",
+  "quickSearch": "Quick search",
+  "quickSearchPlaceholder": "Go to…",
+  "searchList": "Search this list",
+  "keyboardShortcuts": "Keyboard shortcuts"
 }

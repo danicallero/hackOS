@@ -6,6 +6,7 @@
 // so both surfaces render an evaluation identically.
 
 import type { AnswerValue, Question } from "@hackos/shared/questions";
+import { useId } from "react";
 import { ScaleButtons } from "@/components/common/scale-buttons";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -48,22 +49,59 @@ export function QuestionField({
   const { t } = useLocale();
   const label = textForDisplay(question.label);
   const description = textForDisplay(question.description);
-  const id = `question-${question.key}`;
+  const uniqueId = useId();
+  const id = `question-${question.key}-${uniqueId}`;
+  const labelId = `${id}-label`;
+  const descriptionId = `${id}-description`;
+  const lockId = `${id}-lock`;
+  const describedBy =
+    [description && descriptionId, lockedMessage && lockId].filter(Boolean).join(" ") || undefined;
+  const controlAria = {
+    "aria-labelledby": labelId,
+    "aria-describedby": describedBy,
+    "aria-required": question.required || undefined,
+  };
 
   return (
-    <div className="space-y-2 rounded-md border p-4">
-      <Label htmlFor={id} className="text-sm font-medium">
+    <fieldset aria-labelledby={labelId} className="space-y-2 rounded-md border p-4">
+      <Label
+        id={labelId}
+        htmlFor={
+          question.kind === "multi_choice" ||
+          (question.kind === "scale" && question.max - question.min <= 10)
+            ? undefined
+            : id
+        }
+        className="text-sm font-medium"
+      >
         {label}
-        {question.required ? <span className="text-destructive"> *</span> : null}
+        {question.required ? (
+          <>
+            <span aria-hidden="true" className="text-destructive">
+              {" "}
+              *
+            </span>
+            {(question.kind === "multi_choice" ||
+              (question.kind === "scale" && question.max - question.min <= 10)) && (
+              <span className="sr-only"> ({t("required")})</span>
+            )}
+          </>
+        ) : null}
       </Label>
-      {description && <p className="text-muted-foreground text-sm text-pretty">{description}</p>}
+      {description && (
+        <p id={descriptionId} className="text-muted-foreground text-sm text-pretty">
+          {description}
+        </p>
+      )}
       {lockedMessage && (
-        <p role="status" className="text-muted-foreground text-sm">
+        <p id={lockId} role="status" className="text-muted-foreground text-sm">
           {lockedMessage}
         </p>
       )}
       {question.kind === "scale" && question.max - question.min <= 10 ? (
         <ScaleButtons
+          aria-labelledby={labelId}
+          aria-describedby={describedBy}
           min={question.min}
           max={question.max}
           value={typeof value === "number" ? value : null}
@@ -73,6 +111,7 @@ export function QuestionField({
       ) : question.kind === "scale" || question.kind === "integer" || question.kind === "float" ? (
         <Input
           id={id}
+          {...controlAria}
           type="number"
           min={question.min}
           max={question.max}
@@ -88,6 +127,7 @@ export function QuestionField({
         <div className="flex items-center gap-2">
           <Checkbox
             id={id}
+            {...controlAria}
             checked={Boolean(value)}
             disabled={disabled}
             onCheckedChange={(checked) => onChange(checked === true)}
@@ -121,6 +161,7 @@ export function QuestionField({
               <div key={option.value} className="flex items-center gap-2">
                 <Checkbox
                   id={`${id}-${option.value}`}
+                  aria-describedby={describedBy}
                   checked={selected}
                   disabled={disabled}
                   onCheckedChange={(checked) => {
@@ -142,6 +183,7 @@ export function QuestionField({
       ) : question.kind === "long_text" ? (
         <Textarea
           id={id}
+          {...controlAria}
           value={typeof value === "string" ? value : ""}
           maxLength={question.maxLength}
           disabled={disabled}
@@ -153,6 +195,7 @@ export function QuestionField({
       ) : (
         <Input
           id={id}
+          {...controlAria}
           value={typeof value === "string" ? value : ""}
           maxLength={question.maxLength}
           disabled={disabled}
@@ -162,6 +205,6 @@ export function QuestionField({
           onChange={(event) => onChange(event.target.value)}
         />
       )}
-    </div>
+    </fieldset>
   );
 }

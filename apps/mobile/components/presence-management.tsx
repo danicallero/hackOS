@@ -1,7 +1,15 @@
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, Text, TextInput, useColorScheme, View, type ViewStyle } from "react-native";
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -32,6 +40,7 @@ import { has } from "@/lib/tabs";
 import { useScannerSync } from "@/lib/use-scanner";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export type SignalKind = "in" | "out" | "activity";
 
@@ -201,15 +210,18 @@ export function PresenceManagement({
               },
               ownerUserId,
             );
-            await sync.sync();
-            const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-            if (stored?.status === "failed") {
-              void haptic("error");
-              alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
-            } else {
-              void haptic("warning");
-            }
-            await load();
+            await sync.refreshLocal();
+            void (async () => {
+              await sync.sync();
+              const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+              if (stored?.status === "failed") {
+                void haptic("error");
+                alert(t("presenceCouldNotDelete"), stored.lastError ?? undefined);
+              } else {
+                void haptic("warning");
+              }
+              await load();
+            })().catch(() => alert(t("presenceCouldNotDelete")));
           })(),
       },
     ]);
@@ -334,7 +346,7 @@ export function PresenceManagement({
               >
                 {group.label}
               </Text>
-              <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
+              <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                 {group.items.length === 1
                   ? t("presenceRecordsCountOne", { count: "1" })
                   : t("presenceRecordsCountOther", { count: String(group.items.length) })}
@@ -396,8 +408,8 @@ export function PresenceManagement({
           onClose={() => setDraft(null)}
           onSaved={async () => {
             setDraft(null);
+            void haptic("light");
             await load();
-            void haptic("success");
           }}
           ownerUserId={ownerUserId}
           sync={sync}
@@ -554,6 +566,7 @@ function SignalCard({
   focused: boolean;
   onFocusedLayout?: (target: View) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const cardRef = useRef<View>(null);
   const title =
@@ -611,7 +624,7 @@ function SignalCard({
         <View style={{ flex: 1 }}>
           <Text
             selectable
-            numberOfLines={1}
+            numberOfLines={accessibilityText ? undefined : 1}
             style={{ ...type.body, color: colors.label, fontWeight: "600" }}
           >
             {title}
@@ -627,7 +640,7 @@ function SignalCard({
             <Text
               selectable
               numberOfLines={1}
-              style={{ ...type.caption, color: colors.tertiaryLabel, marginTop: 1 }}
+              style={{ ...type.caption, color: colors.secondaryLabel, marginTop: 1 }}
             >
               {t("presenceRecordedBy", { name: recordedBy })}
             </Text>
@@ -635,7 +648,7 @@ function SignalCard({
             <Text
               selectable
               numberOfLines={1}
-              style={{ ...type.caption, color: colors.tertiaryLabel, marginTop: 1 }}
+              style={{ ...type.caption, color: colors.secondaryLabel, marginTop: 1 }}
             >
               {t("presenceRecordedBySystem")}
             </Text>
@@ -796,6 +809,7 @@ function ActivityPicker({
   selectedId: number | null;
   onSelect: (activityId: number) => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
@@ -829,7 +843,7 @@ function ActivityPicker({
       >
         <Text
           selectable
-          numberOfLines={1}
+          numberOfLines={accessibilityText ? undefined : 1}
           style={{ ...type.callout, color: colors.label, flex: 1 }}
         >
           {selected ? `${selected.name} · ${selected.category}` : t("presenceChooseActivity")}
@@ -905,7 +919,7 @@ function ActivityPicker({
                       }}
                     >
                       <Text
-                        numberOfLines={1}
+                        numberOfLines={accessibilityText ? undefined : 1}
                         style={{ ...type.callout, color: colors.label, flex: 1 }}
                       >
                         {`${activity.name} · ${activity.category}`}
@@ -949,7 +963,7 @@ function SignalEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
   ownerUserId: number | undefined;
-  sync: { sync: () => Promise<unknown> };
+  sync: { sync: () => Promise<unknown>; refreshLocal: () => Promise<void> };
   userId: number;
 }) {
   useColorScheme();
@@ -969,13 +983,15 @@ function SignalEditor({
     const notes = draft.notes.trim() || null;
     try {
       const scanId = await enqueueLocalScan(buildDraftPayload(draft, userId, notes), ownerUserId);
-      await sync.sync();
-      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-      if (stored?.status === "failed") {
-        setError(stored.lastError ?? t("presenceCouldNotSave"));
-        return;
-      }
-      await onSaved();
+      await sync.refreshLocal();
+      void (async () => {
+        await sync.sync();
+        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+        if (stored?.status === "failed") {
+          alert(t("presenceCouldNotSave"), stored.lastError ?? undefined);
+        }
+      })().catch(() => alert(t("presenceCouldNotSave")));
+      void onSaved();
     } finally {
       setSaving(false);
     }

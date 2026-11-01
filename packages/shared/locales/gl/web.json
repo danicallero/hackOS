@@ -1,4 +1,5 @@
 {
+  "statsChartData": "Datos e filtros do gráfico",
   "eventReminderTitle": "Recordatorio por correo",
   "eventReminderAudience": "Envíase a todas as persoas con acceso ao evento, coa súa entrada.",
   "eventReminderQueued": "Enviando a {count} persoas.",
@@ -116,6 +117,7 @@
   "backHome": "Volver ao inicio",
   "lastUpdated": "Última actualización",
   "legalLinksLabel": "Ligazóns legais",
+  "onThisPage": "Nesta páxina",
   "skipToContent": "Saltar ao contido",
   "signUpLegalPrefix": "Ao crear unha conta, aceptas os",
   "signUpLegalJoin": "e confirmas que liches a",
@@ -215,6 +217,7 @@
   "mobileSidebarDescription": "Ligazóns persoais e espazos de traballo.",
   "navigationPersonal": "Persoal",
   "navigationWorkspaces": "Áreas de traballo",
+  "navigationPrimary": "Principal",
   "selectAll": "Seleccionar todo",
   "selectRow": "Seleccionar fila",
   "openRow": "Abrir fila",
@@ -887,7 +890,6 @@
   "noUpcomingActivityKinds": "Non hai tipos de actividade próximos dispoñibles para activar agora mesmo.",
   "activeReminders": "Recordatorios activos",
   "noActiveReminders": "Aínda non te apuntaches a ningún recordatorio.",
-  "removeReminderAria": "Quitar recordatorio: {label}",
   "couldNotMarkRead": "Non se puido marcar como lido.",
   "couldNotLoadInboxTitle": "Non se puido cargar a túa caixa de entrada",
   "couldNotLoadInboxDesc": "Algo fallou ao cargar as túas mensaxes.",
@@ -1878,6 +1880,7 @@
   "judgingWindowDesc": "Determina canto tempo teñen as salas de avaliación por proxecto. O ritmo de sala axústase automaticamente a medida que se achega o final desta ventá.",
   "judgingStartsLabel": "Comeza a avaliación",
   "judgingEndsLabel": "Remata a avaliación",
+  "keepEditing": "Seguir editando",
   "unsavedChangesConfirm": "Hai cambios sen gardar nesta sección. ¿Saír de todos os xeitos?",
   "searchTimezonePlaceholder": "Buscar fuso horario…",
   "noTimezoneMatch": "Ningún fuso horario coincide.",
@@ -3755,5 +3758,9 @@
   "certificateAllEventAccess": "Todas as persoas con acceso ao evento",
   "maintenanceTitle": "Restaurando unha copia",
   "maintenanceBody": "hackOS volverá en uns minutos. Esta páxina recárgase soa.",
-  "maintenanceFailedBody": "A restauración precisa dun administrador. Esta páxina recárgase cando se resolva."
+  "maintenanceFailedBody": "A restauración precisa dun administrador. Esta páxina recárgase cando se resolva.",
+  "quickSearch": "Busca rápida",
+  "quickSearchPlaceholder": "Ir a…",
+  "searchList": "Buscar na lista",
+  "keyboardShortcuts": "Atallos de teclado"
 }

@@ -5,6 +5,7 @@ import { SheetModal } from "@/components/app-sheet";
 import { FloatingGlassButton } from "@/components/native-ui";
 import { useLocale } from "@/lib/i18n";
 import { colors, radius, type } from "@/theme";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 const NOTE_MAX_LENGTH = 500;
 const HEADER_HEIGHT = 76;
@@ -48,6 +49,9 @@ export function DiaryNoteEditor({
           <Text
             accessibilityRole="header"
             numberOfLines={1}
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            adjustsFontSizeToFit
+            minimumFontScale={CHROME_MIN_FONT_SCALE}
             style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
           >
             {t("diaryNote")}

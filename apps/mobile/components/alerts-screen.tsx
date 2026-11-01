@@ -678,7 +678,7 @@ function PullHintText({
     <Animated.View style={[style, hintStyle]}>
       <Text
         selectable={false}
-        style={{ color: colors.tertiaryLabel, fontSize: type.caption.fontSize }}
+        style={{ color: colors.secondaryLabel, fontSize: type.caption.fontSize }}
       >
         {label}
       </Text>
@@ -975,7 +975,7 @@ function NotificationRow({
               <Text
                 selectable
                 style={{
-                  color: colors.tertiaryLabel,
+                  color: colors.secondaryLabel,
                   fontSize: type.caption.fontSize,
                   fontVariant: ["tabular-nums"],
                 }}

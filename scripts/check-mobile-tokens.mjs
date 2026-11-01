@@ -4,12 +4,13 @@
 // count; run with --update to record the lower numbers. docs/DESIGN.md §12.
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import ts from "typescript";
 
 const root = new URL("../apps/mobile/", import.meta.url).pathname;
 const baselinePath = new URL("./mobile-token-baseline.json", import.meta.url).pathname;
 const rules = {
   hex: /["']#[0-9a-fA-F]{3,8}["']/g,
-  fontSize: /fontSize: \d/g,
+  fontWeight: /fontWeight:\s*["'](?:800|900)["']/g,
   radius: /[rR]adius: \d/g,
 };
 
@@ -21,6 +22,32 @@ function* walk(dir) {
   }
 }
 
+// Inspect branches as well as plain values (#1165). Geometry-derived avatar
+// initials (size * ratio) are not text-style literals.
+function fontSizeLiteralCount(text, file) {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  function hasLiteral(node) {
+    if (ts.isNumericLiteral(node)) return true;
+    if (ts.isParenthesizedExpression(node)) return hasLiteral(node.expression);
+    if (ts.isConditionalExpression(node)) {
+      return hasLiteral(node.whenTrue) || hasLiteral(node.whenFalse);
+    }
+    return false;
+  }
+  let count = 0;
+  function visit(node) {
+    if (
+      ts.isPropertyAssignment(node) &&
+      node.name.getText(source).replace(/["']/g, "") === "fontSize" &&
+      hasLiteral(node.initializer)
+    )
+      count++;
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return count;
+}
+
 const counts = {};
 for (const dir of ["app", "components", "lib"]) {
   for (const file of walk(join(root, dir))) {
@@ -28,6 +55,7 @@ for (const dir of ["app", "components", "lib"]) {
     const entry = Object.fromEntries(
       Object.entries(rules).map(([key, re]) => [key, (text.match(re) ?? []).length]),
     );
+    entry.fontSize = fontSizeLiteralCount(text, file);
     if (Object.values(entry).some(Boolean)) counts[relative(root, file)] = entry;
   }
 }
@@ -41,7 +69,7 @@ if (process.argv.includes("--update")) {
 const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
 const failures = [];
 for (const [file, entry] of Object.entries(counts)) {
-  for (const key of Object.keys(rules)) {
+  for (const key of [...Object.keys(rules), "fontSize"]) {
     const allowed = baseline[file]?.[key] ?? 0;
     if (entry[key] > allowed) {
       failures.push(`${file}: ${entry[key]} raw ${key} (baseline ${allowed})`);

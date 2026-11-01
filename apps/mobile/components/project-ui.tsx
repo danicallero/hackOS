@@ -87,13 +87,23 @@ export function FieldRow({
   return (
     <View style={{ gap: 4, minHeight: 56, paddingHorizontal: 16, paddingVertical: 10 }}>
       <View style={{ flexDirection: "row", gap: 8, justifyContent: "space-between" }}>
-        <Text style={{ color: colors.secondaryLabel, flexShrink: 1, fontSize: 13 }}>{label}</Text>
+        <Text
+          style={{ color: colors.secondaryLabel, flexShrink: 1, fontSize: type.footnote.fontSize }}
+        >
+          {label}
+        </Text>
         {required ? (
-          <Text style={{ color: colors.tertiaryLabel, fontSize: 13 }}>{required}</Text>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
+            {required}
+          </Text>
         ) : null}
       </View>
       {children}
-      {hint ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{hint}</Text> : null}
+      {hint ? (
+        <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
+          {hint}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -177,7 +187,7 @@ export function GlassButton({
         <Text
           style={{
             color: prominent ? colors.primaryActionText : colors.accent,
-            fontSize: 17,
+            fontSize: type.body.fontSize,
             fontWeight: "600",
           }}
         >

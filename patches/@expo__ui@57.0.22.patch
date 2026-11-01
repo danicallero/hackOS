@@ -10,7 +10,7 @@ index a8843b7..5369090 100644
 +     * Live countdown, no leading zero beside a unit: `2h 34m`, `1h 5m`, `34m`,
 +     * `9m`; `4:05` (colon, zero-padded) in the last five minutes; `48s`, `9s`
 +     * under a minute; `4m` / `<1m` in Always-On. Size defaults to 12; weight
-+     * defaults to semibold; `short` keeps the leading unit only (`12h`, `38m`, `45s`). (hackOS patch, #966)
++     * defaults to semibold; `short` is the compact island form: `2h 40m`, then a stacked number over `min` (`41`, `<1` under a minute, then the bare seconds 30, 29, 28… in the last half minute). (hackOS patch, #966)
 +     */
 +    compactCountdown?: 'full' | 'short' | 'long';
 +    compactCountdownSize?: number;
@@ -23,7 +23,7 @@ diff --git a/ios/TextView.swift b/ios/TextView.swift
 index 7dfe0a9..6b7caa1 100644
 --- a/ios/TextView.swift
 +++ b/ios/TextView.swift
-@@ -25,6 +25,10 @@ public final class TextViewProps: UIBaseViewProps {
+@@ -25,6 +25,10 @@
    @Field public var timerInterval: ClosedRangeDate?
    @Field public var countsDown: Bool?
    @Field public var pauseTime: Date?
@@ -34,7 +34,7 @@ index 7dfe0a9..6b7caa1 100644
  
    // Override default frame alignment for text views
    override var defaultFrameAlignment: Alignment { .leading }
-@@ -37,9 +41,20 @@ public struct TextView: ExpoSwiftUI.View {
+@@ -37,9 +41,20 @@
      self.props = props
    }
  
@@ -56,7 +56,7 @@ index 7dfe0a9..6b7caa1 100644
    }
  
    internal func buildText(applyModifiers: Bool = true) -> Text {
-@@ -73,3 +87,119 @@
+@@ -73,3 +88,168 @@
      return result
    }
  }
@@ -110,48 +110,96 @@ index 7dfe0a9..6b7caa1 100644
 +    (s as NSString).size(withAttributes: [.font: uiFont]).width
 +  }
 +  private var digit: CGFloat { advance("0000000000") / 10 }
++  // The stacked number is bold and larger than the row: measure it with that
++  // font, not the row's, or its box is wider than its digits and the number
++  // sits off-centre. A single digit is a little smaller than two.
++  private func bigFont(_ scale: Double) -> UIFont { UIFont.monospacedDigitSystemFont(ofSize: size * scale, weight: .bold) }
++  private func bigDigit(_ scale: Double) -> CGFloat { ((("0000000000" as NSString).size(withAttributes: [.font: bigFont(scale)]).width) / 10) }
++  private func bigColon(_ scale: Double) -> CGFloat { ((":" as NSString).size(withAttributes: [.font: bigFont(scale)]).width) }
++  private func bigDigits(_ count: Int, _ scale: Double) -> CGFloat { ceil(CGFloat(count) * bigDigit(scale)) }
 +  private var colon: CGFloat { advance(":") }
 +  private func digitsWidth(_ count: Int) -> CGFloat { ceil(CGFloat(count) * digit) }
 +
 +  /// One field of the live timer: `skip` is the width that follows it.
-+  private func field(skip: CGFloat, width: CGFloat) -> some View {
++  private func field(skip: CGFloat, width: CGFloat, scale: Double = 1) -> some View {
 +    Text(timerInterval: Date.now...max(Date.now, end), countsDown: true)
-+      .font(font)
++      .font(scale == 1 ? font : .system(size: size * scale, weight: .bold))
 +      .monospacedDigit()
 +      .lineLimit(1)
 +      .multilineTextAlignment(.trailing)
-+      .frame(width: 400, alignment: .trailing)
++      .frame(width: 400 * scale, alignment: .trailing)
 +      .offset(x: skip)
 +      .frame(width: width, alignment: .trailing)
 +      .clipped()
 +  }
 +
-+  private func unit(_ text: String) -> some View {
-+    Text(text).font(font).lineLimit(1).fixedSize()
++  private func unit(_ text: String, scale: Double = 1, bold: Bool = false) -> some View {
++    Text(text)
++      .font(scale == 1 ? font : .system(size: size * scale, weight: bold ? .bold : .semibold))
++      .lineLimit(1).fixedSize()
 +  }
 +
 +  var body: some View {
 +    let left = max(0, end.timeIntervalSinceNow)
-+    HStack(spacing: 0) {
-+      if short {
-+        // Narrowest form (the vertical island of a foldable): the leading
-+        // unit only, `12h`, `38m`, `45s`. Same live fields as below.
-+        if left >= 3600 {
-+          field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
-+          unit("h")
-+        } else if left < 60 {
-+          if reduced {
-+            unit("<1m")
-+          } else {
-+            field(skip: 0, width: digitsWidth(left >= 10 ? 2 : 1))
-+            unit("s")
-+          }
-+        } else {
-+          field(skip: colon + 2 * digit, width: digitsWidth(left >= 600 ? 2 : 1))
++    // The stacked form is as wide as its widest line: the min label is wider
++    // than a one-digit number and was clipped at the island's edge.
++    let seconds = left <= 30 && !reduced
++    let twoDigits = seconds ? left >= 10 : left >= 600
++    let bigScale: Double = twoDigits ? 1.35 : 1.2
++    let stackWidth = seconds
++      ? bigDigits(twoDigits ? 2 : 1, bigScale)
++      : max(bigDigits(twoDigits ? 2 : 1, bigScale), ceil(advance("min") * 0.72) + 2)
++    if short && left >= 3600 {
++      // Compact island, an hour or more:  on one line; where the island
++      // is too narrow for it (the vertical island of a foldable) the hours stack
++      // over the minutes. No outer fixedSize here: ViewThatFits needs the
++      // island's real width as its proposal.
++      let shortMinutes = (Int(left) % 3600) / 60 < 10
++      let hoursField = field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
++      let minutesField = field(skip: colon + 2 * digit, width: digitsWidth(shortMinutes ? 1 : 2))
++      ViewThatFits(in: .horizontal) {
++        HStack(spacing: 0) {
++          hoursField
++          unit("h ")
++          minutesField
 +          unit("m")
 +        }
++        .fixedSize()
++        VStack(spacing: -1) {
++          HStack(spacing: 0) {
++            hoursField
++            unit("h")
++          }
++          .fixedSize()
++          HStack(spacing: 0) {
++            minutesField
++            unit("m")
++          }
++          .fixedSize()
++        }
++        .fixedSize()
++      }
++    } else {
++    HStack(spacing: 0) {
++      if short && left < 3600 {
++        // Compact island, Luma style: a big number over a small unit label
++        // (`41` over `min`); minutes only, `<1` under a minute, the seconds alone in the last half minute.
++        VStack(spacing: -2) {
++          if seconds {
++            // The last half minute: just the seconds going down, 30, 29, 28…
++            field(skip: 0, width: bigDigits(twoDigits ? 2 : 1, bigScale), scale: bigScale)
++          } else if left < 60 {
++            unit("<1", scale: 1.2, bold: true)
++            unit("min", scale: 0.72)
++          } else {
++            field(skip: bigColon(bigScale) + 2 * bigDigit(bigScale), width: bigDigits(twoDigits ? 2 : 1, bigScale), scale: bigScale)
++            unit("min", scale: 0.72)
++          }
++        }
++        // Two points of air so the island's rounded corner does not cut the label.
++        .frame(width: stackWidth + 2, alignment: .center)
 +      } else if left >= 3600 {
-+        // `2h 34m`; minutes-of-hour under ten drop their zero: `1h 5m`.
++        // `2h 34m` (also the compact island's form past an hour); minutes-of-hour under ten drop their zero: `1h 5m`.
 +        let shortMinutes = (Int(left) % 3600) / 60 < 10
 +        field(skip: 2 * colon + 4 * digit, width: digitsWidth(left >= 36000 ? 2 : 1))
 +        unit("h ")
@@ -174,6 +222,7 @@ index 7dfe0a9..6b7caa1 100644
 +      }
 +    }
 +    .fixedSize()
++    }
 +  }
 +}
 diff --git a/src/swift-ui/Text/index.tsx b/src/swift-ui/Text/index.tsx
@@ -188,7 +237,7 @@ index 2351ee8..00432b5 100644
 +   * Live countdown, no leading zero beside a unit: `2h 34m`, `1h 5m`, `34m`,
 +   * `9m`; `4:05` (colon, zero-padded) in the last five minutes; `48s`, `9s`
 +   * under a minute; `4m` / `<1m` in Always-On. Size defaults to 12; weight
-+   * defaults to semibold; `short` keeps the leading unit only (`12h`, `38m`, `45s`). (hackOS patch, #966)
++   * defaults to semibold; `short` is the compact island form: `2h 40m`, then a stacked number over `min` (`41`, `<1` under a minute, then the bare seconds 30, 29, 28… in the last half minute). (hackOS patch, #966)
 +   */
 +  compactCountdown?: 'full' | 'short' | 'long';
 +  compactCountdownSize?: number;

@@ -14,6 +14,7 @@ import {
   surfaceFit,
   useOperatorLayout,
 } from "@/theme/layout-screens";
+import { type } from "@/theme/tokens";
 
 // H22–H26: both operational readers share capture geometry and input alternatives.
 export function NfcScannerSurface({
@@ -123,7 +124,7 @@ export function NfcScannerSurface({
                 accessibilityLiveRegion="polite"
                 style={{
                   color: colors.secondaryLabel,
-                  fontSize: 15,
+                  fontSize: type.subhead.fontSize,
                   textAlign: "center",
                   maxWidth: 280,
                 }}

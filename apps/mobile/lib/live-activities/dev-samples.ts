@@ -242,7 +242,7 @@ function deadline(
     now +
     (endsIn ??
       (phase === "closing"
-        ? 11 * MINUTE
+        ? 19 * MINUTE
         : long
           ? 22 * 60 * MINUTE + 45 * MINUTE
           : 2 * 60 * MINUTE + 41 * MINUTE));
@@ -301,8 +301,9 @@ const KIND_SAMPLES: Record<string, () => DesiredActivity[]> = {
   "attendee-live-long": () => [attendee("live", 12 * MINUTE, true)],
   "deadline-open": () => [deadline("open", "draft")],
   "deadline-open-unknown": () => [deadline("open", null)],
-  "deadline-last-five": () => [deadline("closing", "draft", false, 4 * MINUTE)],
+  "deadline-last-five": () => [deadline("closing", "draft", false, 5 * MINUTE - 5_000)],
   "deadline-last-minute": () => [deadline("closing", "draft", false, 55_000)],
+  "deadline-last-seconds": () => [deadline("closing", "draft", false, 25_000)],
   "deadline-submitted-soon": () => [deadline("submitted", "submitted", false, 4 * MINUTE)],
   "deadline-closing": () => [deadline("closing", "draft")],
   "deadline-submitted": () => [deadline("submitted", "submitted")],

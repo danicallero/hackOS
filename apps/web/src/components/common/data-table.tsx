@@ -7,7 +7,7 @@ import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -17,6 +17,7 @@ import { SearchField } from "@/components/common/search-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -103,6 +104,106 @@ interface DataTableProps<T> {
 }
 
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
+
+function DataTableCell({ children, className }: { children: React.ReactNode; className?: string }) {
+  const descriptionId = useId();
+  const cellRef = useRef<HTMLTableCellElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [fullValue, setFullValue] = useState("");
+
+  useLayoutEffect(() => {
+    const cell = cellRef.current;
+    if (!cell) return;
+    const measure = () => {
+      const hasOverflow = (element: HTMLElement) =>
+        element.scrollWidth > element.clientWidth + 1 ||
+        element.scrollHeight > element.clientHeight + 1;
+      const truncated =
+        hasOverflow(cell) ||
+        Array.from(cell.querySelectorAll<HTMLElement>("*")).some(
+          (element) => Boolean(element.textContent?.trim()) && hasOverflow(element),
+        );
+      setOverflowing(truncated);
+      if (truncated) {
+        setFullValue(cell.textContent?.trim() ?? "");
+      }
+    };
+    measure();
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    const observeContent = () => {
+      resizeObserver?.observe(cell);
+      for (const element of cell.querySelectorAll<HTMLElement>("*")) {
+        resizeObserver?.observe(element);
+      }
+    };
+    observeContent();
+    const mutationObserver = new MutationObserver(() => {
+      observeContent();
+      measure();
+    });
+    mutationObserver.observe(cell, {
+      attributes: true,
+      attributeFilter: ["style", "class"],
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, []);
+
+  const cell = (
+    <TableCell
+      ref={cellRef}
+      tabIndex={overflowing ? 0 : undefined}
+      aria-describedby={overflowing ? descriptionId : undefined}
+      className={cn(
+        className,
+        overflowing && "focus-visible:inset-ring-2 focus-visible:inset-ring-ring",
+      )}
+      onFocus={overflowing ? () => setOpen(true) : undefined}
+      onClick={
+        overflowing
+          ? (event) => {
+              event.stopPropagation();
+              setOpen(true);
+            }
+          : undefined
+      }
+      onBlur={
+        overflowing
+          ? (event) => {
+              const content = document.querySelector('[data-slot="popover-content"]');
+              if (!content?.contains(event.relatedTarget as Node | null)) setOpen(false);
+            }
+          : undefined
+      }
+    >
+      {children}
+    </TableCell>
+  );
+
+  if (!overflowing) return cell;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>{cell}</PopoverAnchor>
+      <PopoverContent
+        id={descriptionId}
+        role="tooltip"
+        align="start"
+        className="max-h-60 max-w-[min(24rem,calc(100vw-2rem))] overflow-auto whitespace-normal break-words p-3 text-sm"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        {fullValue}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * One table for the whole app. Columns are described declaratively (header +
@@ -330,7 +431,7 @@ export function DataTable<T>({
                         <button
                           type="button"
                           onClick={() => toggleSort(col.id)}
-                          className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-medium transition-colors"
+                          className="button-interaction touch-target text-muted-foreground hover:text-foreground inline-flex min-h-(--target-min) items-center gap-1 font-medium transition-colors"
                           aria-label={t("sortBy", {
                             column:
                               col.sortLabel ??
@@ -358,7 +459,11 @@ export function DataTable<T>({
                       <span className="sr-only">{t("openRow")}</span>
                     </TableHead>
                   )}
-                  {rowActions && <TableHead className="w-12" />}
+                  {rowActions && (
+                    <TableHead className="w-12">
+                      <span className="sr-only">{t("actionsColumn")}</span>
+                    </TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -406,12 +511,12 @@ export function DataTable<T>({
                           </TableCell>
                         )}
                         {columns.map((col) => (
-                          <TableCell
+                          <DataTableCell
                             key={col.id}
                             className={cn(alignClass[col.align ?? "left"], col.className)}
                           >
                             {col.cell(row)}
-                          </TableCell>
+                          </DataTableCell>
                         ))}
                         {rowInteractionCol > 0 && (
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

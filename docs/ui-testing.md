@@ -76,6 +76,16 @@ than fixed delays. Invitation-language scenarios seed the language and the
 cookie-notice dismissal preference before hydration; they test onboarding
 language synchronization without racing the unrelated cookie overlay.
 
+`accessibility-audit.spec.ts` runs axe on representative public, authentication
+and staff states in both themes, attaches violations and manual-review items,
+and checks narrow layouts with enlarged text. It checks actual control bounds
+as well as document width: clipping overflow must not hide a failed layout.
+Run it with `pnpm test:ui:browser accessibility-audit.spec.ts --project=chromium`.
+The separate navigation, shared-control, schedule and statistics scenarios
+exercise keyboard behavior and focus restoration. Automated scans do not
+replace assistive-technology sessions or verification of uploaded documents,
+video captions and arbitrary event content.
+
 ## Demo data for local screenshots
 
 Against a disposable local database, run migrations, the bootstrap seed, then

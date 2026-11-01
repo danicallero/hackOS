@@ -274,6 +274,7 @@ export function ActivityRow({
       case "starts":
         return canEdit ? (
           <EditableTimeCell
+            fieldLabel={t("colStarts")}
             value={timeInputValue(item.startsAt)}
             onSave={(v) => saveTime("startsAt", v)}
           />
@@ -283,6 +284,7 @@ export function ActivityRow({
       case "ends":
         return canEdit ? (
           <EditableTimeCell
+            fieldLabel={t("endsLabel")}
             value={timeInputValue(item.endsAt)}
             onSave={(v) => saveTime("endsAt", v)}
           />
@@ -380,6 +382,7 @@ export function ActivityRow({
       case "location":
         return canEdit ? (
           <EditableTextCell
+            fieldLabel={t("locationLabel")}
             value={item.location ?? ""}
             placeholder={t("locationLabel")}
             onSave={saveLocation}
@@ -403,8 +406,8 @@ export function ActivityRow({
                 ? "hover:bg-muted -mx-1 w-full rounded px-1 py-0.5 text-left disabled:cursor-default"
                 : "-mx-1 w-full px-1 py-0.5 text-left",
             )}
-            aria-label={canEdit ? t("editItemAria") : undefined}
           >
+            {canEdit && <span className="sr-only">{t("editItemAria")}: </span>}
             <p className="truncate font-medium">{item.title}</p>
             {item.description && (
               <p className="text-muted-foreground line-clamp-1 text-sm">{item.description}</p>
@@ -423,7 +426,11 @@ export function ActivityRow({
         );
       case "notes":
         return canEdit ? (
-          <EditableTextCell value={item.notes ?? ""} onSave={saveNotes} />
+          <EditableTextCell
+            fieldLabel={t("notesLabel")}
+            value={item.notes ?? ""}
+            onSave={saveNotes}
+          />
         ) : item.notes ? (
           <span className="block truncate" title={item.notes}>
             {item.notes}

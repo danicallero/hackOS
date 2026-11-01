@@ -56,7 +56,7 @@ and title scale. `src/app/globals.css` imports it and exposes the standard
 shadcn/Tailwind utilities; every management page inherits it through the root
 layout. Buttons use `rounded-button`, fields use `rounded-control`, navigation
 uses `rounded-frame`, and shared headings use `font-display` via the type classes.
-Light is the default for new visitors; saved light/dark/system preferences survive.
+New visitors follow the system appearance; saved light/dark/system preferences survive.
 
 For the next edition, update the theme and font assets/loaders rather than
 restyling pages. The source landing, token mapping and step-by-step edition
@@ -362,6 +362,12 @@ Use one `PageHeader`, then optional `TabBar`, `PageToolbar`, and content.
 `ListToolbar` provides the Users composition: a broad `SearchField`, shared
 `FilterMenu`, trailing actions and a separate active-chip row. `SearchField` owns
 its label/icon/clear control; pages keep filtering and query semantics.
+Keyboard shortcuts (⌘K quick search, ⌘S save, `/` list search, ⌘B sidebar)
+live only in `src/lib/shortcuts.ts` and are handled by `CommandPalette`;
+`SearchField` and `FormActions` opt in automatically. Show a shortcut with
+`ShortcutTooltip` (label + chip on hover/focus, sets `aria-keyshortcuts`) or
+`ShortcutKbd` (the chip alone) from `components/common/shortcut-hint.tsx`,
+never a hand-written string. Rules: `docs/DESIGN.md` §9.
 `PageToolbar` is a labelled region for specialized search/filter/view controls.
 `TabBar`
 uses the same segmented style everywhere: `width="full"` stretches it and
@@ -455,6 +461,15 @@ Popovers (`MultiSelect`, `UniversityPicker`, `TimezonePicker`, `UserPicker`,
 Pass it, or the option list either refuses to scroll or spills past the overlay
 edge.
 
+Searchable pickers expose their real dialog popup through `aria-controls` and
+`aria-haspopup="dialog"`; ArrowUp/ArrowDown opens it, then cmdk owns search and
+option navigation. `Command` supplies a localized search name by default; pass
+`label` for a more specific purpose. Controlled dialogs, confirmation dialogs
+and side panels restore their external opener even without a Radix Trigger;
+an explicit `onCloseAutoFocus` that prevents default retains ownership of focus.
+Question controls associate their group, description and editing status with
+unique labels; score buttons retain their native button/pressed semantics.
+
 `DropdownMenu`, `Select`, and `Popover` detect when their trigger lives inside a
 `Modal`, `SidePanelEditor`, `AlertModal`, or another overlay and keep their
 content in that surface's dismissable layer. Call sites do not need a second
@@ -492,6 +507,12 @@ scroll. See [`docs/tv-screens.md`](../../docs/tv-screens.md) and §11b of
 Badges, meters and charts all take a `tone`. Never hardcode a hex.
 
 ### 3. Layout — `components/layout/*`
+
+`RouteFocus` manages focus after pathname changes and preserves native history
+scroll restoration; query-only changes do not steal focus. `SkipLink` is
+shared by public and app chrome, targeting the sole `main#main-content`
+(`MAIN_CONTENT_ID`). Embedded public content uses a div. Landing section
+anchors focus their headings below the sticky top bar.
 
 `AppSidebar`, `NotificationSidebarTrigger`, `UserMenu`, `AuthGuard` and
 `VerificationBanner` make up the authed shell. The desktop sidebar header owns
@@ -797,3 +818,9 @@ component `.test.tsx` suites in jsdom. Browser-state suites written as `.test.ts
 (nav, privacy removal, URL tabs and the offline queue) are listed explicitly in
 `vitest.config.ts` so they retain their browser environment. Keep browser-only
 coverage in that project when adding suites that use DOM or storage APIs.
+
+Unsaved-change guards (#1180) use the shared `UnsavedChangesProvider` and
+`AlertModal` for links, router push/replace to another route and opted-in browser Back
+(query-only changes on the same route, such as tab sync, pass through). Keep editing
+receives initial focus. Tab close/reload retains native `beforeunload`; in-page
+category switches await `confirmDiscardUnsavedChanges` before changing state.

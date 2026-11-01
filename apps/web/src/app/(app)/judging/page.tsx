@@ -87,8 +87,8 @@ export default function QueuePage() {
   // switching away from those asks first.
   const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
   const { focusMode, changeFocusMode } = useFocusPreference();
-  const selectReviewEntry = (entry: QueueEntry | null) => {
-    if (!confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) return false;
+  const selectReviewEntry = async (entry: QueueEntry | null) => {
+    if (!(await confirmDiscardUnsavedChanges(reviewEditsAtRisk, t))) return false;
     setSelectedReviewEntry(entry);
     return true;
   };
@@ -315,8 +315,8 @@ export default function QueuePage() {
 
   const reviewEntry = reviewTarget;
   const showForm = reviewEntry != null && !windowOpen;
-  const closeReview = () => {
-    if (confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) setSelectedReviewEntry(null);
+  const closeReview = async () => {
+    if (await confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) setSelectedReviewEntry(null);
   };
   const projectPanel = (
     <PresentationPanel
@@ -368,12 +368,14 @@ export default function QueuePage() {
       data-wide
       data-judging-page
     >
+      {/* The fixed workspace has no room for a PageHeader; the destination still needs its h1 (#1176). */}
+      <h1 className="sr-only">{t("judging")}</h1>
       <JudgingTopBar
         rooms={rooms}
         activeRoomId={activeRoomId}
         roomsLoading={roomsLoading}
-        onSelectRoom={(id) => {
-          if (selectReviewEntry(null)) setRoomId(id);
+        onSelectRoom={async (id) => {
+          if (await selectReviewEntry(null)) setRoomId(id);
         }}
         progress={progress.data}
         pace={pace.data}

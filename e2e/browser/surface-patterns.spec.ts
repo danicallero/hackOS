@@ -55,8 +55,9 @@ test("side editor keeps actions visible while its body scrolls and protects dirt
   await trigger.click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Project name", { exact: true }).fill("Unsaved panel");
-  page.once("dialog", (confirm) => confirm.dismiss());
   await page.keyboard.press("Escape");
+  await page.getByRole("alertdialog").getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByRole("alertdialog")).toBeHidden();
   await expect(dialog).toBeVisible();
   const viewport = page.viewportSize()!;
   await page.setViewportSize({ width: viewport.width, height: 550 });
@@ -96,7 +97,9 @@ test("short decisions fit and actionable feedback is available without hover", a
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.getByRole("button", { name: "Show feedback with an action" }).click();
   await expect(page.locator("[data-preview-notice]")).toHaveCount(0);
-  const undo = page.locator("[data-sileo-toast]").getByRole("link", { name: "Undo", exact: true });
+  const undo = page
+    .locator("[data-sileo-toast]")
+    .getByRole("button", { name: "Undo", exact: true });
   await expect(undo).toBeVisible();
   await undo.click();
   await expect(page.locator("[data-preview-notice]")).toBeVisible();

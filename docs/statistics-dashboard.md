@@ -107,7 +107,10 @@ highlights the matching native legend label using a rich-text style; only the
 legend formatter is updated, without replacing series or React state. Bar categories are
 separate overlapping sparse series so each legend item targets its own bar.
 Diagonal decals use thicker stripes, count axes use integer bounds, and a
-screen-reader data list preserves access to every value.
+native “Chart data and filters” disclosure exposes every exact value without hover.
+Its labelled checkboxes mirror the native legend selection and let keyboard users
+filter every category or series, including entries outside the scrolling legend.
+Pointer legend changes update the checkboxes, and theme changes preserve selection.
 
 Application status, confirmation, time-series, and question distributions are
 aggregated by `applications/stats.ts`. Role and mixed-scope shirt-size and food

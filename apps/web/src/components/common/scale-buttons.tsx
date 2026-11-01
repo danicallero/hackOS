@@ -17,6 +17,8 @@ export function ScaleButtons({
   max = 10,
   clearSize,
   className,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
@@ -25,11 +27,18 @@ export function ScaleButtons({
   max?: number;
   clearSize?: "xs" | "sm";
   className?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
 }) {
   const { t } = useLocale();
   const scale = Array.from({ length: max - min + 1 }, (_, index) => min + index);
   return (
-    <ActionGroup className={cn("max-w-full flex-nowrap overflow-x-auto pb-1", className)}>
+    <ActionGroup
+      role={ariaLabelledBy ? "group" : undefined}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
+      className={cn("max-w-full flex-nowrap overflow-x-auto pb-1", className)}
+    >
       {scale.map((score) => (
         <Button
           key={score}

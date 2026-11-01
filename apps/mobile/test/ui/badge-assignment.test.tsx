@@ -88,6 +88,7 @@ const mockPerson = {
 const mockSyncState = {
   serverSnapshot: { people: [mockPerson] },
   lastSync: null,
+  refreshLocal: jest.fn().mockResolvedValue(undefined),
   sync: jest.fn().mockResolvedValue(undefined),
 };
 const mockRouter = { push: jest.fn() };
@@ -395,3 +396,22 @@ it("preserves the secondary movement's date and time editor", async () => {
 jest.mock("@/components/scanner-action-button", () =>
   jest.requireActual("@/components/scanner-action-button.tsx"),
 );
+
+it("keeps presence actions available after local storage while sync is stalled (H24)", async () => {
+  mockPerson.badgeId = "BADGE";
+  mockSyncState.sync.mockImplementation(() => new Promise(() => {}));
+  jest.mocked(enqueueLocalScan).mockResolvedValue("offline-presence");
+  await renderMobile(<PersonOperationsScreen />);
+  await fireEvent.press(await screen.findByRole("button", { name: "personRegisterEntry" }));
+  await waitFor(() => expect(mockSyncState.refreshLocal).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "personRegisterExit" })).not.toBeDisabled(),
+  );
+  await fireEvent.press(screen.getByRole("button", { name: "personRegisterExit" }));
+  await waitFor(() =>
+    expect(enqueueLocalScan).toHaveBeenCalledWith(
+      expect.objectContaining({ direction: "out" }),
+      11,
+    ),
+  );
+});

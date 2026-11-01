@@ -362,7 +362,7 @@ test("searches activities and subscribes from the reminder dialog", async ({ pag
   ]);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: /Remove reminder.*Building with sensors/i }),
+    page.getByRole("button", { name: /^Turn off: Activity: Building with sensors$/ }),
   ).toBeVisible();
   await page.screenshot({
     path: `artifacts/settings/reminders-${test.info().project.name}.png`,

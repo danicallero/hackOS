@@ -503,7 +503,7 @@ async function crossRoomSkipReasons(
   );
   const ineligible = new Set(ineligibleRows.map((r) => r.id));
   // One (room, entry) pair per row: the same shared-queue entry is evaluated
-  // against each room that lists it, excluding that room's own entries.
+  // against each room that lists it, excluding only the entry itself.
   const { rows } = await pool.query(
     `WITH repo_members AS (${REPO_MEMBER_RELATION_SQL}),
           pairs AS (
@@ -520,7 +520,7 @@ async function crossRoomSkipReasons(
        JOIN repo_members s2 ON s2.user_id = s1.user_id
        JOIN queue_entries bqe ON bqe.repo_id = s2.repo_id
                               AND bqe.status IN ('called', 'in_room', 'presenting')
-                              AND bqe.assigned_room_id IS DISTINCT FROM p.room_id
+                              AND bqe.id <> qe.id
        JOIN rooms br ON br.id = bqe.assigned_room_id
        JOIN repos brepo ON brepo.id = bqe.repo_id
       ORDER BY p.room_id, qe.id, bqe.id`,
@@ -1366,7 +1366,6 @@ export async function repoChallenges(repoId: number) {
            JOIN challenges bc ON bc.id = bqe.challenge_id AND bc.is_test_account = false
           WHERE bqe.status IN ('called', 'in_room', 'presenting')
             AND bqe.id <> qe.id
-            AND bqe.assigned_room_id IS DISTINCT FROM qe.assigned_room_id
           ORDER BY (bqe.status = 'called'), bqe.id
           LIMIT 1
        ) busy ON qe.status NOT IN ('completed', 'disqualified')

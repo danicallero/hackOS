@@ -29,7 +29,6 @@ import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
 import { SymbolView } from "@/components/symbol";
 import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
-import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { bumpActivityScanned } from "@/lib/live-activities/sync";
 import { subscribeToManualActivityScan } from "@/lib/manual-activity-scan";
@@ -37,6 +36,7 @@ import { useMeContext } from "@/lib/me-context";
 import { safeBack } from "@/lib/navigation";
 import { queueStatusBarItem, statusShowsLabel } from "@/lib/pane-header-items";
 import { useRouterTabBarBottomInset } from "@/lib/router-tabs-inset";
+import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
@@ -44,7 +44,6 @@ import {
   getActivityState,
   listScannerActivities,
   listScannerPeople,
-  pendingScans,
 } from "@/lib/scanner-db";
 import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
@@ -54,7 +53,11 @@ import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
-import { isAccessibilityTextSize } from "@/theme/dynamic-type";
+import {
+  CHROME_MAX_FONT_SIZE_MULTIPLIER,
+  CHROME_MIN_FONT_SCALE,
+  isAccessibilityTextSize,
+} from "@/theme/dynamic-type";
 import {
   PANE_BAND_INSET,
   PANE_CONTROL_HEIGHT,
@@ -65,6 +68,7 @@ import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens"
 import { SCREEN_TITLE } from "@/theme/screen-title";
 
 interface ActivityScanResult {
+  scanId?: string;
   badgeId: string;
   ticketToken?: string;
   count: number;
@@ -111,7 +115,7 @@ export function ActivityScannerScreen({
   const { me } = useMeContext();
   const ownerUserId = me?.id;
   const syncState = useScannerSync();
-  const { sync: runSync, lastSync } = syncState;
+  const { sync: runSync, refreshLocal, lastSync } = syncState;
   const [localActivity, setLocalActivity] = useState<ScannerActivity | null>(null);
   const [result, setResult] = useState<ActivityScanResult | null>(null);
   const focused = useIsFocused();
@@ -276,6 +280,7 @@ export function ActivityScannerScreen({
           ownerUserId,
         );
         setResult({
+          scanId,
           badgeId,
           ticketToken,
           count: count + 1,
@@ -283,33 +288,41 @@ export function ActivityScannerScreen({
           state: "saved",
           wasRepeat: allowRepeat,
         });
-        void haptic("light");
+        void scanOutcomeHaptic("queued");
         // #966: the staff Live Activity counts distinct people (first scans).
         if (!allowRepeat) void bumpActivityScanned(activityId);
-        await runSync();
-        const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-        if (stored?.status === "failed") {
-          void haptic("error");
-          setResult((current) =>
-            current
-              ? {
-                  ...current,
-                  error: stored.lastError ?? t("presenceScanRejectedBody"),
-                  state: "attention",
-                }
-              : current,
-          );
-        } else if (stored?.status === "acknowledged") {
-          void haptic("success");
-          setResult((current) => (current ? { ...current, state: "confirmed" } : current));
-        }
-        await loadStats();
+        await refreshLocal();
+        void runSync()
+          .then(() => loadStats())
+          .catch(() => undefined);
       } finally {
         setRegistering(false);
       }
     },
-    [activityId, loadStats, ownerUserId, runSync, t],
+    [activityId, loadStats, ownerUserId, refreshLocal, runSync],
   );
+
+  useEffect(() => {
+    if (!result?.scanId || result.state !== "saved") return;
+    const scan = syncState.queue.find((item) => item.id === result.scanId);
+    if (scan?.status === "failed") {
+      void scanOutcomeHaptic("rejected");
+      setResult((current) =>
+        current?.scanId === scan.id
+          ? {
+              ...current,
+              state: "attention",
+              error: scan.lastError ?? t("presenceScanRejectedBody"),
+            }
+          : current,
+      );
+    } else if (scan?.status === "acknowledged") {
+      void scanOutcomeHaptic("accepted");
+      setResult((current) =>
+        current?.scanId === scan.id ? { ...current, state: "confirmed" } : current,
+      );
+    }
+  }, [result, syncState.queue, t]);
 
   const scanned = useCallback(
     async (raw: string) => {
@@ -333,9 +346,11 @@ export function ActivityScannerScreen({
         if (!found.person) {
           setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
           setResult(null);
+          void scanOutcomeHaptic("unknown");
           return;
         }
         const ticketToken = found.person.ticketToken === badgeId ? badgeId : undefined;
+        const localState = await getActivityState(found.person.userId, activityId);
         const state = syncState.serverSnapshot
           ? {
               userId: found.person.userId,
@@ -347,22 +362,23 @@ export function ActivityScannerScreen({
                     candidate.activityId === activityId,
                 )?.count ?? 0,
             }
-          : await getActivityState(found.person.userId, activityId);
+          : localState;
         setError(null);
         setRegistering(false);
-        if (state.count > 0) {
-          void haptic("warning");
+        const count = Math.max(state.count, localState.count);
+        if (count > 0) {
+          void scanOutcomeHaptic("duplicate");
           setResult({
             badgeId,
             ticketToken,
-            count: state.count,
+            count,
             person: found.person,
             state: "repeat_pending",
             wasRepeat: true,
           });
           return;
         }
-        await store(found.person, badgeId, false, state.count, ticketToken);
+        await store(found.person, badgeId, false, count, ticketToken);
       } finally {
         setRegistering(false);
       }
@@ -528,6 +544,9 @@ export function ActivityScannerScreen({
             <Text
               accessibilityRole="header"
               numberOfLines={1}
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              adjustsFontSizeToFit
+              minimumFontScale={CHROME_MIN_FONT_SCALE}
               testID={UI_TEST_IDS.scanner.result}
               style={{ color: colors.label, flex: 1, ...SCREEN_TITLE }}
             >
@@ -559,6 +578,9 @@ export function ActivityScannerScreen({
             <Text
               accessibilityRole="header"
               numberOfLines={1}
+              maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+              adjustsFontSizeToFit
+              minimumFontScale={CHROME_MIN_FONT_SCALE}
               testID={UI_TEST_IDS.scanner.result}
               style={{ color: colors.label, ...SCREEN_TITLE }}
             >
@@ -585,6 +607,9 @@ export function ActivityScannerScreen({
           <Text
             selectable
             numberOfLines={1}
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            adjustsFontSizeToFit
+            minimumFontScale={CHROME_MIN_FONT_SCALE}
             style={{ ...type.callout, color: colors.label, fontWeight: "700", textAlign: "center" }}
           >
             {activityName}
@@ -891,7 +916,7 @@ function ActivityResultPanel({
                       : result.state === "confirmed"
                         ? colors.success
                         : colors.label,
-                    fontSize: 40,
+                    fontSize: type.largeTitle.fontSize,
                     fontVariant: ["tabular-nums"],
                     fontWeight: "600",
                   }}

@@ -154,7 +154,7 @@ function FaqItemBuilder({
               value={item.kind}
               onValueChange={(kind) => update(index, { kind: kind as FaqItemKind })}
             >
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-48" aria-label={t("kindLabel")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

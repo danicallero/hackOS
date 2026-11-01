@@ -135,7 +135,6 @@ export function EditableStatusCell({
         <button
           type="button"
           disabled={saving}
-          aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
           onKeyDown={(event) => {
             if (open && event.key !== "Tab") return;
             handleScheduleGridKeyDown(event);
@@ -144,6 +143,7 @@ export function EditableStatusCell({
           data-schedule-activate="true"
           className="button-interaction hover:bg-muted -mx-1 block rounded px-1 py-0.5 text-left"
         >
+          <span className="sr-only">{t("editScheduleFieldAria", { field: fieldLabel })}: </span>
           <StatusPill item={item} status={status} />
         </button>
       </DropdownMenuTrigger>
@@ -170,10 +170,12 @@ type CellSaveResult = boolean | undefined;
 export function EditableTextCell({
   value,
   placeholder,
+  fieldLabel,
   onSave,
 }: {
   value: string;
   placeholder?: string;
+  fieldLabel: string;
   onSave: (next: string) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
@@ -201,6 +203,7 @@ export function EditableTextCell({
       <button
         type="button"
         onClick={() => setEditing(true)}
+        aria-label={`${t("editScheduleFieldAria", { field: fieldLabel })}: ${value || placeholder || "—"}`}
         onKeyDown={handleScheduleGridKeyDown}
         data-schedule-focusable="true"
         data-schedule-activate="true"
@@ -221,6 +224,7 @@ export function EditableTextCell({
       <Input
         size="sm"
         ref={inputRef}
+        aria-label={fieldLabel}
         value={draft}
         disabled={saving}
         data-schedule-focusable="true"
@@ -257,9 +261,11 @@ export function EditableTextCell({
  */
 export function EditableTimeCell({
   value,
+  fieldLabel,
   onSave,
 }: {
   value: string;
+  fieldLabel: string;
   onSave: (next: string) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
@@ -294,6 +300,7 @@ export function EditableTimeCell({
       <button
         type="button"
         onClick={() => setEditing(true)}
+        aria-label={`${t("editScheduleFieldAria", { field: fieldLabel })}: ${value}`}
         onKeyDown={handleScheduleGridKeyDown}
         data-schedule-focusable="true"
         data-schedule-activate="true"
@@ -311,6 +318,7 @@ export function EditableTimeCell({
       <Input
         size="sm"
         ref={inputRef}
+        aria-label={fieldLabel}
         type="text"
         inputMode="numeric"
         placeholder="HH:MM"
@@ -385,7 +393,8 @@ export function EditableSelectCell({
       <SelectTrigger
         size="sm"
         disabled={saving}
-        aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
+        // A combobox takes no name from its content, so the label repeats the visible value.
+        aria-label={`${t("editScheduleFieldAria", { field: fieldLabel })}: ${value ? labelForOption(value) : emptyLabel}`}
         onKeyDown={(event) => {
           // Once the menu is open, the native select keyboard controls the
           // options. The table-level arrows apply to the closed cell trigger.
@@ -466,11 +475,11 @@ export function EditableAudienceCell({
           type="button"
           disabled={saving}
           className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
-          aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
           onKeyDown={handleScheduleGridKeyDown}
           data-schedule-focusable="true"
           data-schedule-activate="true"
         >
+          <span className="sr-only">{t("editScheduleFieldAria", { field: fieldLabel })}: </span>
           {audienceSummary(audiences, t)}
         </button>
       </PopoverTrigger>
@@ -612,8 +621,8 @@ export function EditablePublishDateCell({
         data-schedule-focusable="true"
         data-schedule-activate="true"
         className="button-interaction hover:bg-muted -mx-1 block w-full truncate rounded px-1 py-0.5 text-left"
-        aria-label={t("editScheduleFieldAria", { field: fieldLabel })}
       >
+        <span className="sr-only">{t("editScheduleFieldAria", { field: fieldLabel })}: </span>
         {value ? formatScheduledDateTime(value, locale) : t("notSet")}
       </button>
     );
@@ -756,6 +765,7 @@ export function EditableOwnersCell({
             value={freeTextName}
             onChange={(e) => setFreeTextName(e.target.value)}
             placeholder={t("ownerFreeTextPlaceholder")}
+            aria-label={t("ownerFreeTextPlaceholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

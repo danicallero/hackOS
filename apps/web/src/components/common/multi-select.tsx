@@ -209,9 +209,15 @@ export function MultiSelect({
                 if (!open) onBlur?.();
               }}
               role="combobox"
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setOpen(true);
+                }
+              }}
               aria-controls={listboxId}
               aria-expanded={open}
-              aria-haspopup="listbox"
+              aria-haspopup="dialog"
               aria-label={ariaLabel}
               aria-labelledby={ariaLabelledBy}
               aria-describedby={ariaDescribedBy}

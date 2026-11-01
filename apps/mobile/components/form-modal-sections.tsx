@@ -1,5 +1,13 @@
 import type { ReactNode, Ref } from "react";
-import { Pressable, ScrollView, Text, TextInput, View, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { SheetModal } from "@/components/app-sheet";
@@ -9,6 +17,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export function FormModalShell({
   children,
@@ -226,6 +235,7 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
   searched: boolean;
   title: string;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
 
   return (
@@ -260,10 +270,15 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
             placeholderTextColor={colors.tertiaryLabel}
             returnKeyType="search"
             value={query}
+            hitSlop={{ top: 4, bottom: 4 }}
             style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize, minHeight: 36 }}
           />
           {query.length > 0 ? (
-            <Pressable accessibilityLabel={t("cancel")} onPress={onClear} hitSlop={8}>
+            <Pressable
+              accessibilityLabel={t("cancel")}
+              onPress={onClear}
+              hitSlop={{ top: 14, bottom: 14, left: 0, right: 28 }}
+            >
               <SymbolView
                 name="xmark.circle.fill"
                 tintColor={colors.tertiaryLabel}
@@ -293,7 +308,7 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
             <View style={{ flex: 1 }}>
               <Text
                 selectable
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{ color: colors.label, fontSize: type.callout.fontSize }}
               >
                 {personCandidateName(candidate)}
@@ -312,7 +327,7 @@ export function FormModalPeoplePicker<T extends FormModalPersonCandidate>({
       ))}
       {!searching && searched && candidates.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}>
             {emptyResultsLabel}
           </Text>
         </View>

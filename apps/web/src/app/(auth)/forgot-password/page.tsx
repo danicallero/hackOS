@@ -4,12 +4,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -33,6 +33,10 @@ function ForgotPasswordForm() {
   const rawNext = params.get("next");
   const { t } = useLocale();
   const [sent, setSent] = useState(false);
+  const confirmationHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (sent) confirmationHeading.current?.focus();
+  }, [sent]);
   const schema = useMemo(() => forgotPasswordSchema(t), [t]);
   const form = useForm<Values>({
     mode: "onBlur",
@@ -69,7 +73,9 @@ function ForgotPasswordForm() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
-          <CardTitle>{t("checkEmail")}</CardTitle>
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+            {t("checkEmail")}
+          </h1>
           <CardDescription>{t("resetEmailSent")}</CardDescription>
         </CardHeader>
         <CardContent className="text-center">
@@ -87,7 +93,7 @@ function ForgotPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("resetPassword")}</CardTitle>
+        <h1 className="type-section-title text-balance">{t("resetPassword")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>

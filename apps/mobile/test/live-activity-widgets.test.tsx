@@ -22,6 +22,7 @@ import type { LiveActivityEnvironment } from "expo-widgets";
 import * as AccreditationWidget from "@/widgets/accreditation-activity";
 import * as AttendeeWidget from "@/widgets/attendee-activity";
 import * as DeadlineWidget from "@/widgets/deadline-activity";
+import { liveActivityKit } from "@/widgets/live-activity-kit";
 import * as QueueWidget from "@/widgets/queue-activity";
 import * as StaffWidget from "@/widgets/staff-activity";
 
@@ -301,14 +302,16 @@ describe("Live Activity layouts (#966)", () => {
     );
     expect(nodes(over.minimal, "Gauge")[0]?.props?.value).toBe(1);
 
-    // Four-digit counts no longer fit the compact slot: the scanned count
-    // alone, the full ratio everywhere else.
+    // Four-digit counts fit neither the compact slot nor the region beside
+    // the camera (#1171): the scanned count alone there, the full ratio on
+    // the Lock Screen.
     const large = StaffActivityLayout(
       activity({ phase: "live", scanned: 1142, accredited: 1380 }),
       environment,
     );
     expect(texts(large.compactTrailing)).toEqual(["1142"]);
-    expect(texts(large.expandedTrailing)).toEqual(["Scanned", "1142", "/1380"]);
+    expect(texts(large.expandedTrailing)).toEqual(["Scanned", "1142"]);
+    expect(texts(large.banner)).toEqual(expect.arrayContaining(["1142", "/1380"]));
   });
 
   it("shows Live in the island without a denominator, the count in the stats", () => {
@@ -591,8 +594,12 @@ describe("New Live Activity kinds (#966)", () => {
     it("shows a known draft as not submitted and an unknown status not at all", () => {
       const draft = DeadlineActivityLayout(deadline(), environment);
       expect(texts(draft.banner)).toEqual(
-        expect.arrayContaining(["Submissions close", "Closes in", "Tidewatch", "Not submitted"]),
+        expect.arrayContaining(["Submissions close", "Closes in", "Not submitted"]),
       );
+      // The project name never appears on the deadline, in any presentation.
+      for (const slot of ["banner", "expandedBottom", "bannerSmall"]) {
+        expect(texts(draft[slot])).not.toContain("Tidewatch");
+      }
       // The window's elapsed share is a real timer bar.
       expect(nodes(draft.banner, "ProgressView")[0]?.props?.timerInterval).toBeTruthy();
 
@@ -769,13 +776,14 @@ describe("New Live Activity kinds (#966)", () => {
       string,
       Record<string, unknown>,
     ][])("%s: hard island caps, whatever the value", (name, layout) => {
-      // The queue's leading slot is wider so a three-digit position fits.
+      // The queue's leading slot is wider so a three-digit position fits; the
+      // attendee and deadline ones so `2h 40m` and "En curso" fit (#1171).
       const leading =
         name.startsWith("attendee") ||
         name.startsWith("deadline") ||
         name.startsWith("future props");
       const caps = {
-        compactLeading: name.startsWith("queue") ? 40 : leading ? 36 : 24,
+        compactLeading: name.startsWith("queue") ? 40 : leading ? 56 : 32,
         compactTrailing: leading ? 24 : 56,
         minimal: 36,
       } as const;
@@ -783,8 +791,16 @@ describe("New Live Activity kinds (#966)", () => {
         const root = layout[slot] as Node;
         const modifiers = root.props?.modifiers as { modifier: string; args: unknown[] }[];
         const frame = modifiers.find((m) => m.modifier === "frame");
-        const box = frame?.args[0] as { maxWidth?: number; width?: number };
-        expect(box.maxWidth ?? box.width).toBe(width);
+        const box = frame?.args[0] as { maxWidth?: number; idealWidth?: number };
+        // Slots only cap: no ideal width, no `fixedSize`, so each hugs its
+        // content and text scales at the cap instead of spilling (#1171).
+        if (name.startsWith("queue") && slot !== "minimal") {
+          expect(box.maxWidth).toBeLessThanOrEqual(width);
+        } else {
+          expect(box.maxWidth).toBe(width);
+        }
+        expect(box.idealWidth).toBeUndefined();
+        expect(modifiers.map((m) => m.modifier)).not.toContain("fixedSize");
         expect(modifiers.map((m) => m.modifier)).toEqual(
           expect.arrayContaining(["minimumScaleFactor", "dynamicTypeSize"]),
         );
@@ -950,19 +966,21 @@ describe("New Live Activity kinds (#966)", () => {
       expect(texts(closing.bannerSmall)).toContain("Not submitted");
     });
 
-    it("keeps red off the iPhone countdowns and bars while closing", () => {
-      const closing = DeadlineActivityLayout(deadline({ phase: "closing" }), environment);
-      for (const slot of ["compactTrailing", "expandedTrailing", "banner"]) {
-        for (const text of nodes(closing[slot], "Text").filter((t) => t.props?.compactCountdown)) {
-          expect(colors(text)).toEqual([]);
+    it("colours every iPhone countdown with the phase hue in each state", () => {
+      const expected = { open: /0A84FF/, closing: /FF453A/, submitted: /30D158/ };
+      for (const [phase, hue] of Object.entries(expected)) {
+        const layout = DeadlineActivityLayout(
+          deadline({
+            phase: phase as "open",
+            submission: phase === "submitted" ? "submitted" : "draft",
+          }),
+          environment,
+        );
+        for (const slot of ["compactLeading", "expandedLeading"]) {
+          const timers = nodes(layout[slot], "Text").filter((t) => t.props?.compactCountdown);
+          expect(timers.length).toBeGreaterThan(0);
+          for (const text of timers) expect(JSON.stringify(colors(text))).toMatch(hue);
         }
-      }
-      for (const bar of nodes(closing.banner, "ProgressView")) {
-        const tints = (bar.props?.modifiers as { modifier: string; args: unknown[] }[])
-          .filter((modifier) => modifier.modifier === "tint")
-          .map((modifier) => modifier.args[0]);
-        expect(tints).toHaveLength(1);
-        expect(JSON.stringify(tints)).not.toMatch(/D70015|FF453A/);
       }
     });
   });
@@ -980,5 +998,229 @@ describe("New Live Activity kinds (#966)", () => {
     expect(
       Object.keys(AccreditationActivityLayout(future("accreditation", {}), environment)).sort(),
     ).toEqual([...SLOTS].sort());
+  });
+});
+
+describe("Dynamic Island safe areas (#1171)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ now: NOW });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const kit = evaluateLayout<never>(liveActivityKit) as unknown as () => {
+    ratioParts: (
+      count: number,
+      total: number | null,
+      maxChars?: number,
+    ) => { count: string; total: string | null };
+    counter: (
+      value: string,
+      size: number,
+      color: string | null,
+      weight?: string,
+      fixed?: boolean,
+    ) => Node;
+    ratioView: (
+      parts: { count: string; total: string | null },
+      options: {
+        size: number;
+        denominatorSize: number;
+        spacing: number;
+        color: string | null;
+        fixed?: boolean;
+        animateTotal?: boolean;
+      },
+    ) => Node;
+  };
+
+  it.each([
+    [42, 180, { count: "42", total: "/180" }],
+    [412, 600, { count: "412", total: "/600" }],
+    [1142, 1380, { count: "1142", total: null }],
+    [1412, null, { count: "1412", total: null }],
+  ] as const)("keeps a ratio only while it fits: %s/%s", (count, total, expected) => {
+    expect(kit().ratioParts(count, total)).toEqual(expected);
+  });
+
+  it("counter fixes its width on the Lock Screen and shrinks inside the island", () => {
+    const names = (fixed: boolean) =>
+      modifiersOf(kit().counter("42", 28, null, "bold", fixed)).map((m) => m.modifier);
+    expect(names(true)).toContain("fixedSize");
+    expect(names(true)).not.toContain("layoutPriority");
+    expect(names(false)).toContain("layoutPriority");
+    expect(names(false)).not.toContain("fixedSize");
+  });
+
+  it("ratioView drops the denominator when absent and animates it on request", () => {
+    const base = { size: 28, denominatorSize: 15, spacing: 1, color: null };
+    const none = kit().ratioView({ count: "42", total: null }, base);
+    expect(none.props?.children).toHaveLength(2);
+    expect((none.props?.children as unknown[])[1]).toBeNull();
+    const total = (animateTotal: boolean) => {
+      const view = kit().ratioView({ count: "42", total: "/180" }, { ...base, animateTotal });
+      return modifiersOf((view.props?.children as Node[])[1]).map((m) => m.modifier);
+    };
+    expect(total(true)).toContain("contentTransition");
+    expect(total(false)).not.toContain("contentTransition");
+  });
+
+  type Modifier = { modifier: string; args: unknown[] };
+  const modifiersOf = (node: Node) => (node.props?.modifiers as Modifier[] | undefined) ?? [];
+  /** Every node below `root` (excluding it) carrying `name`. */
+  function withModifier(root: unknown, name: string): Node[] {
+    const below = (node: unknown): Node[] => {
+      if (node === null || node === undefined || typeof node !== "object") return [];
+      if (Array.isArray(node)) return node.flatMap(below);
+      const current = node as Node;
+      const own = modifiersOf(current).some((m) => m.modifier === name) ? [current] : [];
+      return [...own, ...below(current.props?.children)];
+    };
+    return below((root as Node).props?.children);
+  }
+
+  const states: [string, Record<string, unknown>][] = [
+    ["queue waiting", QueueActivityLayout(queue({ position: 123, etaMinutes: 120 }), environment)],
+    ["queue estimating", QueueActivityLayout(queue({ etaMinutes: null }), environment)],
+    [
+      "queue called",
+      QueueActivityLayout(
+        queue({
+          phase: "called",
+          position: null,
+          etaMinutes: null,
+          roomName: "Aula Magna del edificio central",
+          roomLocation: "Planta 2",
+          calledAt: "2026-02-20T11:58:00.000Z",
+          labels: queueLiveLabels("gl", 3),
+        }),
+        environment,
+      ),
+    ],
+    [
+      "queue in room",
+      QueueActivityLayout(
+        queue({ phase: "in_room", position: null, etaMinutes: null, roomName: "Room B" }),
+        environment,
+      ),
+    ],
+    ["staff upcoming", StaffActivityLayout(activity(), environment)],
+    [
+      "staff live",
+      StaffActivityLayout(
+        activity({
+          phase: "live",
+          scanned: 1142,
+          accredited: 1380,
+          labels: activityLiveLabels("es"),
+        }),
+        environment,
+      ),
+    ],
+    ["attendee upcoming", AttendeeActivityLayout(attendee(), environment)],
+    [
+      "attendee live",
+      AttendeeActivityLayout(
+        attendee({ phase: "live", labels: attendeeActivityLiveLabels("es") }),
+        environment,
+      ),
+    ],
+    ["deadline open", DeadlineActivityLayout(deadline(), environment)],
+    ["deadline closing", DeadlineActivityLayout(deadline({ phase: "closing" }), environment)],
+    [
+      "deadline submitted",
+      DeadlineActivityLayout(
+        deadline({ phase: "submitted", submission: "submitted" }),
+        environment,
+      ),
+    ],
+    [
+      "accreditation",
+      AccreditationActivityLayout(
+        accreditation({ accredited: 1412, eligible: 1600, inside: 1380 }),
+        environment,
+      ),
+    ],
+    [
+      "accreditation no eligible",
+      AccreditationActivityLayout(accreditation({ eligible: 0 }), environment),
+    ],
+  ];
+
+  it.each(states)("%s: nothing in the island refuses to shrink", (_name, layout) => {
+    for (const slot of [
+      "compactLeading",
+      "compactTrailing",
+      "minimal",
+      "expandedLeading",
+      "expandedTrailing",
+    ]) {
+      // A fixed-size view ignores the space it is offered: beside the camera it
+      // grows into the sensor housing, in a compact slot past the island's edge.
+      expect([slot, withModifier(layout[slot], "fixedSize")]).toEqual([slot, []]);
+    }
+  });
+
+  it.each(states)("%s: expanded side regions shrink text at a fixed type size", (_name, layout) => {
+    for (const slot of ["expandedLeading", "expandedTrailing"]) {
+      const names = modifiersOf(layout[slot] as Node).map((m) => m.modifier);
+      expect(names).toEqual(
+        expect.arrayContaining(["padding", "minimumScaleFactor", "dynamicTypeSize"]),
+      );
+    }
+  });
+
+  it("gives the attendee leading slot room for Live and 2h 40m", () => {
+    const cap = (layout: Record<string, unknown>) =>
+      (
+        modifiersOf(layout.compactLeading as Node).find((m) => m.modifier === "frame")?.args[0] as {
+          maxWidth: number;
+        }
+      )?.maxWidth;
+    const labels = attendeeActivityLiveLabels("es");
+    expect(cap(AttendeeActivityLayout(attendee({ labels }), environment))).toBe(56);
+    const live = AttendeeActivityLayout(attendee({ phase: "live", labels }), environment);
+    expect(texts(live.compactLeading)).toEqual([labels.live]);
+    expect(cap(live)).toBe(56);
+    // Leading + trailing stays the staff activity's 80 pt.
+    expect(
+      (
+        modifiersOf(live.compactTrailing as Node).find((m) => m.modifier === "frame")?.args[0] as {
+          maxWidth: number;
+        }
+      )?.maxWidth,
+    ).toBe(24);
+  });
+
+  it("shows only the room in the called Lock Screen, with the count-up under Called", () => {
+    const layout = QueueActivityLayout(
+      queue({
+        phase: "called",
+        position: null,
+        etaMinutes: null,
+        roomName: "Room B",
+        roomLocation: "Floor 1",
+        calledAt: "2026-02-20T11:58:00.000Z",
+      }),
+      environment,
+    );
+    expect(texts(layout.banner)).not.toContain("Floor 1");
+    expect(texts(layout.banner)).toContain("Room B");
+    // Header, hero, track.
+    const children = (layout.banner as Node).props?.children as unknown[];
+    expect(children.filter(Boolean)).toHaveLength(3);
+  });
+
+  it("puts the submitted deadline's time left in the hero row", () => {
+    const layout = DeadlineActivityLayout(
+      deadline({ phase: "submitted", submission: "submitted" }),
+      environment,
+    );
+    const [hero, ...rest] = ((layout.banner as Node).props?.children as unknown[]).filter(Boolean);
+    expect(texts(hero)).toEqual(expect.arrayContaining(["Submitted", "Closes in"]));
+    expect(nodes(hero, "Text").some((text) => text.props?.compactCountdown === "full")).toBe(true);
+    // Hero, title, window bar (no project name).
+    expect(rest).toHaveLength(2);
   });
 });

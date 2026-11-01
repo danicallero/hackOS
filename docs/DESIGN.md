@@ -92,7 +92,7 @@ Each row: value → intent → boundary.
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
 | Meta | 12/16 muted (`type-meta`) | Timestamps, counts, secondary facts. **No artificial tracking** — never add `tracking-*` to shared headings or metadata. |
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
-| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px field radius, pill buttons | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. |
+| Controls | 24 px tiny/icon-xs, 32 px compact, 36 px default, 40 px prominent; 6 px field radius, pill buttons | Tiny is for icon-only remove/inline affordances; compact is for dense staff tables; prominent is for mobile-friendly/primary flows. Use component `size` variants, never one-off height utilities. Multiline `Textarea` uses a separate 64 px minimum token. Every interactive target is at least 24×24 CSS px (`--target-min`, WCAG 2.2 AA 2.5.8): checkboxes and switches paint a smaller box inside a 24 px button, sort headings and column resize handles meet it, and inline links in lists use `min-h-(--target-min)`. When the primary pointer is coarse (`@media (pointer: coarse)`) the four control-height tokens become 44 px (`--target-touch`) and checkboxes, switches and sort headings extend their hit area to 44 px with the `touch-target` class instead of growing, so dense desktop layouts do not change. |
 | Surfaces | 8 px radius, semantic border + background | **No shadow for inline grouping** — border-only. |
 | App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
@@ -103,6 +103,22 @@ capital height (`heading-row`), rather than the different fonts’ line boxes.
 Section icons belong in the title row so descriptions never shift them.
 Schedule grid lines start after the hour-label gutter; labels use the shell
 background to keep the time axis clear in both themes.
+
+Motion, contrast and transparency follow the system preferences, in
+`apps/web/src/app/globals.css` and `apps/web/src/styles/theme.css`:
+
+- `prefers-reduced-motion: reduce` removes every `animate-in`/`animate-out`
+  overlay animation (dialog, sheet, menus, popover, select, tooltip) and the
+  `animate-pulse`/`animate-spin` loops globally, so a primitive needs no
+  `motion-reduce:` variant. A spinner stays visible, only static.
+- `prefers-contrast: more` darkens `--border` and `--muted-foreground` and
+  makes `--ring` the full foreground colour, in both themes.
+- `prefers-reduced-transparency: reduce` makes blurred or translucent surfaces
+  (public top bar, notification trigger, sheet) opaque. The dimming scrim
+  behind modals is not a surface and stays.
+- Tooltips open after 500 ms (instantly for an adjacent one) and on keyboard
+  focus, through the shared `TooltipProvider`; do not set a shorter delay per
+  provider.
 
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
@@ -144,10 +160,14 @@ When adding/updating a primitive, preserve this token-backed visual contract.
 Focus uses `--ring`: ink in light mode, pale blue in dark mode. Never use red
 for ordinary field hover or focus; reserve it for invalid and destructive states.
 
-The edition defaults to **light** for new visitors. `next-themes` retains an
+The edition follows the **system appearance** for new visitors (Apple HIG:
+respect the person's choice of light or dark). `next-themes` retains an
 existing light/dark/system preference. Dark mode uses a near-black canvas and
-charcoal surfaces; fields, cards, buttons and dividers share one subtle border
-token in both themes. Edition blue is reserved for interactive accents. Light
+charcoal surfaces. Decorative cards and dividers use the quiet `--border` token;
+interactive field and unchecked-checkbox boundaries use `--input`, resolved from
+the stronger outline-action boundary (`--button-outline-border`). Keep at least
+3:1 boundary contrast against background, card, shell and secondary surfaces in
+both themes; do not darken decorative framing to meet control requirements. Edition blue is reserved for interactive accents. Light
 mode retains its edition palette. Shared `Input` and `Textarea` controls use
 `--field-foreground`: neutral black text in light mode and the foreground token
 in dark mode. Native date/time
@@ -311,7 +331,7 @@ keys remain stable and map to Phosphor components in `schedule-model.ts`.
    inspect real auth, table/form and judging screens for content-specific fit.
 4. Run `pnpm lint`, web typecheck/tests and the Chromium UI smoke suite.
    `src/lib/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces
-   and status washes, plus a shared field/border token in both themes.
+   and status washes, plus 3:1 field-boundary contrast across adjacent surfaces in both themes.
    Capture screenshots outside the source branch per `docs/ui-testing.md`.
 5. Update this edition section's reference and the web README in the same change.
    Keep event names, dates, logos and copy in their existing configuration/i18n
@@ -330,7 +350,8 @@ from spacing, type, borders and the small number of deliberately elevated
 surfaces — never from stacking rounded rectangles around every region.
 
 - **One canvas, one floating navigation panel.** `SidebarProvider` and
-  `SidebarInset` use the shell tone. The desktop `AppSidebar` uses the
+  `SidebarInset` use the shell tone; the inset is a plain container and the
+  canvas inside it is the page's only `main` (§9). The desktop `AppSidebar` uses the
   `floating` variant: a 12 px rounded, subtly bordered panel with a small
   shadow. The content canvas has no outer border, shadow or radius. Do not
   turn the page area into a second card beside the sidebar.
@@ -369,7 +390,9 @@ challenge pages, terms/privacy, certificate verification, company-tag
 landing, sign-in/sign-up flows) shares one `PublicTopBar`
 (`components/layout/public-top-bar.tsx`). Do not hand-roll a `<header>`.
 
-- **Sticky, 64 px, hairline bottom border.** `sticky top-0` with a blurred
+- **Sticky, at least 64 px, hairline bottom border.** The header wraps at narrow
+  widths and enlarged text, and publishes its measured height for unobscured
+  skip/section targets. `sticky top-0` with a blurred
   `background` wash so content scrolls beneath it; it never hides on scroll.
   Pages that own the viewport (certificate PDF) keep it as a fixed row.
 - **Wordmark leading, controls trailing.** `Brand` at the default size, always
@@ -495,7 +518,9 @@ id) → one `primaryAction` + optional `secondaryActions`.
   the actions on their own right-aligned row as soon as the title row wraps.
 - **The page carries its own name.** There is no global workspace title bar;
   every destination has one `h1` in its `PageHeader`. Navigation communicates
-  the containing workspace, so never add a second, competing page title.
+  the containing workspace, so never add a second, competing page title. A
+  fixed operational workspace with no room for a header (Judging) renders its
+  `h1` visually hidden instead (§9).
 - **Persistent utilities belong in the navigation footer.** Account and
   appearance controls stay together below navigation; language is a quick
   setting in the account menu. The top bar is reserved for orientation and the
@@ -587,12 +612,12 @@ build a universal page component with domain flags.
 | --- | --- |
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
-| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. |
-| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. |
+| `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
+| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowOnMobile` gives the search its own row below `sm` when the actions are wide (Schedule). |
 | `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
-| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. |
+| `FormActions` | Actual save status first, secondary actions then Save last; one pending spinner, owned by the submit button. Save is the scope's ⌘S target (§9). |
 | `Modal` / `AlertModal` / `SidePanelEditor` | Shared geometry and focus/close behavior; content-driven size. Domain dirty/pending guards remain with the editor. |
 
 Users and application responses consume `ListToolbar`; the generic `DataTable`
@@ -734,6 +759,12 @@ Keep actual multi-record objects independently bounded when ownership matters.
 | Side editor / fixed operational pane | Fixed footer outside the scrolling body; no nested sticky bar. |
 | Long, frequently extended operational table | Keep its existing compact trailing sticky create action (Schedule/Rooms). Do not add a floating create button to every short/paginated catalogue. |
 | Immediate cell edit / autosave | Show saving/saved/error at the cell or its shared scope, not a page-level claim that unrelated data is saved. |
+
+The first-visit cookie notice floats over the viewport, so it publishes its
+footprint as `--cookie-notice-inset` on `<html>`. The page reserves that space
+(`body` bottom padding), and anything sticky or floating at the bottom edge
+adds it to its offset (`.form-action-footer`, Schedule's create button), so a
+primary action is never hidden behind the notice at any width (#1179).
 
 `FormActions` places the scope's current save status at the leading edge;
 secondary actions (Cancel/Reset) and the primary Save follow at the trailing
@@ -909,7 +940,10 @@ Tables and lists:
 - Bulk actions appear only after selection and state what set they affect.
 - Wide operational tables preserve readable column widths and scroll
   horizontally instead of compressing every field into an overlapping grid.
-  Long free-text cells truncate with a native title, while row actions stay in
+  Long free-text cells may truncate to preserve dense table geometry. When a
+  cell's content overflows, the cell becomes keyboard-focusable and opens the
+  full value on focus or press; its accessible name remains the visible cell
+  text. Use wrapping or clamping when the column allows it. Row actions stay in
   a stable trailing column. Primary create actions for a table align to that
   trailing edge, close to the side-panel origin.
 - User tables stay text-first when no profile image exists; do not synthesize
@@ -938,7 +972,9 @@ Tables and lists:
 - A page whose primary action creates rows in a long table keeps that action
   reachable from anywhere in the scroll (a sticky button over the table's
   bottom corner), instead of only in the page header where a scrolled-down
-  user can't see it.
+  user can't see it. The table block keeps bottom padding so that button never
+  rests on the last rows, and a table that scrolls sideways at narrow widths
+  uses `.table-scroll-cue` (edge shadows toward the side it can still scroll).
 
 Forms:
 
@@ -1027,6 +1063,26 @@ product bug, not a styling choice.**
 
 - Keyboard: every interactive element reachable and operable; visible focus on
   buttons, rows, tabs, menus, dialogs; dialogs return focus to their trigger.
+- Landmarks: every page has exactly one `<main id="main-content" tabIndex={-1}>`,
+  owned by its shell (`AppShell`, `PublicContentShell`, the public pages).
+  `SidebarInset` and anything embedded in a shell are plain containers, never a
+  second `main`. Both shells start with `SkipLink` (`skipToContent`), the first
+  Tab stop, which moves focus to that main. The app sidebar is the
+  `navigationPrimary` `nav`; the cookie notice is a labelled `aside`.
+- Headings: one `h1` per destination and no skipped levels. A fixed workspace
+  without room for a `PageHeader` (Judging) keeps a visually hidden `h1`; an
+  open section that its tab already names (Profile) keeps a visually hidden
+  `h2` so the `h3`s inside it stay in order.
+- Tabs: the active trigger's panel is mounted in a `TabsContent`, so
+  `aria-controls` resolves; render tab bodies inside it, not as siblings of
+  `Tabs`. Table header cells always have a name — an action column gets a
+  visually hidden `actionsColumn`.
+- Focus after navigation: forward route changes move focus to the main
+  (`RouteFocus`); Back/Forward keep their scroll position. Same-page heading
+  targets accept programmatic focus, clear sticky chrome, and show a focus
+  indicator; static headings stay out of the Tab sequence. In scrollable
+  sidebar lists, keep the whole focus ring inside the row so overflow cannot
+  clip it.
 - Labels: all inputs labelled independently of placeholders; helper/error text
   associated via `aria-describedby`.
 - Announcements: critical form errors and sync failures are announced; busy
@@ -1034,13 +1090,62 @@ product bug, not a styling choice.**
 - Never rely on colour alone for queue, decision, connection, or scan state.
 - Mobile text follows Dynamic Type at every size, including AX1–AX5: content
   text wraps and its container grows (no fixed heights or truncation around
-  it). Only fixed chrome — the tab bar, React Native titles inside native
+  it). Primary row labels and choices release single-line limits when
+  `isAccessibilityTextSize(fontScale)`; secondary metadata may remain one line.
+  Only fixed chrome — the tab bar, React Native titles inside native
   navigation-bar items, overlays on the live camera — uses the shared cap in
   `apps/mobile/theme/dynamic-type.ts`, and capped single-line labels shrink to
   fit rather than truncate. Side-by-side label/value rows (`InfoRow`) stack
   the value under its label at accessibility sizes.
 - Charts expose exact values outside hover-only tooltips (table or text
   alternative for every chart).
+- Pointer targets are at least 24×24 CSS px everywhere and 44 px on coarse
+  pointers (§2 Controls); `axe` `target-size` must report nothing on the
+  dense tables (`/schedule`, `/users`).
+- Honour `prefers-reduced-motion`, `prefers-contrast: more` and
+  `prefers-reduced-transparency` through the global rules in §2, not per
+  component; verify with Chrome's media emulation in both themes.
+
+### Keyboard shortcuts (web, #1182)
+
+A deliberately small set, owned by `apps/web/src/lib/shortcuts.ts` and handled
+once by `CommandPalette` (mounted in `AppShell`). "⌘" means ⌘ on Apple
+platforms and Ctrl elsewhere; hints render in the matching form.
+
+| Keys | Action | Fires while typing? |
+| --- | --- | --- |
+| ⌘K | Open/close quick search (also the sidebar's search button under the brand): the caller's sidebar destinations (`lib/nav.ts`, same capability/association predicate as the sidebar), grouped by personal area and workspace, plus the views inside them and the sections, fields and actions within a view (`NavItem.subItems`, each with its own gate). A result opens `?tab=<view>&go=<message key of the label>`; `QuickArrival` finds that label on the page, scrolls and focuses it, and `do=click` also activates its row's button (e.g. Change password). To make something findable, add a `deep()` entry in `lib/nav.ts` using the label's existing message key. | Yes |
+| ⌘S | Submit the `FormActions` save owner that holds focus when it has unsaved changes (a focused clean editor still claims the key so the browser's "Save page" never opens). With focus outside any form, the only dirty owner in the active layer is saved; several dirty owners → the key does nothing. | Yes |
+| / | Focus the first list `SearchField` in the active layer (the open modal, otherwise the page). Without one, the browser keeps the key. | No |
+| ⌘B | Toggle the sidebar (`ui/sidebar.tsx`). | Yes |
+
+Rules:
+
+- Never claim a browser or screen-reader command: ⌘F stays the browser's find,
+  and ⌘L/⌘T/⌘W/⌘R/⌘P/⌘D are off limits. Extra modifiers (⌥, ⌘⇧, Ctrl on a
+  Mac) never match, and IME composition is ignored.
+- Single keys never fire while focus is in an input, textarea, select,
+  contenteditable or textbox/combobox role; only chorded keys may.
+- Save goes through the form's own submit (`requestSubmit`), so validation,
+  pending state and the unsaved-changes guard are unchanged; a pending or
+  disabled Save is never pressed.
+- Every control with a shortcut shows it on hover and keyboard focus, through
+  `components/common/shortcut-hint.tsx` (never a hand-written string):
+  `ShortcutTooltip` wraps the control in the shared `ui/tooltip` and sets its
+  `aria-keyshortcuts` from the same registry entry. A control with a label
+  tooltip (icon-only or collapsed: the sidebar toggle, the rail's search
+  button) reads "Toggle sidebar ⌘B"; a control whose visible text names it
+  (`FormActions` Save) shows just the chip. Shortcuts render as the
+  `ShortcutKbd` chip everywhere: tooltips, the palette footer, inline hints.
+- A visible hint replaces the tooltip rather than repeating it: the expanded
+  sidebar search button shows its chip inline (tooltip only in the icon
+  rail), and an empty `SearchField` shows `/` inside the field on fine
+  pointers, since a tooltip would cover the list while typing.
+- No workspace-switching shortcuts: the natural ⌘1–⌘9 switch browser tabs,
+  and ⌥digits type characters on Apple layouts. Quick search covers
+  jumping between workspaces.
+- Dialogs keep Radix's Return/Esc behavior; do not add per-dialog key handlers.
+- Add a shortcut only to the registry, with a test and a row here.
 
 ## 10. Copy and localization
 
@@ -1123,8 +1228,9 @@ workspaces with per-device persistence; conventions in
 - File organisation: when a route outgrows a single `page.tsx`, follow the
   "Page structure" rule in `apps/web/README.md` — split by independently
   meaningful parts (tabs, modals, decision logic), never by line count alone.
-- Landing-derived, light-first edition identity; light and dark both fully supported
-  via `next-themes` — every screen must read correctly in both.
+- Landing-derived edition identity; light and dark both fully supported via
+  `next-themes`, following the system appearance by default — every screen must
+  read correctly in both.
 - Navigation: `lib/nav.ts` (`PERSONAL_NAV` + `WORKSPACES`) rendered by
   `AppSidebar`. Workspaces are collapsible groups; the expanded workspace
   persists per device (`localStorage` `hackos-last-workspace`); the icon rail
@@ -1193,9 +1299,14 @@ architecture: [`mobile.md`](./mobile.md).**
   the 6/10 UIKit half-steps), `radius` (`control` 12, `container` 14, `sheet` 22,
   `full` capsule, always with `borderCurve: "continuous"`), `type` (Apple text
   styles, plus `compact` 14) and `motion` (durations and springs) are in
-  `theme/tokens.ts`. Text is `AppText` (or `type.*` spread into a style); screens
+  `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
+  spread into a style); screens
   do not write font sizes, hex colours or radii. Android colours resolve at read
-  time, so never freeze a `colors.*` value at module scope.
+  time, so never freeze a `colors.*` value at module scope. Use
+  `secondaryLabel` for readable supporting text; reserve `tertiaryLabel` for
+  placeholders, disabled content and non-text decoration. Semantic label tokens
+  adapt to Increase Contrast, and readable text on tinted surfaces uses that
+  surface's matching `on…Surface` foreground token.
 - **One pressed vocabulary.** `PressableFeedback` (`feedback`: `row` highlight for
   list cells, `opacity` for text/icon buttons, `scale` for filled buttons and
   cards, `none` when the control draws its own) replaces ad-hoc
@@ -1212,7 +1323,9 @@ architecture: [`mobile.md`](./mobile.md).**
   colours, `fontSize` or `borderRadius` literals beyond
   `scripts/mobile-token-baseline.json`. Migrating a file lowers its count; run
   `node scripts/check-mobile-tokens.mjs --update` to record it. Migrate a screen
-  when you touch it.
+  when you touch it. The font-size budget is zero (#1165); the guard checks
+  numeric values in conditional branches too and rejects weights 800/900.
+  Avatar initials sized proportionally to their artwork remain geometry-derived.
 - **Design for width, not for a device.** Layouts answer to the window the app has
   now (compact < 600 dp, medium < 840 dp, expanded from 840 dp), never to a
   manufacturer, model or fold posture. Bound reading content (720 dp on smaller
@@ -1358,7 +1471,10 @@ HIG](https://developer.apple.com/design/human-interface-guidelines/live-activiti
   top slot to stay inside the expanded height budget (4 pt row gaps and bottom
   inset); other
   kinds use 8 pt row gaps and bottom inset. Keep controls clear of the curved
-  corners. Preserve the relative placement of changing values
+  corners. Leading and trailing sit beside the TrueDepth camera: their
+  content must shrink to the region the system gives it (never `fixedSize`),
+  or it grows into the sensor housing; a ratio too wide for it shows only the
+  count. Preserve the relative placement of changing values
   across compact, expanded and Lock Screen presentations.
 - System typography: 17 pt semibold Lock Screen titles, 15 pt semibold
   expanded titles, 28 pt primary metrics, 17 pt secondary values, 12 pt medium

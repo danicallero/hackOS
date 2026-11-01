@@ -1,15 +1,11 @@
 import { Gauge, HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  allowsTightening,
-  contentTransition,
-  dynamicTypeSize,
   fixedSize,
   font,
   frame,
   gaugeStyle,
   lineLimit,
   monospacedDigit,
-  padding,
   scaleEffect,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
@@ -33,41 +29,22 @@ export const AccreditationActivityLayout = withLiveActivityKit(
   (props: AccreditationLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { caption, colorMods, secondary } = kit;
+    const { caption, counter: number, islandSide, secondary } = kit;
     const capped = kit.capped();
     // A newer, incompatible props shape degrades to a bare symbol.
     if (props.v !== 1 || !props.labels) {
-      const title = (
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-          {typeof props.accredited === "number" ? String(props.accredited) : ""}
-        </Text>
-      );
-      const symbol = <Image systemName="person.badge.key.fill" color="#0A84FF" size={15} />;
-      return capped({
-        banner: (
-          <VStack
-            alignment="leading"
-            modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-          >
-            {title}
-          </VStack>
+      return capped(
+        kit.fallback(
+          typeof props.accredited === "number" ? String(props.accredited) : "",
+          "person.badge.key.fill",
         ),
-        bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
-        compactLeading: symbol,
-        compactTrailing: <Text> </Text>,
-        minimal: symbol,
-        expandedLeading: symbol,
-        expandedTrailing: <Text> </Text>,
-        expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-      });
+      );
     }
     const labels = props.labels;
     // Same colour logic as the staff activity.
-    const islandAccent = "#0A84FF";
-    const neutral = "#8E8E93";
-    const bannerAccent = environment.isLuminanceReduced
-      ? null
-      : ({ dynamic: { light: "#007AFF", dark: "#0A84FF" } } as unknown as string);
+    const { islandAccent } = kit;
+    const { neutral } = kit;
+    const bannerAccent = kit.bannerAccent(environment.isLuminanceReduced);
     const symbol = "person.badge.key.fill";
 
     const count = (value: unknown) =>
@@ -80,44 +57,16 @@ export const AccreditationActivityLayout = withLiveActivityKit(
     const endsAt = new Date(props.endsAt);
     const validEnd = Number.isFinite(endsAt.getTime());
 
-    const number = (value: string, size: number, color: string | null, weight = "bold") => (
-      <Text
-        modifiers={[
-          font({ size, weight: weight as "bold" | "semibold" }),
-          monospacedDigit(),
-          contentTransition("numericText"),
-          lineLimit(1),
-          allowsTightening(true),
-          fixedSize({ horizontal: true }),
-          ...colorMods(color),
-        ]}
-      >
-        {value}
-      </Text>
-    );
-
     // "412 /600": the hero count with its denominator, smaller and secondary.
-    const accreditedValue = (size: number, color: string | null) => (
-      <HStack
-        alignment="firstTextBaseline"
-        spacing={2}
-        modifiers={[fixedSize({ horizontal: true })]}
-      >
-        {number(String(accredited), size, color)}
-        {eligible !== null ? (
-          <Text
-            modifiers={[
-              font({ size: Math.round(size * 0.55), weight: "semibold" }),
-              monospacedDigit(),
-              secondary,
-              lineLimit(1),
-            ]}
-          >
-            {`/${eligible}`}
-          </Text>
-        ) : null}
-      </HStack>
-    );
+    // Beside the camera a ratio past seven characters (`1412/1600`) keeps
+    // only the count; the bar below still shows the share.
+    const accreditedValue = (size: number, color: string | null, fixed = true) =>
+      kit.ratioView(
+        fixed
+          ? { count: String(accredited), total: eligible !== null ? `/${eligible}` : null }
+          : kit.ratioParts(accredited, eligible),
+        { size, denominatorSize: Math.round(size * 0.55), spacing: 2, color, fixed },
+      );
     const stat = (
       label: string | undefined,
       value: ReturnType<typeof number>,
@@ -149,8 +98,13 @@ export const AccreditationActivityLayout = withLiveActivityKit(
         </HStack>
       ) : null;
 
-    const compactLeading = <Image systemName={symbol} color={islandAccent} size={15} />;
-    const compactTrailing = number(String(accredited), 12, islandAccent, "semibold");
+    // `person.badge.key` is clipped at its own bounds in the compact slot (the
+    // key was cut, or vanished with a wider frame), so the compact island uses
+    // the checkmark variant, which draws inside them.
+    const compactLeading = (
+      <Image systemName="person.fill.checkmark" color={islandAccent} size={15} />
+    );
+    const compactTrailing = number(String(accredited), 12, islandAccent, "semibold", false);
 
     // Minimal: the accredited share as a ring.
     const minimal =
@@ -165,18 +119,17 @@ export const AccreditationActivityLayout = withLiveActivityKit(
           ]}
         />
       ) : (
-        number(String(accredited), 13, islandAccent, "semibold")
+        number(String(accredited), 13, islandAccent, "semibold", false)
       );
 
-    const expandedLeading = (
-      <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
-        {scanButton(islandAccent) ?? <Image systemName={symbol} color={islandAccent} size={24} />}
-      </VStack>
+    const expandedLeading = islandSide(
+      scanButton(islandAccent) ?? <Image systemName={symbol} color={islandAccent} size={24} />,
+      "leading",
+      6,
     );
-    const expandedTrailing = (
-      <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-        {stat(labels.accredited, accreditedValue(28, islandAccent), "trailing")}
-      </VStack>
+    const expandedTrailing = islandSide(
+      stat(labels.accredited, accreditedValue(28, islandAccent, false), "trailing"),
+      "trailing",
     );
     const secondaryStats = (
       <HStack alignment="top" spacing={12}>
@@ -187,14 +140,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
       </HStack>
     );
     const expandedBottom = (
-      <VStack
-        alignment="leading"
-        spacing={4}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 8, bottom: 4 }),
-        ]}
-      >
+      <VStack alignment="leading" spacing={4} modifiers={kit.bottomMods(4)}>
         <HStack spacing={8}>
           <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
             {labels.title}
@@ -222,11 +168,7 @@ export const AccreditationActivityLayout = withLiveActivityKit(
 
     // H22 / #966: one primary metric; pace and occupancy stay secondary.
     const banner = (
-      <VStack
-        alignment="leading"
-        spacing={10}
-        modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-      >
+      <VStack alignment="leading" spacing={10} modifiers={kit.bannerMods}>
         <HStack spacing={8}>
           <Image systemName={symbol} color={bannerAccent ?? neutral} size={17} />
           <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
@@ -250,21 +192,8 @@ export const AccreditationActivityLayout = withLiveActivityKit(
     // tints the glyph only; Always-On drops it.
     const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
     const bannerSmall = (
-      <VStack
-        alignment="leading"
-        spacing={2}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 10, vertical: 8 }),
-          dynamicTypeSize({ max: "xLarge" }),
-        ]}
-      >
-        <HStack spacing={5}>
-          <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-            {labels.title}
-          </Text>
-        </HStack>
+      <VStack alignment="leading" spacing={2} modifiers={kit.watchMods}>
+        {kit.watchHeader(symbol, watchGlyph, labels.title)}
         {accreditedValue(26, null)}
         {caption(labels.accredited)}
       </VStack>

@@ -1,6 +1,13 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import {
+  Pressable,
+  ScrollView,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -34,6 +41,8 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
+import { type } from "@/theme/tokens";
 
 const LOGO_SIZE = 40;
 
@@ -156,7 +165,10 @@ export function StandsScreen() {
     >
       <StandNfcModal stand={active} onCancel={cancel} />
       {nfcStatus === "unsupported" ? (
-        <Text selectable style={{ color: colors.secondaryLabel, fontSize: 15, lineHeight: 20 }}>
+        <Text
+          selectable
+          style={{ color: colors.secondaryLabel, fontSize: type.subhead.fontSize, lineHeight: 20 }}
+        >
           {t("standsNfcUnavailable")}
         </Text>
       ) : null}
@@ -180,7 +192,9 @@ export function StandsScreen() {
                 opacity: pressed ? 0.7 : 1,
               })}
             >
-              <Text style={{ color: colors.accent, fontSize: 15, fontWeight: "600" }}>
+              <Text
+                style={{ color: colors.accent, fontSize: type.subhead.fontSize, fontWeight: "600" }}
+              >
                 {t("standsLinkAnother")}
               </Text>
             </Pressable>
@@ -260,6 +274,7 @@ function StandRow({
   onOpen: () => void;
   onLink: () => void;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   // The name and the chevron are two targets around the NFC button; both open
   // the company, so the whole row highlights while either is held.
@@ -297,10 +312,16 @@ function StandRow({
       >
         <StandLogo stand={stand} size={LOGO_SIZE} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}>
+          <Text
+            numberOfLines={accessibilityText ? undefined : 1}
+            style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+          >
             {stand.name}
           </Text>
-          <Text numberOfLines={1} style={{ color: colors.secondaryLabel, fontSize: 14 }}>
+          <Text
+            numberOfLines={1}
+            style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}
+          >
             {counts}
             {stand.scannable ? null : ` · ${t("standsNotScannable")}`}
           </Text>

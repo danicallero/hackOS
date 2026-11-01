@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   useColorScheme,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -35,6 +36,7 @@ import { useMeContext } from "@/lib/me-context";
 import { isPadIdiom } from "@/lib/tabs";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
 interface TeamMember {
@@ -208,6 +210,7 @@ function useMemberCandidateSearch(t: ReturnType<typeof useLocale>["t"], enabled 
 
 /** H29/H31 operator team detail: the participant's own queue card, with the extra context an operator needs. */
 export function TeamOperationsScreen() {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const listColumn = useOperatorListColumn();
   useColorScheme();
   const { entryId, roomId } = useLocalSearchParams<{ entryId: string; roomId: string }>();
@@ -543,7 +546,7 @@ export function TeamOperationsScreen() {
                 accessible={false}
               />
               <Text
-                style={{ ...type.body, color: colors.onSuccessSurface, flex: 1, fontWeight: "800" }}
+                style={{ ...type.body, color: colors.onSuccessSurface, flex: 1, fontWeight: "700" }}
               >
                 {t("teamDetailAtDoor", { room: room.name })}
               </Text>
@@ -579,7 +582,7 @@ export function TeamOperationsScreen() {
                   <View style={{ flex: 1, justifyContent: "center" }}>
                     <Text
                       selectable
-                      numberOfLines={1}
+                      numberOfLines={accessibilityText ? undefined : 1}
                       style={{ ...type.body, color: colors.label }}
                     >
                       {memberDisplayName(member)}
@@ -622,7 +625,9 @@ export function TeamOperationsScreen() {
                     accessibilityLabel={t("teamDetailMemberSearch")}
                     accessibilityRole="button"
                     onPress={() => void memberSearch.search()}
-                    hitSlop={8}
+                    // 15pt glyph in a 36pt field: stretch the touch box to 44x44 leftwards
+                    // and vertically so it never overlaps the text input.
+                    hitSlop={{ top: 15, bottom: 14, left: 29, right: 0 }}
                   >
                     <SymbolView name="magnifyingglass" tintColor={colors.tertiaryLabel} size={15} />
                   </Pressable>
@@ -640,6 +645,7 @@ export function TeamOperationsScreen() {
                     placeholderTextColor={colors.tertiaryLabel}
                     returnKeyType="search"
                     value={memberSearch.query}
+                    hitSlop={{ top: 4, bottom: 4 }}
                     style={{
                       ...type.body,
                       color: colors.label,
@@ -657,7 +663,8 @@ export function TeamOperationsScreen() {
                         memberSearch.setError(null);
                         memberSearch.setSearched(false);
                       }}
-                      hitSlop={8}
+                      // 16pt glyph at the field's trailing edge: stretch to 44x44 inward-out.
+                      hitSlop={{ top: 14, bottom: 14, left: 0, right: 28 }}
                     >
                       <SymbolView
                         name="xmark.circle.fill"
@@ -695,7 +702,7 @@ export function TeamOperationsScreen() {
                       <View style={{ flex: 1 }}>
                         <Text
                           selectable
-                          numberOfLines={1}
+                          numberOfLines={accessibilityText ? undefined : 1}
                           style={{ ...type.body, color: colors.label }}
                         >
                           {memberCandidateName(candidate)}
@@ -866,7 +873,10 @@ export function TeamOperationsScreen() {
                           }}
                         >
                           <View style={{ flex: 1 }}>
-                            <Text numberOfLines={1} style={{ ...type.body, color: colors.label }}>
+                            <Text
+                              numberOfLines={accessibilityText ? undefined : 1}
+                              style={{ ...type.body, color: colors.label }}
+                            >
                               {ch.title}
                             </Text>
                           </View>
@@ -1063,6 +1073,7 @@ function QueueTabBar({
   t: ReturnType<typeof useLocale>["t"];
   scrollRef: React.RefObject<ScrollView | null>;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View style={{ borderBottomWidth: 0.5, borderBottomColor: colors.separator }}>
       <ScrollView
@@ -1091,7 +1102,7 @@ function QueueTabBar({
               }}
             >
               <Text
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{
                   ...type.subhead,
                   color: selected ? colors.accent : colors.secondaryLabel,
@@ -1102,7 +1113,7 @@ function QueueTabBar({
                 {qc.title}
               </Text>
               {qc.room_name ? (
-                <Text numberOfLines={1} style={{ ...type.caption, color: colors.tertiaryLabel }}>
+                <Text numberOfLines={1} style={{ ...type.caption, color: colors.secondaryLabel }}>
                   {qc.room_name}
                 </Text>
               ) : null}
@@ -1308,7 +1319,7 @@ function QueueDetailView({
                     {new Date(row.created_at).toLocaleString()}
                   </Text>
                   {row.reason ? (
-                    <Text style={{ ...type.footnote, color: colors.tertiaryLabel }}>
+                    <Text style={{ ...type.footnote, color: colors.secondaryLabel }}>
                       {row.reason}
                     </Text>
                   ) : null}

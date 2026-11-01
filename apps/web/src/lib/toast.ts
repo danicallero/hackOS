@@ -56,12 +56,12 @@ type NativePromiseOptions<T> = {
   position?: SileoPosition;
 };
 
-const DEFAULT_DURATIONS: Record<ToastState, number> = {
+const DEFAULT_DURATIONS: Record<ToastState, number | null> = {
   success: 2_400,
-  error: 5_000,
+  error: null,
   warning: 3_600,
   info: 2_000,
-  action: 6_000,
+  action: null,
 };
 
 const DEFAULT_POSITION: SileoPosition = "top-right";
@@ -121,7 +121,7 @@ function dedupeKey(method: ToastState, options: SileoOptions): string | undefine
   // Repeated plain feedback is one piece of information. Rich/action toasts
   // stay independent so an Undo or contextual explanation is never hidden.
   if (
-    options.duration === null ||
+    (options.duration === null && method !== "error") ||
     options.button ||
     options.icon ||
     typeof options.title !== "string" ||
@@ -220,7 +220,7 @@ function withButton(options: ToastOptions): Omit<SileoOptions, "type"> {
       ? {
           // Actions must be discoverable without hover, including on touch.
           autopilot: rest.autopilot ?? { expand: 150, collapse: 60_000 },
-          duration: rest.duration === undefined ? 8_000 : rest.duration,
+          duration: rest.duration === undefined ? null : rest.duration,
           button: {
             title: action.label,
             onClick: action.onClick,
@@ -253,11 +253,13 @@ function normalizeMessage(
 function normalizePromiseContent(
   content: ToastPromiseContent,
   id: string,
-  defaultDuration?: number,
+  defaultDuration?: number | null,
   state: ToastState | "loading" = "loading",
 ): SileoOptionsWithId {
   const options = { id, ...withButton(content) };
   const spilled = spillLongTitle(state, options, content.compactTitle);
+  if ((state === "error" || state === "action") && content.duration === undefined)
+    options.duration = null;
   const hasExpandableContent = Boolean(options.description) || Boolean(options.button);
   if (hasExpandableContent && options.autopilot === undefined && !spilled)
     options.autopilot = false;
@@ -307,6 +309,7 @@ function show(
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
   const spilled = spillLongTitle(method, sileoOptions, options?.compactTitle);
+  if (method === "error" && options?.duration === undefined) sileoOptions.duration = null;
   const key = dedupeKey(method, sileoOptions);
   const existingId = findDedupedToast(key);
   if (existingId) return existingId;
@@ -338,6 +341,7 @@ function showAction(message: ToastMessage, options?: ToastOptions) {
   const id = nextToastId();
   const sileoOptions = normalizeMessage(message, options, id);
   const spilled = spillLongTitle("action", sileoOptions, options?.compactTitle);
+  if (options?.duration === undefined) sileoOptions.duration = null;
   if (sileoOptions.autopilot === undefined && !spilled) sileoOptions.autopilot = false;
   if (sileoOptions.duration === undefined) sileoOptions.duration = DEFAULT_DURATIONS.action;
   const result = sileo.action(sileoOptions);

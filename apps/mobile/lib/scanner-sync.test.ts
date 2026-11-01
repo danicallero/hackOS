@@ -126,6 +126,27 @@ describe("synchronizeScanner", () => {
     jest.restoreAllMocks();
   });
 
+  it("queues a stalled badge assignment with its original idempotency key (H22)", async () => {
+    jest.useFakeTimers();
+    mockApiFetch.mockImplementation(() => new Promise(() => {}));
+    const payload: ScanPayload = {
+      kind: "accreditation_user",
+      userId: 7,
+      badgeId: "B-7",
+      method: "manual",
+    };
+    try {
+      const submission = submitScannerMutation(payload, OWNER_USER_ID);
+      await jest.advanceTimersByTimeAsync(5_000);
+      const result = await submission;
+      expect(result.state).toBe("queued");
+      expect(mockEnqueueLocalScan).toHaveBeenCalledWith(payload, OWNER_USER_ID, result.scanId);
+      expect(mockApiFetch.mock.calls[0][1].headers["idempotency-key"]).toBe(result.scanId);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("sends an online badge assignment without touching SQLite first", async () => {
     const payload: ScanPayload = {
       kind: "accreditation_user",

@@ -733,6 +733,7 @@ function PendingOwnersField({
             value={freeTextName}
             onChange={(e) => setFreeTextName(e.target.value)}
             placeholder={t("ownerFreeTextPlaceholder")}
+            aria-label={t("ownerFreeTextPlaceholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
@@ -871,6 +872,7 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
             value={freeTextName}
             onChange={(e) => setFreeTextName(e.target.value)}
             placeholder={t("ownerFreeTextPlaceholder")}
+            aria-label={t("ownerFreeTextPlaceholder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();

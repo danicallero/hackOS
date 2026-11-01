@@ -142,6 +142,22 @@ every workspace and every item (`apps/web/src/lib/session.tsx`).
 
 ### Behaviour
 
+- The shell exposes one `main#main-content` and a first-focusable Skip to
+  content link. The sidebar list is a named navigation landmark. Public landing
+  sections have native anchor links under “On this page”; their headings accept
+  anchor focus and clear the sticky top bar. The embedded Home overview does not
+  introduce another main landmark.
+- Path changes focus the destination main without moving the viewport during
+  browser history restoration; forward navigation starts at the top. Initial
+  loads, same-page anchors and query-only filters keep their native behavior.
+- Desktop disclosures support Enter/Space, including collapse of the current
+  workspace. Mobile sheets expose every authorized destination, close after
+  selecting a link, and retain native modal Escape/focus restoration.
+- Safari follows its own keyboard preference: Option-Tab includes native links;
+  enabling **Safari → Settings → Advanced → Press Tab to highlight each item on
+  a webpage** makes plain Tab include them. Keep destinations as native links.
+
+
 - Each workspace is a collapsible group. Expanding one persists it as the
   "last workspace" for that device (`localStorage`, key
   `hackos-last-workspace`, via `readLastWorkspace`/`writeLastWorkspace` in

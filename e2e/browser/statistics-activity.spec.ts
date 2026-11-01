@@ -123,7 +123,9 @@ test("application charts stay in Before while During shows live meal coverage", 
     });
     await detail.getByRole("button", { name: "Close", exact: true }).click();
     await page.getByRole("tab", { name: "After", exact: true }).click();
-    await expect(page.getByText("Participation funnel", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Participation funnel", exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("img", { name: "T-shirt size distribution", exact: true }),
     ).toHaveCount(0);

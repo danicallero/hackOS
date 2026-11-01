@@ -120,13 +120,15 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   useEffect(() => {
     if (content?.event.name) document.title = content.event.name;
   }, [content]);
+  const Landmark = embedded ? "div" : "main";
   return (
-    <div className="relative overflow-x-clip">
+    <div className="relative min-w-0">
       {!embedded && <PublicTopBar />}
-      <main
-        id="main-content"
-        tabIndex={-1}
-        className={embedded ? "outline-none" : "mx-auto max-w-7xl px-4 outline-none sm:px-6"}
+      {/* Embedded in the app shell, whose canvas is already the page's only <main> (#1172). */}
+      <Landmark
+        id={embedded ? undefined : "main-content"}
+        tabIndex={embedded ? undefined : -1}
+        className={embedded ? undefined : "mx-auto max-w-7xl px-4 outline-none sm:px-6"}
       >
         {!content && !error && (
           <div className="grid py-24" role="status" aria-busy="true">
@@ -163,7 +165,7 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
               now={now}
             />
           ))}
-      </main>
+      </Landmark>
       {!embedded && <PublicFooter />}
     </div>
   );
@@ -229,6 +231,34 @@ function PublicPageContent({
         )}
       </section>
 
+      <nav aria-label={t("onThisPage")} className="flex flex-wrap gap-2 pb-6">
+        {[
+          ...(openApplications.length
+            ? [{ id: "applications-title", label: t("openApplications") }]
+            : []),
+          ...(screenAnnouncements.length
+            ? [{ id: "announcements-title", label: t("publicAnnouncements") }]
+            : []),
+          { id: "schedule-title", label: t("publicSchedule") },
+          { id: "challenges-title", label: t("challengesAndPrizes") },
+          { id: "gallery-title", label: t("projectGallery") },
+          { id: "sponsors-title", label: t("sponsors") },
+          ...(collaborators.length
+            ? [{ id: "collaborators-title", label: t("collaborators") }]
+            : []),
+        ].map(({ id, label }) => (
+          <Button
+            key={id}
+            variant="ghost"
+            size="sm"
+            className="h-auto min-h-[var(--control-height-compact)] max-w-full whitespace-normal text-left"
+            asChild
+          >
+            <a href={`#${id}`}>{label}</a>
+          </Button>
+        ))}
+      </nav>
+
       {openApplications.length > 0 && (
         <section aria-labelledby="applications-title" className="border-t py-12">
           <SectionHeading icon={ClipboardTextIcon} id="applications-title">
@@ -238,7 +268,7 @@ function PublicPageContent({
             {openApplications.map((form) => (
               <div
                 key={form.id}
-                className="hover:border-primary/30 flex items-center justify-between gap-4 rounded-surface border p-5 transition-colors"
+                className="hover:border-primary/30 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between rounded-surface border p-5 transition-colors"
               >
                 <div className="min-w-0">
                   <h3 className="font-medium">{form.name}</h3>
@@ -315,7 +345,11 @@ function PublicPageContent({
           </EmptyNotice>
         )}
         {schedule.length > 0 && (
-          <Button asChild variant="outline" className="mt-4">
+          <Button
+            asChild
+            variant="outline"
+            className="mt-4 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
+          >
             <Link href="/timetable">
               {t("viewSchedule")}
               <ArrowRightIcon className="size-4" aria-hidden="true" />
@@ -368,7 +402,11 @@ function PublicPageContent({
         <SectionHeading icon={FolderSimpleIcon} id="gallery-title">
           {t("projectGallery")}
         </SectionHeading>
-        <Button asChild variant="outline" className="mt-6">
+        <Button
+          asChild
+          variant="outline"
+          className="mt-6 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
+        >
           <Link href="/gallery">
             {t("projectGallery")}
             <ArrowRightIcon aria-hidden="true" className="size-4" />
@@ -377,11 +415,18 @@ function PublicPageContent({
       </section>
 
       <section aria-labelledby="sponsors-title" className="border-t py-12">
-        <h2 id="sponsors-title" className="text-balance font-display text-2xl font-normal">
+        <h2
+          id="sponsors-title"
+          tabIndex={-1}
+          className="landing-section-heading min-w-0 wrap-anywhere text-balance font-display text-2xl font-normal"
+        >
           {t("sponsors")}
         </h2>
         {sponsors.length ? (
-          <SponsorGrid sponsors={sponsors} className="mt-6" />
+          <SponsorGrid
+            sponsors={sponsors}
+            className="mt-6 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
+          />
         ) : (
           <EmptyNotice>{t("sponsorsPending")}</EmptyNotice>
         )}
@@ -389,10 +434,17 @@ function PublicPageContent({
 
       {collaborators.length > 0 && (
         <section aria-labelledby="collaborators-title" className="border-t py-12">
-          <h2 id="collaborators-title" className="text-balance font-display text-2xl font-normal">
+          <h2
+            id="collaborators-title"
+            tabIndex={-1}
+            className="landing-section-heading min-w-0 wrap-anywhere text-balance font-display text-2xl font-normal"
+          >
             {t("collaborators")}
           </h2>
-          <SponsorGrid sponsors={collaborators} className="mt-6" />
+          <SponsorGrid
+            sponsors={collaborators}
+            className="mt-6 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
+          />
         </section>
       )}
     </>
@@ -409,11 +461,15 @@ function SectionHeading({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="bg-primary/10 text-primary grid size-8 place-items-center rounded-full">
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span className="bg-primary/10 text-primary grid size-8 shrink-0 place-items-center rounded-full">
         <Icon className="size-4" aria-hidden="true" />
       </span>
-      <h2 id={id} className="text-balance font-display text-2xl font-normal">
+      <h2
+        id={id}
+        tabIndex={-1}
+        className="landing-section-heading min-w-0 wrap-anywhere text-balance font-display text-2xl font-normal"
+      >
         {children}
       </h2>
     </div>

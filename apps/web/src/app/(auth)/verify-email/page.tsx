@@ -11,7 +11,7 @@ import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -144,7 +144,7 @@ function VerifyEmailInner() {
           <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
             <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
-          <CardTitle>{t("verifyEmail")}</CardTitle>
+          <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
           <Button className="w-full" onClick={() => window.location.assign(confirmUrl)}>
@@ -162,7 +162,7 @@ function VerifyEmailInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
-          <CardTitle>{t("emailVerified")}</CardTitle>
+          <h1 className="type-section-title text-balance">{t("emailVerified")}</h1>
           <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
@@ -186,7 +186,7 @@ function VerifyEmailInner() {
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
           <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
         </div>
-        <CardTitle>{t("verifyEmail")}</CardTitle>
+        <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verificationInstructions")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

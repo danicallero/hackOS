@@ -2,7 +2,15 @@ import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
 import { AppRefreshControl } from "@/components/app-refresh-control";
@@ -34,11 +42,12 @@ import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors } from "@/theme/colors";
-import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { screenGutter } from "@/theme/layout";
 import { PANE_TITLE_TOP, useActivityPaneLayout } from "@/theme/layout-activity-pane";
 import { useParticipantLayout } from "@/theme/layout-participant";
 import { SCREEN_TITLE, TWO_PANE_BAND } from "@/theme/screen-title";
+import { type } from "@/theme/tokens";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
@@ -358,8 +367,8 @@ export function ActivitiesScreen({
                     // item's light/dark appearance with what scrolls behind it,
                     // which turned the title white for a moment.
                     color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                    fontSize: 28,
-                    fontWeight: "800",
+                    fontSize: type.title.fontSize,
+                    fontWeight: "700",
                   }}
                 >
                   {t("tabActivities")}
@@ -536,6 +545,7 @@ const ActivityRow = memo(function ActivityRow({
   selected: boolean;
   t: ReturnType<typeof useLocale>["t"];
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   useEventTimeZone();
   const startsAt = item.startsAt ? new Date(item.startsAt) : null;
   return (
@@ -581,15 +591,21 @@ const ActivityRow = memo(function ActivityRow({
       <View style={{ flex: 1, gap: 2 }}>
         <Text
           selectable
-          numberOfLines={1}
-          style={{ color: colors.label, fontSize: 17, fontWeight: "700" }}
+          numberOfLines={accessibilityText ? undefined : 1}
+          style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "700" }}
         >
           {resolveActivityText(item, language)}
         </Text>
         {startsAt || marker ? (
           <View style={{ alignItems: "center", flexDirection: "row", gap: 6 }}>
             {marker ? (
-              <Text style={{ color: colors.accent, fontSize: 13, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: colors.accent,
+                  fontSize: type.footnote.fontSize,
+                  fontWeight: "700",
+                }}
+              >
                 {marker === "now" ? t("scheduleNow") : t("scannerActivitiesNext")}
               </Text>
             ) : null}
@@ -597,7 +613,7 @@ const ActivityRow = memo(function ActivityRow({
               <Text
                 selectable
                 numberOfLines={1}
-                style={{ color: colors.secondaryLabel, fontSize: 13 }}
+                style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
               >
                 {formatEventTime(startsAt, language, {
                   weekday: "short",
