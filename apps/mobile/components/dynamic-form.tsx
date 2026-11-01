@@ -2,7 +2,15 @@ import type { FormSection, TemplateField } from "@hackos/shared/forms";
 import { MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
 import { Image } from "expo-image";
 import { Fragment, type ReactNode, useState } from "react";
-import { Linking, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Linking,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { FieldLibraryPicker } from "@/components/field-library-picker";
 import { FileViewer } from "@/components/file-viewer";
@@ -15,6 +23,7 @@ import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import type { ProjectFile } from "@/lib/projects";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 export function localizedFormText(
   value: { en: string; es: string; gl: string },
@@ -502,6 +511,7 @@ function Attachment({
   onRemove?: () => void;
   removeLabel: string;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <View style={{ alignItems: "center", flexDirection: "row", gap: 12, paddingTop: 4 }}>
       <PressableFeedback
@@ -513,7 +523,10 @@ function Attachment({
       >
         <Thumbnail file={file} width={44} height={44} label={file.fileName} />
         <View style={{ flex: 1, gap: 2 }}>
-          <Text numberOfLines={1} style={{ color: colors.label, fontSize: type.body.fontSize }}>
+          <Text
+            numberOfLines={accessibilityText ? undefined : 1}
+            style={{ color: colors.label, fontSize: type.body.fontSize }}
+          >
             {file.fileName}
           </Text>
           <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>

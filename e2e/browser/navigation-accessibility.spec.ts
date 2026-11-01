@@ -169,6 +169,12 @@ test("320px sidebar sheet exposes all destinations and closes on keyboard naviga
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  // Focus lands on the sheet's own toggle, whose tooltip takes the first Escape (WCAG 1.4.13).
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toHaveCount(0);
+  await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();

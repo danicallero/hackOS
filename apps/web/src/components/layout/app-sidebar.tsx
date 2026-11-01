@@ -1,11 +1,13 @@
 "use client";
 
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
+import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
-import { useEffect, useState } from "react";
+import { type ComponentProps, useEffect, useState } from "react";
 import { BrandMark } from "@/components/common/brand";
+import { ShortcutKbd, ShortcutTooltip } from "@/components/common/shortcut-hint";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ import {
   writeLastWorkspace,
 } from "@/lib/nav";
 import { useSessionContext } from "@/lib/session";
+import { setCommandPaletteOpen } from "@/lib/shortcuts";
 
 /** Overlaid on the icon's top-right corner — only shown collapsed to the icon rail, where there's no label to anchor a dot to. */
 function UnreadIconDot() {
@@ -56,7 +59,8 @@ function UnreadLabelDot() {
   );
 }
 
-function useVisible() {
+/** Sidebar visibility predicate (H8/H55), shared with quick search (#1182). */
+export function useNavVisibility() {
   const { can, canAny, me, isPureApplicant } = useSessionContext();
   return (item: NavItem) =>
     isNavItemVisible(item, {
@@ -146,6 +150,45 @@ function NavLink({
         </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
+  );
+}
+
+/**
+ * Opens quick search without the shortcut (#1182). Expanded, it shows the
+ * shortcut inline; collapsed to the icon rail, its tooltip carries both.
+ */
+function QuickSearchButton() {
+  const { t } = useLocale();
+  const { state, isMobile, setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <ShortcutTooltip
+          shortcut="commandPalette"
+          label={t("quickSearch")}
+          side="right"
+          hidden={state !== "collapsed" || isMobile}
+        >
+          <SidebarMenuButton
+            variant="outline"
+            className="text-muted-foreground"
+            onClick={() => {
+              // The palette is its own modal; the mobile sheet must not stay open beneath it.
+              if (isMobile) setOpenMobile(false);
+              setCommandPaletteOpen(true);
+            }}
+          >
+            <MagnifyingGlassIcon aria-hidden="true" />
+            <span>{t("quickSearch")}</span>
+            <ShortcutKbd
+              shortcut="commandPalette"
+              aria-hidden="true"
+              className="ml-auto group-data-[collapsible=icon]:hidden"
+            />
+          </SidebarMenuButton>
+        </ShortcutTooltip>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }
 
@@ -261,7 +304,7 @@ function WorkspaceGroup({
 export function AppSidebar() {
   const pathname = usePathname();
   const { t } = useLocale();
-  const isVisible = useVisible();
+  const isVisible = useNavVisibility();
   const { isMobile, setOpenMobile } = useSidebar();
   const unreadCount = useUnreadCount();
   const [lastWorkspace, setLastWorkspace] = useState(() => readLastWorkspace());
@@ -284,129 +327,139 @@ export function AppSidebar() {
 
   return (
     <Sidebar variant="floating" collapsible="icon">
-      <SidebarHeader role="banner" className="h-14 shrink-0 justify-center border-b px-3">
-        <SidebarMenu className="flex-row items-center">
-          <SidebarMenuItem className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-            <SidebarMenuButton
-              asChild
-              size="lg"
-              tooltip="hackOS"
-              className="flex-1 gap-2.5 px-1 hover:bg-transparent"
-            >
-              <Link
-                href="/event"
-                onNavigate={() => {
-                  if (isMobile) setOpenMobile(false);
-                }}
+      {/* `contents` keeps the sidebar's flex layout while exposing it as a landmark (#1177). */}
+      <nav aria-label={t("navigationPrimary")} className="contents">
+        <SidebarHeader className="h-14 shrink-0 justify-center border-b px-3">
+          <SidebarMenu className="flex-row items-center">
+            <SidebarMenuItem className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+              <SidebarMenuButton
+                asChild
+                size="lg"
+                tooltip="hackOS"
+                className="flex-1 gap-2.5 px-1 hover:bg-transparent"
               >
-                <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
-                <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
-                  hackOS
-                </span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
-            <SidebarTrigger hasUnreadNotifications={unreadCount > 0} />
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
-
-      <SidebarContent
-        role="navigation"
-        aria-label={t("mobileSidebarTitle")}
-        className="gap-3 px-2 py-3"
-      >
-        <SidebarGroup className="p-0">
-          <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
-            {t("navigationPersonal")}
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {personalItems.map((item) => (
-              <NavLink
-                key={item.href}
-                item={item}
-                showUnreadDot={item.href === "/event" && unreadCount > 0}
-              />
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
-
-        <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
-
-        <SidebarGroup className="shrink-0 gap-1 p-0">
-          <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
-            {t("navigationWorkspaces")}
-          </SidebarGroupLabel>
-
-          {(() => {
-            const visibleWorkspaces = WORKSPACES.map((workspace) => ({
-              items: workspace.items.filter(isVisible),
-              workspace,
-            })).filter(({ items }) => items.length > 0);
-            const isActiveItem = (item: NavItem) =>
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const anyWorkspaceMatchesRoute = visibleWorkspaces.some(({ items }) =>
-              items.some(isActiveItem),
-            );
-
-            return visibleWorkspaces.map(({ workspace, items }) => {
-              if (items.length === 1) {
-                // A single visible item has nothing to collapse: an accordion
-                // with one row is just a link wearing an extra click.
-                return (
-                  <SidebarGroup key={workspace.id} className="p-0">
-                    <SidebarMenu>
-                      <NavLink item={items[0]} showUnreadDot={false} />
-                    </SidebarMenu>
-                  </SidebarGroup>
-                );
-              }
-              const containsActiveRoute = items.some(isActiveItem);
-              const shouldOpenInitially =
-                containsActiveRoute ||
-                (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
-              return (
-                <WorkspaceGroup
-                  key={workspace.id}
-                  workspace={workspace}
-                  items={items}
-                  active={containsActiveRoute}
-                  open={
-                    workspace.id !== closedWorkspaceId &&
-                    (workspace.id === activeWorkspaceId ||
-                      workspace.id === recentWorkspaceId ||
-                      (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially))
-                  }
-                  onOpen={(id, nextOpen) => {
-                    if (nextOpen) {
-                      setClosedWorkspaceId(null);
-                      setRecentWorkspaceId(id);
-                      setLastWorkspace(id);
-                      writeLastWorkspace(id);
-                    } else {
-                      setClosedWorkspaceId(id);
-                      setRecentWorkspaceId((current) => (current === id ? null : current));
-                    }
+                <Link
+                  href="/event"
+                  onNavigate={() => {
+                    if (isMobile) setOpenMobile(false);
                   }}
+                >
+                  <BrandMark className="size-8 shrink-0 group-data-[collapsible=icon]:size-5" />
+                  <span className="text-lg font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
+                    hackOS
+                  </span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem className="ml-auto group-data-[collapsible=icon]:mx-auto">
+              <SidebarToggle hasUnreadNotifications={unreadCount > 0} />
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+
+        <SidebarContent className="gap-3 px-2 py-3">
+          <QuickSearchButton />
+
+          <SidebarGroup className="p-0">
+            <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+              {t("navigationPersonal")}
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {personalItems.map((item) => (
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  showUnreadDot={item.href === "/event" && unreadCount > 0}
                 />
+              ))}
+            </SidebarMenu>
+          </SidebarGroup>
+
+          <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
+
+          <SidebarGroup className="shrink-0 gap-1 p-0">
+            <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+              {t("navigationWorkspaces")}
+            </SidebarGroupLabel>
+
+            {(() => {
+              const visibleWorkspaces = WORKSPACES.map((workspace) => ({
+                items: workspace.items.filter(isVisible),
+                workspace,
+              })).filter(({ items }) => items.length > 0);
+              const isActiveItem = (item: NavItem) =>
+                pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const anyWorkspaceMatchesRoute = visibleWorkspaces.some(({ items }) =>
+                items.some(isActiveItem),
               );
-            });
-          })()}
-        </SidebarGroup>
-      </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">
-        <div className="flex items-center gap-1">
-          <UserMenu className="min-w-0" />
-          <div className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
-            <ThemeToggle />
+              return visibleWorkspaces.map(({ workspace, items }) => {
+                if (items.length === 1) {
+                  // A single visible item has nothing to collapse: an accordion
+                  // with one row is just a link wearing an extra click.
+                  return (
+                    <SidebarGroup key={workspace.id} className="p-0">
+                      <SidebarMenu>
+                        <NavLink item={items[0]} showUnreadDot={false} />
+                      </SidebarMenu>
+                    </SidebarGroup>
+                  );
+                }
+                const containsActiveRoute = items.some(isActiveItem);
+                const shouldOpenInitially =
+                  containsActiveRoute ||
+                  (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
+                return (
+                  <WorkspaceGroup
+                    key={workspace.id}
+                    workspace={workspace}
+                    items={items}
+                    active={containsActiveRoute}
+                    open={
+                      workspace.id !== closedWorkspaceId &&
+                      (workspace.id === activeWorkspaceId ||
+                        workspace.id === recentWorkspaceId ||
+                        (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially))
+                    }
+                    onOpen={(id, nextOpen) => {
+                      if (nextOpen) {
+                        setClosedWorkspaceId(null);
+                        setRecentWorkspaceId(id);
+                        setLastWorkspace(id);
+                        writeLastWorkspace(id);
+                      } else {
+                        setClosedWorkspaceId(id);
+                        setRecentWorkspaceId((current) => (current === id ? null : current));
+                      }
+                    }}
+                  />
+                );
+              });
+            })()}
+          </SidebarGroup>
+        </SidebarContent>
+
+        <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">
+          <div className="flex items-center gap-1">
+            <UserMenu className="min-w-0" />
+            <div className="ml-auto shrink-0 group-data-[collapsible=icon]:hidden">
+              <ThemeToggle />
+            </div>
           </div>
-        </div>
-      </SidebarFooter>
-
+        </SidebarFooter>
+      </nav>
       <SidebarRail />
     </Sidebar>
+  );
+}
+
+/** The sidebar toggle with its ⌘B hint (#1182), in the rail header and the mobile shell. */
+function SidebarToggle(props: ComponentProps<typeof SidebarTrigger>) {
+  const { t } = useLocale();
+  return (
+    <ShortcutTooltip shortcut="toggleSidebar" label={t("toggleSidebar")} side="right">
+      <SidebarTrigger {...props} />
+    </ShortcutTooltip>
   );
 }
 
@@ -414,5 +467,5 @@ export function AppSidebar() {
 export function NotificationSidebarTrigger({ className }: { className?: string }) {
   const unreadCount = useUnreadCount();
 
-  return <SidebarTrigger className={className} hasUnreadNotifications={unreadCount > 0} />;
+  return <SidebarToggle className={className} hasUnreadNotifications={unreadCount > 0} />;
 }

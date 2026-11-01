@@ -114,6 +114,7 @@ jest.mock("@/lib/use-scanner", () => ({
     syncing: mockSyncing,
     clockSkewMs: null,
     lastSync: null,
+    refreshLocal: jest.fn().mockResolvedValue(undefined),
     sync: jest.fn().mockResolvedValue(undefined),
     retryFailed: jest.fn(),
     retryOne: jest.fn(),

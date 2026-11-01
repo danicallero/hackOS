@@ -1,8 +1,5 @@
 import { Gauge, HStack, Image, ProgressView, Spacer, Text, VStack } from "@expo/ui/swift-ui";
 import {
-  allowsTightening,
-  contentTransition,
-  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -11,8 +8,6 @@ import {
   labelsHidden,
   lineLimit,
   minimumScaleFactor,
-  monospacedDigit,
-  padding,
   scaleEffect,
   tint,
 } from "@expo/ui/swift-ui/modifiers";
@@ -44,46 +39,22 @@ export const StaffActivityLayout = withLiveActivityKit(
   (props: ActivityLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { caption, colorMods, secondary } = kit;
+    const { caption, colorMods, counter, islandSide, secondary } = kit;
     const capped = kit.capped();
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the name
     // instead of rendering half-understood fields (or an invalid timer range).
     if (props.v !== 1 || !props.labels) {
-      const title = (
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-          {typeof props.name === "string" ? props.name : ""}
-        </Text>
-      );
-      const symbol = <Image systemName="person.3.fill" color="#0A84FF" size={15} />;
-      return capped({
-        banner: (
-          <VStack
-            alignment="leading"
-            modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-          >
-            {title}
-          </VStack>
-        ),
-        bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
-        compactLeading: symbol,
-        compactTrailing: <Text> </Text>,
-        minimal: symbol,
-        expandedLeading: symbol,
-        expandedTrailing: <Text> </Text>,
-        expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-      });
+      return capped(kit.fallback(props.name, "person.3.fill"));
     }
     const labels = props.labels;
     // Dynamic Island is always dark; the Lock Screen follows the system scheme,
     // which `environment.colorScheme` does not reliably report, so the Lock
     // Screen accent is a dynamic colour resolved by the view's own appearance.
     // Always-On (reduced luminance) drops accent fills and lets the system dim.
-    const islandAccent = "#0A84FF";
-    const neutral = "#8E8E93";
-    const bannerAccent = environment.isLuminanceReduced
-      ? null
-      : ({ dynamic: { light: "#007AFF", dark: "#0A84FF" } } as unknown as string);
+    const { islandAccent } = kit;
+    const { neutral } = kit;
+    const bannerAccent = kit.bannerAccent(environment.isLuminanceReduced);
     // An upcoming state goes stale at the start: it is live from then on, even
     // before the push that flips `phase` (and brings the counts) arrives.
     const live =
@@ -125,6 +96,7 @@ export const StaffActivityLayout = withLiveActivityKit(
       color: string | null,
       width: number | null,
       form: "full" | "short" | "long" = "full",
+      align: "center" | "trailing" = "trailing",
     ) => (
       <Text
         timerInterval={{ lower, upper: startsAt }}
@@ -134,7 +106,7 @@ export const StaffActivityLayout = withLiveActivityKit(
         modifiers={[
           lineLimit(1),
           minimumScaleFactor(0.6),
-          ...(width ? [frame({ maxWidth: width, alignment: "trailing" })] : []),
+          ...(width ? [frame({ maxWidth: width, alignment: align })] : []),
           ...colorMods(color),
         ]}
       />
@@ -174,56 +146,28 @@ export const StaffActivityLayout = withLiveActivityKit(
       );
     };
 
-    const counter = (value: string, size: number, color: string | null, weight = "bold") => (
-      <Text
-        modifiers={[
-          font({ size, weight: weight as "bold" | "semibold" }),
-          monospacedDigit(),
-          contentTransition("numericText"),
-          lineLimit(1),
-          allowsTightening(true),
-          fixedSize({ horizontal: true }),
-          ...colorMods(color),
-        ]}
-      >
-        {value}
-      </Text>
-    );
-
     // "42/180": the scanned count with its denominator, smaller and secondary
-    // (as the accreditation desk's `accredited/eligible`).
+    // (as the accreditation desk's `accredited/eligible`). Inside the island a
+    // ratio past seven characters (`1142/1380`) keeps only the count.
     const ratio = (
       size: number,
       denominatorSize: number,
       color: string | null,
       weight = "bold",
-    ) => (
-      <HStack
-        alignment="firstTextBaseline"
-        spacing={1}
-        modifiers={[fixedSize({ horizontal: true })]}
-      >
-        {counter(scanned, size, color, weight)}
-        {accredited ? (
-          <Text
-            modifiers={[
-              font({ size: denominatorSize, weight: "semibold" }),
-              monospacedDigit(),
-              contentTransition("numericText"),
-              secondary,
-              lineLimit(1),
-            ]}
-          >
-            {`/${accredited}`}
-          </Text>
-        ) : null}
-      </HStack>
-    );
+      fixed = true,
+    ) =>
+      kit.ratioView(
+        fixed
+          ? { count: scanned, total: accredited ? `/${accredited}` : null }
+          : kit.ratioParts(scannedCount, accredited || null),
+        { size, denominatorSize, spacing: 1, color, weight, fixed, animateTotal: true },
+      );
 
     const stat = (
       label: string | undefined,
       color: string | null,
       align: "leading" | "trailing",
+      fixed = true,
     ) => (
       <VStack alignment={align} spacing={0}>
         {label ? (
@@ -231,7 +175,7 @@ export const StaffActivityLayout = withLiveActivityKit(
             {label}
           </Text>
         ) : null}
-        {ratio(28, 15, color)}
+        {ratio(28, 15, color, "bold", fixed)}
       </VStack>
     );
 
@@ -299,11 +243,9 @@ export const StaffActivityLayout = withLiveActivityKit(
     // Past `142/180` the ratio no longer fits the 56 pt slot (`1142/1380`
     // clipped its denominator), so four-digit counts show the scanned count alone.
     const compactTrailing = !live
-      ? countdown(12, islandAccent, 56, "short")
+      ? countdown(12, islandAccent, 56, "short", "center")
       : accredited || !liveText
-        ? `${scanned}/${accredited ?? ""}`.length > 7
-          ? counter(scanned, 12, islandAccent, "semibold")
-          : ratio(12, 9, islandAccent, "semibold")
+        ? ratio(12, 9, islandAccent, "semibold", false)
         : liveText;
 
     // Minimal: the scanned share as a ring; live without it, the symbol with a
@@ -326,41 +268,32 @@ export const StaffActivityLayout = withLiveActivityKit(
           <Image systemName="circle.fill" color={islandAccent} size={5} />
         </HStack>
       ) : live ? (
-        counter(scanned, 13, islandAccent, "semibold")
+        counter(scanned, 13, islandAccent, "semibold", false)
       ) : (
         glyph(islandAccent, 20)
       );
 
-    const expandedLeading = (
-      <VStack modifiers={[padding({ leading: 8, top: 6 })]}>
-        {scanButton(islandAccent) ?? glyph(islandAccent, 24)}
-      </VStack>
+    const expandedLeading = islandSide(
+      scanButton(islandAccent) ?? glyph(islandAccent, 24),
+      "leading",
+      6,
     );
-    // Inset from the island's rounded corners so labels never clip.
-    const expandedTrailing = (
-      <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-        {live ? (
-          stat(labels.scanned, islandAccent, "trailing")
-        ) : (
-          <VStack alignment="trailing" spacing={0}>
-            <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
-              {labels.startsIn}
-            </Text>
-            {countdown(28, islandAccent, 160, "long")}
-          </VStack>
-        )}
-      </VStack>
+    const expandedTrailing = islandSide(
+      live ? (
+        stat(labels.scanned, islandAccent, "trailing", false)
+      ) : (
+        <VStack alignment="trailing" spacing={0}>
+          <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
+            {labels.startsIn}
+          </Text>
+          {countdown(28, islandAccent, 160, "long")}
+        </VStack>
+      ),
+      "trailing",
     );
 
     const expandedBottom = (
-      <VStack
-        alignment="leading"
-        spacing={4}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 8, bottom: 4 }),
-        ]}
-      >
+      <VStack alignment="leading" spacing={4} modifiers={kit.bottomMods(4)}>
         <HStack spacing={8}>
           <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
             {props.name}
@@ -383,11 +316,7 @@ export const StaffActivityLayout = withLiveActivityKit(
 
     // H25/H26 / #966: preserve the trailing hero across all presentations.
     const banner = (
-      <VStack
-        alignment="leading"
-        spacing={10}
-        modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-      >
+      <VStack alignment="leading" spacing={10} modifiers={kit.bannerMods}>
         <HStack spacing={8}>
           {glyph(bannerAccent, 17)}
           <Text modifiers={[font({ size: 17, weight: "semibold" }), lineLimit(1)]}>
@@ -429,21 +358,8 @@ export const StaffActivityLayout = withLiveActivityKit(
     // tints the glyph only; Always-On drops it.
     const watchGlyph = environment.isLuminanceReduced ? null : islandAccent;
     const bannerSmall = (
-      <VStack
-        alignment="leading"
-        spacing={2}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 10, vertical: 8 }),
-          dynamicTypeSize({ max: "xLarge" }),
-        ]}
-      >
-        <HStack spacing={5}>
-          <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-            {props.name}
-          </Text>
-        </HStack>
+      <VStack alignment="leading" spacing={2} modifiers={kit.watchMods}>
+        {kit.watchHeader(symbol, watchGlyph, props.name)}
         {live ? (
           ratio(26, 14, null)
         ) : (

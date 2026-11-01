@@ -5,7 +5,7 @@ import {
 } from "@hackos/shared/activity-kinds";
 import type { Language } from "@hackos/shared/locale";
 import { useEffect, useRef, useState } from "react";
-import { type ScrollView, Text, TextInput, View } from "react-native";
+import { type ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { MenuView } from "@/components/app-menu";
 import { DateTimeField } from "@/components/date-time-field";
@@ -36,6 +36,7 @@ import {
 } from "@/lib/schedule";
 import { prepareScheduleSubmission, scheduleSaveError } from "@/lib/schedule-save";
 import { colors, radius, type } from "@/theme";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 
 const LANGUAGES: Language[] = ["es", "gl", "en"];
 
@@ -624,6 +625,7 @@ function OwnersField({
   onChange: (owners: ScheduleOwner[]) => void;
   scheduleId?: number;
 }) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const { t } = useLocale();
   const [query, setQuery] = useState("");
   const [freeTextName, setFreeTextName] = useState("");
@@ -796,6 +798,7 @@ function OwnersField({
           placeholderTextColor={colors.tertiaryLabel}
           returnKeyType="done"
           value={freeTextName}
+          hitSlop={{ top: 4, bottom: 4 }}
           style={{
             backgroundColor: colors.elevatedSurface,
             borderCurve: "continuous",
@@ -816,7 +819,7 @@ function OwnersField({
             accessibilityLabel={t("scheduleOwnerAdd")}
             disabled={mutation !== null || !freeTextName.trim()}
             onPress={() => void addFreeText()}
-            hitSlop={8}
+            hitSlop={{ top: 12, bottom: 12, left: 7, right: 7 }}
           >
             <Text style={{ color: colors.accent, fontSize: type.callout.fontSize }}>
               {t("add")}
@@ -826,7 +829,7 @@ function OwnersField({
       </View>
       {owners.length === 0 ? (
         <View style={{ borderTopColor: colors.separator, borderTopWidth: 0.5, padding: 16 }}>
-          <Text style={{ color: colors.tertiaryLabel, fontSize: type.compact.fontSize }}>
+          <Text style={{ color: colors.secondaryLabel, fontSize: type.compact.fontSize }}>
             {t("scheduleOwnersEmpty")}
           </Text>
         </View>
@@ -846,7 +849,7 @@ function OwnersField({
             >
               <Text
                 selectable
-                numberOfLines={1}
+                numberOfLines={accessibilityText ? undefined : 1}
                 style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}
               >
                 {owner.freeTextName ??

@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
 import { Brand } from "@/components/common/brand";
 import { LanguageSelect } from "@/components/common/language-select";
 import { ThemeToggle } from "@/components/common/theme-toggle";
-import { SkipToContent } from "@/components/layout/skip-to-content";
+import { SkipLink } from "@/components/layout/skip-link";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 import { withReturnPath } from "@/lib/return-path";
@@ -58,7 +58,7 @@ export function PublicTopBar({
         className,
       )}
     >
-      <SkipToContent />
+      <SkipLink />
       <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
         <Link
           href="/"

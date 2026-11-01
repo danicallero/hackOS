@@ -11,6 +11,8 @@ import { getCurrentSessionCookie } from "@/lib/api";
 import { apiAssetUrl } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
+import { type } from "@/theme/tokens";
 
 type ViewerState =
   | { status: "loading" }
@@ -142,7 +144,10 @@ export function FileViewer({
           <Text
             accessibilityRole="header"
             numberOfLines={1}
-            style={{ color: colors.label, fontSize: 17, fontWeight: "600" }}
+            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+            adjustsFontSizeToFit
+            minimumFontScale={CHROME_MIN_FONT_SCALE}
+            style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
           >
             {title}
           </Text>

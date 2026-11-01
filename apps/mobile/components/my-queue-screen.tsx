@@ -416,7 +416,7 @@ export function QueueTutorial({
                 style={{
                   color: colors.label,
                   fontSize: type.title.fontSize,
-                  fontWeight: "800",
+                  fontWeight: "700",
                   textAlign: "center",
                 }}
               >
@@ -490,7 +490,7 @@ export function QueueTutorial({
                   style={{
                     color: colors.label,
                     fontSize: type.title2.fontSize,
-                    fontWeight: "800",
+                    fontWeight: "700",
                     textAlign: "center",
                   }}
                 >
@@ -631,6 +631,53 @@ function queueRank(status: string) {
   return 2;
 }
 
+function RoomAlert({ title, location }: { title: string; location?: string | null }) {
+  return (
+    <View
+      accessibilityRole="alert"
+      style={{
+        backgroundColor: colors.successSurface,
+        borderCurve: "continuous",
+        borderRadius: radius.control,
+        gap: 7,
+        padding: 14,
+      }}
+    >
+      <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+        <SymbolView
+          name="door.left.hand.open"
+          tintColor={colors.onSuccessSurface}
+          size={22}
+          accessible={false}
+        />
+        <Text
+          selectable
+          style={{
+            color: colors.onSuccessSurface,
+            flex: 1,
+            fontSize: type.body.fontSize,
+            fontWeight: "700",
+          }}
+        >
+          {title}
+        </Text>
+      </View>
+      {location ? (
+        <Text
+          selectable
+          style={{
+            color: colors.onSuccessSurface,
+            fontSize: type.compact.fontSize,
+            paddingLeft: 30,
+          }}
+        >
+          {location}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 const QueueCard = memo(function QueueCard({
   item,
   precalled,
@@ -674,92 +721,17 @@ const QueueCard = memo(function QueueCard({
         <StatusPill tone={statusTone(item.status)}>{statusLabel(item.status, t)}</StatusPill>
       </View>
 
-      {judged ? null : inRoom ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            backgroundColor: colors.successSurface,
-            borderCurve: "continuous",
-            borderRadius: radius.control,
-            gap: 7,
-            padding: 14,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-            <SymbolView
-              name="door.left.hand.open"
-              tintColor={colors.onSuccessSurface}
-              size={22}
-              accessible={false}
-            />
-            <Text
-              selectable
-              style={{
-                color: colors.onSuccessSurface,
-                flex: 1,
-                fontSize: type.body.fontSize,
-                fontWeight: "800",
-              }}
-            >
-              {item.room ? `${t("queueBeInRoom")} · ${item.room.name}` : t("queueBeInRoom")}
-            </Text>
-          </View>
-          {item.room?.location ? (
-            <Text
-              selectable
-              style={{
-                color: colors.onSuccessSurface,
-                fontSize: type.compact.fontSize,
-                paddingLeft: 30,
-              }}
-            >
-              {item.room.location}
-            </Text>
-          ) : null}
-        </View>
-      ) : calledRoom ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            backgroundColor: colors.successSurface,
-            borderCurve: "continuous",
-            borderRadius: radius.control,
-            gap: 7,
-            padding: 14,
-          }}
-        >
-          <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
-            <SymbolView
-              name="door.left.hand.open"
-              tintColor={colors.onSuccessSurface}
-              size={22}
-              accessible={false}
-            />
-            <Text
-              selectable
-              style={{
-                color: colors.onSuccessSurface,
-                flex: 1,
-                fontSize: type.body.fontSize,
-                fontWeight: "800",
-              }}
-            >
-              {t("queueCalled", { room: calledRoom.name })}
-            </Text>
-          </View>
-          {calledRoom.location ? (
-            <Text
-              selectable
-              style={{
-                color: colors.onSuccessSurface,
-                fontSize: type.compact.fontSize,
-                paddingLeft: 30,
-              }}
-            >
-              {calledRoom.location}
-            </Text>
-          ) : null}
-        </View>
+      {judged ? null : inRoom || calledRoom ? (
+        <RoomAlert
+          title={
+            inRoom
+              ? item.room
+                ? `${t("queueBeInRoom")} · ${item.room.name}`
+                : t("queueBeInRoom")
+              : t("queueCalled", { room: calledRoom?.name ?? "" })
+          }
+          location={inRoom ? item.room?.location : calledRoom?.location}
+        />
       ) : (
         <>
           {precalled ? (

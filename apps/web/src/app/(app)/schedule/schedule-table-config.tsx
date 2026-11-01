@@ -347,8 +347,13 @@ export function ResizableHead({
         aria-label={t("resizeColumnAria")}
         onPointerDown={onPointerDown}
         onKeyDown={onKeyDown}
-        className="button-interaction hover:bg-primary/50 active:bg-primary/70 absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none focus-visible:bg-primary/60"
-      />
+        className="group absolute inset-y-0 right-0 w-(--target-min) cursor-col-resize touch-none outline-none pointer-coarse:w-(--target-touch)"
+      >
+        <span
+          aria-hidden="true"
+          className="group-hover:bg-primary/50 group-active:bg-primary/70 group-focus-visible:bg-primary/60 absolute inset-y-0 right-0 w-1.5"
+        />
+      </button>
     </TableHead>
   );
 }

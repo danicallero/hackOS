@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { MAIN_CONTENT_ID } from "@/components/layout/skip-link";
 
 /** H49/H55: announce the new route; leave initial load and history scroll restoration alone. */
 export function RouteFocus() {
@@ -24,7 +25,7 @@ export function RouteFocus() {
     historyNavigation.current = false;
     if (window.location.hash || pathname.startsWith("/tv")) return;
     const frame = requestAnimationFrame(() => {
-      const main = document.getElementById("main-content");
+      const main = document.getElementById(MAIN_CONTENT_ID);
       main?.focus({ preventScroll: true });
       if (!restoreScroll) window.scrollTo(0, 0);
     });

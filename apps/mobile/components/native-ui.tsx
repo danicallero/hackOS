@@ -37,6 +37,7 @@ import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors, isAccessibilityTextSize, radius, space, type } from "@/theme";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 export function Section({
   title,
@@ -151,10 +152,19 @@ export function ToggleRow({
 }) {
   const text = (
     <View style={{ flex: 1, gap: 2, justifyContent: "center", paddingVertical: 10 }}>
-      <Text style={{ color: disabled ? colors.tertiaryLabel : colors.label, fontSize: 16 }}>
+      <Text
+        style={{
+          color: disabled ? colors.tertiaryLabel : colors.label,
+          fontSize: type.callout.fontSize,
+        }}
+      >
         {label}
       </Text>
-      {detail ? <Text style={{ color: colors.secondaryLabel, fontSize: 13 }}>{detail}</Text> : null}
+      {detail ? (
+        <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
+          {detail}
+        </Text>
+      ) : null}
     </View>
   );
   return (
@@ -257,7 +267,10 @@ export function InfoRow({
         }
       >
         {/* The label keeps its width; long values (emails, badge ids) wrap instead. */}
-        <Text selectable style={{ color: colors.label, flexShrink: 0, fontSize: 16 }}>
+        <Text
+          selectable
+          style={{ color: colors.label, flexShrink: 0, fontSize: type.callout.fontSize }}
+        >
           {label}
         </Text>
         {stacked && !value ? null : (
@@ -265,8 +278,13 @@ export function InfoRow({
             selectable
             style={[
               stacked
-                ? { color: colors.secondaryLabel, fontSize: 16 }
-                : { color: colors.secondaryLabel, flex: 1, fontSize: 16, textAlign: "right" },
+                ? { color: colors.secondaryLabel, fontSize: type.callout.fontSize }
+                : {
+                    color: colors.secondaryLabel,
+                    flex: 1,
+                    fontSize: type.callout.fontSize,
+                    textAlign: "right",
+                  },
               valueStyle,
             ]}
           >
@@ -329,7 +347,10 @@ export function StatusPill({
         style,
       ]}
     >
-      <Text selectable style={{ color: palette.foreground, fontSize: 12, fontWeight: "700" }}>
+      <Text
+        selectable
+        style={{ color: palette.foreground, fontSize: type.caption.fontSize, fontWeight: "700" }}
+      >
         {children}
       </Text>
     </View>
@@ -514,7 +535,7 @@ export function LegacyScreenHeader({
                   placeholder={searchPlaceholder}
                   placeholderTextColor={colors.tertiaryLabel}
                   returnKeyType="search"
-                  style={{ color: colors.label, flex: 1, fontSize: 16 }}
+                  style={{ color: colors.label, flex: 1, fontSize: type.callout.fontSize }}
                   value={searchQuery}
                 />
               </View>
@@ -525,7 +546,9 @@ export function LegacyScreenHeader({
               onPress={onCloseSearch}
               style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
             >
-              <Text style={{ color: colors.accent, fontSize: 16, fontWeight: "600" }}>
+              <Text
+                style={{ color: colors.accent, fontSize: type.callout.fontSize, fontWeight: "600" }}
+              >
                 {cancelLabel}
               </Text>
             </Pressable>
@@ -543,7 +566,9 @@ export function LegacyScreenHeader({
             <View style={{ alignItems: "center", flex: 1, flexDirection: "row", gap: 4 }}>
               {leading}
               {inlineTitle ? null : (
-                <Text style={{ color: colors.label, fontSize: 28, fontWeight: "800" }}>
+                <Text
+                  style={{ color: colors.label, fontSize: type.title.fontSize, fontWeight: "700" }}
+                >
                   {title}
                 </Text>
               )}
@@ -584,6 +609,9 @@ export function LegacyScreenHeader({
                 <Text
                   accessibilityRole="header"
                   numberOfLines={1}
+                  maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                  adjustsFontSizeToFit
+                  minimumFontScale={CHROME_MIN_FONT_SCALE}
                   style={{ ...type.headline, color: colors.label, maxWidth: "50%" }}
                 >
                   {title}
@@ -969,7 +997,12 @@ export function EmptyState({
       <Text
         selectable
         accessibilityRole="header"
-        style={{ color: colors.label, fontSize: 20, fontWeight: "700", textAlign: "center" }}
+        style={{
+          color: colors.label,
+          fontSize: type.title3.fontSize,
+          fontWeight: "700",
+          textAlign: "center",
+        }}
       >
         {title}
       </Text>
@@ -978,7 +1011,7 @@ export function EmptyState({
           selectable
           style={{
             color: colors.secondaryLabel,
-            fontSize: 15,
+            fontSize: type.subhead.fontSize,
             lineHeight: 21,
             textAlign: "center",
           }}

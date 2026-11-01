@@ -3,6 +3,7 @@
 import { IconContext } from "@phosphor-icons/react/dist/lib/context";
 import { usePathname } from "next/navigation";
 import { ThemeProvider } from "next-themes";
+import { UnsavedChangesProvider } from "@/components/common/unsaved-changes-provider";
 import { CookieNotice } from "@/components/layout/cookie-notice";
 import { MaintenanceGate } from "@/components/layout/maintenance-gate";
 import { RouteFocus } from "@/components/layout/route-focus";
@@ -13,7 +14,7 @@ import { SessionProvider } from "@/lib/session";
 
 /**
  * Global client providers, mounted once in the root layout:
- * - next-themes: light-first edition theme, with class strategy on <html>.
+ * - next-themes: follows the system appearance by default, class strategy on <html>.
  * - IconContext: shared Phosphor weight, base size and inherited color.
  * - SessionProvider: /api/me + capability gating (H8/H55).
  * - TooltipProvider: required once for all shadcn tooltips.
@@ -31,13 +32,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // dismisses on click would sit there forever, permanently covering rooms.
   const isKiosk = pathname?.startsWith("/tv");
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <IconContext.Provider value={{ size: 24, weight: "regular", color: "currentColor" }}>
         <SessionProvider>
           <LocaleProvider>
-            <TooltipProvider delayDuration={200}>
+            <TooltipProvider>
               <RouteFocus />
-              <MaintenanceGate>{children}</MaintenanceGate>
+              <UnsavedChangesProvider>
+                <MaintenanceGate>{children}</MaintenanceGate>
+              </UnsavedChangesProvider>
             </TooltipProvider>
             {!isKiosk && <CookieNotice />}
             <Toaster position="top-right" />

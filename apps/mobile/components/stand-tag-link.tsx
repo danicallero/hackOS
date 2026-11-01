@@ -239,7 +239,7 @@ export function StandLogo({ stand, size }: { stand: StandSummary; size: number }
           style={{ height: size * 0.68, width: size * 0.68 }}
         />
       ) : (
-        <Text style={{ color: "#3c3c43", fontSize: size * 0.4, fontWeight: "700" }}>
+        <Text style={{ color: colors.secondaryLabel, fontSize: size * 0.4, fontWeight: "700" }}>
           {stand.name.slice(0, 1).toUpperCase()}
         </Text>
       )}

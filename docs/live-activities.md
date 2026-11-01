@@ -688,7 +688,7 @@ Meal / activity (staff):
 | Compact leading | category symbol (fork.knife / person.3) | same |
 | Compact trailing | countdown to start (`1h 5m` / `34m` / `4:21`) | `scanned/accredited`, e.g. `42/180` (monospaced; the bare count without `accredited`, or when the ratio is longer than 7 characters, e.g. `1142/1380`, which no longer fits the slot); "Live" from the start until the live update brings the counts |
 | Minimal | category symbol (20 pt) | progress ring `scanned / accredited` (the count without `accredited`) |
-| Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180`; name and live state; ends in beside **Scan**, then scanned-share bar |
+| Expanded | name, location, `hh:mm–hh:mm`, countdown | symbol, Scanned `42/180` (the bare count past 7 characters: it sits beside the camera, #1171); name and live state; ends in beside **Scan**, then scanned-share bar |
 | Lock Screen | as expanded | as expanded |
 
 Attendee activity:
@@ -714,7 +714,7 @@ Submission deadline:
 | Compact trailing | countdown timer | countdown timer | countdown timer (muted) |
 | Minimal | hourglass (20 pt) | exclamation mark (20 pt) | checkmark (20 pt) |
 | Expanded | title, countdown, project name; status only when known | "Not submitted · project", countdown | "Submitted ✓ · project", countdown |
-| Lock Screen | title with the status opposite; project leading and countdown trailing; a progress bar from `startsAt` to `endsAt` | as open | project and muted countdown leading, green "Submitted" trailing |
+| Lock Screen | title with the status opposite; project leading and countdown trailing; a progress bar from `startsAt` to `endsAt` | as open | green "Submitted" with the small "Closes in" countdown in the same row (keeps the 160 pt height, #1171), then title, project and bar |
 | Watch | countdown, status line only for a known draft | countdown + red "Not submitted" (the only red element) | "Submitted" + small countdown |
 
 Red is reserved for the closing state and marks the symbol and the "Not
@@ -725,7 +725,7 @@ Accreditation desk:
 
 | Presentation | Content |
 |---|---|
-| Compact leading | `person.badge.key` |
+| Compact leading | `person.fill.checkmark` (`person.badge.key` is clipped in the compact slot) |
 | Compact trailing | `accredited` |
 | Minimal | progress ring `accredited / eligible` |
 | Expanded | symbol / `accredited / eligible`; title and closing time, smaller `inside` and arrivals in the last 10 min beside **Scan**; share bar |

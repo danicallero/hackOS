@@ -347,7 +347,8 @@ export default function SchedulePage() {
     <PageLayout width="workspace">
       <PageHeader title={t("manageSchedule")} />
 
-      <div className="space-y-4">
+      {/* Bottom padding keeps the floating New item button clear of the last rows (#1178). */}
+      <div className="space-y-4 pb-16">
         <ListToolbar
           search={{
             id: "schedule-search",
@@ -356,8 +357,9 @@ export default function SchedulePage() {
             onValueChange: setQuery,
           }}
           filters={filters}
+          searchOwnRowOnMobile
           actions={
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               {canEdit && selectedIds.size > 0 && (
                 <>
                   <span className="text-muted-foreground text-sm">
@@ -393,7 +395,7 @@ export default function SchedulePage() {
           }
         />
 
-        <div className="overflow-x-auto rounded-lg border bg-card">
+        <div className="table-scroll-cue overflow-hidden rounded-lg border">
           <DndContext
             sensors={rowDragSensors}
             collisionDetection={closestCenter}
@@ -626,7 +628,7 @@ export default function SchedulePage() {
         // Zero-height so it never lengthens the page: the button floats over
         // the table's bottom-left corner and stays there while scrolling, so
         // adding an item never means going back up to the header (H59).
-        <div className="pointer-events-none sticky bottom-6 z-20 flex h-0 items-end justify-end">
+        <div className="pointer-events-none sticky bottom-[calc(1.5rem+var(--cookie-notice-inset,0px))] z-20 flex h-0 items-end justify-end">
           <Button
             className="pointer-events-auto shadow-floating"
             onClick={() => setCreateOpen(true)}

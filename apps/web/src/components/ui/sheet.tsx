@@ -64,10 +64,16 @@ function SheetContent({
 }) {
   const focusRestore = useFocusRestore({ onOpenAutoFocus, onCloseAutoFocus })
   const { t } = useLocale()
+  // The unsaved-changes alert (#1180) is portaled outside this sheet; clicking
+  // it must not read as an outside dismissal that asks again.
   function isToastTarget(target: EventTarget | null) {
     return (
         target instanceof Element &&
-      Boolean(target.closest("[data-sileo-viewport], [data-hackos-toast-close]"))
+      Boolean(
+        target.closest(
+          "[data-sileo-viewport], [data-hackos-toast-close], [data-slot=alert-dialog-content]",
+        ),
+      )
     )
   }
   return (

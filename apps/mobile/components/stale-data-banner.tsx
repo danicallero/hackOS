@@ -1,10 +1,10 @@
 import { Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
-
 import { formatLastUpdate } from "@/lib/format-date";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 /**
  * Shown whenever a screen is displaying cached data because the server
@@ -48,11 +48,22 @@ export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
       <View style={{ flex: 1, gap: 3 }}>
         <Text
           selectable
-          style={{ color: colors.onWarningSurface, fontSize: 15, fontWeight: "700" }}
+          style={{
+            color: colors.onWarningSurface,
+            fontSize: type.subhead.fontSize,
+            fontWeight: "700",
+          }}
         >
           {t("offlineDataTitle")}
         </Text>
-        <Text selectable style={{ color: colors.onWarningSurface, fontSize: 13, lineHeight: 18 }}>
+        <Text
+          selectable
+          style={{
+            color: colors.onWarningSurface,
+            fontSize: type.footnote.fontSize,
+            lineHeight: 18,
+          }}
+        >
           {t("offlineDataBody", { updatedAt: formatted })}
         </Text>
       </View>

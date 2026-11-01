@@ -1,8 +1,10 @@
 import type { SFSymbol } from "expo-symbols";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { GlassView } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
+import { type } from "@/theme/tokens";
 
 export interface ScannerActionButtonProps {
   label: string;
@@ -24,6 +26,7 @@ export function ScannerActionButton({
   size = "large",
   testID,
 }: ScannerActionButtonProps) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   return (
     <GlassView
       colorScheme="auto"
@@ -67,12 +70,12 @@ export function ScannerActionButton({
             />
           ) : null}
           <Text
-            adjustsFontSizeToFit={size === "compact"}
+            adjustsFontSizeToFit={size === "compact" && !accessibilityText}
             minimumFontScale={size === "compact" ? 0.75 : undefined}
-            numberOfLines={size === "compact" ? 1 : undefined}
+            numberOfLines={size === "compact" && !accessibilityText ? 1 : undefined}
             style={{
               color: primary ? colors.primaryActionText : colors.label,
-              fontSize: size === "compact" ? 13 : 17,
+              fontSize: size === "compact" ? type.footnote.fontSize : type.body.fontSize,
               fontWeight: "600",
               flexShrink: 1,
               textAlign: "center",

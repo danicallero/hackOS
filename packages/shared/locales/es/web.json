@@ -217,6 +217,7 @@
   "mobileSidebarDescription": "Enlaces personales y espacios de trabajo.",
   "navigationPersonal": "Personal",
   "navigationWorkspaces": "Áreas de trabajo",
+  "navigationPrimary": "Principal",
   "selectAll": "Seleccionar todo",
   "selectRow": "Seleccionar fila",
   "openRow": "Abrir fila",
@@ -1879,6 +1880,7 @@
   "judgingWindowDesc": "Determina cuánto tiempo tienen las salas de evaluación por proyecto. El ritmo de sala se ajusta automáticamente a medida que se acerca el final de esta ventana.",
   "judgingStartsLabel": "Empieza la evaluación",
   "judgingEndsLabel": "Termina la evaluación",
+  "keepEditing": "Seguir editando",
   "unsavedChangesConfirm": "Hay cambios sin guardar en esta sección. ¿Salir de todos modos?",
   "searchTimezonePlaceholder": "Buscar zona horaria…",
   "noTimezoneMatch": "Ninguna zona horaria coincide.",
@@ -3756,5 +3758,9 @@
   "certificateAllEventAccess": "Todas las personas con acceso al evento",
   "maintenanceTitle": "Restaurando una copia",
   "maintenanceBody": "hackOS volverá en unos minutos. Esta página se recarga sola.",
-  "maintenanceFailedBody": "La restauración necesita a un administrador. Esta página se recarga cuando se resuelva."
+  "maintenanceFailedBody": "La restauración necesita a un administrador. Esta página se recarga cuando se resuelva.",
+  "quickSearch": "Búsqueda rápida",
+  "quickSearchPlaceholder": "Ir a…",
+  "searchList": "Buscar en la lista",
+  "keyboardShortcuts": "Atajos de teclado"
 }

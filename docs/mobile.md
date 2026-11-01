@@ -345,6 +345,16 @@ the primitives `AppText` and `PressableFeedback` are specified in
 [`DESIGN.md` §12](./DESIGN.md#12-mobile-specifics). `NavRow`, `RowButton`,
 `ActionButton`, `ToggleRow` and `AuthButton` are migrated; remaining screens move
 over as they are touched, guarded by `pnpm check:mobile-tokens` (H55, H59).
+All screen text sizes now use `type.*` tokens, including conditional sizes;
+bold text stops at 700 (#1165). The token guard has a zero font-size budget
+and rejects 800/900 weights. Proportional avatar initials remain geometry-derived.
+Primary row labels, names, and choices release their single-line limit at
+accessibility text sizes (#1166); secondary metadata may stay truncated.
+Readable supporting text uses `colors.secondaryLabel`; `colors.tertiaryLabel`
+is reserved for placeholders, disabled content and non-text decoration. Text
+on tinted surfaces uses the corresponding `on…Surface` foreground token.
+Fixed navigation titles and live-camera overlays retain the shared chrome cap
+and navigation labels shrink to fit.
 
 Responsive layout: `theme/layout.ts` (size-class gutters, readable widths),
 `theme/layout-screens.ts` (scanner/operator column, stat block and action
@@ -422,6 +432,18 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
   with their content without double-padding screens, sheets through `SheetFrame` (which measures the
   sheet's own safe area). Backgrounds still fill the display. The DEV badge clears the
   same side.
+- **Auth and status screens.** `AuthScreen` (`components/auth-ui.tsx`) centres its form with
+  `authFrameExtra` (`lib/auth-frame.ts`): on the window beside the system's column, or on the
+  first page of a book pose (the crease is in window points; a left column is subtracted because
+  the screen's content starts after it). Rule: that extra and the 24 pt gutters pad a full-width
+  frame *outside* the form's 440 pt cap, never the capped View itself. The non-scrolling variant
+  once padded the capped View, so on the iPhone Duo in book pose (951 pt window, 64 pt right
+  column, crease at ~471 pt, extra ~416 pt) the padding consumed all 440 pt: sign-in showed only
+  field borders, the reveal eye and a sliver of button on a black page. The extra also assumes the
+  side column is already padded, as the root Stack's `contentStyle` does for sign-in; screens drawn
+  instead of the Stack (session restore/offline, pending removal, maintenance, upgrade) get the
+  same padding through `StacklessScreen` in `app/_layout.tsx`, or their form straddled the crease.
+  `test/ui/auth-frame-layout.test.tsx` lays out both variants for book, flat, iPad and phone windows.
 - **Vertical tab bar.** Apple moves bars to the side wherever it reserves a column
   (outer display, inner display in landscape, the outer edge of a Split View half) and
   keeps horizontal bars on the inner display in portrait. The system only moves bars it
@@ -2013,11 +2035,27 @@ the layouts read `environment.isStale` as live. See
 `widgets/accreditation-activity.tsx` (`AccreditationActivity`) are
 `'widget'` layouts serialized into the `ExpoWidgetsTarget` extension, so they
 use only `@expo/ui/swift-ui` and declare every helper and colour inside the
-function. Pieces every kind repeats (island slot caps, `secondary`/`colorMods`,
-the caption, the **Scan** circle) live in `widgets/live-activity-kit.tsx`
-(#1134): the kit is itself a `'widget'` function and `withLiveActivityKit`
-concatenates its source with each layout's, passing its result as the layout's
-third argument, so nothing is imported inside the extension. The names must equal `LIVE_ACTIVITY_WIDGET_NAMES`. Each state
+function. Never write a regex literal in a layout: serialization drops its
+backslashes (`/\s+/` became `/s+/` and the compact island showed "Roo" for
+"Room B"); `test/widget-serialization.test.ts` enforces it (#1171). The compact island hugs its content (HIG: as narrow as possible, snug
+against the camera): slots are sized to their text and centred, and the queue
+shows a short room code ("Aula 3.0" -> "A3.0", "Room B" -> "RB"). The called
+Lock Screen banner shows the room without its location, and the count-up sits
+left-aligned under "Called". Pieces every kind repeats live in `widgets/live-activity-kit.tsx`
+(#1134): island slot caps and `islandSide`, `secondary`/`colorMods`, the
+accent palette (`islandAccent`, `neutral`, `bannerAccent`), the counter and
+ratio views, the caption, the **Scan** circle, the layout modifiers
+(`bannerMods`, `bottomMods`, `watchMods`), `watchHeader` and the `fallback`
+shown for an unknown props version. `ExpoWidgets` serializes each `'widget'`
+function on its own into `ExpoWidgets.bundle`, so a module import (or a
+helper declared outside the function) does not exist in the extension. The kit
+is therefore itself a `'widget'` function: `withLiveActivityKit` concatenates
+its source with each layout's and passes its result as the layout's third
+argument, so nothing is imported inside the extension. Shared pieces return
+modifier lists or single elements, never wrapper components or fragments
+(the extension's JSX runtime is not guaranteed to support them), and each
+activity keeps its own JSX tree and content. The names must equal
+`LIVE_ACTIVITY_WIDGET_NAMES`. Each state
 answers one question with one hero value; everything else is secondary.
 Colours: waiting/upcoming = systemBlue, called = systemGreen (go), in room =
 neutral grey; Always-On drops the accent fills. Lock Screen colours are
@@ -2031,22 +2069,24 @@ Apple's HIG:
 | Compact leading / trailing | `#4` / `~12m` (hourglass while the ETA is unknown); called: door / room (or the count-up when the room is unknown); in room: `person.2` / room | category symbol / countdown to the start; live: `42/180` (scanned / accredited, the denominator smaller and secondary; the bare count without one or past 7 characters) |
 | Minimal | ring of the climb to the front with the position inside; called/in room: the phase symbol | live: ring of the scanned share of accredited people (the count without a denominator); upcoming: category symbol (20 pt) |
 | Expanded | position / ETA (or "Estimating…"); called: door / "Go to" room; bottom: challenge · +N more queues, location · called count-up, stage track | upcoming: symbol / starts-in countdown, name, `hh:mm–hh:mm · location`; live: circular **Scan** / Scanned `42/180`, name + live state, ends-in, then scanned-share bar (elapsed time without a denominator) |
-| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" room (green) + location trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
+| Lock Screen | challenge … +N more queues; position leading (17 pt), ETA trailing (28 pt, accent); called: count-up leading, "Go to" over location + room (green) on one baseline trailing; stage track with labels | symbol + name and optional live state; context/ends-in leading, 28 pt countdown/Scanned `42/180` trailing; live puts circular **Scan** beside ends-in, with a full-width bar below |
 | Watch Smart Stack / CarPlay (`bannerSmall`) | challenge · hero `#4`, line `~12 min`; called: "Go to" room + location; in room: room | name · countdown, or `42/180` + "Scanned"; no buttons |
 
 Lock Screen banners keep the system's black card (design decision: it makes
 the activity stand out; a transparent tint was tried and dropped). The attendee and
-deadline compact slots keep the countdown as one unit in a 12 pt box (the
-patched `compactCountdown="short"`, no scaling) and the symbol in a fixed,
-centred box, so both sit on the axis of the vertical island of a foldable
-(checked on the iPhone Duo and iPhone 18 Pro simulators).
+deadline compact slots use the patched `compactCountdown="short"`: from one
+hour `2h 40m` (both units, 12 pt, never just `2h`); under an hour, as in Luma,
+a bold number over a small unit label (`41`/`min`, `<1`/`min` under a minute, then the bare seconds `30, 29, 28…` in the last half minute;
+reminders never exceed an hour). Compact slots only cap their width
+(`frame(maxWidth:)`, no ideal width or `fixedSize`), so each hugs its content
+with no empty space beside the figure, the "Live" label or the count (#1171).
 
 | Presentation | Attendee activity (H59) | Submission deadline (H19) | Accreditation desk (H22) |
 | --- | --- | --- | --- |
-| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" / symbol (blue) | countdown (white; grey once submitted, never red) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.badge.key` / accredited count |
+| Compact leading / trailing | countdown to the start (one unit, 12 pt) / category symbol; live: "Live" (56 pt slot) / symbol (blue) | countdown in the phase hue (blue open, red closing, green submitted) / hourglass (open, blue), `exclamationmark.circle` (closing, red) or `checkmark.circle` (submitted, green) | `person.fill.checkmark` / accredited count |
 | Minimal | category symbol (20 pt); live: symbol with a live dot | phase symbol (20 pt); submitted: the check | ring of accredited / eligible |
-| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small and grey once submitted); bottom: title + status, project, window bar | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
-| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; project leading, "Closes in" countdown (28 pt) trailing; status in the header; window bar. Closing: red only on the symbol and "Not submitted"; countdown and bar stay neutral. Submitted: green "Submitted" trailing, project and small time left leading, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
+| Expanded | symbol / "Starts in" or "Ends in" countdown; bottom: name + live state, `hh:mm–hh:mm · place`, live elapsed-time bar | symbol / "Closes in" countdown (28 pt, hours long; small once submitted; red while closing, green once submitted); bottom: title + status, window bar (never the project name) | circular **Scan** / Accredited `412 /600`; bottom: title + closing time, secondary arrivals and inside, then share bar |
+| Lock Screen | symbol + name and optional live state; time · place leading, 28 pt countdown trailing; live adds the elapsed-time bar | symbol + title; "Closes in" countdown (28 pt) leading; status in the header; window bar. Closing: the symbol, countdown, bar and "Not submitted" are red. Submitted: green "Submitted" leading, small "Closes in" time left trailing in the same row, then title, window bar | symbol + title … closing time; Last 10 min · Inside secondary (17 pt) leading, Accredited hero (28 pt) trailing; circular **Scan** beside secondary stats; full-width share bar |
 | Watch / CarPlay | name · countdown (live: "Live" + "Ends in" time left) | title · countdown, with a "Not submitted" line (the one red element) only while closing; submitted: "Submitted" + time left | title · `412 /600` + "Accredited" |
 
 **Watch (`.small` family).** `expo-widgets` registers
@@ -2108,13 +2148,31 @@ Numbers use `monospacedDigit` with numeric content transitions; countdowns,
 the count-up since the call and the elapsed-time bar are SwiftUI timers, so
 they tick without updates.
 
-**Fitting the Dynamic Island (#966).** Every widget wraps its compact
+**Fitting the Dynamic Island (#966, #1171).** Every widget wraps its compact
 leading, compact trailing and minimal views in hard width caps of 24, 56 and
-36 pt (the queue's compact leading is 40 pt, so a three-digit position fits) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
+36 pt (the queue's compact leading is 40 pt, so a three-digit position fits;
+a live attendee activity's is 56 pt, so "Live"/"En curso" fits, keeping the
+staff activity's 80 pt total) with a fixed Dynamic Type size (`dynamicTypeSize("large")`), so no
 value, locale or text size can widen the island; text scales down
-(`minimumScaleFactor(0.6)`) instead of truncating. The slots get a 3 pt
-leading / 7 pt trailing inset so the glyph and the time sit on the pill's
-concentric margin (HIG). Every countdown surface uses `2h 34m` / `34m`
+(`minimumScaleFactor(0.6)`) instead of truncating. The cap is
+`frame(idealWidth: cap, maxWidth: cap)` under `fixedSize`: without the ideal
+width, `fixedSize`'s open proposal passed through the frame, the content kept
+its full width and spilled past the island's edge, and the scale factor never
+applied (#1171). Expanded leading and trailing sit beside the TrueDepth camera
+in regions the system sizes; anything there that refuses its proposal
+(`fixedSize`) grows into the sensor housing. So the kit's `islandSide` wraps
+both regions (8 pt off the curved corners, `minimumScaleFactor(0.6)`, fixed
+type size) and nothing inside them, or inside a compact/minimal slot, is
+`fixedSize`; numbers keep their full width only on the Lock Screen. Beside the
+camera and in compact slots a ratio past seven characters (`1142/1380`) shows
+only the count (`ratioParts`); the bar keeps the share. Fonts are fixed point
+sizes (`Font.system(size:)`), so accessibility text sizes do not grow them.
+The Lock Screen (also the banner on iPhones without a Dynamic Island) stays
+within 160 pt: the called queue puts the location on the room's baseline and
+the submitted deadline puts its time left in the hero row, instead of extra
+rows. `test/live-activity-widgets.test.tsx` ("Dynamic Island safe areas")
+asserts these structural rules; it cannot show pixels, so device screenshots
+with two simultaneous activities remain the visual check. Every countdown surface uses `2h 34m` / `34m`
 normally, colon notation in the last five minutes (`4:59`), then `48s` below a
 minute (including `bannerSmall`). A value beside a unit never has a leading zero
 (`1h 5m`, `9m`, `9s`): the fields are as wide as their digits, and zero padding
@@ -2184,9 +2242,9 @@ rank change alone changes the props signature, so it re-applies the score.
 | Staff live (H24/H25) | `142/180`; `scanned` when that overflows or without `accredited` | **142**/180 scanned / name · location | Scanned `142/180` (blue); location; scanned-share track (elapsed time without `accredited`) + **Scan**; "Ends in" countdown |
 | Attendee upcoming (H59) | countdown to `startsAt` in one unit (`2h`, `38m`) on the camera's leading side, category glyph opposite | "Starts in" + countdown (leading, as in Luma's pre-event activity) · category glyph / name / `hh:mm–hh:mm · location` | Starts in + countdown (blue, leading) · glyph; name; time · location |
 | Attendee live | **Now** leading, glyph opposite | "Ends in" + countdown (leading) · **Now** · glyph / name / time · location; elapsed-time track | Ends in + countdown (leading) · Now · glyph; name; time · location; elapsed-time track |
-| Deadline open (H19) | countdown to `endsAt` in one unit on the camera's leading side, status symbol opposite | "Closes in" + countdown (leading) · status · symbol / title / project; hacking-window track (none without `startsAt`) | Closes in + countdown (blue, leading) · status · symbol; title; project (amber "Not submitted", green "Submitted", none when unknown); window track |
+| Deadline open (H19) | countdown to `endsAt` in one unit on the camera's leading side, status symbol opposite | "Closes in" + countdown (leading) · status · symbol / title; hacking-window track (none without `startsAt`) | Closes in + countdown (blue, leading) · status (amber "Not submitted", green "Submitted", none when unknown) · symbol; title; window track |
 | Deadline closing | countdown | the same in red (`exclamationmark` glyph); heads-up only on the transition into `closing` | the same in red |
-| Deadline submitted | countdown (time left) | Submitted / project · "Closes in" + countdown; check, green; no track | Submitted (green) under the project · Closes in + a small countdown |
+| Deadline submitted | countdown (time left) | Submitted · "Closes in" + countdown; check, green; no track | Submitted (green) · Closes in + a small countdown |
 | Accreditation (H22) | accredited count | **412**/600 accredited / +23 last 10 min · 380 inside · title; accredited-share track; **Scan** | Accredited `412/600` (blue) · Last 10 min · Inside; share track + **Scan** |
 
 **Tracks.** Like the iOS bars: each stage fills in its colour up to the
@@ -2317,7 +2375,7 @@ reachable only while it is on, because nothing shows on this device then and
 the rows would be inert.
 
 **Development samples.** Debug builds only: opening
-`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-submitted|accreditation|all|end>`
+`hackos://dev/live-activity?sample=<queue-waiting|queue-estimating|queue-called|queue-in-room|staff-upcoming|staff-live|staff-live-other|attendee-upcoming|attendee-live|deadline-open|deadline-open-unknown|deadline-closing|deadline-last-seconds|deadline-submitted|accreditation|all|end>`
 (for example `xcrun simctl openurl booted …`; any scheme works, and
 `com.hackudc.os.debug://dev/…` avoids opening another installed hackOS build,
 which would overwrite the App Group's shared Live Activity layouts) renders sample states without a
@@ -2517,6 +2575,11 @@ an id's first post).
   while the app runs (`xcrun simctl ui booted content_size
   accessibility-extra-extra-extra-large`), then switch tabs: a cold start at
   the large size does not exercise the re-measure path.
+- **44 pt hit area (#1168).** A control whose visible shape is smaller than 44 pt
+  (inline search/clear glyphs, 28–40 pt text fields and rows, compact retry
+  buttons) keeps its look and reaches 44×44 through `hitSlop` — extended away
+  from neighbouring controls, never into them — or `minHeight`/`minWidth` when
+  the layout has room. Decorative badges and the sheet grabber are exempt.
 - `lib/haptics.ts` — best-effort Expo Haptics feedback for custom controls and
   meaningful outcomes. Selection/light feedback is used for custom toggles,
   segmented choices, scanner capture and retry actions; success/warning/error
@@ -2524,6 +2587,22 @@ an id's first post).
   H51). Native `Switch`, segmented `Picker`, Wallet controls and system menus
   keep their platform-provided feedback, and passive navigation/QR frame
   detection stays silent.
+  The OS decides whether a haptic plays: iOS drops it when System Haptics is
+  off and Android when touch feedback is off, so no screen reads or overrides
+  the setting (#1170).
+  **Scanner and queue mapping** (`lib/scan-haptics.ts`, routed through
+  `haptic()`; mapped by `lib/scan-haptics.test.ts`):
+
+  | Outcome | Haptic | Where |
+  |---|---|---|
+  | Code recognised and accepted | success | general scanner, activity scanner (server-confirmed), person screen (acknowledged) |
+  | Stored offline, not yet confirmed | light | activity scanner, person screen |
+  | Already registered (repeat needs a decision) | warning | activity scanner |
+  | Server rejected the scan | error | activity scanner, person screen |
+  | Unknown or revoked code | error | general and activity scanner |
+  | Queue entry confirmed / rejected by a sync | success / error | `useQueueTransitionHaptics` on the sync queue screen; one haptic per refresh, error wins over success, first snapshot and newly queued entries are silent |
+  | Queue retry / discard | light / warning | the button itself |
+  | Queue "notify team" fails | error | queue operations screen |
 - `expo-network` is installed as a required peer of `@better-auth/expo`; it
   lets the auth client refresh session state when the device regains network
   connectivity. As with every native dependency change, an existing dev client
@@ -2571,6 +2650,17 @@ participants without a badge. Offline activity payloads preserve the original
 credential and the API revalidates tickets on replay, with the same repeat
 confirmation and idempotency as badge scans. Scanner lookup errors appear
 centered below the statistics on both screens and dismiss after six seconds.
+
+All operational scans (activities/meals, presence and badge operations) refresh
+the shared pending queue immediately after durable local
+storage. Reader and manual input availability do not wait for replay, snapshot or
+statistics requests. Sync verdicts update only the matching result, and local
+activity counts remain part of repeat detection when a server snapshot is stale.
+Scanner replay, snapshot and badge-assignment requests time out after five seconds;
+network timeouts retain the original idempotency key and queue the mutation.
+Badge assignment remains authoritative only after server acknowledgement. Contact
+scans and their separate replay queue use the same request deadline and retain
+their existing offline fallback.
 
 ## Switches
 

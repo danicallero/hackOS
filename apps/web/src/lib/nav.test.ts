@@ -6,6 +6,8 @@ import {
   type NavVisibilityContext,
   PERSONAL_NAV,
   readLastWorkspace,
+  visibleNavGroups,
+  visibleSubDestinations,
   WORKSPACES,
   workspaceForPath,
   writeLastWorkspace,
@@ -402,5 +404,57 @@ describe("grouped personal destinations", () => {
     expect(
       PERSONAL_NAV.some((item) => ["/gallery", "/inbox", "/timetable"].includes(item.href)),
     ).toBe(false);
+  });
+});
+
+describe("visibleNavGroups (quick search, #1182)", () => {
+  const groupsFor = (ctx: NavVisibilityContext) =>
+    visibleNavGroups((item) => isNavItemVisible(item, ctx)).map((group) => ({
+      id: group.id,
+      hrefs: group.items.map((item) => item.href),
+    }));
+
+  it("lists only the personal area for an account without work capabilities", () => {
+    const groups = groupsFor(contextFor([]));
+    expect(groups.map((group) => group.id)).toEqual(["personal"]);
+    expect(groups[0].hrefs).toContain("/event");
+  });
+
+  it("adds exactly the workspaces and items the capabilities grant", () => {
+    const groups = groupsFor(contextFor([CAPABILITIES.USERS_READ]));
+    expect(groups.map((group) => group.id)).toEqual(["personal", "accessAudit"]);
+    expect(groups[1].hrefs).toEqual(["/users"]);
+  });
+
+  it("matches the sidebar's workspace set for an administrator", () => {
+    const ctx = contextFor([CAPABILITIES.ADMIN_ALL]);
+    const ids = groupsFor(ctx).map((group) => group.id);
+    expect(ids).toEqual(["personal", ...visibleWorkspaceIds(ctx)]);
+  });
+});
+
+describe("quick search sub-destinations (#1182)", () => {
+  const hrefsFor = (ctx: NavVisibilityContext) =>
+    visibleSubDestinations((item) => isNavItemVisible(item, ctx)).map((entry) => entry.item.href);
+
+  it("lists only the event settings sections the caller can manage", () => {
+    const hrefs = hrefsFor(contextFor([CAPABILITIES.WALLET_MANAGE]));
+    expect(hrefs).toContain("/settings/event?tab=wallet");
+    expect(hrefs).not.toContain("/settings/event?tab=venue");
+    expect(hrefs).not.toContain("/settings/event?tab=danger");
+  });
+
+  it("lists only profile views for a caller without capabilities", () => {
+    const hrefs = hrefsFor(contextFor([]));
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs.every((href) => href.startsWith("/settings/profile?tab="))).toBe(true);
+  });
+
+  it("points every view at its destination with a tab", () => {
+    for (const item of WORKSPACES.flatMap((w) => w.items)) {
+      for (const subItem of item.subItems ?? []) {
+        expect(subItem.href.startsWith(`${item.href}?tab=`)).toBe(true);
+      }
+    }
   });
 });

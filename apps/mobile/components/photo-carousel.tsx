@@ -7,6 +7,8 @@ import { loadingImageStyle, useApiImage } from "@/components/person-avatar";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { useLocale } from "@/lib/i18n";
 import type { ProjectFile } from "@/lib/projects";
+import { colors } from "@/theme/colors";
+import { type } from "@/theme/tokens";
 
 function Page({ photo, width, height }: { photo: ProjectFile; width: number; height: number }) {
   const full = useApiImage(photo.url);
@@ -59,6 +61,7 @@ export function PhotoCarousel({
       onRequestClose={onClose}
       statusBarTranslucent
     >
+      {/* The full-screen photo viewer intentionally stays black behind every image. */}
       <View testID="photo-carousel" style={{ backgroundColor: "#000", flex: 1 }}>
         <FlatList
           data={photos}
@@ -84,7 +87,13 @@ export function PhotoCarousel({
               top: insets.top + 26,
             }}
           >
-            <Text style={{ color: "#fff", fontSize: 15, fontWeight: "600" }}>
+            <Text
+              style={{
+                color: colors.accentText,
+                fontSize: type.subhead.fontSize,
+                fontWeight: "600",
+              }}
+            >
               {`${index + 1} / ${photos.length}`}
             </Text>
           </View>
@@ -94,7 +103,7 @@ export function PhotoCarousel({
           side="left"
           icon="xmark"
           colorScheme="dark"
-          tintColor="#fff"
+          tintColor={colors.accentText as string}
           accessibilityLabel={t("close")}
           onPress={onClose}
         />

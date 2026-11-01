@@ -275,3 +275,8 @@ those interruptions consume room throughput; active presentation estimates
 subtract paused duration. Migration 0407 initializes presentations still in `presenting`
 with the current capped track target, since their former browser-only goal
 cannot be recovered. No timer automatically ends a presentation.
+
+The H30 occupancy guard includes the destination room: a separate called,
+in-room or presenting entry sharing a member blocks another call there too.
+Only the entry being transitioned is excluded; member and repo advisory locks
+continue to serialize concurrent calls.

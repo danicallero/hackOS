@@ -14,7 +14,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-
 import { GlassView } from "@/components/glass-view";
 import {
   type RouterTabItem,
@@ -45,7 +44,7 @@ import { emitTabReselect } from "@/lib/tab-reselect";
 import { useTabShortcuts } from "@/lib/tab-shortcuts";
 import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
-import { MIN_TARGET } from "@/theme/tokens";
+import { MIN_TARGET, type } from "@/theme/tokens";
 
 type TabLabelKey =
   | "tabAccount"
@@ -225,8 +224,8 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
   const { t } = useLocale();
   const systemColorScheme = useColorScheme();
   const fallbackColorScheme: "dark" | "light" = systemColorScheme === "dark" ? "dark" : "light";
-  const tabIconColor = fallbackColorScheme === "dark" ? "#ffffff" : "#000000";
-  const tabSelectedColor = fallbackColorScheme === "dark" ? "#0a84ff" : "#007aff";
+  const tabIconColor = colors.label as string;
+  const tabSelectedColor = colors.interactiveText as string;
   const presentation = useTabPresentation(capabilities, { hasQueueItems });
   const directTabLimit = presentation.directLimit;
   const maxTabsWithoutOverflow = presentation.withoutOverflow;
@@ -289,20 +288,12 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
       testID: `opaque-tab-${key}`,
     };
   });
-  const fallbackTheme: Partial<RouterTabsTheme> =
-    fallbackColorScheme === "dark"
-      ? {
-          label: "#ffffff",
-          selectedLabel: "#0a84ff",
-          selectedSurface: "#2c2c2e",
-          surface: "#1c1c1e",
-        }
-      : {
-          label: "#000000",
-          selectedLabel: "#007aff",
-          selectedSurface: "#e5e5ea",
-          surface: "#ffffff",
-        };
+  const fallbackTheme: Partial<RouterTabsTheme> = {
+    label: colors.label,
+    selectedLabel: colors.interactiveText,
+    selectedSurface: colors.accentSurface,
+    surface: colors.surface,
+  };
 
   return (
     <>
@@ -334,8 +325,8 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
         tabs={tabs}
         testID="opaque-router-tabs"
         theme={{
-          label: fallbackColorScheme === "dark" ? "#ffffff" : "#000000",
-          selectedLabel: colors.accent,
+          label: colors.label,
+          selectedLabel: colors.interactiveText,
           selectedSurface: colors.accentSurface,
           shadow: colors.controlShadow,
           surface: colors.surface,
@@ -633,6 +624,7 @@ function AndroidOverflowMenu({
                   borderWidth: 0.5,
                   elevation: 12,
                   overflow: "hidden",
+                  // Native drop shadows stay black in both appearances.
                   shadowColor: "#000",
                   shadowOffset: { height: 6, width: 0 },
                   shadowOpacity: colorScheme === "dark" ? 0.4 : 0.15,
@@ -701,7 +693,7 @@ function AndroidOverflowMenuRow({
           style={{
             color: selected ? colors.accent : labelColor,
             flex: 1,
-            fontSize: 15,
+            fontSize: type.subhead.fontSize,
             fontWeight: selected ? "600" : "400",
           }}
         >

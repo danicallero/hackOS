@@ -66,8 +66,8 @@ export function SurfacesPreview() {
       <p className="type-meta">{t("surfaceGuidance")}</p>
       <Tabs
         value={tab}
-        onValueChange={(value) => {
-          if (confirmDiscardUnsavedChanges(readingDirty, t)) {
+        onValueChange={async (value) => {
+          if (await confirmDiscardUnsavedChanges(readingDirty, t)) {
             setReadingDirty(false);
             setTab(value);
           }
@@ -427,9 +427,9 @@ function EditorPreview({
   const formId = useId();
   const [state, setState] = useState<SaveState>("saved");
   const [size, setSize] = useState<"default" | "wide" | "expanded">("default");
-  function changeOpen(next: boolean) {
+  async function changeOpen(next: boolean) {
     if (state === "saving") return;
-    if (!next && !confirmDiscardUnsavedChanges(state === "unsaved", t)) return;
+    if (!next && !(await confirmDiscardUnsavedChanges(state === "unsaved", t))) return;
     setState("saved");
     onOpenChange(next);
   }

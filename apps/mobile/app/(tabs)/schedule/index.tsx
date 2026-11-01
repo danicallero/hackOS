@@ -86,6 +86,7 @@ import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { useUnreadNotificationCount } from "@/lib/use-unread-notifications";
 import { listDetailLayout, maxContentWidth } from "@/lib/window-size";
 import { colors, isAccessibilityTextSize, radius, type } from "@/theme";
+import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 import {
   SCREEN_TITLE,
   SCREEN_TITLE_CENTER,
@@ -256,7 +257,7 @@ export default function ScheduleScreen() {
       headerShadowVisible: false,
       headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
       headerTitleAlign: "left",
-      headerTitleStyle: { color: colors.label, fontSize: type.title.fontSize, fontWeight: "800" },
+      headerTitleStyle: { color: colors.label, fontSize: type.title.fontSize, fontWeight: "700" },
       headerSearchBarOptions: {
         placeholder: t("scheduleSearchPlaceholder"),
         autoCapitalize: "none",
@@ -832,6 +833,9 @@ export default function ScheduleScreen() {
                   <Text
                     accessibilityRole="header"
                     numberOfLines={1}
+                    maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                    adjustsFontSizeToFit
+                    minimumFontScale={CHROME_MIN_FONT_SCALE}
                     style={{ color: colors.label, ...SCREEN_TITLE }}
                   >
                     {selectedTitle ?? ""}
@@ -1078,7 +1082,7 @@ function ScheduleCard({
           <Text
             numberOfLines={1}
             style={{
-              color: colors.tertiaryLabel,
+              color: colors.secondaryLabel,
               fontSize: type.footnote.fontSize,
               fontVariant: ["tabular-nums"],
               fontWeight: "500",
@@ -1206,7 +1210,7 @@ function ScheduleCard({
                 </Text>
               ) : null}
               {item.type && item.location ? (
-                <Text style={{ color: colors.tertiaryLabel, fontSize: type.footnote.fontSize }}>
+                <Text style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}>
                   ·
                 </Text>
               ) : null}

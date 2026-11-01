@@ -4,7 +4,9 @@
  * centre on `SCREEN_TITLE_CENTER` pt from the top of the window; a title drawn by a screen itself
  * (the two-pane Schedule) sits on the same line.
  */
-export const SCREEN_TITLE = { fontSize: 28, fontWeight: "800", lineHeight: 34 } as const;
+import { type } from "./tokens";
+
+export const SCREEN_TITLE = type.title;
 export const SCREEN_TITLE_CENTER = 47.5;
 
 /** Height of each column's own top band in a two-pane layout (Schedule, Gallery). */

@@ -4,7 +4,7 @@ import { type Href, usePathname, useRootNavigationState, useRouter } from "expo-
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router/react-navigation";
 import { Stack } from "expo-router/stack";
 import * as SplashScreen from "expo-splash-screen";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -94,6 +94,28 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * An auth-style screen drawn instead of the whole app: the frame and side padding the root Stack's
+ * `contentStyle` gives sign-in, which `AuthScreen`'s foldable centring assumes (H4, H55).
+ */
+function StacklessScreen({ children }: { children: ReactNode }) {
+  const sideInsets = useSideInsets();
+  return (
+    <AdaptiveFrame padSides={false}>
+      <View
+        style={{
+          backgroundColor: colors.background,
+          flex: 1,
+          paddingLeft: sideInsets.left,
+          paddingRight: sideInsets.right,
+        }}
+      >
+        {children}
+      </View>
+    </AdaptiveFrame>
+  );
+}
+
 function RootLayoutSession() {
   return (
     <MeProvider>
@@ -111,9 +133,21 @@ function RootLayoutSessionContents() {
   useOrientationPolicy();
 
   // The API refuses every request from this build (#999); nothing else can work.
-  if (upgradeRequired) return <UpgradeRequiredScreen />;
+  if (upgradeRequired) {
+    return (
+      <StacklessScreen>
+        <UpgradeRequiredScreen />
+      </StacklessScreen>
+    );
+  }
   // A database restore is in progress (#539); the screen resumes the app itself.
-  if (maintenancePhase) return <MaintenanceScreen phase={maintenancePhase} />;
+  if (maintenancePhase) {
+    return (
+      <StacklessScreen>
+        <MaintenanceScreen phase={maintenancePhase} />
+      </StacklessScreen>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -481,24 +515,28 @@ function RootLayoutNav({
       return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
     }
     return (
-      <SessionState
-        loading={loading}
-        offlineAvailable={offlineEntryAvailable}
-        onContinueOffline={() => void enterOffline()}
-        onRetry={() => void refetch()}
-      />
+      <View style={[{ flex: 1 }, sidePadding]}>
+        <SessionState
+          loading={loading}
+          offlineAvailable={offlineEntryAvailable}
+          onContinueOffline={() => void enterOffline()}
+          onRetry={() => void refetch()}
+        />
+      </View>
     );
   }
 
   if (me?.accountState === "removal_pending" && me.removal) {
     return (
-      <PendingRemovalScreen
-        removal={me.removal}
-        onRefresh={async () => {
-          await refetch();
-        }}
-        refreshError={error}
-      />
+      <View style={[{ flex: 1 }, sidePadding]}>
+        <PendingRemovalScreen
+          removal={me.removal}
+          onRefresh={async () => {
+            await refetch();
+          }}
+          refreshError={error}
+        />
+      </View>
     );
   }
 
@@ -616,7 +654,7 @@ function DevelopmentIndicator() {
         style={{
           color: "#ffffff",
           fontSize: type.caption.fontSize,
-          fontWeight: "800",
+          fontWeight: "700",
           letterSpacing: 0.5,
         }}
       >

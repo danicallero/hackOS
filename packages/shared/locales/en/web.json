@@ -217,6 +217,7 @@
   "mobileSidebarDescription": "Personal links and workspaces.",
   "navigationPersonal": "Personal",
   "navigationWorkspaces": "Workspaces",
+  "navigationPrimary": "Primary",
   "selectAll": "Select all",
   "selectRow": "Select row",
   "openRow": "Open row",
@@ -1879,6 +1880,7 @@
   "judgingWindowDesc": "Sizes how much time judging rooms have per project. Room pacing tightens automatically as this window's end approaches.",
   "judgingStartsLabel": "Judging starts",
   "judgingEndsLabel": "Judging ends",
+  "keepEditing": "Keep editing",
   "unsavedChangesConfirm": "There are unsaved changes in this section. Leave anyway?",
   "searchTimezonePlaceholder": "Search timezone…",
   "noTimezoneMatch": "No timezone matches.",
@@ -3756,5 +3758,9 @@
   "certificateAllEventAccess": "Everyone with event access",
   "maintenanceTitle": "Restoring a backup",
   "maintenanceBody": "hackOS will be back shortly. This page reloads on its own.",
-  "maintenanceFailedBody": "The restore needs an administrator. This page reloads once it is resolved."
+  "maintenanceFailedBody": "The restore needs an administrator. This page reloads once it is resolved.",
+  "quickSearch": "Quick search",
+  "quickSearchPlaceholder": "Go to…",
+  "searchList": "Search this list",
+  "keyboardShortcuts": "Keyboard shortcuts"
 }

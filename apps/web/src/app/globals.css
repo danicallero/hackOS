@@ -127,6 +127,12 @@
     background: var(--primary);
     color: var(--primary-foreground);
   }
+  /* WCAG 2.2 AA target size (2.5.8) for native checkboxes and radios; sized by class where a surface owns its geometry. */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
@@ -138,6 +144,27 @@
 }
 
 @layer components {
+  /*
+   * Touch devices get a 44 px hit area without growing the painted control or
+   * the dense desktop layout: the control keeps its own geometry and a
+   * transparent pseudo-element extends the pointer target (WCAG 2.5.8 / HIG).
+   */
+  .touch-target {
+    position: relative;
+  }
+
+  @media (pointer: coarse) {
+    .touch-target::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, var(--target-touch));
+      height: max(100%, var(--target-touch));
+      transform: translate(-50%, -50%);
+    }
+  }
+
   .type-page-title {
     font-family: var(--font-display);
     font-size: var(--font-size-page-title);
@@ -455,6 +482,38 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator:hover,
 input[type="time"]::-webkit-calendar-picker-indicator:hover {
   opacity: 1;
+}
+
+/*
+ * Reduced motion: overlay enter/exit animations (tw-animate-css `animate-in` /
+ * `animate-out`, used by dialog, sheet, menus, popover, select and tooltip) and
+ * decorative loops are dropped globally. Unlayered on purpose so it beats the
+ * utility layer. Radix Presence unmounts immediately when no animation runs.
+ * Spinners stay visible, just static, because the icon still signals loading.
+ */
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-in"],
+  [class*="animate-out"],
+  [class*="animate-pulse"],
+  [class*="animate-spin"] {
+    animation: none;
+  }
+}
+
+/*
+ * Reduced transparency: blurred or translucent washes become opaque surfaces.
+ * Unlayered so it beats the utility layer; the scrim behind modals is a dim,
+ * not a surface, and stays.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  [class*="backdrop-blur"] {
+    backdrop-filter: none;
+    background-color: var(--background);
+  }
+
+  [data-slot="sheet-content"] {
+    background-color: var(--popover);
+  }
 }
 
 /* H49/H55: anchors clear public sticky chrome and expose programmatic heading focus. */

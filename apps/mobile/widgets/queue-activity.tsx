@@ -12,7 +12,6 @@ import {
 import {
   allowsTightening,
   contentTransition,
-  dynamicTypeSize,
   fixedSize,
   font,
   foregroundStyle,
@@ -53,35 +52,20 @@ export const QueueActivityLayout = withLiveActivityKit(
   (props: QueueLiveProps, environment: LiveActivityEnvironment, kit: LiveActivityKit) => {
     "widget";
 
-    const { colorMods, secondary } = kit;
-    const capped = kit.capped({ compactLeading: { width: 40, alignment: "trailing" } });
+    const { colorMods, islandSide, secondary } = kit;
+    // Each compact slot hugs its content (HIG: as narrow as possible, snug
+    // against the camera); `compactSlots` is set once the content is known.
+    let compactSlots: Parameters<typeof kit.capped>[0] = {};
+    const capped = <
+      L extends { compactLeading: unknown; compactTrailing: unknown; minimal: unknown },
+    >(
+      layout: L,
+    ) => kit.capped(compactSlots)(layout);
     // APNs delivers props straight to this layout, so a newer, incompatible
     // shape (`v` bumped, see LIVE_ACTIVITY_PROPS_VERSION) degrades to the title
     // instead of rendering half-understood fields.
     if (props.v !== 1 || !props.labels) {
-      const title = (
-        <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
-          {typeof props.challengeTitle === "string" ? props.challengeTitle : ""}
-        </Text>
-      );
-      const symbol = <Image systemName="person.3.sequence.fill" color="#0A84FF" size={15} />;
-      return capped({
-        banner: (
-          <VStack
-            alignment="leading"
-            modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-          >
-            {title}
-          </VStack>
-        ),
-        bannerSmall: <VStack modifiers={[padding({ all: 8 })]}>{title}</VStack>,
-        compactLeading: symbol,
-        compactTrailing: <Text> </Text>,
-        minimal: symbol,
-        expandedLeading: symbol,
-        expandedTrailing: <Text> </Text>,
-        expandedBottom: <VStack modifiers={[padding({ horizontal: 8 })]}>{title}</VStack>,
-      });
+      return capped(kit.fallback(props.challengeTitle, "person.3.sequence.fill"));
     }
     const labels = props.labels;
     const called = props.phase === "called";
@@ -96,7 +80,7 @@ export const QueueActivityLayout = withLiveActivityKit(
     // luminance) drops accent fills and lets the system dim.
     // Waiting = blue, called = green (go), in room = neutral.
     const reduced = environment.isLuminanceReduced === true;
-    const neutral = "#8E8E93";
+    const { neutral } = kit;
     const islandColor = inRoom ? null : called ? "#30D158" : "#0A84FF";
     const adaptive = (light: string, dark: string) =>
       ({ dynamic: { light, dark } }) as unknown as string;
@@ -108,13 +92,21 @@ export const QueueActivityLayout = withLiveActivityKit(
           : adaptive("#007AFF", "#0A84FF");
 
     const room = props.roomName ?? "";
-    // Compact island: the part that identifies the room ("Room B" -> "B", a long
-    // name -> its first three characters), so it fits the vertical island.
-    const roomWords = room.trim().split(/\s+/);
+    // Compact island: a short code for the room, so it fits the vertical island:
+    // "Aula 3.0" -> "A3.0", "Room B" -> "RB", "Auditorium Ramón Piñeiro" -> "ARP".
+    // No regex literal here: the widget function is serialized to a string and
+    // the backslash of `\s` is lost, which split "Room B" on `s` and cut it to "Roo".
+    const roomWords = room.split(" ").filter(Boolean);
+    const roomLast = roomWords[roomWords.length - 1] ?? "";
+    const roomInitials = (words: string[]) => words.map((w) => w.charAt(0).toUpperCase()).join("");
     const roomCompact =
-      roomWords.length > 1
-        ? (roomWords[roomWords.length - 1] ?? "").slice(0, 3)
-        : room.trim().slice(0, 3);
+      roomWords.length === 0
+        ? ""
+        : roomWords.length === 1
+          ? room.trim().slice(0, 4)
+          : roomLast.length <= 4
+            ? `${roomInitials(roomWords.slice(0, -1))}${roomLast}`.slice(0, 5)
+            : roomInitials(roomWords).slice(0, 4);
     const position =
       typeof props.position === "number" && Number.isFinite(props.position)
         ? `#${props.position}`
@@ -147,7 +139,12 @@ export const QueueActivityLayout = withLiveActivityKit(
 
     // Count-up since the call (H34 shows operators the same elapsed time).
     const calledMs = typeof props.calledAt === "string" ? Date.parse(props.calledAt) : Number.NaN;
-    const calledTimer = (size: number, weight: "semibold" | "medium", width: number) =>
+    const calledTimer = (
+      size: number,
+      weight: "semibold" | "medium",
+      width: number,
+      align: "leading" | "trailing" = "trailing",
+    ) =>
       Number.isFinite(calledMs) ? (
         <Text
           timerInterval={{
@@ -161,8 +158,8 @@ export const QueueActivityLayout = withLiveActivityKit(
             lineLimit(1),
             minimumScaleFactor(0.6),
             layoutPriority(1),
-            multilineTextAlignment("trailing"),
-            frame({ maxWidth: width, alignment: "trailing" }),
+            multilineTextAlignment(align),
+            frame({ maxWidth: width, alignment: align }),
           ]}
         />
       ) : null;
@@ -260,22 +257,21 @@ export const QueueActivityLayout = withLiveActivityKit(
       );
     };
 
-    // Caption above a large value. Numbers keep their full width (`fixedSize`);
-    // a room name can be long, so it shrinks and then truncates.
+    // Caption above a large value. On the Lock Screen numbers keep their full
+    // width (`fixed`); a room name can be long, so it shrinks and then
+    // truncates. Beside the camera nothing is fixed (#1171): a 28 pt
+    // `~12 min` can be wider than that region. `place` sits on the value's
+    // baseline, before it, and gives way first.
     const metric = (
       label: string | null,
       value: string,
       align: "leading" | "trailing",
       color: string | null,
       size: number,
-      numeric = true,
-    ) => (
-      <VStack alignment={align} spacing={0}>
-        {label ? (
-          <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
-            {label}
-          </Text>
-        ) : null}
+      fixed = true,
+      place: string | null = null,
+    ) => {
+      const text = (
         <Text
           modifiers={[
             font({ size, weight: "bold" }),
@@ -283,21 +279,46 @@ export const QueueActivityLayout = withLiveActivityKit(
             contentTransition("numericText", { countsDown: true }),
             lineLimit(1),
             allowsTightening(true),
-            ...(numeric ? [fixedSize({ horizontal: true })] : [minimumScaleFactor(0.6)]),
+            ...(fixed ? [fixedSize({ horizontal: true })] : [minimumScaleFactor(0.6)]),
+            layoutPriority(1),
             ...colorMods(color),
           ]}
         >
           {value}
         </Text>
-      </VStack>
-    );
+      );
+      return (
+        <VStack alignment={align} spacing={0}>
+          {label ? (
+            <Text modifiers={[font({ size: 12, weight: "medium" }), secondary, lineLimit(1)]}>
+              {label}
+            </Text>
+          ) : null}
+          {place ? (
+            <HStack alignment="firstTextBaseline" spacing={6}>
+              <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
+                {place}
+              </Text>
+              {text}
+            </HStack>
+          ) : (
+            text
+          )}
+        </VStack>
+      );
+    };
     // The ETA metric: an estimate (`~12 min`, never a ticking timer), or the
     // smaller "Estimating…" placeholder.
-    const etaMetric = (align: "leading" | "trailing", color: string | null, size: number) =>
+    const etaMetric = (
+      align: "leading" | "trailing",
+      color: string | null,
+      size: number,
+      fixed = true,
+    ) =>
       etaOrEstimating === null
         ? null
         : etaLong
-          ? metric(labels.wait, etaLong, align, color, size)
+          ? metric(labels.wait, etaLong, align, color, size, fixed)
           : metric(labels.wait, etaOrEstimating, align, color, Math.round(size * 0.62), false);
 
     const symbol = inRoom
@@ -359,6 +380,22 @@ export const QueueActivityLayout = withLiveActivityKit(
         <Image systemName="hourglass" color={symbolColor} size={14} />
       );
 
+    const textWidth = (chars: number, size: number) => Math.ceil(chars * size * 0.62) + 4;
+    compactSlots = {
+      compactLeading:
+        called || inRoom || position === null
+          ? { width: 22, alignment: "center" }
+          : { width: textWidth(position.length, 13), alignment: "center" },
+      compactTrailing:
+        called || inRoom
+          ? roomCompact
+            ? { width: textWidth(roomCompact.length, 12), alignment: "center" }
+            : { width: 48, alignment: "center" }
+          : etaCompact
+            ? { width: textWidth(etaCompact.length, 12), alignment: "center" }
+            : { width: 22, alignment: "center" },
+    };
+
     // Minimal: the climb to the front as a ring around the position, or the
     // phase symbol once called.
     const minimal =
@@ -390,52 +427,31 @@ export const QueueActivityLayout = withLiveActivityKit(
         </ZStack>
       );
 
-    const expandedLeading = called ? (
-      <Image
-        systemName={symbol}
-        color={symbolColor}
-        size={24}
-        modifiers={[padding({ leading: 8, top: 6 })]}
-      />
-    ) : inRoom ? (
-      <Image
-        systemName={symbol}
-        color={neutral}
-        size={24}
-        modifiers={[padding({ leading: 8, top: 6 })]}
-      />
-    ) : (
-      <VStack modifiers={[padding({ leading: 8, top: 4 })]}>
-        {metric(labels.position, position ?? "–", "leading", null, 17)}
-      </VStack>
-    );
+    const expandedLeading =
+      called || inRoom
+        ? islandSide(<Image systemName={symbol} color={symbolColor} size={24} />, "leading", 6)
+        : islandSide(
+            metric(labels.position, position ?? "–", "leading", null, 17, false),
+            "leading",
+          );
 
-    // Inset from the island's rounded corners so labels never clip.
-    const expandedTrailing = (
-      <VStack alignment="trailing" modifiers={[padding({ trailing: 8, top: 4 })]}>
-        {called || inRoom
-          ? metric(
-              called ? labels.goTo : labels.inRoom,
-              room || "–",
-              "trailing",
-              islandColor,
-              28,
-              false,
-            )
-          : etaMetric("trailing", islandColor, 28)}
-      </VStack>
+    const expandedTrailing = islandSide(
+      called || inRoom
+        ? metric(
+            called ? labels.goTo : labels.inRoom,
+            room || "–",
+            "trailing",
+            islandColor,
+            28,
+            false,
+          )
+        : etaMetric("trailing", islandColor, 28, false),
+      "trailing",
     );
 
     const calledSince = calledTimer(17, "medium", 72);
     const expandedBottom = (
-      <VStack
-        alignment="leading"
-        spacing={8}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 8, bottom: 8 }),
-        ]}
-      >
+      <VStack alignment="leading" spacing={8} modifiers={kit.bottomMods(8)}>
         <HStack spacing={8}>
           <Text modifiers={[font({ size: 15, weight: "semibold" }), lineLimit(1)]}>
             {props.challengeTitle}
@@ -502,7 +518,9 @@ export const QueueActivityLayout = withLiveActivityKit(
       </HStack>
     );
 
-    const calledFor = calledTimer(17, "semibold", 72);
+    // The banner shows the room alone: the location is in the app, and on a line
+    // of its own it pushed the called banner past the 160 pt Lock Screen height (#1171).
+    const calledFor = calledTimer(17, "semibold", 72, "leading");
     const hero =
       called || inRoom ? (
         <HStack alignment="bottom" spacing={12}>
@@ -517,21 +535,15 @@ export const QueueActivityLayout = withLiveActivityKit(
             </VStack>
           ) : null}
           <Spacer />
-          <VStack alignment="trailing" spacing={0}>
-            {metric(
-              called ? labels.goTo : labels.inRoom,
-              room || "–",
-              "trailing",
-              bannerColor,
-              28,
-              false,
-            )}
-            {props.roomLocation ? (
-              <Text modifiers={[font({ size: 13, weight: "medium" }), secondary, lineLimit(1)]}>
-                {props.roomLocation}
-              </Text>
-            ) : null}
-          </VStack>
+          {metric(
+            called ? labels.goTo : labels.inRoom,
+            room || "–",
+            "trailing",
+            bannerColor,
+            28,
+            false,
+            null,
+          )}
         </HStack>
       ) : (
         <HStack alignment="bottom" spacing={12}>
@@ -542,11 +554,7 @@ export const QueueActivityLayout = withLiveActivityKit(
       );
 
     const banner = (
-      <VStack
-        alignment="leading"
-        spacing={10}
-        modifiers={[frame({ maxWidth: 10000, alignment: "leading" }), padding({ all: 14 })]}
-      >
+      <VStack alignment="leading" spacing={10} modifiers={kit.bannerMods}>
         {header}
         {hero}
         {track(bannerColor, true)}
@@ -591,21 +599,8 @@ export const QueueActivityLayout = withLiveActivityKit(
           ? etaOrEstimating
           : null;
     const bannerSmall = (
-      <VStack
-        alignment="leading"
-        spacing={2}
-        modifiers={[
-          frame({ maxWidth: 10000, alignment: "leading" }),
-          padding({ horizontal: 10, vertical: 8 }),
-          dynamicTypeSize({ max: "xLarge" }),
-        ]}
-      >
-        <HStack spacing={5}>
-          <Image systemName={symbol} color={watchGlyph ?? neutral} size={13} />
-          <Text modifiers={[font({ size: 13, weight: "medium" }), lineLimit(1), secondary]}>
-            {props.challengeTitle}
-          </Text>
-        </HStack>
+      <VStack alignment="leading" spacing={2} modifiers={kit.watchMods}>
+        {kit.watchHeader(symbol, watchGlyph, props.challengeTitle)}
         {watchHero(watchHeroText)}
         {watchLine(watchLineText)}
       </VStack>

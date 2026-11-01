@@ -192,7 +192,7 @@ function Medallion({
         ) : (
           <Text
             style={{
-              color: collected ? colors.label : colors.tertiaryLabel,
+              color: collected ? colors.label : colors.secondaryLabel,
               fontSize: size * 0.3,
               fontWeight: "700",
             }}
@@ -300,7 +300,7 @@ function CompanyBadge({
       <Text
         numberOfLines={2}
         style={{
-          color: collected ? colors.label : colors.tertiaryLabel,
+          color: collected ? colors.label : colors.secondaryLabel,
           fontSize: type.footnote.fontSize,
           fontWeight: collected ? "600" : "500",
           lineHeight: 16,

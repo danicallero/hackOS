@@ -35,6 +35,7 @@ import {
   roleDisplayName,
   roleFilterOptionsFromRoster,
 } from "@/lib/role-filters";
+import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import {
   backAction,
   nextSelection,
@@ -60,7 +61,11 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { listDetailLayout } from "@/lib/window-size";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
-import { CHROME_MAX_FONT_SIZE_MULTIPLIER, isAccessibilityTextSize } from "@/theme/dynamic-type";
+import {
+  CHROME_MAX_FONT_SIZE_MULTIPLIER,
+  CHROME_MIN_FONT_SCALE,
+  isAccessibilityTextSize,
+} from "@/theme/dynamic-type";
 import { SCAN_DETAIL_MAX_WIDTH, SCAN_DETAIL_TITLE_INSET } from "@/theme/layout-scan-pane";
 import { type StatBlockLayout, useOperatorLayout } from "@/theme/layout-screens";
 import { SCREEN_TITLE, SCREEN_TITLE_CENTER, twoPaneBandHeight } from "@/theme/screen-title";
@@ -262,10 +267,11 @@ export function GeneralScannerScreen() {
         : (byTicket ?? badge?.person ?? null);
       if (!person) {
         setError(badge?.revoked ? t("scannerBadgeRevoked") : t("scannerUnknownQr"));
+        void scanOutcomeHaptic("unknown");
         return;
       }
       setError(null);
-      void haptic("light");
+      void scanOutcomeHaptic("accepted");
       if (scanDestination(twoPane) === "pane") {
         const scanned = { userId: person.userId };
         setSelection((current) => nextSelection(current, scanned));
@@ -503,6 +509,9 @@ export function GeneralScannerScreen() {
                     <Text
                       accessibilityRole="header"
                       numberOfLines={1}
+                      maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                      adjustsFontSizeToFit
+                      minimumFontScale={CHROME_MIN_FONT_SCALE}
                       style={{ color: colors.label, ...SCREEN_TITLE }}
                     >
                       {detailTitle}

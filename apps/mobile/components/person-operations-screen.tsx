@@ -7,7 +7,15 @@ import {
   useRouter,
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { InteractionManager, Modal, Platform, ScrollView, Text, View } from "react-native";
+import {
+  InteractionManager,
+  Modal,
+  Platform,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { BadgeLinkActions } from "@/components/badge-link-actions";
@@ -21,7 +29,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { SymbolView } from "@/components/symbol";
 import { alert } from "@/lib/alert";
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { errorText } from "@/lib/api-error-reason";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -30,7 +38,9 @@ import { transparentDetailHeaderOptions } from "@/lib/navigation";
 import type { PresenceDivergence } from "@/lib/presence-timeline";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import { enqueueLocalScan, findPersonById, pendingScans } from "@/lib/scanner-db";
+import { scannerFetch } from "@/lib/scanner-request";
 import { submitScannerMutation } from "@/lib/scanner-sync";
 import type { ScannerPerson, ScannerSnapshot, ScanPayload } from "@/lib/scanner-types";
 import { useSideRegion } from "@/lib/side-region";
@@ -40,6 +50,7 @@ import { useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
+import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { SCAN_DETAIL_TOP_GAP } from "@/theme/layout-scan-pane";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
@@ -176,6 +187,7 @@ export function PersonOperationsScreen({
   topInset?: number;
   userId?: number;
 } = {}) {
+  const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
   const listColumn = useOperatorListColumn();
   const params = useLocalSearchParams<{
     id: string;
@@ -306,7 +318,7 @@ export function PersonOperationsScreen({
 
         if (canAccredit) {
           try {
-            const details = await apiFetch<PersonDetails>("/api/accreditation/lookup-user", {
+            const details = await scannerFetch<PersonDetails>("/api/accreditation/lookup-user", {
               method: "POST",
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ userId }),
@@ -387,15 +399,20 @@ export function PersonOperationsScreen({
     setAttendeeRole(null);
     try {
       const result = await submitScannerMutation(payload, ownerUserId);
-      void haptic(result.state === "acknowledged" ? "success" : "light");
+      if (result.state === "acknowledged" || currentBadge) {
+        setPerson((current) =>
+          current ? { ...current, badgeId: nextBadge, currentBadge: nextBadge } : current,
+        );
+      }
+      void scanOutcomeHaptic(result.state === "acknowledged" ? "accepted" : "queued");
       // Refresh the authoritative snapshot after an online mutation. A local
       // cache failure is intentionally contained by useScannerSync, so it
       // cannot turn a successful server assignment into an error state.
-      const snapshot = await sync.sync().catch(() => undefined);
-      await load(snapshot);
+      await sync.refreshLocal();
+      void sync.sync().then((snapshot) => snapshot && load(snapshot));
       if (claimFailed) alert(t("personLinkBadge"), t("scannerNfcWriteFailed"));
     } catch (cause) {
-      void haptic("error");
+      void scanOutcomeHaptic("rejected");
       const message = errorText(cause, t, t("requestError"));
       alert(cause instanceof ApiError ? t("scannerBusinessRejected") : t("requestError"), message);
     } finally {
@@ -495,8 +512,8 @@ export function PersonOperationsScreen({
                 },
                 ownerUserId,
               );
-              const snapshot = await sync.sync();
-              await load(snapshot);
+              await sync.refreshLocal();
+              void sync.sync().then((snapshot) => snapshot && load(snapshot));
               if (result.state === "acknowledged") {
                 setPerson((current) =>
                   current ? { ...current, badgeId: null, currentBadge: null } : current,
@@ -515,6 +532,29 @@ export function PersonOperationsScreen({
     ]);
   }
 
+  async function synchronizePresenceScan(scanId: string) {
+    if (ownerUserId === undefined) return;
+    try {
+      const snapshot = await sync.sync();
+      // The offline queue fails 4xx replays permanently (e.g. an entry while
+      // a session is already open) — without this check the rejection is
+      // invisible and the log just never appears.
+      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
+      if (stored?.status === "failed") {
+        void scanOutcomeHaptic("rejected");
+        alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
+      } else if (stored?.status === "acknowledged") {
+        void scanOutcomeHaptic("accepted");
+      } else {
+        void scanOutcomeHaptic("queued");
+      }
+      if (snapshot) await load(snapshot);
+      await refreshPresence();
+    } catch (cause) {
+      alert(t("requestError"), errorText(cause, t, t("requestError")));
+    }
+  }
+
   async function registerPresence(direction: "in" | "out") {
     if (!person?.badgeId || ownerUserId === undefined || busy) return;
     const scannedAt = new Date();
@@ -529,26 +569,13 @@ export function PersonOperationsScreen({
         },
         ownerUserId,
       );
-      const snapshot = await sync.sync();
-      // The offline queue fails 4xx replays permanently (e.g. an entry while
-      // a session is already open) — without this check the rejection is
-      // invisible and the log just never appears.
-      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-      if (stored?.status === "failed") {
-        void haptic("error");
-        alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
-      } else if (stored?.status === "acknowledged") {
-        void haptic("success");
-        setPerson({
-          ...person,
-          lastPresenceKind: direction,
-          lastPresenceAt: scannedAt.toISOString(),
-        });
-      } else {
-        void haptic("light");
-      }
-      await load(snapshot);
-      await refreshPresence();
+      setPerson({
+        ...person,
+        lastPresenceKind: direction,
+        lastPresenceAt: scannedAt.toISOString(),
+      });
+      await sync.refreshLocal();
+      void synchronizePresenceScan(scanId);
     } finally {
       setBusy(false);
     }
@@ -558,8 +585,7 @@ export function PersonOperationsScreen({
   // above would reject either half of this (no door session exists for it
   // to open or close), but the unrestricted signal endpoint — the same one
   // "Add event" already uses — has no such gate. Runs inline, right from
-  // this screen, same as the normal register above; not offline-queued,
-  // matching how the full editor's own saves already work.
+  // this screen, using the same durable queue as the full editor (H24).
   async function createPresenceSignal(kind: "in" | "out", occurredAt: Date) {
     if (ownerUserId === undefined) return;
     setBusy(true);
@@ -568,18 +594,8 @@ export function PersonOperationsScreen({
         { kind: "presence_signal", userId, direction: kind, occurredAt: occurredAt.toISOString() },
         ownerUserId,
       );
-      const snapshot = await sync.sync();
-      const stored = (await pendingScans(ownerUserId)).find((scan) => scan.id === scanId);
-      if (stored?.status === "failed") {
-        void haptic("error");
-        alert(t("presenceScanRejectedTitle"), stored.lastError ?? t("presenceScanRejectedBody"));
-      } else if (stored?.status === "acknowledged") {
-        void haptic("success");
-      } else {
-        void haptic("light");
-      }
-      await load(snapshot);
-      await refreshPresence();
+      await sync.refreshLocal();
+      void synchronizePresenceScan(scanId);
     } finally {
       setBusy(false);
     }
@@ -959,8 +975,8 @@ export function PersonOperationsScreen({
               <Text
                 selectable
                 accessibilityRole="header"
-                numberOfLines={1}
-                style={{ ...type.title, color: colors.label, fontWeight: "800" }}
+                numberOfLines={accessibilityText ? undefined : 1}
+                style={{ ...type.title, color: colors.label, fontWeight: "700" }}
               >
                 {fullName}
               </Text>

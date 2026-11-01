@@ -24,6 +24,7 @@ import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -117,9 +118,14 @@ export default function ApplicationDetailPage() {
     return (applicationTabs as readonly string[]).includes(value);
   }
 
-  function changeTab(next: string) {
+  async function changeTab(next: string) {
     if (!isApplicationTab(next) || next === tab) return;
-    if (tab === "builder" && builderDirty && !confirmDiscardUnsavedChanges(true, t)) return;
+    if (tab === "builder" && builderDirty) {
+      if (!(await confirmDiscardUnsavedChanges(true, t))) return;
+      metadataDirtyRef.current = false;
+      questionsDirtyRef.current = false;
+      flushSync(() => setBuilderDirty(false));
+    }
     setTab(next);
   }
 

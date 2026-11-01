@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLocale } from "@/lib/i18n";
 
-/** Light / dark / system theme switcher. Light is the default. */
+/** Light / dark / system theme switcher. System is the default. */
 export function ThemeToggle() {
   const { setTheme } = useTheme();
   const { t } = useLocale();
