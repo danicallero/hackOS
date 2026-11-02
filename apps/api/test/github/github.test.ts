@@ -283,6 +283,29 @@ describe("GitHub webhook and ranking", () => {
 });
 
 describe("account link", () => {
+  it("starts account authorization without admission, event access or a project (H1, H18)", async () => {
+    const server = await getApp();
+    const userId = await createUser();
+    expect(
+      (await pool.query(`SELECT user_id FROM user_roles WHERE user_id = $1`, [userId])).rowCount,
+    ).toBe(0);
+    const result = await server.inject({
+      method: "POST",
+      url: "/api/me/github/authorize",
+      headers: { ...asUser(userId), "idempotency-key": crypto.randomUUID() },
+      payload: {},
+    });
+    expect(result.statusCode).toBe(200);
+    const url = new URL(result.json().url);
+    expect(url.origin + url.pathname).toBe("https://github.com/login/oauth/authorize");
+    expect(url.searchParams.get("client_id")).toBe("client");
+    const { verifyState } = await import("../../src/modules/github/client.js");
+    expect(verifyState(url.searchParams.get("state") as string)).toMatchObject({
+      userId,
+      repoId: null,
+    });
+  });
+
   it("shows the linked status and unlinks with audit", async () => {
     const server = await getApp();
     const userId = await createUser();

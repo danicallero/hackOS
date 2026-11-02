@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
@@ -57,7 +58,9 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { answerValues, hasDietaryRestrictions } from "./response-filters";
 import { SendDecisionsModal } from "./send-decisions-modal";
+import { useResponseSelection } from "./use-response-selection";
 
 interface DurableBatchResult {
   label: string;
@@ -110,7 +113,45 @@ export function ResponsesTab({
   const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const { selectedId, setSelectedId } = useResponseSelection();
+  const [answerFilters, setAnswerFilters] = useState<Record<string, string[]>>({});
+  const [dietaryFilter, setDietaryFilter] = useState<string[]>([]);
+  const { intolerances } = useFoodIntolerances();
+  const [catalogueNames, setCatalogueNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const names: Record<string, string> = {};
+      await Promise.all(
+        (["university", "degree"] as const).map(async (kind) => {
+          const fields = (template ?? []).filter((field) => field.kind === kind);
+          const ids = [
+            ...new Set(
+              allRows.flatMap((row) =>
+                fields.flatMap((field) => answerValues(row.responses[field.key])),
+              ),
+            ),
+          ];
+          const key = kind === "university" ? "universities" : "degrees";
+          // H13: bounded batches also resolve historical catalogue selections.
+          for (let start = 0; start < ids.length; start += 100) {
+            const data = await api.get<Record<string, Array<{ id: number; name: string }>>>(
+              `/api/public/${key}`,
+              { query: { ids: ids.slice(start, start + 100).join(",") } },
+            );
+            for (const item of data[key] ?? []) names[`${kind}:${item.id}`] = item.name;
+          }
+        }),
+      );
+      if (active) setCatalogueNames(names);
+    };
+    void load().catch((err) => {
+      if (active) toast.error(apiErrorText(err, t, t("couldNotLoadResponses")));
+    });
+    return () => {
+      active = false;
+    };
+  }, [allRows, template, t]);
   const [decisionStatusOverrides, setDecisionStatusOverrides] = useState<Record<number, string>>(
     {},
   );
@@ -131,9 +172,22 @@ export function ResponsesTab({
     return rowsForWorkspace(allRows, workspace).filter(
       (row) =>
         (statusFilter.length === 0 || statusFilter.includes(row.status)) &&
-        (!query || `${row.name ?? ""} ${row.email}`.toLocaleLowerCase().includes(query)),
+        (!query || `${row.name ?? ""} ${row.email}`.toLocaleLowerCase().includes(query)) &&
+        (dietaryFilter.length === 0 ||
+          dietaryFilter.includes(hasDietaryRestrictions(row) ? "yes" : "no")) &&
+        Object.entries(answerFilters).every(
+          ([key, values]) =>
+            values.length === 0 ||
+            answerValues(
+              key === "food_intolerances"
+                ? row.food_intolerances
+                : key === "shirt_size"
+                  ? row.shirt_size
+                  : row.responses[key],
+            ).some((value) => values.includes(value)),
+        ),
     );
-  }, [allRows, workspace, statusFilter, search]);
+  }, [allRows, workspace, statusFilter, search, dietaryFilter, answerFilters]);
 
   const load = useCallback(
     async (force = false) => {
@@ -178,29 +232,12 @@ export function ResponsesTab({
     return () => clearTimeout(handle);
   }, [load, liveRefresh, retryNonce]);
 
-  // Deep-link: `?response=<id>` (used by the profile Application tab) opens that
-  // specific response's review modal directly — the same view as clicking a row
-  // — instead of leaving the staff on the general responses list.
-  const [pendingResponseId, setPendingResponseId] = useState<number | null>(() => {
-    const p = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get(
-      "response",
-    );
-    return p && /^\d+$/.test(p) ? Number(p) : null;
-  });
-  useEffect(() => {
-    if (pendingResponseId != null && rows.some((r) => r.id === pendingResponseId)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- wait for rows to load, then select the pending id from URL deep-link
-      setSelectedId(pendingResponseId);
-      setPendingResponseId(null);
-    }
-  }, [rows, pendingResponseId]);
-
   const selected = useMemo(() => {
-    const row = rows.find((r) => r.id === selectedId);
+    const row = allRows.find((r) => r.id === selectedId);
     if (!row) return null;
     const status = decisionStatusOverrides[row.id];
     return status && status !== row.status ? { ...row, status } : row;
-  }, [decisionStatusOverrides, rows, selectedId]);
+  }, [decisionStatusOverrides, allRows, selectedId]);
   const selectedIndex = useMemo(
     () => visibleRows.findIndex((r) => r.id === selectedId),
     [visibleRows, selectedId],
@@ -397,6 +434,96 @@ export function ResponsesTab({
               label: applicationStatusLabel(status, t),
             })),
           },
+          ...(askShirtSize
+            ? [
+                {
+                  id: "shirt-size",
+                  label: t("shirtSize"),
+                  icon: FileTextIcon,
+                  type: "multiple" as const,
+                  value: answerFilters.shirt_size ?? [],
+                  onChange: (value: string[]) => {
+                    setAnswerFilters((current) => ({ ...current, shirt_size: value }));
+                    setSelectedIds(new Set());
+                  },
+                  options: [...new Set(allRows.flatMap((row) => answerValues(row.shirt_size)))]
+                    .sort((a, b) => a.localeCompare(b, language))
+                    .map((value) => ({ value, label: value })),
+                },
+              ]
+            : []),
+          ...(askFoodIntolerances
+            ? [
+                {
+                  id: "dietary",
+                  label: t("dietaryRestrictions"),
+                  icon: ChecksIcon,
+                  type: "multiple" as const,
+                  value: dietaryFilter,
+                  onChange: (value: string[]) => {
+                    setDietaryFilter(value);
+                    setSelectedIds(new Set());
+                  },
+                  options: [
+                    { value: "yes", label: t("withDietaryRestrictions") },
+                    { value: "no", label: t("withoutDietaryRestrictions") },
+                  ],
+                },
+                {
+                  id: "dietary-kind",
+                  label: t("foodIntolerances"),
+                  icon: ChecksIcon,
+                  type: "multiple" as const,
+                  value: answerFilters.food_intolerances ?? [],
+                  onChange: (value: string[]) => {
+                    setAnswerFilters((current) => ({ ...current, food_intolerances: value }));
+                    setSelectedIds(new Set());
+                  },
+                  options: intolerances.map((item) => ({
+                    value: String(item.id),
+                    label: pickText(item.label, language),
+                  })),
+                },
+              ]
+            : []),
+          ...(template ?? [])
+            .filter(
+              (field) =>
+                field.kind !== "file" &&
+                field.kind !== "images" &&
+                field.key !== "food_intolerances" &&
+                field.key !== "shirt_size",
+            )
+            .map((field) => ({
+              id: `answer:${field.key}`,
+              label: pickText(field.label, language),
+              icon: FileTextIcon,
+              type: "multiple" as const,
+              value: answerFilters[field.key] ?? [],
+              onChange: (value: string[]) => {
+                setAnswerFilters((current) => ({ ...current, [field.key]: value }));
+                setSelectedIds(new Set());
+              },
+              options: [
+                ...new Set(allRows.flatMap((row) => answerValues(row.responses[field.key]))),
+              ]
+                .map((value) => ({
+                  value,
+                  label:
+                    field.kind === "checkbox"
+                      ? value === "true"
+                        ? t("yesLabel")
+                        : t("noLabel")
+                      : (catalogueNames[`${field.kind}:${value}`] ??
+                        (field.options?.find((option) => option.value === value)
+                          ? pickText(
+                              field.options.find((option) => option.value === value)!.label,
+                              language,
+                            )
+                          : value)),
+                }))
+                .sort((a, b) => a.label.localeCompare(b.label, language)),
+            })),
         ]}
         actions={
           (canExportFiles || (canDecide && workspace === "outbox")) && (
@@ -465,6 +592,14 @@ export function ResponsesTab({
           )
         }
       />
+      {selectedId !== null && hasLoaded() && !selected && !loadError && (
+        <Alert>
+          <AlertTitle>{t("responseLinkUnavailable")}</AlertTitle>
+          <Button variant="outline" size="sm" onClick={() => setSelectedId(null)}>
+            {t("close")}
+          </Button>
+        </Alert>
+      )}
       {stale && <StaleDataNotice onRetry={() => void load(true)} />}
       <span role="status" aria-live="polite" className="text-muted-foreground text-xs tabular-nums">
         {t("tableResultCount", { count: rows.length })}
@@ -869,14 +1004,23 @@ export function ResponsesTab({
           icon: FileTextIcon,
           title: t("noResponsesTitle"),
           description:
-            statusFilter.length === 0 && !search.trim()
+            statusFilter.length === 0 &&
+            !search.trim() &&
+            dietaryFilter.length === 0 &&
+            !Object.values(answerFilters).some((values) => values.length > 0)
               ? t("submissionsAppearHereDesc")
               : t("noResponsesMatchFilterDesc"),
         }}
         filteredEmpty={{
-          active: statusFilter.length > 0 || search.trim().length > 0,
+          active:
+            statusFilter.length > 0 ||
+            search.trim().length > 0 ||
+            dietaryFilter.length > 0 ||
+            Object.values(answerFilters).some((values) => values.length > 0),
           onClear: () => {
             setStatusFilter([]);
+            setAnswerFilters({});
+            setDietaryFilter([]);
             setSearch("");
             setSelectedIds(new Set());
             document.getElementById("response-search")?.focus();

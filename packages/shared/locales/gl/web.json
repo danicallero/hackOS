@@ -1372,8 +1372,6 @@
   "yourSubmittedAnswers": "As túas respostas enviadas",
   "applicationLockedDesc": "Esta solicitude está bloqueada e xa non se pode editar.",
   "submitApplication": "Enviar solicitude",
-  "verifyEmailToSubmitTitle": "Verifica o teu correo para enviar",
-  "verifyEmailToSubmitDesc": "Podes gardar un borrador agora, pero para envialo precisas un correo verificado.",
   "formHasNoQuestions": "Este formulario non ten preguntas que responder.",
   "noAnswersSaved": "Non se gardou ningunha resposta.",
   "couldNotLoadProjects": "Non se puideron cargar os proxectos.",
@@ -3762,5 +3760,14 @@
   "quickSearch": "Busca rápida",
   "quickSearchPlaceholder": "Ir a…",
   "searchList": "Buscar na lista",
-  "keyboardShortcuts": "Atallos de teclado"
+  "keyboardShortcuts": "Atallos de teclado",
+  "copyResponseLink": "Copiar ligazón da resposta",
+  "couldNotCopyResponseLink": "Non se puido copiar a ligazón da resposta.",
+  "withDietaryRestrictions": "Con restricións alimentarias",
+  "withoutDietaryRestrictions": "Sen restricións alimentarias",
+  "responseLinkUnavailable": "Esta resposta non está dispoñible.",
+  "deleteApplicationDraft": "Borrar borrador",
+  "deleteApplicationDraftDescription": "As respostas gardadas de «{name}» borraranse definitivamente.",
+  "couldNotDeleteApplicationDraft": "Non se puido borrar o borrador. Inténtao de novo.",
+  "discardApplicationDraft": "Descartar borrador"
 }

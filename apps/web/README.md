@@ -824,3 +824,23 @@ Unsaved-change guards (#1180) use the shared `UnsavedChangesProvider` and
 (query-only changes on the same route, such as tab sync, pass through). Keep editing
 receives initial focus. Tab close/reload retains native `beforeunload`; in-page
 category switches await `confirmDiscardUnsavedChanges` before changing state.
+
+## Application review links and answer filters (H13/H14)
+
+Opening a response in an application updates `?response=<numeric ID>`; closing
+it removes that parameter. Reloads and external URL changes restore the selected
+response independently of the local table filters. A response link without a tab
+opens Review for reviewers. The modal's Copy response link action produces
+`/applications/:id?tab=review|outbox|sent&response=:responseId` based on the current
+status, including when opened from a user profile. Links grant no access: existing
+session and capability checks still apply, and a missing response shows an
+unavailable state. Neither answer values nor personal information enter these URLs.
+
+The existing Filters menu offers each configured non-upload question's observed
+values, with translated option labels and resolved university/degree names.
+Multiple choices within a question use OR; separate questions, status and name/email
+search combine with AND. Multiselect/library answers match individual selections,
+checkboxes retain false, and numeric answers retain zero. Shirt size and individual
+dietary restrictions use current user logistics data; the general With dietary
+restrictions filter includes either selected restrictions or nonblank dietary notes.
+Filter values stay local and clear through the standard chips/reset action.

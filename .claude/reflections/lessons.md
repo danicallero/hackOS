@@ -32,23 +32,23 @@ validated.
 None for source changes. Documentation-only changes may skip package tests,
 but must still run the checks relevant to the edited documentation or tooling.
 
-## [R002] Carry issue fixes through to a draft PR
+## [R002] Carry implementation requests through to a draft PR
 
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-10-26
+Date: 2026-11-02
 
 ### Trigger
-When the user requests an issue fix, including by sending its URL, or says
-“PR” in the context of a completed change.
+When the user requests a feature implementation or issue fix, including by
+sending an issue URL, or says “PR” in the context of a completed change.
 
 ### Mistake
 The agent stopped after implementing and validating an issue fix locally,
 leaving the user to explicitly request the pull request.
 
 ### Lesson
-An issue-fix request includes delivering a reviewable draft pull request.
+An implementation or issue-fix request includes delivering a reviewable draft pull request.
 “PR” is an instruction to open it immediately.
 
 ### Action
@@ -552,7 +552,7 @@ Controls deliberately lacking hover behavior, including touch-only surfaces.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-10-08
+Date: 2026-11-02
 
 ### Trigger
 Building or applying a shared page/surface pattern across web routes.
@@ -574,6 +574,9 @@ contract, and include the established Phosphor icons on sections and actions.
 When reusing public landing content inside the app, omit sections already owned
 by sibling routes and exercise their links in both session states; shared data
 does not justify duplicate destinations or sending signed-in users out of the shell.
+Likewise, a page must not repeat an account-level verification notice already
+shown by the app shell; keep its submission guard and remove orphaned notice
+copy, imports and accessibility references.
 Reuse their actual ListToolbar, FilterMenu and DataTable compositions rather
 than reproducing them with loosely aligned buttons and repeated detail blocks. Keep mixed record
 pages wide enough for their table tabs, constrain only text/form groups, and
@@ -943,3 +946,33 @@ Inspect native tablet screenshots at full size and compare foldable portrait/lan
 
 ### Exceptions
 Sheets and focused single-column editors retain their own readable content bounds.
+
+## [R029] Let state-specific actions replace redundant status badges
+
+Status: promoted
+Scope: module:web
+Source: user-correction
+Date: 2026-11-02
+Promoted-To: docs/DESIGN.md
+
+### Trigger
+A record's state has a visible action that already names that state.
+
+### Mistake
+Displayed a Draft badge beside Delete draft, repeating the same information.
+
+### Lesson
+Use the meaningful state-specific action to carry the state when it is available;
+reserve status badges for states with no corresponding action in that position.
+
+### Action
+Render the action and state badge mutually exclusively. Check list and detail
+headers together, including states whose action is unavailable.
+
+### Validation
+Verify actionable drafts show their control without a Draft badge, while
+submitted, in-review and other non-actionable states retain their status.
+
+### Exceptions
+An action whose label does not communicate the current state may still need
+an independent status indicator.
