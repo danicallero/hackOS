@@ -49,6 +49,24 @@ test("the roster paginates beyond 200 with 50 users per page", async ({ page }) 
   await expect(page.getByRole("link", { name: /^Person 205 Roster/ })).toBeVisible();
   await expect(pagination.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
   expect(offsets).toEqual([0, 200]);
+  const size = page.getByRole("combobox", { name: "Rows per page" });
+  await size.focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("option", { name: "100", exact: true }).click();
+  await expect(pagination).toContainText("Page 1 of 3");
+  await expect(page.getByRole("link", { name: /^Person 100 Roster/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Person 101 Roster/ })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Rows per page" })).toHaveText("100");
+  await page
+    .getByRole("navigation", { name: "Table pagination" })
+    .getByRole("button", { name: "Next", exact: true })
+    .click();
+  await page
+    .getByRole("navigation", { name: "Table pagination" })
+    .getByRole("button", { name: "Next", exact: true })
+    .click();
+  await expect(page.getByRole("link", { name: /^Person 205 Roster/ })).toBeVisible();
   await page.screenshot({
     path: `artifacts/settings/users-pagination-${test.info().project.name}.png`,
     fullPage: true,

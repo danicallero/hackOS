@@ -660,6 +660,7 @@ export default function UsersPage() {
             />
           )}
           pageSize={50}
+          pageSizeOptions={[25, 50, 100, 200]}
           loading={loading}
           error={
             loadError

@@ -853,6 +853,8 @@ without causing a sorted-table render loop that starves route transitions (H13).
 
 Users and permission-role membership resolve the full active user directory through
 `lib/user-directory.ts`, following `/api/users` offsets in batches of 200.
-The Users table paginates the complete filtered/sorted result in pages of 50;
+The Users table paginates the complete filtered/sorted result with a persisted
+page-size selector (25, 50, 100 or 200 rows; default 50). Changing size returns
+to the first page;
 200 is the API batch size, not a roster limit. Directory failures remain
 visible and retryable rather than silently leaving role members unresolved.
