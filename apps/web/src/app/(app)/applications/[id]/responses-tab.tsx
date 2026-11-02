@@ -447,7 +447,7 @@ export function ResponsesTab({
                     setSelectedIds(new Set());
                   },
                   options: [...new Set(allRows.flatMap((row) => answerValues(row.shirt_size)))]
-                    .sort()
+                    .sort((a, b) => a.localeCompare(b, language))
                     .map((value) => ({ value, label: value })),
                 },
               ]
