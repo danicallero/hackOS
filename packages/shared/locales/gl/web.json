@@ -3762,5 +3762,8 @@
   "quickSearch": "Busca rápida",
   "quickSearchPlaceholder": "Ir a…",
   "searchList": "Buscar na lista",
-  "keyboardShortcuts": "Atallos de teclado"
+  "keyboardShortcuts": "Atallos de teclado",
+  "deleteApplicationDraft": "Borrar borrador",
+  "deleteApplicationDraftDescription": "As respostas gardadas de «{name}» borraranse definitivamente.",
+  "couldNotDeleteApplicationDraft": "Non se puido borrar o borrador. Inténtao de novo."
 }

@@ -110,6 +110,7 @@ export interface MyResponseSummary {
   application_name: string;
   status: string;
   submitted_at: string | null;
+  can_delete_draft: boolean;
 }
 
 /**

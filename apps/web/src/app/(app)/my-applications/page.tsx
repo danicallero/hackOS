@@ -13,7 +13,8 @@ import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText"
 import { FilePlusIcon } from "@phosphor-icons/react/dist/csr/FilePlus";
 import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -21,7 +22,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -36,48 +37,45 @@ import {
 
 export default function MyApplicationsPage() {
   const { t, language } = useLocale();
-  const [responses, setResponses] = useState<MyResponseSummary[]>([]);
-  const [forms, setForms] = useState<PublicForm[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [responsesError, setResponsesError] = useState<string | null>(null);
-  const [formsError, setFormsError] = useState<string | null>(null);
+  const mine = useLiveQuery(
+    (signal) => api.get<{ responses: MyResponseSummary[] }>("/api/me/applications", { signal }),
+    domainScope(SSE_TOPICS.APPLICATIONS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["me-applications"] },
+  );
+  const open = useLiveQuery(
+    (signal) => api.get<{ applications: PublicForm[] }>("/api/public/applications", { signal }),
+    domainScope(SSE_TOPICS.APPLICATIONS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["public-applications"] },
+  );
+  const responses = mine.data?.responses ?? [];
+  const forms = open.data?.applications ?? [];
+  const loading = (mine.loading && !mine.data) || (open.loading && !open.data);
+  const responsesError = mine.error
+    ? apiErrorText(mine.error, t, t("couldNotLoadYourApplications"))
+    : null;
+  const formsError = open.error
+    ? apiErrorText(open.error, t, t("couldNotLoadYourApplications"))
+    : null;
+  const [deleting, setDeleting] = useState(false);
+  const [draftToDelete, setDraftToDelete] = useState<MyResponseSummary | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // A background live-refresh shouldn't flash the whole page away — only
-  // the very first load (before there's anything to show) should.
-  const hasLoadedRef = useRef(false);
-
-  const load = useCallback(async () => {
-    if (!hasLoadedRef.current) setLoading(true);
-    const [mine, open] = await Promise.allSettled([
-      api.get<{ responses: MyResponseSummary[] }>("/api/me/applications"),
-      api.get<{ applications: PublicForm[] }>("/api/public/applications"),
-    ]);
-    if (mine.status === "fulfilled") {
-      setResponses(mine.value.responses);
-      setResponsesError(null);
-    } else {
-      setResponsesError(apiErrorText(mine.reason, t, t("couldNotLoadYourApplications")));
+  async function deleteDraft() {
+    if (!draftToDelete || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.delete(`/api/applications/${draftToDelete.application_id}/response`);
+      mine.refetch();
+      setDraftToDelete(null);
+    } catch (error) {
+      setDeleteError(apiErrorText(error, t, t("couldNotDeleteApplicationDraft")));
+    } finally {
+      setDeleting(false);
     }
-    if (open.status === "fulfilled") {
-      setForms(open.value.applications);
-      setFormsError(null);
-    } else {
-      setFormsError(apiErrorText(open.reason, t, t("couldNotLoadYourApplications")));
-    }
-    hasLoadedRef.current =
-      hasLoadedRef.current || mine.status === "fulfilled" || open.status === "fulfilled";
-    setLoading(false);
-  }, [t]);
-
-  // Soft, in-place refresh instead of a hard reload when staff decides on
-  // one of your applications elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching applications from API (external-system sync)
-    load();
-  }, [load, liveRefresh]);
+  }
 
   // Open forms I haven't started a response for yet.
   const applied = new Set(responses.map((r) => r.application_id));
@@ -99,6 +97,28 @@ export default function MyApplicationsPage() {
   return (
     <PageLayout>
       <PageHeader title={t("myApplications")} />
+      <AlertModal
+        open={draftToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setDraftToDelete(null);
+        }}
+        title={t("deleteApplicationDraft")}
+        description={t("deleteApplicationDraftDescription", {
+          name: draftToDelete?.application_name ?? "",
+        })}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("deleteApplicationDraft")}
+        destructive
+        pending={deleting}
+        onConfirm={() => void deleteDraft()}
+      >
+        {deleteError && (
+          <ContextualError
+            message={deleteError}
+            onRetry={deleting ? undefined : () => void deleteDraft()}
+          />
+        )}
+      </AlertModal>
 
       <SectionCard
         icon={ClipboardTextIcon}
@@ -107,7 +127,7 @@ export default function MyApplicationsPage() {
         bodyClassName={responses.length === 0 && !responsesError ? "p-0" : "space-y-2"}
       >
         {responsesError ? (
-          <ContextualError message={responsesError} onRetry={() => void load()} />
+          <ContextualError message={responsesError} onRetry={() => mine.refetch()} />
         ) : responses.length === 0 ? (
           <EmptyState
             icon={TrayIcon}
@@ -116,23 +136,39 @@ export default function MyApplicationsPage() {
           />
         ) : (
           responses.map((r) => (
-            <Link
+            <div
               key={r.id}
-              href={`/my-applications/${r.application_id}`}
-              className="hover:bg-muted/50 flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="flex min-w-0 flex-wrap items-center gap-3 rounded-lg border px-4 py-3"
             >
-              <div className="min-w-0 space-y-0.5">
-                <div className="text-pretty font-medium">{r.application_name}</div>
-                <div className="text-muted-foreground text-xs">
-                  {r.submitted_at
-                    ? t("submittedOnPrefix", { date: fmtDateTime(r.submitted_at, language) })
-                    : t("notSubmittedYet")}
+              <Link
+                href={`/my-applications/${r.application_id}`}
+                className="hover:bg-muted/50 flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 rounded-control focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-pretty font-medium">{r.application_name}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {r.submitted_at
+                      ? t("submittedOnPrefix", { date: fmtDateTime(r.submitted_at, language) })
+                      : t("notSubmittedYet")}
+                  </div>
                 </div>
-              </div>
-              <StatusBadge className="shrink-0" tone={statusTone(r.status)} dot={false}>
-                {statusLabel(r.status, t)}
-              </StatusBadge>
-            </Link>
+                <StatusBadge className="shrink-0" tone={statusTone(r.status)} dot={false}>
+                  {statusLabel(r.status, t)}
+                </StatusBadge>
+              </Link>
+              {r.can_delete_draft && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDraftToDelete(r);
+                  }}
+                >
+                  {t("deleteApplicationDraft")}
+                </Button>
+              )}
+            </div>
           ))
         )}
       </SectionCard>
@@ -144,7 +180,7 @@ export default function MyApplicationsPage() {
         bodyClassName={openToApply.length === 0 && !formsError ? "p-0" : "space-y-2"}
       >
         {formsError ? (
-          <ContextualError message={formsError} onRetry={() => void load()} />
+          <ContextualError message={formsError} onRetry={() => open.refetch()} />
         ) : openToApply.length === 0 ? (
           <EmptyState
             icon={TrayIcon}

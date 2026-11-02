@@ -400,6 +400,49 @@ export async function saveDraft(
   });
 }
 
+/** H12: owners may discard preparation, never a submitted or returned response. */
+export async function deleteDraft(userId: number, applicationId: number): Promise<void> {
+  await withTransaction(async (client) => {
+    const user = await client.query(
+      `SELECT id FROM users
+       WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
+       FOR UPDATE`,
+      [userId],
+    );
+    if (!user.rows[0]) throw new NotFoundError("User not found");
+    const { rows } = await client.query<ResponseRow & { previously_submitted: boolean }>(
+      `SELECT r.*, EXISTS (
+         SELECT 1 FROM audit_log l
+         WHERE l.entity_type = 'application_response' AND l.entity_id = r.id::text
+           AND l.action IN ('submitted', 'returned_to_draft')
+       ) AS previously_submitted
+       FROM application_responses r
+       WHERE r.user_id = $1 AND r.application_id = $2 FOR UPDATE OF r`,
+      [userId, applicationId],
+    );
+    const response = rows[0];
+    if (!response) throw new NotFoundError("No response yet for this application");
+    if (
+      response.status !== "draft" ||
+      response.submitted_at !== null ||
+      response.previously_submitted
+    ) {
+      throw new ConflictError("This application has already been submitted", {
+        status: response.status,
+      });
+    }
+    await client.query(`DELETE FROM application_responses WHERE id = $1`, [response.id]);
+    await audit(client, {
+      actorId: userId,
+      entityType: "application_response",
+      entityId: response.id,
+      action: "draft_deleted",
+      source: "web",
+      before: { applicationId, status: "draft" },
+    });
+  });
+}
+
 // ── submit (H12) ─────────────────────────────────────────────────────────────
 
 export interface SubmitInput {
@@ -2153,11 +2196,17 @@ export async function listMyResponses(userId: number): Promise<
     application_name: string;
     status: string;
     submitted_at: Date | null;
+    can_delete_draft: boolean;
   }>
 > {
   const { rows } = await pool.query(
     `SELECT r.id, r.application_id, a.name AS application_name, r.status,
-            r.decision_sent_at, r.submitted_at
+            r.decision_sent_at, r.submitted_at,
+            (r.status = 'draft' AND r.submitted_at IS NULL AND NOT EXISTS (
+              SELECT 1 FROM audit_log l
+              WHERE l.entity_type = 'application_response' AND l.entity_id = r.id::text
+                AND l.action IN ('submitted', 'returned_to_draft')
+            )) AS can_delete_draft
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id
      WHERE r.user_id = $1 ORDER BY r.id DESC`,
@@ -2171,12 +2220,14 @@ export async function listMyResponses(userId: number): Promise<
       status: string;
       decision_sent_at: Date | null;
       submitted_at: Date | null;
+      can_delete_draft: boolean;
     }) => ({
       id: r.id,
       application_id: r.application_id,
       application_name: r.application_name,
       status: maskStatus(r.status),
       submitted_at: r.submitted_at,
+      can_delete_draft: r.can_delete_draft,
     }),
   );
 }

@@ -3,10 +3,12 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth } from "../../lib/capabilities.js";
 import { NotFoundError } from "../../lib/errors.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { activeLibraryFields } from "../form-libraries/service.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
 import {
+  deleteDraft,
   enrichTemplate,
   listMyResponses,
   maskStatus,
@@ -30,7 +32,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "List my application responses",
-        description: "Every response the caller has started or submitted, across all forms (H12).",
+        description:
+          "Every response the caller has started or submitted, across all forms (H12), with can_delete_draft indicating whether the owner may discard a never-submitted draft.",
       },
     },
     async (req) => ({
@@ -111,6 +114,24 @@ export function registerMeRoutes(app: FastifyInstance): void {
     async (req) => {
       const row = await saveDraft(req.userId as number, req.params.id, req.body.responses);
       return { ...row, status: maskStatus(row.status) };
+    },
+  );
+
+  r.delete(
+    "/api/applications/:id/response",
+    {
+      preHandler: [requireAuth, idempotencyGuard],
+      config: routeAccess({ kind: "authenticated", emailVerification: "none" }),
+      schema: {
+        summary: "Delete my unsubmitted draft",
+        description:
+          "Deletes only the caller's draft that has never been submitted (H12), even after the form closes and before email verification. Submitted responses and drafts returned by staff are rejected with 409. The deletion is transactional, audited and idempotent.",
+        params: idParamSchema,
+      },
+    },
+    async (req, reply) => {
+      await deleteDraft(req.userId as number, req.params.id);
+      return reply.code(204).send();
     },
   );
 
