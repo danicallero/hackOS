@@ -146,6 +146,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
       "/api/roles",
       "/api/role-grant-rules",
       "/api/role-templates",
+      "/api/unverified-account-removal",
     ].some((prefix) => routeMatchesPrefix(url, prefix))
   )
     return "identity";
