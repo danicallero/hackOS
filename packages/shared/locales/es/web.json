@@ -3762,5 +3762,10 @@
   "quickSearch": "Búsqueda rápida",
   "quickSearchPlaceholder": "Ir a…",
   "searchList": "Buscar en la lista",
-  "keyboardShortcuts": "Atajos de teclado"
+  "keyboardShortcuts": "Atajos de teclado",
+  "copyResponseLink": "Copiar enlace de la respuesta",
+  "couldNotCopyResponseLink": "No se pudo copiar el enlace de la respuesta.",
+  "withDietaryRestrictions": "Con restricciones alimentarias",
+  "withoutDietaryRestrictions": "Sin restricciones alimentarias",
+  "responseLinkUnavailable": "Esta respuesta no está disponible."
 }

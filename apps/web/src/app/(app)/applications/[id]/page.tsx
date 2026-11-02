@@ -22,7 +22,7 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -76,7 +76,11 @@ export default function ApplicationDetailPage() {
   ].filter((value): value is "builder" | "review" | "outbox" | "sent" => value !== null);
   // Access to this page already requires one of manage/review/decide (nav.ts),
   // so applicationTabs is never empty — the first gated tab is a safe default.
-  const defaultTab = applicationTabs[0] as (typeof applicationTabs)[number];
+  const responseRequested = useSearchParams().has("response");
+  const defaultTab =
+    responseRequested && canReview
+      ? "review"
+      : (applicationTabs[0] as (typeof applicationTabs)[number]);
   const { tab, setTab } = useUrlTab({ values: applicationTabs, defaultValue: defaultTab });
 
   const [form, setForm] = useState<ApplicationForm | null>(null);

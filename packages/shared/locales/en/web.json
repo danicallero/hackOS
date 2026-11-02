@@ -3762,5 +3762,10 @@
   "quickSearch": "Quick search",
   "quickSearchPlaceholder": "Go to…",
   "searchList": "Search this list",
-  "keyboardShortcuts": "Keyboard shortcuts"
+  "keyboardShortcuts": "Keyboard shortcuts",
+  "copyResponseLink": "Copy response link",
+  "couldNotCopyResponseLink": "Could not copy the response link.",
+  "withDietaryRestrictions": "With dietary restrictions",
+  "withoutDietaryRestrictions": "Without dietary restrictions",
+  "responseLinkUnavailable": "This response is unavailable."
 }

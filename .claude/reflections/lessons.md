@@ -32,23 +32,23 @@ validated.
 None for source changes. Documentation-only changes may skip package tests,
 but must still run the checks relevant to the edited documentation or tooling.
 
-## [R002] Carry issue fixes through to a draft PR
+## [R002] Carry implementation requests through to a draft PR
 
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-10-26
+Date: 2026-11-02
 
 ### Trigger
-When the user requests an issue fix, including by sending its URL, or says
-“PR” in the context of a completed change.
+When the user requests a feature implementation or issue fix, including by
+sending an issue URL, or says “PR” in the context of a completed change.
 
 ### Mistake
 The agent stopped after implementing and validating an issue fix locally,
 leaving the user to explicitly request the pull request.
 
 ### Lesson
-An issue-fix request includes delivering a reviewable draft pull request.
+An implementation or issue-fix request includes delivering a reviewable draft pull request.
 “PR” is an instruction to open it immediately.
 
 ### Action
