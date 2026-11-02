@@ -1372,8 +1372,6 @@
   "yourSubmittedAnswers": "Tus respuestas enviadas",
   "applicationLockedDesc": "Esta solicitud está bloqueada y ya no se puede editar.",
   "submitApplication": "Enviar solicitud",
-  "verifyEmailToSubmitTitle": "Verifica tu correo para enviar",
-  "verifyEmailToSubmitDesc": "Puedes guardar un borrador ahora, pero para enviarlo necesitas un correo verificado.",
   "formHasNoQuestions": "Este formulario no tiene preguntas que responder.",
   "noAnswersSaved": "No se ha guardado ninguna respuesta.",
   "couldNotLoadProjects": "No se han podido cargar los proyectos.",
@@ -3767,5 +3765,9 @@
   "couldNotCopyResponseLink": "No se pudo copiar el enlace de la respuesta.",
   "withDietaryRestrictions": "Con restricciones alimentarias",
   "withoutDietaryRestrictions": "Sin restricciones alimentarias",
-  "responseLinkUnavailable": "Esta respuesta no está disponible."
+  "responseLinkUnavailable": "Esta respuesta no está disponible.",
+  "deleteApplicationDraft": "Borrar borrador",
+  "deleteApplicationDraftDescription": "Las respuestas guardadas de «{name}» se borrarán definitivamente.",
+  "couldNotDeleteApplicationDraft": "No se pudo borrar el borrador. Inténtalo de nuevo.",
+  "discardApplicationDraft": "Descartar borrador"
 }

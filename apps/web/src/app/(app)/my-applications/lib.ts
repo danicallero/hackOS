@@ -110,6 +110,7 @@ export interface MyResponseSummary {
   application_name: string;
   status: string;
   submitted_at: string | null;
+  can_delete_draft: boolean;
 }
 
 /**
@@ -117,6 +118,7 @@ export interface MyResponseSummary {
  * is masked (accepted/rejected before the decision is sent read as "review").
  */
 export interface MyResponseDetail {
+  can_delete_draft?: boolean;
   id: number;
   user_id: number;
   application_id: number;
