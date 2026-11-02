@@ -1372,8 +1372,6 @@
   "yourSubmittedAnswers": "Your submitted answers",
   "applicationLockedDesc": "This application is locked and can no longer be edited.",
   "submitApplication": "Submit application",
-  "verifyEmailToSubmitTitle": "Verify your email to submit",
-  "verifyEmailToSubmitDesc": "You can save a draft now, but submitting requires a verified email address.",
   "formHasNoQuestions": "This form has no questions to answer.",
   "noAnswersSaved": "No answers were saved.",
   "couldNotLoadProjects": "Could not load projects.",

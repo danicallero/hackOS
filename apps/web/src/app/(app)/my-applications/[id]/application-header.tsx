@@ -1,5 +1,6 @@
 "use client";
 
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -43,18 +44,21 @@ export function ApplicationHeader({
     <>
       <PageHeader
         title={title}
+        className="flex-row items-start justify-between gap-2"
         description={description}
         secondaryActions={
           canDiscard ? (
             <Button
               variant="outline"
+              size="sm"
               disabled={disabled || discarding}
               onClick={() => {
                 setError(null);
                 setOpen(true);
               }}
             >
-              {t("discardApplicationDraft")}
+              <TrashIcon aria-hidden="true" className="size-4 min-[360px]:hidden" />
+              <span className="max-[359px]:sr-only">{t("discardApplicationDraft")}</span>
             </Button>
           ) : undefined
         }

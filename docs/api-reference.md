@@ -174,11 +174,13 @@ responses' immutable historical form versions. Draft preparation and
 uploads remain available before verification; submitting or confirming a
 place does not. Owners can permanently delete a never-submitted draft from
 **My applications**, including after close and before email verification. This audited, idempotent
-operation never deletes submitted responses or drafts returned by staff;
+operation never deletes submitted responses or drafts returned by staff.
 The list, response read and draft-save endpoints expose `can_delete_draft` from the status and
 audit history (returning a response clears its submission timestamp).
 An actionable draft shows its discard action instead of a duplicate status badge.
-The open form also offers discard in its header: it stops new autosaves, waits
+The open form also offers discard beside its title on desktop and mobile;
+the global email-verification banner is the only verification notice, and
+submission stays disabled until verification. Discarding stops new autosaves, waits
 for pending writes, deletes the draft and returns to **My applications** without
 creating a replacement draft. Failed deletion keeps the form and permits retry.
 Decision-makers can return a response to its owner as a draft.

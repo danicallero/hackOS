@@ -552,7 +552,7 @@ Controls deliberately lacking hover behavior, including touch-only surfaces.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-10-08
+Date: 2026-11-02
 
 ### Trigger
 Building or applying a shared page/surface pattern across web routes.
@@ -574,6 +574,9 @@ contract, and include the established Phosphor icons on sections and actions.
 When reusing public landing content inside the app, omit sections already owned
 by sibling routes and exercise their links in both session states; shared data
 does not justify duplicate destinations or sending signed-in users out of the shell.
+Likewise, a page must not repeat an account-level verification notice already
+shown by the app shell; keep its submission guard and remove orphaned notice
+copy, imports and accessibility references.
 Reuse their actual ListToolbar, FilterMenu and DataTable compositions rather
 than reproducing them with loosely aligned buttons and repeated detail blocks. Keep mixed record
 pages wide enough for their table tabs, constrain only text/form groups, and

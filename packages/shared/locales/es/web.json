@@ -1372,8 +1372,6 @@
   "yourSubmittedAnswers": "Tus respuestas enviadas",
   "applicationLockedDesc": "Esta solicitud está bloqueada y ya no se puede editar.",
   "submitApplication": "Enviar solicitud",
-  "verifyEmailToSubmitTitle": "Verifica tu correo para enviar",
-  "verifyEmailToSubmitDesc": "Puedes guardar un borrador ahora, pero para enviarlo necesitas un correo verificado.",
   "formHasNoQuestions": "Este formulario no tiene preguntas que responder.",
   "noAnswersSaved": "No se ha guardado ninguna respuesta.",
   "couldNotLoadProjects": "No se han podido cargar los proyectos.",
