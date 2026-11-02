@@ -210,6 +210,8 @@ describe("rendered reminder emails", () => {
         expect(verify.html).toContain(vars.verifyUrl);
         expect(verify.html).toContain(vars.deleteUrl);
         expect(verify.text).not.toContain("{{");
+        // Links only become buttons on a line of their own; inline they stay raw markdown.
+        expect(verify.html).not.toContain("](");
       }
     }
   });
