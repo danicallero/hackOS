@@ -219,7 +219,7 @@ export interface ReviewEntry {
   updated_at: string;
 }
 
-/** Shape of GET /api/applications/:id/stats (subset we render). */
+/** Application overview from POST /api/statistics/query (subset we render). */
 export interface ApplicationStats {
   application: {
     id: number;

@@ -11,6 +11,10 @@ The web dashboard uses `GET /api/statistics/scopes` to populate the scope
 selector, `POST /api/statistics/query` to request the selected panel data, and
 `/api/statistics/access` for every scope/panel visibility override.
 
+The application detail page also queries the `overview` panel through this shared
+endpoint for its counts strip (H13/H27), using the application scope and the same
+panel ACLs. It never calls the retired `/api/applications/:id/stats` route.
+
 ## Catalog and scopes
 
 The catalog lives in `apps/api/src/modules/statistics/catalog.ts`. A panel
