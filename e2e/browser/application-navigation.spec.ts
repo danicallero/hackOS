@@ -132,7 +132,24 @@ for (const isSponsorRep of [false, true]) {
         });
       if (path === "/api/users/20/meal-plan") {
         planReads += 1;
-        return route.fulfill({ json: { meals: [], cutoffHours: 24, confirmedAt: null } });
+        return route.fulfill({
+          json: {
+            meals: [
+              {
+                activityId: 1,
+                name: "Sponsor lunch",
+                nameI18n: null,
+                startsAt: "2026-11-10T12:00:00Z",
+                endsAt: "2026-11-10T13:00:00Z",
+                location: null,
+                attending: true,
+                locked: false,
+              },
+            ],
+            cutoffHours: 24,
+            confirmedAt: null,
+          },
+        });
       }
       if (path === "/api/public/food-intolerances")
         return route.fulfill({ json: { intolerances: [] } });
@@ -141,7 +158,13 @@ for (const isSponsorRep of [false, true]) {
     await page.goto("/users/20?tab=overview");
     await expect(page.getByRole("heading", { name: "Ada Applicant", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Profile details", exact: true })).toBeVisible();
-    if (isSponsorRep) await expect.poll(() => planReads).toBe(1);
-    else expect(planReads).toBe(0);
+    // H13/#933: dev Strict Mode can replay the fetch effect. Eligibility is
+    // proved by rendered data for sponsors and no request for non-sponsors.
+    if (isSponsorRep) {
+      await expect(page.getByText("Sponsor lunch", { exact: false })).toBeVisible();
+    } else {
+      expect(planReads).toBe(0);
+      await expect(page.getByText("Sponsor lunch", { exact: false })).toHaveCount(0);
+    }
   });
 }
