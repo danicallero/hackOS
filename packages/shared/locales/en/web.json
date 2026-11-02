@@ -1,4 +1,5 @@
 {
+  "rowsPerPage": "Rows per page",
   "statsChartData": "Chart data and filters",
   "eventReminderTitle": "Email reminder",
   "eventReminderAudience": "Sent to everyone with event access, with their ticket.",

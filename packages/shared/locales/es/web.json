@@ -1,4 +1,5 @@
 {
+  "rowsPerPage": "Filas por página",
   "statsChartData": "Datos y filtros del gráfico",
   "eventReminderTitle": "Recordatorio por correo",
   "eventReminderAudience": "Se envía a todas las personas con acceso al evento, con su entrada.",
