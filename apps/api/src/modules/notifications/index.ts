@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { scheduleAnnouncementsPublisher } from "./announcements-publisher.js";
 import { scheduleOutboxDispatcher } from "./dispatcher.js";
+import { scheduleLifecycleReminders } from "./lifecycle-reminders.js";
 import { registerAnnouncementRoutes } from "./routes/announcements.js";
 import { registerAuditRoutes } from "./routes/audit.js";
 import { registerAutomationRoutes } from "./routes/automation.js";
@@ -31,4 +32,5 @@ export async function registerNotificationsModule(app: FastifyInstance): Promise
   await scheduleOutboxDispatcher();
   await scheduleAnnouncementsPublisher();
   await scheduleActivityReminders();
+  await scheduleLifecycleReminders();
 }

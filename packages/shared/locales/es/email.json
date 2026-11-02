@@ -33,6 +33,18 @@
         "role": "Al terminar de crear tu cuenta, se te asignará automáticamente el rol: {{roleNames}}.",
         "roles": "Al terminar de crear tu cuenta, se te asignarán automáticamente los roles: {{roleNames}}.",
         "enterprise": "Tu cuenta quedará vinculada a {{enterpriseName}}."
+      },
+      "verifyReminder1": {
+        "subject": "Verifica tu correo para usar hackOS",
+        "body": "Hola {{name}}:\n\nCreaste una cuenta de hackOS con esta dirección, pero todavía no la has verificado. Hasta que lo hagas, no podrás enviar solicitudes, consultar información ni tomar decisiones en la plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla: [Borrar esta cuenta]({{deleteUrl}}). Si la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
+      },
+      "verifyReminder2": {
+        "subject": "Recordatorio: tu correo de hackOS sigue sin verificar",
+        "body": "Hola {{name}}:\n\nTe escribimos de nuevo porque tu cuenta de hackOS sigue con el correo sin verificar. Sin verificarlo no puedes enviar solicitudes, consultar información ni usar la plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla: [Borrar esta cuenta]({{deleteUrl}}). Si la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
+      },
+      "verifyReminder3": {
+        "subject": "Último recordatorio: verifica tu correo de hackOS",
+        "body": "Hola {{name}}:\n\nEste es el último recordatorio que te enviamos. Tu cuenta de hackOS sigue sin verificar, así que no puedes enviar solicitudes, consultar información ni usar la plataforma.\n\nSi quieres conservarla, verifícala ahora:\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla: [Borrar esta cuenta]({{deleteUrl}}). Si la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
       }
     },
     "project": {
@@ -84,6 +96,18 @@
         },
         "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar mi plaza]({{confirmUrl}})\n\nSi al final no puedes venir, avísanos para que otra persona pueda aprovechar tu plaza:\n\n[Renunciar a mi plaza]({{declineUrl}})\n\nSi pasa el plazo sin que confirmes, la plaza se liberará automáticamente.",
         "confirmationDeadline": "Confirma tu plaza antes del {{deadline}}."
+      },
+      "draftReminder1": {
+        "subject": "Tu solicitud de {{applicationName}} sigue en borrador",
+        "body": "Hola {{name}}:\n\nEmpezaste una solicitud para {{applicationName}} en {{eventName}}, pero todavía no la has presentado. Sigue como borrador, así que no podemos evaluarla.\n\n[Terminar mi solicitud]({{applicationUrl}})\n\nEl equipo de {{eventName}}"
+      },
+      "draftReminder2": {
+        "subject": "Recordatorio: presenta tu solicitud de {{applicationName}}",
+        "body": "Hola {{name}}:\n\nTe recordamos que tu solicitud para {{applicationName}} en {{eventName}} sigue como borrador.\n\nSi no la presentas, no podremos evaluarla y no podrás participar en {{eventName}}.\n\n[Presentar mi solicitud]({{applicationUrl}})\n\nEl equipo de {{eventName}}"
+      },
+      "draftReminder3": {
+        "subject": "Último recordatorio sobre tu solicitud de {{applicationName}}",
+        "body": "Hola {{name}}:\n\nEsta es la última vez que te escribimos sobre esto. Tu solicitud para {{applicationName}} en {{eventName}} sigue como borrador y no evaluamos borradores.\n\nSi aún quieres participar, puedes presentarla cuando quieras:\n\n[Presentar mi solicitud]({{applicationUrl}})\n\nNo te enviaremos más recordatorios.\n\nEl equipo de {{eventName}}"
       }
     },
     "schedule": {

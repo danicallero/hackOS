@@ -3769,5 +3769,12 @@
   "deleteApplicationDraft": "Borrar borrador",
   "deleteApplicationDraftDescription": "Las respuestas guardadas de «{name}» se borrarán definitivamente.",
   "couldNotDeleteApplicationDraft": "No se pudo borrar el borrador. Inténtalo de nuevo.",
-  "discardApplicationDraft": "Descartar borrador"
+  "discardApplicationDraft": "Descartar borrador",
+  "deleteUnverifiedAccountTitle": "¿Borrar esta cuenta?",
+  "deleteUnverifiedAccountBody": "{email} y todo lo asociado se borrarán de forma permanente. No se puede deshacer.",
+  "verifyEmailInstead": "Verificar el correo en su lugar",
+  "removalLinkInvalidTitle": "Este enlace no es válido",
+  "removalLinkInvalidDesc": "Ha caducado o ya se usó.",
+  "removalLinkVerifiedTitle": "Esta cuenta ya está verificada",
+  "removalLinkVerifiedDesc": "No se puede borrar desde este enlace. Inicia sesión para gestionarla desde tu perfil."
 }
