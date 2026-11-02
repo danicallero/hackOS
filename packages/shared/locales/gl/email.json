@@ -36,15 +36,15 @@
       },
       "verifyReminder1": {
         "subject": "Verifica o teu correo para usar hackOS",
-        "body": "Ola {{name}}:\n\nCreaches unha conta de hackOS con este enderezo, pero aínda non a verificaches. Ata que o fagas, non poderás enviar solicitudes, consultar información nin tomar decisións na plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala: [Borrar esta conta]({{deleteUrl}}). Se a conta ten contrasinal, terás que introducilo para confirmalo."
+        "body": "Ola {{name}}:\n\nCreaches unha conta de hackOS con este enderezo, pero aínda non a verificaches. Ata que o fagas, non poderás enviar solicitudes, consultar información nin tomar decisións na plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala:\n\n[Borrar esta conta]({{deleteUrl}})\n\nSe a conta ten contrasinal, terás que introducilo para confirmalo."
       },
       "verifyReminder2": {
         "subject": "Lembrete: o teu correo de hackOS segue sen verificar",
-        "body": "Ola {{name}}:\n\nEscribímosche de novo porque a túa conta de hackOS segue co correo sen verificar. Sen verificalo non podes enviar solicitudes, consultar información nin usar a plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala: [Borrar esta conta]({{deleteUrl}}). Se a conta ten contrasinal, terás que introducilo para confirmalo."
+        "body": "Ola {{name}}:\n\nEscribímosche de novo porque a túa conta de hackOS segue co correo sen verificar. Sen verificalo non podes enviar solicitudes, consultar información nin usar a plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala:\n\n[Borrar esta conta]({{deleteUrl}})\n\nSe a conta ten contrasinal, terás que introducilo para confirmalo."
       },
       "verifyReminder3": {
         "subject": "Último lembrete: verifica o teu correo de hackOS",
-        "body": "Ola {{name}}:\n\nEste é o último lembrete que che enviamos. A túa conta de hackOS segue sen verificar, así que non podes enviar solicitudes, consultar información nin usar a plataforma.\n\nSe queres conservala, verifícaa agora:\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala: [Borrar esta conta]({{deleteUrl}}). Se a conta ten contrasinal, terás que introducilo para confirmalo."
+        "body": "Ola {{name}}:\n\nEste é o último lembrete que che enviamos. A túa conta de hackOS segue sen verificar, así que non podes enviar solicitudes, consultar información nin usar a plataforma.\n\nSe queres conservala, verifícaa agora:\n\n[Confirmar correo]({{verifyUrl}})\n\nA ligazón funciona durante tres días. Se caducou, podes pedir unha nova desde hackOS.\n\nNon creaches ti esta conta? Podes borrala:\n\n[Borrar esta conta]({{deleteUrl}})\n\nSe a conta ten contrasinal, terás que introducilo para confirmalo."
       }
     },
     "project": {

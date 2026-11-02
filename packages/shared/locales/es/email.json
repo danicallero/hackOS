@@ -36,15 +36,15 @@
       },
       "verifyReminder1": {
         "subject": "Verifica tu correo para usar hackOS",
-        "body": "Hola {{name}}:\n\nCreaste una cuenta de hackOS con esta dirección, pero todavía no la has verificado. Hasta que lo hagas, no podrás enviar solicitudes, consultar información ni tomar decisiones en la plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla: [Borrar esta cuenta]({{deleteUrl}}). Si la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
+        "body": "Hola {{name}}:\n\nCreaste una cuenta de hackOS con esta dirección, pero todavía no la has verificado. Hasta que lo hagas, no podrás enviar solicitudes, consultar información ni tomar decisiones en la plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla:\n\n[Borrar esta cuenta]({{deleteUrl}})\n\nSi la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
       },
       "verifyReminder2": {
         "subject": "Recordatorio: tu correo de hackOS sigue sin verificar",
-        "body": "Hola {{name}}:\n\nTe escribimos de nuevo porque tu cuenta de hackOS sigue con el correo sin verificar. Sin verificarlo no puedes enviar solicitudes, consultar información ni usar la plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla: [Borrar esta cuenta]({{deleteUrl}}). Si la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
+        "body": "Hola {{name}}:\n\nTe escribimos de nuevo porque tu cuenta de hackOS sigue con el correo sin verificar. Sin verificarlo no puedes enviar solicitudes, consultar información ni usar la plataforma.\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla:\n\n[Borrar esta cuenta]({{deleteUrl}})\n\nSi la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
       },
       "verifyReminder3": {
         "subject": "Último recordatorio: verifica tu correo de hackOS",
-        "body": "Hola {{name}}:\n\nEste es el último recordatorio que te enviamos. Tu cuenta de hackOS sigue sin verificar, así que no puedes enviar solicitudes, consultar información ni usar la plataforma.\n\nSi quieres conservarla, verifícala ahora:\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla: [Borrar esta cuenta]({{deleteUrl}}). Si la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
+        "body": "Hola {{name}}:\n\nEste es el último recordatorio que te enviamos. Tu cuenta de hackOS sigue sin verificar, así que no puedes enviar solicitudes, consultar información ni usar la plataforma.\n\nSi quieres conservarla, verifícala ahora:\n\n[Confirmar correo]({{verifyUrl}})\n\nEl enlace funciona durante tres días. Si ha caducado, puedes pedir uno nuevo desde hackOS.\n\n¿No has creado tú esta cuenta? Puedes borrarla:\n\n[Borrar esta cuenta]({{deleteUrl}})\n\nSi la cuenta tiene contraseña, tendrás que introducirla para confirmarlo."
       }
     },
     "project": {

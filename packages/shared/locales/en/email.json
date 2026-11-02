@@ -36,15 +36,15 @@
       },
       "verifyReminder1": {
         "subject": "Verify your email to use hackOS",
-        "body": "Hi {{name}},\n\nYou created a hackOS account with this address, but you haven't verified it yet. Until you do, you can't submit applications, view information or make decisions on the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
+        "body": "Hi {{name}},\n\nYou created a hackOS account with this address, but you haven't verified it yet. Until you do, you can't submit applications, view information or make decisions on the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it:\n\n[Delete this account]({{deleteUrl}})\n\nIf the account has a password, you'll need to enter it to confirm."
       },
       "verifyReminder2": {
         "subject": "Reminder: your hackOS email is still unverified",
-        "body": "Hi {{name}},\n\nWe're writing again because your hackOS account still has an unverified email. Without verification you can't submit applications, view information or use the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
+        "body": "Hi {{name}},\n\nWe're writing again because your hackOS account still has an unverified email. Without verification you can't submit applications, view information or use the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it:\n\n[Delete this account]({{deleteUrl}})\n\nIf the account has a password, you'll need to enter it to confirm."
       },
       "verifyReminder3": {
         "subject": "Last reminder: verify your hackOS email",
-        "body": "Hi {{name}},\n\nThis is the last reminder we'll send. Your hackOS account is still unverified, so you can't submit applications, view information or use the platform.\n\nIf you want to keep it, verify it now:\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
+        "body": "Hi {{name}},\n\nThis is the last reminder we'll send. Your hackOS account is still unverified, so you can't submit applications, view information or use the platform.\n\nIf you want to keep it, verify it now:\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it:\n\n[Delete this account]({{deleteUrl}})\n\nIf the account has a password, you'll need to enter it to confirm."
       }
     },
     "project": {
