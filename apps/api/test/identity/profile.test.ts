@@ -56,6 +56,32 @@ async function requestRemovalPin(a: App, userId: number): Promise<string> {
   return pin as string;
 }
 
+describe("GET /api/users/:id meal-plan eligibility (#933)", () => {
+  it("reports sponsor membership independently of display roles", async () => {
+    const app = await getApp();
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const user = await createUser();
+    const headers = asUser(reader);
+    const url = `/api/users/${user}`;
+    const ordinary = await app.inject({ method: "GET", url, headers });
+    expect(ordinary.statusCode).toBe(200);
+    expect(ordinary.json().isSponsorRep).toBe(false);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      "INSERT INTO enterprises (name) VALUES ('Sponsor') RETURNING id",
+    );
+    await pool.query("INSERT INTO sponsors (user_id, enterprise_id) VALUES ($1, $2)", [
+      user,
+      rows[0].id,
+    ]);
+    const sponsor = await app.inject({ method: "GET", url, headers });
+    expect(sponsor.statusCode).toBe(200);
+    expect(sponsor.json().isSponsorRep).toBe(true);
+    await pool.query("DELETE FROM sponsors WHERE user_id = $1", [user]);
+    expect((await app.inject({ method: "GET", url, headers })).json().isSponsorRep).toBe(false);
+  });
+});
+
 describe("GET /api/me (H7)", () => {
   it("lets staff manually classify a user as participant or mentor and issues a ticket", async () => {
     const a = await getApp();

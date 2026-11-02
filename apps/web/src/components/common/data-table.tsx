@@ -281,10 +281,20 @@ export function DataTable<T>({
     });
   }, [filtered, sort, columns]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: onVisibleRowsChange is a caller-supplied setState-style callback, not a value this effect should re-fire on.
+  const reportedRows = useRef<T[] | null>(null);
+  // Inline column definitions can recompute the same sorted sequence after a
+  // parent stores it (H13). Report only changed rows/order to avoid a render loop.
   useEffect(() => {
+    const previous = reportedRows.current;
+    if (
+      previous &&
+      previous.length === sorted.length &&
+      previous.every((row, index) => row === sorted[index])
+    )
+      return;
+    reportedRows.current = sorted;
     onVisibleRowsChange?.(sorted);
-  }, [sorted]);
+  }, [sorted, onVisibleRowsChange]);
 
   const pageCount = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1;
   const current = Math.min(page, pageCount - 1);

@@ -136,7 +136,10 @@ was loaded, and locked meals that were never answered. Staff read a sponsor's pl
 /api/users/:id/meal-plan` (`meal-plans:manage`, same rules but partial: meals left out stay
 unanswered and the sponsor's `confirmedAt` is not set; always audited as
 `meal_plan.updated`); logistics reads aggregate headcounts and the catering
-CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`).
+CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`). The
+staff profile response includes `isSponsorRep` so the web overview only loads a
+meal plan for sponsor representatives, rather than probing non-sponsors and
+receiving the expected `403 not_sponsor`.
 
 On the web, the `(app)` layout shows a dismissable dialog with one step per
 pending task ("Later" hides it for the browser session via `sessionStorage`),
