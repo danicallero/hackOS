@@ -32,7 +32,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { apiErrorText } from "@/lib/api-error-text";
-import { shortDateFmt } from "@/lib/datetime";
+import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { invalidateServerState, readServerState } from "@/lib/server-state";
@@ -52,7 +52,7 @@ function avatarName(u: UserListItem): string {
   return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;
 }
 
-const dateFmt = shortDateFmt;
+const dateFmt = shortDateTimeFmt;
 
 /** H8: roles are arbitrary names now, not a fixed category set — show the name as-is. */
 function roleLabel(role: UserListItem["visibleRoleName"], t: Translate): string {
@@ -277,7 +277,7 @@ function buildColumns(
       id: "created",
       header: t("colJoined"),
       align: "right",
-      sortValue: (u) => u.createdAt,
+      sortValue: (u) => Date.parse(u.createdAt),
       cell: (u) => (
         <span className="text-muted-foreground text-sm">
           {dateFmt.format(new Date(u.createdAt))}

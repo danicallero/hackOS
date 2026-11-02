@@ -856,5 +856,6 @@ Users and permission-role membership resolve the full active user directory thro
 The Users table paginates the complete filtered/sorted result with a persisted
 page-size selector (25, 50, 100 or 200 rows; default 50). Changing size returns
 to the first page;
-200 is the API batch size, not a roster limit. Directory failures remain
+200 is the API batch size, not a roster limit. Joined displays date and time
+in the event zone and sorts by the full creation instant. Directory failures remain
 visible and retryable rather than silently leaving role members unresolved.

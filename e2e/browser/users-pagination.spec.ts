@@ -18,7 +18,7 @@ test("the roster paginates beyond 200 with 50 users per page", async ({ page }) 
     confirmedSpot: false,
     isTestAccount: false,
     image: null,
-    createdAt: "2026-10-01T12:00:00Z",
+    createdAt: new Date(Date.UTC(2026, 9, 1, 12, 0, 205 - index)).toISOString(),
   }));
   const offsets: number[] = [];
   await page.route("**/api/**", async (route) => {
@@ -71,6 +71,25 @@ test("the roster paginates beyond 200 with 50 users per page", async ({ page }) 
     path: `artifacts/settings/users-pagination-${test.info().project.name}.png`,
     fullPage: true,
   });
+  if (test.info().project.name !== "mobile-chromium") {
+    await pagination.getByRole("button", { name: "Previous", exact: true }).click();
+    await pagination.getByRole("button", { name: "Previous", exact: true }).click();
+    const sort = page.getByRole("button", { name: "Sort by Joined", exact: true });
+    await sort.click();
+    await expect(page.getByRole("columnheader", { name: "Sort by Joined" })).toHaveAttribute(
+      "aria-sort",
+      "ascending",
+    );
+    await expect(page.getByRole("link", { name: /^Person 205 Roster/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Person 001 Roster/ })).toHaveCount(0);
+    await sort.click();
+    await expect(page.getByRole("link", { name: /^Person 001 Roster/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Person 205 Roster/ })).toHaveCount(0);
+    await page.screenshot({
+      path: `artifacts/settings/users-created-time-${test.info().project.name}.png`,
+      fullPage: true,
+    });
+  }
 });
 
 test("role members outside the first batch resolve their names and emails", async ({ page }) => {
