@@ -175,8 +175,12 @@ uploads remain available before verification; submitting or confirming a
 place does not. Owners can permanently delete a never-submitted draft from
 **My applications**, including after close and before email verification. This audited, idempotent
 operation never deletes submitted responses or drafts returned by staff;
-`GET /api/me/applications` exposes `can_delete_draft` from the status and
+The list, response read and draft-save endpoints expose `can_delete_draft` from the status and
 audit history (returning a response clears its submission timestamp).
+An actionable draft shows its discard action instead of a duplicate status badge.
+The open form also offers discard in its header: it stops new autosaves, waits
+for pending writes, deletes the draft and returns to **My applications** without
+creating a replacement draft. Failed deletion keeps the form and permits retry.
 Decision-makers can return a response to its owner as a draft.
 A response owner can retrieve that immutable form snapshot with their answers
 even after the form closes; the applicant page renders it read-only unless the

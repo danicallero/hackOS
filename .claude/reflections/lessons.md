@@ -943,3 +943,33 @@ Inspect native tablet screenshots at full size and compare foldable portrait/lan
 
 ### Exceptions
 Sheets and focused single-column editors retain their own readable content bounds.
+
+## [R029] Let state-specific actions replace redundant status badges
+
+Status: promoted
+Scope: module:web
+Source: user-correction
+Date: 2026-11-02
+Promoted-To: docs/DESIGN.md
+
+### Trigger
+A record's state has a visible action that already names that state.
+
+### Mistake
+Displayed a Draft badge beside Delete draft, repeating the same information.
+
+### Lesson
+Use the meaningful state-specific action to carry the state when it is available;
+reserve status badges for states with no corresponding action in that position.
+
+### Action
+Render the action and state badge mutually exclusively. Check list and detail
+headers together, including states whose action is unavailable.
+
+### Validation
+Verify actionable drafts show their control without a Draft badge, while
+submitted, in-review and other non-actionable states retain their status.
+
+### Exceptions
+An action whose label does not communicate the current state may still need
+an independent status indicator.

@@ -61,6 +61,7 @@ export interface ResponseRow {
   submitted_at: Date | null;
   allow_resubmit_after_close: boolean;
   auto_accept_on_resubmit: boolean;
+  can_delete_draft?: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -373,7 +374,7 @@ export async function saveDraft(
          VALUES ($1, $2, $3, $4::jsonb, 'draft') RETURNING *`,
         [userId, applicationId, currentForm.id, JSON.stringify(responses)],
       );
-      return inserted.rows[0];
+      return { ...inserted.rows[0], can_delete_draft: true };
     }
 
     // Existing draft stays editable until submit; anything past draft is locked.
@@ -396,8 +397,23 @@ export async function saveDraft(
         WHERE id = $1 AND user_id = $2 RETURNING *`,
       [existing.id, userId, JSON.stringify(responses)],
     );
-    return updated.rows[0];
+    return { ...updated.rows[0], can_delete_draft: await canDeleteDraft(client, updated.rows[0]) };
   });
+}
+
+/** H12: returning a response clears submitted_at, so audit history owns this boundary. */
+export async function canDeleteDraft(
+  db: Queryable,
+  response: Pick<ResponseRow, "id" | "status" | "submitted_at">,
+): Promise<boolean> {
+  if (response.status !== "draft" || response.submitted_at !== null) return false;
+  const { rows } = await db.query(
+    `SELECT EXISTS (SELECT 1 FROM audit_log
+      WHERE entity_type = 'application_response' AND entity_id = $1
+        AND action IN ('submitted', 'returned_to_draft')) AS submitted`,
+    [String(response.id)],
+  );
+  return !rows[0].submitted;
 }
 
 /** H12: owners may discard preparation, never a submitted or returned response. */

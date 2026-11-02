@@ -152,9 +152,11 @@ export default function MyApplicationsPage() {
                       : t("notSubmittedYet")}
                   </div>
                 </div>
-                <StatusBadge className="shrink-0" tone={statusTone(r.status)} dot={false}>
-                  {statusLabel(r.status, t)}
-                </StatusBadge>
+                {!r.can_delete_draft && (
+                  <StatusBadge className="shrink-0" tone={statusTone(r.status)} dot={false}>
+                    {statusLabel(r.status, t)}
+                  </StatusBadge>
+                )}
               </Link>
               {r.can_delete_draft && (
                 <Button

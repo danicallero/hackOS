@@ -91,6 +91,13 @@ describe("discard application draft (H12)", () => {
 
   it("offers deletion only for never-submitted drafts and requires confirmation", async () => {
     expect(buttons()).toHaveLength(1);
+    const actionable = container.querySelector('a[href="/my-applications/10"]');
+    expect(actionable?.textContent).not.toContain("dataStatusDraft");
+    const returned = container.querySelector('a[href="/my-applications/12"]');
+    expect(returned?.textContent).toContain("dataStatusDraft");
+    expect(container.querySelector('a[href="/my-applications/11"]')?.textContent).toContain(
+      "dataStatusReview",
+    );
     expect(container.querySelector('a[href="/my-applications/11"]')).not.toBeNull();
     await act(async () => buttons()[0]?.click());
     expect(state.remove).not.toHaveBeenCalled();

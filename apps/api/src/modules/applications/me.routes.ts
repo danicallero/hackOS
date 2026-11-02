@@ -8,6 +8,7 @@ import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { activeLibraryFields } from "../form-libraries/service.js";
 import { idParamSchema, saveDraftSchema, submitSchema } from "./schemas.js";
 import {
+  canDeleteDraft,
   deleteDraft,
   enrichTemplate,
   listMyResponses,
@@ -50,7 +51,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get my response for one form",
         description:
-          "Returns the caller's own answers and the immutable form snapshot they answered, including for a closed form. Retired library questions are hidden in editable drafts so deleting a required catalogue cannot strand an application. Submitted definitions remain unchanged. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
+          "Returns the caller's own answers, deletion eligibility (can_delete_draft) and the immutable form snapshot they answered, including for a closed form. Retired library questions are hidden in editable drafts so deleting a required catalogue cannot strand an application. Submitted definitions remain unchanged. Internal accepted/rejected status is masked as 'review' until the decision is sent (H12, H14).",
         params: idParamSchema,
       },
     },
@@ -84,6 +85,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       );
       return {
         ...row,
+        can_delete_draft: await canDeleteDraft(pool, row),
         status: maskStatus(row.status),
         template: enriched,
         sections,
@@ -106,7 +108,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Save my draft response",
         description:
-          "Creates or updates the caller's draft for a form (H12). 409 if the window is closed and no draft exists yet for this form.",
+          "Creates or updates the caller's draft for a form and returns can_delete_draft eligibility (H12). 409 if the window is closed and no draft exists yet for this form.",
         params: idParamSchema,
         body: saveDraftSchema,
       },

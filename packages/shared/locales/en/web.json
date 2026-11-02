@@ -3765,5 +3765,6 @@
   "keyboardShortcuts": "Keyboard shortcuts",
   "deleteApplicationDraft": "Delete draft",
   "deleteApplicationDraftDescription": "The saved answers for “{name}” will be permanently deleted.",
-  "couldNotDeleteApplicationDraft": "Could not delete the draft. Try again."
+  "couldNotDeleteApplicationDraft": "Could not delete the draft. Try again.",
+  "discardApplicationDraft": "Discard draft"
 }

@@ -3765,5 +3765,6 @@
   "keyboardShortcuts": "Atajos de teclado",
   "deleteApplicationDraft": "Borrar borrador",
   "deleteApplicationDraftDescription": "Las respuestas guardadas de «{name}» se borrarán definitivamente.",
-  "couldNotDeleteApplicationDraft": "No se pudo borrar el borrador. Inténtalo de nuevo."
+  "couldNotDeleteApplicationDraft": "No se pudo borrar el borrador. Inténtalo de nuevo.",
+  "discardApplicationDraft": "Descartar borrador"
 }

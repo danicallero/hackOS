@@ -33,6 +33,23 @@ describe("discard an application draft (H12)", () => {
     ).toEqual([{ actor_id: owner, entity_id: String(response), action: "draft_deleted" }]);
   });
 
+  it("includes deletion eligibility when creating, reading and saving the open draft", async () => {
+    const app = await getApp();
+    const owner = await createUser({ emailVerified: false });
+    const application = await createApplication();
+    const url = `/api/applications/${application}/response`;
+    for (const method of ["PUT", "GET", "PUT"] as const) {
+      const result = await app.inject({
+        method,
+        url,
+        headers: asUser(owner),
+        ...(method === "PUT" ? { payload: { responses: { motivation: "draft" } } } : {}),
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.json().can_delete_draft).toBe(true);
+    }
+  });
+
   it("never deletes another person's draft and requires a session", async () => {
     const app = await getApp();
     const owner = await createUser();
@@ -98,6 +115,16 @@ describe("discard an application draft (H12)", () => {
       submitted_at: null,
       can_delete_draft: false,
     });
+    for (const method of ["GET", "PUT"] as const) {
+      const result = await app.inject({
+        method,
+        url: `/api/applications/${application}/response`,
+        headers: asUser(owner),
+        ...(method === "PUT" ? { payload: { responses: {} } } : {}),
+      });
+      expect(result.statusCode).toBe(200);
+      expect(result.json().can_delete_draft).toBe(false);
+    }
     const result = await app.inject({
       method: "DELETE",
       url: `/api/applications/${application}/response`,

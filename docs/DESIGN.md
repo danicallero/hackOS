@@ -795,6 +795,8 @@ explain the available retry/reload path, never silently overwrite another edit.
   published, paused, conflict), with a localized label and semantic tone.
   Static names, dates, preferences, roles listed as metadata, mandatory flags,
   descriptions and quantities are text. Filter chips are controls, not badges.
+  When a state-specific action already names the state (for example, **Discard draft**), show the action instead of
+  a duplicate state badge; retain badges for states without an available action.
   Never rely on color alone or turn every attribute into a pill.
 - A collapsed object has a visible disclosure control; essential state and
   next action stay visible. Actions inside a row stop row navigation and stay
