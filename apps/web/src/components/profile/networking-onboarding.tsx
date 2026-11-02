@@ -18,7 +18,11 @@ import {
 } from "@/lib/networking-onboarding";
 import { useSessionContext } from "@/lib/session";
 
-/** H7/H10/H15: event access starts the personal-profile step, never an application alone. */
+/**
+ * H7/H10/H15: event access starts the personal-profile step, never an application alone.
+ * H1: saving the profile needs a verified primary email, so the step waits for it
+ * instead of blocking the person on an API error.
+ */
 export function NetworkingOnboarding({
   children,
   embedded = false,
@@ -27,7 +31,7 @@ export function NetworkingOnboarding({
   embedded?: boolean;
 }) {
   const { me } = useSessionContext();
-  if (!me?.hasEventAccess) return children;
+  if (!me?.hasEventAccess || !me.emailVerified) return children;
   return (
     <OnboardingStep key={me.id} userId={me.id} embedded={embedded}>
       {children}
