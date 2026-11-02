@@ -3,11 +3,15 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MyResponseDetail } from "../lib";
 
-const { put, success } = vi.hoisted(() => ({ put: vi.fn(), success: vi.fn() }));
+const { put, remove, success } = vi.hoisted(() => ({
+  put: vi.fn(),
+  remove: vi.fn(),
+  success: vi.fn(),
+}));
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
-  api: { put },
+  api: { put, delete: remove },
 }));
 vi.mock("@/lib/toast", () => ({ toast: { success, error: vi.fn() } }));
 
@@ -47,19 +51,28 @@ type Snapshot = {
   values: Record<string, unknown>;
   saveState: string;
   edit: (value: string) => void;
+  discard: () => Promise<void>;
+  discarding: boolean;
 };
 
-function Harness({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
+const translate = (key: string) => key;
+function Harness({
+  onSnapshot,
+  initialResponse = response,
+}: {
+  onSnapshot: (snapshot: Snapshot) => void;
+  initialResponse?: MyResponseDetail | null;
+}) {
   const [values, setValues] = useState<Record<string, unknown>>({ answer: "initial" });
   const [saveState, setSaveState] = useState<"saved" | "saving" | "unsaved" | "error">("saved");
   const [saving, setSaving] = useState(false);
   const [answerRevision, setAnswerRevision] = useState(0);
   const latestAnswerRevision = useRef(0);
   const hasLocalEdits = useRef(false);
-  const [currentResponse, setResponse] = useState<MyResponseDetail | null>(response);
-  const setActionError = vi.fn();
+  const [currentResponse, setResponse] = useState<MyResponseDetail | null>(initialResponse);
+  const [, setActionError] = useState<import("../lib").ActionError | null>(null);
 
-  useApplicationDraft({
+  const { discardDraft, discarding } = useApplicationDraft({
     applicationId: 4,
     formOpen: true,
     response: currentResponse,
@@ -71,7 +84,7 @@ function Harness({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
     hasLocalEdits,
     saveState,
     saving,
-    t: (key) => key,
+    t: translate,
     setResponse,
     setValues,
     setSaving,
@@ -88,8 +101,8 @@ function Harness({ onSnapshot }: { onSnapshot: (snapshot: Snapshot) => void }) {
   }, []);
 
   useEffect(() => {
-    onSnapshot({ values, saveState, edit });
-  }, [edit, onSnapshot, saveState, values]);
+    onSnapshot({ values, saveState, edit, discard: discardDraft, discarding });
+  }, [edit, onSnapshot, saveState, values, discardDraft, discarding]);
 
   return null;
 }
@@ -109,6 +122,8 @@ describe("useApplicationDraft", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     put.mockReset();
+    remove.mockReset();
+    remove.mockResolvedValue(undefined);
     success.mockReset();
     container = document.createElement("div");
     document.body.append(container);
@@ -169,5 +184,85 @@ describe("useApplicationDraft", () => {
     );
     await flush();
     expect(snapshot).toMatchObject({ values: { answer: "newer answer" }, saveState: "saved" });
+  });
+  it("cancels a queued autosave and never creates a replacement after discarding", async () => {
+    act(() => snapshot?.edit("unsaved answer"));
+    await act(async () => {
+      await snapshot?.discard();
+    });
+    expect(remove).toHaveBeenCalledWith("/api/applications/4/response");
+    act(() => snapshot?.edit("late render"));
+    await act(async () => {
+      vi.advanceTimersByTime(1400);
+    });
+    expect(put).not.toHaveBeenCalled();
+    expect(snapshot?.discarding).toBe(true);
+  });
+
+  it("waits for an in-flight save before deleting and suppresses a newer queued save", async () => {
+    const pending = deferred<MyResponseDetail>();
+    put.mockReturnValueOnce(pending.promise);
+    act(() => snapshot?.edit("saving answer"));
+    await act(async () => {
+      vi.advanceTimersByTime(700);
+    });
+    act(() => snapshot?.edit("newer answer"));
+    let discarded!: Promise<void>;
+    act(() => {
+      discarded = snapshot!.discard();
+    });
+    expect(remove).not.toHaveBeenCalled();
+    await act(async () => {
+      pending.resolve(response);
+      await discarded;
+    });
+    expect(remove).toHaveBeenCalledOnce();
+    await act(async () => {
+      vi.advanceTimersByTime(1400);
+    });
+    expect(put).toHaveBeenCalledOnce();
+    expect(snapshot?.values).toEqual({ answer: "newer answer" });
+  });
+
+  it("waits for initial draft creation and prevents its late result from restarting creation", async () => {
+    const pending = deferred<MyResponseDetail>();
+    put.mockReturnValueOnce(pending.promise);
+    act(() =>
+      root.render(
+        <Harness
+          key="new"
+          initialResponse={null}
+          onSnapshot={(next) => {
+            snapshot = next;
+          }}
+        />,
+      ),
+    );
+    expect(put).toHaveBeenCalledOnce();
+    let discarded!: Promise<void>;
+    act(() => {
+      discarded = snapshot!.discard();
+    });
+    expect(remove).not.toHaveBeenCalled();
+    await act(async () => {
+      pending.resolve(response);
+      await discarded;
+    });
+    await flush();
+    expect(remove).toHaveBeenCalledOnce();
+    expect(put).toHaveBeenCalledOnce();
+  });
+
+  it("allows retry when deletion fails", async () => {
+    remove.mockRejectedValueOnce(new Error("offline"));
+    await act(async () => {
+      await expect(snapshot!.discard()).rejects.toThrow("offline");
+    });
+    expect(snapshot?.discarding).toBe(false);
+    await act(async () => {
+      await snapshot?.discard();
+    });
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(snapshot?.discarding).toBe(true);
   });
 });

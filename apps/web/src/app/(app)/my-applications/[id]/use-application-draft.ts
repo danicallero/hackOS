@@ -1,6 +1,6 @@
 "use client";
 
-import { type MutableRefObject, useCallback, useEffect } from "react";
+import { type MutableRefObject, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { Translate } from "@/lib/i18n";
@@ -49,7 +49,40 @@ export function useApplicationDraft({
   setSaveState,
   setActionError,
 }: Options) {
+  const stopped = useRef(false);
+  const pendingWrites = useRef(new Set<Promise<MyResponseDetail>>());
+  const [discarding, setDiscarding] = useState(false);
+  const writeDraft = useCallback(
+    (responses: Record<string, unknown>) => {
+      const request = api.put<MyResponseDetail>(`/api/applications/${applicationId}/response`, {
+        responses,
+      });
+      pendingWrites.current.add(request);
+      const settled = () => pendingWrites.current.delete(request);
+      void request.then(settled, settled);
+      return request;
+    },
+    [applicationId],
+  );
+
+  const discardDraft = useCallback(async () => {
+    stopped.current = true;
+    setDiscarding(true);
+    try {
+      // Wait for writes already sent, then delete. Cancelling fetch alone cannot
+      // prevent a server-side autosave from committing after deletion (H12).
+      await Promise.allSettled([...pendingWrites.current]);
+      await api.delete(`/api/applications/${applicationId}/response`);
+    } catch (error) {
+      stopped.current = false;
+      setDiscarding(false);
+      setSaveState(hasLocalEdits.current ? "unsaved" : "saved");
+      throw error;
+    }
+  }, [applicationId, hasLocalEdits, setSaveState]);
+
   const saveDraft = useCallback(async () => {
+    if (stopped.current) return;
     // Each request owns the answer revision that it serializes. Controls stay
     // editable while it is in flight, so its response is only authoritative
     // when no later local edit exists (#844).
@@ -58,9 +91,8 @@ export function useApplicationDraft({
     setSaveState("saving");
     setActionError(null);
     try {
-      const saved = await api.put<MyResponseDetail>(`/api/applications/${applicationId}/response`, {
-        responses: values,
-      });
+      const saved = await writeDraft(values);
+      if (stopped.current) return;
       if (latestAnswerRevision.current !== savedRevision) {
         setSaveState("unsaved");
         return;
@@ -77,6 +109,7 @@ export function useApplicationDraft({
       setValues(saved.responses ?? {});
       setSaveState("saved");
     } catch (error) {
+      if (stopped.current) return;
       if (latestAnswerRevision.current !== savedRevision) {
         setSaveState("unsaved");
         return;
@@ -90,7 +123,7 @@ export function useApplicationDraft({
     }
   }, [
     answerRevision,
-    applicationId,
+    writeDraft,
     hasLocalEdits,
     latestAnswerRevision,
     setActionError,
@@ -103,16 +136,15 @@ export function useApplicationDraft({
   ]);
 
   useEffect(() => {
-    if (!formOpen || response || responseError) return;
+    if (stopped.current || discarding || !formOpen || response || responseError) return;
     let active = true;
-    void api
-      .put<MyResponseDetail>(`/api/applications/${applicationId}/response`, { responses: {} })
+    void writeDraft({})
       .then((draft) => {
-        if (!active) return;
+        if (!active || stopped.current) return;
         setResponse(draft);
       })
       .catch((error) => {
-        if (!active) return;
+        if (!active || stopped.current) return;
         setActionError({
           action: "save",
           message: apiErrorText(error, t, t("couldNotSaveDraft")),
@@ -121,13 +153,21 @@ export function useApplicationDraft({
     return () => {
       active = false;
     };
-  }, [applicationId, formOpen, response, responseError, setActionError, setResponse, t]);
+  }, [discarding, formOpen, response, responseError, setActionError, setResponse, t, writeDraft]);
 
   useEffect(() => {
-    if (!editable || !response || saving || saveState !== "unsaved") return;
+    if (
+      stopped.current ||
+      discarding ||
+      !editable ||
+      !response ||
+      saving ||
+      saveState !== "unsaved"
+    )
+      return;
     const timer = window.setTimeout(() => void saveDraft(), 700);
     return () => window.clearTimeout(timer);
-  }, [editable, response, saveDraft, saveState, saving]);
+  }, [discarding, editable, response, saveDraft, saveState, saving]);
 
-  return saveDraft;
+  return { saveDraft, discardDraft, discarding };
 }

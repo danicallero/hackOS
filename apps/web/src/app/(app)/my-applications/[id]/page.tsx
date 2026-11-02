@@ -13,9 +13,8 @@
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
-import { ShieldWarningIcon } from "@phosphor-icons/react/dist/csr/ShieldWarning";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -25,10 +24,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/surface";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
@@ -38,7 +35,6 @@ import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { validationErrorSummary } from "@/lib/application-validation";
 import { pickText, useLocale } from "@/lib/i18n";
-import { withReturnPath } from "@/lib/return-path";
 import type { SaveState } from "@/lib/save-state";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
@@ -56,10 +52,9 @@ import {
   type MyResponseDetail,
   type PublicForm,
   seedApplicationValues,
-  statusLabel,
-  statusTone,
   withLogisticsSection,
 } from "../lib";
+import { ApplicationHeader } from "./application-header";
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
 import { ApplicationStatusActions } from "./application-status-actions";
 import { useApplicationDraft } from "./use-application-draft";
@@ -69,6 +64,7 @@ export default function MyApplicationDetailPage() {
   const { t, language } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const router = useRouter();
   const { me, refresh } = useSessionContext();
   const lang: Language = language;
   const [form, setForm] = useState<PublicForm | null>(null);
@@ -249,7 +245,11 @@ export default function MyApplicationDetailPage() {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
-  const handleSaveDraft = useApplicationDraft({
+  const {
+    saveDraft: handleSaveDraft,
+    discardDraft,
+    discarding,
+  } = useApplicationDraft({
     applicationId: id,
     formOpen: Boolean(form),
     response,
@@ -489,16 +489,17 @@ export default function MyApplicationDetailPage() {
 
   return (
     <PageLayout width="reading">
-      <PageHeader
+      <ApplicationHeader
         title={title}
         description={description}
-        actions={
-          status ? (
-            <StatusBadge tone={statusTone(status)} dot={false}>
-              {statusLabel(status, t)}
-            </StatusBadge>
-          ) : undefined
-        }
+        status={status}
+        canDiscard={response?.can_delete_draft === true && status === "draft"}
+        disabled={submitting}
+        discarding={discarding}
+        onDiscard={async () => {
+          await discardDraft();
+          router.replace("/my-applications");
+        }}
       />
 
       {loadError && <ContextualError message={loadError} onRetry={retry} />}
@@ -533,7 +534,7 @@ export default function MyApplicationDetailPage() {
                 type="button"
                 variant="outline"
                 onClick={handleSaveDraft}
-                disabled={saving || submitting}
+                disabled={saving || submitting || discarding}
                 className="w-full sm:w-auto"
                 loading={saving}
               >
@@ -543,10 +544,7 @@ export default function MyApplicationDetailPage() {
                 type="button"
                 onClick={handleSubmit}
                 pending={submitting}
-                disabled={saving || me?.emailVerified !== true}
-                aria-describedby={
-                  me?.emailVerified === true ? undefined : `verify-email-to-submit-${id}`
-                }
+                disabled={saving || discarding || me?.emailVerified !== true}
                 className="w-full sm:w-auto"
               >
                 {t("submitApplication")}
@@ -557,25 +555,6 @@ export default function MyApplicationDetailPage() {
       >
         {actionError && (actionError.action === "save" || actionError.action === "submit") && (
           <ContextualError message={actionError.message} onRetry={retryAction} />
-        )}
-        {editable && me && !me.emailVerified && (
-          <Alert id={`verify-email-to-submit-${id}`} variant="destructive">
-            <ShieldWarningIcon aria-hidden="true" />
-            <AlertTitle>{t("verifyEmailToSubmitTitle")}</AlertTitle>
-            <AlertDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {t("verifyEmailToSubmitDesc")}
-              <Button asChild size="sm" variant="outline">
-                <Link
-                  href={withReturnPath(
-                    `/verify-email?email=${encodeURIComponent(me.email)}`,
-                    `/my-applications/${id}`,
-                  )}
-                >
-                  {t("verifyNow")}
-                </Link>
-              </Button>
-            </AlertDescription>
-          </Alert>
         )}
 
         {template.length > 0 ? (
@@ -612,7 +591,7 @@ export default function MyApplicationDetailPage() {
                     value={values[field.key] as FieldValue}
                     onChange={(v) => setValue(field.key, v)}
                     onBlur={(value) => validateOnBlur(field, value)}
-                    disabled={!editable}
+                    disabled={!editable || discarding}
                     lang={lang}
                     error={fieldErrors[field.key]}
                     sharedWithSponsors={values[sponsorShareKey(field.key)] === true}
