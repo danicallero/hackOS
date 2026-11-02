@@ -104,6 +104,8 @@ export interface RunAccountRemovalOptions {
   securityPin?: string;
   /** Current credential for an unverified real self-service account. */
   reauthenticationPassword?: string;
+  /** An unverified account that never had a password has none to re-enter. */
+  allowPasswordlessReauthentication?: boolean;
   /** The authenticated session that initiated self-service removal, if known. */
   sessionToken?: string | null;
   /** Admin routes can force the action only after the locked preflight agrees. */
@@ -332,8 +334,17 @@ async function verifyUnverifiedSelfServicePassword(
   client: pg.PoolClient,
   user: Pick<UserRemovalRow, "email_verified" | "is_test_account" | "id">,
   password: string | undefined,
+  allowPasswordless = false,
 ): Promise<void> {
   if (user.email_verified || user.is_test_account) return;
+  if (allowPasswordless) {
+    const { rowCount } = await client.query(
+      `SELECT 1 FROM accounts
+        WHERE user_id = $1 AND provider_id = 'credential' AND password IS NOT NULL`,
+      [user.id],
+    );
+    if (!rowCount) return;
+  }
   if (!password) {
     throw new BadRequestError("Re-enter your current password to continue.", {
       code: "removal_reauthentication_required",
@@ -731,7 +742,12 @@ async function prepareAccountRemoval(
       // PIN/password check.
       if (options.actorId === options.targetId) {
         await consumeRemovalPin(client, user, options.securityPin);
-        await verifyUnverifiedSelfServicePassword(client, user, options.reauthenticationPassword);
+        await verifyUnverifiedSelfServicePassword(
+          client,
+          user,
+          options.reauthenticationPassword,
+          options.allowPasswordlessReauthentication,
+        );
       }
 
       // Retire wallet credentials while the account is still active. The H54

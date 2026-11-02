@@ -166,8 +166,12 @@ it("keeps a short profile scrollable past the collapsed avatar (#935)", async ()
   expect(minHeight).toBeGreaterThanOrEqual(852 + 120 - 59);
 });
 
+it("keeps a short notch profile scrollable through the full merge (H7)", async () => {
+  expect(await layoutProfile({ top: 47 })).toBeGreaterThanOrEqual(852 + 120 - 47);
+});
+
 it("does not pad a short profile without a camera cutout to collapse into (#935)", async () => {
-  expect(await layoutProfile()).toBeUndefined();
+  expect(await layoutProfile({ top: 20 })).toBeUndefined();
 });
 
 it("lists every project the person is in (#935)", async () => {

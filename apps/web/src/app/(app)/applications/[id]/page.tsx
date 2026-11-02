@@ -26,6 +26,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
@@ -37,6 +38,7 @@ import { TabBar } from "@/components/common/tab-bar";
 import { QuestionsCard } from "@/components/forms/questions-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveQuery } from "@/hooks/use-event-source";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
@@ -84,7 +86,21 @@ export default function ApplicationDetailPage() {
   const { tab, setTab } = useUrlTab({ values: applicationTabs, defaultValue: defaultTab });
 
   const [form, setForm] = useState<ApplicationForm | null>(null);
-  const [stats, setStats] = useState<ApplicationStats | null>(null);
+  const {
+    data: stats,
+    error: statsError,
+    refetch: refetchStats,
+  } = useLiveQuery(
+    (signal) =>
+      api.post<ApplicationStats>(
+        "/api/statistics/query",
+        { scopes: [`application:${id}`], panel_keys: ["overview"] },
+        { signal },
+      ),
+    domainScope(SSE_TOPICS.APPLICATIONS),
+    [EVENTS.DOMAIN_CHANGED],
+    { enabled: canStats && Number.isFinite(id), resourceKey: ["application", id, "overview"] },
+  );
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -164,16 +180,6 @@ export default function ApplicationDetailPage() {
     else setState("error");
   }, [id, loadForm, liveRefresh]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (!canStats || !Number.isFinite(id)) return;
-    api
-      .get<ApplicationStats>(`/api/applications/${id}/stats`)
-      .then(setStats)
-      // Keep the last complete stats strip during background revalidation.
-      .catch(() => {});
-  }, [id, canStats, liveRefresh]);
-
   if (state === "loading") {
     return (
       <div className="flex items-center justify-center py-20">
@@ -251,6 +257,12 @@ export default function ApplicationDetailPage() {
         onConfirm={() => void deleteForm()}
       />
 
+      {canStats && Boolean(statsError) && (
+        <ContextualError
+          message={apiErrorText(statsError, t, t("couldNotLoadStatistics"))}
+          onRetry={() => refetchStats()}
+        />
+      )}
       {canStats && stats?.counts_by_status && <StatsStrip stats={stats} />}
 
       {applicationTabs.length > 0 && (

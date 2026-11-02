@@ -994,11 +994,13 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "highest-visible role also shown elsewhere; `roles` is that user's complete " +
           "assigned-role set (H8) for a secondary role list — system:superadmin is stripped " +
           "out of it unless the viewer holds PERMISSIONS_MANAGE (irrelevant to an ordinary " +
-          "USERS_READ viewer, and never advertised to them).",
+          "USERS_READ viewer, and never advertised to them). `isSponsorRep` identifies whether " +
+          "the sponsor-only meal-plan section applies to this user.",
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: userResponseSchema.extend({
             visibleRoleName: z.string().nullable(),
+            isSponsorRep: z.boolean(),
             capabilities: z.array(z.string()),
             roles: z.array(assignedRoleSchema),
           }),
@@ -1008,12 +1010,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(pool, req.params.id);
-      const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin] = await Promise.all([
-        getHighestVisibleRoleName(pool, req.params.id),
-        getEffectiveCapabilities(createAuthorizationContext(req.params.id)),
-        getAssignedRoles(pool, req.params.id),
-        userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.PERMISSIONS_MANAGE),
-      ]);
+      const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin, membership] =
+        await Promise.all([
+          getHighestVisibleRoleName(pool, req.params.id),
+          getEffectiveCapabilities(createAuthorizationContext(req.params.id)),
+          getAssignedRoles(pool, req.params.id),
+          userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.PERMISSIONS_MANAGE),
+          computeMembershipFlags(pool, req.params.id),
+        ]);
       // H8: system:superadmin is CLI-only and never advertised to a staff
       // viewer browsing someone else's profile unless they themselves manage
       // permissions — it carries no operational meaning to an ordinary
@@ -1023,6 +1027,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         : allRoles.filter((r) => r.name !== SUPERADMIN_ROLE_NAME);
       return {
         ...serializeUser(row),
+        isSponsorRep: membership.isSponsorRep,
         visibleRoleName,
         capabilities: [...capabilities],
         roles,

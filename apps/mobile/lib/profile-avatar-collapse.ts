@@ -99,7 +99,7 @@ export function profileAvatarSnapTarget(
 }
 
 /*
- * Plain collapse, without a camera cutout to morph into (no Dynamic Island,
+ * Plain collapse, without a camera cutout to morph into (no iPhone notch/island,
  * no Android hole punch) or under Reduce Motion (#935): the avatar stays in
  * the scroll content. It holds still and shrinks while the name below closes
  * the gap, then rides up and off screen with the content, so it never parks
@@ -255,9 +255,10 @@ export function pickHolePunchCutout(
 /**
  * Resolve the camera-area morph target.
  * - iPhone with Dynamic Island: fixed island geometry (UIKit exposes none).
+ * - Notched iPhone: merge inside the top-connected cutout, above its lower edge.
  * - Other devices with a hole punch: a circle the size of the real cutout read
  *   from the OS.
- * - Everything else (notch, no cutout, landscape, unknown): `hasCutout: false`,
+ * - Everything else (no cutout, landscape, unknown): `hasCutout: false`,
  *   which callers render as a plain collapse/fade with no morph.
  */
 export function resolveProfileCameraTarget({
@@ -293,6 +294,20 @@ export function resolveProfileCameraTarget({
       top: safeAreaTop - DYNAMIC_ISLAND_TOP_OFFSET + DYNAMIC_ISLAND_INSET,
       width,
       height: DYNAMIC_ISLAND_HEIGHT - 2 * DYNAMIC_ISLAND_INSET,
+      hasCutout: true,
+    };
+  }
+
+  if (!isLandscape && platform === "ios" && safeAreaTop >= 44) {
+    // H7: the notch is attached to y=0, not floating below the status bar.
+    // A centred 150 x 30 pt target fits inside both notch generations; the
+    // safe-area bottom (44/47 pt) extends below the hardware and leaves a gap.
+    const width = 150;
+    return {
+      left: (screenWidth - width) / 2,
+      top: 0,
+      width,
+      height: 30,
       hasCutout: true,
     };
   }

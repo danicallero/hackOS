@@ -47,6 +47,11 @@ jest.mock("react-native-reanimated", () => ({
 }));
 const mockHaptic = jest.fn();
 jest.mock("@/lib/haptics", () => ({ haptic: (intent: string) => mockHaptic(intent) }));
+let mockOcclusionRegion: { x: number; y: number; width: number; height: number } | null = null;
+jest.mock("@/modules/fold-region", () => ({
+  __esModule: true,
+  default: { getOcclusionRegion: () => mockOcclusionRegion },
+}));
 let mockCutoutRects: { left: number; top: number; width: number; height: number }[] = [];
 jest.mock("@/modules/camera-capabilities", () => ({
   __esModule: true,
@@ -521,9 +526,59 @@ describe("profile camera target", () => {
     );
   });
 
-  it("does not morph on notch iPhones or iPhones without a cutout", () => {
-    expect(resolveProfileCameraTarget({ ...base, safeAreaTop: 47 })).toEqual(plain(176.5, 53));
+  it.each([
+    44, 47,
+  ])("merges inside a notch with a %s pt safe area, above its lower edge", (safeAreaTop) => {
+    const target = resolveProfileCameraTarget({
+      ...base,
+      screenWidth: 390,
+      height: 844,
+      safeAreaTop,
+    });
+    expect(target).toEqual({ left: 120, top: 0, width: 150, height: 30, hasCutout: true });
+    // The 13's hardware notch reaches y=34; the mask lip must join inside it,
+    // not at the safe area's y=47, which leaves a visible strip of background.
+    expect(target.top + target.height).toBeLessThanOrEqual(34);
+    const collapsed = profileAvatarMaskFrame(112, start, target, 1);
+    expect(collapsed.top + collapsed.height).toBeLessThanOrEqual(34);
+  });
+
+  it("does not morph on iPhones without a cutout", () => {
     expect(resolveProfileCameraTarget({ ...base, safeAreaTop: 20 })).toEqual(plain(176.5, 26));
+  });
+
+  it.each([
+    [
+      { x: 107, y: 0, width: 176, height: 47 },
+      { left: 120, top: 0, width: 150, height: 30 },
+    ],
+    [
+      { x: 132, y: 11, width: 126, height: 37.33 },
+      { left: 136, top: 15, width: 118, height: 29.33 },
+    ],
+  ])("keeps a reported notch attached while preserving a floating island's inset", async (region, expected) => {
+    jest.replaceProperty(Platform, "OS", "ios");
+    jest.spyOn(require("react-native"), "useWindowDimensions").mockReturnValue({
+      width: 390,
+      height: 844,
+      scale: 3,
+      fontScale: 1,
+    });
+    mockOcclusionRegion = region;
+    try {
+      const { result } = await renderController({ top: 47, bottom: 34 });
+      expect(result.current.simple).toBe(false);
+      expect(result.current.target).toMatchObject({
+        left: expected.left,
+        top: expected.top,
+        width: expected.width,
+        hasCutout: true,
+      });
+      expect(result.current.target.height).toBeCloseTo(expected.height);
+    } finally {
+      mockOcclusionRegion = null;
+      jest.restoreAllMocks();
+    }
   });
 
   it("keeps the avatar in the page when Duo places its island in the side rail", () => {
@@ -1205,9 +1260,17 @@ describe("android hole-punch gooey overlay", () => {
     ).toBeTruthy();
   });
 
-  it("draws no overlay on an iPhone without a Dynamic Island", async () => {
+  it("uses the shared mask to merge into a notch on iPhone 13", async () => {
     jest.replaceProperty(Platform, "OS", "ios");
     await render({ top: 47, bottom: 34 });
+    expect(
+      screen.getByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
+    ).toBeTruthy();
+  });
+
+  it("draws no overlay on an iPhone without a cutout", async () => {
+    jest.replaceProperty(Platform, "OS", "ios");
+    await render({ top: 20, bottom: 0 });
     expect(
       screen.queryByTestId("profile-avatar-collapse-mask", { includeHiddenElements: true }),
     ).toBeNull();

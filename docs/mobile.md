@@ -1230,6 +1230,13 @@ The morph only runs where a real camera cutout exists:
 
 - **iPhone with Dynamic Island** (safe-area top >= 55 pt, portrait): the island
   geometry above, unchanged.
+- **iPhone with a notch** (44/47 pt top safe area, portrait; H7): the same
+  scroll-driven mask merges into a centred 150 × 30 pt target attached to the
+  screen's top edge. It fits inside the hardware notch, rather than ending at
+  the safe-area bottom below it, so the neck meets the notch without a visible
+  gap. Top-connected system occlusion regions use this target too; only floating
+  islands retain the existing 4 pt inset around the reported region. Carry,
+  snapping, haptics and Reduce Motion follow the shared morph contract.
 - **Android with a hole punch**: the target is the actual cutout, read at
   runtime from `WindowInsets.getDisplayCutout().boundingRects` (API 28+) through
   `CameraCapabilities.getDisplayCutoutRects()` in `modules/camera-capabilities`
@@ -1245,7 +1252,7 @@ The morph only runs where a real camera cutout exists:
   function and Android uses the plain collapse. With a hole punch, Android does
   not use the island mask above (its keyframes squeeze a small round target
   into a thin vertical needle); it uses the native gooey view described below.
-- **Duo lateral island, no cutout, unknown, API < 28, iPhone notch / no Dynamic Island, landscape**
+- **Duo lateral island, no cutout, unknown, API < 28, iPhone without a camera cutout, landscape**
   (`hasCutout: false`): no morph and no overlay (`simple`). The avatar stays in
   the scroll content: it holds still and shrinks to 0.75 until the view right
   below it (the name block, wired with `onNameLayout`) reaches its shrunken

@@ -75,7 +75,7 @@ export function OverviewTab({
       ) : (
         <ReadOnlyOverview user={user} intolerances={intolerances} />
       )}
-      <MealPlanSection userId={user.id} />
+      {user.isSponsorRep && <MealPlanSection userId={user.id} />}
     </div>
   );
 }

@@ -94,6 +94,40 @@ describe("DataTable accessibility and interactions", () => {
     act(() => root.render(table));
   }
 
+  it("settles sorted row notifications when a parent recreates columns (H13)", async () => {
+    const report = vi.fn();
+    function ReviewTable({ data = rows }: { data?: Row[] }) {
+      const [visible, setVisible] = useState<Row[]>([]);
+      return (
+        <>
+          <output>{visible.map((row) => row.name).join(",")}</output>
+          <DataTable
+            columns={[...columns]}
+            data={data}
+            getRowId={(row) => row.id}
+            onVisibleRowsChange={(next) => {
+              report(next);
+              if (report.mock.calls.length > 10) throw new Error("Row notification loop");
+              setVisible(next);
+            }}
+          />
+        </>
+      );
+    }
+    render(<ReviewTable />);
+    const sortButton = container.querySelector("th button") as HTMLButtonElement;
+    await act(async () => sortButton.click());
+    // Ascending leaves the sequence unchanged; descending changes it once.
+    expect(report).toHaveBeenCalledTimes(1);
+    await act(async () => sortButton.click());
+    expect(report).toHaveBeenCalledTimes(2);
+    expect(container.querySelector("output")?.textContent).toBe("Grace,Ada");
+    const updated = [{ ...rows[0], name: "Zoe" }, rows[1]] as Row[];
+    render(<ReviewTable data={updated} />);
+    expect(report).toHaveBeenCalledTimes(3);
+    expect(container.querySelector("output")?.textContent).toBe("Zoe,Grace");
+  });
+
   it("keeps rows semantic and activates the native link with Enter", async () => {
     render(
       <DataTable
