@@ -3769,5 +3769,12 @@
   "deleteApplicationDraft": "Delete draft",
   "deleteApplicationDraftDescription": "The saved answers for “{name}” will be permanently deleted.",
   "couldNotDeleteApplicationDraft": "Could not delete the draft. Try again.",
-  "discardApplicationDraft": "Discard draft"
+  "discardApplicationDraft": "Discard draft",
+  "deleteUnverifiedAccountTitle": "Delete this account?",
+  "deleteUnverifiedAccountBody": "{email} and everything linked to it will be permanently deleted. This can't be undone.",
+  "verifyEmailInstead": "Verify the email instead",
+  "removalLinkInvalidTitle": "This link isn't valid",
+  "removalLinkInvalidDesc": "It has expired or was already used.",
+  "removalLinkVerifiedTitle": "This account is already verified",
+  "removalLinkVerifiedDesc": "It can't be deleted from this link. Sign in to manage it from your profile."
 }

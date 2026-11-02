@@ -1,5 +1,6 @@
 import { expo } from "@better-auth/expo";
 import { betterAuth } from "better-auth";
+import { createEmailVerificationToken } from "better-auth/api";
 import { getSessionCookie } from "better-auth/cookies";
 import { constantTimeEqual, makeSignature } from "better-auth/crypto";
 import { config } from "../../config.js";
@@ -113,6 +114,25 @@ function withFrontendCallback(token: string, path: string): string {
   // in a message, and a direct GET to the API verified accounts on their own.
   const params = new URLSearchParams({ token, callback: path });
   return `${WEB_URL}/verify-email?${params.toString()}`;
+}
+
+/**
+ * Verification link for the reminder emails (H1): same signed token and web
+ * landing page as the sign-up email, but minted outside Better Auth's send
+ * endpoint (which would queue the sign-up template) and valid longer, since a
+ * reminder is read days after it is sent.
+ */
+export async function createVerificationReminderLink(
+  email: string,
+  expiresInSeconds: number,
+): Promise<string> {
+  const token = await createEmailVerificationToken(
+    config.BETTER_AUTH_SECRET,
+    email,
+    undefined,
+    expiresInSeconds,
+  );
+  return withFrontendCallback(token, "/verify-email?verified=1");
 }
 
 /**

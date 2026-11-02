@@ -51,6 +51,7 @@ Enum token_type {
   password_reset
   sponsor_invite
   spot_confirmation
+  unverified_account_removal
 }
 
 Table account_removal_pin_challenges {
@@ -222,6 +223,8 @@ Table application_responses {
   created_at "timestamp with time zone" [not null, default: `now()`]
   decision_sent_at "timestamp with time zone"
   declined_at "timestamp with time zone"
+  draft_reminded_at "timestamp with time zone"
+  draft_reminders_sent smallint [not null, default: `0`]
   id integer [pk, increment, not null]
   referrer_application_id integer
   referrer_user_id integer
@@ -1400,6 +1403,8 @@ Table users {
   surname text
   ui_prefs jsonb [not null, default: `'{}'::jsonb`]
   updated_at "timestamp with time zone" [not null, default: `now()`]
+  verification_reminded_at "timestamp with time zone"
+  verification_reminders_sent smallint [not null, default: `0`]
 
   Note: 'Authorization is resolved from the user\'s assigned roles and each role\'s tri-state capability grants (H8). Display labels may be relationship-derived, but never authorize access.'
 }

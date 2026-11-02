@@ -33,6 +33,18 @@
         "role": "When you finish creating your account, you will automatically receive the role: {{roleNames}}.",
         "roles": "When you finish creating your account, you will automatically receive the roles: {{roleNames}}.",
         "enterprise": "Your account will be linked to {{enterpriseName}}."
+      },
+      "verifyReminder1": {
+        "subject": "Verify your email to use hackOS",
+        "body": "Hi {{name}},\n\nYou created a hackOS account with this address, but you haven't verified it yet. Until you do, you can't submit applications, view information or make decisions on the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
+      },
+      "verifyReminder2": {
+        "subject": "Reminder: your hackOS email is still unverified",
+        "body": "Hi {{name}},\n\nWe're writing again because your hackOS account still has an unverified email. Without verification you can't submit applications, view information or use the platform.\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
+      },
+      "verifyReminder3": {
+        "subject": "Last reminder: verify your hackOS email",
+        "body": "Hi {{name}},\n\nThis is the last reminder we'll send. Your hackOS account is still unverified, so you can't submit applications, view information or use the platform.\n\nIf you want to keep it, verify it now:\n\n[Confirm email]({{verifyUrl}})\n\nThe link works for three days. If it has expired, you can request a new one from hackOS.\n\nDidn't you create this account? You can delete it: [Delete this account]({{deleteUrl}}). If the account has a password, you'll need to enter it to confirm."
       }
     },
     "project": {
@@ -84,6 +96,18 @@
         },
         "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf it turns out you can’t make it, please let us know so someone else can take your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
         "confirmationDeadline": "Confirm your spot before {{deadline}}."
+      },
+      "draftReminder1": {
+        "subject": "Your {{applicationName}} application is still a draft",
+        "body": "Hi {{name}},\n\nYou started an application for {{applicationName}} at {{eventName}}, but you haven't submitted it yet. It's still a draft, so we can't review it.\n\n[Finish my application]({{applicationUrl}})\n\nThe {{eventName}} team"
+      },
+      "draftReminder2": {
+        "subject": "Reminder: submit your {{applicationName}} application",
+        "body": "Hi {{name}},\n\nA reminder that your application for {{applicationName}} at {{eventName}} is still a draft.\n\nIf you don't submit it, we won't be able to evaluate it and you won't be able to take part in {{eventName}}.\n\n[Submit my application]({{applicationUrl}})\n\nThe {{eventName}} team"
+      },
+      "draftReminder3": {
+        "subject": "Last reminder about your {{applicationName}} application",
+        "body": "Hi {{name}},\n\nThis is the last time we'll write to you about this. Your application for {{applicationName}} at {{eventName}} is still a draft, and we won't evaluate drafts.\n\nIf you'd still like to take part, you can submit it whenever you're ready:\n\n[Submit my application]({{applicationUrl}})\n\nWe won't send any more reminders.\n\nThe {{eventName}} team"
       }
     },
     "schedule": {

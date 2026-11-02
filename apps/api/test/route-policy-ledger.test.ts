@@ -13,9 +13,9 @@ describe("final route-policy ledger", () => {
   it("has the exact classified rows, allowlists, and sole Better Auth exemption", async () => {
     app = await buildTestApp();
     const rows = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(rows).toHaveLength(497);
+    expect(rows).toHaveLength(499);
     expect(rows.filter((row) => row.policy.kind === "public")).toHaveLength(32);
-    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(13);
+    expect(rows.filter((row) => row.policy.kind === "token")).toHaveLength(15);
     // #992 and #1016: match the current inventory enforced by scripts/route-policy-audit.ts.
     expect(rows.filter((row) => row.policy.kind === "authenticated")).toHaveLength(105);
     expect(rows.filter((row) => row.policy.kind === "capability")).toHaveLength(262);
@@ -70,6 +70,7 @@ describe("final route-policy ledger", () => {
     ).toEqual([
       "DELETE /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
       "GET /api/invites/lookup",
+      "GET /api/unverified-account-removal",
       "GET /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier",
       "GET /api/wallet/apple/v1/passes/:passTypeIdentifier/:serialNumber",
       "GET /api/wallet/scoped/apple/:purpose.pkpass",
@@ -79,6 +80,7 @@ describe("final route-policy ledger", () => {
       "POST /api/auth/resend-verification",
       "POST /api/github/webhook",
       "POST /api/invites/accept",
+      "POST /api/unverified-account-removal",
       "POST /api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier/:serialNumber",
       "POST /api/wallet/apple/v1/log",
     ]);

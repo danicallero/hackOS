@@ -451,6 +451,30 @@ closes with thanks and an invitation to future editions. Email correspondence
 uses edition red as a brand/action accent in both themes, not as a status color;
 this is deliberately separate from the web's ink/blue primary control pairing.
 
+### Lifecycle reminders (H1, H12, H52)
+
+Two independent series nudge people who stalled, at most three emails each, five
+days apart, run by the `lifecycle-reminders` worker (`notifications/lifecycle-reminders.ts`).
+Each email is the next level of its template (`…1` first, `…2` firmer, `…3` says
+it is the last); the counter and `*_reminded_at` columns (migration `0609`) make
+a tick that overlaps another, or a failed one, send nothing twice.
+
+| Series | Who | First email | Template | Contents |
+| --- | --- | --- | --- | --- |
+| Unverified account | `email_verified = false`, active, not a test account | 5 days after sign-up | `auth.verifyReminder1-3` | fresh verification link (3 days) and the "I didn't create this account" link |
+| Draft application | verified account, `status = 'draft'`, still submittable (window open, or returned with resubmit allowed) | 5 days after the last edit | `application.draftReminder1-3` | link to the draft |
+
+An unverified account only receives the first series. Returning a response to
+draft resets its counter.
+
+**"I didn't create this account"** (`/delete-account?token=…`,
+`GET/POST /api/unverified-account-removal`): the single-use token (30 days,
+`email_verification_tokens.type = 'unverified_account_removal'`) identifies the
+account. Deleting needs no emailed PIN, but the account's password when it has
+one (10 attempts/hour); an account without a password is deleted after the
+page's confirmation. Once the email is verified the link answers
+`account_already_verified` and the regular PIN flow applies.
+
 ### Automatic reminder settings (H45, H51)
 
 The schedule-item reminder job is an event-level automation: Event settings →

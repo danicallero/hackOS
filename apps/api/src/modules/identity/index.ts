@@ -19,6 +19,7 @@ import { registerReviewFixtureRoutes } from "./routes/review-fixtures.js";
 import { registerRoleGrantRuleRoutes } from "./routes/role-grant-rules.js";
 import { registerRoleRoutes } from "./routes/roles.js";
 import { registerUiPrefsRoutes } from "./routes/ui-prefs.js";
+import { registerUnverifiedRemovalRoutes } from "./routes/unverified-removal.js";
 
 /**
  * Identity module (H1-H10). Mounts Better Auth's own handler under
@@ -110,6 +111,7 @@ export async function registerIdentityModule(app: FastifyInstance): Promise<void
   });
 
   registerResendVerificationRoutes(app);
+  registerUnverifiedRemovalRoutes(app);
   registerProfileRoutes(app);
   registerPhotoRoutes(app);
   registerMealPlanRoutes(app);

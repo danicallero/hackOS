@@ -673,6 +673,7 @@ export async function returnToDraft(
       `UPDATE application_responses
           SET status = 'draft', decision_sent_at = NULL, confirmation_token_id = NULL,
               confirmed_at = NULL, declined_at = NULL, submitted_at = NULL,
+              draft_reminders_sent = 0, draft_reminded_at = NULL,
               allow_resubmit_after_close = $2, auto_accept_on_resubmit = $3
         WHERE id = $1 RETURNING *`,
       [responseId, input.allow_resubmit_after_close, input.auto_accept_on_resubmit],
