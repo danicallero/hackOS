@@ -31,14 +31,15 @@ import {
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
-import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
+import { invalidateServerState, readServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import type { UserList, UserListItem } from "@/lib/types";
+import type { UserListItem } from "@/lib/types";
+import { loadUserDirectory } from "@/lib/user-directory";
 import { UsersActions } from "./users-actions";
 
 function fullName(u: UserListItem): string {
@@ -450,17 +451,15 @@ export default function UsersPage() {
     };
   }, [showPresence, liveRefresh]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     let cancelled = false;
-    // Preserve populated rows during a live refresh. The initial load and an
-    // explicit retry still use the skeleton, but identity SSE must not make
-    // the roster disappear between two authoritative reads (#732).
+    const key = ["users", "directory", q.trim()];
+    if (liveRefresh || retryNonce) invalidateServerState(key);
+    // Preserve populated rows during identity SSE refreshes (#732).
     if (!hasLoadedUsers.current) setLoading(true);
     setLoadError(null);
     const handle = setTimeout(() => {
-      api
-        .get<UserList>("/api/users", { query: { q: q.trim() || undefined, limit: 200 } })
+      readServerState(key, (signal) => loadUserDirectory(signal, q.trim()))
         .then((r) => {
           if (cancelled) return;
           hasLoadedUsers.current = true;
@@ -660,7 +659,7 @@ export default function UsersPage() {
               reservePhoto={reservePhoto}
             />
           )}
-          pageSize={15}
+          pageSize={50}
           loading={loading}
           error={
             loadError

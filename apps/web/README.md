@@ -848,3 +848,11 @@ Filter values stay local and clear through the standard chips/reset action.
 DataTable reports `onVisibleRowsChange` only when the row objects or their order
 change. Parent components may store that sequence and recreate column definitions
 without causing a sorted-table render loop that starves route transitions (H13).
+
+### Staff user directory (H8/H10)
+
+Users and permission-role membership resolve the full active user directory through
+`lib/user-directory.ts`, following `/api/users` offsets in batches of 200.
+The Users table paginates the complete filtered/sorted result in pages of 50;
+200 is the API batch size, not a roster limit. Directory failures remain
+visible and retryable rather than silently leaving role members unresolved.
