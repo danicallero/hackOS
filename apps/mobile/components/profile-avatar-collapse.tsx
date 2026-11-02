@@ -405,7 +405,9 @@ function readIslandFrame(): ProfileCameraCutoutFrame | null {
   if (Platform.OS !== "ios") return null;
   try {
     const region = FoldRegion?.getOcclusionRegion?.();
-    if (!region || region.width < 24 || region.height < 24) return null;
+    // H7: a top-connected occlusion is a notch, not a floating island. Its
+    // reserved area can include padding below the hardware; use the notch target.
+    if (!region || region.y <= 0 || region.width < 24 || region.height < 24) return null;
     const inset = 4;
     return {
       left: region.x + inset,
