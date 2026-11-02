@@ -16,6 +16,7 @@ import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimpl
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
 import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
+import { LinkIcon } from "@phosphor-icons/react/dist/csr/Link";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import Link from "next/link";
@@ -989,81 +990,102 @@ export function ReviewModal({
         title={response.name ?? response.email}
         description={response.name ? response.email : undefined}
         headerActions={
-          (onNavigate || showDecisionMenu || showEditAction || showExportAction) && (
-            <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
-              {onNavigate && (
-                <>
-                  <button
-                    type="button"
-                    className={dialogIconButtonClass}
-                    disabled={!canGoPrev}
-                    onClick={() => onNavigate("prev")}
-                    aria-label={t("previousCandidate")}
-                    title={t("previousCandidate")}
-                  >
-                    <CaretLeftIcon aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    className={dialogIconButtonClass}
-                    disabled={!canGoNext}
-                    onClick={() => onNavigate("next")}
-                    aria-label={t("nextCandidate")}
-                    title={t("nextCandidate")}
-                  >
-                    <CaretRightIcon aria-hidden="true" />
-                  </button>
-                </>
-              )}
-              {showDecisionMenu && (
-                <DecisionMenu
-                  status={st}
-                  busy={busy}
-                  run={run}
-                  responseId={response.id}
-                  canOverride={canOverride}
-                  onRequestRevoke={() => setConfirmRevoke(true)}
-                  onAccepted={showApplicantAcceptedToast}
-                />
-              )}
-              {showEditAction &&
-                (editing ? (
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    className={dialogIconButtonClass}
-                    loading={savingEdit}
-                    onClick={() => void saveEdit()}
-                    aria-label={t("saveAnswers")}
-                    title={t("saveAnswers")}
-                  >
-                    <FloppyDiskIcon aria-hidden="true" />
-                  </Button>
-                ) : (
-                  <button
-                    type="button"
-                    className={dialogIconButtonClass}
-                    onClick={startEdit}
-                    aria-label={t("editAnswers")}
-                    title={t("editAnswers")}
-                  >
-                    <PencilIcon aria-hidden="true" />
-                  </button>
-                ))}
-              {showExportAction && (
+          <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
+            <button
+              type="button"
+              className={dialogIconButtonClass}
+              aria-label={t("copyResponseLink")}
+              title={t("copyResponseLink")}
+              onClick={() => {
+                const tab =
+                  response.status === "review"
+                    ? "review"
+                    : response.status.endsWith("_internal")
+                      ? "outbox"
+                      : "sent";
+                const url = new URL(`/applications/${applicationId}`, window.location.origin);
+                url.searchParams.set("tab", tab);
+                url.searchParams.set("response", String(response.id));
+                void navigator.clipboard.writeText(url.href).then(
+                  () => toast.success(t("copied")),
+                  () => toast.error(t("couldNotCopyResponseLink")),
+                );
+              }}
+            >
+              <LinkIcon aria-hidden="true" />
+            </button>
+            {onNavigate && (
+              <>
                 <button
                   type="button"
                   className={dialogIconButtonClass}
-                  onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
-                  aria-label={t("exportAnswers")}
-                  title={t("exportAnswers")}
+                  disabled={!canGoPrev}
+                  onClick={() => onNavigate("prev")}
+                  aria-label={t("previousCandidate")}
+                  title={t("previousCandidate")}
                 >
-                  <DownloadSimpleIcon aria-hidden="true" />
+                  <CaretLeftIcon aria-hidden="true" />
                 </button>
-              )}
-            </div>
-          )
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  disabled={!canGoNext}
+                  onClick={() => onNavigate("next")}
+                  aria-label={t("nextCandidate")}
+                  title={t("nextCandidate")}
+                >
+                  <CaretRightIcon aria-hidden="true" />
+                </button>
+              </>
+            )}
+            {showDecisionMenu && (
+              <DecisionMenu
+                status={st}
+                busy={busy}
+                run={run}
+                responseId={response.id}
+                canOverride={canOverride}
+                onRequestRevoke={() => setConfirmRevoke(true)}
+                onAccepted={showApplicantAcceptedToast}
+              />
+            )}
+            {showEditAction &&
+              (editing ? (
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  className={dialogIconButtonClass}
+                  loading={savingEdit}
+                  onClick={() => void saveEdit()}
+                  aria-label={t("saveAnswers")}
+                  title={t("saveAnswers")}
+                >
+                  <FloppyDiskIcon aria-hidden="true" />
+                </Button>
+              ) : (
+                <button
+                  type="button"
+                  className={dialogIconButtonClass}
+                  onClick={startEdit}
+                  aria-label={t("editAnswers")}
+                  title={t("editAnswers")}
+                >
+                  <PencilIcon aria-hidden="true" />
+                </button>
+              ))}
+            {showExportAction && (
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
+                aria-label={t("exportAnswers")}
+                title={t("exportAnswers")}
+              >
+                <DownloadSimpleIcon aria-hidden="true" />
+              </button>
+            )}
+          </div>
         }
         floatingContent={
           <>
