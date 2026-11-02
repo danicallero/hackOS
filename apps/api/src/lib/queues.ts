@@ -39,17 +39,17 @@ export function registerWorker(name: string, processor: Processor): void {
   processors.set(name, processor);
 }
 
-export function startWorkers(): void {
+export async function startWorkers(): Promise<void> {
   for (const [name, processor] of processors) {
     workers.push(new Worker(name, processor, { connection: connection() }));
   }
+  await Promise.all(workers.map((worker) => worker.waitUntilReady()));
 }
 
 export async function stopQueues(): Promise<void> {
-  await Promise.allSettled([
-    ...workers.map((w) => w.close()),
-    ...[...queues.values()].map((q) => q.close()),
-  ]);
+  // H22/H29: accepted jobs may enqueue follow-up work while draining.
+  await Promise.all(workers.map((worker) => worker.close()));
+  await Promise.all([...queues.values()].map((queue) => queue.close()));
   workers.length = 0;
   queues.clear();
   processors.clear();

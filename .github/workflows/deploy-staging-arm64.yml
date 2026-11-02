@@ -140,9 +140,9 @@ jobs:
           archive_file="$RUNNER_TEMP/$archive_name"
           tar -czf "$archive_file" \
             -C "$GITHUB_WORKSPACE/deploy" \
-            docker-compose.yml incus-deploy.sh \
+            docker-compose.yml docker-compose.rolling.yml incus-deploy.sh \
             -C "$GITHUB_WORKSPACE/deploy/scripts" \
-            check-env.sh services.sh
+            check-env.sh services.sh rolling-deploy.sh backup.sh
 
           scp \
             -i "$HACKOS_SSH_KEY_FILE" \

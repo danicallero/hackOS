@@ -12,7 +12,7 @@ import { closeValkey } from "./lib/valkey.js";
 // processors. Modules must call registerWorker() at import time.
 await import("./modules/index.js");
 
-startWorkers();
+await startWorkers();
 const metricsServer = await startMetricsServer();
 console.log("hackOS worker running");
 

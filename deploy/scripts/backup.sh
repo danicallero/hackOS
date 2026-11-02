@@ -41,6 +41,11 @@ esac
 app_dir="${HACKOS_APP_DIR:-/opt/hackos}"
 compose_file="${HACKOS_COMPOSE_FILE:-$app_dir/docker-compose.yml}"
 project_name="hackos-$environment"
+# H22/H29: legacy restore lifecycle commands cannot drain named release containers.
+if [[ -f "$app_dir/rollout/routes.json" && "$command" =~ ^(restore|undo)$ ]]; then
+  echo "ERROR: rolling mode requires an explicit drained restore procedure; legacy restore/undo refused" >&2
+  exit 1
+fi
 lock_file="${HACKOS_LOCK_FILE:-$app_dir/.deploy.lock}"
 config_file="${HACKOS_CONFIG_FILE:-/etc/hackos/hackos.env}"
 secrets_file="${HACKOS_SECRETS_FILE:-/etc/hackos/hackos.secrets}"

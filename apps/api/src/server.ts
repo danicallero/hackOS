@@ -7,11 +7,11 @@ import { closeValkey } from "./lib/valkey.js";
 
 // Keep direct `node dist/server.js` launches safe as well as Compose launches:
 // the API must never expose routes against an unapplied schema (H10, H53, H54).
-await migrate();
+await migrate(undefined, process.argv.includes("--check-schema"));
 const app = await buildApp();
 
 if (config.workersInline) {
-  startWorkers();
+  await startWorkers();
 }
 
 await app.listen({ port: config.PORT, host: config.HOST });

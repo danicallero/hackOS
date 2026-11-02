@@ -4,7 +4,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { migrate, migrationChecksum, validateMigrationFilenames } from "../scripts/migrate.js";
+import {
+  migrate,
+  migrationChecksum,
+  validateMigrationFilenames,
+  verifyAppliedMigrations,
+} from "../scripts/migrate.js";
 import { renderSchemaDbml } from "../scripts/schema-dbml.js";
 import { TEST_DATABASE_URL } from "./test-env.js";
 
@@ -63,6 +68,32 @@ describe("consolidated migration baseline (H1-H59)", () => {
       client.query<{ name: string }>("SELECT name FROM _migrations ORDER BY name"),
     );
     expect(ledger.rows.map((row) => row.name)).toEqual(names);
+  });
+
+  it("checks an applied bundle without applying DDL during an online rollout", async () => {
+    await migrate(databaseUrl.toString());
+    const before = await withClient((client) =>
+      client.query("SELECT * FROM _migrations ORDER BY name"),
+    );
+    expect(await migrate(databaseUrl.toString(), true)).toEqual([]);
+    const after = await withClient((client) =>
+      client.query("SELECT * FROM _migrations ORDER BY name"),
+    );
+    expect(after.rows).toEqual(before.rows);
+  });
+
+  it("refuses pending, removed or checksum-mismatched migrations", () => {
+    const files = [{ name: "0001_base.sql", checksum: "abc" }];
+    expect(() => verifyAppliedMigrations(files, [])).toThrow("already-applied");
+    expect(() =>
+      verifyAppliedMigrations(files, [{ name: "0001_base.sql", checksum: "wrong" }]),
+    ).toThrow("already-applied");
+    expect(() => verifyAppliedMigrations([], [{ name: "0001_base.sql", checksum: "abc" }])).toThrow(
+      "already-applied",
+    );
+    expect(() =>
+      verifyAppliedMigrations(files, [{ name: "0001_base.sql", checksum: "abc" }]),
+    ).not.toThrow();
   });
 
   it("matches the checked-in ERD and retains the required relational boundaries", async () => {

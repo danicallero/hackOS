@@ -401,3 +401,13 @@ web editor. “Restore deployment defaults” clears the saved field overrides;
 each image slot can separately restore its bundled/URL fallback. The three
 `WALLET_*_OPTIONS_JSON` values must be JSON objects and default to `{}`.
 explicit values override it. See [Wallet architecture](./event-config-wallet.md).
+
+### Rollout gateway
+
+`GATEWAY_IMAGE_TAG` is a non-secret, immutable `sha-<40 hex>` tag supplied by
+the rollout-aware operator scripts from `/opt/hackos/rollout/gateway-image`,
+not copied from the current API tag on each update. It is used only by
+`deploy/docker-compose.rolling.yml` to select the stable gateway's API image.
+The gateway receives no application environment/secrets. `HACKOS_APP_DIR`
+selects the existing operator install directory for its read-only routing/assets
+bind mount (default `/opt/hackos`). See the deployment runbook before bootstrap.

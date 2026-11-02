@@ -116,7 +116,23 @@ async function prepareMigrationLedger(
   }
 }
 
-export async function migrate(databaseUrl?: string): Promise<string[]> {
+/** H12/H29: online cutovers may validate the schema, but never mutate it. */
+export function verifyAppliedMigrations(
+  files: readonly { name: string; checksum: string }[],
+  records: readonly MigrationRecord[],
+): void {
+  const expected = new Map(files.map((file) => [file.name, file.checksum]));
+  if (
+    files.length !== records.length ||
+    records.some((record) => expected.get(record.name) !== record.checksum)
+  ) {
+    throw new Error(
+      "Online deployment requires an already-applied, checksum-matching migration bundle. Apply reviewed compatible migrations separately.",
+    );
+  }
+}
+
+export async function migrate(databaseUrl?: string, checkOnly = false): Promise<string[]> {
   const migrations = await readMigrationFiles();
   const files = new Map(migrations.map((migration) => [migration.name, migration]));
   const url = databaseUrl ?? process.env.DATABASE_URL ?? DEFAULT_DATABASE_URL;
@@ -125,6 +141,13 @@ export async function migrate(databaseUrl?: string): Promise<string[]> {
   const applied: string[] = [];
   try {
     await client.query("SELECT pg_advisory_lock($1)", [ADVISORY_LOCK_KEY]);
+    if (checkOnly) {
+      const { rows } = await client.query<MigrationRecord>(
+        "SELECT name, checksum FROM public._migrations ORDER BY name",
+      );
+      verifyAppliedMigrations(migrations, rows);
+      return [];
+    }
     const done = await prepareMigrationLedger(client, files);
     for (const migration of migrations) {
       if (done.has(migration.name)) continue;
@@ -152,6 +175,6 @@ export async function migrate(databaseUrl?: string): Promise<string[]> {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const applied = await migrate();
+  const applied = await migrate(undefined, process.argv.includes("--check"));
   console.log(applied.length ? `Applied: ${applied.join(", ")}` : "Already up to date");
 }

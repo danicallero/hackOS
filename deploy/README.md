@@ -844,3 +844,119 @@ a class lets staging event saves overwrite production ticket content.
 `GOOGLE_WALLET_BACKGROUND_COLOR` defaults to Apple's `#a3d5ff`; explicit env
 values take precedence. Recovery for existing passes and image configuration:
 [Wallet architecture](../docs/event-config-wallet.md).
+
+## Online application updates (H12, H13, H22, H29)
+
+After explicit gateway installation, `incus-deploy.sh` detects
+`/opt/hackos/rollout/routes.json` and uses `rolling-deploy.sh` instead of
+recreating serving containers. A stable, non-root gateway owns the existing
+3000/3001/9464 host ports and the edge-network `api`/`web` aliases. It uses the
+API image's standalone Go binary, without application secrets or Docker socket.
+Its image is independently pinned in `rollout/gateway-image` and is never
+recreated by an application release. Deployment controls bind only to container
+loopback; they are reached with `docker exec`, never the public ingress.
+
+The online path:
+
+1. Pull and verify selected immutable images before touching serving processes.
+2. Refuse changed Compose definitions, an unhealthy gateway, less than 4 GiB
+   available memory, or a pending/changed migration bundle. `migrate --check`
+   reads the ledger; candidate `server --check-schema` never applies DDL.
+3. Start uniquely named API/web candidates with no published ports, using the
+   same private dependencies. Wait for Docker health. Keep the old release live
+   if a candidate fails. Import hashed Next static assets into a retained cache;
+   refuse conflicting bytes at the same path, and retain earlier assets for
+   tabs opened before the release. No automatic cache GC is performed.
+4. Stop the old worker with **no kill deadline**, letting BullMQ finish active
+   jobs before closing producer queues. Start and health-check its replacement.
+   Jobs may queue during the handover; a failed replacement restarts the old
+   worker. This avoids deliberate overlap of dispatcher generations.
+5. Write the API/web/worker routing pointer atomically and reload the gateway.
+   New requests use the new generation; already accepted finite requests,
+   including uploads/downloads, finish on the old generation. SSE streams close
+   so clients reconnect/refetch. The gateway never deliberately replays failed
+   mutations. Transport failures return 503 with `Retry-After: 2`.
+6. Smoke-test API/web through the gateway. A failed check restores previous
+   routes/worker where possible and retains generations for inspection. If
+   reload confirmation is lost, retain both HTTP generations rather than kill
+   a possibly serving process.
+7. Wait for old HTTP request counts to reach zero before graceful stop/removal.
+   There is **no timeout that kills an accepted request**. A stuck request/job
+   can keep deployment and its lock waiting; inspect it instead of force-killing
+   the process. Persist `.image-tags` only after successful drain.
+
+### First installation on staging
+
+This is a one-time infrastructure change, **not an online application update**.
+The gateway must take ports previously owned by the legacy API/web containers.
+Schedule a controlled window, record previous image tags and verify backups;
+let users finish saves/submissions/scans before stopping legacy processes.
+Do not enable this directly in production without staging qualification.
+
+Prerequisites: Docker Compose >= 2.24.4; existing healthy Postgres/Valkey/MinIO;
+at least 4 GiB of available host memory and sufficient disk for retained static
+assets; the selected API image must contain the gateway binary and schema-check
+mode. Pull both selected images before the window. The rolling files must be
+installed next to `deploy.sh` (both CD transfer paths include them).
+
+```sh
+# On the staging host, using the existing operator environment and host lock:
+# Record .image-tags and finish/drain active work before the controlled stop.
+/opt/hackos/services.sh staging stop api worker web
+/opt/hackos/deploy.sh staging sha-<40-hex> true true manual enable-rolling
+```
+
+The bootstrap refuses to run while legacy api/web/worker services are running.
+It starts healthy candidates, imports their static assets, writes routing and
+starts the gateway. Bootstrap failures require operator recovery and are not
+covered by the steady-state online guarantee. Subsequently the existing
+`services.sh staging deploy …` and staging CD use online cutover automatically.
+The production timer uses the same detection after separate installation there.
+Do not remove the routing directory to bypass protections.
+
+Rolling `services.sh` uses the overlay for status/logs and addresses the active
+API for administrative scripts. Its `start`/`recreate`/`stop`/`shutdown` shortcuts are refused:
+use deployment for releases; for explicit incident recovery inspect the names
+in `rollout/routes.json` and use the recorded containers, without routing to a
+stopped process. Raw Compose lifecycle commands bypass the online protocol. Legacy backup
+`restore`/`undo` commands are also refused because they cannot drain named
+release containers safely; backup creation/verification remain available. A
+restore requires a separately reviewed maintenance procedure that accounts
+for all named generations.
+
+### Capacity, compatibility and limits
+
+Existing services declare 13 GiB. During a combined update, overlapping API/web
+add 3 GiB and the gateway adds 128 MiB, for **16.125 GiB** of declared container
+limits before OS headroom. The worker generations do not deliberately overlap.
+Plan host capacity accordingly and requalify representative traffic; a free-
+memory check alone is not a load qualification. Database overlap is two APIs
+and one worker: `3 × DB_POOL_MAX(24) + 12 = 84 < 100`. Recompute before adding
+replicas or changing pools. Avoid repeating failed candidates until retained
+containers are inspected/removed, as they consume capacity.
+
+This protects compatible application updates from deliberate replacement-time
+request loss; it cannot promise risk-free arbitrary releases. New API versions
+must support already-open web/mobile clients, old/new HTTP generations must
+share compatible data/job formats, and changes to public files/server rendering
+still need cross-version testing. Retained `/_next/static` files protect lazy
+chunks, not every possible incompatible Next protocol or API contract change.
+Schema/runtime/gateway upgrades require an explicit reviewed procedure;
+automatic online releases fail closed rather than attempt destructive DDL or
+restart stateful services. Hardware crashes, dependency/provider failures,
+operator kills and application regressions remain possible. External email
+exactly-once delivery is not guaranteed by graceful worker drain.
+
+A rollback uses a previously published compatible image pair through the same
+online deployment path and preserves the production release hold convention.
+Reverting the deployment scripts to a version without rolling support is not a
+safe rollback: it would bypass the gateway. Retain a rollout-aware operator
+script and both Compose files in release backups. Never restore the database
+as an ordinary code rollback or delete accepted writes.
+
+Qualification: `go test -race deploy/rollout/main.go deploy/rollout/main_test.go`
+uses real HTTP sockets to hold a mutation across cutover, check drain tracking,
+close SSE, reject invalid routes and preserve/collision-check old assets. The
+Docker rollout drill must additionally verify health failure, worker drain,
+bootstrap, proxy/edge routing and authenticated saves under representative load
+before enabling the mode on a host.

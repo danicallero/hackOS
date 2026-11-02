@@ -209,7 +209,11 @@ valid_image_tag() {
 running_image_tag() {
   local service="$1"
   local container_id image
-  container_id="$(compose ps --quiet "$service" 2>/dev/null || true)"
+  if [[ -f "$app_dir/rollout/routes.json" && "$service" =~ ^(api|web)$ ]]; then
+    container_id="$(sed -n 's/.*"'"$service"'":"http:\/\/\([a-z0-9-]*\):[0-9]*".*/\1/p' "$app_dir/rollout/routes.json")"
+  else
+    container_id="$(compose ps --quiet "$service" 2>/dev/null || true)"
+  fi
   [[ -n "$container_id" ]] || return 1
   image="$(docker inspect --format '{{.Config.Image}}' "$container_id" 2>/dev/null || true)"
   if [[ "$image" =~ :((sha-)[0-9a-f]{40})$ ]]; then
@@ -373,6 +377,9 @@ printf 'api_image_tag=%s\nweb_image_tag=%s\n' \
   "$api_image_tag" \
   "$web_image_tag" >>"$release_dir/metadata"
 chmod 0640 "$release_dir/metadata"
+for rollout_file in docker-compose.rolling.yml rolling-deploy.sh; do
+  if [[ -f "$app_dir/$rollout_file" ]]; then install -m 0644 "$app_dir/$rollout_file" "$release_dir/$rollout_file"; fi
+done
 
 wait_for_health() {
   local service="$1"
@@ -434,40 +441,46 @@ fi
 if [[ "$deploy_web" == true ]]; then
   verify_pulled_image_revision web "$web_image_tag"
 fi
-phase "Starting database, queue, and object storage"
-run_compose "initialize container-local metrics reader" run --rm --no-deps metrics-init
-run_compose "start datastores" up --detach postgres valkey minio
-wait_for_health postgres
-wait_for_health valkey
-wait_for_health minio
-phase "Checking object storage"
-run_compose "initialize object storage" run --rm --no-deps minio-init
-if [[ "$deploy_api" == true && "$(env_value BACKUPS_ENABLED)" == true ]]; then
-  if [[ ! -x "$backup_file" ]]; then
-    echo "ERROR: Backups are enabled but $backup_file is missing" >&2
-    exit 1
+if [[ -f "$app_dir/rollout/routes.json" || -f "$app_dir/rollout/gateway-image" || "${6:-}" == enable-rolling ]]; then
+  # H12/H22/H29: routing is stable while replacement processes start and drain.
+  source "$app_dir/rolling-deploy.sh"
+else
+  phase "Starting database, queue, and object storage"
+  run_compose "initialize container-local metrics reader" run --rm --no-deps metrics-init
+  run_compose "start datastores" up --detach postgres valkey minio
+  wait_for_health postgres
+  wait_for_health valkey
+  wait_for_health minio
+  phase "Checking object storage"
+  run_compose "initialize object storage" run --rm --no-deps minio-init
+  if [[ "$deploy_api" == true && "$(env_value BACKUPS_ENABLED)" == true ]]; then
+    if [[ ! -x "$backup_file" ]]; then
+      echo "ERROR: Backups are enabled but $backup_file is missing" >&2
+      exit 1
+    fi
+    echo "BACKUP: creating S3 backup before migration"
+    HACKOS_LOCK_HELD=true "$backup_file" "$environment"
   fi
-  echo "BACKUP: creating S3 backup before migration"
-  HACKOS_LOCK_HELD=true "$backup_file" "$environment"
-fi
-if [[ "$deploy_api" == true ]]; then
-  phase "Applying database migrations"
-  run_compose "migrate database" run --rm --no-deps migrate
-  phase "Recreating API and worker"
-  run_compose "update api and worker" up --detach --no-deps --force-recreate api worker
-  wait_for_health api
-  wait_for_health worker
-else
-  echo "SKIP: API and worker unchanged"
-fi
-if [[ "$deploy_web" == true ]]; then
-  phase "Recreating web"
-  run_compose "update web" up --detach --no-deps --force-recreate web
-  wait_for_health web
-else
-  # Retain the image while adopting Compose changes such as metrics volumes.
-  run_compose "refresh retained web configuration" up --detach --no-deps --pull never web
-  wait_for_health web
+  if [[ "$deploy_api" == true ]]; then
+    phase "Applying database migrations"
+    run_compose "migrate database" run --rm --no-deps migrate
+    phase "Recreating API and worker"
+    run_compose "update api and worker" up --detach --no-deps --force-recreate api worker
+    wait_for_health api
+    wait_for_health worker
+  else
+    echo "SKIP: API and worker unchanged"
+  fi
+  if [[ "$deploy_web" == true ]]; then
+    phase "Recreating web"
+    run_compose "update web" up --detach --no-deps --force-recreate web
+    wait_for_health web
+  else
+    # Retain the image while adopting Compose changes such as metrics volumes.
+    run_compose "refresh retained web configuration" up --detach --no-deps --pull never web
+    wait_for_health web
+  fi
+
 fi
 
 state_tmp="$(mktemp "${state_file}.XXXXXX")"

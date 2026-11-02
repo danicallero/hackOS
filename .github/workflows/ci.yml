@@ -36,6 +36,9 @@ jobs:
       - name: Test memory collector
         run: go test deploy/metrics/main.go deploy/metrics/main_test.go
 
+      - name: Test online rollout gateway
+        run: go test -race deploy/rollout/main.go deploy/rollout/main_test.go
+
       - name: Test deployment script release-tag handling
         run: bash deploy/test-services-image-tags.sh
 
@@ -201,3 +204,16 @@ jobs:
 
       - name: Verify real cgroup limits and collector privileges
         run: bash deploy/metrics/test-runtime.sh
+
+  rollout-test:
+    name: online application rollout runtime
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Build API with stable rollout gateway
+        run: docker build -f apps/api/Dockerfile -t hackos-rollout-api:verify .
+      - name: Verify real container cutover and draining
+        run: bash deploy/rollout/test-runtime.sh

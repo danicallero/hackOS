@@ -1,0 +1,47 @@
+# Applied only after an explicit, controlled gateway bootstrap.
+# Requires Docker Compose >= 2.24.4 (!override / !reset support).
+services:
+  api:
+    ports: !reset []
+    networks: !override
+      private: {}
+      egress: {}
+  web:
+    ports: !reset []
+    networks: !override
+      egress: {}
+  worker:
+    ports: !reset []
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9464/metrics >/dev/null"]
+  gateway:
+    image: "ghcr.io/danicallero/hackos-api:${GATEWAY_IMAGE_TAG:?gateway image must be pinned}"
+    entrypoint: ["/usr/local/bin/rollout-gateway"]
+    restart: unless-stopped
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes:
+      - type: bind
+        source: "${HACKOS_APP_DIR:-/opt/hackos}/rollout"
+        target: /rollout
+        read_only: true
+    networks:
+      egress: {}
+      edge:
+        aliases: [api, web]
+    ports:
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${API_PUBLISH_PORT:-3000}:3000"
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WEB_PUBLISH_PORT:-3001}:3001"
+      - "${PUBLISH_BIND_ADDRESS:-0.0.0.0}:${WORKER_METRICS_PUBLISH_PORT:-9464}:9464"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3002/healthz"]
+      interval: 5s
+      timeout: 2s
+      retries: 6
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    memswap_limit: 128m

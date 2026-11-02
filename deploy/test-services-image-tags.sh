@@ -151,3 +151,25 @@ grep -Fq 'is not published in GHCR for the selected units' "$test_dir/menu.log"
 grep -Fxq 'operator shell still alive' "$test_dir/menu.log"
 
 echo 'services image-tag regression test: passed'
+
+# H12/H29: old lifecycle shortcuts must never bypass a live routing pointer.
+mkdir -p "$test_dir/app/rollout"
+printf '%s\n' '{"api":"http://hackos-staging-api-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:3000"}' > "$test_dir/app/rollout/routes.json"
+printf '%s\n' 'sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' > "$test_dir/app/rollout/gateway-image"
+for blocked_action in start recreate stop shutdown; do
+  if env PATH="$test_dir/bin:$PATH" \
+    HACKOS_APP_DIR="$test_dir/app" \
+    HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+    HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+    HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+    bash "$services_script" staging "$blocked_action" > "$test_dir/blocked.log" 2>&1; then
+    echo "rolling lifecycle shortcut unexpectedly allowed: $blocked_action" >&2
+    exit 1
+  fi
+  grep -q 'Rolling mode:' "$test_dir/blocked.log"
+done
+if HACKOS_APP_DIR="$test_dir/app" bash "$deploy_dir/scripts/backup.sh" production restore --yes > "$test_dir/restore-blocked.log" 2>&1; then
+  echo 'rolling restore unexpectedly allowed' >&2; exit 1
+fi
+grep -q 'drained restore procedure' "$test_dir/restore-blocked.log"
+echo 'rolling lifecycle and restore guards: passed'

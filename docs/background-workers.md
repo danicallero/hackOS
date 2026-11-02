@@ -280,3 +280,16 @@ The H30 occupancy guard includes the destination room: a separate called,
 in-room or presenting entry sharing a member blocks another call there too.
 Only the entry being transitioned is excluded; member and repo advisory locks
 continue to serialize concurrent calls.
+
+## Worker handover during online deployment
+
+Worker readiness now waits for BullMQ connections before exposing metrics.
+The rollout-aware deployment path closes BullMQ workers before producer queues,
+so already accepted jobs may enqueue follow-up work while draining. It uses
+`docker stop --time -1`, waits for accepted jobs to finish, then starts and
+health-checks the replacement before switching ingress. This can briefly delay
+queued notifications/scans; it does not intentionally run old/new dispatcher
+generations simultaneously or SIGKILL an accepted send. A hung job holds the
+deployment lock for operator inspection. Provider delivery is still subject to
+the outbox/retry limitations above; graceful shutdown does not establish
+exactly-once delivery at external services. See [online updates](../deploy/README.md#online-application-updates-h12-h13-h22-h29).

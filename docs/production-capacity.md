@@ -257,3 +257,16 @@ endpoints remain available for installed clients. Physical connection budgets
 and gauges count the shared response once; logical attachments and access-check
 load remain separate. See [realtime transport](./realtime-transport.md) for the
 scope/authorization table, lifecycle, revocation, metrics and 600-client results.
+
+### Online rollout headroom
+
+The opt-in online deployment protocol adds a stable 128 MiB gateway and briefly
+overlaps API/web generations (3 GiB additional declared limits). Combined
+container limits reach 16.125 GiB, so the 13 GiB steady-state budget is not an
+online rollout capacity guarantee. The script refuses less than 4 GiB available
+memory; qualify the host with the overlapping generation under real traffic.
+Two API pools plus one worker pool and operational reserve require
+`(2 × 24) + 24 + 12 = 84 < 100` database connections. Worker generations hand
+over serially. See [online application updates](../deploy/README.md#online-application-updates-h12-h13-h22-h29)
+for the first-installation window, compatibility limits and fail-closed schema
+checks. No production activation or capacity increase is implied by this code.

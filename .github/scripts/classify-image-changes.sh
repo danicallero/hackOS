@@ -19,7 +19,7 @@ deploy_files=false
 while IFS= read -r path; do
   [[ -n "$path" ]] || continue
   case "$path" in
-    apps/api|apps/api/*|deploy/metrics/*)
+    apps/api|apps/api/*|deploy/metrics/*|deploy/rollout/*)
       api_image=true
       ;;
     apps/web|apps/web/*)
@@ -29,7 +29,7 @@ while IFS= read -r path; do
       api_image=true
       web_image=true
       ;;
-    deploy/docker-compose.yml|deploy/incus-deploy.sh|deploy/scripts/*|.github/scripts/classify-image-changes.sh|.github/workflows/build.yml|.github/workflows/deploy-staging-arm64.yml)
+    deploy/docker-compose.yml|deploy/docker-compose.rolling.yml|deploy/incus-deploy.sh|deploy/scripts/*|.github/scripts/classify-image-changes.sh|.github/workflows/build.yml|.github/workflows/deploy-staging-arm64.yml)
       deploy_files=true
       ;;
   esac

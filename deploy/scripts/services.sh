@@ -287,14 +287,26 @@ if valid_image_tag "$web_image_tag"; then
 fi
 
 compose() {
+  local files=(--file "$compose_file")
+  if [[ -f "$app_dir/rollout/routes.json" ]]; then
+    export GATEWAY_IMAGE_TAG
+    GATEWAY_IMAGE_TAG="$(cat "$app_dir/rollout/gateway-image")"
+    files+=(--file "$app_dir/docker-compose.rolling.yml")
+  fi
   docker compose \
     "${compose_env_files[@]}" \
-    --file "$compose_file" \
+    "${files[@]}" \
     --project-name "$project_name" \
     "$@"
 }
 
 run_api_script() {
+  if [[ -f "$app_dir/rollout/routes.json" ]]; then
+    local container
+    container="$(python3 -c 'import json,sys,urllib.parse; print(urllib.parse.urlparse(json.load(open(sys.argv[1]))["api"]).hostname)' "$app_dir/rollout/routes.json")"
+    docker exec "$container" node "$@"
+    return
+  fi
   if compose ps --status running --services api 2>/dev/null | grep -Fxq api; then
     compose exec --no-TTY api node "$@"
   else
@@ -2074,6 +2086,7 @@ case "$action" in
     ;;
 
   start)
+    [[ ! -f "$app_dir/rollout/routes.json" ]] || die "Rolling mode: use deploy for releases; use recorded rollout container names for explicit recovery."
     validate_services "$@"
     lock_mutation
     start_targets=("${runtime_services[@]}")
@@ -2092,6 +2105,7 @@ case "$action" in
     ;;
 
   recreate)
+    [[ ! -f "$app_dir/rollout/routes.json" ]] || die "Rolling mode: recreate bypasses draining; use deploy instead."
     validate_services "$@"
     lock_mutation
     recreate_services=("${runtime_services[@]}")
@@ -2105,6 +2119,7 @@ case "$action" in
     ;;
 
   stop)
+    [[ ! -f "$app_dir/rollout/routes.json" ]] || die "Rolling mode: inspect and gracefully stop the recorded containers explicitly; Compose stop omits release containers."
     validate_services "$@"
     lock_mutation
     if (($# == 0)); then
@@ -2116,6 +2131,7 @@ case "$action" in
     ;;
 
   shutdown)
+    [[ ! -f "$app_dir/rollout/routes.json" ]] || die "Rolling mode: inspect and gracefully stop the recorded containers explicitly."
     (($# == 0)) || usage
     lock_mutation
     echo "Stopping $project_name. Persistent data is retained."

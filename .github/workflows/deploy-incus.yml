@@ -136,6 +136,8 @@ jobs:
           set -euo pipefail
           incus exec hackos -- mkdir -p /opt/hackos
           incus file push deploy/docker-compose.yml hackos/opt/hackos/docker-compose.yml
+          incus file push deploy/docker-compose.rolling.yml hackos/opt/hackos/docker-compose.rolling.yml
+          incus file push deploy/scripts/rolling-deploy.sh hackos/opt/hackos/rolling-deploy.sh
           incus file push deploy/incus-deploy.sh hackos/opt/hackos/deploy.sh
           incus file push deploy/scripts/check-env.sh hackos/opt/hackos/check-env.sh
           incus file push deploy/scripts/backup.sh hackos/opt/hackos/backup.sh
