@@ -3,7 +3,7 @@ import { type Queryable, withTransaction } from "../../db/pool.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { createVerificationReminderLink } from "../identity/auth.js";
 import { enqueueAuthEmail } from "../identity/outbox.js";
-import { issueUnverifiedRemovalLink } from "../identity/unverified-removal.js";
+import { issueUnverifiedRemovalLink, webUrl } from "../identity/unverified-removal.js";
 
 /**
  * Escalating reminders for people who stalled (H1, H12, H52). Two independent
@@ -34,10 +34,6 @@ const LEVELS = ["1", "2", "3"] as const;
 
 function levelOf(alreadySent: number): (typeof LEVELS)[number] {
   return LEVELS[Math.min(alreadySent, MAX_REMINDERS - 1)] as (typeof LEVELS)[number];
-}
-
-function webUrl(path: string): string {
-  return `${config.WEB_URL.replace(/\/+$/, "")}${path}`;
 }
 
 export async function remindUnverifiedAccounts(db: Queryable): Promise<number> {

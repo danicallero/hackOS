@@ -23,6 +23,13 @@ import { runAccountRemoval } from "./removal.js";
 const TOKEN_TTL_DAYS = 30;
 const PASSWORD_ATTEMPTS = { windowSeconds: 3600, max: 10 };
 
+/** A web-app URL for `path`, tolerating a trailing slash on `WEB_URL`. */
+export function webUrl(path: string): string {
+  let base = config.WEB_URL;
+  while (base.endsWith("/")) base = base.slice(0, -1);
+  return `${base}${path}`;
+}
+
 /** Mints a removal link for an unverified account; call inside the reminder's transaction. */
 export async function issueUnverifiedRemovalLink(
   db: Queryable,
@@ -34,7 +41,7 @@ export async function issueUnverifiedRemovalLink(
      VALUES ($1, 'unverified_account_removal', $2, $3, now() + make_interval(days => $4))`,
     [token, user.email, user.id, TOKEN_TTL_DAYS],
   );
-  return `${config.WEB_URL.replace(/\/+$/, "")}/delete-account?token=${token}`;
+  return webUrl(`/delete-account?token=${token}`);
 }
 
 interface RemovalTarget {
