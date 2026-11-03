@@ -746,6 +746,18 @@ Keep actual multi-record objects independently bounded when ownership matters.
   A pending confirmation cannot dismiss while its mutation is in flight. A dirty editor must not silently
   discard input: retain it or use the existing discard guard. Pending writes
   cannot submit twice. Do not automatically close on a failed save.
+- Application review puts mobile candidate navigation beside Close. At 360 px
+  and below, the name moves under that control row. Keep mobile names on one
+  line with ellipsis, retaining the full accessible name. Truncated labels use
+  normal text-box metrics so overflow clipping cannot cut descenders. Its action
+  row reserves space for state, then fits authorized commands using their actual
+  touch-target widths. Show commands directly when space permits; More actions contains
+  only overflow, recalculated after resizing or permission changes. The list
+  retains a visible Export label. The score row places the accessible Reviewed by
+  you indicator beside the average and aligns permitted review access to the trailing edge on mobile.
+  It scrolls on the modal's own surface, without a second sticky background or a
+  bordered metadata box.
+  Answer sections use headings, spacing and quiet separators rather than nested cards.
 - Essential header controls wrap in header flow on narrow screens rather than
   covering the title. Menus/comboboxes use the nearest overlay scope and keep
   their keyboard behavior; no hand-built nested portals or stacked editor modals.

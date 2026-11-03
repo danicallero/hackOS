@@ -36,6 +36,7 @@ export function Modal({
   size = "md",
   footer,
   headerActions,
+  headerNavigation,
   floatingContent,
   floatingFocus = true,
   className,
@@ -54,6 +55,8 @@ export function Modal({
    *  flow on small screens — for controls (e.g. prev/next paging) that must
    *  stay put while the body scrolls (H13). */
   headerActions?: React.ReactNode;
+  /** Compact mobile navigation beside the close button. */
+  headerNavigation?: React.ReactNode;
   /** Visually floating content rendered in the dialog portal, outside the
    *  scrollable dialog surface (e.g. an attached file viewer). */
   floatingContent?: React.ReactNode;
@@ -71,11 +74,30 @@ export function Modal({
         floatingContent={floatingContent}
         floatingFocus={floatingFocus}
       >
-        <DialogHeader className={cn("shrink-0 pr-10", headerActions && "sm:pr-48 text-left")}>
-          <div className="min-w-0 space-y-1.5">
-            <DialogTitle className="heading-row flex min-w-0 items-center gap-2">
+        <DialogHeader className="shrink-0 text-left">
+          <div
+            className={cn(
+              "min-w-0 space-y-1.5 pr-10",
+              headerActions && "sm:pr-64",
+              headerNavigation && "max-sm:pr-0 max-[360px]:pt-10",
+            )}
+          >
+            <DialogTitle
+              className={cn(
+                "heading-row flex min-w-0 items-center gap-2",
+                headerNavigation && "min-[361px]:max-sm:pr-32",
+              )}
+            >
               {Icon && <Icon className="text-muted-foreground size-5 shrink-0" />}
-              <span className="heading-label min-w-0 break-words">{title}</span>
+              <span
+                className={cn(
+                  "heading-label min-w-0 break-words",
+                  headerNavigation && "max-sm:truncate max-sm:[text-box:normal]",
+                )}
+                title={title}
+              >
+                {title}
+              </span>
             </DialogTitle>
             {description && (
               <DialogDescription className={cn("break-words", headerActions && "text-left")}>
@@ -83,9 +105,14 @@ export function Modal({
               </DialogDescription>
             )}
           </div>
+          {headerNavigation && (
+            <div className="absolute top-3 right-12 flex items-center gap-1 sm:hidden">
+              {headerNavigation}
+            </div>
+          )}
           {headerActions && (
             // Desktop controls share the close row; narrow screens keep them in header flow.
-            <div className="flex flex-wrap items-center gap-2 pt-2 sm:absolute sm:top-3 sm:right-12 sm:max-w-[calc(100%-3.75rem)] sm:justify-end sm:gap-1 sm:pt-0">
+            <div className="flex flex-wrap items-center gap-1 pt-1 sm:absolute sm:top-3 sm:right-12 sm:max-w-[calc(100%-3.75rem)] sm:justify-end sm:gap-1 sm:pt-0">
               {headerActions}
             </div>
           )}

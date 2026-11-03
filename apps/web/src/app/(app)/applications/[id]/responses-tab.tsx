@@ -58,7 +58,8 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { answerValues, hasDietaryRestrictions } from "./response-filters";
+import { answerValues, hasDietaryRestrictions, matchesResponseSearch } from "./response-filters";
+import { ScoreSelection } from "./score-selection";
 import { SendDecisionsModal } from "./send-decisions-modal";
 import { useResponseSelection } from "./use-response-selection";
 
@@ -168,11 +169,10 @@ export function ResponsesTab({
   const [visibleRows, setVisibleRows] = useState<ResponseRow[]>([]);
 
   const rows = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase();
     return rowsForWorkspace(allRows, workspace).filter(
       (row) =>
         (statusFilter.length === 0 || statusFilter.includes(row.status)) &&
-        (!query || `${row.name ?? ""} ${row.email}`.toLocaleLowerCase().includes(query)) &&
+        matchesResponseSearch(row, search) &&
         (dietaryFilter.length === 0 ||
           dietaryFilter.includes(hasDietaryRestrictions(row) ? "yes" : "no")) &&
         Object.entries(answerFilters).every(
@@ -408,10 +408,11 @@ export function ResponsesTab({
   return (
     <div className="space-y-4">
       <ListToolbar
+        searchOwnRowOnMobile
         search={{
           id: "response-search",
           label: t("searchResponses"),
-          placeholder: t("searchByNameOrEmailPlaceholder"),
+          placeholder: t("searchApplicantsOrReviews"),
           value: search,
           onValueChange: (value) => {
             setSearch(value);
@@ -526,19 +527,26 @@ export function ResponsesTab({
             })),
         ]}
         actions={
-          (canExportFiles || (canDecide && workspace === "outbox")) && (
+          (canExportFiles || canDecide) && (
             <ActionGroup className="justify-end">
+              {canDecide && (
+                <ScoreSelection
+                  rows={rows}
+                  onSelect={setSelectedIds}
+                  disabled={loading || batchBusy || Boolean(loadError)}
+                />
+              )}
               {canExportFiles && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="outline"
-                      size={isMobile ? "icon" : "default"}
+                      className="max-sm:gap-1 max-sm:px-2 max-sm:text-xs max-sm:has-[>svg:first-child]:pl-2"
                       aria-label={t("export")}
                       ref={exportTriggerRef}
                     >
                       <DownloadSimpleIcon aria-hidden="true" />
-                      {!isMobile && t("export")}
+                      {t("export")}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent

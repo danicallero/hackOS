@@ -214,6 +214,16 @@ excluded only from Detox idle synchronization; the blacklist does not simulate a
 as their idempotency key, so this covers transient failure, recovery, and the
 no-duplicate boundary on a device.
 
+## Geometry assertions
+
+Wait for the relevant content and `document.fonts.ready` before measuring.
+Geometry-only scenarios should request reduced motion so opening scale animations
+do not change bounding boxes while assertions read them. Check the allocated
+layout tracks and available control space rather than a fixed search-width
+percentage that changes whenever a permitted toolbar action is added. Include
+narrow Chromium coverage: Linux scrollbar and font metrics can expose wrapping
+that a macOS screenshot misses.
+
 ## Adding a flow
 
 1. Put browser scenarios in `e2e/browser` and compose them from the fixture or

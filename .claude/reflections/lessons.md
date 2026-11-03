@@ -552,7 +552,7 @@ Controls deliberately lacking hover behavior, including touch-only surfaces.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-11-02
+Date: 2026-11-03
 
 ### Trigger
 Building or applying a shared page/surface pattern across web routes.
@@ -599,6 +599,17 @@ Compare new screens directly with those maintained references; passing flows
 and having screenshots are not evidence that hierarchy or alignment is good.
 Also compare the narrow header action row with Users; preserve its inline
 layout, reducing labelled edit actions to accessible icons when necessary.
+For compact review dialogs, test the maximum permitted action set at the
+smallest supported viewport, including long names. At narrow widths, separate
+identity from the navigation/close row and use single-line ellipsis while
+preserving the full accessible name. Do not combine baseline text-box trimming
+with overflow-clipped labels: retain normal line metrics and inspect descenders
+such as y, p and g. Moving controls into header flow is insufficient
+if a secondary action wraps alone and consumes another row. Measure the
+space occupied by authorized actions and keep every command that fits directly
+visible; an accessible overflow menu contains only those that cannot fit. Test
+smaller permission sets and resizing, and check that export remains reachable. Review metadata must use the parent surface; do not add a
+contrasting sticky strip that covers the content being read.
 Check table geometry, useful field hierarchy, action order, pending feedback
 and panel widths. Recheck each route after a shared pattern changes.
 
