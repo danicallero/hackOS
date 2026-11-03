@@ -358,6 +358,35 @@ function applicationFiles(
   });
 }
 
+function ReviewStatus({
+  st,
+  reviewedByMe,
+  t,
+  compact = false,
+}: {
+  st: string;
+  reviewedByMe: boolean;
+  t: Translate;
+  compact?: boolean;
+}) {
+  return (
+    <>
+      <StatusBadge tone={statusTone(st)}>
+        <span className="truncate">{applicationStatusLabel(st, t)}</span>
+      </StatusBadge>
+      {reviewedByMe && (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 text-muted-foreground"
+          title={t("reviewedByYou")}
+        >
+          <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
+          <span className={compact ? "sr-only" : undefined}>{t("reviewedByYou")}</span>
+        </span>
+      )}
+    </>
+  );
+}
+
 /** Average score, review reveal, and status pills for the active response. */
 function StatusPillsRow({
   response,
@@ -394,14 +423,8 @@ function StatusPillsRow({
           {t("viewReviews", { count: response.review_count })}
         </Button>
       )}
-      <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
-        <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
-        {reviewedByMe && (
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
-            {t("reviewedByYou")}
-          </span>
-        )}
+      <div className="ms-auto hidden items-center gap-2 sm:flex">
+        <ReviewStatus st={st} reviewedByMe={reviewedByMe} t={t} />
       </div>
     </div>
   );
@@ -1000,7 +1023,7 @@ export function ReviewModal({
         title={response.name ?? response.email}
         description={response.name ? response.email : undefined}
         headerActions={
-          <div className="flex max-w-full flex-wrap items-center gap-1 sm:justify-end">
+          <div className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-1 sm:mx-0 sm:w-auto sm:flex-wrap sm:justify-end">
             <button
               type="button"
               className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
@@ -1035,15 +1058,17 @@ export function ReviewModal({
               </>
             )}
             {showDecisionMenu && (
-              <DecisionMenu
-                status={st}
-                busy={busy}
-                run={run}
-                responseId={response.id}
-                canOverride={canOverride}
-                onRequestRevoke={() => setConfirmRevoke(true)}
-                onAccepted={showApplicantAcceptedToast}
-              />
+              <div className="hidden sm:block">
+                <DecisionMenu
+                  status={st}
+                  busy={busy}
+                  run={run}
+                  responseId={response.id}
+                  canOverride={canOverride}
+                  onRequestRevoke={() => setConfirmRevoke(true)}
+                  onAccepted={showApplicantAcceptedToast}
+                />
+              </div>
             )}
             {showEditAction &&
               (editing ? (
@@ -1051,7 +1076,7 @@ export function ReviewModal({
                   type="button"
                   size="icon-sm"
                   variant="ghost"
-                  className={dialogIconButtonClass}
+                  className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
                   loading={savingEdit}
                   onClick={() => void saveEdit()}
                   aria-label={t("saveAnswers")}
@@ -1062,7 +1087,7 @@ export function ReviewModal({
               ) : (
                 <button
                   type="button"
-                  className={dialogIconButtonClass}
+                  className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
                   onClick={startEdit}
                   aria-label={t("editAnswers")}
                   title={t("editAnswers")}
@@ -1094,6 +1119,31 @@ export function ReviewModal({
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  {showDecisionMenu && (
+                    <DecisionMenu
+                      submenu
+                      status={st}
+                      busy={busy}
+                      run={run}
+                      responseId={response.id}
+                      canOverride={canOverride}
+                      onRequestRevoke={() => setConfirmRevoke(true)}
+                      onAccepted={showApplicantAcceptedToast}
+                    />
+                  )}
+                  {showEditAction && (
+                    <DropdownMenuItem
+                      disabled={savingEdit}
+                      onSelect={() => (editing ? void saveEdit() : startEdit())}
+                    >
+                      {editing ? (
+                        <FloppyDiskIcon aria-hidden="true" />
+                      ) : (
+                        <PencilIcon aria-hidden="true" />
+                      )}
+                      {editing ? t("saveAnswers") : t("editAnswers")}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onSelect={copyResponseLink}>
                     <LinkIcon aria-hidden="true" />
                     {t("copyResponseLink")}
@@ -1110,6 +1160,9 @@ export function ReviewModal({
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+            </div>
+            <div className="ms-auto flex min-w-0 items-center gap-1.5 sm:hidden">
+              <ReviewStatus st={st} reviewedByMe={reviewedByMe} t={t} compact />
             </div>
           </div>
         }
@@ -1799,7 +1852,7 @@ interface RunOptions {
 type RunAction = (label: string, fn: () => Promise<unknown>, options?: RunOptions) => Promise<void>;
 
 function hasDecisionActions(canDecide: boolean) {
-  // The gavel is deliberately persistent. The available items change with
+  // Decision controls stay available. Their items change with
   // the status, but the control never disappears when an in-modal action
   // moves an application between workspaces.
   return canDecide;
@@ -1807,6 +1860,7 @@ function hasDecisionActions(canDecide: boolean) {
 
 /** Admin decisions stay available without competing with the review forum. */
 function DecisionMenu({
+  submenu = false,
   status,
   busy,
   run,
@@ -1815,6 +1869,7 @@ function DecisionMenu({
   onRequestRevoke,
   onAccepted,
 }: {
+  submenu?: boolean;
   status: ResponseRow["status"];
   busy: boolean;
   run: RunAction;
@@ -1828,6 +1883,243 @@ function DecisionMenu({
   const outboxActions = status === "accepted_internal" || status === "rejected_internal";
   const sentActions = ["accepted", "rejected", "confirmed", "declined", "expired"].includes(status);
   const hasAvailableActions = reviewActions || outboxActions || sentActions;
+
+  const items = (
+    <>
+      <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
+      <DropdownMenuSeparator />
+      {!hasAvailableActions && (
+        <DropdownMenuItem disabled>{t("noDecisionActions")}</DropdownMenuItem>
+      )}
+      {reviewActions && (
+        <>
+          <DropdownMenuItem
+            disabled={busy}
+            onSelect={() =>
+              void run(
+                t("acceptedUnsentToast"),
+                () => api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
+                {
+                  refresh: false,
+                  nextStatus: "accepted_internal",
+                  notify: onAccepted,
+                },
+              )
+            }
+          >
+            {t("accept")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={busy}
+            onSelect={() =>
+              void run(
+                t("rejectedUnsentToast"),
+                () => api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+                { refresh: false, nextStatus: "rejected_internal" },
+              )
+            }
+          >
+            {t("reject")}
+          </DropdownMenuItem>
+        </>
+      )}
+      {outboxActions && (
+        <>
+          <DropdownMenuItem
+            disabled={busy}
+            onSelect={() =>
+              void run(
+                t("decisionSent"),
+                () => api.post(`/api/responses/${responseId}/send-decision`),
+                {
+                  refresh: false,
+                  nextStatus: status === "accepted_internal" ? "accepted" : "rejected",
+                },
+              )
+            }
+          >
+            <PaperPlaneTiltIcon aria-hidden="true" />
+            {t("sendDecision")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={busy}
+            onSelect={() =>
+              void run(
+                t("movedBackToReview"),
+                () =>
+                  api.post(`/api/responses/${responseId}/revert-decision`, {
+                    decision: "review",
+                  }),
+                { refresh: false, nextStatus: "review" },
+              )
+            }
+          >
+            {t("backToReview")}
+          </DropdownMenuItem>
+        </>
+      )}
+      {status !== "draft" && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={busy}>
+              <FileTextIcon aria-hidden="true" />
+              {t("returnToDraft")}
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent
+              align="start"
+              className="w-72 max-w-[calc(100vw-2rem)]"
+              style={{ direction: "ltr" }}
+            >
+              <DropdownMenuItem
+                className="whitespace-normal leading-snug"
+                onSelect={() =>
+                  void run(
+                    t("returnedToDraft"),
+                    () =>
+                      api.post(`/api/responses/${responseId}/return-to-draft`, {
+                        allow_resubmit_after_close: false,
+                        auto_accept_on_resubmit: false,
+                      }),
+                    { refresh: false, nextStatus: "draft" },
+                  )
+                }
+              >
+                {t("returnToDraftOpen")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="whitespace-normal leading-snug"
+                onSelect={() =>
+                  void run(
+                    t("returnedToDraft"),
+                    () =>
+                      api.post(`/api/responses/${responseId}/return-to-draft`, {
+                        allow_resubmit_after_close: true,
+                        auto_accept_on_resubmit: false,
+                      }),
+                    { refresh: false, nextStatus: "draft" },
+                  )
+                }
+              >
+                {t("returnToDraftLate")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="whitespace-normal leading-snug"
+                onSelect={() =>
+                  void run(
+                    t("returnedToDraft"),
+                    () =>
+                      api.post(`/api/responses/${responseId}/return-to-draft`, {
+                        allow_resubmit_after_close: true,
+                        auto_accept_on_resubmit: true,
+                      }),
+                    { refresh: false, nextStatus: "draft" },
+                  )
+                }
+              >
+                {t("returnToDraftAutoAccept")}
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </>
+      )}
+      {sentActions && (
+        <>
+          {(status === "accepted" || status === "rejected" || status === "expired") && (
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("decisionResent"),
+                  () => api.post(`/api/responses/${responseId}/resend-decision`),
+                  { refresh: false, nextStatus: status === "expired" ? "accepted" : status },
+                )
+              }
+            >
+              {t("resend")}
+            </DropdownMenuItem>
+          )}
+          {(status === "accepted" || status === "rejected") && (
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("movedBackToReview"),
+                  () =>
+                    api.post(`/api/responses/${responseId}/revert-decision`, {
+                      decision: "review",
+                    }),
+                  { refresh: false, nextStatus: "review" },
+                )
+              }
+            >
+              {t("backToReview")}
+            </DropdownMenuItem>
+          )}
+          {(status === "rejected" || status === "declined" || status === "expired") && (
+            <DropdownMenuItem
+              disabled={busy}
+              onSelect={() =>
+                void run(
+                  t("reaccepted"),
+                  () => api.post(`/api/responses/${responseId}/re-accept`, undefined),
+                  { refresh: false, nextStatus: "accepted" },
+                )
+              }
+            >
+              {t("reaccept")}
+            </DropdownMenuItem>
+          )}
+          {(status === "accepted" || status === "confirmed") && (
+            <DropdownMenuItem variant="destructive" disabled={busy} onSelect={onRequestRevoke}>
+              {t("revokeSpot")}
+            </DropdownMenuItem>
+          )}
+          {canOverride && status === "accepted" && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() =>
+                  void run(
+                    t("spotConfirmed"),
+                    () => api.post(`/api/responses/${responseId}/confirm`),
+                    { refresh: false, nextStatus: "confirmed" },
+                  )
+                }
+              >
+                {t("confirmOverride")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={busy}
+                onSelect={() =>
+                  void run(
+                    t("spotDeclined"),
+                    () => api.post(`/api/responses/${responseId}/decline`),
+                    { refresh: false, nextStatus: "declined" },
+                  )
+                }
+              >
+                {t("declineOverride")}
+              </DropdownMenuItem>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+  if (submenu)
+    return (
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger disabled={busy}>
+          <GavelIcon aria-hidden="true" />
+          {t("decisionLabel")}
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="min-w-52">{items}</DropdownMenuSubContent>
+      </DropdownMenuSub>
+    );
 
   // H12/H14: keep the submenu and its chevron on the same (trailing) side of
   // the decision menu. Radix flips it automatically when the viewport is tight.
@@ -1845,228 +2137,7 @@ function DecisionMenu({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-52" style={{ direction: "ltr" }}>
-        <DropdownMenuLabel>{t("decisionLabel")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {!hasAvailableActions && (
-          <DropdownMenuItem disabled>{t("noDecisionActions")}</DropdownMenuItem>
-        )}
-        {reviewActions && (
-          <>
-            <DropdownMenuItem
-              disabled={busy}
-              onSelect={() =>
-                void run(
-                  t("acceptedUnsentToast"),
-                  () => api.post(`/api/responses/${responseId}/decide`, { decision: "accepted" }),
-                  {
-                    refresh: false,
-                    nextStatus: "accepted_internal",
-                    notify: onAccepted,
-                  },
-                )
-              }
-            >
-              {t("accept")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={busy}
-              onSelect={() =>
-                void run(
-                  t("rejectedUnsentToast"),
-                  () => api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
-                  { refresh: false, nextStatus: "rejected_internal" },
-                )
-              }
-            >
-              {t("reject")}
-            </DropdownMenuItem>
-          </>
-        )}
-        {outboxActions && (
-          <>
-            <DropdownMenuItem
-              disabled={busy}
-              onSelect={() =>
-                void run(
-                  t("decisionSent"),
-                  () => api.post(`/api/responses/${responseId}/send-decision`),
-                  {
-                    refresh: false,
-                    nextStatus: status === "accepted_internal" ? "accepted" : "rejected",
-                  },
-                )
-              }
-            >
-              <PaperPlaneTiltIcon aria-hidden="true" />
-              {t("sendDecision")}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={busy}
-              onSelect={() =>
-                void run(
-                  t("movedBackToReview"),
-                  () =>
-                    api.post(`/api/responses/${responseId}/revert-decision`, {
-                      decision: "review",
-                    }),
-                  { refresh: false, nextStatus: "review" },
-                )
-              }
-            >
-              {t("backToReview")}
-            </DropdownMenuItem>
-          </>
-        )}
-        {status !== "draft" && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger disabled={busy}>
-                <FileTextIcon aria-hidden="true" />
-                {t("returnToDraft")}
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent
-                align="start"
-                className="w-72 max-w-[calc(100vw-2rem)]"
-                style={{ direction: "ltr" }}
-              >
-                <DropdownMenuItem
-                  className="whitespace-normal leading-snug"
-                  onSelect={() =>
-                    void run(
-                      t("returnedToDraft"),
-                      () =>
-                        api.post(`/api/responses/${responseId}/return-to-draft`, {
-                          allow_resubmit_after_close: false,
-                          auto_accept_on_resubmit: false,
-                        }),
-                      { refresh: false, nextStatus: "draft" },
-                    )
-                  }
-                >
-                  {t("returnToDraftOpen")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="whitespace-normal leading-snug"
-                  onSelect={() =>
-                    void run(
-                      t("returnedToDraft"),
-                      () =>
-                        api.post(`/api/responses/${responseId}/return-to-draft`, {
-                          allow_resubmit_after_close: true,
-                          auto_accept_on_resubmit: false,
-                        }),
-                      { refresh: false, nextStatus: "draft" },
-                    )
-                  }
-                >
-                  {t("returnToDraftLate")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="whitespace-normal leading-snug"
-                  onSelect={() =>
-                    void run(
-                      t("returnedToDraft"),
-                      () =>
-                        api.post(`/api/responses/${responseId}/return-to-draft`, {
-                          allow_resubmit_after_close: true,
-                          auto_accept_on_resubmit: true,
-                        }),
-                      { refresh: false, nextStatus: "draft" },
-                    )
-                  }
-                >
-                  {t("returnToDraftAutoAccept")}
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          </>
-        )}
-        {sentActions && (
-          <>
-            {(status === "accepted" || status === "rejected" || status === "expired") && (
-              <DropdownMenuItem
-                disabled={busy}
-                onSelect={() =>
-                  void run(
-                    t("decisionResent"),
-                    () => api.post(`/api/responses/${responseId}/resend-decision`),
-                    { refresh: false, nextStatus: status === "expired" ? "accepted" : status },
-                  )
-                }
-              >
-                {t("resend")}
-              </DropdownMenuItem>
-            )}
-            {(status === "accepted" || status === "rejected") && (
-              <DropdownMenuItem
-                disabled={busy}
-                onSelect={() =>
-                  void run(
-                    t("movedBackToReview"),
-                    () =>
-                      api.post(`/api/responses/${responseId}/revert-decision`, {
-                        decision: "review",
-                      }),
-                    { refresh: false, nextStatus: "review" },
-                  )
-                }
-              >
-                {t("backToReview")}
-              </DropdownMenuItem>
-            )}
-            {(status === "rejected" || status === "declined" || status === "expired") && (
-              <DropdownMenuItem
-                disabled={busy}
-                onSelect={() =>
-                  void run(
-                    t("reaccepted"),
-                    () => api.post(`/api/responses/${responseId}/re-accept`, undefined),
-                    { refresh: false, nextStatus: "accepted" },
-                  )
-                }
-              >
-                {t("reaccept")}
-              </DropdownMenuItem>
-            )}
-            {(status === "accepted" || status === "confirmed") && (
-              <DropdownMenuItem variant="destructive" disabled={busy} onSelect={onRequestRevoke}>
-                {t("revokeSpot")}
-              </DropdownMenuItem>
-            )}
-            {canOverride && status === "accepted" && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  disabled={busy}
-                  onSelect={() =>
-                    void run(
-                      t("spotConfirmed"),
-                      () => api.post(`/api/responses/${responseId}/confirm`),
-                      { refresh: false, nextStatus: "confirmed" },
-                    )
-                  }
-                >
-                  {t("confirmOverride")}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  variant="destructive"
-                  disabled={busy}
-                  onSelect={() =>
-                    void run(
-                      t("spotDeclined"),
-                      () => api.post(`/api/responses/${responseId}/decline`),
-                      { refresh: false, nextStatus: "declined" },
-                    )
-                  }
-                >
-                  {t("declineOverride")}
-                </DropdownMenuItem>
-              </>
-            )}
-          </>
-        )}
+        {items}
       </DropdownMenuContent>
     </DropdownMenu>
   );

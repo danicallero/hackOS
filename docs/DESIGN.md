@@ -746,8 +746,9 @@ Keep actual multi-record objects independently bounded when ownership matters.
   A pending confirmation cannot dismiss while its mutation is in flight. A dirty editor must not silently
   discard input: retain it or use the existing discard guard. Pending writes
   cannot submit twice. Do not automatically close on a failed save.
-- Application review keeps candidate navigation and decision/edit actions in one
-  compact mobile header row. Secondary copy/export actions use More actions;
+- Application review keeps candidate navigation, application state and an
+  accessible icon-only Reviewed by you indicator in one compact mobile header row.
+  Decision/edit and copy/export actions use More actions;
   the response list retains a visible Export label. Average score, review access
   and state belong to the scrolling content on the modal's own surface, without
   a second sticky background or a bordered container around static metadata.

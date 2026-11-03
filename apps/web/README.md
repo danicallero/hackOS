@@ -186,8 +186,9 @@ focus within the review. Empty file fields still retain their viewer slots.
 ## Application review layout (H13/H14)
 
 The modal keeps identity and candidate navigation in its header. On narrow
-screens, decision/edit controls and navigation share a single action row;
-copy-link and Export answers live under More actions. The list's Export action
+screens, navigation shares a single row with application state and an icon-only
+Reviewed by you indicator. Decision/edit, copy-link and Export answers live under
+More actions. The list's Export action
 keeps its visible label on mobile and opens the existing data/attachment menu.
 
 Average score, review access and application state form a compact summary in

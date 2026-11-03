@@ -126,9 +126,24 @@ for (const width of [320, 393, 1440]) {
         style: "nextjs-portal { visibility: hidden }",
       });
       if (width < 640) {
+        const header = dialog.locator('[data-slot="dialog-header"]');
+        const state = header.getByText("In review", { exact: true });
+        await expect(state).toBeVisible();
+        await expect(header.getByText("Reviewed by you", { exact: true })).toHaveClass("sr-only");
+        const more = await header
+          .getByRole("button", { name: "More actions", exact: true })
+          .boundingBox();
+        const stateBox = await state.boundingBox();
+        expect(stateBox!.x).toBeGreaterThan(more!.x + more!.width);
+        expect(
+          Math.abs(stateBox!.y + stateBox!.height / 2 - more!.y - more!.height / 2),
+        ).toBeLessThan(3);
         await dialog.getByRole("button", { name: "More actions", exact: true }).click();
         await expect(
           page.getByRole("menuitem", { name: "Copy response link", exact: true }),
+        ).toBeVisible();
+        await expect(
+          page.getByRole("menuitem", { name: "Edit answers", exact: true }),
         ).toBeVisible();
         await page.screenshot({
           path: info.outputPath(`export-menu-${width}-${theme}.png`),
@@ -162,6 +177,11 @@ for (const width of [320, 393, 1440]) {
         animations: "disabled",
         style: "nextjs-portal { visibility: hidden }",
       });
+      if (width < 640) {
+        await dialog.getByRole("button", { name: "More actions", exact: true }).click();
+        await page.getByRole("menuitem", { name: "Decision", exact: true }).click();
+        await expect(page.getByRole("menuitem", { name: "Accept", exact: true })).toBeVisible();
+      }
     });
   }
 }
