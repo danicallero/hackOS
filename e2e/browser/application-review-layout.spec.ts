@@ -118,8 +118,9 @@ for (const width of [320, 393, 1440]) {
         };
       });
       expect(geometry.overflow).toBe(false);
-      expect(geometry.headerHeight).toBeLessThan(130);
-      expect(Math.max(...geometry.tops) - Math.min(...geometry.tops)).toBeLessThan(2);
+      expect(geometry.headerHeight).toBeLessThan(width < 640 ? 200 : 130);
+      if (width >= 640)
+        expect(Math.max(...geometry.tops) - Math.min(...geometry.tops)).toBeLessThan(2);
       await page.screenshot({
         path: info.outputPath(`review-${width}-${theme}.png`),
         animations: "disabled",
@@ -130,21 +131,26 @@ for (const width of [320, 393, 1440]) {
         const state = header.getByText("In review", { exact: true });
         await expect(state).toBeVisible();
         await expect(header.getByText("Reviewed by you", { exact: true })).toHaveClass("sr-only");
-        const more = await header
-          .getByRole("button", { name: "More actions", exact: true })
+        const nav = await header
+          .getByRole("button", { name: "Next candidate", exact: true })
+          .boundingBox();
+        const close = await dialog
+          .getByRole("button", { name: "Close", exact: true })
+          .boundingBox();
+        expect(Math.abs(nav!.y - close!.y)).toBeLessThan(2);
+        const decision = await header
+          .getByRole("button", { name: "Decision actions", exact: true })
           .boundingBox();
         const stateBox = await state.boundingBox();
-        expect(stateBox!.x).toBeGreaterThan(more!.x + more!.width);
+        expect(stateBox!.x).toBeGreaterThan(decision!.x + decision!.width);
         expect(
-          Math.abs(stateBox!.y + stateBox!.height / 2 - more!.y - more!.height / 2),
+          Math.abs(stateBox!.y + stateBox!.height / 2 - decision!.y - decision!.height / 2),
         ).toBeLessThan(3);
-        await dialog.getByRole("button", { name: "More actions", exact: true }).click();
-        await expect(
-          page.getByRole("menuitem", { name: "Copy response link", exact: true }),
-        ).toBeVisible();
-        await expect(
-          page.getByRole("menuitem", { name: "Edit answers", exact: true }),
-        ).toBeVisible();
+        if (
+          !(await dialog.getByRole("button", { name: "Export answers", exact: true }).isVisible())
+        ) {
+          await dialog.getByRole("button", { name: "More actions", exact: true }).click();
+        }
         await page.screenshot({
           path: info.outputPath(`export-menu-${width}-${theme}.png`),
           animations: "disabled",
@@ -152,9 +158,9 @@ for (const width of [320, 393, 1440]) {
         });
       }
       const download = page.waitForEvent("download");
-      await page
-        .getByRole(width < 640 ? "menuitem" : "button", { name: "Export answers", exact: true })
-        .click();
+      const directExport = dialog.getByRole("button", { name: "Export answers", exact: true });
+      if (await directExport.isVisible()) await directExport.click();
+      else await page.getByRole("menuitem", { name: "Export answers", exact: true }).click();
       expect((await download).suggestedFilename()).toBe("Avery-Applicant-answers.csv");
       await expect(dialog).toBeVisible();
       await dialog.getByRole("button", { name: "View reviews (3)", exact: true }).click();
@@ -177,10 +183,64 @@ for (const width of [320, 393, 1440]) {
         animations: "disabled",
         style: "nextjs-portal { visibility: hidden }",
       });
-      if (width < 640) {
-        await dialog.getByRole("button", { name: "More actions", exact: true }).click();
-        await page.getByRole("menuitem", { name: "Decision", exact: true }).click();
+      if (width === 393 && theme === "dark") {
+        await page.setViewportSize({ width: 320, height: 844 });
+        await expect
+          .poll(() => dialog.evaluate((element) => element.scrollWidth <= element.clientWidth))
+          .toBe(true);
+        await page.setViewportSize({ width: 393, height: 844 });
+        await expect(
+          dialog.getByRole("button", { name: "Export answers", exact: true }),
+        ).toBeVisible();
+        await expect(dialog.getByRole("button", { name: "More actions", exact: true })).toHaveCount(
+          0,
+        );
+        await dialog.getByRole("button", { name: "Decision actions", exact: true }).click();
         await expect(page.getByRole("menuitem", { name: "Accept", exact: true })).toBeVisible();
+        for (const access of ["reviewer", "exporter", "decider"] as const) {
+          const capabilities =
+            access === "decider"
+              ? [CAPABILITIES.APPLICATIONS_DECIDE]
+              : [
+                  CAPABILITIES.APPLICATIONS_REVIEW,
+                  ...(access === "exporter" ? [CAPABILITIES.EXPORTS_RUN] : []),
+                ];
+          await page.route("**/api/me", (route) =>
+            route.fulfill({ json: { ...shellUser, capabilities } }),
+          );
+          await page.reload();
+          const limited = page.getByRole("dialog", { name: "Avery Applicant", exact: true });
+          await expect(
+            limited.getByRole("button", { name: "Copy response link", exact: true }),
+          ).toBeVisible();
+          await expect(
+            limited.getByRole("button", { name: "More actions", exact: true }),
+          ).toHaveCount(0);
+          await expect(
+            limited.getByRole("button", { name: "Edit answers", exact: true }),
+          ).toHaveCount(0);
+          if (access === "exporter")
+            await expect(
+              limited.getByRole("button", { name: "Export answers", exact: true }),
+            ).toBeVisible();
+          else
+            await expect(
+              limited.getByRole("button", { name: "Export answers", exact: true }),
+            ).toHaveCount(0);
+          if (access === "decider")
+            await expect(
+              limited.getByRole("button", { name: "Decision actions", exact: true }),
+            ).toBeVisible();
+          else
+            await expect(
+              limited.getByRole("button", { name: "Decision actions", exact: true }),
+            ).toHaveCount(0);
+          await page.screenshot({
+            path: info.outputPath(`review-permissions-${access}.png`),
+            animations: "disabled",
+            style: "nextjs-portal { visibility: hidden }",
+          });
+        }
       }
     });
   }

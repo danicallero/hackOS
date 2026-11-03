@@ -601,9 +601,10 @@ Also compare the narrow header action row with Users; preserve its inline
 layout, reducing labelled edit actions to accessible icons when necessary.
 For compact review dialogs, test the maximum permitted action set at the
 smallest supported viewport. Moving controls into header flow is insufficient
-if a secondary action wraps alone and consumes another row. Put secondary
-commands in an accessible overflow menu and check that export remains
-reachable. Review metadata must use the parent surface; do not add a
+if a secondary action wraps alone and consumes another row. Measure the
+space occupied by authorized actions and keep every command that fits directly
+visible; an accessible overflow menu contains only those that cannot fit. Test
+smaller permission sets and resizing, and check that export remains reachable. Review metadata must use the parent surface; do not add a
 contrasting sticky strip that covers the content being read.
 Check table geometry, useful field hierarchy, action order, pending feedback
 and panel widths. Recheck each route after a shared pattern changes.

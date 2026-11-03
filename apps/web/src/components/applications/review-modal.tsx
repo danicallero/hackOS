@@ -12,7 +12,6 @@ import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
-import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
@@ -30,6 +29,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { type ReviewAction, ReviewActions } from "@/components/applications/review-actions";
 import {
   FileViewerDocking,
   type FileViewerSide,
@@ -847,6 +847,30 @@ export function ReviewModal({
   );
   const activeFile = Math.min(activeFileIndex, Math.max(files.length - 1, 0));
   const canRevealReviews = canManage;
+  const candidateNavigation = onNavigate ? (
+    <>
+      <button
+        type="button"
+        className={dialogIconButtonClass}
+        disabled={!canGoPrev}
+        onClick={() => onNavigate("prev")}
+        aria-label={t("previousCandidate")}
+        title={t("previousCandidate")}
+      >
+        <CaretLeftIcon aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className={dialogIconButtonClass}
+        disabled={!canGoNext}
+        onClick={() => onNavigate("next")}
+        aria-label={t("nextCandidate")}
+        title={t("nextCandidate")}
+      >
+        <CaretRightIcon aria-hidden="true" />
+      </button>
+    </>
+  ) : null;
   const showDecisionMenu = hasDecisionActions(canDecide);
   const showEditAction = canEdit && Boolean(template?.length);
   const showExportAction = canExport && answerFields.length > 0;
@@ -865,6 +889,46 @@ export function ReviewModal({
       () => toast.error(t("couldNotCopyResponseLink")),
     );
   };
+  const decisionMenu = showDecisionMenu ? (
+    <DecisionMenu
+      status={st}
+      busy={busy}
+      run={run}
+      responseId={response.id}
+      canOverride={canOverride}
+      onRequestRevoke={() => setConfirmRevoke(true)}
+      onAccepted={showApplicantAcceptedToast}
+    />
+  ) : undefined;
+  const mobileActions: ReviewAction[] = [
+    ...(showEditAction
+      ? [
+          {
+            id: "edit",
+            label: editing ? t("saveAnswers") : t("editAnswers"),
+            icon: editing ? FloppyDiskIcon : PencilIcon,
+            disabled: savingEdit,
+            run: () => {
+              if (editing) void saveEdit();
+              else startEdit();
+            },
+          },
+        ]
+      : []),
+    { id: "copy", label: t("copyResponseLink"), icon: LinkIcon, run: copyResponseLink },
+    ...(showExportAction
+      ? [
+          {
+            id: "export",
+            label: t("exportAnswers"),
+            icon: DownloadSimpleIcon,
+            run: () => {
+              void exportAnswers(response, answerFields, answerValues, lang, t);
+            },
+          },
+        ]
+      : []),
+  ];
   // Suppressed only while a link-opened popup owns the composer (see
   // openReviewWindow) — a manually opened one leaves this visible too.
   const showInlineReview = canScore && !inlineReviewHidden;
@@ -1022,149 +1086,66 @@ export function ReviewModal({
         icon={FileTextIcon}
         title={response.name ?? response.email}
         description={response.name ? response.email : undefined}
+        headerNavigation={candidateNavigation}
         headerActions={
-          <div className="-mx-2 flex w-[calc(100%+1rem)] items-center gap-1 sm:mx-0 sm:w-auto sm:flex-wrap sm:justify-end">
-            <button
-              type="button"
-              className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
-              aria-label={t("copyResponseLink")}
-              title={t("copyResponseLink")}
-              onClick={copyResponseLink}
-            >
-              <LinkIcon aria-hidden="true" />
-            </button>
-            {onNavigate && (
-              <>
-                <button
-                  type="button"
-                  className={dialogIconButtonClass}
-                  disabled={!canGoPrev}
-                  onClick={() => onNavigate("prev")}
-                  aria-label={t("previousCandidate")}
-                  title={t("previousCandidate")}
-                >
-                  <CaretLeftIcon aria-hidden="true" />
-                </button>
-                <button
-                  type="button"
-                  className={dialogIconButtonClass}
-                  disabled={!canGoNext}
-                  onClick={() => onNavigate("next")}
-                  aria-label={t("nextCandidate")}
-                  title={t("nextCandidate")}
-                >
-                  <CaretRightIcon aria-hidden="true" />
-                </button>
-              </>
-            )}
-            {showDecisionMenu && (
-              <div className="hidden sm:block">
-                <DecisionMenu
-                  status={st}
-                  busy={busy}
-                  run={run}
-                  responseId={response.id}
-                  canOverride={canOverride}
-                  onRequestRevoke={() => setConfirmRevoke(true)}
-                  onAccepted={showApplicantAcceptedToast}
-                />
-              </div>
-            )}
-            {showEditAction &&
-              (editing ? (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
-                  loading={savingEdit}
-                  onClick={() => void saveEdit()}
-                  aria-label={t("saveAnswers")}
-                  title={t("saveAnswers")}
-                >
-                  <FloppyDiskIcon aria-hidden="true" />
-                </Button>
-              ) : (
-                <button
-                  type="button"
-                  className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
-                  onClick={startEdit}
-                  aria-label={t("editAnswers")}
-                  title={t("editAnswers")}
-                >
-                  <PencilIcon aria-hidden="true" />
-                </button>
-              ))}
-            {showExportAction && (
+          <>
+            <div className="hidden items-center gap-1 sm:flex sm:flex-wrap sm:justify-end">
               <button
                 type="button"
                 className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
-                onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
-                aria-label={t("exportAnswers")}
-                title={t("exportAnswers")}
+                aria-label={t("copyResponseLink")}
+                title={t("copyResponseLink")}
+                onClick={copyResponseLink}
               >
-                <DownloadSimpleIcon aria-hidden="true" />
+                <LinkIcon aria-hidden="true" />
               </button>
-            )}
-            <div className="sm:hidden">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+              {onNavigate && (
+                <div className="hidden items-center gap-1 sm:flex">{candidateNavigation}</div>
+              )}
+              {decisionMenu}
+              {showEditAction &&
+                (editing ? (
                   <Button
                     type="button"
-                    variant="ghost"
                     size="icon-sm"
-                    aria-label={t("moreActions")}
+                    variant="ghost"
+                    className={dialogIconButtonClass}
+                    loading={savingEdit}
+                    onClick={() => void saveEdit()}
+                    aria-label={t("saveAnswers")}
+                    title={t("saveAnswers")}
                   >
-                    <DotsThreeIcon aria-hidden="true" />
+                    <FloppyDiskIcon aria-hidden="true" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {showDecisionMenu && (
-                    <DecisionMenu
-                      submenu
-                      status={st}
-                      busy={busy}
-                      run={run}
-                      responseId={response.id}
-                      canOverride={canOverride}
-                      onRequestRevoke={() => setConfirmRevoke(true)}
-                      onAccepted={showApplicantAcceptedToast}
-                    />
-                  )}
-                  {showEditAction && (
-                    <DropdownMenuItem
-                      disabled={savingEdit}
-                      onSelect={() => (editing ? void saveEdit() : startEdit())}
-                    >
-                      {editing ? (
-                        <FloppyDiskIcon aria-hidden="true" />
-                      ) : (
-                        <PencilIcon aria-hidden="true" />
-                      )}
-                      {editing ? t("saveAnswers") : t("editAnswers")}
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onSelect={copyResponseLink}>
-                    <LinkIcon aria-hidden="true" />
-                    {t("copyResponseLink")}
-                  </DropdownMenuItem>
-                  {showExportAction && (
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        void exportAnswers(response, answerFields, answerValues, lang, t)
-                      }
-                    >
-                      <DownloadSimpleIcon aria-hidden="true" />
-                      {t("exportAnswers")}
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                ) : (
+                  <button
+                    type="button"
+                    className={dialogIconButtonClass}
+                    onClick={startEdit}
+                    aria-label={t("editAnswers")}
+                    title={t("editAnswers")}
+                  >
+                    <PencilIcon aria-hidden="true" />
+                  </button>
+                ))}
+              {showExportAction && (
+                <button
+                  type="button"
+                  className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
+                  onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
+                  aria-label={t("exportAnswers")}
+                  title={t("exportAnswers")}
+                >
+                  <DownloadSimpleIcon aria-hidden="true" />
+                </button>
+              )}
             </div>
-            <div className="ms-auto flex min-w-0 items-center gap-1.5 sm:hidden">
-              <ReviewStatus st={st} reviewedByMe={reviewedByMe} t={t} compact />
-            </div>
-          </div>
+            <ReviewActions
+              primary={decisionMenu}
+              actions={mobileActions}
+              trailing={<ReviewStatus st={st} reviewedByMe={reviewedByMe} t={t} compact />}
+            />
+          </>
         }
         floatingContent={
           <>
@@ -1860,7 +1841,6 @@ function hasDecisionActions(canDecide: boolean) {
 
 /** Admin decisions stay available without competing with the review forum. */
 function DecisionMenu({
-  submenu = false,
   status,
   busy,
   run,
@@ -1869,7 +1849,6 @@ function DecisionMenu({
   onRequestRevoke,
   onAccepted,
 }: {
-  submenu?: boolean;
   status: ResponseRow["status"];
   busy: boolean;
   run: RunAction;
@@ -2110,17 +2089,6 @@ function DecisionMenu({
       )}
     </>
   );
-  if (submenu)
-    return (
-      <DropdownMenuSub>
-        <DropdownMenuSubTrigger disabled={busy}>
-          <GavelIcon aria-hidden="true" />
-          {t("decisionLabel")}
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="min-w-52">{items}</DropdownMenuSubContent>
-      </DropdownMenuSub>
-    );
-
   // H12/H14: keep the submenu and its chevron on the same (trailing) side of
   // the decision menu. Radix flips it automatically when the viewport is tight.
   return (
