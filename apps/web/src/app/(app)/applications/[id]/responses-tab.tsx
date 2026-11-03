@@ -541,12 +541,12 @@ export function ResponsesTab({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="outline"
-                      size={isMobile ? "icon" : "default"}
+                      className="max-sm:gap-1 max-sm:px-3 max-sm:text-xs"
                       aria-label={t("export")}
                       ref={exportTriggerRef}
                     >
                       <DownloadSimpleIcon aria-hidden="true" />
-                      {!isMobile && t("export")}
+                      {t("export")}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent

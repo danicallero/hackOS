@@ -38,7 +38,11 @@ export function ScoreSelection({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" disabled={disabled || rows.length === 0}>
+        <Button
+          variant="outline"
+          className="max-sm:gap-1 max-sm:px-3 max-sm:text-xs"
+          disabled={disabled || rows.length === 0}
+        >
           <ChecksIcon aria-hidden="true" />
           {t("selectByScore")}
         </Button>

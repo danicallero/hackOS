@@ -12,6 +12,7 @@ import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
+import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
@@ -376,36 +377,30 @@ function StatusPillsRow({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
-        className,
-      )}
-    >
-      <div className="inline-flex max-w-full flex-wrap items-center gap-1 rounded-control border border-border bg-muted/20 px-1.5 py-1">
-        <p className="text-muted-foreground min-w-0 flex-1 px-1 text-xs">
-          avg {fmtScore(response.avg_score)}/5 · {response.review_count}{" "}
-          {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
-        </p>
-        {canRevealReviews && response.review_count > 0 && (
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            className="shrink-0 px-2"
-            onClick={onShowReviews}
-          >
-            {t("viewReviews", { count: response.review_count })}
-          </Button>
+    <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 text-xs", className)}>
+      <span className="text-muted-foreground tabular-nums">
+        <span className="sr-only">{t("averageScore")}: </span>
+        {fmtScore(response.avg_score)}/5
+        {(!canRevealReviews || response.review_count === 0) && (
+          <>
+            {" "}
+            · {response.review_count}{" "}
+            {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
+          </>
         )}
-      </div>
-      <div className="flex flex-wrap items-center justify-end gap-2 sm:ms-auto">
+      </span>
+      {canRevealReviews && response.review_count > 0 && (
+        <Button type="button" size="xs" variant="ghost" onClick={onShowReviews}>
+          {t("viewReviews", { count: response.review_count })}
+        </Button>
+      )}
+      <div className="flex flex-wrap items-center gap-2 sm:ms-auto">
         <StatusBadge tone={statusTone(st)}>{applicationStatusLabel(st, t)}</StatusBadge>
         {reviewedByMe && (
-          <StatusBadge tone="success" dot={false}>
-            <CheckCircleIcon className="size-3" aria-hidden="true" />
+          <span className="inline-flex items-center gap-1 text-muted-foreground">
+            <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
             {t("reviewedByYou")}
-          </StatusBadge>
+          </span>
         )}
       </div>
     </div>
@@ -832,6 +827,21 @@ export function ReviewModal({
   const showDecisionMenu = hasDecisionActions(canDecide);
   const showEditAction = canEdit && Boolean(template?.length);
   const showExportAction = canExport && answerFields.length > 0;
+  const copyResponseLink = () => {
+    const tab =
+      response.status === "review"
+        ? "review"
+        : response.status.endsWith("_internal")
+          ? "outbox"
+          : "sent";
+    const url = new URL(`/applications/${applicationId}`, window.location.origin);
+    url.searchParams.set("tab", tab);
+    url.searchParams.set("response", String(response.id));
+    void navigator.clipboard.writeText(url.href).then(
+      () => toast.success(t("copied")),
+      () => toast.error(t("couldNotCopyResponseLink")),
+    );
+  };
   // Suppressed only while a link-opened popup owns the composer (see
   // openReviewWindow) — a manually opened one leaves this visible too.
   const showInlineReview = canScore && !inlineReviewHidden;
@@ -980,7 +990,7 @@ export function ReviewModal({
         size="xl"
         floatingFocus={desktopFloating && (canScore || files.length > 0)}
         className={cn(
-          "max-h-[90vh] overflow-visible sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left] motion-reduce:transition-none",
+          "max-h-[calc(100dvh-2rem)] gap-3 overflow-visible sm:max-h-[90dvh] sm:max-w-4xl 2xl:h-[min(90vh,54rem)] 2xl:transition-[left] motion-reduce:transition-none",
           files.length > 0 &&
             (effectiveViewerSide === "left"
               ? "2xl:left-[calc(50%+15.5rem)]"
@@ -990,27 +1000,13 @@ export function ReviewModal({
         title={response.name ?? response.email}
         description={response.name ? response.email : undefined}
         headerActions={
-          <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
+          <div className="flex max-w-full flex-wrap items-center gap-1 sm:justify-end">
             <button
               type="button"
-              className={dialogIconButtonClass}
+              className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
               aria-label={t("copyResponseLink")}
               title={t("copyResponseLink")}
-              onClick={() => {
-                const tab =
-                  response.status === "review"
-                    ? "review"
-                    : response.status.endsWith("_internal")
-                      ? "outbox"
-                      : "sent";
-                const url = new URL(`/applications/${applicationId}`, window.location.origin);
-                url.searchParams.set("tab", tab);
-                url.searchParams.set("response", String(response.id));
-                void navigator.clipboard.writeText(url.href).then(
-                  () => toast.success(t("copied")),
-                  () => toast.error(t("couldNotCopyResponseLink")),
-                );
-              }}
+              onClick={copyResponseLink}
             >
               <LinkIcon aria-hidden="true" />
             </button>
@@ -1077,7 +1073,7 @@ export function ReviewModal({
             {showExportAction && (
               <button
                 type="button"
-                className={dialogIconButtonClass}
+                className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
                 onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
                 aria-label={t("exportAnswers")}
                 title={t("exportAnswers")}
@@ -1085,6 +1081,36 @@ export function ReviewModal({
                 <DownloadSimpleIcon aria-hidden="true" />
               </button>
             )}
+            <div className="sm:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("moreActions")}
+                  >
+                    <DotsThreeIcon aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={copyResponseLink}>
+                    <LinkIcon aria-hidden="true" />
+                    {t("copyResponseLink")}
+                  </DropdownMenuItem>
+                  {showExportAction && (
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        void exportAnswers(response, answerFields, answerValues, lang, t)
+                      }
+                    >
+                      <DownloadSimpleIcon aria-hidden="true" />
+                      {t("exportAnswers")}
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         }
         floatingContent={
@@ -1119,7 +1145,7 @@ export function ReviewModal({
             />
           ) : (
             <>
-              <div className="bg-background sticky top-0 z-10 -mx-6 mb-2 px-6 py-2">
+              <div className="border-border border-b pb-3">
                 <StatusPillsRow
                   response={response}
                   st={st}
@@ -1297,7 +1323,7 @@ function AnswersSection({
   const { t } = useLocale();
   return (
     <div className="space-y-4">
-      <p className="text-sm font-medium">{t("answersLabel")}</p>
+      {answerSections.length === 0 && <h3 className="text-sm font-medium">{t("answersLabel")}</h3>}
       {answerFields.length > 0 ? (
         <div className="space-y-4">
           {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
@@ -1305,7 +1331,7 @@ function AnswersSection({
               key={group.section?.key ?? `ungrouped-${i}`}
               className={
                 group.section
-                  ? "border-border bg-muted/20 space-y-4 rounded-xl border p-4 sm:p-5"
+                  ? "border-border space-y-4 border-t pt-5 first:border-t-0 first:pt-0"
                   : "space-y-4"
               }
             >
@@ -1566,7 +1592,7 @@ export function ReviewPanelCard({
   return (
     <div
       className={cn(
-        "border-primary/30 bg-card space-y-3 rounded-xl border p-4 shadow-2xl ring-1 ring-black/5",
+        "border-border bg-popover space-y-3 rounded-xl border p-4 shadow-floating",
         className,
       )}
     >
@@ -1758,7 +1784,9 @@ function FloatingReviewPanel(props: ReviewComposerProps) {
 }
 
 function InlineReviewPanel(props: ReviewComposerProps) {
-  return <ReviewPanelCard {...props} className="shadow-sm" />;
+  return (
+    <ReviewPanelCard {...props} className="rounded-none border-0 border-t px-0 pt-5 shadow-none" />
+  );
 }
 
 interface RunOptions {

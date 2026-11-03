@@ -183,6 +183,19 @@ preserves the panel's measured dimensions; dock preview moves the adjacent
 modal before drop, cancellation restores placement, and keyboard docking keeps
 focus within the review. Empty file fields still retain their viewer slots.
 
+## Application review layout (H13/H14)
+
+The modal keeps identity and candidate navigation in its header. On narrow
+screens, decision/edit controls and navigation share a single action row;
+copy-link and Export answers live under More actions. The list's Export action
+keeps its visible label on mobile and opens the existing data/attachment menu.
+
+Average score, review access and application state form a compact summary in
+the scrolling content. They scroll away with the answers rather than covering
+them with a separate sticky band. Answer sections use open spacing and quiet
+separators; the mobile review composer follows the same layout. Floating
+review/file tools remain available on desktop.
+
 ## Application review selection and search (H13/H14)
 
 The Responses search matches applicant names, email addresses and visible review

@@ -71,8 +71,8 @@ export function Modal({
         floatingContent={floatingContent}
         floatingFocus={floatingFocus}
       >
-        <DialogHeader className={cn("shrink-0 pr-10", headerActions && "sm:pr-48 text-left")}>
-          <div className="min-w-0 space-y-1.5">
+        <DialogHeader className="shrink-0 text-left">
+          <div className={cn("min-w-0 space-y-1.5 pr-10", headerActions && "sm:pr-64")}>
             <DialogTitle className="heading-row flex min-w-0 items-center gap-2">
               {Icon && <Icon className="text-muted-foreground size-5 shrink-0" />}
               <span className="heading-label min-w-0 break-words">{title}</span>
@@ -85,7 +85,7 @@ export function Modal({
           </div>
           {headerActions && (
             // Desktop controls share the close row; narrow screens keep them in header flow.
-            <div className="flex flex-wrap items-center gap-2 pt-2 sm:absolute sm:top-3 sm:right-12 sm:max-w-[calc(100%-3.75rem)] sm:justify-end sm:gap-1 sm:pt-0">
+            <div className="flex flex-wrap items-center gap-1 pt-1 sm:absolute sm:top-3 sm:right-12 sm:max-w-[calc(100%-3.75rem)] sm:justify-end sm:gap-1 sm:pt-0">
               {headerActions}
             </div>
           )}
