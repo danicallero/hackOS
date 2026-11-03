@@ -183,6 +183,39 @@ preserves the panel's measured dimensions; dock preview moves the adjacent
 modal before drop, cancellation restores placement, and keyboard docking keeps
 focus within the review. Empty file fields still retain their viewer slots.
 
+## Application review layout (H13/H14)
+
+The modal keeps candidate navigation beside the close button on mobile. At
+360 px and below, identity starts underneath those controls. Mobile names stay
+on one line with ellipsis; the full title remains accessible. Its
+action row measures the available space after application state. It renders
+only authorized actions and shows decision, edit/save, copy-link and Export
+answers directly when they fit;
+More actions contains only the commands that overflow. Resizing or changing
+permissions recalculates the row without reducing touch targets. The list's
+Export action retains its visible mobile label and existing data/attachment menu.
+
+The scrolling score row shows the average, followed by the Reviewed by you
+indicator when present. On mobile, permitted review access aligns to the right.
+This row scrolls away with the answers rather than covering them with a
+separate sticky band. Answer sections use open spacing and quiet
+separators; the mobile review composer follows the same layout. Floating
+review/file tools remain available on desktop.
+
+## Application review selection and search (H13/H14)
+
+The Responses search matches applicant names, email addresses and visible review
+notes. The API returns only the caller's own review unless they hold
+`applications:manage`; managers can search all returned reviewers' notes.
+`applications:review` or `applications:decide` alone does not expose other
+reviewers' notes. Aggregate scores remain visible to reviewers.
+
+Users with `applications:decide` can select by average score using greater than,
+less than or equal to a numeric threshold. This replaces the selection across
+all pages of the current workspace and active filters/search. Comparisons use
+the full average rather than its rounded display; unscored responses are excluded.
+Selection alone does not apply a decision.
+
 ## Collaborative judging saves (H36)
 
 The live judging form saves locally edited fields; submission also includes

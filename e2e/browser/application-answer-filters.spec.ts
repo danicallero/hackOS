@@ -123,7 +123,7 @@ test("filter answers and dietary needs, then reopen a response by its ID", async
   await expect(name("Grace Selected")).toHaveCount(0);
   await expect(name("Ada Notes")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("answer-filters.png"), fullPage: true });
-  await name("Ada Notes").click();
+  await page.getByRole("button", { name: /^Ada Notes(?:\s|$)/ }).click();
   await expect(page.getByRole("button", { name: "Copy response link", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/response=10/);
   expect(new URL(page.url()).searchParams.size).toBe(2);

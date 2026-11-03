@@ -3,6 +3,7 @@ import { expect, shellUser, test } from "./fixtures";
 
 // H12/H36: the application table shares the Users canvas, not a narrow form column.
 test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route("**/api/**", async (route) => {
     if (new URL(route.request().url()).pathname === "/api/me/public-profile") {
       return route.fallback();
@@ -82,18 +83,23 @@ test("sent decisions expose every column and use the shared list controls", asyn
     await page.goto("/applications/1?tab=sent");
     const table = page.getByRole("table");
     await expect(table).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
     const geometry = await table.evaluate((element) => ({
       width: element.getBoundingClientRect().width,
       scrollWidth: element.parentElement!.scrollWidth,
       available: element.parentElement!.clientWidth,
       lastColumnRight: element.querySelector("th:last-child")!.getBoundingClientRect().right,
       viewport: innerWidth,
-      searchWidth: document.querySelector('input[type="search"]')!.getBoundingClientRect().width,
+      searchWidth: document.getElementById("response-search")!.getBoundingClientRect().width,
+      searchTrackWidth: document
+        .getElementById("response-search")!
+        .parentElement!.getBoundingClientRect().width,
     }));
     expect(geometry.scrollWidth).toBe(geometry.available);
     expect(geometry.lastColumnRight).toBeLessThan(geometry.viewport);
     expect(geometry.width).toBeLessThanOrEqual(1280);
-    expect(geometry.searchWidth).toBeGreaterThan(geometry.width * 0.65);
+    expect(geometry.searchWidth).toBeGreaterThan(geometry.width / 2);
+    expect(Math.abs(geometry.searchWidth - geometry.searchTrackWidth)).toBeLessThan(1);
     await page.getByRole("searchbox").fill("Nobody");
     await expect(table.getByText("Sofía Martínez")).toHaveCount(0);
   }
