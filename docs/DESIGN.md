@@ -746,7 +746,9 @@ Keep actual multi-record objects independently bounded when ownership matters.
   A pending confirmation cannot dismiss while its mutation is in flight. A dirty editor must not silently
   discard input: retain it or use the existing discard guard. Pending writes
   cannot submit twice. Do not automatically close on a failed save.
-- Application review puts mobile candidate navigation beside Close. Its action
+- Application review puts mobile candidate navigation beside Close. At 360 px
+  and below, the name moves under that control row. Keep mobile names on one
+  line with ellipsis, retaining the full accessible name. Its action
   row reserves space for state, then fits authorized commands using their actual
   touch-target widths. Show commands directly when space permits; More actions contains
   only overflow, recalculated after resizing or permission changes. The list

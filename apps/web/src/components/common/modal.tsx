@@ -79,17 +79,25 @@ export function Modal({
             className={cn(
               "min-w-0 space-y-1.5 pr-10",
               headerActions && "sm:pr-64",
-              headerNavigation && "max-sm:pr-0",
+              headerNavigation && "max-sm:pr-0 max-[360px]:pt-10",
             )}
           >
             <DialogTitle
               className={cn(
                 "heading-row flex min-w-0 items-center gap-2",
-                headerNavigation && "max-sm:pr-32",
+                headerNavigation && "min-[361px]:max-sm:pr-32",
               )}
             >
               {Icon && <Icon className="text-muted-foreground size-5 shrink-0" />}
-              <span className="heading-label min-w-0 break-words">{title}</span>
+              <span
+                className={cn(
+                  "heading-label min-w-0 break-words",
+                  headerNavigation && "max-sm:truncate",
+                )}
+                title={title}
+              >
+                {title}
+              </span>
             </DialogTitle>
             {description && (
               <DialogDescription className={cn("break-words", headerActions && "text-left")}>

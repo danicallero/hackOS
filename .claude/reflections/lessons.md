@@ -600,7 +600,9 @@ and having screenshots are not evidence that hierarchy or alignment is good.
 Also compare the narrow header action row with Users; preserve its inline
 layout, reducing labelled edit actions to accessible icons when necessary.
 For compact review dialogs, test the maximum permitted action set at the
-smallest supported viewport. Moving controls into header flow is insufficient
+smallest supported viewport, including long names. At narrow widths, separate
+identity from the navigation/close row and use single-line ellipsis while
+preserving the full accessible name. Moving controls into header flow is insufficient
 if a secondary action wraps alone and consumes another row. Measure the
 space occupied by authorized actions and keep every command that fits directly
 visible; an accessible overflow menu contains only those that cannot fit. Test

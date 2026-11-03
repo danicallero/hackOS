@@ -185,7 +185,9 @@ focus within the review. Empty file fields still retain their viewer slots.
 
 ## Application review layout (H13/H14)
 
-The modal keeps candidate navigation beside the close button on mobile. Its
+The modal keeps candidate navigation beside the close button on mobile. At
+360 px and below, identity starts underneath those controls. Mobile names stay
+on one line with ellipsis; the full title remains accessible. Its
 action row measures the available space after application state. It renders
 only authorized actions and shows decision, edit/save, copy-link and Export
 answers directly when they fit;

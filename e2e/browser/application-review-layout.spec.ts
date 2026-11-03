@@ -28,10 +28,12 @@ for (const width of [320, 393, 1440]) {
           gl: `Pregunta ${index + 1}`,
         },
       }));
+      const applicantName =
+        width === 320 ? "Avery Applicant with a longer surname" : "Avery Applicant";
       const response = {
         id: 10,
         user_id: 22,
-        name: "Avery Applicant",
+        name: applicantName,
         email: "avery@example.test",
         status: "review",
         responses: Object.fromEntries(template.map((field) => [field.key, "An answer to read"])),
@@ -104,7 +106,7 @@ for (const width of [320, 393, 1440]) {
         style: "nextjs-portal { visibility: hidden }",
       });
       await page.getByRole("button", { name: /^Avery Applicant/ }).click();
-      const dialog = page.getByRole("dialog", { name: "Avery Applicant", exact: true });
+      const dialog = page.getByRole("dialog", { name: applicantName, exact: true });
       await expect(dialog).toBeVisible();
       const geometry = await dialog.evaluate((element) => {
         const header = element.querySelector('[data-slot="dialog-header"]')!;
@@ -118,6 +120,29 @@ for (const width of [320, 393, 1440]) {
         };
       });
       expect(geometry.overflow).toBe(false);
+      if (width < 640) {
+        const identity = dialog.locator('[data-slot="dialog-title"] .heading-label');
+        const identityGeometry = await identity.evaluate((element) => ({
+          height: element.getBoundingClientRect().height,
+          lineHeight: Number.parseFloat(getComputedStyle(element).lineHeight),
+          whiteSpace: getComputedStyle(element).whiteSpace,
+          overflow: getComputedStyle(element).textOverflow,
+          clipped: element.scrollWidth > element.clientWidth,
+        }));
+        expect(identityGeometry.whiteSpace).toBe("nowrap");
+        expect(identityGeometry.overflow).toBe("ellipsis");
+        expect(identityGeometry.height).toBeLessThanOrEqual(identityGeometry.lineHeight + 1);
+        if (width === 320) {
+          expect(identityGeometry.clipped).toBe(true);
+          const nameBox = await identity.boundingBox();
+          const dialogBox = await dialog.boundingBox();
+          expect(nameBox!.width).toBeGreaterThan(dialogBox!.width - 90);
+          const closeBox = await dialog
+            .getByRole("button", { name: "Close", exact: true })
+            .boundingBox();
+          expect(nameBox!.y).toBeGreaterThanOrEqual(closeBox!.y + closeBox!.height);
+        }
+      }
       expect(geometry.headerHeight).toBeLessThan(width < 640 ? 200 : 130);
       if (width >= 640)
         expect(Math.max(...geometry.tops) - Math.min(...geometry.tops)).toBeLessThan(2);
@@ -173,7 +198,9 @@ for (const width of [320, 393, 1440]) {
       const directExport = dialog.getByRole("button", { name: "Export answers", exact: true });
       if (await directExport.isVisible()) await directExport.click();
       else await page.getByRole("menuitem", { name: "Export answers", exact: true }).click();
-      expect((await download).suggestedFilename()).toBe("Avery-Applicant-answers.csv");
+      expect((await download).suggestedFilename()).toBe(
+        `${applicantName.replaceAll(" ", "-")}-answers.csv`,
+      );
       await expect(dialog).toBeVisible();
       await dialog.getByRole("button", { name: "View reviews (3)", exact: true }).click();
       await expect(dialog.getByText("Review notes 2", { exact: true })).toBeVisible();
@@ -221,7 +248,7 @@ for (const width of [320, 393, 1440]) {
             route.fulfill({ json: { ...shellUser, capabilities } }),
           );
           await page.reload();
-          const limited = page.getByRole("dialog", { name: "Avery Applicant", exact: true });
+          const limited = page.getByRole("dialog", { name: applicantName, exact: true });
           await expect(
             limited.getByRole("button", { name: "Copy response link", exact: true }),
           ).toBeVisible();
