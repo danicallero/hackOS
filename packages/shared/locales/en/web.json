@@ -3786,5 +3786,6 @@
   "scoreSelectionScope": "Replaces the selection across all pages of the filtered list.",
   "selectScoreMatches_one": "Select {count} match",
   "selectScoreMatches": "Select {count} matches",
-  "searchApplicantsOrReviews": "Search name, email or review notes…"
+  "searchApplicantsOrReviews": "Search name, email or review notes…",
+  "reviewAverageScore": "{score}/5 avg"
 }

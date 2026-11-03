@@ -3786,5 +3786,6 @@
   "scoreSelectionScope": "Reemplaza la selección en todas las páginas de la lista filtrada.",
   "selectScoreMatches_one": "Seleccionar {count} coincidencia",
   "selectScoreMatches": "Seleccionar {count} coincidencias",
-  "searchApplicantsOrReviews": "Buscar nombre, correo o notas de revisión…"
+  "searchApplicantsOrReviews": "Buscar nombre, correo o notas de revisión…",
+  "reviewAverageScore": "{score}/5 media"
 }

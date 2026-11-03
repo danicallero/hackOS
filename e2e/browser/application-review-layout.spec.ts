@@ -130,7 +130,19 @@ for (const width of [320, 393, 1440]) {
         const header = dialog.locator('[data-slot="dialog-header"]');
         const state = header.getByText("In review", { exact: true });
         await expect(state).toBeVisible();
-        await expect(header.getByText("Reviewed by you", { exact: true })).toHaveClass("sr-only");
+        await expect(header.getByText("Reviewed by you", { exact: true })).toHaveCount(0);
+        const reviewed = dialog.getByText("Reviewed by you", { exact: true });
+        await expect(reviewed).toHaveClass("sr-only sm:not-sr-only");
+        const score = dialog.getByText("3.7/5 avg", { exact: true });
+        const reviewButton = dialog.getByRole("button", { name: "View reviews (3)", exact: true });
+        const scoreBox = await score.boundingBox();
+        const reviewedBox = await reviewed.locator("..").boundingBox();
+        const reviewsBox = await reviewButton.boundingBox();
+        expect(reviewedBox!.x).toBeGreaterThan(scoreBox!.x + scoreBox!.width);
+        expect(reviewsBox!.x).toBeGreaterThan(reviewedBox!.x + reviewedBox!.width);
+        expect(
+          Math.abs(scoreBox!.y + scoreBox!.height / 2 - reviewsBox!.y - reviewsBox!.height / 2),
+        ).toBeLessThan(3);
         const nav = await header
           .getByRole("button", { name: "Next candidate", exact: true })
           .boundingBox();

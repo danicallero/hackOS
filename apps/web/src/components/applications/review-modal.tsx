@@ -358,32 +358,11 @@ function applicationFiles(
   });
 }
 
-function ReviewStatus({
-  st,
-  reviewedByMe,
-  t,
-  compact = false,
-}: {
-  st: string;
-  reviewedByMe: boolean;
-  t: Translate;
-  compact?: boolean;
-}) {
+function ReviewStatus({ st, t }: { st: string; t: Translate }) {
   return (
-    <>
-      <StatusBadge tone={statusTone(st)}>
-        <span className="truncate">{applicationStatusLabel(st, t)}</span>
-      </StatusBadge>
-      {reviewedByMe && (
-        <span
-          className="inline-flex shrink-0 items-center gap-1 text-muted-foreground"
-          title={t("reviewedByYou")}
-        >
-          <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
-          <span className={compact ? "sr-only" : undefined}>{t("reviewedByYou")}</span>
-        </span>
-      )}
-    </>
+    <StatusBadge tone={statusTone(st)}>
+      <span className="truncate">{applicationStatusLabel(st, t)}</span>
+    </StatusBadge>
   );
 }
 
@@ -407,24 +386,31 @@ function StatusPillsRow({
 }) {
   return (
     <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2 text-xs", className)}>
-      <span className="text-muted-foreground tabular-nums">
-        <span className="sr-only">{t("averageScore")}: </span>
-        {fmtScore(response.avg_score)}/5
-        {(!canRevealReviews || response.review_count === 0) && (
-          <>
-            {" "}
-            · {response.review_count}{" "}
-            {response.review_count === 1 ? t("reviewWord") : t("reviewsWord")}
-          </>
-        )}
+      <span className="text-muted-foreground shrink-0 tabular-nums">
+        {t("reviewAverageScore", { score: fmtScore(response.avg_score) })}
       </span>
+      {reviewedByMe && (
+        <span
+          className="inline-flex shrink-0 items-center gap-1 text-muted-foreground"
+          title={t("reviewedByYou")}
+        >
+          <CheckCircleIcon className="size-3.5 text-success" aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">{t("reviewedByYou")}</span>
+        </span>
+      )}
       {canRevealReviews && response.review_count > 0 && (
-        <Button type="button" size="xs" variant="ghost" onClick={onShowReviews}>
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          className="ms-auto sm:ms-0"
+          onClick={onShowReviews}
+        >
           {t("viewReviews", { count: response.review_count })}
         </Button>
       )}
       <div className="ms-auto hidden items-center gap-2 sm:flex">
-        <ReviewStatus st={st} reviewedByMe={reviewedByMe} t={t} />
+        <ReviewStatus st={st} t={t} />
       </div>
     </div>
   );
@@ -1143,7 +1129,7 @@ export function ReviewModal({
             <ReviewActions
               primary={decisionMenu}
               actions={mobileActions}
-              trailing={<ReviewStatus st={st} reviewedByMe={reviewedByMe} t={t} compact />}
+              trailing={<ReviewStatus st={st} t={t} />}
             />
           </>
         }
