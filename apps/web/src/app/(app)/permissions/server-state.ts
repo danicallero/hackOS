@@ -3,7 +3,7 @@ import { invalidateServerState } from "@/lib/server-state";
 export const PERMISSIONS_RESOURCES = {
   roles: ["permissions", "roles"],
   templates: ["permissions", "role-templates"],
-  users: ["permissions", "users", 200],
+  users: ["permissions", "users", "all"],
 } as const;
 
 export function invalidatePermissionsResources() {

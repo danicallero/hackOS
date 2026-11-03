@@ -61,6 +61,7 @@ import type {
   UserList,
   UserListItem,
 } from "@/lib/types";
+import { loadUserDirectory } from "@/lib/user-directory";
 import { GrantRulesOverviewModal } from "./grant-rules-overview";
 import { permissionTemplateName } from "./helpers";
 import { RoleEditor } from "./role-editor";
@@ -106,6 +107,7 @@ function PermissionsPageContent() {
   const [users, setUsers] = useState<Map<number, UserListItem>>(new Map());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [templates, setTemplates] = useState<RoleTemplate[]>([]);
   const [showTrash, setShowTrash] = useState(false);
@@ -166,6 +168,7 @@ function PermissionsPageContent() {
   // and its DndContext; only the initial load shows the spinner.
   const load = useCallback(
     async (opts?: { silent?: boolean; force?: boolean }) => {
+      const generation = ++loadGeneration.current;
       if (!opts?.silent) setLoading(true);
       setLoadError(null);
       if (opts?.force) invalidatePermissionsResources();
@@ -176,10 +179,9 @@ function PermissionsPageContent() {
         readServerState(PERMISSIONS_RESOURCES.templates, (signal) =>
           api.get<RoleTemplate[]>("/api/role-templates", { signal }),
         ),
-        readServerState(PERMISSIONS_RESOURCES.users, (signal) =>
-          api.get<UserList>("/api/users", { query: { limit: 200 }, signal }),
-        ),
+        readServerState(PERMISSIONS_RESOURCES.users, (signal) => loadUserDirectory(signal)),
       ]);
+      if (generation !== loadGeneration.current) return;
       if (rolesResult.status === "fulfilled") {
         setRoles(rolesResult.value);
       } else {
@@ -187,7 +189,8 @@ function PermissionsPageContent() {
       }
       if (templatesResult.status === "fulfilled") setTemplates(templatesResult.value);
       if (usersResult.status === "fulfilled") mergeUsers(usersResult.value.users);
-      if (!opts?.silent) setLoading(false);
+      else setLoadError(apiErrorText(usersResult.reason, t, t("couldNotLoadUsers")));
+      setLoading(false);
     },
     [t, mergeUsers],
   );

@@ -18,6 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -70,6 +77,7 @@ interface DataTableProps<T> {
   toolbar?: React.ReactNode;
   /** Enable client-side pagination at this page size. */
   pageSize?: number;
+  pageSizeOptions?: readonly number[];
   loading?: boolean;
   empty?: { icon?: PhosphorIcon; title: string; description?: string; action?: React.ReactNode };
   filteredEmpty?: {
@@ -228,7 +236,8 @@ export function DataTable<T>({
   searchPlaceholder,
   searchLabel,
   toolbar,
-  pageSize,
+  pageSize: initialPageSize,
+  pageSizeOptions,
   loading,
   empty,
   filteredEmpty,
@@ -248,6 +257,14 @@ export function DataTable<T>({
     stateKey ? `${stateKey}:sort` : null,
     null,
   );
+  const [preferredPageSize, setPreferredPageSize] = usePersistedState(
+    stateKey ? `${stateKey}:pageSize` : null,
+    initialPageSize ?? 50,
+  );
+  const pageSize = pageSizeOptions?.includes(preferredPageSize)
+    ? preferredPageSize
+    : initialPageSize;
+  const pageSizeId = useId();
   const [page, setPage] = usePersistedState(stateKey ? `${stateKey}:page` : null, 0);
   useScrollRestoration(stateKey ? `${stateKey}:scroll` : null, !loading);
   const searchId = useId();
@@ -606,18 +623,43 @@ export function DataTable<T>({
             )}
           </div>
         )}
-        {pageSize && sorted.length > pageSize && (
+        {pageSize && (sorted.length > pageSize || pageSizeOptions) && (
           <nav
-            className="flex items-center justify-between gap-2 border-t p-3"
+            className="flex flex-wrap items-center justify-between gap-3 border-t p-3"
             aria-label={t("tablePagination")}
           >
+            {pageSizeOptions && (
+              <div className="flex items-center gap-2">
+                <label htmlFor={pageSizeId} className="text-muted-foreground text-xs">
+                  {t("rowsPerPage")}
+                </label>
+                <Select
+                  value={String(pageSize)}
+                  onValueChange={(value) => {
+                    setPreferredPageSize(Number(value));
+                    setPage(0);
+                  }}
+                >
+                  <SelectTrigger id={pageSizeId} size="sm" disabled={loading}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pageSizeOptions.map((size) => (
+                      <SelectItem key={size} value={String(size)}>
+                        {size}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <span
               role="status"
               aria-live="polite"
               className="text-muted-foreground text-xs tabular-nums"
             >
               {t("paginationSummary", {
-                start: current * pageSize + 1,
+                start: sorted.length ? current * pageSize + 1 : 0,
                 end: Math.min((current + 1) * pageSize, sorted.length),
                 total: sorted.length,
                 page: current + 1,
