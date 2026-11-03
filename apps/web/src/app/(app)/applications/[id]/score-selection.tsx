@@ -40,7 +40,7 @@ export function ScoreSelection({
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="max-sm:gap-1 max-sm:px-3 max-sm:text-xs"
+          className="max-sm:gap-1 max-sm:px-2 max-sm:text-xs max-sm:has-[>svg:first-child]:pl-2"
           disabled={disabled || rows.length === 0}
         >
           <ChecksIcon aria-hidden="true" />

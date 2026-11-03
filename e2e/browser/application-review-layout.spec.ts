@@ -5,6 +5,7 @@ import { expect, shellUser, test } from "./fixtures";
 for (const width of [320, 393, 1440]) {
   for (const theme of ["light", "dark"] as const) {
     test(`review layout and export at ${width}px in ${theme}`, async ({ page }, info) => {
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.setViewportSize({ width, height: 844 });
       await page.addInitScript((appearance) => {
         localStorage.setItem("theme", appearance);
@@ -93,6 +94,7 @@ for (const width of [320, 393, 1440]) {
       await expect(exportList).toBeVisible();
       await expect(exportList).toContainText("Export");
       await expect(page.getByRole("button", { name: /^Avery Applicant/ })).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
       const scoreButton = page.getByRole("button", { name: "Select by score", exact: true });
       const exportBox = await exportList.boundingBox();
       const scoreBox = await scoreButton.boundingBox();
