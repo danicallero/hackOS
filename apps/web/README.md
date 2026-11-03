@@ -183,6 +183,20 @@ preserves the panel's measured dimensions; dock preview moves the adjacent
 modal before drop, cancellation restores placement, and keyboard docking keeps
 focus within the review. Empty file fields still retain their viewer slots.
 
+## Application review selection and search (H13/H14)
+
+The Responses search matches applicant names, email addresses and visible review
+notes. The API returns only the caller's own review unless they hold
+`applications:manage`; managers can search all returned reviewers' notes.
+`applications:review` or `applications:decide` alone does not expose other
+reviewers' notes. Aggregate scores remain visible to reviewers.
+
+Users with `applications:decide` can select by average score using greater than,
+less than or equal to a numeric threshold. This replaces the selection across
+all pages of the current workspace and active filters/search. Comparisons use
+the full average rather than its rounded display; unscored responses are excluded.
+Selection alone does not apply a decision.
+
 ## Collaborative judging saves (H36)
 
 The live judging form saves locally edited fields; submission also includes

@@ -3777,5 +3777,14 @@
   "removalLinkInvalidTitle": "This link isn't valid",
   "removalLinkInvalidDesc": "It has expired or was already used.",
   "removalLinkVerifiedTitle": "This account is already verified",
-  "removalLinkVerifiedDesc": "It can't be deleted from this link. Sign in to manage it from your profile."
+  "removalLinkVerifiedDesc": "It can't be deleted from this link. Sign in to manage it from your profile.",
+  "selectByScore": "Select by score",
+  "averageScore": "Average score",
+  "scoreGreaterThan": "Greater than",
+  "scoreLessThan": "Less than",
+  "scoreEqualTo": "Equal to",
+  "scoreSelectionScope": "Replaces the selection across all pages of the filtered list.",
+  "selectScoreMatches_one": "Select {count} match",
+  "selectScoreMatches": "Select {count} matches",
+  "searchApplicantsOrReviews": "Search name, email or review notes…"
 }

@@ -3777,5 +3777,14 @@
   "removalLinkInvalidTitle": "Esta ligazón non é válida",
   "removalLinkInvalidDesc": "Caducou ou xa se usou.",
   "removalLinkVerifiedTitle": "Esta conta xa está verificada",
-  "removalLinkVerifiedDesc": "Non se pode borrar desde esta ligazón. Inicia sesión para xestionala desde o teu perfil."
+  "removalLinkVerifiedDesc": "Non se pode borrar desde esta ligazón. Inicia sesión para xestionala desde o teu perfil.",
+  "selectByScore": "Seleccionar por puntuación",
+  "averageScore": "Puntuación media",
+  "scoreGreaterThan": "Maior que",
+  "scoreLessThan": "Menor que",
+  "scoreEqualTo": "Igual a",
+  "scoreSelectionScope": "Substitúe a selección en todas as páxinas da lista filtrada.",
+  "selectScoreMatches_one": "Seleccionar {count} coincidencia",
+  "selectScoreMatches": "Seleccionar {count} coincidencias",
+  "searchApplicantsOrReviews": "Buscar nome, correo ou notas de revisión…"
 }
