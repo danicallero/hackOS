@@ -128,9 +128,12 @@ for (const width of [320, 393, 1440]) {
           whiteSpace: getComputedStyle(element).whiteSpace,
           overflow: getComputedStyle(element).textOverflow,
           clipped: element.scrollWidth > element.clientWidth,
+          textBoxTrim: getComputedStyle(element).getPropertyValue("text-box-trim"),
         }));
         expect(identityGeometry.whiteSpace).toBe("nowrap");
         expect(identityGeometry.overflow).toBe("ellipsis");
+        expect(identityGeometry.textBoxTrim).toBe("none");
+        expect(identityGeometry.height).toBeGreaterThanOrEqual(identityGeometry.lineHeight - 1);
         expect(identityGeometry.height).toBeLessThanOrEqual(identityGeometry.lineHeight + 1);
         if (width === 320) {
           expect(identityGeometry.clipped).toBe(true);

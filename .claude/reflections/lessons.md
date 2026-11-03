@@ -602,7 +602,9 @@ layout, reducing labelled edit actions to accessible icons when necessary.
 For compact review dialogs, test the maximum permitted action set at the
 smallest supported viewport, including long names. At narrow widths, separate
 identity from the navigation/close row and use single-line ellipsis while
-preserving the full accessible name. Moving controls into header flow is insufficient
+preserving the full accessible name. Do not combine baseline text-box trimming
+with overflow-clipped labels: retain normal line metrics and inspect descenders
+such as y, p and g. Moving controls into header flow is insufficient
 if a secondary action wraps alone and consumes another row. Measure the
 space occupied by authorized actions and keep every command that fits directly
 visible; an accessible overflow menu contains only those that cannot fit. Test

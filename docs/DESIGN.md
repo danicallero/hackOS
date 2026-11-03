@@ -748,7 +748,8 @@ Keep actual multi-record objects independently bounded when ownership matters.
   cannot submit twice. Do not automatically close on a failed save.
 - Application review puts mobile candidate navigation beside Close. At 360 px
   and below, the name moves under that control row. Keep mobile names on one
-  line with ellipsis, retaining the full accessible name. Its action
+  line with ellipsis, retaining the full accessible name. Truncated labels use
+  normal text-box metrics so overflow clipping cannot cut descenders. Its action
   row reserves space for state, then fits authorized commands using their actual
   touch-target widths. Show commands directly when space permits; More actions contains
   only overflow, recalculated after resizing or permission changes. The list

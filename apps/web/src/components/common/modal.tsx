@@ -92,7 +92,7 @@ export function Modal({
               <span
                 className={cn(
                   "heading-label min-w-0 break-words",
-                  headerNavigation && "max-sm:truncate",
+                  headerNavigation && "max-sm:truncate max-sm:[text-box:normal]",
                 )}
                 title={title}
               >
