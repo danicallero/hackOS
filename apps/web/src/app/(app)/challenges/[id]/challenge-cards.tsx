@@ -51,6 +51,7 @@ import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
+import { cn } from "@/lib/utils";
 import { VersionHistory } from "./version-history";
 import { WinnerPublication } from "./winner-publication";
 
@@ -224,7 +225,7 @@ export function EditCard({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <Tabs value={tab} onValueChange={setTab}>
-          <TabBar>
+          <TabBar aria-label={t("challengeSections")}>
             <TabsTrigger value="content">{t("contentTabLabel")}</TabsTrigger>
             <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
             <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
@@ -234,7 +235,7 @@ export function EditCard({
           </TabBar>
 
           <TabsContent value="content" className="pt-4">
-            <SectionCard variant="plain" title={t("challengeLabel")}>
+            <SectionCard variant="plain" bodyClassName="pt-0">
               <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
                 {generalDisabled && (
                   <p className="text-muted-foreground text-sm">{t("publicContentFrozenDesc")}</p>
@@ -264,7 +265,7 @@ export function EditCard({
                   control={form.control}
                   name="mandatory"
                   render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4 rounded-md border p-4">
+                    <FormItem className="flex items-center justify-between gap-4 border-t pt-5">
                       <FormLabel>{t("mandatoryChallengeLabel")}</FormLabel>
                       <FormControl>
                         <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -278,7 +279,7 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="prizes" className="space-y-6 pt-4">
-            <SectionCard variant="plain" title={t("prizesLabel")}>
+            <SectionCard variant="plain" bodyClassName="pt-0">
               <fieldset disabled={generalDisabled} className="disabled:opacity-60">
                 <PrizeBuilder value={prizes} onChange={setPrizes} />
               </fieldset>
@@ -332,7 +333,7 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="publish" className="space-y-6 pt-4">
-            <SectionCard variant="plain" title={t("publicationTitle")}>
+            <SectionCard variant="plain" bodyClassName="pt-0">
               <div className="space-y-5">
                 <PublicationControls
                   id="challenge-publication"
@@ -410,13 +411,19 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="history" className="pt-4">
-            <SectionCard variant="plain" title={t("versionHistoryTitle")}>
+            <SectionCard variant="plain" bodyClassName="pt-0">
               <VersionHistory challengeId={challenge.id} />
             </SectionCard>
           </TabsContent>
         </Tabs>
 
-        <div className="form-action-footer flex flex-wrap items-center justify-end gap-3">
+        {/* Winners and History own their data; the form's save owner only serves the other tabs. */}
+        <div
+          className={cn(
+            "form-action-footer flex flex-wrap items-center justify-end gap-3",
+            (tab === "winners" || tab === "history") && "hidden",
+          )}
+        >
           <SaveStatus
             showIcon={!form.formState.isSubmitting}
             state={
@@ -475,11 +482,7 @@ function BulkEnrollmentCard({ challengeId }: { challengeId: number }) {
   const confirmingRemove = confirming === "remove";
 
   return (
-    <SectionCard
-      variant="plain"
-      title={t("bulkEnrollmentTitle")}
-      description={t("bulkEnrollmentDesc")}
-    >
+    <SectionCard variant="plain" title={t("bulkEnrollmentTitle")}>
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
@@ -620,12 +623,9 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
           {winners.length === 0 ? (
             <EmptyState title={t("noWinnersSetTitle")} />
           ) : (
-            <ul className="space-y-2">
+            <ul className="divide-border divide-y">
               {winners.map((winner) => (
-                <li
-                  key={winner.rank}
-                  className="flex items-center justify-between gap-3 rounded-md border p-3"
-                >
+                <li key={winner.rank} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="flex items-center gap-3">
                     <StatusBadge tone="success">
                       {t("rankLabel", { rank: winner.rank })}

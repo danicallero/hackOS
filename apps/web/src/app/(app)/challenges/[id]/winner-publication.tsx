@@ -56,6 +56,7 @@ export function WinnerPublication({ challengeId }: { challengeId: number }) {
   return (
     <div>
       <SectionCard
+        variant="plain"
         title={t("projectWinnersPublishAt")}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
