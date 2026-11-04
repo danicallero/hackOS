@@ -19,6 +19,7 @@ import {
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { readServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -59,12 +60,14 @@ export function DegreePicker({
   const [loading, setLoading] = useState(true);
   const [label, setLabel] = useState<string | null>(null);
   useEffect(() => {
+    // Only search once the picker opens (#1227).
+    if (!open) return;
     let active = true;
     const timer = setTimeout(() => {
-      api
-        .get<{ degrees: Degree[] }>("/api/public/degrees", {
-          query: { q: query.trim() || undefined },
-        })
+      const q = query.trim() || undefined;
+      readServerState(["public", "degrees", { q }], (signal) =>
+        api.get<{ degrees: Degree[] }>("/api/public/degrees", { query: { q }, signal }),
+      )
         .then((result) => active && setOptions(result.degrees))
         .catch(() => active && setOptions([]))
         .finally(() => active && setLoading(false));
@@ -73,11 +76,12 @@ export function DegreePicker({
       active = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [open, query]);
   useEffect(() => {
     if (!value || options.some((item) => String(item.id) === value) || label) return;
-    api
-      .get<{ degrees: Degree[] }>("/api/public/degrees", { query: { ids: value } })
+    readServerState(["public", "degrees", { ids: value }], (signal) =>
+      api.get<{ degrees: Degree[] }>("/api/public/degrees", { query: { ids: value }, signal }),
+    )
       .then(({ degrees }) => setLabel(degrees[0]?.name ?? null))
       .catch(() => {});
   }, [value, options, label]);
