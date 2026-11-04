@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "@/lib/api";
@@ -56,7 +56,18 @@ vi.mock("@/components/ui/command", () => ({
 }));
 vi.mock("radix-ui", () => ({
   Popover: {
-    Root: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    // The mock keeps its content mounted, so report the popover as open: the
+    // picker only searches while open (#1227).
+    Root: ({
+      children,
+      onOpenChange,
+    }: {
+      children: React.ReactNode;
+      onOpenChange?: (open: boolean) => void;
+    }) => {
+      useEffect(() => onOpenChange?.(true), [onOpenChange]);
+      return <>{children}</>;
+    },
     Trigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     Content: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     Portal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
