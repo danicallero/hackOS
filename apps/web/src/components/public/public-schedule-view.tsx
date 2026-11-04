@@ -30,17 +30,10 @@ import { getPublicEvent } from "@/lib/public-content";
  * The public schedule combines the event and activity reads required by H47.
  * Each read has its own retryable failure state so a rejected request cannot
  * leave the public page in an infinite loading state. `/timetable` is the one
- * route for signed-in and signed-out viewers; only its header differs.
- *
- * `header` is a title slot rather than a plain node because both shells title
- * themselves with the event name, which only this component has loaded.
- * Search and categorical filters are owned here so both shells share controls.
+ * route for signed-in and signed-out viewers; its title lives in the Home
+ * layout. Search and categorical filters are owned here so both shells share controls.
  */
-export function PublicScheduleView({
-  header,
-}: {
-  header?: (event: PublicEvent | null, actions: React.ReactNode) => React.ReactNode;
-}) {
+export function PublicScheduleView() {
   const { t, language } = useLocale();
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
@@ -166,7 +159,6 @@ export function PublicScheduleView({
 
   return (
     <>
-      {header?.(event, null)}
       {eventLoading || scheduleLoading ? (
         <div className="flex justify-center py-20" role="status" aria-busy="true">
           <Spinner className="size-6" />

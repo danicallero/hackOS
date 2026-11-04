@@ -14,7 +14,12 @@ export default function AppLoading() {
   const { t } = useLocale();
   return (
     <PageLayout>
-      <div role="status" aria-busy="true" aria-label={t("loading")} className="space-y-6">
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label={t("loading")}
+        className="loading-delayed space-y-6"
+      >
         <Skeleton className="h-8 w-48" aria-hidden="true" />
         <div className="space-y-4" aria-hidden="true">
           <div className="flex gap-2">
