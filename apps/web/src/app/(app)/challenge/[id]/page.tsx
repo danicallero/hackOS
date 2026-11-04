@@ -6,7 +6,7 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -26,6 +26,7 @@ import { usePublishedWinners } from "@/hooks/use-published-winners";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { getPublicChallenges } from "@/lib/public-content";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -43,6 +44,10 @@ function asPrizes(value: unknown): Prize[] {
 
 export default function PublicChallengePage() {
   const { language, t } = useLocale();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const { status } = useSessionContext();
   const authenticated = status === "authenticated";
   const { id } = useParams<{ id: string }>();
@@ -58,12 +63,14 @@ export default function PublicChallengePage() {
     setChallenge(undefined);
     setChallengeError(null);
     try {
-      const { items } = await api.get<{ items: PublicChallenge[] }>("/api/public/challenges");
+      const { items } = await getPublicChallenges<PublicChallenge>();
       setChallenge(items.find((c) => String(c.id) === id) ?? null);
     } catch (error) {
-      setChallengeError(apiErrorText(error, t, t("couldNotLoadChallenge")));
+      const tr = tRef.current;
+      setChallengeError(apiErrorText(error, tr, tr("couldNotLoadChallenge")));
     }
-  }, [id, t]);
+    // `t` is read through a ref so a locale change does not refetch (#1227).
+  }, [id]);
 
   const loadApplications = useCallback(async () => {
     setApplicationsLoading(true);
@@ -74,11 +81,12 @@ export default function PublicChallengePage() {
       );
       setHasOpenApplications(applications.length > 0);
     } catch (error) {
-      setApplicationsError(apiErrorText(error, t, t("couldNotLoadApplicationForms")));
+      const tr = tRef.current;
+      setApplicationsError(apiErrorText(error, tr, tr("couldNotLoadApplicationForms")));
     } finally {
       setApplicationsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

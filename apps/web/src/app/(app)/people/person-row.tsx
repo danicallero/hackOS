@@ -6,10 +6,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Column } from "@/components/common/data-table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { api } from "@/lib/api";
 import { apiAssetUrl } from "@/lib/directory";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { getPublicChallenges } from "@/lib/public-content";
 import { cn } from "@/lib/utils";
 import { type ChallengeOption, challengeTitleText } from "../projects/shared";
 
@@ -226,8 +226,7 @@ export function useChallengeNames() {
   const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
+    getPublicChallenges<ChallengeOption>()
       .then((r) => {
         if (!cancelled) setChallenges(r.items);
       })

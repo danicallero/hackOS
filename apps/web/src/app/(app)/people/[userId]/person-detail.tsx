@@ -20,6 +20,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { getPublicChallenges } from "@/lib/public-content";
 import { type ChallengeOption, challengeTitleText } from "../../projects/shared";
 
 type State =
@@ -52,8 +53,7 @@ function PersonReader({ userId }: { userId: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
+    getPublicChallenges<ChallengeOption>()
       .then((r) => {
         if (!cancelled) setChallenges(r.items);
       })
