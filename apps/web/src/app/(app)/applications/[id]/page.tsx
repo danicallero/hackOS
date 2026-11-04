@@ -350,7 +350,7 @@ function StatsStrip({ stats }: { stats: ApplicationStats }) {
         label={t("responsesLabel")}
         value={String(nonDraft)}
         icon={UsersIcon}
-        hint={t("nonDraftHint")}
+        hint={t("nonDraftHint", { n: stats.draft_count ?? 0 })}
       />
       <StatCard
         label={t("acceptedLabel")}

@@ -2196,7 +2196,7 @@
   "needsAtLeastOneOption": "\"{key}\" needs at least one option.",
   "noAnswersRecorded": "No answers recorded.",
   "noLabel": "No",
-  "nonDraftHint": "Non-draft",
+  "nonDraftHint": "+{n} drafts",
   "noOptionsDefined": "No options defined",
   "chooseAnyHint": "Choose any that apply",
   "noQuestionsYet": "No questions yet",
