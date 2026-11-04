@@ -1,5 +1,6 @@
 "use client";
 
+import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -34,6 +35,20 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
     void load();
   }, [load]);
 
+  const renderStatuses = (row: PersonDirectoryEntry) => (
+    <span className="flex flex-wrap gap-x-4 gap-y-2">
+      <StatusBadge tone={row.confirmed ? "success" : "warning"}>
+        {row.confirmed ? t("confirmed") : t("notConfirmed")}
+      </StatusBadge>
+      <StatusBadge tone={row.eventAccess ? "success" : "danger"}>
+        {row.eventAccess ? t("eventAccessStatus") : t("noEventAccessStatus")}
+      </StatusBadge>
+      <StatusBadge tone={row.present ? "success" : "neutral"}>
+        {row.present ? t("currentlyInside") : t("currentlyOutside")}
+      </StatusBadge>
+    </span>
+  );
+
   const columns: Column<PersonDirectoryEntry>[] = [
     {
       id: "user",
@@ -63,19 +78,7 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
     {
       id: "status",
       header: t("statusColumn"),
-      cell: (row) => (
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
-          <StatusBadge tone={row.confirmed ? "success" : "warning"}>
-            {row.confirmed ? t("confirmed") : t("notConfirmed")}
-          </StatusBadge>
-          <StatusBadge tone={row.eventAccess ? "success" : "danger"}>
-            {row.eventAccess ? t("eventAccessStatus") : t("noEventAccessStatus")}
-          </StatusBadge>
-          <StatusBadge tone={row.present ? "success" : "neutral"}>
-            {row.present ? t("currentlyInside") : t("currentlyOutside")}
-          </StatusBadge>
-        </div>
-      ),
+      cell: renderStatuses,
     },
   ];
 
@@ -89,6 +92,32 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
         getRowLabel={(row) =>
           [row.name, row.surname].filter(Boolean).join(" ") || String(row.userId)
         }
+        renderMobileRow={(row) => (
+          <button
+            type="button"
+            onClick={() => onOpenPerson(row.userId)}
+            className="button-interaction flex w-full items-start gap-3 px-4 py-3 text-left"
+          >
+            <span className="min-w-0 flex-1 space-y-2">
+              <span className="block wrap-anywhere text-sm font-medium">
+                {[row.name, row.surname].filter(Boolean).join(" ") || `#${row.userId}`}
+              </span>
+              {row.email && (
+                <span className="text-muted-foreground block wrap-anywhere text-sm">
+                  {row.email}
+                </span>
+              )}
+              <span className="text-muted-foreground block wrap-anywhere text-sm">
+                {row.badgeId ?? t("noBadge")}
+              </span>
+              {renderStatuses(row)}
+            </span>
+            <CaretRightIcon
+              aria-hidden="true"
+              className="text-muted-foreground mt-1 size-4 shrink-0"
+            />
+          </button>
+        )}
         loading={loading}
         searchable={(row) =>
           [row.name, row.surname, row.email, row.badgeId, row.dni].filter(Boolean).join(" ")

@@ -811,6 +811,8 @@ explain the available retry/reload path, never silently overwrite another edit.
   Operational status labels use foreground contrast and the label type scale.
   Adjacent states retain individual dots and enough spacing to read as separate
   facts; removing their capsules must not turn them into muted running text.
+  The narrow logistics directory uses drill-down rows so its states stay visible
+  alongside identity rather than outside a horizontally scrolling table.
   Static names, dates, preferences, roles listed as metadata, mandatory flags,
   descriptions and quantities are text. Filter chips are controls, not badges.
   When a state-specific action already names the state (for example, **Discard draft**), show the action instead of
