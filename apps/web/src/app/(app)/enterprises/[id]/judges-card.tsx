@@ -102,7 +102,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard title={t("judges")}>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-judge-${enterpriseId}`}>{t("assignJudgeLabel")}</Label>

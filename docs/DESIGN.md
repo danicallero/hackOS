@@ -112,6 +112,10 @@ Motion, contrast and transparency follow the system preferences, in
   overlay animation (dialog, sheet, menus, popover, select, tooltip) and the
   `animate-pulse`/`animate-spin` loops globally, so a primitive needs no
   `motion-reduce:` variant. A spinner stays visible, only static.
+- Tab panels crossfade on selection: `TabsContent` plays `animate-tab-panel-in`
+  (opacity and a 4 px `translateY`, 180 ms, `cubic-bezier(0.16, 1, 0.3, 1)` like
+  the sidebar); the global reduced-motion rule removes it. Animate only
+  opacity/transform/height in app motion; durations stay 120-200 ms.
 - `prefers-contrast: more` darkens `--border` and `--muted-foreground` and
   makes `--ring` the full foreground colour, in both themes.
 - `prefers-reduced-transparency: reduce` makes blurred or translucent surfaces
@@ -700,6 +704,14 @@ without context are not an adequate mobile adaptation.
   Keep the page header above them. The selected tab already names the panel:
   do not repeat it as an immediate `h2`; give distinct subsections their own
   headings. Statistics phase uses `width="content"` in its control row. Use a route for a different subject/workflow.
+  Record management pages with several distinct views (challenge: Content,
+  Prizes, Judging, Winners, Publish, History; company: Profile, Challenges,
+  Judges, Members, Stand tags) keep the header fixed above the `TabBar` and
+  render each tab as a single column of open sections (hairlines, no nested
+  cards). A tab's only section carries no title; sections that differ from the
+  tab name keep theirs. The selected tab is synced with `?tab=` through
+  `useUrlTab`, the bar scrolls the selected tab into view on a narrow line, and
+  panels crossfade (§2). Do not force tabs onto a record with one view.
 - Tabs stay on one scrollable line; never wrap or clip their last item. Event
   settings does not add a second vertical rail beside the app sidebar:
   `/settings/event` is a plain list of the sections the caller may manage, and

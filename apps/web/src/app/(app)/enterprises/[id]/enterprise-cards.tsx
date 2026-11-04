@@ -130,7 +130,7 @@ export function ChallengesSummaryCard({
   if (!canManage && !isOwnEnterprise) return null;
 
   return (
-    <SectionCard title={t("challengeStatusTitle")}>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       {challenges === null ? (
         <div className="flex justify-center py-6">
           <Spinner className="size-5" />
@@ -251,7 +251,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard title={t("affiliatedUsersTitle")}>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-member-${enterpriseId}`}>{t("addMemberLabel")}</Label>

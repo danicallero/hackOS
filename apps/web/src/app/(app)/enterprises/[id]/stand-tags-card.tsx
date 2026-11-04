@@ -276,7 +276,7 @@ export function StandTagsCard({
   const dateFormat = new Intl.DateTimeFormat(language, { dateStyle: "medium" });
 
   return (
-    <SectionCard>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       <div className="space-y-6">
         {!scannable && (
           <div
