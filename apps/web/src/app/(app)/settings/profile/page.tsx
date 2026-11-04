@@ -47,6 +47,10 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
   });
+  // A tab mounts when first opened and then stays mounted so a draft survives
+  // switching; tabs never opened do not fetch their data (#1227).
+  const [visited, setVisited] = useState<ReadonlySet<string>>(() => new Set([tab]));
+  if (!visited.has(tab)) setVisited(new Set([...visited, tab]));
   const [dirty, setDirty] = useState<Record<EditableSection, boolean>>({
     personal: false,
     public: false,
@@ -107,11 +111,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
             hidden={item.id !== tab}
             className="divide-y divide-border/60 pt-2"
           >
-            {item.sections.map((section) => (
-              <ProfileSection key={section.id} section={section} tabTitle={item.title}>
-                {body(section.id)}
-              </ProfileSection>
-            ))}
+            {visited.has(item.id) &&
+              item.sections.map((section) => (
+                <ProfileSection key={section.id} section={section} tabTitle={item.title}>
+                  {body(section.id)}
+                </ProfileSection>
+              ))}
           </TabsContent>
         ))}
       </Tabs>
