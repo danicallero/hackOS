@@ -659,6 +659,10 @@ identity change; successful writes and matching SSE signals invalidate exact
 resource keys before the next authoritative API read. This never changes the
 API's Postgres-backed source of truth or creates a global SSE refresh topic.
 
+A scope join or leave reopens the single multiplexed stream; when the reopen
+finishes within 2 s it is treated as planned and does not fire `reconnect`
+resyncs, so existing live queries are not refetched on every navigation (#1227).
+
 The near-static public pickers (`/api/public/universities`, `/api/public/degrees`,
 `/api/public/food-intolerances`) send `Cache-Control: public, max-age=60,
 stale-while-revalidate=300` (#1227). Staff catalogue managers read them with

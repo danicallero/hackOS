@@ -116,6 +116,19 @@ describe("multiplexed SSE broker (#892)", () => {
     expect(resync).toHaveBeenCalledOnce();
   });
 
+  it("does not resync existing consumers when another page joins a scope (#1227)", async () => {
+    const personalResync = vi.fn();
+    subscribe(REALTIME_SCOPES.PERSONAL, { onResync: personalResync });
+    await vi.advanceTimersByTimeAsync(100);
+    fixture.connections[0].emit("personal", 1);
+    await settle();
+    subscribe(REALTIME_SCOPES.QUEUE);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(fixture.fetcher).toHaveBeenCalledTimes(2);
+    await settle();
+    expect(personalResync).not.toHaveBeenCalled();
+  });
+
   it("drops delayed old-account frames and old listeners after account switching", async () => {
     const old = vi.fn();
     subscribe(REALTIME_SCOPES.PERSONAL, { onEvent: old });

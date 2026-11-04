@@ -8,6 +8,7 @@ export type RealtimeConsumer = {
   onResync?: (context: { reason: ResyncReason; topic: string; lastEventId: string | null }) => void;
   onConnectionChange?: (connected: boolean) => void;
 };
+const PLANNED_REOPEN_MAX_MS = 2000;
 type TopicState = { lastId: number | null; ignoreGap: boolean };
 
 function retryAfter(response: Response): number | null {
@@ -29,6 +30,8 @@ export class RealtimeClient {
   private generation = 0;
   private connected = false;
   private opened = false;
+  /** Set when a scope-set change deliberately reopened the stream; such a reopen is not a lost connection. */
+  private scopeReopenAt: number | null = null;
   private active = true;
   private failures = 0;
   private scopesKey = "";
@@ -134,6 +137,7 @@ export class RealtimeClient {
     this.scopesKey = key;
     for (const scope of this.topics.keys()) if (!scopes.includes(scope)) this.topics.delete(scope);
     // Abort before scheduling the replacement: there is never a second active reader.
+    if (this.opened && key) this.scopeReopenAt = Date.now();
     this.stop();
     this.failures = 0;
     if (key) this.schedule(REALTIME_LIMITS.SUBSCRIPTION_DEBOUNCE_MS);
@@ -250,7 +254,14 @@ export class RealtimeClient {
       }
       this.failures = 0;
       this.status(true);
-      if (this.opened) this.resyncAll(this.foregroundRecovery ? "foreground" : "reconnect");
+      // A reopen caused by pages joining/leaving scopes is quick and planned: the
+      // consumers that just mounted fetched fresh data themselves, and refetching
+      // every live query on each navigation duplicated me/notifications/etc.
+      const plannedReopen =
+        this.scopeReopenAt !== null && Date.now() - this.scopeReopenAt < PLANNED_REOPEN_MAX_MS;
+      this.scopeReopenAt = null;
+      if (this.opened && !plannedReopen)
+        this.resyncAll(this.foregroundRecovery ? "foreground" : "reconnect");
       this.foregroundRecovery = false;
       this.opened = true;
       for (const state of this.topics.values()) state.ignoreGap = true;
