@@ -77,10 +77,8 @@ function Countdown({
 
   // Not `leading-none`: the frame clips overflow, and a line box exactly as
   // tall as the glyphs shaves anything with a descender or accent.
-  const timeClassName =
-    "block font-mono text-[8em] leading-[1.05] font-semibold tracking-[-0.02em] tabular-nums";
-  const labelClassName =
-    "text-muted-foreground max-w-full text-[1.25em] font-medium tracking-[0.18em] text-balance uppercase";
+  const timeClassName = "block font-mono text-[8em] leading-[1.05] font-semibold tabular-nums";
+  const labelClassName = "text-muted-foreground max-w-full text-[1.25em] font-medium text-balance";
 
   return (
     <div className="flex min-w-0 flex-col items-center justify-center gap-[0.5em] text-center">
@@ -177,9 +175,7 @@ export function ScheduleBlock({
   return (
     <section className={cn("flex min-h-0 flex-col gap-[0.75em]", grow && "flex-1")}>
       {showHeading && (
-        <h2 className="text-muted-foreground shrink-0 text-[1em] font-medium tracking-[0.18em] uppercase">
-          {t("schedule")}
-        </h2>
+        <h2 className="text-muted-foreground shrink-0 text-[1em] font-medium">{t("schedule")}</h2>
       )}
       {ordered.length === 0 ? (
         <p className="text-muted-foreground text-[1.5em]">{t("scheduleEmptyDesc")}</p>
@@ -331,9 +327,7 @@ export function EmbeddedAnnouncement({
 function WifiRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline gap-[1em]">
-      <dt className="text-muted-foreground w-[7em] shrink-0 text-[0.95em] font-medium tracking-[0.18em] uppercase">
-        {label}
-      </dt>
+      <dt className="text-muted-foreground w-[7em] shrink-0 text-[0.95em] font-medium">{label}</dt>
       <dd className="min-w-0">{children}</dd>
     </div>
   );

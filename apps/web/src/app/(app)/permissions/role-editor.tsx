@@ -427,7 +427,7 @@ export function RoleEditor({
               key={entry.capability}
               className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
             >
-              <span className="truncate font-mono text-xs">{entry.capability}</span>
+              <span className="text-sm">{prettifyCapability(entry.capability, t)}</span>
               <span className="text-muted-foreground shrink-0 text-xs">
                 {t(permissionStateMessageKey(entry.current))} →{" "}
                 {t(permissionStateMessageKey(entry.default))}
@@ -578,7 +578,6 @@ function CapabilityGroup({
                 {description && (
                   <p className="text-muted-foreground truncate text-xs">{description}</p>
                 )}
-                <p className="text-muted-foreground truncate font-mono text-xs">{cap}</p>
               </div>
               <PermissionStateControl
                 state={caps[cap] ?? "inherit"}

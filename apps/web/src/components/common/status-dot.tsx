@@ -6,19 +6,23 @@ export function StatusDot({
   tone,
   children,
   className,
+  dot = true,
 }: {
   tone: Tone;
   children: React.ReactNode;
   className?: string;
+  dot?: boolean;
 }) {
   return (
     <span
       className={cn(
-        "text-muted-foreground inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap",
+        "type-label text-foreground inline-flex items-center gap-1.5 whitespace-nowrap",
         className,
       )}
     >
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", TONE_DOT[tone])} />
+      {dot && (
+        <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", TONE_DOT[tone])} />
+      )}
       {children}
     </span>
   );

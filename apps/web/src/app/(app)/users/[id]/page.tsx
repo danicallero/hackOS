@@ -149,7 +149,7 @@ export default function UserProfilePage() {
         <TabsContent value="public-profile" className="pt-2">
           <PublicProfileTab key={user.id} user={user} onUpdated={load} />
         </TabsContent>
-        <TabsContent value="access" className="grid gap-6 pt-2 xl:grid-cols-2">
+        <TabsContent value="access" className="grid items-start gap-6 pt-2 xl:grid-cols-2">
           <QrTab user={user} />
           <PermissionsTab user={user} onChanged={load} />
         </TabsContent>

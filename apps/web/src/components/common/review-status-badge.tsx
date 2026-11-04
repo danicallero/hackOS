@@ -1,5 +1,4 @@
 import { StatusBadge } from "@/components/common/status-badge";
-import { StatusDot } from "@/components/common/status-dot";
 import { useLocale } from "@/lib/i18n";
 
 /**
@@ -10,29 +9,25 @@ import { useLocale } from "@/lib/i18n";
 export function ReviewStatusBadge({
   status,
   score,
-  quiet = false,
 }: {
   /** null renders "not started". */
   status: "draft" | "submitted" | null;
   /** Shown inline when status is "submitted"; ignored otherwise. */
   score?: number | null;
-  /** A dot and label instead of a pill, for headers that already carry other emphasis. */
-  quiet?: boolean;
 }) {
   const { t } = useLocale();
 
-  const Marker = quiet ? StatusDot : StatusBadge;
   if (status === "submitted") {
     return (
-      <Marker tone="success">
+      <StatusBadge tone="success">
         {score !== null && score !== undefined
           ? t("challengeReviewSubmittedWithNota", { nota: score })
           : t("challengeReviewSubmitted")}
-      </Marker>
+      </StatusBadge>
     );
   }
   if (status === "draft") {
-    return <Marker tone="info">{t("challengeReviewDraft")}</Marker>;
+    return <StatusBadge tone="info">{t("challengeReviewDraft")}</StatusBadge>;
   }
-  return <Marker tone="neutral">{t("challengeReviewNotStarted")}</Marker>;
+  return <StatusBadge tone="neutral">{t("challengeReviewNotStarted")}</StatusBadge>;
 }

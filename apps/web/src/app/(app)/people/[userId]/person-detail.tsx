@@ -59,7 +59,7 @@ function PersonReader({ userId }: { userId: number }) {
         if (!cancelled) setChallenges(r.items);
       })
       .catch(() => {
-        // Challenge chips fall back to the names the profile returns.
+        // Challenge titles fall back to the names the profile returns.
       });
     return () => {
       cancelled = true;
@@ -181,16 +181,11 @@ function PersonReader({ userId }: { userId: number }) {
       id: "challenges",
       label: t("challenges"),
       value: (
-        <ul className="flex flex-wrap gap-1.5">
-          {entry.challenges.map((challenge) => (
-            <li
-              key={challenge.id}
-              className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-xs"
-            >
-              {titles.get(challenge.id) || challenge.name}
-            </li>
-          ))}
-        </ul>
+        <p className="wrap-anywhere">
+          {entry.challenges
+            .map((challenge) => titles.get(challenge.id) || challenge.name)
+            .join(", ")}
+        </p>
       ),
     });
   }
@@ -232,7 +227,7 @@ function PersonReader({ userId }: { userId: number }) {
         <p className="max-w-prose whitespace-pre-line wrap-anywhere text-pretty">{entry.bio}</p>
       )}
       {rows.length > 0 && (
-        <dl className="divide-y divide-border/60 border-y border-border/60">
+        <dl className="divide-y divide-border/60">
           {rows.map((row) => (
             <div
               key={row.id}

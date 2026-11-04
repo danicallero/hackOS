@@ -151,7 +151,8 @@ describe("RoleEditor mobile drill-down", () => {
 
     // role -> permissions
     await act(async () => user.click(buttonWithText(container, "capabilitiesLabel")));
-    expect(container.textContent).toContain("users:read");
+    expect(container.textContent).toContain("Users · Read");
+    expect(container.textContent).not.toContain("users:read");
     // the back button on a sub-screen is labeled with the role's name
     const backFromCapabilities = buttonWithText(container, "Judges");
 

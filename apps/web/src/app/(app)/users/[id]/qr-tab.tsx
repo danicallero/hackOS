@@ -58,8 +58,8 @@ export function QrTab({ user }: { user: UserDetail }) {
       icon={QrCodeIcon}
       bodyClassName="grid gap-4 md:grid-cols-2"
     >
-      <QrCode value={payload?.ticketToken} label={t("entranceTicket")} />
-      <QrCode value={payload?.badgeId} label={t("currentBadge")} />
+      <QrCode variant="plain" value={payload?.ticketToken} label={t("entranceTicket")} />
+      <QrCode variant="plain" value={payload?.badgeId} label={t("currentBadge")} />
     </SectionCard>
   );
 }

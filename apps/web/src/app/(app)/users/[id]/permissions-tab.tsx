@@ -16,10 +16,10 @@ import { IconButton } from "@/components/common/icon-button";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { capabilityDescription, prettifyCapability } from "@/lib/capability-presentation";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -112,12 +112,12 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         {user.roles.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noRolesForUser")}</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <ul className="divide-y divide-border/60">
             {user.roles.map((r) => (
-              <Badge key={r.id} variant="outline" className="gap-1.5 py-1 pr-1">
+              <li key={r.id} className="flex items-center justify-between gap-3 py-2">
                 <Link
                   href={`/permissions/${r.id}`}
-                  className="inline-flex items-center gap-1.5 hover:underline"
+                  className="inline-flex min-h-(--target-min) items-center gap-1.5 text-sm hover:underline"
                 >
                   <ShieldIcon aria-hidden="true" className="size-3" />
                   {r.name}
@@ -134,9 +134,9 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
                     <XIcon aria-hidden="true" className="size-3" />
                   </IconButton>
                 )}
-              </Badge>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </SectionCard>
 
@@ -144,13 +144,11 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         {user.capabilities.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noCapabilities")}</p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <ul className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {user.capabilities.map((c) => (
-              <Badge key={c} variant="secondary" className="font-mono">
-                {c}
-              </Badge>
+              <li key={c}>{capabilityDescription(c, t) || prettifyCapability(c, t)}</li>
             ))}
-          </div>
+          </ul>
         )}
       </SectionCard>
       <EnterpriseMemberships userId={user.id} onChanged={onChanged} />

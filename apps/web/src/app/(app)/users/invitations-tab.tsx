@@ -11,7 +11,6 @@ import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { StatusBadge } from "@/components/common/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -213,7 +212,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
         row.source === "email" ? (
           <span className="font-medium">{row.label}</span>
         ) : (
-          <StatusBadge tone="neutral">{t("inviteLink")}</StatusBadge>
+          <span className="font-medium">{t("inviteLink")}</span>
         ),
     },
     {
@@ -422,13 +421,11 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
                 <dt className="text-muted-foreground">{t("rolesTitle")}</dt>
                 <dd className="mt-1">
                   {selected.roles.length ? (
-                    <div className="flex flex-wrap gap-1.5">
-                      {selected.roles.map((roleId) => (
-                        <Badge key={roleId} variant="outline">
-                          {roleNames.get(roleId) ?? `#${roleId}`}
-                        </Badge>
-                      ))}
-                    </div>
+                    <span className="wrap-anywhere">
+                      {selected.roles
+                        .map((roleId) => roleNames.get(roleId) ?? `#${roleId}`)
+                        .join(", ")}
+                    </span>
                   ) : (
                     "—"
                   )}

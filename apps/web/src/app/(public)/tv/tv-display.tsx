@@ -7,6 +7,7 @@ import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Spinner } from "@/components/common/spinner";
+import { StatusBadge } from "@/components/common/status-badge";
 import type {
   PublicAnnouncement,
   PublicEvent,
@@ -260,17 +261,11 @@ export function activeAnnouncement(
 
 /** A room considered "ready" (not paused) vs. paused — mirrors the room's own
  * control-panel state (H35) rather than a TV-only concept. */
-function RoomStatusPill({ paused, t }: { paused: boolean; t: Translate }) {
+function RoomStatus({ paused, t }: { paused: boolean; t: Translate }) {
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium",
-        paused ? "bg-destructive/10 text-destructive" : "bg-success/15 text-success",
-      )}
-    >
-      <span className={cn("size-1.5 rounded-full", paused ? "bg-destructive" : "bg-success")} />
+    <StatusBadge tone={paused ? "danger" : "success"} className="shrink-0 text-sm">
       {paused ? t("paused") : t("readyStatus")}
-    </span>
+    </StatusBadge>
   );
 }
 
@@ -282,7 +277,7 @@ function ChallengeHeading({ challenge }: { challenge: RoomView["challenge"] }) {
   if (!challenge) return null;
   return (
     <div className="min-w-0">
-      <p className="text-base font-bold tracking-wide uppercase">
+      <p className="text-base font-bold">
         <MarqueeText text={challenge.enterprise_name} />
       </p>
       <h2 className="text-2xl font-medium">
@@ -294,7 +289,7 @@ function ChallengeHeading({ challenge }: { challenge: RoomView["challenge"] }) {
 
 /** Room name + location — identical treatment everywhere a room appears,
  * standalone or clustered in a joint group, name always bold. The
- * ready/paused pill is NOT part of this block: it always belongs in the
+ * ready/paused status is NOT part of this block: it always belongs in the
  * top-right corner of whichever card this room heads, so callers place it
  * alongside this component rather than nesting it underneath. */
 function RoomHeader({ room }: { room: RoomView }) {
@@ -323,7 +318,7 @@ function PresentingBlock({ active, t }: { active: QueueEntry | null; t: Translat
         : t("roomEmptyLabel");
   return (
     <div className="bg-muted/60 mt-4 rounded-xl p-4">
-      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">{label}</p>
+      <p className="text-muted-foreground text-xs font-medium">{label}</p>
       <p className="mt-1 text-3xl font-semibold">
         <MarqueeText text={active?.repo_name ?? "—"} />
       </p>
@@ -343,9 +338,7 @@ function WaitingRoomList({ room, t }: { room: RoomView; t: Translate }) {
   const rowSize = waitingRoomRowSize(entries.length);
   return (
     <div className="bg-warning/20 mt-4 rounded-xl p-4">
-      <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        {t("waitingRoomButton")}
-      </p>
+      <p className="text-muted-foreground text-xs font-medium">{t("waitingRoomButton")}</p>
       <ol className="mt-1.5 space-y-1">
         {entries.length ? (
           entries.map((entry, index) => (
@@ -383,9 +376,7 @@ function NextInQueueFooter({
   return (
     <div className="mt-auto border-t pt-3">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-          {t("nextInQueue")}
-        </p>
+        <p className="text-muted-foreground text-xs font-medium">{t("nextInQueue")}</p>
         {waitingCount > 0 && (
           <span className="text-muted-foreground text-xs tabular-nums">
             {t("waitingCountSuffix", { count: waitingCount })}
@@ -400,11 +391,11 @@ function NextInQueueFooter({
 }
 
 /** A room whose challenge (if any) isn't shared with another room. The
- * ready/paused pill always sits in the card's top-right corner — next to the
+ * ready/paused status always sits in the card's top-right corner — next to the
  * challenge heading when there is one, next to the room header otherwise —
  * matching where it sits on a joint card's per-room mini-cards. */
 function StandaloneRoomCard({ room, t }: { room: RoomView; t: Translate }) {
-  const pill = <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />;
+  const pill = <RoomStatus paused={Boolean(room.state?.is_paused)} t={t} />;
   return (
     <article className="bg-card flex min-w-0 flex-col rounded-2xl border p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -566,7 +557,7 @@ function JointGroupSegments({
                 >
                   <div className="flex items-start justify-between gap-3">
                     <RoomHeader room={room} />
-                    <RoomStatusPill paused={Boolean(room.state?.is_paused)} t={t} />
+                    <RoomStatus paused={Boolean(room.state?.is_paused)} t={t} />
                   </div>
                   <PresentingBlock active={room.active} t={t} />
                   <WaitingRoomList room={room} t={t} />
@@ -620,9 +611,7 @@ function AnnouncementRoomCard({ announcement }: { announcement: PublicAnnounceme
       <div className="flex items-start gap-3">
         <MegaphoneIcon className="text-primary mt-1 size-5 shrink-0" aria-hidden="true" />
         <div className="min-w-0">
-          <p className="text-primary text-xs font-bold tracking-wide uppercase">
-            {t("modeAnnouncement")}
-          </p>
+          <p className="text-primary text-xs font-bold">{t("modeAnnouncement")}</p>
           <h2 className="mt-1 text-2xl font-medium">
             <MarqueeText text={content.title} />
           </h2>
@@ -839,19 +828,19 @@ function WifiView({
             >
               <div className="flex min-w-0 flex-col gap-[2.5em]">
                 <div>
-                  <p className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
+                  <p className="text-muted-foreground text-[1.25em] font-medium">
                     {t("networkLabel")}
                   </p>
-                  <p className="mt-[0.15em] text-[4.5em] leading-[1.05] font-semibold tracking-[-0.01em] wrap-break-word">
+                  <p className="mt-[0.15em] text-[4.5em] leading-[1.05] font-semibold wrap-break-word">
                     {ssid}
                   </p>
                 </div>
                 {password && (
                   <div>
-                    <p className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
+                    <p className="text-muted-foreground text-[1.25em] font-medium">
                       {t("password")}
                     </p>
-                    <p className="bg-muted mt-[0.35em] inline-block rounded-[0.4em] px-[0.5em] py-[0.2em] font-mono text-[3.25em] leading-tight font-semibold tracking-[0.02em] break-all">
+                    <p className="bg-muted mt-[0.35em] inline-block rounded-[0.4em] px-[0.5em] py-[0.2em] font-mono text-[3.25em] leading-tight font-semibold break-all">
                       {password}
                     </p>
                   </div>
@@ -863,7 +852,7 @@ function WifiView({
               {venue?.wifi && (
                 <div className="flex flex-col items-center gap-[1.25em]">
                   <WifiQr wifi={venue.wifi} size="17em" />
-                  <p className="text-muted-foreground text-[1.35em] font-medium tracking-[0.06em]">
+                  <p className="text-muted-foreground text-[1.35em] font-medium">
                     {t("wifiScanToJoin")}
                   </p>
                 </div>

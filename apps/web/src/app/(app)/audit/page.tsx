@@ -17,7 +17,6 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +48,7 @@ function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
           >
             {auditTimeFmt.format(new Date(row.created_at))}
           </time>
-          <Badge variant="secondary">{getActionLabel(row.action, t)}</Badge>
+          <span className="text-sm font-medium">{getActionLabel(row.action, t)}</span>
         </div>
         <CaretRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
       </div>
@@ -66,9 +65,7 @@ function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
           <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
           <dd className="mt-0.5">
             {row.source ? (
-              <Badge variant="outline" className="capitalize">
-                {row.source}
-              </Badge>
+              <span className="capitalize">{row.source}</span>
             ) : (
               <span className="text-muted-foreground">—</span>
             )}
@@ -210,7 +207,7 @@ export default function AuditPage() {
     {
       id: "action",
       header: t("colAction"),
-      cell: (r) => <Badge variant="secondary">{getActionLabel(r.action, t)}</Badge>,
+      cell: (r) => <span className="text-sm font-medium">{getActionLabel(r.action, t)}</span>,
     },
     {
       id: "entity",
@@ -252,9 +249,7 @@ export default function AuditPage() {
       header: t("colSource"),
       cell: (r) =>
         r.source ? (
-          <Badge variant="outline" className="capitalize">
-            {r.source}
-          </Badge>
+          <span className="capitalize">{r.source}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),

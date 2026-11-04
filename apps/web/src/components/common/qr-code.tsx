@@ -28,7 +28,7 @@ export function QrCode({
   const copyToClipboard = useCopyToClipboard();
   if (!value) {
     return (
-      <div className={cn("rounded-lg border p-4 text-center", className)}>
+      <div className={cn(variant === "card" && "rounded-lg border p-4 text-center", className)}>
         <p className="text-muted-foreground text-sm">{t("qrNotAvailable", { item: label })}</p>
       </div>
     );

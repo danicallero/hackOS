@@ -96,7 +96,7 @@ Each row: value → intent → boundary.
 | Surfaces | 8 px radius, semantic border + background | **No shadow for inline grouping** — border-only. |
 | App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
-| Full radius | buttons, status pills, avatars | Not for fields or content surfaces. |
+| Full radius | buttons, avatars, status dots | Not for fields or content surfaces. Status labels do not need a capsule. |
 
 Shared page and section title rows align icons and counters to the visible
 capital height (`heading-row`), rather than the different fonts’ line boxes.
@@ -442,10 +442,10 @@ colour tokens.
 
 Use `SectionCard variant="plain"` for open page sections: it retains the
 heading, actions and semantic section without a border, background, inset
-padding. A quiet heading hairline anchors a titled section; lists may use
-hairlines between rows where separate states need clear boundaries.
-The title row reserves the compact-control height, so adjacent plain sections
-align their hairlines even when only one has an action. A multi-record project
+padding. Header/body spacing anchors a titled section without an automatic
+divider; lists may use hairlines between rows where separate states need clear
+boundaries. The title row reserves the compact-control height, so adjacent plain
+sections align even when only one has an action. A multi-record project
 list uses one surface per project to clarify ownership, not nested row cards.
 Choose layout and spacing first; a card needs a
 bounded unit to justify it. Never put a bordered card around every member or
@@ -495,7 +495,7 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
 ```tsx
 <SectionCard
   title={t("roomQueues")}
-  state={<StatusBadge>{rooms.length}</StatusBadge>}
+  state={<span className="type-meta tabular-nums">{rooms.length}</span>}
   action={<Button variant="outline">{t("viewAll")}</Button>}
 >
   {children}
@@ -805,6 +805,14 @@ explain the available retry/reload path, never silently overwrite another edit.
   A headerless `SectionCard` must not render an orphan top separator.
 - Badges communicate a meaningful categorical state (pending, confirmed,
   published, paused, conflict), with a localized label and semantic tone.
+  The default presentation is a quiet label with an optional semantic dot,
+  without a border, tinted background or capsule padding. Do not repeat the
+  same state through a dot, border and background at once.
+  Operational status labels use foreground contrast and the label type scale.
+  Adjacent states retain individual dots and enough spacing to read as separate
+  facts; removing their capsules must not turn them into muted running text.
+  The narrow logistics directory uses drill-down rows so its states stay visible
+  alongside identity rather than outside a horizontally scrolling table.
   Static names, dates, preferences, roles listed as metadata, mandatory flags,
   descriptions and quantities are text. Filter chips are controls, not badges.
   When a state-specific action already names the state (for example, **Discard draft**), show the action instead of
@@ -913,8 +921,8 @@ anything else.
 | A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
 | Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
-| Communicate entity status | `StatusBadge` with a `tone` (queue states: `QueueStatusBadge`); `StatusDot` (a toned dot plus muted label, no pill or outline) where the header already carries emphasis, e.g. the judging evaluation header (`ReviewStatusBadge quiet`) | Coloured text, custom pills |
-| A metric | `StatCard` (delta/footer slots for meters/sparklines) | Bare big numbers in a `Surface` |
+| Communicate entity status | `StatusBadge` with a `tone` and optional dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Coloured prose, custom pills, badges for static metadata |
+| A dashboard metric | `StatCard` (delta/footer slots for meters/sparklines); compact definition lists for supporting scanner totals, with the primary count emphasized | An identical card for every supporting count |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
 | A group of adjacent actions | `ActionGroup` (wraps with the shared 8 px gap) | Repeated per-page flex/gap wrappers with divergent wrapping |
@@ -1179,6 +1187,9 @@ validates their locale coverage and copy rules.
 Writing rules:
 
 1. Titles name the object or task.
+   Do not add an eyebrow that repeats the title or labels an obvious preview.
+   Keep a short label when it distinguishes a real state or identifies a metric;
+   use normal capitalization and spacing rather than all caps or tracking.
 2. Buttons use a verb + concrete object where ambiguity exists.
 3. Descriptions explain only risk, consequence, policy, or an unfamiliar
    state.
