@@ -200,7 +200,10 @@ export function UniversityPicker({
       id={listboxId}
       className="pointer-events-auto bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
-      <Command shouldFilter={false}>
+      <Command
+        shouldFilter={false}
+        className="min-h-0 [&_[data-slot=command-input-wrapper]]:shrink-0"
+      >
         <CommandInput
           placeholder={t("searchUniversitiesShortPlaceholder")}
           value={query}
@@ -242,7 +245,7 @@ export function UniversityPicker({
                   aria-hidden="true"
                   className={cn("size-4", String(u.id) === value ? "opacity-100" : "opacity-0")}
                 />
-                {u.name}
+                <span className="min-w-0 whitespace-normal wrap-anywhere">{u.name}</span>
               </CommandItem>
             ))}
             {canPropose && (
@@ -289,7 +292,10 @@ export function UniversityPicker({
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
           aria-required={ariaRequired}
-          className={cn("w-full justify-between rounded-control font-normal", className)}
+          className={cn(
+            "w-full min-w-0 max-w-full justify-between rounded-control font-normal",
+            className,
+          )}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? t("selectYourUniversityPlaceholder")}

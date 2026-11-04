@@ -86,26 +86,32 @@ export function AlertModal({
           data-slot="alert-dialog-content"
           className={cn(
             overlayVariants({ elevation: "modal" }),
-            "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] gap-4 overflow-y-auto border-border/60 p-6 sm:max-w-(--modal-width-md)",
+            "fixed top-1/2 left-1/2 z-50 flex w-full min-w-0 flex-col max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] overflow-visible border-border/60 sm:max-w-(--modal-width-md)",
           )}
         >
-          <div className="space-y-2">
-            <AlertDialog.Title className="type-section-title text-balance">
-              {title}
-            </AlertDialog.Title>
-            <AlertDialog.Description className="text-muted-foreground text-pretty text-sm">
-              {description}
-            </AlertDialog.Description>
-          </div>
-          {children}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            {reverseActions && confirmButton}
-            <AlertDialog.Cancel asChild>
-              <Button variant="outline" disabled={pending}>
-                {cancelLabel}
-              </Button>
-            </AlertDialog.Cancel>
-            {!reverseActions && confirmButton}
+          <div
+            data-slot="alert-dialog-portal-container"
+            className="pointer-events-none fixed inset-0 z-50"
+          />
+          <div className="grid min-h-0 min-w-0 gap-4 overflow-y-auto p-6 [&>*]:min-w-0">
+            <div className="space-y-2">
+              <AlertDialog.Title className="type-section-title text-balance">
+                {title}
+              </AlertDialog.Title>
+              <AlertDialog.Description className="text-muted-foreground text-pretty text-sm wrap-anywhere">
+                {description}
+              </AlertDialog.Description>
+            </div>
+            {children}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {reverseActions && confirmButton}
+              <AlertDialog.Cancel asChild>
+                <Button variant="outline" disabled={pending}>
+                  {cancelLabel}
+                </Button>
+              </AlertDialog.Cancel>
+              {!reverseActions && confirmButton}
+            </div>
           </div>
         </AlertDialog.Content>
       </AlertDialog.Portal>

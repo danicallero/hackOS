@@ -820,6 +820,12 @@ mode; new empty participant drafts begin editing. `CreateProjectPanel` collects
 a team and dynamic answers for administrative creation, independently of personal
 project creation. See [project access and lifecycle](../../docs/projects.md#unified-inspection-and-administration-h18h21).
 
+Directory pickers for degrees and universities keep long selected names within the
+field width; option names wrap inside a scrollable list. Confirmation dialogs,
+like editors, provide a dedicated child portal layer outside their scrolling body
+so nested pickers remain above actions and inside the modal focus scope. Directory
+lists in compact confirmations use the viewport as their collision boundary.
+
 Form validation runs on blur: React Hook Form uses `mode: "onBlur"` and
 `reValidateMode: "onBlur"`; `FormControl` also validates custom controls when
 focus leaves their boundary. Compound controls may report completion with an
