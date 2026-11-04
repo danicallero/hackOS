@@ -11,7 +11,7 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
-import { idParamSchema } from "./schemas.js";
+import { idParamSchema, PUBLIC_CATALOG_CACHE } from "./schemas.js";
 
 /**
  * Food-intolerance dictionary (H12/H25). Administration maintains the shared
@@ -61,7 +61,8 @@ export function registerIntoleranceRoutes(app: FastifyInstance): void {
           "Anonymous read-only catalogue used by application and profile pickers; staff maintain it through the protected management endpoints.",
       },
     },
-    async () => {
+    async (_req, reply) => {
+      reply.header("cache-control", PUBLIC_CATALOG_CACHE);
       const { rows } = await pool.query(
         `SELECT id, label, description FROM food_intolerances ORDER BY id`,
       );
