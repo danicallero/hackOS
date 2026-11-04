@@ -778,7 +778,6 @@ export function QuestionsCard({
       />
       {fields.length === 0 && sections.length === 0 ? (
         <EmptyState
-          icon={ListChecksIcon}
           title={t("noQuestionsYet")}
           description={t("noQuestionsYetDesc")}
           action={

@@ -273,7 +273,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
     );
   }
   if (collection.total === 0) {
-    return <EmptyState icon={StorefrontIcon} title={t("diaryCollectionEmpty")} />;
+    return <EmptyState title={t("diaryCollectionEmpty")} />;
   }
 
   const complete = collection.collected === collection.total;
@@ -307,7 +307,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
       </div>
 
       {visible.length === 0 ? (
-        <EmptyState icon={StarIcon} title={t("diaryNoFavourites")} />
+        <EmptyState title={t("diaryNoFavourites")} />
       ) : (
         <ul className="grid grid-cols-3 gap-x-2 gap-y-2 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6">
           {visible.map((item) => (

@@ -557,7 +557,7 @@ Controls deliberately lacking hover behavior, including touch-only surfaces.
 Status: active
 Scope: module:web
 Source: user-correction
-Date: 2026-11-03
+Date: 2026-11-04
 
 ### Trigger
 Building or applying a shared page/surface pattern across web routes.
@@ -575,7 +575,10 @@ detail page. Shared patterns need representative content and rendered review.
 Use the audited Users and application Responses layouts as the dense-list references.
 Applying PageLayout and the app shell alone does not complete a design-system
 migration: audit every clickable item against the shared Button/IconButton
-contract, and include the established Phosphor icons on sections and actions.
+contract, and use established Phosphor icons only where they identify a useful action,
+state or content distinction. Do not decorate a form with an isolated symbol
+or repeat an obvious heading with an icon; accessible hiding does not make
+a visually redundant icon useful.
 When reusing public landing content inside the app, omit sections already owned
 by sibling routes and exercise their links in both session states; shared data
 does not justify duplicate destinations or sending signed-in users out of the shell.

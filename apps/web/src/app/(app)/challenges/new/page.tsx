@@ -1,7 +1,6 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
@@ -21,10 +20,7 @@ export default function NewChallengePage() {
 
   return (
     <PageLayout width="reading">
-      <PageHeader
-        title={t("newChallenge")}
-        leading={<TrophyIcon className="text-muted-foreground size-6" aria-hidden="true" />}
-      />
+      <PageHeader title={t("newChallenge")} />
       <NewChallengeForm onCreated={(challenge) => router.push(`/challenges/${challenge.id}`)} />
     </PageLayout>
   );

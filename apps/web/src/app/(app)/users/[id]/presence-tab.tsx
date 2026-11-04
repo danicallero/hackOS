@@ -96,7 +96,6 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
   if (state === "forbidden") {
     return (
       <EmptyState
-        icon={ClockIcon}
         title={t("presenceUnavailableTitle")}
         description={t("presenceUnavailableDesc")}
       />
@@ -112,7 +111,6 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
   if (state === "error" || !data) {
     return (
       <EmptyState
-        icon={ClockIcon}
         title={t("couldNotLoadPresenceTitle")}
         description={loadError}
         action={
@@ -126,7 +124,6 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
 
   return (
     <SectionCard
-      icon={ClockIcon}
       title={t("presence")}
       action={
         canEdit || canExport ? (

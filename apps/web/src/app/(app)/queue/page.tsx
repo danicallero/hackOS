@@ -3,7 +3,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
-import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
@@ -158,7 +157,6 @@ export default function QueueOperationsPage() {
       <PageLayout>
         <PageHeader title={t("queueOperations")} />
         <EmptyState
-          icon={TicketIcon}
           title={t("couldNotLoadQueueOps")}
           description={errorText(roomViews.error, t, t("tryAgain"))}
         />
@@ -240,11 +238,7 @@ export default function QueueOperationsPage() {
         {canViewRooms && (
           <TabsContent value="rooms" className="pt-2">
             {rooms.length === 0 ? (
-              <EmptyState
-                icon={TicketIcon}
-                title={t("noRoomsYet")}
-                description={t("noRoomsYetDescription")}
-              />
+              <EmptyState title={t("noRoomsYet")} description={t("noRoomsYetDescription")} />
             ) : (
               <QueueOperatorConsole
                 rooms={rooms}

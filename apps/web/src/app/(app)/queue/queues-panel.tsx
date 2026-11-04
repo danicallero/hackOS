@@ -119,7 +119,7 @@ export function QueuesPanel() {
   }
 
   if (groups.length === 0) {
-    return <EmptyState icon={StackIcon} title={t("noQueuesYet")} />;
+    return <EmptyState title={t("noQueuesYet")} />;
   }
 
   return (

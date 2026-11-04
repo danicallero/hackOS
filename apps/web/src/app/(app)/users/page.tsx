@@ -207,15 +207,11 @@ function buildColumns(
       header: t("email"),
       sortValue: (u) => u.email.toLowerCase(),
       cell: (u) => (
-        <div className="flex items-center gap-2">
-          <StatusBadge
-            tone={u.emailVerified ? "success" : "warning"}
-            dot={false}
-            className="w-24 shrink-0 justify-center"
-          >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-muted-foreground">{u.email}</span>
+          <StatusBadge tone={u.emailVerified ? "success" : "warning"}>
             {u.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
-          <span className="text-muted-foreground">{u.email}</span>
         </div>
       ),
     },
@@ -224,7 +220,7 @@ function buildColumns(
       header: t("colApplication"),
       sortValue: (u) => u.applicationStatus ?? "",
       cell: (u) => (
-        <StatusBadge tone={applicationTone(u.applicationStatus)} dot={false} className="capitalize">
+        <StatusBadge tone={applicationTone(u.applicationStatus)} className="capitalize">
           {applicationLabel(u.applicationStatus, t)}
         </StatusBadge>
       ),
@@ -249,9 +245,7 @@ function buildColumns(
         ) : presentIds.has(u.id) ? (
           <StatusBadge tone="success">{t("present")}</StatusBadge>
         ) : (
-          <StatusBadge tone="neutral" dot={false}>
-            {t("away")}
-          </StatusBadge>
+          <StatusBadge tone="neutral">{t("away")}</StatusBadge>
         ),
     },
     {
@@ -331,7 +325,7 @@ function UserMobileRow({
                 <dt className="text-muted-foreground shrink-0">{column.header}:</dt>
                 <dd className="min-w-0">
                   {column.id === "application" ? (
-                    <StatusBadge tone={applicationTone(user.applicationStatus)} dot={false}>
+                    <StatusBadge tone={applicationTone(user.applicationStatus)}>
                       {values.application}
                     </StatusBadge>
                   ) : column.id === "presence" && presentIds !== null ? (
@@ -341,7 +335,7 @@ function UserMobileRow({
                   ) : column.id === "email" ? (
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span>{values.email}</span>
-                      <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+                      <StatusBadge tone={user.emailVerified ? "success" : "warning"}>
                         {user.emailVerified ? t("verified") : t("unverified")}
                       </StatusBadge>
                     </span>

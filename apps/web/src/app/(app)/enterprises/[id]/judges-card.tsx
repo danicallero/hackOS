@@ -6,7 +6,6 @@
 // enterprises may bring outside judges — and adding one is silent.
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -20,6 +19,8 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
+
+import { mutateMembership } from "./membership-mutation";
 
 interface Judge {
   userId: number;
@@ -75,35 +76,33 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
     [candidates, rosterIds],
   );
 
-  async function add(userId: number) {
-    setBusy(true);
-    try {
-      await api.post(`/api/enterprises/${enterpriseId}/judges`, { userId });
-      setSelectedUserId("");
-      await load();
-      toast.success(t("judgeAssigned"), { compactTitle: t("assignJudgeLabel") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotAssignJudge")), t("assignJudgeLabel"));
-    } finally {
-      setBusy(false);
-    }
+  function add(userId: number) {
+    return mutateMembership({
+      request: () => api.post(`/api/enterprises/${enterpriseId}/judges`, { userId }),
+      refresh: load,
+      afterRequest: () => setSelectedUserId(""),
+      setBusy,
+      t,
+      success: t("judgeAssigned"),
+      failure: t("couldNotAssignJudge"),
+      title: t("assignJudgeLabel"),
+    });
   }
 
-  async function remove(userId: number) {
-    setBusy(true);
-    try {
-      await api.delete(`/api/enterprises/${enterpriseId}/judges/${userId}`);
-      await load();
-      toast.success(t("judgeRemoved"), { compactTitle: t("toastRemoveJudge") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotRemoveJudge")), t("toastRemoveJudge"));
-    } finally {
-      setBusy(false);
-    }
+  function remove(userId: number) {
+    return mutateMembership({
+      request: () => api.delete(`/api/enterprises/${enterpriseId}/judges/${userId}`),
+      refresh: load,
+      setBusy,
+      t,
+      success: t("judgeRemoved"),
+      failure: t("couldNotRemoveJudge"),
+      title: t("toastRemoveJudge"),
+    });
   }
 
   return (
-    <SectionCard icon={GavelIcon} title={t("judges")}>
+    <SectionCard title={t("judges")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-judge-${enterpriseId}`}>{t("assignJudgeLabel")}</Label>
@@ -133,7 +132,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
             <Spinner className="size-5" />
           </div>
         ) : judges.length === 0 ? (
-          <EmptyState icon={GavelIcon} title={t("noJudgesAssigned")} />
+          <EmptyState title={t("noJudgesAssigned")} />
         ) : (
           <ul className="divide-border divide-y">
             {judges.map((judge) => {

@@ -71,7 +71,7 @@ export function SectionCard({
         className,
       )}
     >
-      {(hasHeaderText || Icon || leading || state || action) && (
+      {(hasHeaderText || leading || state || action) && (
         <div
           className={cn(
             "flex flex-col gap-(--space-within-section) p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-5 sm:pb-0",
@@ -86,9 +86,6 @@ export function SectionCard({
             )}
           >
             {leading && <div className="shrink-0">{leading}</div>}
-            {title === undefined && Icon && !leading && (
-              <Icon className="text-muted-foreground size-5 shrink-0" aria-hidden="true" />
-            )}
             <div className="min-w-0 space-y-1">
               {title !== undefined && (
                 <div className="heading-row flex flex-wrap items-center gap-(--space-related)">

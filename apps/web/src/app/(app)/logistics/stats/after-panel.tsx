@@ -4,7 +4,6 @@ import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PercentIcon } from "@phosphor-icons/react/dist/csr/Percent";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
-import { TimerIcon } from "@phosphor-icons/react/dist/csr/Timer";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -118,7 +117,6 @@ export function AfterPanel({
       <div className="grid gap-4 xl:grid-cols-2">
         <ChartCard
           title={t("participationFunnel")}
-          icon={TimerIcon}
           rows={funnelRows}
           chartType={funnelChart}
           onChartTypeChange={setFunnelChart}
@@ -160,7 +158,6 @@ export function AfterPanel({
       <SectionCard
         title={t("attendanceHours")}
         description={t("attendanceHoursEstimated")}
-        icon={UsersIcon}
         state={<Freshness kind={error ? "incomplete" : "estimated"} />}
         action={
           <Button asChild variant="outline">

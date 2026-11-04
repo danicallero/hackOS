@@ -415,8 +415,8 @@ Shared geometry is in `styles/surfaces.css`; the full decisions and exceptions
 are in `docs/DESIGN.md` §4b, with interactive examples in `/design-system`.
 
 Shared page, section, modal and panel headers use `heading-row` to align
-visible title capitals with icons and `type-meta` counters. Section icons
-stay in the title row, independently of descriptions.
+visible title capitals with icons and `type-meta` counters. Useful section icons stay in the title row, independently of descriptions;
+icons that merely decorate or repeat a heading are omitted.
 
 `StatusBadge` uses the shared `StatusDot` presentation: a quiet label with an
 optional semantic dot, without pill borders or tinted backgrounds. Static roles,

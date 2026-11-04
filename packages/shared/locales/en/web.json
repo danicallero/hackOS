@@ -2247,6 +2247,7 @@
   "preview": "Preview",
   "previewTitle": "Preview: {name}",
   "quotaInline": "quota {capacity}",
+  "grantsRoleInline": "grants {role}",
   "reaccept": "Re-accept",
   "reacceptDeclinedExpired": "Re-accept (declined/expired)",
   "reaccepted": "Re-accepted.",

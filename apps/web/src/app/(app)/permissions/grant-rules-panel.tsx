@@ -250,7 +250,6 @@ export function GrantRulesPanel({
       )}
 
       <SectionCard
-        icon={scopedRole ? undefined : LightningIcon}
         title={scopedRole ? undefined : t("grantRulesTitle")}
         description={disabled ? t("superadminLockedDesc") : undefined}
         bodyClassName="p-0"
@@ -260,7 +259,7 @@ export function GrantRulesPanel({
             <Spinner className="size-6" />
           </div>
         ) : rules.length === 0 ? (
-          <EmptyState icon={LightningIcon} title={t("noGrantRulesYetTitle")} />
+          <EmptyState title={t("noGrantRulesYetTitle")} />
         ) : (
           <ul className="divide-border divide-y">
             {rules.map((rule) => (

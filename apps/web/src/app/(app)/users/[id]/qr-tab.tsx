@@ -2,7 +2,6 @@
 
 // Accreditation QR / badge (H22-H23, H28).
 
-import { QrCodeIcon } from "@phosphor-icons/react/dist/csr/QrCode";
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { QrCode } from "@/components/common/qr-code";
@@ -48,14 +47,13 @@ export function QrTab({ user }: { user: UserDetail }) {
   }
 
   if (error) {
-    return <EmptyState icon={QrCodeIcon} title={t("couldNotLoadQrCodes")} description={error} />;
+    return <EmptyState title={t("couldNotLoadQrCodes")} description={error} />;
   }
 
   return (
     <SectionCard
       title={t("ticketAndBadgeQr")}
       description={t("ticketAndBadgeQrDesc")}
-      icon={QrCodeIcon}
       bodyClassName="grid gap-4 md:grid-cols-2"
     >
       <QrCode variant="plain" value={payload?.ticketToken} label={t("entranceTicket")} />

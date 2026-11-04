@@ -2247,6 +2247,7 @@
   "preview": "Vista previa",
   "previewTitle": "Vista previa: {name}",
   "quotaInline": "cupo {capacity}",
+  "grantsRoleInline": "concede {role}",
   "reaccept": "Volver a aceptar",
   "reacceptDeclinedExpired": "Volver a aceptar (rechazada/caducada)",
   "reaccepted": "Vuelta a aceptar.",

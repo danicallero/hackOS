@@ -170,8 +170,6 @@ function PresenceTimelineRow({
       : window?.status === "provisional"
         ? "warning"
         : "neutral";
-  const typeTone: "success" | "warning" | "info" =
-    signal.kind === "in" ? "success" : signal.kind === "out" ? "warning" : "info";
   const recordedBy = signal.recordedBy
     ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ") ||
       `#${signal.recordedBy.userId}`
@@ -206,9 +204,6 @@ function PresenceTimelineRow({
           )}
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
-          <StatusBadge tone={typeTone} dot={false}>
-            {signal.kind === "activity" ? t("activitySignal") : title}
-          </StatusBadge>
           {window && (
             <StatusBadge tone={statusTone} dot={false}>
               <StatusIcon className="size-3" aria-hidden="true" />

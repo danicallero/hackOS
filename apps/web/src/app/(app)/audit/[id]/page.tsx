@@ -5,7 +5,6 @@
 // shared, and opened from the row itself instead of trapped behind a click.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -66,7 +65,7 @@ export default function AuditEntryPage() {
   if (state === "error" || !row) {
     return (
       <div className="space-y-6">
-        <EmptyState icon={LogIcon} title={t("auditEntryNotFound")} description={errorMsg} />
+        <EmptyState title={t("auditEntryNotFound")} description={errorMsg} />
       </div>
     );
   }

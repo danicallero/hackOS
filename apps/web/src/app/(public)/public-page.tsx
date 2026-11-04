@@ -363,7 +363,6 @@ function PublicPageContent({
                 key={challenge.id}
                 className="flex h-full flex-col"
                 bodyClassName="flex-1"
-                icon={TrophyIcon}
                 title={displayText(challenge.title, language)}
                 footer={
                   <Button asChild variant="outline" size="sm">

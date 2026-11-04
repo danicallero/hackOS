@@ -69,7 +69,6 @@ export function HoursTab({
     <SectionCard
       title={t("attendanceHours")}
       description={t("attendanceHoursDesc")}
-      icon={UsersIcon}
       action={
         <ActionGroup className="items-end">
           <Field id="min-hours" label={t("minHoursLabel")}>
