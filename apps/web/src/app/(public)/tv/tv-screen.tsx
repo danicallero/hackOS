@@ -99,7 +99,7 @@ export function TvHeader({
       )}
     >
       {eventName ? (
-        <span className="min-w-0 flex-1 text-[1.5em] font-semibold tracking-tight">
+        <span className="min-w-0 flex-1 text-[1.5em] font-semibold">
           <MarqueeText text={eventName} />
         </span>
       ) : (

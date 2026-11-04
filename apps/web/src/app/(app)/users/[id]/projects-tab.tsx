@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -29,13 +28,13 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
       sortValue: (project) => project.challenges?.length ?? 0,
       cell: (project) =>
         project.challenges?.length ? (
-          <div className="flex flex-wrap gap-1">
-            {project.challenges.map((challenge) => (
-              <StatusBadge key={challenge.id} tone="brand" dot={false}>
-                {typeof challenge.title === "string" ? challenge.title : challenge.title.en}
-              </StatusBadge>
-            ))}
-          </div>
+          <span className="text-muted-foreground wrap-anywhere text-sm">
+            {project.challenges
+              .map((challenge) =>
+                typeof challenge.title === "string" ? challenge.title : challenge.title.en,
+              )
+              .join(", ")}
+          </span>
         ) : (
           <span className="text-muted-foreground text-sm">{t("none")}</span>
         ),

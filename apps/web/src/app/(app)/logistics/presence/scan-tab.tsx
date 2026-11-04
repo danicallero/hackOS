@@ -284,7 +284,9 @@ export function ScanTab({
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="person-search">{t("personSearchTitle")}</Label>
+            <Label htmlFor="person-search" className="sr-only">
+              {t("personSearchTitle")}
+            </Label>
             <Input
               id="person-search"
               value={query}
@@ -407,7 +409,6 @@ export function ScanTab({
               ) : (
                 <SectionCard
                   title={t("assignBadgeAction")}
-                  description={t("ticketCheckInDesc")}
                   icon={SealCheckIcon}
                   bodyClassName="space-y-4"
                 >
@@ -452,12 +453,7 @@ export function ScanTab({
             )}
 
             {presCard && (
-              <SectionCard
-                title={t("doorScan")}
-                description={t("doorScanDesc")}
-                icon={DoorOpenIcon}
-                bodyClassName="space-y-4"
-              >
+              <SectionCard title={t("doorScan")} icon={DoorOpenIcon} bodyClassName="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Button
                     variant={presCard.openSince ? "outline" : "default"}

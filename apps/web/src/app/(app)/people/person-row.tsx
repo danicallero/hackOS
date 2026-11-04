@@ -54,23 +54,16 @@ export function Challenges({
 }) {
   if (entry.challenges.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
-    <ul className="flex flex-wrap gap-1.5">
-      {entry.challenges.map((challenge) => (
-        <li
-          key={challenge.id}
-          className="bg-muted text-muted-foreground rounded-md px-2 py-0.5 text-xs"
-        >
-          {nameOf(challenge)}
-        </li>
-      ))}
-    </ul>
+    <span className="text-muted-foreground wrap-break-word text-sm">
+      {entry.challenges.map(nameOf).join(", ")}
+    </span>
   );
 }
 
 /** The private note under a saved person's name. */
 export function NoteLine({ note }: { note: string }) {
   return (
-    <p className="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line wrap-break-word italic">
+    <p className="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line wrap-break-word">
       {note}
     </p>
   );
@@ -239,7 +232,7 @@ export function useChallengeNames() {
         if (!cancelled) setChallenges(r.items);
       })
       .catch(() => {
-        // Chips fall back to the API's names.
+        // Titles fall back to the API's names.
       });
     return () => {
       cancelled = true;

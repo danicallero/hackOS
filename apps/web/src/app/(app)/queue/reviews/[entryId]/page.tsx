@@ -237,7 +237,6 @@ export default function ReviewDetailPage() {
 
       <SectionCard
         title={t("evaluationPanelTitle")}
-        description={t("evaluationPanelDesc")}
         footer={
           panel.length > 0 ? (
             <div className="flex flex-wrap justify-end gap-2">

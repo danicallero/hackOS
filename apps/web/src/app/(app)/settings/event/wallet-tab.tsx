@@ -178,7 +178,7 @@ function BuiltinBackFieldRow({
         <Input id={id} value={caption} onChange={(event) => onCaptionChange(event.target.value)} />
       </div>
       <div className="text-muted-foreground flex min-h-[var(--control-height-default)] items-center rounded-control border border-dashed px-3 text-sm">
-        {value || <span className="italic">{t("notSetYet")}</span>}
+        {value || <span>{t("notSetYet")}</span>}
         {value && note && <span className="ml-2 text-xs">({note})</span>}
       </div>
       {/* Spacer matching the custom rows' delete button, so columns line up. */}

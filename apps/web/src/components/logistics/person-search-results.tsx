@@ -32,26 +32,24 @@ export function PersonSearchResults({
           <button
             key={person.userId}
             type="button"
-            className="button-interaction hover:bg-muted flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
+            className="button-interaction hover:bg-muted flex w-full flex-wrap items-center justify-between gap-3 border-b px-3 py-2 text-left last:border-b-0"
             onClick={() => onSelect(person)}
           >
-            <span>
-              <span className="block text-sm font-medium">
+            <span className="min-w-0 flex-1">
+              <span className="block wrap-anywhere text-sm font-medium">
                 {[person.name, person.surname].filter(Boolean).join(" ") || person.email}
               </span>
-              <span className="text-muted-foreground block text-xs">{person.email}</span>
+              <span className="text-muted-foreground block wrap-anywhere text-xs">
+                {person.email}
+              </span>
+              <span className="text-muted-foreground mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                {matchKey && <span>{t(matchKey)}</span>}
+                <span className="font-mono wrap-anywhere">{person.badgeId ?? t("noBadge")}</span>
+              </span>
             </span>
             <span className="flex flex-wrap justify-end gap-2">
-              {matchKey && (
-                <StatusBadge tone="info" dot={false}>
-                  {t(matchKey)}
-                </StatusBadge>
-              )}
-              <StatusBadge tone={person.badgeId ? "info" : "neutral"} dot={false}>
-                {person.badgeId ?? t("noBadge")}
-              </StatusBadge>
               {"confirmed" in person && (
-                <StatusBadge tone={person.confirmed ? "success" : "neutral"} dot={false}>
+                <StatusBadge tone={person.confirmed ? "success" : "neutral"}>
                   {person.confirmed ? t("confirmedStatus") : t("noAppStatus")}
                 </StatusBadge>
               )}

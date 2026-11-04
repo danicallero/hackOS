@@ -420,7 +420,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
             )}
             {open.challenges.length > 0 && <Challenges entry={open} nameOf={nameOf} />}
             {open.entry?.note && (
-              <p className="bg-muted/60 rounded-lg px-3 py-2 text-sm whitespace-pre-line wrap-break-word italic">
+              <p className="text-muted-foreground text-sm whitespace-pre-line wrap-break-word">
                 {open.entry.note}
               </p>
             )}

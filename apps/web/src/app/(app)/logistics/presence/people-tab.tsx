@@ -64,14 +64,14 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
       id: "status",
       header: t("statusColumn"),
       cell: (row) => (
-        <div className="flex flex-wrap gap-2">
-          <StatusBadge tone={row.confirmed ? "success" : "warning"} dot={false}>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <StatusBadge tone={row.confirmed ? "success" : "warning"}>
             {row.confirmed ? t("confirmed") : t("notConfirmed")}
           </StatusBadge>
-          <StatusBadge tone={row.eventAccess ? "success" : "danger"} dot={false}>
+          <StatusBadge tone={row.eventAccess ? "success" : "danger"}>
             {row.eventAccess ? t("eventAccessStatus") : t("noEventAccessStatus")}
           </StatusBadge>
-          <StatusBadge tone={row.present ? "success" : "neutral"} dot={false}>
+          <StatusBadge tone={row.present ? "success" : "neutral"}>
             {row.present ? t("currentlyInside") : t("currentlyOutside")}
           </StatusBadge>
         </div>
@@ -80,7 +80,7 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
   ];
 
   return (
-    <SectionCard title={t("peopleTab")} icon={UsersIcon}>
+    <SectionCard variant="plain">
       <DataTable
         columns={columns}
         data={people}

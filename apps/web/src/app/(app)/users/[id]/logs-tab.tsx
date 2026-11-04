@@ -9,7 +9,6 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { Badge } from "@/components/ui/badge";
 import { ApiError, api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
@@ -118,9 +117,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
       header: t("colSource"),
       cell: (r) =>
         r.source ? (
-          <Badge variant="outline" className="capitalize">
-            {r.source}
-          </Badge>
+          <span className="text-muted-foreground capitalize text-sm">{r.source}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
