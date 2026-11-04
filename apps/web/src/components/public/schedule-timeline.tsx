@@ -231,7 +231,7 @@ export function ScheduleTimeline({
     return (
       <div className="space-y-3">
         {renderToolbar?.(null)}
-        <EmptyState icon={CalendarDotsIcon} title={emptyTitle ?? t("schedulePending")} />
+        <EmptyState title={emptyTitle ?? t("schedulePending")} />
       </div>
     );
   const dayHeader = (

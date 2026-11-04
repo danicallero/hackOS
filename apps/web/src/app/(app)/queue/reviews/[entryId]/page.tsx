@@ -8,7 +8,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
@@ -190,7 +189,7 @@ export default function ReviewDetailPage() {
         }
       />
 
-      <SectionCard title={t("projectDetailsTitle")} icon={ClipboardTextIcon}>
+      <SectionCard title={t("projectDetailsTitle")}>
         <div className="space-y-4">
           <ProjectDescriptionLinks
             description={project.description}

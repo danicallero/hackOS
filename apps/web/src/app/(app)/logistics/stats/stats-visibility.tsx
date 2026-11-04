@@ -1,7 +1,6 @@
 "use client";
 
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
-import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { SpinnerGapIcon } from "@phosphor-icons/react/dist/csr/SpinnerGap";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useEffect, useState } from "react";
@@ -214,7 +213,6 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
     <SectionCard
       title={t("manageStatisticsVisibility")}
       description={t("statisticsVisibilityHint")}
-      icon={EyeIcon}
       action={
         <Button variant="outline" onClick={() => setOpen((value) => !value)}>
           {t(open ? "closeStatisticsVisibility" : "manageStatisticsVisibility")}

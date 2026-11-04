@@ -7,7 +7,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
-import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -250,7 +249,6 @@ export function VenueTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) =>
           variant="plain"
           footerClassName="justify-start"
           className="mt-6"
-          icon={WifiHighIcon}
           title={t("venueWifiSectionTitle")}
           stickyFooter
           footer={<FormActions pending={formState.isSubmitting} state={saveState} />}

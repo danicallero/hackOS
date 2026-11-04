@@ -6,7 +6,6 @@
 // enterprises may bring outside judges — and adding one is silent.
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -103,7 +102,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard icon={GavelIcon} title={t("judges")}>
+    <SectionCard title={t("judges")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-judge-${enterpriseId}`}>{t("assignJudgeLabel")}</Label>
@@ -133,7 +132,7 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
             <Spinner className="size-5" />
           </div>
         ) : judges.length === 0 ? (
-          <EmptyState icon={GavelIcon} title={t("noJudgesAssigned")} />
+          <EmptyState title={t("noJudgesAssigned")} />
         ) : (
           <ul className="divide-border divide-y">
             {judges.map((judge) => {

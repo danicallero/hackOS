@@ -4,10 +4,7 @@
 // memberships (H43).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
-import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -81,7 +78,6 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
   return (
     <div className="space-y-6">
       <SectionCard
-        icon={UsersIcon}
         title={t("rolesTitle")}
         action={
           canManage && addable.length > 0 ? (
@@ -140,7 +136,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
         )}
       </SectionCard>
 
-      <SectionCard icon={KeyIcon} title={t("effectiveCapabilities")}>
+      <SectionCard title={t("effectiveCapabilities")}>
         {user.capabilities.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noCapabilities")}</p>
         ) : (
@@ -213,7 +209,6 @@ export function EnterpriseMemberships({
 
   return (
     <SectionCard
-      icon={BuildingsIcon}
       title={t("enterprises")}
       action={
         canManage ? (

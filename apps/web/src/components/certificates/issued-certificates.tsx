@@ -1,6 +1,5 @@
 "use client";
 
-import { CertificateIcon } from "@phosphor-icons/react/dist/csr/Certificate";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { useState } from "react";
@@ -95,7 +94,6 @@ export function IssuedCertificates() {
   return (
     <SectionCard
       variant="plain"
-      icon={CertificateIcon}
       title={t("certificateIssuedRegister")}
       action={<IssueCertificateDialog onIssued={issued.reload} />}
     >

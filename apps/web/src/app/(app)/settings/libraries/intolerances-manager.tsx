@@ -284,44 +284,29 @@ export function IntolerancesManager() {
       >
         <Form {...form}>
           <form id={FORM_ID} onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-            <div className="space-y-3">
-              <p className="text-sm font-medium">{t("labelField")}</p>
-              {(["es", "en", "gl"] as const).map((loc) => (
-                <FormField
-                  key={loc}
-                  control={form.control}
-                  name={`label.${loc}` as const}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-muted-foreground text-xs">{loc}</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ))}
-            </div>
-            <div className="space-y-3">
-              <p className="text-sm font-medium">{t("descriptionOptionalLabel")}</p>
-              {(["es", "en", "gl"] as const).map((loc) => (
-                <FormField
-                  key={loc}
-                  control={form.control}
-                  name={`description.${loc}` as const}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-muted-foreground text-xs">{loc}</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              ))}
-            </div>
+            {(["label", "description"] as const).map((field) => (
+              <div key={field} className="space-y-3">
+                <p className="text-sm font-medium">
+                  {t(field === "label" ? "labelField" : "descriptionOptionalLabel")}
+                </p>
+                {(["es", "en", "gl"] as const).map((loc) => (
+                  <FormField
+                    key={loc}
+                    control={form.control}
+                    name={`${field}.${loc}` as const}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-muted-foreground text-xs">{loc}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                ))}
+              </div>
+            ))}
           </form>
         </Form>
       </SidePanelEditor>

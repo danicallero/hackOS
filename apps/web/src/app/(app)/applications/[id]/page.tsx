@@ -19,7 +19,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -191,11 +190,7 @@ export default function ApplicationDetailPage() {
   if (state === "error") {
     return (
       <div className="space-y-6">
-        <EmptyState
-          icon={ClipboardTextIcon}
-          title={t("formNotFound")}
-          description={errorMsg || t("formCouldNotBeLoaded")}
-        />
+        <EmptyState title={t("formNotFound")} description={errorMsg || t("formCouldNotBeLoaded")} />
       </div>
     );
   }
@@ -222,12 +217,7 @@ export default function ApplicationDetailPage() {
         state={
           form && w ? (
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge tone="neutral">
-                {grantedRoleNameLabel(form.granted_role_name, t)}
-              </StatusBadge>
-              <StatusBadge tone={w.tone} dot={false}>
-                {w.label}
-              </StatusBadge>
+              <StatusBadge tone={w.tone}>{w.label}</StatusBadge>
               {/* Form settings and Questions save independently (two buttons,
                   two local statuses) — this aggregate keeps either one's
                   unsaved edit visible even while looking at the other card,
@@ -237,9 +227,14 @@ export default function ApplicationDetailPage() {
           ) : undefined
         }
         meta={
-          form?.capacity != null ? (
+          form ? (
             <span className="text-muted-foreground text-xs">
-              {t("quotaInline", { capacity: form.capacity })}
+              {[
+                t("grantsRoleInline", { role: grantedRoleNameLabel(form.granted_role_name, t) }),
+                form.capacity != null ? t("quotaInline", { capacity: form.capacity }) : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           ) : undefined
         }

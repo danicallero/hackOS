@@ -2,9 +2,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { GlobeIcon } from "@phosphor-icons/react/dist/csr/Globe";
-import { MonitorArrowUpIcon } from "@phosphor-icons/react/dist/csr/MonitorArrowUp";
-import { RadioIcon } from "@phosphor-icons/react/dist/csr/Radio";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -188,7 +185,6 @@ export default function TvControlPage() {
       />
 
       <SectionCard
-        icon={RadioIcon}
         title={t("currentBroadcast")}
         description={
           current
@@ -245,7 +241,6 @@ export default function TvControlPage() {
       </SectionCard>
 
       <SectionCard
-        icon={MonitorArrowUpIcon}
         title={t("displayMode")}
         description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
         footer={
@@ -289,11 +284,7 @@ export default function TvControlPage() {
         )}
       </SectionCard>
 
-      <SectionCard
-        icon={GlobeIcon}
-        title={t("tvDisplayLanguage")}
-        description={t("tvDisplayLanguageDesc")}
-      >
+      <SectionCard title={t("tvDisplayLanguage")} description={t("tvDisplayLanguageDesc")}>
         <div className="grid gap-2 sm:max-w-xs">
           <Select
             value={tvLanguage ?? "default"}

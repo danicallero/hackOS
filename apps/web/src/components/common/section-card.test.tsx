@@ -1,3 +1,4 @@
+import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
 import { getByRole } from "@testing-library/dom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,6 +21,18 @@ describe("SectionCard", () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+  });
+
+  it("does not display an isolated icon above untitled form fields", () => {
+    act(() => {
+      root.render(
+        <SectionCard icon={ClipboardTextIcon}>
+          <input aria-label="Name" />
+        </SectionCard>,
+      );
+    });
+    expect(getByRole(container, "textbox", { name: "Name" })).toBeDefined();
+    expect(container.querySelector("svg")).toBeNull();
   });
 
   it.each([

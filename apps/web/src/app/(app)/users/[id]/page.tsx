@@ -3,7 +3,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { CertificatesPanel } from "@/components/certificates/certificates-panel";
@@ -116,7 +115,6 @@ export default function UserProfilePage() {
     return (
       <div className="space-y-6">
         <EmptyState
-          icon={UsersIcon}
           title={t("userNotFoundTitle")}
           description={errorMsg || t("profileNotLoaded")}
         />

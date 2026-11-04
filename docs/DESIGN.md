@@ -100,7 +100,8 @@ Each row: value → intent → boundary.
 
 Shared page and section title rows align icons and counters to the visible
 capital height (`heading-row`), rather than the different fonts’ line boxes.
-Section icons belong in the title row so descriptions never shift them.
+Useful section icons belong in the title row so descriptions never shift them;
+an icon alone never creates a section header.
 Schedule grid lines start after the hour-label gutter; labels use the shell
 background to keep the time axis clear in both themes.
 
@@ -311,8 +312,14 @@ usually 16 px in controls/navigation, 14 px beside compact metadata, 20–24 px
 for prominent states. Use `weight="fill"` for selected dots; preserve `animate-spin`
 on `SpinnerGapIcon`. Use `weight`, not Lucide's `strokeWidth`, to change the style.
 
-Icons inherit semantic text colors. Keep decorative icons `aria-hidden` and
-give icon-only controls localized accessible labels. Activity registry icon
+An icon must help identify an action, state, content type or real identity.
+Remove symbols that only decorate a form or repeat an obvious heading; never
+leave an isolated symbol above fields. Visual navigation cues may accompany
+labels when they help recognition. Hiding a symbol from assistive technology
+does not justify displaying it: `aria-hidden` prevents duplicate announcements
+for useful icons whose meaning is already expressed in nearby text. Give
+icon-only controls localized accessible labels. Icons inherit semantic text
+colors. Activity registry icon
 keys remain stable and map to Phosphor components in `schedule-model.ts`.
 
 ### Changing the next edition
@@ -669,8 +676,9 @@ without context are not an adequate mobile adaptation.
   no colored band, border, shadow or surrounding card. Use the same hierarchy
   for lists and records. Keep the title visible when its actions wrap.
 - No decorative page symbol by default. `leading` is a real record identity
-  (logo/photo); section icons are optional scanning aids when several distinct
-  domains appear together, not mandatory decoration. Never fabricate avatars.
+  (logo/photo); section icons need a concrete recognition or state purpose,
+  rather than merely matching the heading's noun. Omit redundant symbols and
+  icon-only section headers. Never fabricate avatars.
   When the reader may edit that image (user staff on a person's record), the
   avatar itself opens a small change/remove menu, marked with a camera badge;
   it never carries other page actions.

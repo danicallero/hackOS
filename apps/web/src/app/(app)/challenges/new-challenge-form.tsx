@@ -4,7 +4,6 @@ import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -193,7 +192,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           </TabBar>
 
           <TabsContent value="basics" className="space-y-6 pt-4">
-            <SectionCard variant="plain" icon={TrophyIcon} title={t("challengeBasicsTitle")}>
+            <SectionCard variant="plain" title={t("challengeBasicsTitle")}>
               <div className="space-y-5">
                 <FormField
                   control={form.control}

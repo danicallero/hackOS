@@ -274,7 +274,6 @@ export function StaffRankingSection() {
   return (
     <SectionCard
       title={t("staffScanRanking")}
-      icon={TrophyIcon}
       action={
         <div className="flex flex-wrap gap-2">
           <Button

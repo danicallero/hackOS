@@ -4,7 +4,6 @@
 // with users:read, editable with meal-plans:manage (audited server-side).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
@@ -63,7 +62,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
 
   if (loadFailed) {
     return (
-      <SectionCard variant="plain" title={t("meals")} icon={BowlFoodIcon}>
+      <SectionCard variant="plain" title={t("meals")}>
         <ContextualError
           message={t("couldNotLoadUserMealPlan")}
           onRetry={() => setReload((n) => n + 1)}
@@ -99,7 +98,6 @@ export function MealPlanSection({ userId }: { userId: number }) {
     <SectionCard
       variant="plain"
       title={t("meals")}
-      icon={BowlFoodIcon}
       footer={
         canManage ? (
           <Button onClick={() => void save()} disabled={!dirty || saving} loading={saving}>

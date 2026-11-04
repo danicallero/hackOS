@@ -2,7 +2,6 @@
 
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
@@ -43,7 +42,6 @@ export function GalleryProjectCard({
   return (
     <SectionCard
       title={<span className="line-clamp-2">{project.name}</span>}
-      icon={FolderSimpleIcon}
       className="flex h-full min-w-0 flex-col"
       bodyClassName="flex-1 space-y-3"
       footerClassName="justify-between gap-3"

@@ -3,8 +3,6 @@
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
-import { GiftIcon } from "@phosphor-icons/react/dist/csr/Gift";
-import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -140,7 +138,6 @@ export default function PublicChallengePage() {
         // The persistent "Back to event" button above is the page's stable
         // escape hatch; a second one here said it twice (#299).
         <EmptyState
-          icon={TrophyIcon}
           title={t("challengeNotFoundTitle")}
           description={t("challengeUnpublishedDesc")}
         />
@@ -160,11 +157,7 @@ export default function PublicChallengePage() {
                 {displayText(challenge.description, language)}
               </p>
               {displayText(challenge.criteria, language) && (
-                <SectionCard
-                  title={t("judgingCriteriaTitle")}
-                  icon={ListChecksIcon}
-                  variant="plain"
-                >
+                <SectionCard title={t("judgingCriteriaTitle")} variant="plain">
                   <p className="whitespace-pre-wrap text-pretty text-sm leading-relaxed">
                     {displayText(challenge.criteria, language)}
                   </p>
@@ -174,7 +167,7 @@ export default function PublicChallengePage() {
             {(winners.length > 0 || asPrizes(challenge.prizes).length > 0) && (
               <div className="space-y-6">
                 {winners.length > 0 && (
-                  <SectionCard title={t("winnersTabLabel")} icon={TrophyIcon}>
+                  <SectionCard title={t("winnersTabLabel")}>
                     <ol className="divide-y divide-border/60">
                       {winners.map((winner) => (
                         <li key={winner.rank} className="space-y-3 py-3 first:pt-0 last:pb-0">
@@ -195,7 +188,7 @@ export default function PublicChallengePage() {
                   </SectionCard>
                 )}
                 {asPrizes(challenge.prizes).length > 0 && (
-                  <SectionCard title={t("prizesLabel")} icon={GiftIcon} variant="plain">
+                  <SectionCard title={t("prizesLabel")} variant="plain">
                     <ul className="divide-y divide-border/60">
                       {asPrizes(challenge.prizes).map((prize) => (
                         <li key={prize.name} className="py-3 first:pt-0 last:pb-0">

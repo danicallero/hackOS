@@ -106,7 +106,7 @@ export function GrantRulesOverviewModal({
             <Spinner className="size-6" />
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState icon={LightningIcon} title={t("noGrantRulesYetTitle")} />
+          <EmptyState title={t("noGrantRulesYetTitle")} />
         ) : (
           <ul className="divide-border max-h-[60vh] divide-y overflow-y-auto rounded-md border">
             {filtered.map((rule) => (

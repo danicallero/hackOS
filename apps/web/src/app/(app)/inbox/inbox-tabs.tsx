@@ -21,9 +21,7 @@ import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -232,16 +230,9 @@ export function MessagesTab() {
           <Spinner className="size-5" />
         </div>
       ) : error ? (
-        <EmptyState
-          icon={TrayIcon}
-          title={t("couldNotLoadInboxTitle")}
-          description={t("couldNotLoadInboxDesc")}
-        />
+        <EmptyState title={t("couldNotLoadInboxTitle")} description={t("couldNotLoadInboxDesc")} />
       ) : items.length === 0 ? (
-        <EmptyState
-          icon={TrayIcon}
-          title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")}
-        />
+        <EmptyState title={unreadOnly ? t("noUnreadMessages") : t("noMessagesYet")} />
       ) : (
         <ul className="space-y-3">
           {items.map((item) => {
@@ -539,7 +530,6 @@ export function PreferencesTab() {
   if (!prefs) {
     return (
       <EmptyState
-        icon={SlidersHorizontalIcon}
         title={t("couldNotLoadPreferencesTitle")}
         description={t("couldNotLoadPreferencesDesc")}
       />
@@ -655,7 +645,6 @@ export function PreferencesTab() {
 
       <SectionCard
         variant="plain"
-        icon={CalendarDotsIcon}
         title={t("activeReminders")}
         action={
           <Modal

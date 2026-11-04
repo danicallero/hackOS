@@ -12,7 +12,6 @@
 // challenge-directory access) — see requireSponsorPortalAccess.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useState } from "react";
@@ -268,7 +267,7 @@ function SponsorScheduleCard() {
   const sponsorItems = items?.filter((item) => item.audiences?.includes("sponsor")) ?? null;
 
   return (
-    <SectionCard icon={CalendarDotsIcon} title={t("whatsHappeningTitle")}>
+    <SectionCard title={t("whatsHappeningTitle")}>
       {error ? (
         <ContextualError message={error} onRetry={load} />
       ) : sponsorItems === null || !event ? (

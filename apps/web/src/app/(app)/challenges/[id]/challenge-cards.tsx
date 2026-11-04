@@ -2,9 +2,7 @@
 
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -236,7 +234,7 @@ export function EditCard({
           </TabBar>
 
           <TabsContent value="content" className="pt-4">
-            <SectionCard variant="plain" icon={TrophyIcon} title={t("challengeLabel")}>
+            <SectionCard variant="plain" title={t("challengeLabel")}>
               <fieldset disabled={generalDisabled} className="space-y-5 disabled:opacity-60">
                 {generalDisabled && (
                   <p className="text-muted-foreground text-sm">{t("publicContentFrozenDesc")}</p>
@@ -412,11 +410,7 @@ export function EditCard({
           </TabsContent>
 
           <TabsContent value="history" className="pt-4">
-            <SectionCard
-              variant="plain"
-              icon={ClockCounterClockwiseIcon}
-              title={t("versionHistoryTitle")}
-            >
+            <SectionCard variant="plain" title={t("versionHistoryTitle")}>
               <VersionHistory challengeId={challenge.id} />
             </SectionCard>
           </TabsContent>
@@ -618,18 +612,13 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
   }
 
   return (
-    <SectionCard
-      variant="plain"
-      title={t("winnersTitle")}
-      description={t("winnersDesc")}
-      icon={TrophyIcon}
-    >
+    <SectionCard variant="plain" title={t("winnersTitle")} description={t("winnersDesc")}>
       {loading ? (
         <Spinner className="size-5" />
       ) : (
         <div className="space-y-4">
           {winners.length === 0 ? (
-            <EmptyState icon={TrophyIcon} title={t("noWinnersSetTitle")} />
+            <EmptyState title={t("noWinnersSetTitle")} />
           ) : (
             <ul className="space-y-2">
               {winners.map((winner) => (

@@ -7,8 +7,6 @@
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -131,14 +129,13 @@ export function ChallengesSummaryCard({
   if (!canManage && !isOwnEnterprise) return null;
 
   return (
-    <SectionCard icon={TrophyIcon} title={t("challengeStatusTitle")}>
+    <SectionCard title={t("challengeStatusTitle")}>
       {challenges === null ? (
         <div className="flex justify-center py-6">
           <Spinner className="size-5" />
         </div>
       ) : challenges.length === 0 ? (
         <EmptyState
-          icon={TrophyIcon}
           title={t("noChallengesYetTitle")}
           description={canManage ? undefined : t("noChallengeAssignedYet")}
         />
@@ -255,7 +252,7 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   }
 
   return (
-    <SectionCard icon={BuildingsIcon} title={t("affiliatedUsersTitle")}>
+    <SectionCard title={t("affiliatedUsersTitle")}>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-member-${enterpriseId}`}>{t("addMemberLabel")}</Label>
@@ -284,7 +281,6 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
           </div>
         ) : members.length === 0 ? (
           <EmptyState
-            icon={BuildingsIcon}
             title={t("noAffiliatedUsersTitle")}
             description={t("searchAboveToAffiliate")}
           />
