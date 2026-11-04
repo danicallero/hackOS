@@ -2196,7 +2196,7 @@
   "needsAtLeastOneOption": "\"{key}\" precisa polo menos unha opción.",
   "noAnswersRecorded": "Non hai respostas rexistradas.",
   "noLabel": "Non",
-  "nonDraftHint": "Non borrador",
+  "nonDraftHint": "+{n} borradores",
   "noOptionsDefined": "Sen opcións definidas",
   "chooseAnyHint": "Elixe as que correspondan",
   "noQuestionsYet": "Aínda non hai preguntas",

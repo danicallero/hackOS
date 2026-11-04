@@ -161,6 +161,13 @@ export async function applicationStats(
     byStatus[r.status] = r.n;
   }
 
+  const draftCount = await pool.query(
+    `SELECT count(*)::int AS n FROM application_responses r
+     JOIN users u ON u.id = r.user_id AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
+     WHERE r.application_id = $1 AND r.status = 'draft'`,
+    [applicationId],
+  );
+
   // Funnel among sent decisions (H27): sent, still-in-window, expired,
   // declined, confirmed. Rejection is an application outcome, not a new
   // confirmation status, so it is counted from the existing `rejected` state.
@@ -257,6 +264,7 @@ export async function applicationStats(
       capacity: app.capacity,
     },
     counts_by_status: byStatus,
+    draft_count: Number(draftCount.rows[0]?.n ?? 0),
     overview: {
       submitted: Object.entries(byStatus).reduce(
         (total, [status, count]) => total + (status === "draft" ? 0 : count),
@@ -312,6 +320,7 @@ function filterStatisticsPanels(result: Record<string, unknown>, allowed: Set<st
   if (!allowed.has("overview")) {
     delete result.overview;
     delete result.counts_by_status;
+    delete result.draft_count;
     delete result.time_to_confirm_hours;
   }
   if (!allowed.has("shirt-sizes")) delete result.shirt_sizes_confirmed;
