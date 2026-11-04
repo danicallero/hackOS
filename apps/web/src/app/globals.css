@@ -549,6 +549,21 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   }
 }
 
+/*
+ * Route skeletons stay invisible for the first 400 ms: a fast navigation lands
+ * its content before anything flashes; only a slow one shows the placeholder.
+ */
+.loading-delayed {
+  opacity: 0;
+  animation: loading-delayed-in 150ms ease-out 400ms forwards;
+}
+
+@keyframes loading-delayed-in {
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),

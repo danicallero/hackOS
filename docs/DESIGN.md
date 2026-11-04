@@ -140,7 +140,10 @@ Motion, contrast and transparency follow the system preferences, in
   only for a first, uncached read. Skeletons reuse `components/ui/skeleton.tsx`
   with the real content's geometry (DataTable `loading` keeps the real header
   and column count; `(app)/loading.tsx` mirrors title row, toolbar and rows) so
-  data landing moves nothing. Sidebar links and table rows prefetch on hover
+  data landing moves nothing. Sections with shared tabs or a title (Home, Projects)
+  give each route its own `loading.tsx` that keeps that chrome mounted; the generic
+  fallback must never replace it during tab-to-tab navigation. Route skeletons
+  fade in only after 400 ms (`.loading-delayed`), so fast navigations show none. Sidebar links and table rows prefetch on hover
   and focus, and sidebar links also warm the destination list's cache
   (`lib/list-resources.ts`).
 - Tooltips open after 500 ms (instantly for an adjacent one) and on keyboard
