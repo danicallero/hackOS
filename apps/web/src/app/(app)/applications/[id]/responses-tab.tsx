@@ -189,12 +189,18 @@ export function ResponsesTab({
     );
   }, [allRows, workspace, statusFilter, search, dietaryFilter, answerFilters]);
 
+  // Read through refs: navigating between responses or changing language must not
+  // recreate `load`, whose effect would refetch the whole table each time (#1227).
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  const tRef = useRef(t);
+  tRef.current = t;
   const load = useCallback(
     async (force = false) => {
       // Keep the current table snapshot stable while a response modal is open.
       // In particular, accepting a review moves it out of this workspace; the
       // reviewer should still be able to navigate the familiar set and use undo.
-      if (!force && selectedId !== null) return;
+      if (!force && selectedIdRef.current !== null) return;
       if (!hasLoaded()) setLoading(true);
       try {
         const { responses } = await api.get<{ responses: ResponseRow[] }>(
@@ -213,12 +219,12 @@ export function ResponsesTab({
       } catch (err) {
         // A failed background refresh keeps the table and selection (#1012).
         if (!failed(err)) return;
-        setLoadError(apiErrorText(err, t, t("couldNotLoadResponses")));
+        setLoadError(apiErrorText(err, tRef.current, tRef.current("couldNotLoadResponses")));
       } finally {
         setLoading(false);
       }
     },
-    [id, selectedId, t, succeeded, failed, hasLoaded],
+    [id, succeeded, failed, hasLoaded],
   );
 
   // Soft, in-place refresh instead of a hard reload when a response changes
