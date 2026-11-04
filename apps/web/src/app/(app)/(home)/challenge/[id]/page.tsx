@@ -10,9 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
-import { HomeSectionHeader } from "@/components/common/section-navigation";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -103,8 +101,7 @@ export default function PublicChallengePage() {
   }, [challenge, language]);
 
   return (
-    <PageLayout>
-      {authenticated && <HomeSectionHeader />}
+    <>
       <PageHeader
         headingLevel={authenticated ? 2 : 1}
         title={challenge ? displayText(challenge.title, language) : t("challenges")}
@@ -242,6 +239,6 @@ export default function PublicChallengePage() {
           )}
         </article>
       )}
-    </PageLayout>
+    </>
   );
 }

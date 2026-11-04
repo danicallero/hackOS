@@ -1,7 +1,5 @@
 "use client";
 
-import { PageLayout } from "@/components/common/page-layout";
-import { HomeSectionHeader } from "@/components/common/section-navigation";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale } from "@/lib/i18n";
@@ -15,8 +13,7 @@ export default function InboxPage() {
     defaultValue: "messages",
   });
   return (
-    <PageLayout>
-      <HomeSectionHeader />
+    <>
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar className="h-auto flex-wrap [&_[data-slot=tabs-trigger]]:flex-auto [&_[data-slot=tabs-trigger]]:whitespace-normal">
           <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
@@ -29,6 +26,6 @@ export default function InboxPage() {
           <PreferencesTab />
         </TabsContent>
       </Tabs>
-    </PageLayout>
+    </>
   );
 }
