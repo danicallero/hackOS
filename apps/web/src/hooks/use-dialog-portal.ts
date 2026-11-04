@@ -16,14 +16,18 @@ export function getOverlayContainer(anchor: HTMLElement | null) {
   const overlay = anchor?.closest<HTMLElement>(OVERLAY_CONTAINER_SELECTOR);
   if (!overlay) return null;
 
-  // Dialog and sheet panels are flex containers. A portaled overlay rendered
-  // directly in either would become another flex item, so use their dedicated
+  // Dialog, sheet and confirmation panels are flex containers. A portaled overlay
+  // rendered directly in them would become another flex item, so use their dedicated
   // child layer instead. It stays inside Radix's active modal scope while
   // remaining outside the panel's scrolling content.
-  if (overlay.dataset.slot === "dialog-content" || overlay.dataset.slot === "sheet-content") {
+  if (
+    overlay.dataset.slot === "dialog-content" ||
+    overlay.dataset.slot === "sheet-content" ||
+    overlay.dataset.slot === "alert-dialog-content"
+  ) {
     return (
       overlay.querySelector<HTMLElement>(
-        ':scope > [data-slot="dialog-portal-container"], :scope > [data-slot="sheet-portal-container"]',
+        ':scope > [data-slot="alert-dialog-portal-container"], :scope > [data-slot="dialog-portal-container"], :scope > [data-slot="sheet-portal-container"]',
       ) ?? overlay
     );
   }
@@ -88,6 +92,11 @@ export function useDialogPortal(inDialog: boolean) {
   return {
     ref: setAnchor,
     portalProps: container ? { container } : {},
-    contentProps: container ? { collisionBoundary: container } : {},
+    // Confirmations are compact; use viewport collisions so a directory list
+    // can extend beyond the panel without losing its modal focus/scroll scope.
+    contentProps:
+      container && container.dataset.slot !== "alert-dialog-portal-container"
+        ? { collisionBoundary: container }
+        : {},
   };
 }
