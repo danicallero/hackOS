@@ -1939,7 +1939,7 @@
   "newUniversityTitle": "Nueva universidad",
   "universityNamePlaceholder": "Universidad de Santiago de Compostela",
   "addUniversity": "Añadir universidad",
-  "removeFromDirectoryInline": "¿Quitar «{name}» del directorio? Las selecciones existentes de los solicitantes conservan su id pero dejan de resolverse.",
+  "removeFromDirectoryInline": "¿Quitar «{name}» del directorio?",
   "deleteUniversityTitle": "Eliminar universidad",
   "addedUniversityInline": "Añadido «{name}».",
   "couldNotAddUniversity": "No se ha podido añadir esa universidad.",

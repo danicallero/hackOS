@@ -221,9 +221,12 @@ exact city match is selected, and otherwise the text is kept in the manual
 city/province/country fields (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
 catalogue's authenticated-proposal and staff-curation boundary.
-Universities linked to user profiles cannot be deleted: the route returns 409
-with `details.reason = university_in_use`, and the web displays a localized
-message advising consolidation into another university. Profiles remain intact.
+Universities and degrees referenced by application answers cannot be deleted,
+including drafts and answers tied to older immutable form versions. The routes
+return 409 (`details.reason = university_in_use` or
+`details.code = degree_in_use`); clients show localized guidance to consolidate
+into another catalogue value first. Account removal detaches degree/university
+proposal authorship while preserving catalogue entries used by other applicants.
 
 Staff can merge
 duplicate degree rows transactionally: every answer using the source catalogue

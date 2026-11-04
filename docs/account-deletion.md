@@ -88,6 +88,12 @@ all its foreign-key relationships available as an identity-shaped audit
 subject.  The obsolete compatibility module has been removed; the only
 implementation is now the shared lifecycle in `removal.ts`.
 
+Degree proposals remain in the shared catalogue after their proposer leaves.
+Removal clears `university_degrees.proposed_by` and its `suggested_by` reference,
+deletes the departing person's own responses (drafts included), and preserves
+other applicants' answers. Staff cannot delete a degree still referenced by an
+application response; consolidation is required instead (H12/H54).
+
 ### Removal request
 
 1. The authenticated client reads the server preflight. If the primary email

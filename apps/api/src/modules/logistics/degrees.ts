@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -245,12 +246,29 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       preHandler: manage,
       schema: {
         summary: "Delete a degree",
-        description: "Deletes an unused curated degree.",
+        description:
+          "Deletes an unused curated degree and audits the mutation. Returns 409 with code degree_in_use when a draft or submitted application answer still references it; consolidate it into another degree first.",
         params: idParamSchema,
       },
     },
     async (req, reply) => {
       await withTransaction(async (client) => {
+        const { rowCount: answers } = await client.query(
+          `SELECT 1
+             FROM application_responses response
+             JOIN application_form_versions form ON form.id = response.application_form_version_id
+             CROSS JOIN LATERAL jsonb_array_elements(form.template) field
+            WHERE field->>'kind' = 'degree'
+              AND response.responses ->> (field->>'key') = $1::text
+            LIMIT 1`,
+          [req.params.id],
+        );
+        if (answers) {
+          throw new ConflictError(
+            "This degree is used in applications. Merge it into another degree before deleting it.",
+            { code: ERROR_REASONS.DEGREE_IN_USE, id: req.params.id },
+          );
+        }
         const { rowCount } = await client.query("DELETE FROM university_degrees WHERE id = $1", [
           req.params.id,
         ]);
