@@ -1939,7 +1939,7 @@
   "newUniversityTitle": "New university",
   "universityNamePlaceholder": "e.g. University of Santiago de Compostela",
   "addUniversity": "Add university",
-  "removeFromDirectoryInline": "Remove \"{name}\" from the directory? Existing applicant selections keep their id but stop resolving.",
+  "removeFromDirectoryInline": "Remove \"{name}\" from the directory?",
   "deleteUniversityTitle": "Delete university",
   "addedUniversityInline": "Added \"{name}\".",
   "couldNotAddUniversity": "Could not add that university.",

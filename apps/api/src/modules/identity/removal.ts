@@ -1501,6 +1501,9 @@ async function scrubRelationships(
 
   await client.query(`UPDATE user_roles SET assigned_by = NULL WHERE assigned_by = $1`, [userId]);
   await client.query(`UPDATE universities SET proposed_by = NULL WHERE proposed_by = $1`, [userId]);
+  await client.query(`UPDATE university_degrees SET proposed_by = NULL WHERE proposed_by = $1`, [
+    userId,
+  ]);
   await client.query(`UPDATE enterprises SET director_id = NULL WHERE director_id = $1`, [userId]);
   await client.query(`UPDATE enterprise_invite_links SET created_by = NULL WHERE created_by = $1`, [
     userId,
