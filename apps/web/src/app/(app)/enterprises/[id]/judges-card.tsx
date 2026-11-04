@@ -20,6 +20,8 @@ import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
 
+import { mutateMembership } from "./membership-mutation";
+
 interface Judge {
   userId: number;
   name: string | null;
@@ -74,31 +76,29 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
     [candidates, rosterIds],
   );
 
-  async function add(userId: number) {
-    setBusy(true);
-    try {
-      await api.post(`/api/enterprises/${enterpriseId}/judges`, { userId });
-      setSelectedUserId("");
-      await load();
-      toast.success(t("judgeAssigned"), { compactTitle: t("assignJudgeLabel") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotAssignJudge")), t("assignJudgeLabel"));
-    } finally {
-      setBusy(false);
-    }
+  function add(userId: number) {
+    return mutateMembership({
+      request: () => api.post(`/api/enterprises/${enterpriseId}/judges`, { userId }),
+      refresh: load,
+      afterRequest: () => setSelectedUserId(""),
+      setBusy,
+      t,
+      success: t("judgeAssigned"),
+      failure: t("couldNotAssignJudge"),
+      title: t("assignJudgeLabel"),
+    });
   }
 
-  async function remove(userId: number) {
-    setBusy(true);
-    try {
-      await api.delete(`/api/enterprises/${enterpriseId}/judges/${userId}`);
-      await load();
-      toast.success(t("judgeRemoved"), { compactTitle: t("toastRemoveJudge") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotRemoveJudge")), t("toastRemoveJudge"));
-    } finally {
-      setBusy(false);
-    }
+  function remove(userId: number) {
+    return mutateMembership({
+      request: () => api.delete(`/api/enterprises/${enterpriseId}/judges/${userId}`),
+      refresh: load,
+      setBusy,
+      t,
+      success: t("judgeRemoved"),
+      failure: t("couldNotRemoveJudge"),
+      title: t("toastRemoveJudge"),
+    });
   }
 
   return (

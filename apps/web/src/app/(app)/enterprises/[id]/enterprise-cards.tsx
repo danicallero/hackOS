@@ -46,6 +46,7 @@ import {
   enterpriseFormSchema,
 } from "../enterprise-form-fields";
 import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
+import { mutateMembership } from "./membership-mutation";
 import { PublicationSummary } from "./publication-summary";
 
 function toFormValues(e: Enterprise): EnterpriseFormValues {
@@ -224,31 +225,29 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     [memberUserIds, t],
   );
 
-  async function add(userId: number) {
-    setBusy(true);
-    try {
-      await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
-      setSelectedUserId("");
-      await loadMembers();
-      toast.success(t("userAffiliated"), { compactTitle: t("addMemberLabel") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotAddUser")), t("addMemberLabel"));
-    } finally {
-      setBusy(false);
-    }
+  function add(userId: number) {
+    return mutateMembership({
+      request: () => api.post(`/api/enterprises/${enterpriseId}/members`, { userId }),
+      refresh: loadMembers,
+      afterRequest: () => setSelectedUserId(""),
+      setBusy,
+      t,
+      success: t("userAffiliated"),
+      failure: t("couldNotAddUser"),
+      title: t("addMemberLabel"),
+    });
   }
 
-  async function remove(userId: number) {
-    setBusy(true);
-    try {
-      await api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`);
-      await loadMembers();
-      toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveMember") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotRemoveUser")), t("toastRemoveMember"));
-    } finally {
-      setBusy(false);
-    }
+  function remove(userId: number) {
+    return mutateMembership({
+      request: () => api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`),
+      refresh: loadMembers,
+      setBusy,
+      t,
+      success: t("affiliationRemoved"),
+      failure: t("couldNotRemoveUser"),
+      title: t("toastRemoveMember"),
+    });
   }
 
   return (
