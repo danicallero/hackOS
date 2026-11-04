@@ -21,6 +21,8 @@ import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { enterprisesResource, fetchListResource } from "@/lib/list-resources";
+import { peekServerState, revalidateServerState } from "@/lib/server-state";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { CreateEnterpriseModal } from "./create-enterprise-modal";
@@ -36,8 +38,10 @@ export default function EnterprisesPage() {
   const router = useRouter();
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
   const me = useMe();
-  const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: a remount paints the last read at once.
+  const seeded = peekServerState<{ enterprises: Enterprise[] }>(enterprisesResource.key);
+  const [enterprises, setEnterprises] = useState<Enterprise[]>(() => seeded?.enterprises ?? []);
+  const [loading, setLoading] = useState(seeded === undefined);
   const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sponsorRetryNonce, setSponsorRetryNonce] = useState(0);
@@ -50,9 +54,12 @@ export default function EnterprisesPage() {
   const [reordering, setReordering] = useState(false);
 
   const load = useCallback(async () => {
-    if (!hasLoaded()) setLoading(true);
+    if (peekServerState(enterprisesResource.key) !== undefined) succeeded();
+    else if (!hasLoaded()) setLoading(true);
     try {
-      const r = await api.get<{ enterprises: Enterprise[] }>("/api/enterprises");
+      const r = await revalidateServerState(enterprisesResource.key, (signal) =>
+        fetchListResource<{ enterprises: Enterprise[] }>(enterprisesResource, signal),
+      );
       succeeded();
       setLoadError(null);
       setEnterprises(r.enterprises);

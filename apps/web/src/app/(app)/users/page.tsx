@@ -34,11 +34,12 @@ import { usePersistedState } from "@/hooks/use-persisted-state";
 import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { usersDirectoryKey } from "@/lib/list-resources";
 import { logisticsApi } from "@/lib/logistics";
-import { invalidateServerState, readServerState } from "@/lib/server-state";
+import { invalidateServerState, peekServerState, readServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import type { UserListItem } from "@/lib/types";
+import type { UserList, UserListItem } from "@/lib/types";
 import { loadUserDirectory } from "@/lib/user-directory";
 import { UsersActions } from "./users-actions";
 
@@ -357,10 +358,11 @@ export default function UsersPage() {
   const isMobile = useIsMobile();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const hasLoadedUsers = useRef(false);
+  const seeded = peekServerState<UserList>(usersDirectoryKey(q.trim()));
+  const [users, setUsers] = useState<UserListItem[]>(() => seeded?.users ?? []);
+  const [total, setTotal] = useState(() => seeded?.total ?? 0);
+  const [loading, setLoading] = useState(seeded === undefined);
+  const hasLoadedUsers = useRef(seeded !== undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [emailSelection, setEmailFilter] = usePersistedState<string | string[]>(
@@ -446,7 +448,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const key = ["users", "directory", q.trim()];
+    const key = usersDirectoryKey(q.trim());
     if (liveRefresh || retryNonce) invalidateServerState(key);
     // Preserve populated rows during identity SSE refreshes (#732).
     if (!hasLoadedUsers.current) setLoading(true);

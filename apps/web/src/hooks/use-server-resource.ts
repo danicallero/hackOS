@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   invalidateServerState,
+  peekServerState,
   readServerState,
   type ServerStateKey,
   serverStateEpoch,
@@ -17,6 +18,8 @@ type Result<T> = { stamp: string; data: T | null; error: unknown };
  * One GET through the identity-scoped `server-state` primitive (#720, #1003):
  * concurrent readers of a key share one request, and an identity switch drops
  * the data and re-reads. Failures surface as `error`; nothing is substituted.
+ * A remount paints the previous settled value immediately (no loading state)
+ * and revalidates in the background.
  * Use `useLiveQuery` instead when SSE events should refresh the resource.
  */
 export function useServerResource<T>(
@@ -54,11 +57,12 @@ export function useServerResource<T>(
       },
       (error) => {
         if (cancelled) return;
-        setResult((prev) => ({
-          stamp,
-          data: prev?.stamp === stamp ? prev.data : null,
-          error,
-        }));
+        // Settled data already on screen survives a failed revalidation.
+        setResult((prev) => {
+          const kept =
+            prev?.stamp === stamp ? prev.data : (peekServerState<T>(keyRef.current) ?? null);
+          return { stamp, data: kept, error: kept === null ? error : null };
+        });
       },
     );
     return () => {
@@ -90,10 +94,13 @@ export function useServerResource<T>(
   }, []);
 
   const current = result?.stamp === stamp ? result : null;
+  // Stale-while-revalidate: settled data from an earlier mount paints at once
+  // and the effect above refreshes it in the background.
+  const cached = current === null && enabled ? (peekServerState<T>(key) ?? null) : null;
   return {
-    data: current?.data ?? null,
+    data: current?.data ?? cached,
     error: current?.error ?? null,
-    loading: enabled && current === null,
+    loading: enabled && current === null && cached === null,
     reload,
     mutate,
   };

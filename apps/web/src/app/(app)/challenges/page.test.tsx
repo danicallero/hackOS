@@ -42,6 +42,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { ApiError, api } from "@/lib/api";
+import { resetServerStateForTests } from "@/lib/server-state";
 import ChallengesPage from "./page";
 
 const challenge = (id: number) => ({
@@ -69,6 +70,7 @@ describe("ChallengesPage background refresh (#1012)", () => {
   }
 
   beforeEach(() => {
+    resetServerStateForTests();
     state.nonce = 0;
     container = document.createElement("div");
     document.body.append(container);

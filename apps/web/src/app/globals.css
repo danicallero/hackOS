@@ -501,6 +501,47 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /*
+ * Route transitions (view transitions, (app)/template.tsx): the content region
+ * crossfades with a 4px settle on arrival; the document root is not animated,
+ * so the shell and sidebar stay still. Only opacity/transform animate. Under
+ * reduced motion the swap is instant (the browser default).
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(.route-exit) {
+  animation: 120ms cubic-bezier(0.16, 1, 0.3, 1) both route-fade-out;
+}
+
+::view-transition-new(.route-enter) {
+  animation: 180ms cubic-bezier(0.16, 1, 0.3, 1) both route-fade-in;
+}
+
+@keyframes route-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/*
  * Reduced transparency: blurred or translucent washes become opaque surfaces.
  * Unlayered so it beats the utility layer; the scrim behind modals is a dim,
  * not a surface, and stays.

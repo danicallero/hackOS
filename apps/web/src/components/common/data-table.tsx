@@ -522,6 +522,8 @@ export function DataTable<T>({
                     const interactive = rowInteractionCol > 0 && (rowHref !== null || !getRowHref);
                     const rowProps = {
                       className: interactive ? "cursor-pointer" : undefined,
+                      // Row navigation is a router.push: prefetch the record on intent.
+                      onPointerEnter: rowHref ? () => router.prefetch(rowHref) : undefined,
                       onClick: interactive
                         ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
                         : undefined,

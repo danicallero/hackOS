@@ -117,6 +117,28 @@ Motion, contrast and transparency follow the system preferences, in
 - `prefers-reduced-transparency: reduce` makes blurred or translucent surfaces
   (public top bar, notification trigger, sheet) opaque. The dimming scrim
   behind modals is not a surface and stays.
+- **Route transitions.** Navigating between top-level routes crossfades the
+  content region only: `(app)/template.tsx` wraps the page in React's
+  `<ViewTransition>` (`experimental.viewTransition` in `next.config.ts`), and
+  `globals.css` times it (`.route-exit` 120 ms fade-out, `.route-enter` 180 ms
+  fade-in with a 4 px settle, curve `cubic-bezier(0.16, 1, 0.3, 1)`, the
+  sidebar's). The document root is not animated, so the shell, sidebar and
+  skip link stay still; the page header belongs to the page and fades with it.
+  Animate only `opacity`/`transform` (never layout properties), keep
+  `default="none"` so dialogs, filters and in-page Suspense do not trigger the
+  boundary, and keep durations 120-200 ms. Under `prefers-reduced-motion` every
+  view-transition animation is off and the swap is instant. The transition
+  snapshot paints above overlays, so close dialogs before navigating. Public
+  surfaces under `(public)` and `(auth)` have no template and no transition.
+- **No flash between pages.** A list the user has already seen paints at once
+  and revalidates in the background (stale-while-revalidate, see
+  `apps/web/README.md` § Browser server state); the loading skeleton appears
+  only for a first, uncached read. Skeletons reuse `components/ui/skeleton.tsx`
+  with the real content's geometry (DataTable `loading` keeps the real header
+  and column count; `(app)/loading.tsx` mirrors title row, toolbar and rows) so
+  data landing moves nothing. Sidebar links and table rows prefetch on hover
+  and focus, and sidebar links also warm the destination list's cache
+  (`lib/list-resources.ts`).
 - Tooltips open after 500 ms (instantly for an adjacent one) and on keyboard
   focus, through the shared `TooltipProvider`; do not set a shorter delay per
   provider.
