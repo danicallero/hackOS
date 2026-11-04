@@ -164,3 +164,16 @@ describe("public content catalog (H48, H49)", () => {
     expect(activities.json().items[0].title).toBe("Opening");
   });
 });
+
+describe("public catalogue HTTP caching (#1227)", () => {
+  it.each([
+    "/api/public/universities",
+    "/api/public/degrees",
+    "/api/public/food-intolerances",
+  ])("serves %s with a short shared cache lifetime", async (url) => {
+    const server = await getApp();
+    const res = await server.inject({ method: "GET", url });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["cache-control"]).toBe("public, max-age=60, stale-while-revalidate=300");
+  });
+});

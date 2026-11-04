@@ -446,3 +446,6 @@ export const mealPlanSummariesResponse = z.object({
     }),
   ),
 });
+
+/** Near-static public pickers (food intolerances, universities, degrees); staff edits show within a minute. */
+export const PUBLIC_CATALOG_CACHE = "public, max-age=60, stale-while-revalidate=300";

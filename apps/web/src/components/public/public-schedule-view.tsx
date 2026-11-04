@@ -21,10 +21,10 @@ import {
   matchesScheduleKindFilter,
 } from "@/components/public/schedule-kind-filter";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
-import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
+import { getPublicEvent } from "@/lib/public-content";
 
 /**
  * The public schedule combines the event and activity reads required by H47.
@@ -64,7 +64,7 @@ export function PublicScheduleView({
     setEventLoading(true);
     setEventError(null);
     try {
-      setEvent(await api.get<PublicEvent>("/api/public/event"));
+      setEvent(await getPublicEvent());
     } catch (error) {
       setEventError(apiErrorText(error, t, t("publicEventUnavailable")));
     } finally {

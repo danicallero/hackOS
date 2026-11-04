@@ -20,6 +20,7 @@ import { usePersistedState } from "@/hooks/use-persisted-state";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { type LogisticsStats, logisticsApi, type PresenceHours } from "@/lib/logistics";
+import { getPublicEvent } from "@/lib/public-content";
 import { useCan, useMe } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { AfterPanel } from "./after-panel";
@@ -113,8 +114,7 @@ export default function LogisticsStatsPage() {
 
   useEffect(() => {
     if (!canStats) return;
-    api
-      .get<PublicEvent>("/api/public/event")
+    getPublicEvent()
       .then((event) => {
         if (!phaseWasChosen.current) setPhase(defaultDataPhase(event));
       })

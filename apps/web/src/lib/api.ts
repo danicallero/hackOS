@@ -39,15 +39,89 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return url.toString();
 }
 
+interface SharedGet {
+  promise: Promise<unknown>;
+  controller: AbortController;
+  subscribers: number;
+  shared: boolean;
+}
+/** Identical GETs that are in flight at the same moment (#1227). Nothing is kept after they settle. */
+const inflightGets = new Map<string, SharedGet>();
+
+function abortError(signal: AbortSignal): unknown {
+  return signal.reason ?? new DOMException("The operation was aborted.", "AbortError");
+}
+
+/**
+ * Concurrent identical GETs (same URL, credentials and cache mode) share one
+ * network request, so components that mount together and ask for the same
+ * resource no longer each hit the API. Each caller still gets its own copy of
+ * the result and its own abort: the request is cancelled only when every
+ * caller has aborted.
+ */
+function coalescedGet<T>(path: string, options: RequestOptions): Promise<T> {
+  const { signal, ...rest } = options;
+  if (signal?.aborted) return Promise.reject(abortError(signal));
+  const key = `${buildUrl(path, rest.query)}|${rest.credentials ?? ""}|${rest.cache ?? ""}`;
+  let entry = inflightGets.get(key);
+  if (entry) {
+    entry.shared = true;
+  } else {
+    const controller = new AbortController();
+    const created: SharedGet = {
+      controller,
+      subscribers: 0,
+      shared: false,
+      promise: performFetch<T>(path, { ...rest, signal: controller.signal }).finally(() => {
+        if (inflightGets.get(key) === created) inflightGets.delete(key);
+      }),
+    };
+    entry = created;
+    inflightGets.set(key, created);
+  }
+  const current = entry;
+  current.subscribers += 1;
+  return new Promise<T>((resolve, reject) => {
+    let done = false;
+    const release = () => {
+      current.subscribers -= 1;
+      if (current.subscribers === 0 && inflightGets.get(key) === current) {
+        inflightGets.delete(key);
+        current.controller.abort();
+      }
+    };
+    const onAbort = () => {
+      if (done) return;
+      done = true;
+      release();
+      reject(abortError(signal as AbortSignal));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    current.promise.then(
+      (value) => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener("abort", onAbort);
+        current.subscribers -= 1;
+        resolve((current.shared ? structuredClone(value) : value) as T);
+      },
+      (error) => {
+        if (done) return;
+        done = true;
+        signal?.removeEventListener("abort", onAbort);
+        current.subscribers -= 1;
+        reject(error);
+      },
+    );
+  });
+}
+
 /**
  * Single entry point for every hackOS API call. Public reads omit cookies so
  * they remain usable from any origin; every other request carries the session
  * cookie and stays within the deployment's credentialed CORS boundary.
  */
-export async function apiFetch<T = unknown>(
-  path: string,
-  options: RequestOptions = {},
-): Promise<T> {
+async function performFetch<T>(path: string, options: RequestOptions): Promise<T> {
   const { body, query, headers, credentials: requestedCredentials, ...rest } = options;
   const method = rest.method?.toUpperCase() ?? "GET";
   const isMutation = !["GET", "HEAD", "OPTIONS"].includes(method);
@@ -105,6 +179,14 @@ export async function apiFetch<T = unknown>(
   }
 
   return payload as T;
+}
+
+export function apiFetch<T = unknown>(path: string, options: RequestOptions = {}): Promise<T> {
+  const isGet = (options.method?.toUpperCase() ?? "GET") === "GET";
+  if (isGet && options.body === undefined && !options.headers) {
+    return coalescedGet<T>(path, options);
+  }
+  return performFetch<T>(path, options);
 }
 
 /**

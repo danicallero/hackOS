@@ -9,7 +9,7 @@ import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
-import { idParamSchema } from "./schemas.js";
+import { idParamSchema, PUBLIC_CATALOG_CACHE } from "./schemas.js";
 
 const body = z.object({ name: z.string().min(1).max(200) });
 const COLUMNS = "id, name, proposed_by, created_at";
@@ -124,7 +124,8 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
           "Anonymous autocomplete for degree application fields. Accepts a name query or comma-separated IDs.",
       },
     },
-    async (req) => {
+    async (req, reply) => {
+      reply.header("cache-control", PUBLIC_CATALOG_CACHE);
       const { q, ids } = req.query as { q?: string; ids?: string };
       if (ids) {
         const parsed = ids

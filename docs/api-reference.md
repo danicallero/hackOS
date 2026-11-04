@@ -659,6 +659,20 @@ identity change; successful writes and matching SSE signals invalidate exact
 resource keys before the next authoritative API read. This never changes the
 API's Postgres-backed source of truth or creates a global SSE refresh topic.
 
+`apiFetch` also coalesces identical GETs that are in flight at the same moment into
+one network request (each caller gets its own copy and its own abort), and the shared
+public event/challenge/sponsor feeds go through `lib/public-content.ts`, which reuses
+the 30 s server-state cache (#1227).
+
+A scope join or leave reopens the single multiplexed stream; when the reopen
+finishes within 2 s it is treated as planned and does not fire `reconnect`
+resyncs, so existing live queries are not refetched on every navigation (#1227).
+
+The near-static public pickers (`/api/public/universities`, `/api/public/degrees`,
+`/api/public/food-intolerances`) send `Cache-Control: public, max-age=60,
+stale-while-revalidate=300` (#1227). Staff catalogue managers read them with
+`cache: "no-cache"` so an edit shows immediately.
+
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable
 Postgres tables such as `notification_outbox`, due confirmations, scheduled

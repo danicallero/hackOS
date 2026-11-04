@@ -145,17 +145,27 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).toContain("meals-body");
   });
 
-  it("keeps every tab mounted so a hidden draft survives switching", async () => {
-    nav.search = "tab=account";
+  const openTab = async (index: number) => {
+    const trigger = container.querySelectorAll("[role=tab]")[index] as HTMLElement;
+    await act(async () => {
+      trigger.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+      trigger.click();
+    });
+  };
+
+  it("mounts a tab only once it is opened, then keeps it so a hidden draft survives (#1227)", async () => {
     await render();
+    expect(container.textContent).toContain("personal-body");
+    expect(container.textContent).not.toContain("danger-body");
+    await openTab(3);
     expect(openPanel()[0].textContent).toContain("danger-body");
     expect(container.textContent).toContain("personal-body");
   });
 
   it("marks a tab holding unsaved edits", async () => {
     personal.dirty = true;
-    nav.search = "tab=wallet";
     await render();
+    await openTab(2);
     const profileTab = [...container.querySelectorAll("[role=tab]")][0];
     expect(profileTab.textContent).toContain("unsavedChanges");
   });
