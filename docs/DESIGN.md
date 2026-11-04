@@ -120,6 +120,23 @@ Motion, contrast and transparency follow the system preferences, in
   focus, through the shared `TooltipProvider`; do not set a shorter delay per
   provider.
 
+### List motion
+
+`components/common/list-motion.tsx` is the shared tween for lists that change
+under the user's hands; `DataTable` opts in with `animateRows`.
+
+- Rows that enter or leave the dataset (not paging, search or sort) animate
+  height + opacity in 150 ms on the sidebar curve `cubic-bezier(0.16, 1, 0.3, 1)`.
+  A leaving row stays mounted as an inert, `aria-hidden` ghost until it has
+  collapsed; only `grid-template-rows`, opacity and transform are animated.
+- A state change crossfades its marker or action area (`StateSwap`) instead of
+  snapping: the previous content fades out in place, inert, while the new one
+  fades in.
+- Reduced motion removes all of it: rows enter and leave instantly, `StateSwap`
+  swaps without a layer.
+- Use it only where a row's state changes in place (review decisions). Static
+  tables do not need it.
+
 Uppercase/letter-spacing is not a hierarchy tool — use scale, weight, and
 colour; reserve uppercase for real codes (badge IDs, room codes).
 
@@ -796,6 +813,15 @@ explain the available retry/reload path, never silently overwrite another edit.
   Static names, dates, preferences, roles listed as metadata, mandatory flags,
   descriptions and quantities are text. Filter chips are controls, not badges.
   Never rely on color alone or turn every attribute into a pill.
+- A pending record shows its decision directly in the row's trailing cell
+  (`DataTable` `rowActions`), for example Accept / Reject on a response under
+  review or Send in the outbox. The action replaces a badge that would only
+  repeat the pending state, so when every row is pending the status column is
+  dropped and the same cell shows the marker once the record is resolved
+  (R029). The update is optimistic: the marker crossfades in, the resolved row
+  stays listed for about a second and then collapses out; a failure rolls the
+  row back and raises an error toast, and a reversible decision offers Undo.
+  Keep focus near the row when its buttons are replaced.
 - A collapsed object has a visible disclosure control; essential state and
   next action stay visible. Actions inside a row stop row navigation and stay
   keyboard/touch reachable. Hover can strengthen affordances, not reveal the

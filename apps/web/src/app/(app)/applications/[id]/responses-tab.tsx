@@ -20,6 +20,7 @@ import { ReviewModal } from "@/components/applications/review-modal";
 import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
 import { type Column, DataTable } from "@/components/common/data-table";
+import { StateSwap } from "@/components/common/list-motion";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -57,6 +58,7 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { type InlineAction, ResponseRowActions } from "./response-row-actions";
 import { SendDecisionsModal } from "./send-decisions-modal";
 
 interface DurableBatchResult {
@@ -126,14 +128,35 @@ export function ResponsesTab({
   // The table's own search/sort-applied row order, for modal prev/next.
   const [visibleRows, setVisibleRows] = useState<ResponseRow[]>([]);
 
+  // Inline decisions apply optimistically; a resolved row stays listed
+  // ("settling") just long enough for its new marker to be seen, then leaves.
+  const [optimistic, setOptimistic] = useState<Record<number, string>>({});
+  const [settling, setSettling] = useState<Set<number>>(new Set());
+  const inflight = useRef(new Set<number>());
+  const settleTimers = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timers = settleTimers.current;
+    return () => {
+      for (const timer of timers) clearTimeout(timer);
+    };
+  }, []);
+  // Decision holders in the review workspace see the marker in the action area.
+  const markerInline = canDecide && workspace === "review";
+
   const rows = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    return rowsForWorkspace(allRows, workspace).filter(
-      (row) =>
-        (statusFilter.length === 0 || statusFilter.includes(row.status)) &&
-        (!query || `${row.name ?? ""} ${row.email}`.toLocaleLowerCase().includes(query)),
+    const current = allRows.map((row) =>
+      optimistic[row.id] ? { ...row, status: optimistic[row.id] } : row,
     );
-  }, [allRows, workspace, statusFilter, search]);
+    const inWorkspace = new Set(rowsForWorkspace(current, workspace).map((row) => row.id));
+    return current
+      .filter((row) => inWorkspace.has(row.id) || settling.has(row.id))
+      .filter(
+        (row) =>
+          (statusFilter.length === 0 || statusFilter.includes(row.status)) &&
+          (!query || `${row.name ?? ""} ${row.email}`.toLocaleLowerCase().includes(query)),
+      );
+  }, [allRows, workspace, statusFilter, search, optimistic, settling]);
 
   const load = useCallback(
     async (force = false) => {
@@ -218,14 +241,22 @@ export function ResponsesTab({
         </div>
       ),
     },
-    {
-      id: "status",
-      header: t("statusColumn"),
-      sortValue: (r) => r.status,
-      cell: (r) => (
-        <StatusBadge tone={statusTone(r.status)}>{applicationStatusLabel(r.status, t)}</StatusBadge>
-      ),
-    },
+    ...(markerInline
+      ? []
+      : [
+          {
+            id: "status",
+            header: t("statusColumn"),
+            sortValue: (r: ResponseRow) => r.status,
+            cell: (r: ResponseRow) => (
+              <StateSwap stateKey={r.status}>
+                <StatusBadge tone={statusTone(r.status)}>
+                  {applicationStatusLabel(r.status, t)}
+                </StatusBadge>
+              </StateSwap>
+            ),
+          },
+        ]),
     {
       id: "score",
       header: t("scoreColumn"),
@@ -331,6 +362,95 @@ export function ResponsesTab({
       toast.error(errorText(err, t, t("exportFailed")), t("exportFiles"));
     } finally {
       setExportingKey(null);
+    }
+  }
+
+  function rollbackInline(id: number) {
+    setOptimistic((current) => {
+      const { [id]: _removed, ...rest } = current;
+      return rest;
+    });
+    setSettling((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  // Keyboard users keep their place: when the acted-on buttons are replaced,
+  // focus moves to the nearest row that still offers an action (R004).
+  function keepFocusNear(id: number) {
+    const timer = setTimeout(() => {
+      settleTimers.current.delete(timer);
+      if (document.activeElement && document.activeElement !== document.body) return;
+      const all = [...document.querySelectorAll<HTMLElement>("[data-row-actions]")];
+      const own = all.find((el) => el.dataset.rowActions === String(id));
+      const target =
+        all.find((el) => el !== own && (own ? own.compareDocumentPosition(el) & 4 : true)) ??
+        all.find((el) => el !== own);
+      target?.querySelector<HTMLElement>("button")?.focus();
+    }, 220);
+    settleTimers.current.add(timer);
+  }
+
+  async function actInline(row: ResponseRow, action: InlineAction) {
+    if (inflight.current.has(row.id)) return;
+    inflight.current.add(row.id);
+    const nextStatus =
+      action === "accept"
+        ? "accepted_internal"
+        : action === "reject"
+          ? "rejected_internal"
+          : row.status === "accepted_internal"
+            ? "accepted"
+            : "rejected";
+    setOptimistic((current) => ({ ...current, [row.id]: nextStatus }));
+    setSettling((current) => new Set(current).add(row.id));
+    keepFocusNear(row.id);
+    try {
+      if (action === "send") {
+        await api.post(`/api/responses/${row.id}/send-decision`);
+        toast.success(t("decisionSent"), { compactTitle: t("toastDecisions") });
+      } else {
+        await api.post(`/api/responses/${row.id}/decide`, {
+          decision: action === "accept" ? "accepted" : "rejected",
+        });
+        toast.action(t(action === "accept" ? "acceptedUnsentToast" : "rejectedUnsentToast"), {
+          compactTitle: t("toastDecisions"),
+          duration: 8_000,
+          action: { label: t("undo"), onClick: () => void undoInline(row.id) },
+        });
+      }
+      void load(true);
+      const timer = setTimeout(() => {
+        settleTimers.current.delete(timer);
+        setSettling((current) => {
+          const next = new Set(current);
+          next.delete(row.id);
+          return next;
+        });
+        setOptimistic((current) => {
+          const { [row.id]: _removed, ...rest } = current;
+          return rest;
+        });
+      }, 900);
+      settleTimers.current.add(timer);
+    } catch (err) {
+      rollbackInline(row.id);
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastDecisions"));
+      void load(true);
+    } finally {
+      inflight.current.delete(row.id);
+    }
+  }
+
+  async function undoInline(id: number) {
+    try {
+      await api.post(`/api/responses/${id}/revert-decision`, { decision: "review" });
+      toast.success(t("decisionUndone"), { compactTitle: t("toastUndoDecision") });
+      await load(true);
+    } catch (err) {
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastUndoDecision"));
     }
   }
 
@@ -827,9 +947,21 @@ export function ResponsesTab({
                   aria-hidden="true"
                 />
               </button>
-              <StatusBadge tone={statusTone(row.status)}>
-                {applicationStatusLabel(row.status, t)}
-              </StatusBadge>
+              {!markerInline && (
+                <StateSwap stateKey={row.status}>
+                  <StatusBadge tone={statusTone(row.status)}>
+                    {applicationStatusLabel(row.status, t)}
+                  </StatusBadge>
+                </StateSwap>
+              )}
+              <div className="flex justify-end">
+                <ResponseRowActions
+                  row={row}
+                  canDecide={canDecide}
+                  markerInline={markerInline}
+                  onAct={(r, action) => void actInline(r, action)}
+                />
+              </div>
               <dl className="grid gap-2 text-xs">
                 {columns
                   .filter((column) => {
@@ -855,6 +987,19 @@ export function ResponsesTab({
         )}
         columns={columns}
         data={rows}
+        animateRows
+        rowActions={
+          canDecide
+            ? (row) => (
+                <ResponseRowActions
+                  row={row}
+                  canDecide={canDecide}
+                  markerInline={markerInline}
+                  onAct={(r, action) => void actInline(r, action)}
+                />
+              )
+            : undefined
+        }
         getRowId={(r) => String(r.id)}
         loading={loading && !hasLoaded()}
         error={loadError ? { message: loadError, onRetry: load } : undefined}

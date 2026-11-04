@@ -132,9 +132,11 @@ for (const entry of ["application", "user"] as const) {
     if (await cookieNotice.isVisible()) await cookieNotice.locator("button").click();
 
     if (entry === "application") {
-      await expect(page.getByRole("button", { name: "Avery Applicant" })).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Avery Applicant", exact: true }),
+      ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath("application-response-list.png") });
-      await page.getByRole("button", { name: "Avery Applicant" }).click();
+      await page.getByRole("button", { name: "Avery Applicant", exact: true }).click();
     } else {
       await page.getByRole("button", { name: "Open", exact: true }).click();
     }

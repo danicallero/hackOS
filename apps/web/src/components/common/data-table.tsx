@@ -12,6 +12,12 @@ import { ActionGroup } from "@/components/common/action-group";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
+import {
+  type PresenceItem,
+  RowMotionCell,
+  useRowMotion,
+  useRowPresence,
+} from "@/components/common/list-motion";
 import { PageToolbar } from "@/components/common/page-toolbar";
 import { SearchField } from "@/components/common/search-field";
 import { Button } from "@/components/ui/button";
@@ -95,12 +101,49 @@ interface DataTableProps<T> {
    *  order — lets a caller page through rows in the order actually on
    *  screen, e.g. prev/next inside a detail modal. */
   onVisibleRowsChange?: (rows: T[]) => void;
+  /**
+   * Rows that appear or disappear from `data` after the first load enter and
+   * leave with a height + opacity tween (DESIGN.md §2 "List motion"). Paging,
+   * search and sort never animate. Ignored when `renderRow` is set.
+   */
+  animateRows?: boolean;
   /** Replaces the row element, e.g. with a sortable row; it must render `key={getRowId(row)}`. */
   renderRow?: (
     row: T,
     props: { className?: string; onClick?: () => void },
     cells: React.ReactNode,
   ) => React.ReactNode;
+}
+
+/** A table row that tweens in/out when `animate` is set; a plain row otherwise. */
+function MotionRow({
+  animate,
+  entering,
+  exiting,
+  onExited,
+  children,
+  ...props
+}: {
+  animate: boolean;
+  entering: boolean;
+  exiting: boolean;
+  onExited: () => void;
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  const { open, animating } = useRowMotion({ entering, exiting, onExited });
+  if (!animate) return <TableRow {...props}>{children}</TableRow>;
+  return (
+    <TableRow
+      {...props}
+      data-motion={!open ? "closed" : animating ? "animating" : undefined}
+      // A ghost row is only a visual: keep it out of the tab order and AT tree.
+      {...(exiting ? { inert: true, "aria-hidden": true } : {})}
+    >
+      {children}
+    </TableRow>
+  );
 }
 
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -240,6 +283,7 @@ export function DataTable<T>({
   onSelectionChange,
   stateKey,
   onVisibleRowsChange,
+  animateRows = false,
   renderRow,
 }: DataTableProps<T>) {
   const { t } = useLocale();
@@ -289,6 +333,12 @@ export function DataTable<T>({
   const pageCount = pageSize ? Math.max(1, Math.ceil(sorted.length / pageSize)) : 1;
   const current = Math.min(page, pageCount - 1);
   const rows = pageSize ? sorted.slice(current * pageSize, current * pageSize + pageSize) : sorted;
+
+  const allIds = useMemo(() => new Set(data.map(getRowId)), [data, getRowId]);
+  const presence = useRowPresence(rows, allIds, getRowId, animateRows && !loading);
+  const motionRows: PresenceItem<T>[] = animateRows
+    ? presence.items
+    : rows.map((row) => ({ row, id: getRowId(row), entering: false, exiting: false }));
 
   const toggleSort = (id: string) =>
     setSort((s) =>
@@ -488,8 +538,7 @@ export function DataTable<T>({
                     ),
                   )
                 ) : (
-                  rows.map((row) => {
-                    const rowId = getRowId(row);
+                  motionRows.map(({ row, id: rowId, entering, exiting }) => {
                     const checked = selectable && selectedIds?.has(rowId);
                     const rowHref = getRowHref?.(row) ?? null;
                     const interactive = rowInteractionCol > 0 && (rowHref !== null || !getRowHref);
@@ -499,56 +548,72 @@ export function DataTable<T>({
                         ? () => (rowHref ? router.push(rowHref) : onRowClick?.(row))
                         : undefined,
                     };
+                    const motionCell = (node: React.ReactNode) =>
+                      animateRows ? <RowMotionCell>{node}</RowMotionCell> : node;
+                    const cellPad = animateRows ? "p-0" : undefined;
                     const cells = (
                       <>
                         {selectable && (
-                          <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={() => toggleOne(rowId)}
-                              aria-label={t("selectRow")}
-                            />
+                          <TableCell
+                            className={cn("w-10", cellPad)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {motionCell(
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={() => toggleOne(rowId)}
+                                aria-label={t("selectRow")}
+                              />,
+                            )}
                           </TableCell>
                         )}
                         {columns.map((col) => (
                           <DataTableCell
                             key={col.id}
-                            className={cn(alignClass[col.align ?? "left"], col.className)}
+                            className={cn(alignClass[col.align ?? "left"], col.className, cellPad)}
                           >
-                            {col.cell(row)}
+                            {motionCell(col.cell(row))}
                           </DataTableCell>
                         ))}
                         {rowInteractionCol > 0 && (
-                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            {!interactive ? null : rowHref ? (
-                              <IconButton
-                                variant="ghost"
-                                size="icon-lg"
-                                className="md:size-[var(--control-height-compact)]"
-                                asChild
-                                label={getRowLabel?.(row) ?? rowId}
-                              >
-                                <Link href={rowHref} aria-label={getRowLabel?.(row) ?? rowId}>
+                          <TableCell
+                            className={cn("text-right", cellPad)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {motionCell(
+                              !interactive ? null : rowHref ? (
+                                <IconButton
+                                  variant="ghost"
+                                  size="icon-lg"
+                                  className="md:size-[var(--control-height-compact)]"
+                                  asChild
+                                  label={getRowLabel?.(row) ?? rowId}
+                                >
+                                  <Link href={rowHref} aria-label={getRowLabel?.(row) ?? rowId}>
+                                    <CaretRightIcon className="size-4" aria-hidden="true" />
+                                  </Link>
+                                </IconButton>
+                              ) : (
+                                <IconButton
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-lg"
+                                  className="md:size-[var(--control-height-compact)]"
+                                  onClick={() => onRowClick?.(row)}
+                                  label={getRowLabel?.(row) ?? rowId}
+                                >
                                   <CaretRightIcon className="size-4" aria-hidden="true" />
-                                </Link>
-                              </IconButton>
-                            ) : (
-                              <IconButton
-                                type="button"
-                                variant="ghost"
-                                size="icon-lg"
-                                className="md:size-[var(--control-height-compact)]"
-                                onClick={() => onRowClick?.(row)}
-                                label={getRowLabel?.(row) ?? rowId}
-                              >
-                                <CaretRightIcon className="size-4" aria-hidden="true" />
-                              </IconButton>
+                                </IconButton>
+                              ),
                             )}
                           </TableCell>
                         )}
                         {rowActions && (
-                          <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                            {rowActions(row)}
+                          <TableCell
+                            className={cn("text-right", cellPad)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {motionCell(rowActions(row))}
                           </TableCell>
                         )}
                       </>
@@ -556,9 +621,16 @@ export function DataTable<T>({
                     return renderRow ? (
                       renderRow(row, rowProps, cells)
                     ) : (
-                      <TableRow key={rowId} {...rowProps}>
+                      <MotionRow
+                        key={rowId}
+                        animate={animateRows}
+                        entering={entering}
+                        exiting={exiting}
+                        onExited={() => presence.dropGhost(rowId)}
+                        {...rowProps}
+                      >
                         {cells}
-                      </TableRow>
+                      </MotionRow>
                     );
                   })
                 )}

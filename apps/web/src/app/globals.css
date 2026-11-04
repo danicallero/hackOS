@@ -501,6 +501,58 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /*
+ * List motion (DESIGN.md §2): rows collapse/expand through a 1fr -> 0fr grid
+ * track plus opacity, and marker/action areas crossfade. Unlayered like the
+ * reduced-motion block above so the media query below wins.
+ */
+.list-cell {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transition:
+    grid-template-rows 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.list-cell-inner {
+  min-height: 0;
+}
+tr[data-motion] .list-cell-inner {
+  overflow: hidden;
+}
+tr[data-motion="closed"] {
+  border-bottom-width: 0;
+}
+tr[data-motion="closed"] .list-cell {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+@keyframes list-swap-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes list-swap-out {
+  to {
+    opacity: 0;
+  }
+}
+.list-swap-in {
+  animation: list-swap-in 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.list-swap-out {
+  animation: list-swap-out 150ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .list-cell {
+    transition: none;
+  }
+  .list-swap-in,
+  .list-swap-out {
+    animation: none;
+  }
+}
+
+/*
  * Reduced transparency: blurred or translucent washes become opaque surfaces.
  * Unlayered so it beats the utility layer; the scrim behind modals is a dim,
  * not a surface, and stays.

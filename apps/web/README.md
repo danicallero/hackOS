@@ -340,6 +340,11 @@ Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,
 `EntityCombobox`, `ActionGroup`, `IconButton`, `UserAvatar`.
 
+`DataTable` takes `animateRows` for lists whose rows change state in place and
+`rowActions` for the trailing action cell; `components/common/list-motion.tsx`
+(`StateSwap`, row presence) owns the tween. See
+[List motion](../../docs/DESIGN.md#list-motion).
+
 The schedule's fixed-layout table sets its minimum width to the sum of its
 visible column widths, including selection/actions for editors. Avoid intrinsic
 `min-width: max-content` with percentage-width fixed tables: Firefox can inflate
