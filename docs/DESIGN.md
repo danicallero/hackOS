@@ -717,6 +717,32 @@ existing values rather than introducing a second custom form layout. A panel
 may contain open groups, never stacked bordered cards for every field group.
 Keep actual multi-record objects independently bounded when ownership matters.
 
+### Title-first creation
+
+Creation forms with a few required fields and several optional settings
+(challenge creation, staff project creation) use `TitleInput` and `EditorRow`
+from `components/common/title-first-form.tsx`:
+
+- The record title is a borderless input at section-title scale, first in the
+  form. The page keeps its single `PageHeader`; a panel keeps its own header.
+  Translated titles get a `TabBar` (EN/ES/GL) beside the input; English is the
+  required value and the others default to it.
+- Everything else is a collapsed `EditorRow`: label left, current value right
+  (muted "Add" when empty), caret. Rows sit in one bordered `Surface` (page)
+  or an open list (panel); never one card per row. A row opens one focused
+  editor with a single Done: a popover on desktop, a bottom sheet below `md`
+  (`narrow="popover"` inside a panel that is already a full-screen sheet, so
+  sheets never stack). Pick-one lists close on selection (`confirm={false}`).
+- Switches that need no editor stay inline in the row.
+- One primary submit at the end; required-field errors appear under the title
+  or row, and validate on submit, never on blur (a blur error shifts the row
+  the user is about to click).
+- Creation and edit share field order and save behavior; the row order is the
+  edit page's tab order (content, prizes, judging, publication).
+- Motion: caret rotation and row hover only, 150 ms on the sidebar curve
+  `cubic-bezier(0.16,1,0.3,1)`; popover/sheet animation comes from the shared
+  primitives and is removed under `prefers-reduced-motion`.
+
 ### Overlay geometry and content ownership
 
 - The live statistics activity chart can expand to the viewport minus 32 px,

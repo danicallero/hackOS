@@ -416,6 +416,11 @@ desktop and Tags on mobile. Mobile entries keep the name as their drill-down
 title and render each selected remaining field as a labeled tag, using the same
 column selection as the table (including presence when authorized).
 
+`TitleInput` + `EditorRow` (`components/common/title-first-form.tsx`) are the
+title-first creation pattern: borderless record title, then collapsed rows that
+each open one popover (desktop) or bottom sheet (narrow). Challenge creation and
+the staff project panel use them; rules in `docs/DESIGN.md` §4b.
+
 `SidePanelEditor` is the focused-record counterpart to `Modal`: it opens a
 right-side editor over the current workspace, with a fixed title/actions area
 and independently scrollable form body. Use it for a single record's details;

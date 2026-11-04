@@ -3762,5 +3762,12 @@
   "quickSearch": "Búsqueda rápida",
   "quickSearchPlaceholder": "Ir a…",
   "searchList": "Buscar en la lista",
-  "keyboardShortcuts": "Atajos de teclado"
+  "keyboardShortcuts": "Atajos de teclado",
+  "addRow": "Añadir",
+  "challengePrizesCount_one": "{count} premio",
+  "challengePrizesCount_other": "{count} premios",
+  "challengeQuestionsCount_one": "{count} pregunta",
+  "challengeQuestionsCount_other": "{count} preguntas",
+  "challengePrizesCount": "{count} premios",
+  "challengeQuestionsCount": "{count} preguntas"
 }

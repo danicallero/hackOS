@@ -850,6 +850,43 @@ export function MultilingualInput({
   );
 }
 
+/** English, Spanish and Galician values stacked for a focused editor (popover or sheet). */
+export function MultilingualFields({
+  value,
+  onChange,
+  textarea,
+}: {
+  value: I18nText;
+  onChange: (value: I18nText) => void;
+  textarea?: boolean;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="space-y-3">
+      <TaggedControl
+        tag={t("englishTag")}
+        textarea={textarea}
+        value={value.en}
+        onChange={(next) => onChange({ ...value, en: next })}
+      />
+      <TaggedControl
+        tag={t("spanishTag")}
+        placeholder={t("defaultsToEnglishPlaceholder")}
+        textarea={textarea}
+        value={value.es}
+        onChange={(next) => onChange({ ...value, es: next })}
+      />
+      <TaggedControl
+        tag={t("galicianTag")}
+        placeholder={t("defaultsToEnglishPlaceholder")}
+        textarea={textarea}
+        value={value.gl}
+        onChange={(next) => onChange({ ...value, gl: next })}
+      />
+    </div>
+  );
+}
+
 /**
  * A single input/textarea with a small caption above it — the language (English,
  * Spanish, Galician) for a translation, or a field name like "Value". The caption

@@ -3762,5 +3762,12 @@
   "quickSearch": "Quick search",
   "quickSearchPlaceholder": "Go to…",
   "searchList": "Search this list",
-  "keyboardShortcuts": "Keyboard shortcuts"
+  "keyboardShortcuts": "Keyboard shortcuts",
+  "addRow": "Add",
+  "challengePrizesCount_one": "{count} prize",
+  "challengePrizesCount_other": "{count} prizes",
+  "challengeQuestionsCount_one": "{count} question",
+  "challengeQuestionsCount_other": "{count} questions",
+  "challengePrizesCount": "{count} prizes",
+  "challengeQuestionsCount": "{count} questions"
 }

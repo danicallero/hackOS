@@ -2,29 +2,42 @@
 
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
-import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
+import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
+import { CalendarBlankIcon } from "@phosphor-icons/react/dist/csr/CalendarBlank";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
+import { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
+import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
+import { TextAlignLeftIcon } from "@phosphor-icons/react/dist/csr/TextAlignLeft";
+import { TimerIcon } from "@phosphor-icons/react/dist/csr/Timer";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DurationInput } from "@/components/common/duration-input";
-import { EntityCombobox } from "@/components/common/entity-combobox";
 import { PublicationControls } from "@/components/common/publication-controls";
 import {
   JudgingPanelBuilder,
-  MultilingualInput,
+  MultilingualFields,
   normalizePrizes,
   normalizeQuestions,
   PrizeBuilder,
 } from "@/components/common/questionnaire-builder";
 import { SaveStatus } from "@/components/common/save-status";
-import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { TabBar } from "@/components/common/tab-bar";
+import { EditorRow, TitleInput } from "@/components/common/title-first-form";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Form,
   FormControl,
@@ -34,17 +47,30 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Surface } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
 import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "@/lib/challenges";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { useLocale } from "@/lib/i18n";
+import { formatScheduledDateTime, fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { languageName, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import { useUrlTab } from "@/lib/url-tab";
+import type { Language } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
-const STEPS = ["basics", "prizes", "judging", "publish"] as const;
+const TITLE_LANGUAGES = ["en", "es", "gl"] as const satisfies readonly Language[];
+
+/** First non-empty translation, so a row summary never looks empty when only es/gl are filled. */
+function anyLanguage(value: I18nText) {
+  return value.en.trim() || value.es.trim() || value.gl.trim();
+}
+
+function formatDuration(total: string) {
+  const seconds = /^\d+$/.test(total) ? Number(total) : 0;
+  if (seconds <= 0) return "";
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
 
 const optionalPositiveInt = z
   .string()
@@ -64,16 +90,18 @@ type EnterpriseSummary = { id: number; name: string };
 
 export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challenge) => void }) {
   const { t } = useLocale();
-  const { tab: step, setTab: setStep } = useUrlTab({ values: STEPS, defaultValue: "basics" });
   const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [titleI18n, setTitleI18n] = useState<I18nText>(EMPTY_I18N);
+  const [titleLang, setTitleLang] = useState<Language>("en");
+  const [titleError, setTitleError] = useState(false);
   const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(EMPTY_I18N);
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [retryNonce, setRetryNonce] = useState(0);
+  const titleRef = useRef<HTMLInputElement>(null);
   const form = useForm<CreateValues>({
     mode: "onBlur",
     reValidateMode: "onBlur",
@@ -89,6 +117,11 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
   });
   const [scheduledPublish, setScheduledPublish] = useState(false);
   const visibility = form.watch("visibility");
+  const availableFrom = form.watch("availableFrom");
+  const enterpriseId = form.watch("enterpriseId");
+  const maxPresentationSeconds = form.watch("maxPresentationSeconds");
+  const maxInWaitingArea = form.watch("maxInWaitingArea");
+  const errors = form.formState.errors;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers this safe authoring-data load.
   useEffect(() => {
@@ -115,13 +148,17 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
     };
   }, [retryNonce, t]);
 
+  function validateTitle() {
+    if (titleI18n.en.trim()) return true;
+    setTitleError(true);
+    setTitleLang("en");
+    titleRef.current?.focus();
+    return false;
+  }
+
   async function onSubmit(values: CreateValues) {
+    if (!validateTitle()) return;
     const title = titleI18n.en.trim();
-    if (!title) {
-      toast.error(t("englishTitleRequired"), t("toastCreateChallenge"));
-      setStep("basics");
-      return;
-    }
     try {
       const created = await api.post<Challenge>("/api/challenges", {
         enterpriseId: Number(values.enterpriseId),
@@ -157,14 +194,6 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
     }
   }
 
-  const stepIndex = STEPS.indexOf(step);
-  const goPrevious = () => {
-    if (stepIndex > 0) setStep(STEPS[stepIndex - 1]);
-  };
-  const goNext = () => {
-    if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
-  };
-
   if (loadingData && enterprises.length === 0 && !loadError) {
     return (
       <div className="flex items-center justify-center py-20" role="status" aria-busy="true">
@@ -174,9 +203,21 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
     );
   }
 
+  const enterprise = enterprises.find((item) => String(item.id) === enterpriseId);
+  const timing = [formatDuration(maxPresentationSeconds), maxInWaitingArea]
+    .filter(Boolean)
+    .join(" · ");
+  const timingError = errors.maxPresentationSeconds?.message ?? errors.maxInWaitingArea?.message;
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form
+        onSubmit={form.handleSubmit(onSubmit, () => {
+          validateTitle();
+        })}
+        className="space-y-6"
+        noValidate
+      >
         {loadError && (
           <ContextualError
             message={loadError}
@@ -184,84 +225,156 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
           />
         )}
 
-        <Tabs value={step} onValueChange={(value) => setStep(value)}>
-          <TabBar aria-label={t("challengeCreationSteps")}>
-            <TabsTrigger value="basics">{t("contentTabLabel")}</TabsTrigger>
-            <TabsTrigger value="prizes">{t("prizesTabLabel")}</TabsTrigger>
-            <TabsTrigger value="judging">{t("judgingTabLabel")}</TabsTrigger>
-            <TabsTrigger value="publish">{t("publishTabLabel")}</TabsTrigger>
-          </TabBar>
+        <Surface padding="none" className="overflow-hidden">
+          <div className="space-y-1 px-4 pt-4 pb-2">
+            <div className="flex items-center gap-3">
+              <TitleInput
+                ref={titleRef}
+                autoFocus
+                value={titleI18n[titleLang]}
+                maxLength={200}
+                placeholder={titleLang === "en" ? t("titleLabel") : titleI18n.en || t("titleLabel")}
+                aria-label={`${t("titleLabel")} (${languageName(titleLang)})`}
+                invalid={titleError && titleLang === "en"}
+                errorId="challenge-title-error"
+                onChange={(event) => {
+                  setTitleI18n({ ...titleI18n, [titleLang]: event.target.value });
+                  if (titleLang === "en" && event.target.value.trim()) setTitleError(false);
+                }}
+              />
+              <Tabs value={titleLang} onValueChange={(value) => setTitleLang(value as Language)}>
+                <TabBar width="content" aria-label={t("language")}>
+                  {TITLE_LANGUAGES.map((code) => (
+                    <TabsTrigger key={code} value={code} aria-label={languageName(code)}>
+                      {code.toUpperCase()}
+                    </TabsTrigger>
+                  ))}
+                </TabBar>
+              </Tabs>
+            </div>
+            {titleError && (
+              <p id="challenge-title-error" role="alert" className="text-sm text-destructive">
+                {t("englishTitleRequired")}
+              </p>
+            )}
+          </div>
 
-          <TabsContent value="basics" className="space-y-6 pt-4">
-            <SectionCard variant="plain" icon={TrophyIcon} title={t("challengeBasicsTitle")}>
-              <div className="space-y-5">
-                <FormField
-                  control={form.control}
-                  name="enterpriseId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("enterpriseLabel")}</FormLabel>
-                      <FormControl>
-                        <EntityCombobox
-                          options={enterprises}
-                          value={field.value}
-                          onChange={field.onChange}
-                          getId={(enterprise) => enterprise.id}
-                          getLabel={(enterprise) => `${enterprise.name} (#${enterprise.id})`}
-                          placeholder={t("selectEnterprisePlaceholder")}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+          <div className="border-t">
+            <FormField
+              control={form.control}
+              name="enterpriseId"
+              render={({ field }) => (
+                <EditorRow
+                  inset
+                  icon={BuildingsIcon}
+                  label={t("enterpriseLabel")}
+                  value={enterprise?.name}
+                  error={errors.enterpriseId ? t("fieldRequired") : null}
+                  confirm={false}
+                >
+                  {(close) => (
+                    <Command aria-label={t("enterpriseLabel")}>
+                      <CommandInput placeholder={t("typeToFilterEllipsis")} />
+                      <CommandList className="max-h-64">
+                        <CommandEmpty>{t("noMatchingResultsPeriod")}</CommandEmpty>
+                        <CommandGroup>
+                          {enterprises.map((item) => (
+                            <CommandItem
+                              key={item.id}
+                              value={`${item.id} ${item.name}`}
+                              onSelect={() => {
+                                field.onChange(String(item.id));
+                                form.clearErrors("enterpriseId");
+                                close();
+                              }}
+                            >
+                              <CheckIcon
+                                aria-hidden="true"
+                                className={cn(
+                                  "size-4",
+                                  String(item.id) === field.value ? "opacity-100" : "opacity-0",
+                                )}
+                              />
+                              {`${item.name} (#${item.id})`}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
                   )}
+                </EditorRow>
+              )}
+            />
+            <EditorRow
+              inset
+              icon={TextAlignLeftIcon}
+              label={t("descriptionLabel")}
+              value={anyLanguage(descriptionI18n)}
+            >
+              <MultilingualFields textarea value={descriptionI18n} onChange={setDescriptionI18n} />
+            </EditorRow>
+            <EditorRow
+              inset
+              icon={ListBulletsIcon}
+              label={t("publicCriteria")}
+              value={anyLanguage(criteriaI18n)}
+            >
+              <MultilingualFields textarea value={criteriaI18n} onChange={setCriteriaI18n} />
+            </EditorRow>
+            <FormField
+              control={form.control}
+              name="mandatory"
+              render={({ field }) => (
+                <EditorRow
+                  inset
+                  icon={StarIcon}
+                  label={t("mandatoryChallengeLabel")}
+                  inline={
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      aria-label={t("mandatoryChallengeLabel")}
+                    />
+                  }
                 />
-                <MultilingualInput
-                  label={t("titleLabel")}
-                  value={titleI18n}
-                  onChange={setTitleI18n}
-                />
-                <MultilingualInput
-                  label={t("descriptionLabel")}
-                  optional
-                  textarea
-                  value={descriptionI18n}
-                  onChange={setDescriptionI18n}
-                />
-                <MultilingualInput
-                  label={t("publicCriteria")}
-                  optional
-                  textarea
-                  value={criteriaI18n}
-                  onChange={setCriteriaI18n}
-                />
-                <FormField
-                  control={form.control}
-                  name="mandatory"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between gap-4">
-                      <FormLabel>{t("mandatoryChallengeLabel")}</FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </SectionCard>
-          </TabsContent>
-
-          <TabsContent value="prizes" className="space-y-6 pt-4">
-            <SectionCard variant="plain" title={t("prizesLabel")}>
+              )}
+            />
+            <EditorRow
+              inset
+              icon={TrophyIcon}
+              label={t("prizesLabel")}
+              size="lg"
+              value={
+                prizes.filter((prize) => prize.name.trim()).length
+                  ? t("challengePrizesCount", {
+                      count: prizes.filter((prize) => prize.name.trim()).length,
+                    })
+                  : undefined
+              }
+            >
               <PrizeBuilder value={prizes} onChange={setPrizes} />
-            </SectionCard>
-          </TabsContent>
-
-          <TabsContent value="judging" className="space-y-6 pt-4">
-            <SectionCard variant="plain" title={t("judgingPanel")}>
+            </EditorRow>
+            <EditorRow
+              inset
+              icon={GavelIcon}
+              label={t("judgingPanel")}
+              size="lg"
+              value={
+                questions.length
+                  ? t("challengeQuestionsCount", { count: questions.length })
+                  : undefined
+              }
+            >
               <JudgingPanelBuilder value={questions} onChange={setQuestions} />
-            </SectionCard>
-            <SectionCard variant="plain" title={t("judgingTimingTitle")}>
-              <div className="grid gap-5 sm:grid-cols-2">
+            </EditorRow>
+            <EditorRow
+              inset
+              icon={TimerIcon}
+              label={t("judgingTimingTitle")}
+              value={timing}
+              error={timingError}
+            >
+              <div className="grid gap-4">
                 <FormField
                   control={form.control}
                   name="maxPresentationSeconds"
@@ -289,11 +402,19 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                   )}
                 />
               </div>
-            </SectionCard>
-          </TabsContent>
-
-          <TabsContent value="publish" className="space-y-6 pt-4">
-            <SectionCard variant="plain" title={t("publicationTitle")}>
+            </EditorRow>
+            <EditorRow
+              inset
+              icon={CalendarBlankIcon}
+              label={t("publicationTitle")}
+              value={
+                visibility === "visible"
+                  ? t("visibleLabel")
+                  : scheduledPublish && availableFrom
+                    ? formatScheduledDateTime(availableFrom)
+                    : t("hiddenOption")
+              }
+            >
               <PublicationControls
                 id="challenge-publication"
                 visibility={visibility}
@@ -305,7 +426,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                 scheduleLabel={t("schedulePublicationLabel")}
                 publishAtLabel={t("publishAtLabel")}
                 scheduled={scheduledPublish}
-                publishAt={form.watch("availableFrom")}
+                publishAt={availableFrom}
                 onVisibilityChange={(next) => {
                   form.setValue("visibility", next, { shouldDirty: true });
                   if (next === "visible") {
@@ -325,9 +446,9 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                   form.setValue("availableFrom", value, { shouldDirty: true })
                 }
               />
-            </SectionCard>
-          </TabsContent>
-        </Tabs>
+            </EditorRow>
+          </div>
+        </Surface>
 
         <div className="form-action-footer flex flex-wrap items-center justify-between gap-3">
           <SaveStatus
@@ -345,24 +466,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
                   : "saved"
             }
           />
-          <div className="flex items-center gap-2">
-            {stepIndex > 0 && (
-              <Button type="button" variant="outline" onClick={goPrevious}>
-                <ArrowLeftIcon aria-hidden="true" className="size-4" />
-                {t("previous")}
-              </Button>
-            )}
-            {stepIndex < STEPS.length - 1 ? (
-              <Button type="button" onClick={goNext}>
-                {t("next")}
-                <ArrowRightIcon aria-hidden="true" className="size-4" />
-              </Button>
-            ) : (
-              <SubmitButton pending={form.formState.isSubmitting}>
-                {t("createChallenge")}
-              </SubmitButton>
-            )}
-          </div>
+          <SubmitButton pending={form.formState.isSubmitting}>{t("createChallenge")}</SubmitButton>
         </div>
       </form>
     </Form>
