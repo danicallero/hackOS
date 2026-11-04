@@ -178,7 +178,7 @@ silently substituting the default model.
 Status: active
 Scope: repository
 Source: user-correction
-Date: 2026-10-13
+Date: 2026-11-04
 
 ### Trigger
 Composing detail pages, lists, or participant workflows.
@@ -197,6 +197,9 @@ Use open sections for related page content, with quiet hairlines where spacing
 alone leaves row ownership ambiguous. Removing cards does not mean removing
 all boundaries. Repeated inbox/list rows still need clear ownership: use quiet
 hairlines, restrained neutral washes and distinct subject/meta/body hierarchy.
+When removing status capsules, preserve separation and legibility: adjacent
+states need individual markers and spacing, and operational labels need normal
+foreground contrast. Do not turn a row of distinct states into muted running text.
 For operational screens, distinguish the main count from supporting metrics instead
 of giving every number an identical card. Group scanner actions into visible,
 bounded controls; replacing a camera must also reconsider how the freed space
@@ -206,6 +209,8 @@ navigation available without making it the default.
 ### Validation
 Inspect real desktop and narrow screenshots, including a single record,
 multiple records, and independent simultaneous states.
+For adjacent statuses, include positive, warning and unavailable states and
+verify that each label remains distinguishable after removing its capsule.
 
 ### Exceptions
 Distinct participant contexts (project details, team, judging and delivery)

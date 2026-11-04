@@ -9,7 +9,6 @@ import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { StatusBadge } from "@/components/common/status-badge";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { ActivityPass, UserActivity } from "./logs-tab";
@@ -76,9 +75,9 @@ export function PhysicalActivity({
       id: "type",
       header: t("colType"),
       cell: (p) => (
-        <StatusBadge tone={isMealActivityKind(p.category) ? "success" : "info"} dot={false}>
+        <span className="text-muted-foreground text-sm">
           {isMealActivityKind(p.category) ? t("typeMeal") : t("typeWorkshop")}
-        </StatusBadge>
+        </span>
       ),
     },
     {

@@ -418,8 +418,13 @@ Shared page, section, modal and panel headers use `heading-row` to align
 visible title capitals with icons and `type-meta` counters. Section icons
 stay in the title row, independently of descriptions.
 
+`StatusBadge` uses the shared `StatusDot` presentation: a quiet label with an
+optional semantic dot, without pill borders or tinted backgrounds. Static roles,
+identifiers and other metadata remain ordinary text.
+
 `SectionCard variant="plain"` keeps the shared section heading/actions without
-card chrome. Use it when page spacing and columns explain the structure; reserve
+card chrome. Section headers use spacing rather than automatic dividers in both
+variants; retain row hairlines where they clarify ownership. Use it when page spacing and columns explain the structure; reserve
 the default bordered surface for genuinely bounded groups. Event settings use bounded category surfaces on the content canvas with a
 desktop category rail and narrow-screen tabs. Wallet separates Fields,
 Appearance, Images and Delivery by their distinct save/action owners. My profile
@@ -745,7 +750,7 @@ settings. Narrower viewports stack these sections. Assigned roles occupy a
 separate full-width section below the editable settings, so their count cannot
 change the account column's height. A full-width role card starts collapsed
 and shows the visible role. It reveals all assigned role names, marking the
-visible role with a badge. Effective capabilities are grouped by area; each
+visible role with a quiet text label. Effective capabilities are grouped by area; each
 group opens on demand and shows capability names without descriptions.
 
 Pure schedule/announcement form models, localized content resolution, presence

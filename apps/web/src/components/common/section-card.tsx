@@ -74,9 +74,8 @@ export function SectionCard({
       {(hasHeaderText || Icon || leading || state || action) && (
         <div
           className={cn(
-            "flex flex-col gap-(--space-within-section) p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5",
-            variant === "plain" &&
-              "border-b border-border/60 p-0 pb-3 sm:items-center sm:p-0 sm:pb-3",
+            "flex flex-col gap-(--space-within-section) p-4 pb-0 sm:flex-row sm:items-start sm:justify-between sm:p-5 sm:pb-0",
+            variant === "plain" && "p-0 sm:items-center sm:p-0",
             headerClassName,
           )}
         >
@@ -112,9 +111,6 @@ export function SectionCard({
           </div>
           {action && <ActionGroup className="sm:shrink-0">{action}</ActionGroup>}
         </div>
-      )}
-      {variant === "surface" && (hasHeaderText || Icon || leading || state || action) && (
-        <div className="border-border border-t" />
       )}
       <div
         className={cn(

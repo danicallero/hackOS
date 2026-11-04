@@ -2,13 +2,11 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
-import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { StatCard } from "@/components/common/stat-card";
 import { TabBar } from "@/components/common/tab-bar";
 import { PresenceExportPanel } from "@/components/exports/presence-export-panel";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -132,23 +130,23 @@ export default function PresencePage() {
         {/* Mount the active panel so each trigger's aria-controls resolves (#1177). */}
         <TabsContent value={tab} className="space-y-(--page-section-gap)">
           {tab === "scan" && canAccredit && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-              <StatCard
-                label={t("checkedInSession")}
-                value={sessionCount}
-                icon={SealCheckIcon}
-                hint={t("onThisDevice")}
-              />
+            <dl className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
+              <div className="flex items-baseline gap-3">
+                <dt className="text-sm">
+                  {t("checkedInSession")}
+                  <span className="text-muted-foreground ml-2 text-xs">{t("onThisDevice")}</span>
+                </dt>
+                <dd className="text-2xl font-semibold tabular-nums">{sessionCount}</dd>
+              </div>
               {roleCounts.map((item) => (
-                <StatCard
-                  key={item.role ?? "unassigned"}
-                  label={item.role ?? t("roleUnassigned")}
-                  value={item.count}
-                  icon={SealCheckIcon}
-                  hint={t("accredited")}
-                />
+                <div key={item.role ?? "unassigned"} className="flex items-baseline gap-2">
+                  <dt className="text-muted-foreground text-sm">
+                    {item.role ?? t("roleUnassigned")} · {t("accredited")}
+                  </dt>
+                  <dd className="text-lg tabular-nums">{item.count}</dd>
+                </div>
               ))}
-            </div>
+            </dl>
           )}
 
           {tab === "scan" && (canAccredit || canPresence) && (

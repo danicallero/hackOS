@@ -1422,7 +1422,7 @@ function AnswersSection({
         <div className="divide-border divide-y">
           {Object.entries(response.responses).map(([k, v]) => (
             <div key={k} className="py-3 first:pt-0 last:pb-0">
-              <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">{k}</p>
+              <p className="text-muted-foreground mb-1 text-xs font-medium">{k}</p>
               <div className="whitespace-pre-wrap text-sm">
                 {typeof v === "object" ? JSON.stringify(v) : String(v)}
               </div>
@@ -1574,7 +1574,7 @@ export function ReviewComposerFields({
   return (
     <>
       <div className="space-y-1.5">
-        <Label className="text-muted-foreground text-xs uppercase">{t("scoreRangeLabel")}</Label>
+        <Label className="text-muted-foreground text-xs">{t("scoreRangeLabel")}</Label>
         <ScaleButtons
           value={myScore}
           onChange={onScoreChange}
@@ -1586,7 +1586,7 @@ export function ReviewComposerFields({
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
-          <Label htmlFor={notesId} className="text-muted-foreground text-xs uppercase">
+          <Label htmlFor={notesId} className="text-muted-foreground text-xs">
             {t("notesLabel")}
           </Label>
           <SaveStatus state={reviewSaveState} />

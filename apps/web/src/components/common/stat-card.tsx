@@ -8,10 +8,10 @@ export type StatTone = "neutral" | "success" | "danger" | "warning" | "info";
 
 export const statToneSurfaceClass: Record<StatTone, string> = {
   neutral: "",
-  success: "border-success/30 bg-success/5",
-  danger: "border-destructive/30 bg-destructive/5",
-  warning: "border-warning/60 bg-warning/10",
-  info: "border-info/30 bg-info/5",
+  success: "border-success/30",
+  danger: "border-destructive/30",
+  warning: "border-warning/60",
+  info: "border-info/30",
 };
 
 /**

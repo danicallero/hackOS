@@ -293,9 +293,7 @@ export function IntolerancesManager() {
                   name={`label.${loc}` as const}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-muted-foreground text-xs uppercase">
-                        {loc}
-                      </FormLabel>
+                      <FormLabel className="text-muted-foreground text-xs">{loc}</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -314,9 +312,7 @@ export function IntolerancesManager() {
                   name={`description.${loc}` as const}
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-muted-foreground text-xs uppercase">
-                        {loc}
-                      </FormLabel>
+                      <FormLabel className="text-muted-foreground text-xs">{loc}</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>

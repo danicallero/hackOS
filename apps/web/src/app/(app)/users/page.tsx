@@ -59,8 +59,6 @@ function roleLabel(role: UserListItem["visibleRoleName"], t: Translate): string 
   return role ?? t("roleUnassigned");
 }
 
-const ROLE_TONE = "neutral";
-
 const COLUMN_OPTIONS = [
   "name",
   "role",
@@ -201,9 +199,7 @@ function buildColumns(
       header: t("colRole"),
       sortValue: (u) => u.visibleRoleName ?? "",
       cell: (u) => (
-        <StatusBadge tone={ROLE_TONE} dot={false}>
-          {roleLabel(u.visibleRoleName, t)}
-        </StatusBadge>
+        <span className="text-muted-foreground text-sm">{roleLabel(u.visibleRoleName, t)}</span>
       ),
     },
     {
@@ -327,32 +323,35 @@ function UserMobileRow({
             </StatusBadge>
           )}
         </div>
-        <div className="flex min-w-0 flex-wrap items-start gap-1.5">
+        <dl className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1.5 text-xs">
           {columns
             .filter((column) => column.id !== "name")
             .map((column) => (
-              <StatusBadge
-                key={column.id}
-                tone={
-                  column.id === "application"
-                    ? applicationTone(user.applicationStatus)
-                    : column.id === "email" && !user.emailVerified
-                      ? "warning"
-                      : "neutral"
-                }
-                dot={false}
-                className="max-w-full items-baseline gap-1 wrap-anywhere text-left"
-              >
-                <span className="text-muted-foreground shrink-0">{column.header}:</span>
-                <span className="min-w-0">{values[column.id as UserColumnId]}</span>
-                {column.id === "email" && (
-                  <span className="sr-only">
-                    {user.emailVerified ? t("verified") : t("unverified")}
-                  </span>
-                )}
-              </StatusBadge>
+              <div key={column.id} className="flex max-w-full items-baseline gap-1 wrap-anywhere">
+                <dt className="text-muted-foreground shrink-0">{column.header}:</dt>
+                <dd className="min-w-0">
+                  {column.id === "application" ? (
+                    <StatusBadge tone={applicationTone(user.applicationStatus)} dot={false}>
+                      {values.application}
+                    </StatusBadge>
+                  ) : column.id === "presence" && presentIds !== null ? (
+                    <StatusBadge tone={presentIds.has(user.id) ? "success" : "neutral"}>
+                      {values.presence}
+                    </StatusBadge>
+                  ) : column.id === "email" ? (
+                    <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span>{values.email}</span>
+                      <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+                        {user.emailVerified ? t("verified") : t("unverified")}
+                      </StatusBadge>
+                    </span>
+                  ) : (
+                    values[column.id as UserColumnId]
+                  )}
+                </dd>
+              </div>
             ))}
-        </div>
+        </dl>
       </div>
       <CaretRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
     </Link>

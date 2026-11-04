@@ -28,9 +28,7 @@ function Column({ title, rows, showMerged }: { title: string; rows: Row[]; showM
   const { t } = useLocale();
   return (
     <section className="flex min-h-0 min-w-0 flex-col gap-[0.75em]">
-      <h3 className="text-muted-foreground text-[1.25em] font-medium tracking-[0.18em] uppercase">
-        {title}
-      </h3>
+      <h3 className="text-muted-foreground text-[1.25em] font-medium">{title}</h3>
       {rows.length === 0 ? (
         <TvEmpty text={t("githubNoActivity")} />
       ) : (
@@ -38,17 +36,17 @@ function Column({ title, rows, showMerged }: { title: string; rows: Row[]; showM
           {rows.slice(0, 5).map((row, index) => (
             <li
               key={row.name}
-              className="flex items-baseline gap-[0.75em] rounded-[0.5em] border px-[0.9em] py-[0.5em]"
+              className="flex items-baseline gap-[0.75em] border-b border-border/60 px-[0.9em] py-[0.5em] last:border-b-0"
             >
-              <span className="text-muted-foreground w-[1.5em] font-mono text-[1.5em] tabular-nums">
+              <span className="text-muted-foreground w-[1.5em] text-[1.5em] tabular-nums">
                 {index + 1}
               </span>
               <span className="min-w-0 flex-1 truncate text-[1.75em] font-semibold">
                 {row.name}
               </span>
-              <span className="font-mono text-[2em] font-semibold tabular-nums">{row.count}</span>
+              <span className="text-[2em] font-semibold tabular-nums">{row.count}</span>
               {showMerged && (
-                <span className="text-muted-foreground font-mono text-[1.25em] tabular-nums">
+                <span className="text-muted-foreground text-[1.25em] tabular-nums">
                   {row.merged ?? 0} {t("githubMerged")}
                 </span>
               )}

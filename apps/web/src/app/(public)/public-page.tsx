@@ -260,7 +260,7 @@ function PublicPageContent({
       </nav>
 
       {openApplications.length > 0 && (
-        <section aria-labelledby="applications-title" className="border-t py-12">
+        <section aria-labelledby="applications-title" className="py-12">
           <SectionHeading icon={ClipboardTextIcon} id="applications-title">
             {t("openApplications")}
           </SectionHeading>
@@ -293,16 +293,13 @@ function PublicPageContent({
       )}
 
       {screenAnnouncements.length > 0 && (
-        <section aria-labelledby="announcements-title" className="border-t py-12">
+        <section aria-labelledby="announcements-title" className="py-12">
           <SectionHeading icon={MegaphoneIcon} id="announcements-title">
             {t("publicAnnouncements")}
           </SectionHeading>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {screenAnnouncements.map((item) => (
-              <article
-                key={item.id}
-                className="hover:border-primary/30 rounded-surface border p-5 transition-colors"
-              >
+              <article key={item.id} className="rounded-surface border p-5">
                 <h3 className="font-medium">{item.title}</h3>
                 <p className="text-muted-foreground text-pretty mt-2 wrap-anywhere whitespace-pre-wrap text-sm">
                   {item.body}
@@ -313,17 +310,14 @@ function PublicPageContent({
         </section>
       )}
 
-      <section aria-labelledby="schedule-title" className="border-t py-12">
+      <section aria-labelledby="schedule-title" className="py-12">
         <SectionHeading icon={CalendarDotsIcon} id="schedule-title">
           {t("publicSchedule")}
         </SectionHeading>
         {upcomingSchedule.length ? (
-          <ol className="mt-6 divide-y overflow-hidden rounded-surface border">
+          <ol className="mt-6 divide-y">
             {upcomingSchedule.map((item) => (
-              <li
-                key={item.id}
-                className="hover:bg-accent/50 grid gap-1 p-4 transition-colors sm:grid-cols-[12rem_1fr_auto] sm:gap-4"
-              >
+              <li key={item.id} className="grid gap-1 py-4 sm:grid-cols-[12rem_1fr_auto] sm:gap-4">
                 <time className="text-muted-foreground text-sm tabular-nums">
                   {dateTime(item.startsAt, event.timezone, language)}
                 </time>
@@ -358,7 +352,7 @@ function PublicPageContent({
         )}
       </section>
 
-      <section aria-labelledby="challenges-title" className="border-t py-12">
+      <section aria-labelledby="challenges-title" className="py-12">
         <SectionHeading icon={TrophyIcon} id="challenges-title">
           {t("challengesAndPrizes")}
         </SectionHeading>
@@ -398,7 +392,7 @@ function PublicPageContent({
         )}
       </section>
 
-      <section aria-labelledby="gallery-title" className="border-t py-12">
+      <section aria-labelledby="gallery-title" className="py-12">
         <SectionHeading icon={FolderSimpleIcon} id="gallery-title">
           {t("projectGallery")}
         </SectionHeading>
@@ -414,7 +408,7 @@ function PublicPageContent({
         </Button>
       </section>
 
-      <section aria-labelledby="sponsors-title" className="border-t py-12">
+      <section aria-labelledby="sponsors-title" className="py-12">
         <h2
           id="sponsors-title"
           tabIndex={-1}
@@ -433,7 +427,7 @@ function PublicPageContent({
       </section>
 
       {collaborators.length > 0 && (
-        <section aria-labelledby="collaborators-title" className="border-t py-12">
+        <section aria-labelledby="collaborators-title" className="py-12">
           <h2
             id="collaborators-title"
             tabIndex={-1}

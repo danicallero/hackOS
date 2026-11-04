@@ -70,14 +70,13 @@ describe("warning text contrast", () => {
       const theme = themeTokens(selector);
       const warning = tokenColor(theme, "--warning");
       const warningForeground = tokenColor(theme, "--warning-foreground");
-      const foreground = tokenColor(theme, "--foreground");
       const card = tokenColor(theme, "--card");
       const shell = selector === ":root" ? card : tokenColor(theme, "--hackos-shell");
 
-      // StatCard's 5% wash, alerts/banner's 10% wash, and StatusBadge's 10% wash.
-      expectAa(warningForeground, blend(warning, card, 0.05));
+      // Statistic cards use the card canvas; alerts and banners retain a 10% wash.
+      expectAa(warningForeground, card);
       expectAa(warningForeground, blend(warning, shell, 0.1));
-      expectAa(foreground, blend(warning, card, 0.1));
+      expectAa(tokenColor(theme, "--muted-foreground"), card);
       // The verification button's 10% wash is nested in its banner's 10% wash.
       expectAa(warningForeground, blend(warning, blend(warning, shell, 0.1), 0.1));
     }

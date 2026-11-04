@@ -109,7 +109,7 @@ export function ActivityStatisticsDetail({
           {mealPlan ? (
             <section className="min-w-0 space-y-3">
               <h2 className="type-section-title">{t("mealPlanDietary")}</h2>
-              <dl className="divide-y divide-border/60 border-y border-border/60">
+              <dl className="divide-y divide-border/60">
                 {mealPlan.intolerances.length === 0 ? (
                   <div className="py-2 text-sm text-muted-foreground">
                     {t("mealPlanNoRestrictions")}
@@ -163,7 +163,7 @@ function StatsSection({
 
 function FigureList({ rows }: { rows: { label: string; n: number }[] }) {
   return (
-    <dl className="divide-y divide-border/60 border-y border-border/60">
+    <dl className="divide-y divide-border/60">
       {rows.map((item) => (
         <div key={item.label} className="flex items-baseline justify-between gap-4 py-2">
           <dt className="text-sm text-muted-foreground">{item.label}</dt>

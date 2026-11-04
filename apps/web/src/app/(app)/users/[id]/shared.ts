@@ -6,9 +6,6 @@ import { getEventTimeZone } from "@/lib/event-time";
 import { LOCALE_CODES } from "@/lib/i18n";
 import type { UserDetail } from "@/lib/types";
 
-/** H8: the header pill just shows the user's actual role name (illustrative tone, never used for gating). */
-export const ROLE_TONE = "neutral";
-
 export { roleDisplayName } from "@hackos/shared/display-labels";
 
 export function fullName(u: Pick<UserDetail, "name" | "surname" | "email">): string {

@@ -1,7 +1,6 @@
 import { StatusBadge } from "@/components/common/status-badge";
 import { useLocale } from "@/lib/i18n";
 import type { AccreditationLookup, PersonCard, PresenceLookup } from "@/lib/logistics";
-import { personName } from "@/lib/logistics";
 
 export function labelForIntolerance(item: { label: unknown }, fallback: string): string {
   if (typeof item.label === "string") return item.label;
@@ -23,10 +22,9 @@ export function PersonCardView({
     labelForIntolerance(item, t("intoleranceFallback")),
   );
   return (
-    <div className="rounded-lg border p-4">
+    <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="font-medium">{personName(card)}</p>
           {card.userId != null && (
             <p className="text-muted-foreground text-sm">
               {t("userNumberFallback", { id: card.userId })}
@@ -43,11 +41,11 @@ export function PersonCardView({
             <StatusBadge tone={card.confirmed ? "success" : "warning"}>
               {card.confirmed ? t("confirmed") : t("notConfirmed")}
             </StatusBadge>
-            <StatusBadge tone={card.alreadyAccredited ? "info" : "neutral"}>
+            <span className="text-muted-foreground text-xs font-mono wrap-anywhere">
               {card.alreadyAccredited
                 ? t("badgeCapitalInline", { badge: card.currentBadge ?? "" })
                 : t("noBadge")}
-            </StatusBadge>
+            </span>
           </div>
         )}
         {"present" in card && (

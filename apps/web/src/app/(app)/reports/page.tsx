@@ -10,7 +10,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -88,9 +88,9 @@ export default function ReportsPage() {
       header: t("colReported"),
       cell: (r) => (
         <div className="flex min-w-0 items-center gap-2">
-          <Badge variant="secondary">
+          <span className="text-muted-foreground text-xs">
             {t(r.kind === "project" ? "reportKindProject" : "reportKindProfile")}
-          </Badge>
+          </span>
           {r.project ? (
             <Link href={`/projects/${r.project.id}`} className="truncate text-sm hover:underline">
               {r.project.name}
@@ -150,7 +150,7 @@ export default function ReportsPage() {
             </Button>
           </div>
         ) : (
-          <Badge variant="outline">{t(STATUS_KEY[r.status])}</Badge>
+          <StatusBadge tone="neutral">{t(STATUS_KEY[r.status])}</StatusBadge>
         ),
     },
   ];

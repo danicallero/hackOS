@@ -33,7 +33,7 @@ import {
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserDetail } from "@/lib/types";
-import { fullName, ROLE_TONE, roleDisplayName } from "./shared";
+import { fullName, roleDisplayName } from "./shared";
 import { UserPhoto } from "./user-photo";
 
 export function ProfileHeader({
@@ -97,7 +97,9 @@ export function ProfileHeader({
             <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
               {user.emailVerified ? t("verified") : t("unverified")}
             </StatusBadge>
-            <StatusBadge tone={ROLE_TONE}>{roleDisplayName(user.visibleRoleName, t)}</StatusBadge>
+            <span className="text-muted-foreground text-sm">
+              {roleDisplayName(user.visibleRoleName, t)}
+            </span>
             {user.badgeId && (
               <span className="text-muted-foreground font-mono text-xs">
                 {t("badgeIdInline", { id: user.badgeId })}

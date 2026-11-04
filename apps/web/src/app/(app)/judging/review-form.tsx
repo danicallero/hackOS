@@ -431,7 +431,7 @@ export function ReviewForm({
           )}
           {syncLabel}
         </span>
-        <ReviewStatusBadge quiet status={status === "submitted" ? "submitted" : "draft"} />
+        <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
         {column && onClose && (
           <button
             type="button"

@@ -15,7 +15,6 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { diffAuditSnapshot, formatDiffValue } from "@/lib/audit-diff";
@@ -88,9 +87,7 @@ export default function AuditEntryPage() {
         }
         state={
           row.source ? (
-            <Badge variant="outline" className="capitalize">
-              {row.source}
-            </Badge>
+            <span className="text-muted-foreground text-xs capitalize">{row.source}</span>
           ) : undefined
         }
         description={summary}

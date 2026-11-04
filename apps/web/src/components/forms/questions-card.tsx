@@ -809,9 +809,7 @@ export function QuestionsCard({
               {(ungroupedBlock.fields.length > 0 || dragging) && (
                 <div className="space-y-4">
                   {sections.length > 0 && ungroupedBlock.fields.length > 0 && (
-                    <p className="text-muted-foreground text-xs font-medium uppercase">
-                      {t("noSection")}
-                    </p>
+                    <p className="text-muted-foreground text-xs font-medium">{t("noSection")}</p>
                   )}
                   {renderFields(ungroupedBlock)}
                   <DroppableBlock
@@ -2269,7 +2267,7 @@ export function FileRestrictionsEditor({
       </div>
       {restrictTypes && (
         <div className="space-y-1.5">
-          <Label htmlFor="allowed-file-types" className="text-muted-foreground text-xs uppercase">
+          <Label htmlFor="allowed-file-types" className="text-muted-foreground text-xs">
             {t("allowedFileTypesLabel")}
           </Label>
           <Input
@@ -2289,7 +2287,7 @@ export function FileRestrictionsEditor({
         </div>
       )}
       <div className="space-y-1.5">
-        <Label htmlFor="max-file-size-mb" className="text-muted-foreground text-xs uppercase">
+        <Label htmlFor="max-file-size-mb" className="text-muted-foreground text-xs">
           {t("maxSizeMbLabel")}
         </Label>
         <Input
