@@ -8,7 +8,12 @@ import {
   type RealtimeRefetchTrigger,
   telemetryScopeForRealtimeScope,
 } from "@/lib/realtime-telemetry";
-import { invalidateServerState, readServerState, type ServerStateKey } from "@/lib/server-state";
+import {
+  invalidateServerState,
+  peekServerState,
+  readServerState,
+  type ServerStateKey,
+} from "@/lib/server-state";
 import {
   type SseResyncContext,
   type SseResyncReason,
@@ -161,12 +166,16 @@ export function useLiveQuery<T>(
   connected: boolean;
   refetch: (trigger?: RealtimeRefetchTrigger) => void;
 } {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(true);
   const resourceKeyValue = JSON.stringify(requestedResourceKey);
   // The key is a value contract, so equal inline arrays must not restart a read.
   const resourceKey = stableResourceKey(resourceKeyValue) as ServerStateKey;
+  // Stale-while-revalidate: a remount paints the last settled read model at
+  // once; the mount effect below still revalidates it in the background.
+  const [data, setData] = useState<T | null>(() =>
+    enabled ? (peekServerState<T>(resourceKey) ?? null) : null,
+  );
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(data === null);
 
   const fetcherRef = useRef(fetcher);
   useEffect(() => {
@@ -181,7 +190,7 @@ export function useLiveQuery<T>(
   } | null>(null);
   const disposedRef = useRef(false);
   const refetchRef = useRef<(trigger?: RealtimeRefetchTrigger) => void>(() => undefined);
-  const dataRef = useRef<T | null>(null);
+  const dataRef = useRef<T | null>(data);
 
   const refetch = useCallback(
     (trigger: RealtimeRefetchTrigger = "manual") => {
@@ -255,11 +264,19 @@ export function useLiveQuery<T>(
   useEffect(() => {
     disposedRef.current = false;
     if (!enabled) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset loading on refetch; no lazier pattern for this state reset
-    setLoading(true);
+    const settled = peekServerState<T>(resourceKey);
+    if (settled !== undefined) {
+      dataRef.current = settled;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- adopt the cached read model of a new key before revalidating it
+      setData(settled);
+      setLoading(false);
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset loading on refetch; no lazier pattern for this state reset
+      setLoading(true);
+    }
     const cancel = refetch();
     return cancel;
-  }, [enabled, refetch, queryKeyValue]);
+  }, [enabled, refetch, queryKeyValue, resourceKey]);
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onMatchingEventRef = useRef(onMatchingEvent);

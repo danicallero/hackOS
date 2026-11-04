@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
   type ApplicationForm,
@@ -30,6 +29,8 @@ import {
   windowState,
 } from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
+import { applicationsResource, fetchListResource } from "@/lib/list-resources";
+import { peekServerState, revalidateServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 
 export default function ApplicationsPage() {
@@ -37,18 +38,21 @@ export default function ApplicationsPage() {
   const isMobile = useIsMobile();
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
-  const [forms, setForms] = useState<ApplicationForm[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: a remount paints the last read at once.
+  const seeded = peekServerState<{ applications: ApplicationForm[] }>(applicationsResource.key);
+  const [forms, setForms] = useState<ApplicationForm[]>(() => seeded?.applications ?? []);
+  const [loading, setLoading] = useState(seeded === undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
   const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
 
   const load = useCallback(async () => {
-    if (!hasLoaded()) setLoading(true);
+    if (peekServerState(applicationsResource.key) !== undefined) succeeded();
+    else if (!hasLoaded()) setLoading(true);
     try {
       // The API admits manage, review, and decide holders. It never infers
       // builder permission merely from access to this directory.
-      const { applications } = await api.get<{ applications: ApplicationForm[] }>(
-        "/api/applications",
+      const { applications } = await revalidateServerState(applicationsResource.key, (signal) =>
+        fetchListResource<{ applications: ApplicationForm[] }>(applicationsResource, signal),
       );
       setForms(applications);
       succeeded();

@@ -108,6 +108,25 @@ readers. The schedule editor and event settings subscribe to the content stream
 and merge new server values into open forms while keeping fields the user has
 changed.
 
+### Cached-first reads (stale-while-revalidate)
+
+A remount must not flash a loading state for data the user already saw.
+`peekServerState(key)` returns the last settled value (up to five minutes old,
+even past the 30 s reuse window) and never starts a request;
+`revalidateServerState(key, fetcher)` always reads the API, joins an in-flight
+read and replaces the cache. The previous value stays peekable while the new
+read runs and is dropped by `invalidateServerState` or an identity change.
+`useServerResource` and `useLiveQuery` paint the peeked value on their first
+render (no `loading`) and revalidate in the background; if that revalidation
+fails the painted data stays and no error replaces it. Pages that still own a
+hand-written loader (challenges, enterprises, applications, users, schedule)
+seed their state from `peekServerState` and load through
+`revalidateServerState` (users keeps its `readServerState` + invalidate flow). `lib/list-resources.ts` holds
+each main list's key and request so the page and the navigation warm-up
+(`warmRoute`, called from sidebar links on hover/focus and gated by the viewer's
+capabilities) share one cache entry. Tests that mount a cached page must call
+`resetServerStateForTests()` in `beforeEach`.
+
 ### Background refresh failures
 
 A page whose `load()` is re-run by `useAutoRefresh` must not treat a failed

@@ -121,4 +121,33 @@ describe("useLiveQuery recovery (H38, H41-H42)", () => {
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+
+  it("paints the previous read model on remount without a loading state, then revalidates", async () => {
+    let seen: { data: { version: number } | null; loading: boolean }[] = [];
+    function Probe() {
+      const { data, loading } = useLiveQuery(fetcher, "queue", ["queue.changed"], {
+        resourceKey: ["test", "queue"],
+      });
+      seen.push({ data, loading });
+      return null;
+    }
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => root?.render(createElement(Probe)));
+    await flush();
+    expect(seen[0]).toEqual({ data: null, loading: true });
+
+    act(() => root?.unmount());
+    vi.setSystemTime(new Date("2026-09-14T10:01:00.000Z"));
+    fetcher.mockResolvedValue({ version: 2 });
+    seen = [];
+    root = createRoot(container);
+    act(() => root?.render(createElement(Probe)));
+    expect(seen[0]).toEqual({ data: { version: 1 }, loading: false });
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(seen.at(-1)).toEqual({ data: { version: 2 }, loading: false });
+    expect(seen.some((s) => s.loading)).toBe(false);
+  });
 });

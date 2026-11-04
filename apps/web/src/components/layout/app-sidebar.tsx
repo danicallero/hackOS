@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
+import { warmRoute } from "@/lib/list-resources";
 import {
   isNavItemVisible,
   type NavItem,
@@ -97,6 +98,7 @@ function NavLink({
   const pathname = usePathname();
   const { t } = useLocale();
   const { isMobile, setOpenMobile } = useSidebar();
+  const { can } = useSessionContext();
   const active =
     isActive ??
     (matchesPath(pathname, item.href) ||
@@ -135,6 +137,9 @@ function NavLink({
       >
         <Link
           href={item.href}
+          // Warm the destination list so the page paints from cache on arrival.
+          onPointerEnter={() => warmRoute(item.href, can)}
+          onFocus={() => warmRoute(item.href, can)}
           onNavigate={() => {
             if (isMobile) setOpenMobile(false);
           }}

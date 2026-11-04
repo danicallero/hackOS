@@ -9,6 +9,12 @@ export type ServerStateKey = readonly unknown[];
 /** Settled data is reusable for this long; a later mount re-reads the API. */
 const DATA_TTL_MS = 30_000;
 
+/**
+ * Stale-while-revalidate window: settled data older than the TTL may still be
+ * painted instantly on mount (`peekServerState`) while a fresh read runs.
+ */
+const STALE_PAINT_MS = 5 * 60_000;
+
 type Entry = {
   data?: unknown;
   at?: number;
@@ -78,23 +84,32 @@ export function invalidateServerState(key: ServerStateKey): void {
 }
 
 /**
+ * Settled data for an exact resource, fresh or stale (up to five minutes), or
+ * `undefined`. For painting a mount instantly; it never starts a request, so
+ * callers still revalidate in the background (stale-while-revalidate).
+ */
+export function peekServerState<T>(key: ServerStateKey): T | undefined {
+  const entry = entries.get(scopedKey(key));
+  if (entry?.data === undefined || Date.now() - (entry.at ?? 0) >= STALE_PAINT_MS) return undefined;
+  return entry.data as T;
+}
+
+/**
  * One in-flight GET per active identity/resource. A response can populate the
  * cache only if the identity epoch and entry still match the request that made
  * it, preventing an old login or invalidated request from winning a race.
+ * Previous settled data stays peekable until the new response replaces it.
  */
-export function readServerState<T>(
+function fetchInto<T>(
   key: ServerStateKey,
   fetcher: (signal: AbortSignal) => Promise<T>,
 ): Promise<T> {
   const keyAtStart = scopedKey(key);
   const existing = entries.get(keyAtStart);
-  if (existing?.data !== undefined && Date.now() - (existing.at ?? 0) < DATA_TTL_MS) {
-    return Promise.resolve(existing.data as T);
-  }
   if (existing?.request) return existing.request as Promise<T>;
 
   const controller = new AbortController();
-  const entry: Entry = { controller };
+  const entry: Entry = { controller, data: existing?.data, at: existing?.at };
   const requestEpoch = epoch;
   const request = fetcher(controller.signal)
     .then((data) => {
@@ -113,6 +128,26 @@ export function readServerState<T>(
   entry.request = request;
   entries.set(keyAtStart, entry);
   return request;
+}
+
+/** Reuse settled data younger than the TTL; otherwise read the API. */
+export function readServerState<T>(
+  key: ServerStateKey,
+  fetcher: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const existing = entries.get(scopedKey(key));
+  if (existing?.data !== undefined && Date.now() - (existing.at ?? 0) < DATA_TTL_MS) {
+    return Promise.resolve(existing.data as T);
+  }
+  return fetchInto(key, fetcher);
+}
+
+/** Always read the API (joining an in-flight read); the result replaces the cache. */
+export function revalidateServerState<T>(
+  key: ServerStateKey,
+  fetcher: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  return fetchInto(key, fetcher);
 }
 
 /** Test-only cleanup for deterministic identity/cache tests. */

@@ -5,7 +5,9 @@ import { useCallback, useEffect } from "react";
 import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { Translate } from "@/lib/i18n";
+import { scheduleResource } from "@/lib/list-resources";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { revalidateServerState } from "@/lib/server-state";
 
 export function useScheduleLoader({
   canRead,
@@ -31,8 +33,7 @@ export function useScheduleLoader({
   const load = useCallback(
     (options?: { preserveSelection?: boolean }) => {
       setError(null);
-      logisticsApi
-        .schedule()
+      revalidateServerState(scheduleResource.key, () => logisticsApi.schedule())
         .then(({ items }) => {
           setItems(items);
           if (options?.preserveSelection) {

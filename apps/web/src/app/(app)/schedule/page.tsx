@@ -40,7 +40,9 @@ import {
 } from "@/components/ui/table";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { scheduleResource } from "@/lib/list-resources";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
+import { peekServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
@@ -87,7 +89,10 @@ export default function SchedulePage() {
   // schedule:manage implies read; read-only holders get the staff table.
   const canRead = useCan(CAPABILITIES.SCHEDULE_READ) || canEdit;
 
-  const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
+  // Stale-while-revalidate: a remount paints the last schedule at once.
+  const [items, setItems] = useState<PublicScheduleItem[] | null>(
+    () => peekServerState<{ items: PublicScheduleItem[] }>(scheduleResource.key)?.items ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
