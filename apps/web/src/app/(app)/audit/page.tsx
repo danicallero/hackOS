@@ -221,6 +221,14 @@ export default function AuditPage() {
           >
             {t("userInline", { id: r.entity_id })}
           </Link>
+        ) : r.entity_type === "application_response" ? (
+          <Link
+            href={`/applications/response/${r.entity_id}`}
+            className="text-sm hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {r.entity_type} #{r.entity_id}
+          </Link>
         ) : (
           <span className="text-sm">
             {r.entity_type} #{r.entity_id}

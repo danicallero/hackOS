@@ -8,6 +8,7 @@ import { sponsorShareKey } from "@hackos/shared/applications";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
@@ -1302,6 +1303,36 @@ export function ReviewModal({
   );
 }
 
+/** Sections this reviewer chose to fold away in the answers list; kept per
+ *  application in this browser only, so it never affects other reviewers. */
+function useCollapsedSections(applicationId: number) {
+  const key = `review-collapsed-sections:${applicationId}`;
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(key);
+      setCollapsed(new Set(raw ? (JSON.parse(raw) as string[]) : []));
+    } catch {
+      setCollapsed(new Set());
+    }
+  }, [key]);
+  const toggle = useCallback(
+    (sectionKey: string) =>
+      setCollapsed((current) => {
+        const next = new Set(current);
+        if (!next.delete(sectionKey)) next.add(sectionKey);
+        try {
+          window.localStorage.setItem(key, JSON.stringify([...next]));
+        } catch {
+          // storage unavailable: the fold just won't persist
+        }
+        return next;
+      }),
+    [key],
+  );
+  return [collapsed, toggle] as const;
+}
+
 /** The applicant's answers: read-only grouped-by-section view, an inline
  *  edit form (APPLICATIONS_EDIT_RESPONSE), or a raw key/value fallback when
  *  the form has no template. */
@@ -1341,6 +1372,7 @@ function AnswersSection({
   onExternalLinkClick?: () => void;
 }) {
   const { t } = useLocale();
+  const [collapsed, toggleCollapsed] = useCollapsedSections(applicationId);
   return (
     <div className="space-y-4">
       {answerSections.length === 0 && <h3 className="text-sm font-medium">{t("answersLabel")}</h3>}
@@ -1356,50 +1388,82 @@ function AnswersSection({
               }
             >
               {group.section && (
-                <p className="type-section-title text-balance">
+                <button
+                  type="button"
+                  aria-expanded={editing || !collapsed.has(group.section.key)}
+                  disabled={editing}
+                  onClick={() => group.section && toggleCollapsed(group.section.key)}
+                  className="type-section-title focus-visible:ring-ring flex w-full items-center justify-between gap-2 rounded-sm text-left text-balance outline-none focus-visible:ring-2"
+                >
                   {pickText(group.section.title, lang)}
-                </p>
+                  {!editing && (
+                    <CaretDownIcon
+                      aria-hidden="true"
+                      className={cn(
+                        "text-muted-foreground size-4 shrink-0 transition-transform",
+                        collapsed.has(group.section.key) && "-rotate-90",
+                      )}
+                    />
+                  )}
+                </button>
               )}
-              <div className="space-y-4">
+              <div
+                className={cn(
+                  "space-y-4",
+                  !editing && group.section && collapsed.has(group.section.key) && "hidden",
+                )}
+              >
                 {group.fields.map((f) => {
                   const isLogistics = group.section?.key === LOGISTICS_SECTION_KEY;
                   const fieldEditing = editing && !isLogistics;
                   const value = (fieldEditing ? editValues[f.key] : answerValues[f.key]) as
                     | FieldValue
                     | undefined;
+                  const age =
+                    !fieldEditing && f.kind === "birth_year" && typeof value === "number"
+                      ? new Date().getFullYear() - value
+                      : null;
                   return (
-                    <TemplateFieldControl
-                      key={f.key}
-                      field={f}
-                      applicationId={fieldEditing ? applicationId : undefined}
-                      responseId={fieldEditing ? response.id : undefined}
-                      value={value}
-                      disabled={!fieldEditing}
-                      error={fieldEditing ? editErrors[f.key] : undefined}
-                      onChange={(v) => onEditFieldChange(f.key, v)}
-                      onBlur={(value) => onEditFieldBlur(f, value)}
-                      sharedWithSponsors={
-                        (fieldEditing ? editValues : response.responses)[sponsorShareKey(f.key)] ===
-                        true
-                      }
-                      onSharedWithSponsorsChange={(v) =>
-                        setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
-                      }
-                      lang={lang}
-                      inDialog
-                      onExternalLinkClick={onExternalLinkClick}
-                    />
+                    <div key={f.key} className="space-y-1">
+                      <TemplateFieldControl
+                        field={f}
+                        applicationId={fieldEditing ? applicationId : undefined}
+                        responseId={fieldEditing ? response.id : undefined}
+                        value={value}
+                        disabled={!fieldEditing}
+                        error={fieldEditing ? editErrors[f.key] : undefined}
+                        onChange={(v) => onEditFieldChange(f.key, v)}
+                        onBlur={(value) => onEditFieldBlur(f, value)}
+                        sharedWithSponsors={
+                          (fieldEditing ? editValues : response.responses)[
+                            sponsorShareKey(f.key)
+                          ] === true
+                        }
+                        onSharedWithSponsorsChange={(v) =>
+                          setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
+                        }
+                        lang={lang}
+                        inDialog
+                        onExternalLinkClick={onExternalLinkClick}
+                      />
+                      {age !== null && age >= 0 && (
+                        <p className="text-muted-foreground text-xs">
+                          {t("reviewAgeYears", { count: age })}
+                        </p>
+                      )}
+                    </div>
                   );
                 })}
               </div>
-              {group.section?.key === LOGISTICS_SECTION_KEY && (
-                <Link
-                  href={`/users/${response.user_id}`}
-                  className="text-primary text-xs underline underline-offset-4"
-                >
-                  {t("editInProfileLink")}
-                </Link>
-              )}
+              {group.section?.key === LOGISTICS_SECTION_KEY &&
+                (editing || !collapsed.has(LOGISTICS_SECTION_KEY)) && (
+                  <Link
+                    href={`/users/${response.user_id}`}
+                    className="text-primary text-xs underline underline-offset-4"
+                  >
+                    {t("editInProfileLink")}
+                  </Link>
+                )}
             </div>
           ))}
           {editing && (
