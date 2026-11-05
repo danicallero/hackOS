@@ -251,6 +251,7 @@ Table applications {
   id integer [pk, increment, not null]
   name text [not null]
   open_at "timestamp with time zone"
+  review_hidden_fields "text[]" [not null, default: `'{}'::text[]`]
   sections jsonb [not null, default: `'[]'::jsonb`]
   template jsonb [not null]
 }

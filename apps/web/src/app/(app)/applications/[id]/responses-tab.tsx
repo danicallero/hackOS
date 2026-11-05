@@ -88,6 +88,8 @@ export function ResponsesTab({
   sections,
   askShirtSize,
   askFoodIntolerances,
+  reviewHiddenFields,
+  onStandardViewSaved,
   workspace,
 }: {
   id: number;
@@ -95,6 +97,8 @@ export function ResponsesTab({
   sections: FormSection[];
   askShirtSize: boolean;
   askFoodIntolerances: boolean;
+  reviewHiddenFields: string[];
+  onStandardViewSaved: () => void;
   workspace: ApplicationWorkspace;
 }) {
   const { t, language } = useLocale();
@@ -1055,6 +1059,8 @@ export function ResponsesTab({
           template={template}
           sections={sections}
           askShirtSize={askShirtSize}
+          reviewHiddenFields={reviewHiddenFields}
+          onStandardViewSaved={onStandardViewSaved}
           askFoodIntolerances={askFoodIntolerances}
           onClose={() => {
             setSelectedId(null);

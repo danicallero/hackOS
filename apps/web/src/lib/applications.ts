@@ -173,6 +173,8 @@ export interface ApplicationForm {
   /** Whether this form asks for shirt size / dietary restrictions (H12). */
   ask_shirt_size: boolean;
   ask_food_intolerances: boolean;
+  /** Answer keys hidden in the standard review view; every answer stays reachable (H13). */
+  review_hidden_fields?: string[];
   /** Roles granted alongside ticket issuance when a response is confirmed (H8). */
   grants_role_ids: number[];
   /** Whether any response to this form has ever reached "confirmed" (H8) —
