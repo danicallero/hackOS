@@ -199,6 +199,11 @@ versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
 
+The review modal opens on a standard view: `applications.review_hidden_fields` lists the answer keys
+hidden by default (set with `PATCH /api/applications/:id`, `applications:manage`, no form-version
+bump). Reviewers can reveal everything with **View all details** (editing also shows everything) and
+keep their own hidden set in the browser; birth years read as ages in the standard view (H13).
+
 Form fields can belong to a named section via `section_key`, or remain ungrouped
 and appear immediately after a section via `after_section_key` (H11). These
 properties are mutually exclusive and must reference an existing section.

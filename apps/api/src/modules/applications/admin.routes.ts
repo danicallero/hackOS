@@ -142,7 +142,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       ) AS granted_role_name`;
   const COLUMNS = `id, name, template, sections, description, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
-                   current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
+                   review_hidden_fields, current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
                    ${HAS_CONFIRMED_RESPONSES_EXPR}, ${GRANTED_ROLE_NAME_EXPR}`;
 
   // ── public: open forms with their template ──────────────────────────────────
@@ -339,7 +339,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template (library fields receive owned catalogue IDs; removing one requires its UUID in library_deletions and cascades its values), named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
+          "Partial update of a form's template (library fields receive owned catalogue IDs; removing one requires its UUID in library_deletions and cascades its values), named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), the standard review view's hidden answers (`review_hidden_fields`, H13), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -399,6 +399,8 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
         if (b.ask_food_intolerances !== undefined)
           put("ask_food_intolerances", b.ask_food_intolerances);
+        if (b.review_hidden_fields !== undefined)
+          put("review_hidden_fields", [...new Set(b.review_hidden_fields)], "::text[]");
 
         // grants_role_ids replaces the form's full role-grant set (H8, H11).
         // Omitted (undefined) leaves it unchanged; [] clears every grant.

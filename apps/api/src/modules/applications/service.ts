@@ -1652,6 +1652,7 @@ export interface ResponseDetail {
     sections: FormSection[];
     ask_shirt_size: boolean;
     ask_food_intolerances: boolean;
+    review_hidden_fields: string[];
   };
   reviews: Array<{
     author_id: number;
@@ -1712,7 +1713,7 @@ export async function getResponseDetail(
               LIMIT 1) AS granted_role_name,
             a.template,
             a.sections,
-            a.ask_shirt_size, a.ask_food_intolerances
+            a.ask_shirt_size, a.ask_food_intolerances, a.review_hidden_fields
      FROM application_responses r
      JOIN users u ON u.id = r.user_id
      JOIN applications a ON a.id = r.application_id
@@ -1735,6 +1736,7 @@ export async function getResponseDetail(
     sections,
     ask_shirt_size,
     ask_food_intolerances,
+    review_hidden_fields,
     ...response
   } = rows[0];
 
@@ -1781,6 +1783,7 @@ export async function getResponseDetail(
       sections,
       ask_shirt_size,
       ask_food_intolerances,
+      review_hidden_fields,
     },
     reviews,
     avg_score: avgScore,

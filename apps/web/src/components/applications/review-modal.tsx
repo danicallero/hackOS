@@ -13,6 +13,8 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
+import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FloppyDiskIcon } from "@phosphor-icons/react/dist/csr/FloppyDisk";
 import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
@@ -40,6 +42,7 @@ import {
   ApplicationFileViewerPanel,
 } from "@/components/applications/review-file-viewer";
 import { type ReviewSyncMessage, useReviewSync } from "@/components/applications/review-sync";
+import { ReviewViewMenu, useReviewView } from "@/components/applications/review-view-menu";
 import { AlertModal } from "@/components/common/alert-modal";
 import { fileDownloadUrl } from "@/components/common/file-link";
 import { Modal } from "@/components/common/modal";
@@ -64,6 +67,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
@@ -423,6 +427,8 @@ export function ReviewModal({
   sections = [],
   askShirtSize = false,
   askFoodIntolerances = false,
+  reviewHiddenFields = [],
+  onStandardViewSaved,
   onClose,
   onChanged,
   onNavigate,
@@ -439,6 +445,9 @@ export function ReviewModal({
   /** Whether this form asks for shirt size/dietary data (H12) — see `logisticsAnswerFields`. */
   askShirtSize?: boolean;
   askFoodIntolerances?: boolean;
+  /** The form's standard review view: answer keys hidden unless "view all" is on (H13). */
+  reviewHiddenFields?: string[];
+  onStandardViewSaved?: () => void;
   onClose: () => void;
   onChanged: () => Promise<void>;
   workspace?: ApplicationWorkspace;
@@ -493,6 +502,18 @@ export function ReviewModal({
   // The PUT replaces the whole responses object, so editValues seeds from every
   // existing key, not just the ones the template shows.
   const [editing, setEditing] = useState(false);
+  const [viewAll, setViewAll] = useState(false);
+  const standardKey = reviewHiddenFields.join("\n");
+  const [standardHidden, setStandardHidden] = useState(reviewHiddenFields);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: standardKey is the stable identity of reviewHiddenFields
+  useEffect(() => setStandardHidden(reviewHiddenFields), [standardKey]);
+  const reviewView = useReviewView(applicationId, standardHidden);
+  const [savingStandardView, setSavingStandardView] = useState(false);
+  // Editing always exposes every answer; the compact view is read-only.
+  const compactView = !viewAll && !editing;
+  const shownFields = compactView
+    ? answerFields.filter((field) => !reviewView.hidden.has(field.key))
+    : answerFields;
   const [editValues, setEditValues] = useState<Record<string, unknown>>(response.responses);
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
@@ -722,6 +743,21 @@ export function ReviewModal({
       if (message.saveState === "saved") void onChangedRef.current();
     },
   );
+
+  async function saveStandardView(hidden: string[]) {
+    setSavingStandardView(true);
+    try {
+      await api.patch(`/api/applications/${applicationId}`, { review_hidden_fields: hidden });
+      setStandardHidden(hidden);
+      reviewView.setHidden(null);
+      toast.success(t("standardReviewViewSaved"), { compactTitle: t("saveStandardReviewView") });
+      onStandardViewSaved?.();
+    } catch (error) {
+      showErrorToast(error, t("saveStandardReviewView"));
+    } finally {
+      setSavingStandardView(false);
+    }
+  }
 
   function startEdit() {
     setEditValues({ ...response.responses });
@@ -1089,6 +1125,32 @@ export function ReviewModal({
                 <div className="hidden items-center gap-1 sm:flex">{candidateNavigation}</div>
               )}
               {decisionMenu}
+              <button
+                type="button"
+                className={dialogIconButtonClass}
+                onClick={() => setViewAll((current) => !current)}
+                aria-pressed={viewAll || editing}
+                disabled={editing}
+                aria-label={t("viewAllDetails")}
+                title={t("viewAllDetails")}
+              >
+                {viewAll || editing ? (
+                  <EyeIcon aria-hidden="true" weight="fill" />
+                ) : (
+                  <EyeSlashIcon aria-hidden="true" />
+                )}
+              </button>
+              {!editing && (
+                <ReviewViewMenu
+                  groups={groupFieldsBySections(answerFields, answerSections)}
+                  hidden={reviewView.hidden}
+                  customized={reviewView.customized}
+                  lang={lang}
+                  onChange={reviewView.setHidden}
+                  onSaveStandard={canManage ? saveStandardView : undefined}
+                  savingStandard={savingStandardView}
+                />
+              )}
               {showEditAction &&
                 (editing ? (
                   <Button
@@ -1211,7 +1273,8 @@ export function ReviewModal({
                       onEditFieldBlur={handleEditFieldBlur}
                       savingEdit={savingEdit}
                       saveEdit={saveEdit}
-                      answerFields={answerFields}
+                      answerFields={shownFields}
+                      compactView={compactView}
                       answerSections={answerSections}
                       answerValues={answerValues}
                       response={response}
@@ -1235,7 +1298,8 @@ export function ReviewModal({
                     onEditFieldBlur={handleEditFieldBlur}
                     savingEdit={savingEdit}
                     saveEdit={saveEdit}
-                    answerFields={answerFields}
+                    answerFields={shownFields}
+                    compactView={compactView}
                     answerSections={answerSections}
                     answerValues={answerValues}
                     response={response}
@@ -1255,7 +1319,8 @@ export function ReviewModal({
                   onEditFieldBlur={handleEditFieldBlur}
                   savingEdit={savingEdit}
                   saveEdit={saveEdit}
-                  answerFields={answerFields}
+                  answerFields={shownFields}
+                  compactView={compactView}
                   answerSections={answerSections}
                   answerValues={answerValues}
                   response={response}
@@ -1317,6 +1382,7 @@ function AnswersSection({
   savingEdit,
   saveEdit,
   answerFields,
+  compactView,
   answerSections,
   answerValues,
   response,
@@ -1334,6 +1400,8 @@ function AnswersSection({
   savingEdit: boolean;
   saveEdit: () => Promise<void>;
   answerFields: TemplateField[];
+  /** Read-only summary view: birth years read as ages. */
+  compactView: boolean;
   answerSections: FormSection[];
   answerValues: Record<string, unknown>;
   response: ResponseRow;
@@ -1346,62 +1414,80 @@ function AnswersSection({
       {answerSections.length === 0 && <h3 className="text-sm font-medium">{t("answersLabel")}</h3>}
       {answerFields.length > 0 ? (
         <div className="space-y-4">
-          {groupFieldsBySections(answerFields, answerSections).map((group, i) => (
-            <div
-              key={group.section?.key ?? `ungrouped-${i}`}
-              className={
-                group.section
-                  ? "border-border space-y-4 border-t pt-5 first:border-t-0 first:pt-0"
-                  : "space-y-4"
-              }
-            >
-              {group.section && (
-                <p className="type-section-title text-balance">
-                  {pickText(group.section.title, lang)}
-                </p>
-              )}
-              <div className="space-y-4">
-                {group.fields.map((f) => {
-                  const isLogistics = group.section?.key === LOGISTICS_SECTION_KEY;
-                  const fieldEditing = editing && !isLogistics;
-                  const value = (fieldEditing ? editValues[f.key] : answerValues[f.key]) as
-                    | FieldValue
-                    | undefined;
-                  return (
-                    <TemplateFieldControl
-                      key={f.key}
-                      field={f}
-                      applicationId={fieldEditing ? applicationId : undefined}
-                      responseId={fieldEditing ? response.id : undefined}
-                      value={value}
-                      disabled={!fieldEditing}
-                      error={fieldEditing ? editErrors[f.key] : undefined}
-                      onChange={(v) => onEditFieldChange(f.key, v)}
-                      onBlur={(value) => onEditFieldBlur(f, value)}
-                      sharedWithSponsors={
-                        (fieldEditing ? editValues : response.responses)[sponsorShareKey(f.key)] ===
-                        true
-                      }
-                      onSharedWithSponsorsChange={(v) =>
-                        setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
-                      }
-                      lang={lang}
-                      inDialog
-                      onExternalLinkClick={onExternalLinkClick}
-                    />
-                  );
-                })}
+          {groupFieldsBySections(answerFields, answerSections)
+            .filter((group) => group.fields.length > 0)
+            .map((group, i) => (
+              <div
+                key={group.section?.key ?? `ungrouped-${i}`}
+                className={
+                  group.section
+                    ? "border-border space-y-4 border-t pt-5 first:border-t-0 first:pt-0"
+                    : "space-y-4"
+                }
+              >
+                {group.section && (
+                  <p className="type-section-title text-balance">
+                    {pickText(group.section.title, lang)}
+                  </p>
+                )}
+                <div className="space-y-4">
+                  {group.fields.map((f) => {
+                    const isLogistics = group.section?.key === LOGISTICS_SECTION_KEY;
+                    const fieldEditing = editing && !isLogistics;
+                    const value = (fieldEditing ? editValues[f.key] : answerValues[f.key]) as
+                      | FieldValue
+                      | undefined;
+                    const birthYear = value as unknown;
+                    if (compactView && f.kind === "birth_year" && typeof birthYear === "number") {
+                      return (
+                        <div key={f.key} className="space-y-1.5">
+                          <Label htmlFor={`review-age-${f.key}`}>{t("reviewAgeLabel")}</Label>
+                          <Input
+                            id={`review-age-${f.key}`}
+                            disabled
+                            value={t("reviewAgeYears", {
+                              count: Math.max(0, new Date().getFullYear() - birthYear),
+                            })}
+                          />
+                        </div>
+                      );
+                    }
+                    return (
+                      <TemplateFieldControl
+                        key={f.key}
+                        field={f}
+                        applicationId={fieldEditing ? applicationId : undefined}
+                        responseId={fieldEditing ? response.id : undefined}
+                        value={value}
+                        disabled={!fieldEditing}
+                        error={fieldEditing ? editErrors[f.key] : undefined}
+                        onChange={(v) => onEditFieldChange(f.key, v)}
+                        onBlur={(value) => onEditFieldBlur(f, value)}
+                        sharedWithSponsors={
+                          (fieldEditing ? editValues : response.responses)[
+                            sponsorShareKey(f.key)
+                          ] === true
+                        }
+                        onSharedWithSponsorsChange={(v) =>
+                          setEditValues((prev) => ({ ...prev, [sponsorShareKey(f.key)]: v }))
+                        }
+                        lang={lang}
+                        inDialog
+                        onExternalLinkClick={onExternalLinkClick}
+                      />
+                    );
+                  })}
+                </div>
+                {group.section?.key === LOGISTICS_SECTION_KEY && (
+                  <Link
+                    href={`/users/${response.user_id}`}
+                    className="text-primary text-xs underline underline-offset-4"
+                  >
+                    {t("editInProfileLink")}
+                  </Link>
+                )}
               </div>
-              {group.section?.key === LOGISTICS_SECTION_KEY && (
-                <Link
-                  href={`/users/${response.user_id}`}
-                  className="text-primary text-xs underline underline-offset-4"
-                >
-                  {t("editInProfileLink")}
-                </Link>
-              )}
-            </div>
-          ))}
+            ))}
           {editing && (
             <div className="flex justify-end gap-2">
               <Button
