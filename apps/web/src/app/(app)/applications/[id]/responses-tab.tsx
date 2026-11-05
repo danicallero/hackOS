@@ -263,6 +263,7 @@ export function ResponsesTab({
     },
     {
       id: "status",
+      width: "w-36",
       header: t("statusColumn"),
       sortValue: (r) => r.status,
       cell: (r) => (
@@ -271,6 +272,7 @@ export function ResponsesTab({
     },
     {
       id: "score",
+      width: "w-28",
       header: t("scoreColumn"),
       align: "right",
       sortValue: (r) => Number(r.avg_score ?? -1),
@@ -288,6 +290,7 @@ export function ResponsesTab({
     },
     {
       id: "submitted",
+      width: "w-44",
       header: t("dataStatusSubmitted"),
       align: "right",
       sortValue: (r) => r.submitted_at ?? "",
@@ -300,6 +303,7 @@ export function ResponsesTab({
   if (workspace === "sent") {
     columns.push({
       id: "communicated",
+      width: "w-44",
       header: t("decisionDeliveryColumn"),
       align: "right",
       sortValue: (r) => r.decision_sent_at ?? "",
@@ -311,6 +315,7 @@ export function ResponsesTab({
     });
     columns.push({
       id: "deadline",
+      width: "w-44",
       header: t("confirmationDeadlineColumn"),
       align: "right",
       sortValue: (r) => r.confirmation_expires_at ?? "",
@@ -1003,6 +1008,7 @@ export function ResponsesTab({
           </div>
         )}
         columns={columns}
+        tableClassName={workspace === "sent" ? "min-w-[64rem]" : undefined}
         data={rows}
         getRowId={(r) => String(r.id)}
         loading={loading && !hasLoaded()}
