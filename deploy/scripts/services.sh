@@ -1562,7 +1562,7 @@ require_registry_tools() {
 }
 
 ghcr_tags() {
-  local package="$1" token
+  local package="$1" token url headers next
   require_registry_tools
   token="$(
     curl --fail --silent --show-error --get 'https://ghcr.io/token' \
@@ -1570,11 +1570,20 @@ ghcr_tags() {
       --data-urlencode "scope=repository:${github_owner}/${package}:pull" |
       python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])'
   )" || die "could not obtain a read-only GHCR token for $package"
-  curl --fail --silent --show-error \
-    -H "Authorization: Bearer $token" \
-    "https://ghcr.io/v2/${github_owner}/${package}/tags/list?n=1000" |
-    python3 -c 'import json, sys; print("\n".join(json.load(sys.stdin).get("tags", [])))' ||
-    die "could not list GHCR tags for $package"
+  headers="$(mktemp)"
+  url="https://ghcr.io/v2/${github_owner}/${package}/tags/list?n=1000"
+  # The registry lists tags in pages; following rel="next" keeps newly pushed
+  # tags visible once the repository holds more than one page of them.
+  while [[ -n "$url" ]]; do
+    curl --fail --silent --show-error -D "$headers" \
+      -H "Authorization: Bearer $token" "$url" |
+      python3 -c 'import json, sys; print("\n".join(json.load(sys.stdin).get("tags", [])))' ||
+      { rm -f "$headers"; die "could not list GHCR tags for $package"; }
+    next="$(sed -n 's/^[Ll]ink: <\([^>]*\)>; *rel="next".*/\1/p' "$headers" | tr -d '\r' | head -n 1)"
+    url=""
+    [[ -z "$next" ]] || url="https://ghcr.io${next}"
+  done
+  rm -f "$headers"
 }
 
 github_api() {
