@@ -89,6 +89,8 @@ interface DataTableProps<T> {
   /** Persistent mutation feedback that leaves the current rows available. */
   mutationError?: { message: string; onRetry?: () => void };
   className?: string;
+  /** Extra classes for the table itself, e.g. a min width so a fixed layout scrolls instead of squeezing flexible columns. */
+  tableClassName?: string;
   /** Enable row selection via checkboxes. */
   selectable?: boolean;
   selectedIds?: Set<string>;
@@ -244,6 +246,7 @@ export function DataTable<T>({
   error,
   mutationError,
   className,
+  tableClassName,
   selectable,
   selectedIds,
   onSelectionChange,
@@ -424,7 +427,9 @@ export function DataTable<T>({
           {isEmpty ? (
             <div className="min-w-0">{renderEmptyState()}</div>
           ) : (
-            <Table className={cn(columns.some((col) => col.width) && "table-fixed")}>
+            <Table
+              className={cn(columns.some((col) => col.width) && "table-fixed", tableClassName)}
+            >
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   {selectable && (
