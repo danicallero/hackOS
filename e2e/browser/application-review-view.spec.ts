@@ -89,12 +89,16 @@ test("review modal honours the standard view, view all and personal choices", as
   await expect(dialog.getByText("Birth year")).toHaveCount(0);
   await expect(dialog.getByLabel("Age")).toHaveValue("22 years old");
 
+  await page.screenshot({ path: testInfo.outputPath("review-standard-view.png") });
   await dialog.getByRole("button", { name: "View all details" }).click();
   await expect(dialog.getByText("National ID")).toBeVisible();
   await expect(dialog.getByText("Birth year")).toBeVisible();
   await dialog.getByRole("button", { name: "View all details" }).click();
 
   await dialog.getByRole("button", { name: "Choose visible answers" }).click();
+  await expect(page.getByRole("checkbox", { name: "Home city" })).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: testInfo.outputPath("review-choose-answers.png") });
   await page.getByRole("checkbox", { name: "Home city" }).click();
   await page.keyboard.press("Escape");
   await expect(dialog.getByText("Home city")).toHaveCount(0);
