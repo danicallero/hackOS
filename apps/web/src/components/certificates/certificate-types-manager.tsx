@@ -1,6 +1,5 @@
 "use client";
 
-import { CertificateIcon } from "@phosphor-icons/react/dist/csr/Certificate";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -95,7 +94,6 @@ export function CertificateTypesManager() {
     <>
       <SectionCard
         variant="plain"
-        icon={CertificateIcon}
         title={t("certificateTypes")}
         action={
           <Button onClick={() => setEditing(null)}>

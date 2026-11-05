@@ -77,6 +77,17 @@
   --animate-accordion-up: accordion-up 0.2s ease-out;
   --animate-sidebar-group-expand: sidebar-group-expand 180ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-sidebar-group-collapse: sidebar-group-collapse 140ms ease-in;
+  --animate-tab-panel-in: tab-panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  @keyframes tab-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
   @keyframes accordion-down {
     from {
       height: 0;
@@ -497,6 +508,67 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   [class*="animate-pulse"],
   [class*="animate-spin"] {
     animation: none;
+  }
+
+  /* Tab panel crossfade (docs/DESIGN.md §2). */
+  [data-slot="tabs-content"] {
+    animation: none;
+  }
+}
+
+/*
+ * Route transitions (view transitions, (app)/template.tsx): the content region
+ * crossfades with a 4px settle on arrival; the document root is not animated,
+ * so the shell and sidebar stay still. Only opacity/transform animate. Under
+ * reduced motion the swap is instant (the browser default).
+ */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(.route-exit) {
+  animation: 120ms cubic-bezier(0.16, 1, 0.3, 1) both route-fade-out;
+}
+
+::view-transition-new(.route-enter) {
+  animation: 180ms cubic-bezier(0.16, 1, 0.3, 1) both route-fade-in;
+}
+
+@keyframes route-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/*
+ * Route skeletons stay invisible for the first 400 ms: a fast navigation lands
+ * its content before anything flashes; only a slow one shows the placeholder.
+ */
+.loading-delayed {
+  opacity: 0;
+  animation: loading-delayed-in 150ms ease-out 400ms forwards;
+}
+
+@keyframes loading-delayed-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { GitCommitIcon } from "@phosphor-icons/react/dist/csr/GitCommit";
 import { SectionCard } from "@/components/common/section-card";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
@@ -45,7 +44,7 @@ export function GithubActivity({ projectId }: { projectId: number }) {
   if (!data) return null;
   const { people = [], totals } = data;
   return (
-    <SectionCard title="GitHub" icon={GitCommitIcon} variant="plain">
+    <SectionCard title="GitHub" variant="plain">
       <table className="w-full text-sm">
         <thead className="text-muted-foreground text-left">
           <tr>

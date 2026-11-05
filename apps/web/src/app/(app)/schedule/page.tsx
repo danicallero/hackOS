@@ -16,7 +16,6 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import type { ActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
@@ -41,7 +40,9 @@ import {
 } from "@/components/ui/table";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { scheduleResource } from "@/lib/list-resources";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
+import { peekServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { ActivityRow } from "./schedule-activity-row";
@@ -88,7 +89,10 @@ export default function SchedulePage() {
   // schedule:manage implies read; read-only holders get the staff table.
   const canRead = useCan(CAPABILITIES.SCHEDULE_READ) || canEdit;
 
-  const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
+  // Stale-while-revalidate: a remount paints the last schedule at once.
+  const [items, setItems] = useState<PublicScheduleItem[] | null>(
+    () => peekServerState<{ items: PublicScheduleItem[] }>(scheduleResource.key)?.items ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -461,7 +465,7 @@ export default function SchedulePage() {
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={visibleColumns.length + 2} className="p-0">
                       <div className="sticky left-0 w-full max-w-[calc(100vw-2rem)]">
-                        <EmptyState icon={CalendarDotsIcon} title={t("noScheduleItemsYet")} />
+                        <EmptyState title={t("noScheduleItemsYet")} />
                       </div>
                     </TableCell>
                   </TableRow>

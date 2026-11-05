@@ -2,8 +2,6 @@
 
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ClockCountdownIcon } from "@phosphor-icons/react/dist/csr/ClockCountdown";
-import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -51,7 +49,7 @@ export function HomeOverview({
         </section>
       )}
       {screenAnnouncements.length > 0 && (
-        <SectionCard variant="plain" title={t("publicAnnouncements")} icon={MegaphoneIcon}>
+        <SectionCard variant="plain" title={t("publicAnnouncements")}>
           <div className="grid gap-4 md:grid-cols-2">
             {screenAnnouncements.map((item) => (
               <article key={item.id} className="border-l-2 border-primary bg-primary/5 px-4 py-3">
@@ -64,7 +62,7 @@ export function HomeOverview({
           </div>
         </SectionCard>
       )}
-      <SectionCard variant="plain" title={t("challengesAndPrizes")} icon={TrophyIcon}>
+      <SectionCard variant="plain" title={t("challengesAndPrizes")}>
         {challenges.length ? (
           <div className="grid auto-rows-fr gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {challenges.map((challenge) => (
@@ -93,7 +91,7 @@ export function HomeOverview({
             ))}
           </div>
         ) : (
-          <EmptyState icon={TrophyIcon} title={t("challengesPending")} />
+          <EmptyState title={t("challengesPending")} />
         )}
       </SectionCard>
       <SectionCard variant="plain" title={t("sponsors")}>

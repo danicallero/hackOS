@@ -24,6 +24,7 @@ import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { readServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -96,12 +97,20 @@ export function UniversityPicker({
   // Debounced search against the public directory.
   // biome-ignore lint/correctness/useExhaustiveDependencies: searchAttempt intentionally retries the unchanged query.
   useEffect(() => {
+    // The list is only needed once the picker opens; a closed picker must not
+    // cost a request on every page that renders it (#1227).
+    if (!open) return;
     let active = true;
     const handle = setTimeout(async () => {
       try {
-        const { universities } = await api.get<{ universities: University[] }>(
-          "/api/public/universities",
-          { query: { q: query.trim() || undefined } },
+        const q = query.trim() || undefined;
+        const { universities } = await readServerState(
+          ["public", "universities", { q }],
+          (signal) =>
+            api.get<{ universities: University[] }>("/api/public/universities", {
+              query: { q },
+              signal,
+            }),
         );
         if (active) setOptions(universities);
       } catch {
@@ -117,7 +126,7 @@ export function UniversityPicker({
       active = false;
       clearTimeout(handle);
     };
-  }, [query, searchAttempt]);
+  }, [open, query, searchAttempt]);
 
   const knownLabel = value ? (options.find((o) => String(o.id) === value)?.name ?? null) : null;
 
@@ -128,10 +137,12 @@ export function UniversityPicker({
   useEffect(() => {
     if (!value || knownLabel || resolvedLabel?.id === value) return;
     let active = true;
-    api
-      .get<{ universities: University[] }>("/api/public/universities", {
+    readServerState(["public", "universities", { ids: value }], (signal) =>
+      api.get<{ universities: University[] }>("/api/public/universities", {
         query: { ids: value },
-      })
+        signal,
+      }),
+    )
       .then(({ universities }) => {
         const match = universities.find((o) => String(o.id) === value);
         if (active && match) setResolvedLabel({ id: value, name: match.name });
@@ -200,7 +211,10 @@ export function UniversityPicker({
       id={listboxId}
       className="pointer-events-auto bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md outline-hidden"
     >
-      <Command shouldFilter={false}>
+      <Command
+        shouldFilter={false}
+        className="min-h-0 [&_[data-slot=command-input-wrapper]]:shrink-0"
+      >
         <CommandInput
           placeholder={t("searchUniversitiesShortPlaceholder")}
           value={query}
@@ -242,7 +256,7 @@ export function UniversityPicker({
                   aria-hidden="true"
                   className={cn("size-4", String(u.id) === value ? "opacity-100" : "opacity-0")}
                 />
-                {u.name}
+                <span className="min-w-0 whitespace-normal wrap-anywhere">{u.name}</span>
               </CommandItem>
             ))}
             {canPropose && (
@@ -289,7 +303,10 @@ export function UniversityPicker({
           aria-describedby={ariaDescribedBy}
           aria-invalid={ariaInvalid}
           aria-required={ariaRequired}
-          className={cn("w-full justify-between rounded-control font-normal", className)}
+          className={cn(
+            "w-full min-w-0 max-w-full justify-between rounded-control font-normal",
+            className,
+          )}
         >
           <span className={cn("flex-1 truncate text-left", !label && "text-muted-foreground")}>
             {label ?? t("selectYourUniversityPlaceholder")}

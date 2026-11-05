@@ -5,6 +5,8 @@
  * English `message`, which can be reworded at any time.
  */
 export const ERROR_REASONS = {
+  /** 409: a degree is referenced by a draft or submitted application (H12). */
+  DEGREE_IN_USE: "degree_in_use",
   /** 409: the same Idempotency-Key is still being processed; retry shortly. */
   IDEMPOTENCY_IN_FLIGHT: "idempotency_in_flight",
   /** 409: the Idempotency-Key was reused with a different request. */

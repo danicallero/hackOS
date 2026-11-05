@@ -7,7 +7,7 @@ import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { PublicFooter } from "@/components/layout/public-footer";
@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { getPublicChallenges, getPublicEvent, getPublicSponsors } from "@/lib/public-content";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -73,6 +74,10 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
     const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const load = useCallback(async () => {
     try {
       const [
@@ -83,10 +88,10 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         announcementResult,
         applicationResult,
       ] = await Promise.all([
-        api.get<PublicEvent>("/api/public/event"),
+        getPublicEvent(),
         embedded ? Promise.resolve({ items: [] }) : logisticsApi.publicSchedule(),
-        api.get<{ items: PublicSponsor[] }>("/api/public/sponsors"),
-        api.get<{ items: PublicChallenge[] }>("/api/public/challenges"),
+        getPublicSponsors<PublicSponsor>(),
+        getPublicChallenges<PublicChallenge>(),
         api.get<{ items: PublicAnnouncement[] }>("/api/announcements/public"),
         embedded
           ? Promise.resolve({ applications: [] })
@@ -108,9 +113,10 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
       });
       setError(null);
     } catch {
-      setError(t("publicEventUnavailable"));
+      setError(tRef.current("publicEventUnavailable"));
     }
-  }, [embedded, t]);
+    // `t` is read through a ref: a locale change must not refetch the whole page (#1227).
+  }, [embedded]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
@@ -363,7 +369,6 @@ function PublicPageContent({
                 key={challenge.id}
                 className="flex h-full flex-col"
                 bodyClassName="flex-1"
-                icon={TrophyIcon}
                 title={displayText(challenge.title, language)}
                 footer={
                   <Button asChild variant="outline" size="sm">

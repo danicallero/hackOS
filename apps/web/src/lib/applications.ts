@@ -228,6 +228,7 @@ export interface ApplicationStats {
     capacity: number | null;
   };
   counts_by_status?: Record<string, number>;
+  draft_count?: number;
 }
 
 // ── status presentation ───────────────────────────────────────────────────────

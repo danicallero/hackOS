@@ -5,7 +5,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -111,12 +110,7 @@ export function ReadOnlyOverview({
   const { t } = useLocale();
   const lang = (LANGS.includes(user.language as Language) ? user.language : "es") as Language;
   return (
-    <SectionCard
-      variant="plain"
-      icon={UserIcon}
-      title={t("profileDetails")}
-      bodyClassName="space-y-4"
-    >
+    <SectionCard variant="plain" title={t("profileDetails")} bodyClassName="space-y-4">
       <dl className="space-y-4">
         <Field
           label={t("language")}
@@ -227,7 +221,6 @@ export function StaffEditForm({
       <form onSubmit={form.handleSubmit(onSubmit)}>
         <SectionCard
           variant="plain"
-          icon={UserIcon}
           title={t("profileDetails")}
           footer={
             <SubmitButton pending={form.formState.isSubmitting}>{t("saveChanges")}</SubmitButton>

@@ -29,6 +29,8 @@ import {
 } from "@/lib/challenges";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
+import { challengesResource, fetchListResource } from "@/lib/list-resources";
+import { peekServerState, revalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
@@ -98,8 +100,11 @@ export default function ChallengesPage() {
   const canAdmin = canAny(CAPABILITIES.SPONSORS_MANAGE, CAPABILITIES.QUEUE_ADMIN);
   const canSee = canAccessSponsorWorkspace(canAdmin, Boolean(me?.isSponsorRep));
   const columns = useMemo(() => buildColumns(t, LOCALE_CODES[language]), [t, language]);
-  const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [loading, setLoading] = useState(true);
+  const resource = challengesResource(canAdmin);
+  // Stale-while-revalidate: a remount paints the last read at once.
+  const seeded = peekServerState<{ challenges: Challenge[] }>(resource.key);
+  const [challenges, setChallenges] = useState<Challenge[]>(() => seeded?.challenges ?? []);
+  const [loading, setLoading] = useState(seeded === undefined);
   const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -110,10 +115,13 @@ export default function ChallengesPage() {
       setLoading(false);
       return;
     }
-    if (!hasLoaded()) setLoading(true);
+    const resource = challengesResource(canAdmin);
+    if (peekServerState(resource.key) !== undefined) succeeded();
+    else if (!hasLoaded()) setLoading(true);
     try {
-      const path = canAdmin ? "/api/challenges" : "/api/challenges/mine";
-      const res = await api.get<{ challenges: Challenge[] }>(path);
+      const res = await revalidateServerState(resource.key, (signal) =>
+        fetchListResource<{ challenges: Challenge[] }>(resource, signal),
+      );
       succeeded();
       setLoadError(null);
       setChallenges(res.challenges);

@@ -1,4 +1,5 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
@@ -8,7 +9,7 @@ import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
-import { idParamSchema } from "./schemas.js";
+import { idParamSchema, PUBLIC_CATALOG_CACHE } from "./schemas.js";
 
 const body = z.object({ name: z.string().min(1).max(200) });
 const COLUMNS = "id, name, proposed_by, created_at";
@@ -123,7 +124,8 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
           "Anonymous autocomplete for degree application fields. Accepts a name query or comma-separated IDs.",
       },
     },
-    async (req) => {
+    async (req, reply) => {
+      reply.header("cache-control", PUBLIC_CATALOG_CACHE);
       const { q, ids } = req.query as { q?: string; ids?: string };
       if (ids) {
         const parsed = ids
@@ -245,12 +247,29 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       preHandler: manage,
       schema: {
         summary: "Delete a degree",
-        description: "Deletes an unused curated degree.",
+        description:
+          "Deletes an unused curated degree and audits the mutation. Returns 409 with code degree_in_use when a draft or submitted application answer still references it; consolidate it into another degree first.",
         params: idParamSchema,
       },
     },
     async (req, reply) => {
       await withTransaction(async (client) => {
+        const { rowCount: answers } = await client.query(
+          `SELECT 1
+             FROM application_responses response
+             JOIN application_form_versions form ON form.id = response.application_form_version_id
+             CROSS JOIN LATERAL jsonb_array_elements(form.template) field
+            WHERE field->>'kind' = 'degree'
+              AND response.responses ->> (field->>'key') = $1::text
+            LIMIT 1`,
+          [req.params.id],
+        );
+        if (answers) {
+          throw new ConflictError(
+            "This degree is used in applications. Merge it into another degree before deleting it.",
+            { code: ERROR_REASONS.DEGREE_IN_USE, id: req.params.id },
+          );
+        }
         const { rowCount } = await client.query("DELETE FROM university_degrees WHERE id = $1", [
           req.params.id,
         ]);

@@ -34,11 +34,12 @@ import { usePersistedState } from "@/hooks/use-persisted-state";
 import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { usersDirectoryKey } from "@/lib/list-resources";
 import { logisticsApi } from "@/lib/logistics";
-import { invalidateServerState, readServerState } from "@/lib/server-state";
+import { invalidateServerState, peekServerState, readServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import type { UserListItem } from "@/lib/types";
+import type { UserList, UserListItem } from "@/lib/types";
 import { loadUserDirectory } from "@/lib/user-directory";
 import { UsersActions } from "./users-actions";
 
@@ -207,15 +208,11 @@ function buildColumns(
       header: t("email"),
       sortValue: (u) => u.email.toLowerCase(),
       cell: (u) => (
-        <div className="flex items-center gap-2">
-          <StatusBadge
-            tone={u.emailVerified ? "success" : "warning"}
-            dot={false}
-            className="w-24 shrink-0 justify-center"
-          >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-muted-foreground">{u.email}</span>
+          <StatusBadge tone={u.emailVerified ? "success" : "warning"}>
             {u.emailVerified ? t("verified") : t("unverified")}
           </StatusBadge>
-          <span className="text-muted-foreground">{u.email}</span>
         </div>
       ),
     },
@@ -224,7 +221,7 @@ function buildColumns(
       header: t("colApplication"),
       sortValue: (u) => u.applicationStatus ?? "",
       cell: (u) => (
-        <StatusBadge tone={applicationTone(u.applicationStatus)} dot={false} className="capitalize">
+        <StatusBadge tone={applicationTone(u.applicationStatus)} className="capitalize">
           {applicationLabel(u.applicationStatus, t)}
         </StatusBadge>
       ),
@@ -249,9 +246,7 @@ function buildColumns(
         ) : presentIds.has(u.id) ? (
           <StatusBadge tone="success">{t("present")}</StatusBadge>
         ) : (
-          <StatusBadge tone="neutral" dot={false}>
-            {t("away")}
-          </StatusBadge>
+          <StatusBadge tone="neutral">{t("away")}</StatusBadge>
         ),
     },
     {
@@ -331,7 +326,7 @@ function UserMobileRow({
                 <dt className="text-muted-foreground shrink-0">{column.header}:</dt>
                 <dd className="min-w-0">
                   {column.id === "application" ? (
-                    <StatusBadge tone={applicationTone(user.applicationStatus)} dot={false}>
+                    <StatusBadge tone={applicationTone(user.applicationStatus)}>
                       {values.application}
                     </StatusBadge>
                   ) : column.id === "presence" && presentIds !== null ? (
@@ -341,7 +336,7 @@ function UserMobileRow({
                   ) : column.id === "email" ? (
                     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                       <span>{values.email}</span>
-                      <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+                      <StatusBadge tone={user.emailVerified ? "success" : "warning"}>
                         {user.emailVerified ? t("verified") : t("unverified")}
                       </StatusBadge>
                     </span>
@@ -363,10 +358,11 @@ export default function UsersPage() {
   const isMobile = useIsMobile();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const hasLoadedUsers = useRef(false);
+  const seeded = peekServerState<UserList>(usersDirectoryKey(q.trim()));
+  const [users, setUsers] = useState<UserListItem[]>(() => seeded?.users ?? []);
+  const [total, setTotal] = useState(() => seeded?.total ?? 0);
+  const [loading, setLoading] = useState(seeded === undefined);
+  const hasLoadedUsers = useRef(seeded !== undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
   const [emailSelection, setEmailFilter] = usePersistedState<string | string[]>(
@@ -452,7 +448,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const key = ["users", "directory", q.trim()];
+    const key = usersDirectoryKey(q.trim());
     if (liveRefresh || retryNonce) invalidateServerState(key);
     // Preserve populated rows during identity SSE refreshes (#732).
     if (!hasLoadedUsers.current) setLoading(true);

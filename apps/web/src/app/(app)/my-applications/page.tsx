@@ -9,9 +9,6 @@
 //   GET /api/public/applications  → { applications } (open forms w/ template)
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
-import { FilePlusIcon } from "@phosphor-icons/react/dist/csr/FilePlus";
-import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
 import Link from "next/link";
 import { useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -121,7 +118,6 @@ export default function MyApplicationsPage() {
       </AlertModal>
 
       <SectionCard
-        icon={ClipboardTextIcon}
         title={t("myResponses")}
         state={<span className="type-meta tabular-nums">{responses.length}</span>}
         bodyClassName={responses.length === 0 && !responsesError ? "p-0" : "space-y-2"}
@@ -129,11 +125,7 @@ export default function MyApplicationsPage() {
         {responsesError ? (
           <ContextualError message={responsesError} onRetry={() => mine.refetch()} />
         ) : responses.length === 0 ? (
-          <EmptyState
-            icon={TrayIcon}
-            title={t("notAppliedYetTitle")}
-            description={t("notAppliedYetDesc")}
-          />
+          <EmptyState title={t("notAppliedYetTitle")} description={t("notAppliedYetDesc")} />
         ) : (
           responses.map((r) => (
             <div
@@ -176,7 +168,6 @@ export default function MyApplicationsPage() {
       </SectionCard>
 
       <SectionCard
-        icon={FilePlusIcon}
         title={t("openToApply")}
         state={<span className="type-meta tabular-nums">{openToApply.length}</span>}
         bodyClassName={openToApply.length === 0 && !formsError ? "p-0" : "space-y-2"}
@@ -184,11 +175,7 @@ export default function MyApplicationsPage() {
         {formsError ? (
           <ContextualError message={formsError} onRetry={() => open.refetch()} />
         ) : openToApply.length === 0 ? (
-          <EmptyState
-            icon={TrayIcon}
-            title={t("noOpenFormsTitle")}
-            description={t("noOpenFormsDesc")}
-          />
+          <EmptyState title={t("noOpenFormsTitle")} description={t("noOpenFormsDesc")} />
         ) : (
           openToApply.map((f) => (
             <div

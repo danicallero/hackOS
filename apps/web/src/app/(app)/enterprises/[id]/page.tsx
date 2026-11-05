@@ -7,7 +7,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -118,7 +117,6 @@ export default function EnterpriseDetailPage() {
     return (
       <div className="space-y-6">
         <EmptyState
-          icon={BuildingsIcon}
           title={t("enterpriseNotFoundTitle")}
           description={errorMsg || t("enterpriseNotLoadedDesc")}
         />

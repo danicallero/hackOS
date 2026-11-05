@@ -57,11 +57,7 @@ export function PhysicalActivity({
   }
   if (state === "error" || !data) {
     return (
-      <EmptyState
-        icon={ClipboardTextIcon}
-        title={t("couldNotLoadActivityTitle")}
-        description={t("passesUnavailable")}
-      />
+      <EmptyState title={t("couldNotLoadActivityTitle")} description={t("passesUnavailable")} />
     );
   }
 
@@ -105,7 +101,7 @@ export function PhysicalActivity({
   if (embedded) return table;
 
   return (
-    <SectionCard icon={ClipboardTextIcon} title={t("activityPasses")} bodyClassName="p-0">
+    <SectionCard title={t("activityPasses")} bodyClassName="p-0">
       {table}
     </SectionCard>
   );

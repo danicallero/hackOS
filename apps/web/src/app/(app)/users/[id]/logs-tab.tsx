@@ -72,13 +72,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
   }, [userId, canAudit]);
 
   if (state === "forbidden") {
-    return (
-      <EmptyState
-        icon={LogIcon}
-        title={t("auditLogUnavailableTitle")}
-        description={t("needAuditReadCap")}
-      />
-    );
+    return <EmptyState title={t("auditLogUnavailableTitle")} description={t("needAuditReadCap")} />;
   }
   if (state === "loading") {
     return (
@@ -88,7 +82,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
     );
   }
   if (state === "error") {
-    return <EmptyState icon={LogIcon} title={t("couldNotLoadAuditLog")} />;
+    return <EmptyState title={t("couldNotLoadAuditLog")} />;
   }
 
   const columns: Column<AuditRow>[] = [
@@ -125,7 +119,7 @@ export function AuditLogSection({ userId }: { userId: number }) {
   ];
 
   return (
-    <SectionCard icon={LogIcon} title={t("auditLog")} bodyClassName="p-0">
+    <SectionCard title={t("auditLog")} bodyClassName="p-0">
       <DataTable
         columns={columns}
         data={items}

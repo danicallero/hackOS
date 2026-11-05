@@ -1,6 +1,5 @@
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
 import { TrophyIcon } from "@phosphor-icons/react/dist/ssr/Trophy";
-import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
 import Link from "next/link";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -59,7 +58,7 @@ export function ProjectOverview({
       <aside className="min-w-0 space-y-6 lg:sticky lg:top-6">
         {(project.members.length === 0 ||
           project.members.some((member) => member.status !== "declined" && member.name)) && (
-          <SectionCard title={labels.team} icon={UsersIcon} variant="plain">
+          <SectionCard title={labels.team} variant="plain">
             {project.members.length === 0 && (
               <p className="text-sm text-muted-foreground">{labels.noMembers}</p>
             )}
@@ -93,7 +92,7 @@ export function ProjectOverview({
             links={{ githubUrl: asideExtra ? null : project.githubUrl, demoUrl: project.demoUrl }}
           />
         )}
-        <SectionCard title={labels.challenges} icon={TrophyIcon} variant="plain">
+        <SectionCard title={labels.challenges} variant="plain">
           {project.challenges.length === 0 && (
             <p className="text-sm text-muted-foreground">{labels.noChallenges}</p>
           )}

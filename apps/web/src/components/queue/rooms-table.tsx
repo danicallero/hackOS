@@ -3,7 +3,6 @@
 // The room administration grid (H29, H46): the small, high-frequency fields
 // and enterprise assignments stay editable in place.
 
-import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useState } from "react";
@@ -326,7 +325,7 @@ export function RoomsTable({
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={5} className="p-0">
                 <div className="sticky left-0 w-full max-w-[calc(100vw-2rem)]">
-                  <EmptyState icon={BuildingsIcon} title={emptyTitle} action={emptyAction} />
+                  <EmptyState title={emptyTitle} action={emptyAction} />
                 </div>
               </TableCell>
             </TableRow>

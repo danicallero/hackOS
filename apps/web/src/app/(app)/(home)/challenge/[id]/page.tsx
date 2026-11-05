@@ -3,18 +3,14 @@
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
-import { GiftIcon } from "@phosphor-icons/react/dist/csr/Gift";
-import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
-import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
-import { HomeSectionHeader } from "@/components/common/section-navigation";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -28,6 +24,7 @@ import { usePublishedWinners } from "@/hooks/use-published-winners";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { getPublicChallenges } from "@/lib/public-content";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -45,6 +42,10 @@ function asPrizes(value: unknown): Prize[] {
 
 export default function PublicChallengePage() {
   const { language, t } = useLocale();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const { status } = useSessionContext();
   const authenticated = status === "authenticated";
   const { id } = useParams<{ id: string }>();
@@ -60,12 +61,14 @@ export default function PublicChallengePage() {
     setChallenge(undefined);
     setChallengeError(null);
     try {
-      const { items } = await api.get<{ items: PublicChallenge[] }>("/api/public/challenges");
+      const { items } = await getPublicChallenges<PublicChallenge>();
       setChallenge(items.find((c) => String(c.id) === id) ?? null);
     } catch (error) {
-      setChallengeError(apiErrorText(error, t, t("couldNotLoadChallenge")));
+      const tr = tRef.current;
+      setChallengeError(apiErrorText(error, tr, tr("couldNotLoadChallenge")));
     }
-  }, [id, t]);
+    // `t` is read through a ref so a locale change does not refetch (#1227).
+  }, [id]);
 
   const loadApplications = useCallback(async () => {
     setApplicationsLoading(true);
@@ -76,11 +79,12 @@ export default function PublicChallengePage() {
       );
       setHasOpenApplications(applications.length > 0);
     } catch (error) {
-      setApplicationsError(apiErrorText(error, t, t("couldNotLoadApplicationForms")));
+      const tr = tRef.current;
+      setApplicationsError(apiErrorText(error, tr, tr("couldNotLoadApplicationForms")));
     } finally {
       setApplicationsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -97,8 +101,7 @@ export default function PublicChallengePage() {
   }, [challenge, language]);
 
   return (
-    <PageLayout>
-      {authenticated && <HomeSectionHeader />}
+    <>
       <PageHeader
         headingLevel={authenticated ? 2 : 1}
         title={challenge ? displayText(challenge.title, language) : t("challenges")}
@@ -140,7 +143,6 @@ export default function PublicChallengePage() {
         // The persistent "Back to event" button above is the page's stable
         // escape hatch; a second one here said it twice (#299).
         <EmptyState
-          icon={TrophyIcon}
           title={t("challengeNotFoundTitle")}
           description={t("challengeUnpublishedDesc")}
         />
@@ -160,11 +162,7 @@ export default function PublicChallengePage() {
                 {displayText(challenge.description, language)}
               </p>
               {displayText(challenge.criteria, language) && (
-                <SectionCard
-                  title={t("judgingCriteriaTitle")}
-                  icon={ListChecksIcon}
-                  variant="plain"
-                >
+                <SectionCard title={t("judgingCriteriaTitle")} variant="plain">
                   <p className="whitespace-pre-wrap text-pretty text-sm leading-relaxed">
                     {displayText(challenge.criteria, language)}
                   </p>
@@ -174,7 +172,7 @@ export default function PublicChallengePage() {
             {(winners.length > 0 || asPrizes(challenge.prizes).length > 0) && (
               <div className="space-y-6">
                 {winners.length > 0 && (
-                  <SectionCard title={t("winnersTabLabel")} icon={TrophyIcon}>
+                  <SectionCard title={t("winnersTabLabel")}>
                     <ol className="divide-y divide-border/60">
                       {winners.map((winner) => (
                         <li key={winner.rank} className="space-y-3 py-3 first:pt-0 last:pb-0">
@@ -195,7 +193,7 @@ export default function PublicChallengePage() {
                   </SectionCard>
                 )}
                 {asPrizes(challenge.prizes).length > 0 && (
-                  <SectionCard title={t("prizesLabel")} icon={GiftIcon} variant="plain">
+                  <SectionCard title={t("prizesLabel")} variant="plain">
                     <ul className="divide-y divide-border/60">
                       {asPrizes(challenge.prizes).map((prize) => (
                         <li key={prize.name} className="py-3 first:pt-0 last:pb-0">
@@ -241,6 +239,6 @@ export default function PublicChallengePage() {
           )}
         </article>
       )}
-    </PageLayout>
+    </>
   );
 }

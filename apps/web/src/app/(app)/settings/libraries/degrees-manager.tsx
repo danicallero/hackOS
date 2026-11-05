@@ -49,6 +49,7 @@ export function DegreesManager() {
     try {
       const result = await api.get<{ degrees: Degree[] }>("/api/public/degrees", {
         query: { q: search.trim() || undefined },
+        cache: "no-cache",
       });
       setEntries(result.degrees);
       setError(null);

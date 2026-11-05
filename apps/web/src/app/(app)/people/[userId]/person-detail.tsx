@@ -3,7 +3,6 @@
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
-import { UserIcon } from "@phosphor-icons/react/dist/csr/User";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -21,6 +20,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { getPublicChallenges } from "@/lib/public-content";
 import { type ChallengeOption, challengeTitleText } from "../../projects/shared";
 
 type State =
@@ -53,8 +53,7 @@ function PersonReader({ userId }: { userId: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get<{ items: ChallengeOption[] }>("/api/public/challenges")
+    getPublicChallenges<ChallengeOption>()
       .then((r) => {
         if (!cancelled) setChallenges(r.items);
       })
@@ -128,7 +127,7 @@ function PersonReader({ userId }: { userId: number }) {
               title={state.status === "missing" ? t("personNotFound") : t("columnPeople")}
             />
             {state.status === "missing" ? (
-              <EmptyState icon={UserIcon} title={t("personNotFound")} />
+              <EmptyState title={t("personNotFound")} />
             ) : (
               <ContextualError
                 message={state.message}

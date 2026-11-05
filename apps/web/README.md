@@ -108,6 +108,25 @@ readers. The schedule editor and event settings subscribe to the content stream
 and merge new server values into open forms while keeping fields the user has
 changed.
 
+### Cached-first reads (stale-while-revalidate)
+
+A remount must not flash a loading state for data the user already saw.
+`peekServerState(key)` returns the last settled value (up to five minutes old,
+even past the 30 s reuse window) and never starts a request;
+`revalidateServerState(key, fetcher)` always reads the API, joins an in-flight
+read and replaces the cache. The previous value stays peekable while the new
+read runs and is dropped by `invalidateServerState` or an identity change.
+`useServerResource` and `useLiveQuery` paint the peeked value on their first
+render (no `loading`) and revalidate in the background; if that revalidation
+fails the painted data stays and no error replaces it. Pages that still own a
+hand-written loader (challenges, enterprises, applications, users, schedule)
+seed their state from `peekServerState` and load through
+`revalidateServerState` (users keeps its `readServerState` + invalidate flow). `lib/list-resources.ts` holds
+each main list's key and request so the page and the navigation warm-up
+(`warmRoute`, called from sidebar links on hover/focus and gated by the viewer's
+capabilities) share one cache entry. Tests that mount a cached page must call
+`resetServerStateForTests()` in `beforeEach`.
+
 ### Background refresh failures
 
 A page whose `load()` is re-run by `useAutoRefresh` must not treat a failed
@@ -415,8 +434,8 @@ Shared geometry is in `styles/surfaces.css`; the full decisions and exceptions
 are in `docs/DESIGN.md` §4b, with interactive examples in `/design-system`.
 
 Shared page, section, modal and panel headers use `heading-row` to align
-visible title capitals with icons and `type-meta` counters. Section icons
-stay in the title row, independently of descriptions.
+visible title capitals with icons and `type-meta` counters. Useful section icons stay in the title row, independently of descriptions;
+icons that merely decorate or repeat a heading are omitted.
 
 `StatusBadge` uses the shared `StatusDot` presentation: a quiet label with an
 optional semantic dot, without pill borders or tinted backgrounds. Static roles,
@@ -819,6 +838,12 @@ judging embeds its `ProjectAnswers` content. Staff inspection opens in reading
 mode; new empty participant drafts begin editing. `CreateProjectPanel` collects
 a team and dynamic answers for administrative creation, independently of personal
 project creation. See [project access and lifecycle](../../docs/projects.md#unified-inspection-and-administration-h18h21).
+
+Directory pickers for degrees and universities keep long selected names within the
+field width; option names wrap inside a scrollable list. Confirmation dialogs,
+like editors, provide a dedicated child portal layer outside their scrolling body
+so nested pickers remain above actions and inside the modal focus scope. Directory
+lists in compact confirmations use the viewport as their collision boundary.
 
 Form validation runs on blur: React Hook Form uses `mode: "onBlur"` and
 `reValidateMode: "onBlur"`; `FormControl` also validates custom controls when

@@ -7,8 +7,6 @@
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -48,6 +46,7 @@ import {
   enterpriseFormSchema,
 } from "../enterprise-form-fields";
 import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
+import { mutateMembership } from "./membership-mutation";
 import { PublicationSummary } from "./publication-summary";
 
 function toFormValues(e: Enterprise): EnterpriseFormValues {
@@ -131,14 +130,13 @@ export function ChallengesSummaryCard({
   if (!canManage && !isOwnEnterprise) return null;
 
   return (
-    <SectionCard icon={TrophyIcon} title={t("challengeStatusTitle")}>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       {challenges === null ? (
         <div className="flex justify-center py-6">
           <Spinner className="size-5" />
         </div>
       ) : challenges.length === 0 ? (
         <EmptyState
-          icon={TrophyIcon}
           title={t("noChallengesYetTitle")}
           description={canManage ? undefined : t("noChallengeAssignedYet")}
         />
@@ -227,35 +225,33 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
     [memberUserIds, t],
   );
 
-  async function add(userId: number) {
-    setBusy(true);
-    try {
-      await api.post(`/api/enterprises/${enterpriseId}/members`, { userId });
-      setSelectedUserId("");
-      await loadMembers();
-      toast.success(t("userAffiliated"), { compactTitle: t("addMemberLabel") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotAddUser")), t("addMemberLabel"));
-    } finally {
-      setBusy(false);
-    }
+  function add(userId: number) {
+    return mutateMembership({
+      request: () => api.post(`/api/enterprises/${enterpriseId}/members`, { userId }),
+      refresh: loadMembers,
+      afterRequest: () => setSelectedUserId(""),
+      setBusy,
+      t,
+      success: t("userAffiliated"),
+      failure: t("couldNotAddUser"),
+      title: t("addMemberLabel"),
+    });
   }
 
-  async function remove(userId: number) {
-    setBusy(true);
-    try {
-      await api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`);
-      await loadMembers();
-      toast.success(t("affiliationRemoved"), { compactTitle: t("toastRemoveMember") });
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotRemoveUser")), t("toastRemoveMember"));
-    } finally {
-      setBusy(false);
-    }
+  function remove(userId: number) {
+    return mutateMembership({
+      request: () => api.delete(`/api/enterprises/${enterpriseId}/members/${userId}`),
+      refresh: loadMembers,
+      setBusy,
+      t,
+      success: t("affiliationRemoved"),
+      failure: t("couldNotRemoveUser"),
+      title: t("toastRemoveMember"),
+    });
   }
 
   return (
-    <SectionCard icon={BuildingsIcon} title={t("affiliatedUsersTitle")}>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor={`enterprise-member-${enterpriseId}`}>{t("addMemberLabel")}</Label>
@@ -284,7 +280,6 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
           </div>
         ) : members.length === 0 ? (
           <EmptyState
-            icon={BuildingsIcon}
             title={t("noAffiliatedUsersTitle")}
             description={t("searchAboveToAffiliate")}
           />

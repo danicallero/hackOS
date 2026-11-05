@@ -2,7 +2,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -97,7 +96,6 @@ export default function ChallengeDetailPage() {
     return (
       <div className="space-y-6">
         <EmptyState
-          icon={TrophyIcon}
           title={t("challengeNotFoundTitle")}
           description={errorMsg || t("challengeNotLoadedDesc")}
         />

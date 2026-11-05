@@ -9,11 +9,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import type { Question } from "@hackos/shared/questions";
-import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
-import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -137,7 +134,7 @@ export default function QueueDetailPage() {
   if (status === "error" || !queue) {
     return (
       <div className="space-y-6">
-        <EmptyState icon={StackIcon} title={t("queueNotFound")} />
+        <EmptyState title={t("queueNotFound")} />
       </div>
     );
   }
@@ -267,7 +264,6 @@ export default function QueueDetailPage() {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard
           title={t("queueTeams")}
-          icon={StackIcon}
           description={t("queueTeamCount", { count: queue.entries.length })}
           action={
             queue.entries.length > 0 ? (
@@ -306,7 +302,7 @@ export default function QueueDetailPage() {
         >
           {queue.entries.length === 0 ? (
             <div className="p-5">
-              <EmptyState icon={StackIcon} title={t("queueEmpty")} />
+              <EmptyState title={t("queueEmpty")} />
             </div>
           ) : filteredEntries.length === 0 ? (
             <div className="space-y-3 p-5">
@@ -451,7 +447,7 @@ export default function QueueDetailPage() {
         </SectionCard>
 
         <div className="space-y-6">
-          <SectionCard title={t("queueName")} icon={StackIcon}>
+          <SectionCard title={t("queueName")}>
             <div className="space-y-2">
               <Label htmlFor="queue-name" className="sr-only">
                 {t("queueName")}
@@ -468,7 +464,7 @@ export default function QueueDetailPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title={t("challengesInThisQueue")} icon={TrophyIcon} bodyClassName="p-0">
+          <SectionCard title={t("challengesInThisQueue")} bodyClassName="p-0">
             <ul className="divide-border divide-y">
               {queue.challenges.map((challenge) => (
                 <li key={challenge.id} className="truncate px-4 py-2.5 text-sm sm:px-5">
@@ -478,7 +474,7 @@ export default function QueueDetailPage() {
             </ul>
           </SectionCard>
 
-          <SectionCard title={t("rooms")} icon={BuildingsIcon} bodyClassName="p-0">
+          <SectionCard title={t("rooms")} bodyClassName="p-0">
             <div className="space-y-2 px-4 py-4 sm:px-5">
               <Label htmlFor="queue-rooms" className="sr-only">
                 {t("rooms")}
@@ -508,7 +504,6 @@ export default function QueueDetailPage() {
       {shared && meta && (
         <SectionCard
           title={t("mergedJudgingForm")}
-          icon={TrophyIcon}
           description={meta.evaluationStarted ? t("queueCriteriaLocked") : undefined}
           footer={
             !meta.evaluationStarted ? (

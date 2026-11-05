@@ -3,7 +3,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { IconButton } from "@/components/common/icon-button";
@@ -365,13 +364,7 @@ export function CertificatesPanel({
 
   return (
     <>
-      {staff ? (
-        <SectionCard title={t("certificates")} icon={SealCheckIcon}>
-          {body}
-        </SectionCard>
-      ) : (
-        body
-      )}
+      {staff ? <SectionCard title={t("certificates")}>{body}</SectionCard> : body}
       {staff ? (
         <Modal
           open={revoking !== null}

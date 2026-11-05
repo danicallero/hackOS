@@ -364,6 +364,10 @@ export function mergeApplicationSnapshots(
   return {
     application: snapshots.length === 1 ? first.application : null,
     counts_by_status: counts,
+    draft_count: snapshots.reduce(
+      (total, snapshot) => total + Number(snapshot.draft_count ?? 0),
+      0,
+    ),
     overview,
     time_series: timeSeries,
     time_to_confirm_hours: {
@@ -583,6 +587,7 @@ export async function queryStatistics(
   if (!allowedPanelSet.has("overview")) {
     delete result.overview;
     delete result.counts_by_status;
+    delete result.draft_count;
     delete result.time_to_confirm_hours;
   }
   if (!allowedPanelSet.has("shirt-sizes")) delete result.shirt_sizes_confirmed;

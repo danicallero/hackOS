@@ -7,9 +7,9 @@ import { useServerResource } from "./use-server-resource";
 
 const KEY = ["public", "food-intolerances"] as const;
 
-const fetchIntolerances = (signal: AbortSignal) =>
+const fetchIntolerances = (signal: AbortSignal, cache?: RequestCache) =>
   api
-    .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances", { signal })
+    .get<{ intolerances: Intolerance[] }>("/api/public/food-intolerances", { signal, cache })
     .then((r) => r.intolerances);
 
 /** Read the shared dictionary, reusing its identity-scoped cache and in-flight request. */
@@ -20,7 +20,10 @@ export function getFoodIntolerances(): Promise<Intolerance[]> {
 /** Force an authoritative read and publish it to mounted dictionary consumers. */
 export async function refreshFoodIntolerances(): Promise<Intolerance[]> {
   invalidateServerState(KEY);
-  const intolerances = await getFoodIntolerances();
+  // Staff just edited the catalogue; skip the browser's 60 s public cache.
+  const intolerances = await readServerState(KEY, (signal) =>
+    fetchIntolerances(signal, "no-cache"),
+  );
   writeServerState(KEY, intolerances);
   return intolerances;
 }

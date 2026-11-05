@@ -53,6 +53,20 @@ export function ApplicationFileViewer({
     return () => document.removeEventListener("fullscreenchange", syncFullscreen);
   }, []);
 
+  // The viewer is mounted in each responsive layout and CSS hides all but one;
+  // a hidden iframe/img would still download the file, so only the laid-out
+  // instance loads it (#1227).
+  const [laidOut, setLaidOut] = useState(false);
+  useEffect(() => {
+    const element = previewRef.current;
+    if (!element) return;
+    const sync = () => setLaidOut(element.getClientRects().length > 0);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   if (files.length === 0) return null;
 
   const file = files[activeIndex] ?? files[0];
@@ -171,6 +185,8 @@ export function ApplicationFileViewer({
             <FileTextIcon className="text-muted-foreground size-8" aria-hidden="true" />
             <p className="text-muted-foreground text-sm">{t("noFileUploadedPeriod")}</p>
           </div>
+        ) : !laidOut ? (
+          <div className="min-h-64" />
         ) : file.preview === "pdf" && file.href ? (
           <iframe
             key={file.value ?? file.fieldKey}

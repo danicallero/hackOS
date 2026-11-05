@@ -221,9 +221,12 @@ exact city match is selected, and otherwise the text is kept in the manual
 city/province/country fields (H12). City labels are stored as text while degree
 answers retain the catalogue ID. The degree catalogue follows the university
 catalogue's authenticated-proposal and staff-curation boundary.
-Universities linked to user profiles cannot be deleted: the route returns 409
-with `details.reason = university_in_use`, and the web displays a localized
-message advising consolidation into another university. Profiles remain intact.
+Universities and degrees referenced by application answers cannot be deleted,
+including drafts and answers tied to older immutable form versions. The routes
+return 409 (`details.reason = university_in_use` or
+`details.code = degree_in_use`); clients show localized guidance to consolidate
+into another catalogue value first. Account removal detaches degree/university
+proposal authorship while preserving catalogue entries used by other applicants.
 
 Staff can merge
 duplicate degree rows transactionally: every answer using the source catalogue
@@ -655,6 +658,20 @@ existing session identity. It aborts and drops that browser-only state on an
 identity change; successful writes and matching SSE signals invalidate exact
 resource keys before the next authoritative API read. This never changes the
 API's Postgres-backed source of truth or creates a global SSE refresh topic.
+
+`apiFetch` also coalesces identical GETs that are in flight at the same moment into
+one network request (each caller gets its own copy and its own abort), and the shared
+public event/challenge/sponsor feeds go through `lib/public-content.ts`, which reuses
+the 30 s server-state cache (#1227).
+
+A scope join or leave reopens the single multiplexed stream; when the reopen
+finishes within 2 s it is treated as planned and does not fire `reconnect`
+resyncs, so existing live queries are not refetched on every navigation (#1227).
+
+The near-static public pickers (`/api/public/universities`, `/api/public/degrees`,
+`/api/public/food-intolerances`) send `Cache-Control: public, max-age=60,
+stale-while-revalidate=300` (#1227). Staff catalogue managers read them with
+`cache: "no-cache"` so an edit shows immediately.
 
 ### Background work
 Background work uses two patterns. Repeatable BullMQ ticks drain durable

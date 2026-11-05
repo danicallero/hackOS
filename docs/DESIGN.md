@@ -100,7 +100,8 @@ Each row: value → intent → boundary.
 
 Shared page and section title rows align icons and counters to the visible
 capital height (`heading-row`), rather than the different fonts’ line boxes.
-Section icons belong in the title row so descriptions never shift them.
+Useful section icons belong in the title row so descriptions never shift them;
+an icon alone never creates a section header.
 Schedule grid lines start after the hour-label gutter; labels use the shell
 background to keep the time axis clear in both themes.
 
@@ -111,11 +112,41 @@ Motion, contrast and transparency follow the system preferences, in
   overlay animation (dialog, sheet, menus, popover, select, tooltip) and the
   `animate-pulse`/`animate-spin` loops globally, so a primitive needs no
   `motion-reduce:` variant. A spinner stays visible, only static.
+- Tab panels crossfade on selection: `TabsContent` plays `animate-tab-panel-in`
+  (opacity and a 4 px `translateY`, 180 ms, `cubic-bezier(0.16, 1, 0.3, 1)` like
+  the sidebar); the global reduced-motion rule removes it. Animate only
+  opacity/transform/height in app motion; durations stay 120-200 ms.
 - `prefers-contrast: more` darkens `--border` and `--muted-foreground` and
   makes `--ring` the full foreground colour, in both themes.
 - `prefers-reduced-transparency: reduce` makes blurred or translucent surfaces
   (public top bar, notification trigger, sheet) opaque. The dimming scrim
   behind modals is not a surface and stays.
+- **Route transitions.** Navigating between top-level routes crossfades the
+  content region only: `(app)/template.tsx` wraps the page in React's
+  `<ViewTransition>` (`experimental.viewTransition` in `next.config.ts`), and
+  `globals.css` times it (`.route-exit` 120 ms fade-out, `.route-enter` 180 ms
+  fade-in with a 4 px settle, curve `cubic-bezier(0.16, 1, 0.3, 1)`, the
+  sidebar's). The document root is not animated, so the shell, sidebar and
+  skip link stay still; the page header belongs to the page and fades with it.
+  Animate only `opacity`/`transform` (never layout properties), keep
+  `default="none"` so dialogs, filters and in-page Suspense do not trigger the
+  boundary, and keep durations 120-200 ms. Under `prefers-reduced-motion` every
+  view-transition animation is off and the swap is instant. The transition
+  snapshot paints above overlays, so close dialogs before navigating. Public
+  surfaces under `(public)` and `(auth)` have no template and no transition.
+- **No flash between pages.** A list the user has already seen paints at once
+  and revalidates in the background (stale-while-revalidate, see
+  `apps/web/README.md` § Browser server state); the loading skeleton appears
+  only for a first, uncached read. Skeletons reuse `components/ui/skeleton.tsx`
+  with the real content's geometry (DataTable `loading` keeps the real header
+  and column count; `(app)/loading.tsx` mirrors title row, toolbar and rows) so
+  data landing moves nothing. Sections with a shared title or tab bar (Home) render it in a route-group
+  `layout.tsx` so it stays mounted across their routes; the group's `loading.tsx`
+  skeletons only the content below it. The generic fallback must never replace
+  shared chrome. Route skeletons fade in only after 400 ms (`.loading-delayed`),
+  so fast navigations show none. Sidebar links and table rows prefetch on hover
+  and focus, and sidebar links also warm the destination list's cache
+  (`lib/list-resources.ts`).
 - Tooltips open after 500 ms (instantly for an adjacent one) and on keyboard
   focus, through the shared `TooltipProvider`; do not set a shorter delay per
   provider.
@@ -311,8 +342,14 @@ usually 16 px in controls/navigation, 14 px beside compact metadata, 20–24 px
 for prominent states. Use `weight="fill"` for selected dots; preserve `animate-spin`
 on `SpinnerGapIcon`. Use `weight`, not Lucide's `strokeWidth`, to change the style.
 
-Icons inherit semantic text colors. Keep decorative icons `aria-hidden` and
-give icon-only controls localized accessible labels. Activity registry icon
+An icon must help identify an action, state, content type or real identity.
+Remove symbols that only decorate a form or repeat an obvious heading; never
+leave an isolated symbol above fields. Visual navigation cues may accompany
+labels when they help recognition. Hiding a symbol from assistive technology
+does not justify displaying it: `aria-hidden` prevents duplicate announcements
+for useful icons whose meaning is already expressed in nearby text. Give
+icon-only controls localized accessible labels. Icons inherit semantic text
+colors. Activity registry icon
 keys remain stable and map to Phosphor components in `schedule-model.ts`.
 
 ### Changing the next edition
@@ -669,8 +706,9 @@ without context are not an adequate mobile adaptation.
   no colored band, border, shadow or surrounding card. Use the same hierarchy
   for lists and records. Keep the title visible when its actions wrap.
 - No decorative page symbol by default. `leading` is a real record identity
-  (logo/photo); section icons are optional scanning aids when several distinct
-  domains appear together, not mandatory decoration. Never fabricate avatars.
+  (logo/photo); section icons need a concrete recognition or state purpose,
+  rather than merely matching the heading's noun. Omit redundant symbols and
+  icon-only section headers. Never fabricate avatars.
   When the reader may edit that image (user staff on a person's record), the
   avatar itself opens a small change/remove menu, marked with a camera badge;
   it never carries other page actions.
@@ -692,6 +730,14 @@ without context are not an adequate mobile adaptation.
   Keep the page header above them. The selected tab already names the panel:
   do not repeat it as an immediate `h2`; give distinct subsections their own
   headings. Statistics phase uses `width="content"` in its control row. Use a route for a different subject/workflow.
+  Record management pages with several distinct views (challenge: Content,
+  Prizes, Judging, Winners, Publish, History; company: Profile, Challenges,
+  Judges, Members, Stand tags) keep the header fixed above the `TabBar` and
+  render each tab as a single column of open sections (hairlines, no nested
+  cards). A tab's only section carries no title; sections that differ from the
+  tab name keep theirs. The selected tab is synced with `?tab=` through
+  `useUrlTab`, the bar scrolls the selected tab into view on a narrow line, and
+  panels crossfade (§2). Do not force tabs onto a record with one view.
 - Tabs stay on one scrollable line; never wrap or clip their last item. Event
   settings does not add a second vertical rail beside the app sidebar:
   `/settings/event` is a plain list of the sections the caller may manage, and

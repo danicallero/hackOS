@@ -1,6 +1,5 @@
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/ssr/FolderSimple";
 import Link from "next/link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
@@ -140,7 +139,6 @@ export default async function GalleryPage({
       )}
       {result.items.length === 0 && (
         <EmptyState
-          icon={FolderSimpleIcon}
           title={
             query.search || query.challengeId || query.winnersOnly === "true"
               ? copy.noMatchesTitle

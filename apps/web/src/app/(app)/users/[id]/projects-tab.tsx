@@ -3,7 +3,6 @@
 // The person's projects and their queue state across challenges (H16-H17).
 
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -108,7 +107,6 @@ export function ProjectsTab({ userId }: { userId: number }) {
   if (error) {
     return (
       <EmptyState
-        icon={FolderSimpleIcon}
         title={t("projectsCouldNotLoad")}
         description={error}
         action={
@@ -123,7 +121,6 @@ export function ProjectsTab({ userId }: { userId: number }) {
   if (projects.length === 0) {
     return (
       <EmptyState
-        icon={FolderSimpleIcon}
         title={t("noProjectsYet")}
         action={
           <Button variant="outline" asChild>

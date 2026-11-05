@@ -32,7 +32,6 @@ import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { HourglassIcon } from "@phosphor-icons/react/dist/csr/Hourglass";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { ShieldSlashIcon } from "@phosphor-icons/react/dist/csr/ShieldSlash";
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
 import { TimerIcon } from "@phosphor-icons/react/dist/csr/Timer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -857,7 +856,6 @@ function OverviewPanel({
   return (
     <SectionCard
       title={t("statisticsOverviewPanel")}
-      icon={SquaresFourIcon}
       className={cn("@container h-full", statToneSurfaceClass[tone])}
     >
       {loading && !stats ? (
@@ -881,7 +879,6 @@ function OverviewPanel({
         </div>
       ) : !stats ? (
         <EmptyState
-          icon={SquaresFourIcon}
           title={t("noApplicationStatistics")}
           action={
             <Button variant="outline" size="sm" onClick={onRetry}>

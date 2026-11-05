@@ -94,11 +94,11 @@ export function ProfileHeader({
         meta={
           <>
             <span className="text-muted-foreground truncate text-sm">{user.email}</span>
-            <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+            <StatusBadge tone={user.emailVerified ? "success" : "warning"}>
               {user.emailVerified ? t("verified") : t("unverified")}
             </StatusBadge>
             <span className="text-muted-foreground text-sm">
-              {roleDisplayName(user.visibleRoleName, t)}
+              {t("colRole")}: {roleDisplayName(user.visibleRoleName, t)}
             </span>
             {user.badgeId && (
               <span className="text-muted-foreground font-mono text-xs">

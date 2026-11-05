@@ -58,7 +58,7 @@ function TabsContent({
   return (
     <TabsPrimitive.Content
       data-slot="tabs-content"
-      className={cn("flex-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring", className)}
+      className={cn("flex-1 data-[state=active]:animate-tab-panel-in focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring", className)}
       {...props}
     />
   )

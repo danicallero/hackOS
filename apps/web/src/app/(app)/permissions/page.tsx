@@ -7,7 +7,6 @@ import { ArrowUUpLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowUUpLeft";
 import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
 import { LightningIcon } from "@phosphor-icons/react/dist/csr/Lightning";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { ShieldCheckIcon } from "@phosphor-icons/react/dist/csr/ShieldCheck";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -450,7 +449,6 @@ function PermissionsPageContent() {
     </div>
   ) : roles.length === 0 ? (
     <EmptyState
-      icon={ShieldCheckIcon}
       title={t("noRolesYetTitle")}
       action={
         <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -542,7 +540,7 @@ function PermissionsPageContent() {
               <ActionGroup className="justify-end">{roleActions}</ActionGroup>
               {!loading && !loadError && (
                 <Section>
-                  <EmptyState icon={ShieldCheckIcon} title={t("selectRoleHint")} />
+                  <EmptyState title={t("selectRoleHint")} />
                 </Section>
               )}
             </div>

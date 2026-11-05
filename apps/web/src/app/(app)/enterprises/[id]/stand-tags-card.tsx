@@ -276,7 +276,7 @@ export function StandTagsCard({
   const dateFormat = new Intl.DateTimeFormat(language, { dateStyle: "medium" });
 
   return (
-    <SectionCard>
+    <SectionCard variant="plain" bodyClassName="pt-0">
       <div className="space-y-6">
         {!scannable && (
           <div
@@ -351,7 +351,7 @@ export function StandTagsCard({
             <Spinner className="size-5" />
           </div>
         ) : tags.length === 0 ? (
-          <EmptyState icon={ContactlessPaymentIcon} title={t("standTagsEmpty")} />
+          <EmptyState title={t("standTagsEmpty")} />
         ) : (
           <ul className="divide-border divide-y border-t">
             {tags.map((tag) => (

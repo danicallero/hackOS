@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { ClockCounterClockwiseIcon } from "@phosphor-icons/react/dist/csr/ClockCounterClockwise";
-import { KeyIcon } from "@phosphor-icons/react/dist/csr/Key";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
@@ -330,7 +329,6 @@ export function RoleEditor({
       )}
       {/* No title here — the "Capabilities" tab label / nav row already names this panel (H8). */}
       <SectionCard
-        icon={KeyIcon}
         description={isProtected ? t("superadminLockedDesc") : t("capabilitiesChangeDesc")}
         bodyClassName="p-0"
         footer={

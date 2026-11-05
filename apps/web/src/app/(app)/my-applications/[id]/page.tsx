@@ -12,7 +12,6 @@
 //   POST /api/me/responses/:responseId/decline   → decline my place (H15)
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -463,7 +462,6 @@ export default function MyApplicationDetailPage() {
             className="overflow-hidden"
           >
             <EmptyState
-              icon={ClipboardTextIcon}
               title={t("applicationNotOpenTitle")}
               description={t("applicationNotOpenDesc")}
               action={
@@ -519,7 +517,6 @@ export default function MyApplicationDetailPage() {
       />
 
       <SectionCard
-        icon={ClipboardTextIcon}
         title={response?.submitted_at ? t("yourSubmittedAnswers") : t("yourAnswers")}
         description={editable ? undefined : t("applicationLockedDesc")}
         footer={

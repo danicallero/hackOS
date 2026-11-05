@@ -12,10 +12,9 @@
 // challenge-directory access) — see requireSponsorPortalAccess.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -47,6 +46,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { EMPTY_I18N, textForDisplay } from "@/lib/challenges";
 import { type I18nText, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
+import { getPublicEvent } from "@/lib/public-content";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 
@@ -244,21 +244,26 @@ function FaqItemsDisplay({ items }: { items: FaqItem[] }) {
  */
 function SponsorScheduleCard() {
   const { t } = useLocale();
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [items, setItems] = useState<PublicScheduleItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setError(null);
-    Promise.all([api.get<PublicEvent>("/api/public/event"), logisticsApi.publicSchedule()])
+    Promise.all([getPublicEvent(), logisticsApi.publicSchedule()])
       .then(([eventData, schedule]) => {
         setEvent(eventData);
         setItems(schedule.items);
       })
       .catch((err) => {
-        setError(apiErrorText(err, t, t("couldNotLoadSchedule")));
+        const tr = tRef.current;
+        setError(apiErrorText(err, tr, tr("couldNotLoadSchedule")));
       });
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -268,7 +273,7 @@ function SponsorScheduleCard() {
   const sponsorItems = items?.filter((item) => item.audiences?.includes("sponsor")) ?? null;
 
   return (
-    <SectionCard icon={CalendarDotsIcon} title={t("whatsHappeningTitle")}>
+    <SectionCard title={t("whatsHappeningTitle")}>
       {error ? (
         <ContextualError message={error} onRetry={load} />
       ) : sponsorItems === null || !event ? (

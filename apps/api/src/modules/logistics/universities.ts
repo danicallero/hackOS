@@ -11,7 +11,7 @@ import {
   type RouteAccessPolicy,
   routeAccessOption as routeAccess,
 } from "../../lib/route-policy.js";
-import { idParamSchema } from "./schemas.js";
+import { idParamSchema, PUBLIC_CATALOG_CACHE } from "./schemas.js";
 
 const idParam = idParamSchema;
 
@@ -147,7 +147,8 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
           "Anonymous read-only autocomplete for application and profile university pickers. It accepts a name query or a comma-separated set of IDs.",
       },
     },
-    async (req) => {
+    async (req, reply) => {
+      reply.header("cache-control", PUBLIC_CATALOG_CACHE);
       const q = (req.query as { q?: string; ids?: string }).q;
       const idsParam = (req.query as { q?: string; ids?: string }).ids;
 

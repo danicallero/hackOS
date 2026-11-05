@@ -19,6 +19,7 @@ import {
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { readServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -59,12 +60,14 @@ export function DegreePicker({
   const [loading, setLoading] = useState(true);
   const [label, setLabel] = useState<string | null>(null);
   useEffect(() => {
+    // Only search once the picker opens (#1227).
+    if (!open) return;
     let active = true;
     const timer = setTimeout(() => {
-      api
-        .get<{ degrees: Degree[] }>("/api/public/degrees", {
-          query: { q: query.trim() || undefined },
-        })
+      const q = query.trim() || undefined;
+      readServerState(["public", "degrees", { q }], (signal) =>
+        api.get<{ degrees: Degree[] }>("/api/public/degrees", { query: { q }, signal }),
+      )
         .then((result) => active && setOptions(result.degrees))
         .catch(() => active && setOptions([]))
         .finally(() => active && setLoading(false));
@@ -73,11 +76,12 @@ export function DegreePicker({
       active = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [open, query]);
   useEffect(() => {
     if (!value || options.some((item) => String(item.id) === value) || label) return;
-    api
-      .get<{ degrees: Degree[] }>("/api/public/degrees", { query: { ids: value } })
+    readServerState(["public", "degrees", { ids: value }], (signal) =>
+      api.get<{ degrees: Degree[] }>("/api/public/degrees", { query: { ids: value }, signal }),
+    )
       .then(({ degrees }) => setLabel(degrees[0]?.name ?? null))
       .catch(() => {});
   }, [value, options, label]);
@@ -130,9 +134,11 @@ export function DegreePicker({
           aria-expanded={open}
           aria-haspopup="dialog"
           {...aria}
-          className="w-full justify-between rounded-control font-normal"
+          className="w-full min-w-0 max-w-full justify-between rounded-control font-normal"
         >
-          <span className="truncate">{currentLabel ?? t("selectDegreePlaceholder")}</span>
+          <span className="min-w-0 flex-1 truncate text-left">
+            {currentLabel ?? t("selectDegreePlaceholder")}
+          </span>
           <CaretUpDownIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
         </Button>
       </PopoverPrimitive.Trigger>
@@ -142,9 +148,12 @@ export function DegreePicker({
           id={listboxId}
           align="start"
           sideOffset={4}
-          className="bg-popover text-popover-foreground z-50 w-(--radix-popover-trigger-width) rounded-md border shadow-md"
+          className="pointer-events-auto bg-popover text-popover-foreground z-50 flex max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) flex-col rounded-md border shadow-md"
         >
-          <Command shouldFilter={false}>
+          <Command
+            shouldFilter={false}
+            className="min-h-0 [&_[data-slot=command-input-wrapper]]:shrink-0"
+          >
             <CommandInput
               placeholder={t("searchDegreesPlaceholder")}
               value={query}
@@ -153,13 +162,16 @@ export function DegreePicker({
                 setLoading(true);
               }}
             />
-            <CommandList className="max-h-64">
+            <CommandList className="max-h-64 min-h-0 flex-1">
               <CommandEmpty>{loading ? t("loading") : t("typeToSearchDegrees")}</CommandEmpty>
               <CommandGroup>
                 {options.map((degree) => (
                   <CommandItem
                     key={degree.id}
                     value={String(degree.id)}
+                    onPointerDown={(event) => {
+                      if (inDialog) event.preventDefault();
+                    }}
                     onSelect={() => select(degree)}
                   >
                     <CheckIcon
@@ -169,7 +181,7 @@ export function DegreePicker({
                         String(degree.id) === value ? "opacity-100" : "opacity-0",
                       )}
                     />
-                    {degree.name}
+                    <span className="min-w-0 whitespace-normal wrap-anywhere">{degree.name}</span>
                   </CommandItem>
                 ))}
                 {canPropose && (

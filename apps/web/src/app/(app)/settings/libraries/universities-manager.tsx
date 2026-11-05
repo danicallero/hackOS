@@ -82,7 +82,7 @@ export function UniversitiesManager() {
     try {
       const { universities } = await api.get<{ universities: University[] }>(
         "/api/public/universities",
-        { query: { q: search.trim() || undefined } },
+        { query: { q: search.trim() || undefined }, cache: "no-cache" },
       );
       succeeded();
       setLoadError(null);
