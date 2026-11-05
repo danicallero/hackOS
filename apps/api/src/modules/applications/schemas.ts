@@ -56,6 +56,8 @@ export const updateApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().optional(),
     ask_shirt_size: z.boolean().optional(),
     ask_food_intolerances: z.boolean().optional(),
+    /** Answer keys hidden in the standard review view (H13); reviewers can still show everything. */
+    review_hidden_fields: z.array(z.string().min(1).max(200)).max(500).optional(),
     // Omitted = leave the form's role grants unchanged; explicit [] clears
     // every grant; a non-empty array replaces the full set (H8/H11).
     grants_role_ids: z.array(z.number().int().positive()).nullish(),

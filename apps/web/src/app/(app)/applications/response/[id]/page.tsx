@@ -21,10 +21,10 @@ export default function ResponseRedirectPage() {
   useEffect(() => {
     let cancelled = false;
     api
-      .get<{ application_id: number }>(`/api/responses/${id}`)
-      .then(({ application_id }) => {
+      .get<{ application: { id: number } }>(`/api/responses/${id}`)
+      .then(({ application }) => {
         if (!cancelled) {
-          router.replace(`/applications/${application_id}?tab=review&response=${id}`);
+          router.replace(`/applications/${application.id}?tab=review&response=${id}`);
         }
       })
       .catch((e) => {
