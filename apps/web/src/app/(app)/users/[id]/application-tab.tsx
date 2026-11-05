@@ -47,6 +47,7 @@ interface ResponseDetailPayload {
     sections: FormSection[];
     ask_shirt_size: boolean;
     ask_food_intolerances: boolean;
+    review_hidden_fields?: string[];
   };
   reviews: ReviewEntry[];
   avg_score: number | string | null;
@@ -64,6 +65,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
     sections: FormSection[];
     askShirtSize: boolean;
     askFoodIntolerances: boolean;
+    reviewHiddenFields: string[];
   } | null>(null);
   const [openingId, setOpeningId] = useState<number | null>(null);
 
@@ -109,6 +111,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
         sections: detail.application.sections,
         askShirtSize: detail.application.ask_shirt_size,
         askFoodIntolerances: detail.application.ask_food_intolerances,
+        reviewHiddenFields: detail.application.review_hidden_fields ?? [],
       });
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotOpenApplication")), t("toastOpenApplication"));
@@ -185,6 +188,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
           sections={selected.sections}
           askShirtSize={selected.askShirtSize}
           askFoodIntolerances={selected.askFoodIntolerances}
+          reviewHiddenFields={selected.reviewHiddenFields}
           onClose={() => setSelected(null)}
           onChanged={() => loadRows(false)}
         />

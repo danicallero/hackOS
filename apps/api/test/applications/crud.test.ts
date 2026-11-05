@@ -111,6 +111,38 @@ describe("applications CRUD (H11)", () => {
     expect(list.json().applications).toHaveLength(1);
   });
 
+  it("stores the standard review view without changing the form version (H13)", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);
+    const reviewer = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_REVIEW]);
+    const create = await a.inject({
+      method: "POST",
+      url: "/api/applications",
+      headers: asUser(manager),
+      payload: { name: "View form", template: sampleTemplate() },
+    });
+    const id = create.json().id;
+    expect(create.json().review_hidden_fields).toEqual([]);
+
+    const patch = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(manager),
+      payload: { review_hidden_fields: ["dni", "phone", "dni"] },
+    });
+    expect(patch.statusCode).toBe(200);
+    expect(patch.json().review_hidden_fields).toEqual(["dni", "phone"]);
+    expect(patch.json().current_form_version).toBe(create.json().current_form_version);
+
+    const denied = await a.inject({
+      method: "PATCH",
+      url: `/api/applications/${id}`,
+      headers: asUser(reviewer),
+      payload: { review_hidden_fields: [] },
+    });
+    expect(denied.statusCode).toBe(403);
+  });
+
   it("moves drafts to an updated form version", async () => {
     const a = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.APPLICATIONS_MANAGE]);

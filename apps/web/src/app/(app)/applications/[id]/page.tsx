@@ -297,6 +297,8 @@ export default function ApplicationDetailPage() {
                 sections={form?.sections ?? []}
                 askShirtSize={form?.ask_shirt_size ?? false}
                 askFoodIntolerances={form?.ask_food_intolerances ?? false}
+                reviewHiddenFields={form?.review_hidden_fields ?? []}
+                onStandardViewSaved={loadForm}
                 workspace="review"
               />
             </TabsContent>
@@ -309,6 +311,8 @@ export default function ApplicationDetailPage() {
                 sections={form?.sections ?? []}
                 askShirtSize={form?.ask_shirt_size ?? false}
                 askFoodIntolerances={form?.ask_food_intolerances ?? false}
+                reviewHiddenFields={form?.review_hidden_fields ?? []}
+                onStandardViewSaved={loadForm}
                 workspace="outbox"
               />
             </TabsContent>
@@ -321,6 +325,8 @@ export default function ApplicationDetailPage() {
                 sections={form?.sections ?? []}
                 askShirtSize={form?.ask_shirt_size ?? false}
                 askFoodIntolerances={form?.ask_food_intolerances ?? false}
+                reviewHiddenFields={form?.review_hidden_fields ?? []}
+                onStandardViewSaved={loadForm}
                 workspace="sent"
               />
             </TabsContent>
