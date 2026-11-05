@@ -42,7 +42,21 @@ case "$*" in
     ;;
   *ghcr.io/token*) printf '%s\n' '{"token":"test"}' ;;
   *hackos-api/tags/list*|*hackos-web/tags/list*)
-    if [[ "${HACKOS_TEST_MISSING_WEB:-false}" == true && "$*" == *hackos-web/tags/list* ]]; then
+    if [[ "${HACKOS_TEST_PAGINATED:-false}" == true ]]; then
+      # Registry pages: the wanted tag only exists on the second page.
+      headers=""
+      args=("$@")
+      for ((i = 0; i < ${#args[@]}; i++)); do
+        if [[ "${args[i]}" == -D ]]; then headers="${args[i + 1]}"; fi
+      done
+      : >"${headers:-/dev/null}"
+      if [[ "$*" == *"last="* ]]; then
+        printf '%s\n' '{"tags":["sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}'
+      else
+        printf 'link: </v2/danicallero/hackos-web/tags/list?last=x&n=1000>; rel="next"\r\n' >"${headers:-/dev/null}"
+        printf '%s\n' '{"tags":["sha-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]}'
+      fi
+    elif [[ "${HACKOS_TEST_MISSING_WEB:-false}" == true && "$*" == *hackos-web/tags/list* ]]; then
       printf '%s\n' '{"tags":[]}'
     else
       printf '%s\n' '{"tags":["sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}'
@@ -149,5 +163,23 @@ env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
 
 grep -Fq 'is not published in GHCR for the selected units' "$test_dir/menu.log"
 grep -Fxq 'operator shell still alive' "$test_dir/menu.log"
+
+
+# GHCR lists tags in pages; a release whose tag is not on the first page must
+# still validate (the first page alone hid the newest main release).
+env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+  PATH="$test_dir/bin:$PATH" \
+  HACKOS_APP_DIR="$test_dir/app" \
+  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy-paged.log" \
+  HACKOS_TEST_PAGINATED=true \
+  bash "$services_script" production deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --both >/dev/null
+
+grep -Fxq 'true production sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true true rollback' "$test_dir/deploy-paged.log" || {
+  echo 'services.sh did not follow GHCR tag pagination.' >&2
+  exit 1
+}
 
 echo 'services image-tag regression test: passed'
