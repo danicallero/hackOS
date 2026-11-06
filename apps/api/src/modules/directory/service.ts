@@ -29,7 +29,7 @@ export interface DirectoryEntry {
   socials: SocialLink[];
   /** Authenticated CV route, only while the person shares it. */
   cvUrl: string | null;
-  /** Repositories first, then unlinked work groups, each by id (#935). */
+  /** The person's shown repositories, each by id (#935). */
   projects: DirectoryProject[];
   /** Deprecated: the first of `projects`, kept for app builds that predate it. */
   project: DirectoryProject | null;
@@ -57,8 +57,8 @@ interface EntryRow {
 
 /**
  * Fragments over `p` (user_public_profiles) and `u` (users). The projects are
- * every active repository submission plus every unlinked planned work group
- * the person belongs to (#935: a person can work on several); challenges are
+ * every active repository submission the person belongs to (#935: a person
+ * can work on several); challenges are
  * the published ones any of them still takes part in (cancelled/disqualified
  * queue entries excluded, as in projects/lifecycle.ts). Both are suppressed
  * when show_project is off.
@@ -73,9 +73,12 @@ const SHOWN_REPOS_SQL = `
      AND r.is_test_account = false`;
 
 const CHALLENGE_OF_PROJECTS = `c.visibility='visible' AND c.is_test_account=false
- AND EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.challenge_id=c.id
- AND pc.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr))
- OR (c.visibility='visible' AND c.is_test_account=false AND EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.challenge_id=c.id AND qe.status NOT IN('cancelled','disqualified') AND qe.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr)))`;
+ AND (
+   EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.challenge_id=c.id
+     AND pc.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr))
+   OR EXISTS(SELECT 1 FROM queue_entries qe WHERE qe.challenge_id=c.id AND qe.status NOT IN('cancelled','disqualified')
+     AND qe.repo_id IN(SELECT id FROM (${SHOWN_REPOS_SQL}) sr))
+ )`;
 
 /**
  * Labels or keys that name a CV in the three event languages (#935): "cv",
@@ -162,10 +165,8 @@ function entrySql(profiles: string): string {
          p.socials,
          (p.share_cv AND COALESCE(fcv.key, p.cv_key) IS NOT NULL) AS has_cv,
          COALESCE((
-           SELECT jsonb_agg(jsonb_build_object('kind', x.kind, 'id', x.id, 'name', x.name) ORDER BY x.ord, x.id)
-             FROM (
-               SELECT 'project' AS kind, 0 AS ord, id, name FROM (${SHOWN_REPOS_SQL}) sr
-             ) x
+           SELECT jsonb_agg(jsonb_build_object('kind', 'project', 'id', sr.id, 'name', sr.name) ORDER BY sr.id)
+             FROM (${SHOWN_REPOS_SQL}) sr
          ), '[]'::jsonb) AS projects,
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.title) ORDER BY c.title, c.id)

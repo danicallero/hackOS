@@ -132,7 +132,10 @@ async function betterAuthPassthrough(
     request.method === "POST" && request.url.split("?", 1)[0] === "/api/auth/sign-in/email";
   const attemptedSignInEmail = isEmailSignIn ? signInEmail(request.body) : null;
   if (attemptedSignInEmail) {
-    const fixture = await findReviewFixtureByEmail(pool, attemptedSignInEmail).catch(() => null);
+    const fixture = await findReviewFixtureByEmail(pool, attemptedSignInEmail).catch((error) => {
+      request.log.warn({ err: error }, "review fixture lookup failed");
+      return null;
+    });
     if (fixture) request.reviewFixtureContext = fixture;
   }
 
@@ -179,8 +182,8 @@ async function betterAuthPassthrough(
   // This records only successful sign-ins for the current synthetic account;
   // a telemetry failure must never turn a successful login into a 500.
   if (isEmailSignIn && attemptedSignInEmail && response.ok) {
-    await recordReviewFixtureAuthentication(pool, attemptedSignInEmail, request.ip).catch(
-      () => undefined,
+    await recordReviewFixtureAuthentication(pool, attemptedSignInEmail, request.ip).catch((error) =>
+      request.log.warn({ err: error }, "review fixture sign-in record failed"),
     );
   }
 
