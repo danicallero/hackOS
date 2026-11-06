@@ -31,7 +31,6 @@ export const createRepoBodySchema = z.object({
   memberUserIds: z.array(z.number().int().positive()).max(50).default([]),
   challengeIds: z.array(z.number().int().positive()).max(50).default([]),
 });
-export type CreateRepoBody = z.infer<typeof createRepoBodySchema>;
 
 /** PATCH /api/repos/:id (H18) — metadata only; team/challenges have their own H21 routes. */
 export const updateRepoBodySchema = z
@@ -45,14 +44,12 @@ export const updateRepoBodySchema = z
   .refine((body) => Object.values(body).some((value) => value !== undefined), {
     message: "At least one field is required",
   });
-export type UpdateRepoBody = z.infer<typeof updateRepoBodySchema>;
 
 /** POST /api/me/projects (H19) — no memberUserIds: the creator is the sole initial member. */
 export const createMyProjectBodySchema = createRepoBodySchema.omit({
   memberUserIds: true,
   responses: true,
 });
-export type CreateMyProjectBody = z.infer<typeof createMyProjectBodySchema>;
 
 export const repoMemberBodySchema = z.object({
   userId: z.coerce.number().int().positive(),
@@ -70,7 +67,6 @@ export const inviteProjectMemberBodySchema = z
   .refine((body) => (body.email === undefined) !== (body.userId === undefined), {
     message: "Provide exactly one of email or userId",
   });
-export type InviteProjectMemberBody = z.infer<typeof inviteProjectMemberBodySchema>;
 
 export const repoChallengeBodySchema = z.object({
   challengeId: z.coerce.number().int().positive(),

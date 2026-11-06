@@ -4,17 +4,16 @@ import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { validateResponses } from "../../lib/form-validation.js";
+import { likeContains } from "../../lib/like.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
 import { deletePrefix } from "../../lib/storage.js";
+import { translationsOf } from "../challenges/translations.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { validateLibraryAnswers } from "../form-libraries/service.js";
 import { hasEventAccess } from "../identity/role.js";
-import {
-  assertFixtureSubjectScope,
-  isSyntheticOperator,
-} from "../logistics/review-fixture-scope.js";
 import { notify } from "../notifications/service.js";
 import {
   broadcastQueueEvent,
@@ -364,17 +363,6 @@ export interface PublicChallenge {
   };
 }
 
-function translationsOf(i18n: unknown, fallback: string | null): Record<string, string> {
-  const translations: Record<string, string> = {};
-  if (i18n && typeof i18n === "object" && !Array.isArray(i18n)) {
-    for (const [locale, value] of Object.entries(i18n as Record<string, unknown>)) {
-      if (typeof value === "string" && value.trim()) translations[locale] = value;
-    }
-  }
-  if (Object.keys(translations).length === 0 && fallback?.trim()) translations.en = fallback;
-  return translations;
-}
-
 export async function listPublicChallenges(
   userId: number | null = null,
 ): Promise<PublicChallenge[]> {
@@ -435,10 +423,8 @@ async function computePublicChallenges(winnersVisible: boolean): Promise<PublicC
 // H45). See apps/api/src/modules/sponsors/service.ts#listPublicSponsors.
 
 export { createNativeDraft as createMyProject } from "./native.js";
-export async function isAdmittedParticipant(db: Queryable, userId: number) {
-  return hasEventAccess(db, userId);
-}
-export async function isActiveProjectMember(db: Queryable, repoId: number, userId: number) {
+
+async function isActiveProjectMember(db: Queryable, repoId: number, userId: number) {
   return !!(
     await db.query(
       `SELECT 1 FROM submissions s JOIN users u ON u.id=s.user_id WHERE repo_id=$1 AND user_id=$2 AND status='active' AND u.account_state='active' AND u.anonymized_at IS NULL`,
@@ -446,7 +432,7 @@ export async function isActiveProjectMember(db: Queryable, repoId: number, userI
     )
   ).rowCount;
 }
-export async function activeProjectMemberCount(db: Queryable, repoId: number) {
+async function activeProjectMemberCount(db: Queryable, repoId: number) {
   return Number(
     (
       await db.query(`SELECT count(*) FROM submissions WHERE repo_id=$1 AND status='active'`, [
@@ -506,8 +492,8 @@ export async function listProjectMemberCandidates(q: string, limit: number, acto
   const marker = await isSyntheticOperator(pool, actorId);
   return (
     await pool.query(
-      `SELECT id,email,name,surname FROM users WHERE is_test_account=$3 AND account_state='active' AND anonymized_at IS NULL AND (email ILIKE '%'||$1||'%' OR unaccent(name) ILIKE unaccent('%'||$1||'%')) ORDER BY id LIMIT $2`,
-      [q, limit, marker],
+      `SELECT id,email,name,surname FROM users WHERE is_test_account=$3 AND account_state='active' AND anonymized_at IS NULL AND (email ILIKE $1 OR unaccent(name) ILIKE unaccent($1)) ORDER BY id LIMIT $2`,
+      [likeContains(q), limit, marker],
     )
   ).rows;
 }

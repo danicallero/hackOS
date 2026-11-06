@@ -9,6 +9,7 @@ import { pool } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, objectExists } from "../../lib/storage.js";
 import type { TemplateField } from "./schemas.js";
@@ -145,7 +146,7 @@ export function registerFilesExportRoutes(app: FastifyInstance): void {
 
       const filename = `${fieldKey}-${scope}.zip`;
       reply.header("content-type", "application/zip");
-      reply.header("content-disposition", `attachment; filename="${filename}"`);
+      reply.header("content-disposition", contentDisposition(filename));
       reply.header("cache-control", "private, no-store");
       // Read by the web client to surface exactly which applications need
       // manual attention (their upload is missing from storage) — set before

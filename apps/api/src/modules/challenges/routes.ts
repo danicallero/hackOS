@@ -8,9 +8,9 @@ import {
   requireAnyCapability,
   requireAuth,
 } from "../../lib/capabilities.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import {
   challengeEditAccessFor,
   isChallengeAdmin,

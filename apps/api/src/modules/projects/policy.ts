@@ -65,7 +65,7 @@ export async function projectViewer(db: Queryable, userId: number | null) {
  * H18: attendees and visitors browse once the gallery opens; project staff
  * (PROJECTS_READ, who already read every project) browse it at any time.
  */
-export async function galleryAccess(
+async function galleryAccess(
   db: Queryable,
   userId: number | null,
   /**

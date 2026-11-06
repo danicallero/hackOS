@@ -10,6 +10,7 @@ import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { likeContains } from "../../lib/like.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { visibleWinnerRows } from "../challenges/winner-publication.js";
 import { repositoryScopeFor, requireRepositoryListAccess } from "./access.js";
@@ -251,11 +252,11 @@ export function registerNativeProjectRoutes(app: FastifyInstance) {
                 .map((winner) => winner.repoId)
             : null;
           const { rows } = await pool.query(
-            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE '%'||$3||'%') AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
+            `SELECT r.id,count(*) OVER()::int AS total FROM repos r WHERE r.is_test_account=$8 AND (r.submission_status='submitted' OR ($1<>'team_only' AND ($1='public' OR $2))) AND ($3::text IS NULL OR r.name ILIKE $3) AND ($4::int IS NULL OR EXISTS(SELECT 1 FROM project_challenges pc WHERE pc.repo_id=r.id AND pc.challenge_id=$4)) AND ($7::int[] IS NULL OR r.id=ANY($7)) ORDER BY r.id LIMIT $5 OFFSET $6`,
             [
               phase.draftVisibility,
               viewer.attendee,
-              search ?? null,
+              search ? likeContains(search) : null,
               challengeId ?? null,
               pageSize,
               (page - 1) * pageSize,

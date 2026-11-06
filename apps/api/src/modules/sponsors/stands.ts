@@ -3,10 +3,8 @@ import type pg from "pg";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { AppError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import {
-  assertFixtureEnterpriseScope,
-  isSyntheticOperator,
-} from "../logistics/review-fixture-scope.js";
+import { assertFixtureEnterpriseScope } from "../../lib/fixture-queue-scope.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { ENTERPRISE_HAS_REAL, ENTERPRISE_HAS_SYNTHETIC } from "./service.js";
 
 /**
@@ -411,7 +409,7 @@ export async function generateMissingQrTags(
   });
 }
 
-export interface StandCode {
+interface StandCode {
   enterpriseId: number;
   name: string;
   kind: "nfc" | "qr";

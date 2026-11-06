@@ -16,10 +16,10 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, putObject } from "../../lib/storage.js";
-import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { type TemplateField, uploadQuerySchema } from "./schemas.js";
 
 const uploadParamsSchema = z.object({

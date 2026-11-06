@@ -7,11 +7,11 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import type {
   ContextualPolicyResolver,
   ContextualResourceLocator,
 } from "../../lib/route-policy.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 
 /** How a user was allowed to touch a challenge. */
 export type ChallengeAccess = "admin" | "owner" | "assigned_judge";
@@ -34,7 +34,7 @@ function challengeIdFrom(request: FastifyRequest, locator: ContextualResourceLoc
  * sponsors.enterprise_id; the user must hold a sponsor row on that same
  * enterprise (H44: "editar mi reto").
  */
-export async function ownsChallenge(userId: number, challengeId: number): Promise<boolean> {
+async function ownsChallenge(userId: number, challengeId: number): Promise<boolean> {
   const fixtureMarker = await isSyntheticOperator(pool, userId);
   const { rowCount } = await pool.query(
     `SELECT 1
@@ -99,7 +99,7 @@ export async function assertCanEditChallenge(
  * the people who will actually judge (JUDGE_PANEL) or run the queue
  * (QUEUE_OPERATE) — H44 lets sponsors "preview the panel before judging".
  */
-export async function assertCanViewPanel(
+async function assertCanViewPanel(
   context: AuthorizationContext,
   challengeId: number,
 ): Promise<void> {

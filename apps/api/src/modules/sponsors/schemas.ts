@@ -135,8 +135,6 @@ export const sponsorFaqBody = z
 
 export type FaqItem = z.infer<typeof faqItem>;
 
-export type SponsorFaqBody = z.infer<typeof sponsorFaqBody>;
-
 /**
  * #935 sponsor stand tags. NFC UIDs use the badge encoding (docs/mobile.md):
  * separators are dropped and hex is uppercased before the 7-byte check. A QR

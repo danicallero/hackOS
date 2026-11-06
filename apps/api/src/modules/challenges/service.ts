@@ -7,8 +7,8 @@ import {
   assertFixtureEnterpriseScope,
   assertFixtureQueueScope,
   assertFixtureQueueScopes,
-  isSyntheticOperator,
-} from "../logistics/review-fixture-scope.js";
+} from "../../lib/fixture-queue-scope.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { notifyMany } from "../notifications/service.js";
 import { announceQueueOutcomes, enrollReposInMandatoryChallenges } from "../projects/service.js";
 import { challengePanelLocked } from "../queue/evaluation-lock.js";
@@ -20,8 +20,7 @@ import {
   type PublishChallengeBody,
   type UpdateChallengeBody,
 } from "./schemas.js";
-
-type TranslationMap = Record<string, string>;
+import { translationsOf } from "./translations.js";
 
 /** Publicly visible challenges are frozen for sponsor owners (admins keep editing). */
 function isFrozenForOwner(visibility: string): boolean {
@@ -60,17 +59,6 @@ const CREATE_RETURNING_COLUMNS = `id, author, title, title_i18n, description, de
   criteria, criteria_i18n, prizes, judging_panel_criteria, max_presentation_seconds,
   max_in_waiting_area, mandatory, visibility, available_from, created_at, updated_at`;
 
-function translationsOf(i18n: unknown, fallback: string | null): TranslationMap {
-  const translations: TranslationMap = {};
-  if (i18n && typeof i18n === "object" && !Array.isArray(i18n)) {
-    for (const [locale, value] of Object.entries(i18n as Record<string, unknown>)) {
-      if (typeof value === "string" && value.trim()) translations[locale] = value;
-    }
-  }
-  if (Object.keys(translations).length === 0 && fallback?.trim()) translations.en = fallback;
-  return translations;
-}
-
 function challengeReadModel(row: Record<string, unknown>) {
   return {
     ...row,
@@ -99,7 +87,7 @@ export async function judgingStartsAt(): Promise<Date | null> {
  * the first team walks in, and nothing is at risk until an answer has been
  * given. See `queue/evaluation-lock.ts`.
  */
-export function panelIsLocked(challengeId: number): Promise<boolean> {
+function panelIsLocked(challengeId: number): Promise<boolean> {
   return challengePanelLocked(challengeId);
 }
 
