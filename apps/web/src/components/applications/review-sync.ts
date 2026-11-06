@@ -25,7 +25,7 @@ function reviewSyncChannelName(applicationId: number): string {
   return `hackos-review-sync-${applicationId}`;
 }
 
-export function openReviewSyncChannel(applicationId: number): BroadcastChannel | null {
+function openReviewSyncChannel(applicationId: number): BroadcastChannel | null {
   if (typeof BroadcastChannel === "undefined") return null;
   try {
     return new BroadcastChannel(reviewSyncChannelName(applicationId));

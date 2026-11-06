@@ -11,12 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
+import { api, apiDownload, parseExportFailures } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { API_URL } from "@/lib/env";
-import type { Translate } from "@/lib/i18n";
 import { type I18nText, type MessageKey, pickText, useLocale } from "@/lib/i18n";
-import { intentKey, settleIntentKey } from "@/lib/intent-key";
 import { toast } from "@/lib/toast";
 
 const EXPORT_STATUSES = [
@@ -100,10 +97,6 @@ function allFieldIds(catalog: ExportCatalog): string[] {
   ];
 }
 
-function errorMessage(error: unknown, t: Translate, fallback: string): string {
-  return apiErrorText(error, t, fallback);
-}
-
 export function ApplicationExportPanel({
   trigger,
   applicationId,
@@ -143,7 +136,7 @@ export function ApplicationExportPanel({
       setCatalog(next);
       setSelectedFields(allFieldIds(next));
     } catch (error) {
-      const message = errorMessage(error, t, t("applicationExportCatalogFailed"));
+      const message = apiErrorText(error, t, t("applicationExportCatalogFailed"));
       setCatalogError(message);
       toast.error(message, t("toastExportApplications"));
     } finally {
@@ -280,51 +273,21 @@ export function ApplicationExportPanel({
 
     setExporting(true);
     try {
-      const requestBody = JSON.stringify({
-        statuses: selectedStatuses,
-        fields: selected.map((option) => option.selection),
-        ...(applicationId ? { application_ids: [applicationId] } : {}),
-        documents,
-        language,
-      });
-      const intent = `POST applications.zip ${requestBody}`;
-      const response = await fetch(`${API_URL}/api/exports/applications.zip`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "Idempotency-Key": intentKey(intent),
+      const headers = await apiDownload(
+        "/api/exports/applications.zip",
+        "applications-export.zip",
+        {
+          method: "POST",
+          body: {
+            statuses: selectedStatuses,
+            fields: selected.map((option) => option.selection),
+            ...(applicationId ? { application_ids: [applicationId] } : {}),
+            documents,
+            language,
+          },
         },
-        body: requestBody,
-      });
-      settleIntentKey(intent, response.status);
-
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(payload?.error?.message ?? t("applicationExportFailed"));
-      }
-
-      const failureHeader = response.headers.get("x-export-file-failures");
-      let report: MissingFileReport | null = null;
-      if (failureHeader) {
-        try {
-          const parsed = JSON.parse(failureHeader) as MissingFileReport;
-          if (parsed.total > 0) report = parsed;
-        } catch {
-          // The ZIP is still usable; only the optional inline failure report was malformed.
-        }
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "applications-export.zip";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      );
+      const report = parseExportFailures<MissingFileReport>(headers);
       setMissingFiles(report);
       toast.success(t("applicationExportDownloaded"), {
         compactTitle: t("toastExportApplications"),
@@ -335,7 +298,7 @@ export function ApplicationExportPanel({
           t("exportFiles"),
         );
     } catch (error) {
-      const message = errorMessage(error, t, t("applicationExportFailed"));
+      const message = apiErrorText(error, t, t("applicationExportFailed"));
       setExportError(message);
       toast.error(message, t("toastExportApplications"));
     } finally {
