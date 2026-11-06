@@ -131,7 +131,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Tell a team to enter",
+        description:
+          "Notification only (H31): pings the team that it can come in. The entry keeps its status; replays with the same idempotency key return the original result.",
+        params: entryIdParam,
+      },
     },
     async (req) => notifyEnter(req.params.entryId, actor(req.userId)),
   );
@@ -148,7 +153,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Remind a called team",
+        description:
+          "Notification only (H29): asks a called team to come back to the waiting room. The entry keeps its status.",
+        params: entryIdParam,
+      },
     },
     async (req) => remindWaitingRoom(req.params.entryId, actor(req.userId)),
   );
@@ -165,7 +175,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Bring a called team into the room",
+        description:
+          "Moves a called team to `in_room` without starting the presentation clock (H32). Freed waiting-area slots are refilled right after.",
+        params: entryIdParam,
+      },
     },
     async (req) =>
       transitionAndTopUp(req.params.entryId, () => bringIn(req.params.entryId, actor(req.userId))),
@@ -182,7 +197,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Start the presentation",
+        description:
+          "Moves the team to `presenting` and starts the authoritative presentation clock (H32).",
+        params: entryIdParam,
+      },
     },
     async (req) => startPresentation(req.params.entryId, actor(req.userId)),
   );
@@ -225,7 +245,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Complete the presentation",
+        description:
+          "Closes the presentation and frees the room slot, which is refilled right after (H32).",
+        params: entryIdParam,
+      },
     },
     async (req) =>
       transitionAndTopUp(req.params.entryId, () =>
@@ -248,7 +273,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: reasonBody },
+      schema: {
+        summary: "Send a team back to called",
+        description:
+          "Returns an `in_room` or `presenting` team to the top of the called list, keeping its turn, and resets its clock (H33). Judging decision: needs the judge view, not queue operation alone.",
+        params: entryIdParam,
+        body: reasonBody,
+      },
     },
     async (req) =>
       transitionAndTopUp(req.params.entryId, () =>
@@ -268,7 +299,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: requeueBody },
+      schema: {
+        summary: "Requeue a called team",
+        description:
+          "Moves a `called` team back to `waiting` at the top or bottom of its queue, with an optional reason (H33).",
+        params: entryIdParam,
+        body: requeueBody,
+      },
     },
     async (req) =>
       transitionAndTopUp(req.params.entryId, () =>
@@ -282,7 +319,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
     {
       preHandler: [operate, idempotencyGuard],
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_OPERATE } },
-      schema: { params: entryIdParam, body: requeueBody.extend(requiredReasonBody.shape) },
+      schema: {
+        summary: "Re-enter a team from a terminal state",
+        description:
+          "Puts a team that is `completed`, `cancelled` or `disqualified` back in `waiting` at the top or bottom. Manual and audited; the reason is required (H33).",
+        params: entryIdParam,
+        body: requeueBody.extend(requiredReasonBody.shape),
+      },
     },
     async (req) =>
       reEnter(req.params.entryId, actor(req.userId), req.body.position, req.body.reason),
@@ -300,7 +343,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: reasonBody },
+      schema: {
+        summary: "Mark a team as no-show",
+        description:
+          "Human no-show decision for a `called` or `in_room` team, available to judges and operators (H34): the team goes to the bottom of the queue and its call count rises; it is never eliminated automatically.",
+        params: entryIdParam,
+        body: reasonBody,
+      },
     },
     async (req) =>
       transitionAndTopUp(req.params.entryId, () =>
@@ -321,7 +370,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: reasonBody },
+      schema: {
+        summary: "Move a team to the top of the queue",
+        description:
+          "Sends a searched team to the top of its challenge queue, releasing it from `called` if needed. Only moves the existing entry; no second entry is created (H37).",
+        params: entryIdParam,
+        body: reasonBody,
+      },
     },
     async (req) =>
       moveToTopAndTopUp(() => moveToTop(req.params.entryId, actor(req.userId), req.body.reason)),
@@ -365,7 +420,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: reasonBody },
+      schema: {
+        summary: "Send a team to the end of the queue",
+        description:
+          "Voluntary skip: the team goes to the end of its queue without a no-show ladder penalty (plan/07 section 4).",
+        params: entryIdParam,
+        body: reasonBody,
+      },
     },
     async (req) => skipToEnd(req.params.entryId, actor(req.userId), req.body.reason),
   );
@@ -376,7 +437,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
     {
       preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { params: entryIdParam, body: requiredReasonBody },
+      schema: {
+        summary: "Disqualify a team",
+        description:
+          "Manual disqualification after repeated no-shows. Needs queue admin, a reason, and is audited (H34).",
+        params: entryIdParam,
+        body: requiredReasonBody,
+      },
     },
     async (req) => disqualify(req.params.entryId, actor(req.userId), req.body.reason),
   );
@@ -386,7 +453,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
     {
       preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { params: entryIdParam, body: reasonBody },
+      schema: {
+        summary: "Cancel a queue entry",
+        description: "Cancels the entry. Needs queue admin; the reason is optional.",
+        params: entryIdParam,
+        body: reasonBody,
+      },
     },
     async (req) => cancelEntry(req.params.entryId, actor(req.userId), req.body.reason),
   );
@@ -403,7 +475,13 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: manualCallBody },
+      schema: {
+        summary: "Call any team manually",
+        description:
+          "Calls any team to `called` or `in_room` regardless of its position (H37). Fails when the room already has an active team or a team member is busy in another room (H30).",
+        params: entryIdParam,
+        body: manualCallBody,
+      },
     },
     async (req) =>
       transitionAndTopUp(req.params.entryId, () =>
@@ -429,7 +507,12 @@ export function registerEntriesRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Entry history",
+        description:
+          "Requeue, no-show and other transitions of one entry, from the queue history (H34).",
+        params: entryIdParam,
+      },
     },
     async (req) => entryHistory(req.params.entryId, actor(req.userId)),
   );

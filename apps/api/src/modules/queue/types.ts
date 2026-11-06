@@ -20,29 +20,3 @@ export interface QueueEntryRow {
   created_at: string;
   updated_at: string;
 }
-
-export interface RoomRow {
-  id: number;
-  name: string;
-  location: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RoomQueueStateRow {
-  room_id: number;
-  is_paused: boolean;
-  max_in_waiting_area: number;
-  started_at: string | null;
-  updated_at: string;
-}
-
-export interface QueueSettingsRow {
-  id: number;
-  handoff_buffer_minutes: number;
-  schedule_start_at: string | null;
-  schedule_end_at: string | null;
-  pre_call_notification_eta_minutes: number;
-  requeue_prompt_default: string;
-}

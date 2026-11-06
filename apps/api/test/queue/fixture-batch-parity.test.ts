@@ -6,7 +6,7 @@ import {
   assertFixtureEnterpriseScopes,
   assertFixtureQueueScope,
   assertFixtureQueueScopes,
-} from "../../src/modules/logistics/review-fixture-scope.js";
+} from "../../src/lib/fixture-queue-scope.js";
 import { queueEntryFixtureMarkers, queueFixtureMarker } from "../../src/modules/queue/broadcast.js";
 import { createUser, truncateAll } from "../helpers.js";
 import {

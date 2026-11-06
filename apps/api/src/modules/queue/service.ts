@@ -4,6 +4,7 @@ import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
 import { notifyMany, QUEUE_STAFF_CATEGORY } from "../notifications/service.js";
@@ -35,13 +36,6 @@ import {
 import { CLOSE_PRESENTATION_PAUSE_SQL } from "./presentation-clock.js";
 import { roomPace } from "./reads.js";
 import type { QueueEntryRow } from "./types.js";
-
-/**
- * Postgres unique_violation. Thrown by the `one_active_per_room` partial
- * index (plan/07 invariant 2) and the `one_active_entry_per_repo` partial
- * index (H30 backstop, plan/07 §2/§4).
- */
-const PG_UNIQUE_VIOLATION = "23505";
 
 /**
  * Lock an entry for a state transition, together with every other active
@@ -340,7 +334,7 @@ export async function callNextForRoom(
         );
         entry = res.rows[0];
       } catch (err) {
-        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+        if (isUniqueViolation(err)) {
           await client.query(`ROLLBACK TO SAVEPOINT call_next_candidate`);
           continue;
         }
@@ -551,7 +545,7 @@ export async function bringIn(entryId: number, actorId: number): Promise<QueueEn
       );
       updated = res.rows[0];
     } catch (err) {
-      if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      if (isUniqueViolation(err)) {
         throw new ConflictError("Room already has an active team", {
           roomId: entry.assigned_room_id,
         });
@@ -1210,14 +1204,13 @@ export async function manualCall(
       );
       updated = res.rows[0];
     } catch (err) {
-      const pgErr = err as { code?: string; constraint?: string };
-      if (pgErr.code === PG_UNIQUE_VIOLATION && pgErr.constraint === "one_active_entry_per_repo") {
+      if (isUniqueViolation(err, "one_active_entry_per_repo")) {
         throw new ConflictError("Team has a member busy in another room (H30)", {
           entryId,
           code: ERROR_REASONS.TEAM_MEMBER_BUSY,
         });
       }
-      if (pgErr.code === PG_UNIQUE_VIOLATION) {
+      if (isUniqueViolation(err)) {
         throw new ConflictError("Room already has an active team", { roomId });
       }
       throw err;
