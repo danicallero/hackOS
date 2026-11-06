@@ -2,14 +2,7 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { FilterMenu, type FilterMenuProps } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
@@ -31,7 +24,7 @@ import {
 } from "@/lib/projects";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { listDetailLayout } from "@/lib/window-size";
-import { colors, radius, type } from "@/theme";
+import { colors } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
@@ -171,19 +164,15 @@ export function ProjectGalleryScreen() {
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
-      ...(Platform.OS === "ios"
-        ? {
-            headerSearchBarOptions: {
-              placeholder: t("projectSearch"),
-              autoCapitalize: "none",
-              hideWhenScrolling: false,
-              allowToolbarIntegration: false,
-              placement: "integratedButton",
-              onChangeText: (event: { nativeEvent: { text: string } }) =>
-                setSearch(event.nativeEvent.text),
-            },
-          }
-        : {}),
+      headerSearchBarOptions: {
+        placeholder: t("projectSearch"),
+        autoCapitalize: "none",
+        hideWhenScrolling: false,
+        allowToolbarIntegration: false,
+        ...(Platform.OS === "ios" ? { placement: "integratedButton" as const } : {}),
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setSearch(event.nativeEvent.text),
+      },
     });
   });
   const load = useCallback(
@@ -340,23 +329,6 @@ export function ProjectGalleryScreen() {
               justifyContent: empty ? "center" : undefined,
             }}
           >
-            {Platform.OS !== "ios" ? (
-              <TextInput
-                accessibilityLabel={t("projectSearch")}
-                value={search}
-                onChangeText={setSearch}
-                placeholder={t("projectSearch")}
-                placeholderTextColor={colors.tertiaryLabel}
-                style={{
-                  color: colors.label,
-                  padding: 12,
-                  minHeight: 44,
-                  fontSize: type.body.fontSize,
-                  backgroundColor: colors.surface,
-                  borderRadius: radius.control,
-                }}
-              />
-            ) : null}
             {closed ? (
               <EmptyState icon="clock" title={closed} />
             ) : error ? (

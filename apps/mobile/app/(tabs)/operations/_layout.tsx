@@ -1,4 +1,5 @@
 import { Stack } from "expo-router/stack";
+import { Platform } from "react-native";
 import { useLocale } from "@/lib/i18n";
 import { useTabStackScreenOptions } from "@/lib/navigation";
 
@@ -10,8 +11,8 @@ export default function OperationsLayout() {
       <Stack.Screen
         name="index"
         options={{
-          headerLargeTitle: true,
-          headerTransparent: true,
+          headerLargeTitle: Platform.OS === "ios",
+          headerTransparent: Platform.OS === "ios",
           headerShadowVisible: false,
           title: t("tabQueueOperations"),
           headerSearchBarOptions: {
