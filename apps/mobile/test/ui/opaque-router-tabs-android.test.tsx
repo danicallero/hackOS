@@ -9,7 +9,7 @@ import { Platform } from "react-native";
 
 // Mocks for expo-router tab primitives used by router-tabs.tsx.
 const mockUsePathname = jest.fn(() => "/(tabs)/schedule");
-const mockUseRouter = jest.fn(() => ({ replace: jest.fn() }));
+const mockUseRouter = jest.fn(() => ({ replace: jest.fn(), navigate: jest.fn() }));
 jest.mock("expo-router", () => ({
   usePathname: () => mockUsePathname(),
   useRouter: () => mockUseRouter(),
@@ -408,5 +408,22 @@ describe("OpaqueRouterTabs — Dynamic Type", () => {
     expect(label.props.adjustsFontSizeToFit).toBe(true);
     expect(label.props.minimumFontScale).toBe(CHROME_MIN_FONT_SCALE);
     expect(label.props.numberOfLines).toBe(1);
+  });
+});
+
+describe("Account tab return destination (H55)", () => {
+  it.each([
+    "/others/notification-settings/live-activities",
+    "/(tabs)/others/notification-settings/live-activities",
+    "/schedule",
+  ])("opens the account profile from %s instead of restoring its last setting", async (path) => {
+    const navigate = jest.fn();
+    mockUseRouter.mockReturnValue({ replace: jest.fn(), navigate });
+    mockUsePathname.mockReturnValue(path);
+    mockPrimaryTabs.mockReturnValue(["schedule", "queue", "diary", "account"]);
+    mockOverflowTabs.mockReturnValue([]);
+    await render(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
+    await fireEvent.press(screen.getByTestId("opaque-tab-account"));
+    expect(navigate).toHaveBeenCalledWith("/(tabs)/others/account");
   });
 });

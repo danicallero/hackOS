@@ -135,9 +135,17 @@ export function ProjectDetailScreen({
   ) : gallery ? (
     <ProjectReadView project={project} onRefresh={refresh} titleHeader={embedded} />
   ) : (
-    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} embedded={embedded} />
+    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} />
   );
-  if (!androidHeader) return body;
+  if (!androidHeader)
+    return (
+      <>
+        {embedded ? null : (
+          <EntryBackToolbar fallback={gallery ? "/projects/gallery" : "/(tabs)/queue"} />
+        )}
+        {body}
+      </>
+    );
   return (
     <>
       <AndroidDetailHeader
@@ -383,11 +391,9 @@ async function pickDocument(field: TemplateField) {
 export function ProjectEditor({
   project,
   reload,
-  embedded = false,
 }: {
   project: NativeProject;
   reload: () => Promise<void>;
-  embedded?: boolean;
 }) {
   const { t, language } = useLocale();
   const readable = useParticipantLayout("form");
@@ -537,7 +543,6 @@ export function ProjectEditor({
       );
   return (
     <>
-      {embedded ? null : <EntryBackToolbar fallback="/(tabs)/queue" />}
       <ScrollView
         automaticallyAdjustKeyboardInsets
         contentInsetAdjustmentBehavior="automatic"

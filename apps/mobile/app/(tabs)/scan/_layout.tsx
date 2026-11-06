@@ -5,6 +5,9 @@ import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/
 
 import { colors } from "@/theme/colors";
 
+/** H55: preserve the owning screen underneath a directly opened child. */
+export const unstable_settings = { anchor: "index" };
+
 export default function ScannerLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();

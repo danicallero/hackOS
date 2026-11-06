@@ -7,7 +7,7 @@ import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import { safeBack } from "@/lib/navigation";
+import type { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 /**
@@ -76,7 +76,8 @@ export function EntryBackToolbar({
       <Stack.Toolbar.Button
         accessibilityLabel={t("back")}
         icon="chevron.left"
-        onPress={() => safeBack(router, fallback)}
+        // H55: parent tab history may exist even though this stack has no screen below.
+        onPress={() => router.replace(fallback)}
       />
       {children}
     </Stack.Toolbar>

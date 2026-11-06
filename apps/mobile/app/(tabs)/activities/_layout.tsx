@@ -4,6 +4,9 @@ import { useLocale } from "@/lib/i18n";
 import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
+/** H55: preserve the owning screen underneath a directly opened child. */
+export const unstable_settings = { anchor: "index" };
+
 export default function ActivitiesLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();
