@@ -731,9 +731,10 @@ they are not device screenshots or proof of native toolbar behavior.
   discards the changes (back to the preview) and the checkmark saves. On foldable
   iPhone with a vertical system bar the route uses a full-screen modal so its
   native toolbar actions can join that side bar; other windows keep a sheet. The
-  native title shares the page background (large on iPhone, compact in iPad
-  sheets) and its scroll view remains
-  directly under the screen so the title can collapse normally. Custom fallback
+  native compact title shares the page background on every device. The profile
+  uses the presentation width with symmetric gutters instead of a narrow,
+  leading-aligned form column. Its scroll view attaches directly to the native
+  screen. Custom fallback
   controls and the title respect the measured sheet top safe area.
   **Edit mode** keeps the layout and edits in place: headline under the name,
   bio and where-to-find-you as inputs, the account photo through

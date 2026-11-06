@@ -417,6 +417,9 @@ describe("Networking profile safe areas and native controls (H55, #935)", () => 
       mockApiFetch.mockResolvedValue(shared);
       await renderMobile(<NetworkingProfileRoute />);
       await screen.findByRole("button", { name: "networkingEdit" });
+      expect(mockHeaderOptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ headerLargeTitle: false }),
+      );
       expect(screen.queryByTestId("networking-sheet-frame")).toBeNull();
       expect(screen.getByTestId("native-toolbar-left")).toBeTruthy();
       expect(screen.getByTestId("native-toolbar-right")).toBeTruthy();
@@ -457,6 +460,23 @@ describe("Networking profile safe areas and native controls (H55, #935)", () => 
       if (padDescriptor) Object.defineProperty(Platform, "isPad", padDescriptor);
       else Reflect.deleteProperty(Platform, "isPad");
       mockNativeHeader = false;
+    }
+  });
+  test("wide networking content fills its presentation instead of a leading form column", async () => {
+    const dimensions = jest
+      .spyOn(require("react-native"), "useWindowDimensions")
+      .mockReturnValue({ width: 1200, height: 900, scale: 2, fontScale: 1 });
+    try {
+      mockApiFetch.mockResolvedValue(shared);
+      await renderMobile(<NetworkingProfileRoute />);
+      const content = StyleSheet.flatten(
+        screen.getByTestId("networking-profile-scroll").props.contentContainerStyle,
+      );
+      expect(content.width).toBe("100%");
+      expect(content.maxWidth).toBeUndefined();
+      expect(content.alignSelf).toBeUndefined();
+    } finally {
+      dimensions.mockRestore();
     }
   });
 });

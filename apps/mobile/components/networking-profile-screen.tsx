@@ -33,7 +33,7 @@ import { cvErrorKey, deleteCv, pickCv, uploadCv } from "@/lib/profile-cv";
 import { isPadIdiom } from "@/lib/tabs";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { colors, type } from "@/theme";
-import { useParticipantLayout } from "@/theme/layout-participant";
+import { useScreenGutter } from "@/theme/layout";
 
 const AVATAR_SIZE = 112;
 
@@ -61,7 +61,7 @@ export default function NetworkingProfileScreen() {
   const sideInsets = useSideInsets();
   const padIdiom = isPadIdiom();
   const { t } = useLocale();
-  const readable = useParticipantLayout("form");
+  const gutter = useScreenGutter();
   const { me } = useMeContext();
   const [profile, setProfile] = useState<NetworkingProfile | null>(null);
   const [stored, setStored] = useState<NetworkingDraft | null>(null);
@@ -376,8 +376,7 @@ export default function NetworkingProfileScreen() {
           <Stack.Screen
             options={{
               headerBackVisible: false,
-              headerLargeTitle: !padIdiom,
-              headerLargeTitleShadowVisible: false,
+              headerLargeTitle: false,
               headerStyle: { backgroundColor: colors.background },
               headerShadowVisible: false,
               title: t("networkingTitle"),
@@ -425,7 +424,8 @@ export default function NetworkingProfileScreen() {
         contentContainerStyle={{
           gap: 22,
           paddingVertical: 16,
-          ...readable.content,
+          width: "100%",
+          paddingHorizontal: gutter,
           paddingBottom: Math.max(32, insets.bottom + 16),
           paddingTop: 16 + topInset,
         }}
