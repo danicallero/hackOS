@@ -447,15 +447,7 @@ export function GeneralScannerScreen() {
                 onOpenPeople={() =>
                   peopleDestination(twoPane) === "overlay"
                     ? setPeopleOpen(true)
-                    : router.push(
-                        // Android's legacy (non-Liquid-Glass) header lands on a plain
-                        // title with a separate search icon to tap; this jumps straight
-                        // into search with the keyboard up instead. iOS uses the native
-                        // `headerSearchBarOptions` bar there, unaffected by this param.
-                        process.env.EXPO_OS === "android"
-                          ? { pathname: "/(tabs)/scan/people", params: { autoSearch: "1" } }
-                          : "/(tabs)/scan/people",
-                      )
+                    : router.push("/(tabs)/scan/people")
                 }
                 nfcFirst
                 hint={null}

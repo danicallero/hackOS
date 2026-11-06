@@ -5,14 +5,29 @@ import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { HeaderHeightContext } from "expo-router/react-navigation";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScrollViewMarker } from "react-native-screens/experimental";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { DynamicForm } from "@/components/dynamic-form";
 import { EntryBackToolbar } from "@/components/header-back-button";
-import { ActionButton, InfoRow, Section, Separator } from "@/components/native-ui";
+import {
+  ActionButton,
+  AndroidDetailHeader,
+  InfoRow,
+  Section,
+  Separator,
+  useAndroidDetailHeaderInset,
+} from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { ProjectGithubLink, ProjectRepoRow } from "@/components/project-github";
@@ -24,6 +39,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import { formatEventTime } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
+import { safeBack } from "@/lib/navigation";
 import {
   type NativeProject,
   type ProjectFile,
@@ -58,15 +74,23 @@ export function ProjectDetailScreen({
   const [error, setError] = useState<Error | null>(null);
   const [epoch, setEpoch] = useState(0);
   const navigation = useNavigation();
+  const { t: tr } = useLocale();
+  const router = useRouter();
+  // Android draws its own header (same as the activity detail) around the screen body.
+  const androidHeader = process.env.EXPO_OS === "android" && !embedded;
+  const androidHeaderInset = useAndroidDetailHeaderInset();
+  useLayoutEffect(() => {
+    if (androidHeader) navigation.setOptions({ headerShown: false });
+  }, [androidHeader, navigation]);
   useEffect(() => {
-    if (project && !embedded)
+    if (project && !embedded && !androidHeader)
       navigation.setOptions({
         title: project.name,
         headerLargeTitle: true,
         headerLargeTitleShadowVisible: false,
         headerShadowVisible: false,
       });
-  }, [navigation, project, embedded]);
+  }, [navigation, project, embedded, androidHeader]);
   // Quiet reload for pull-to-refresh and after actions: the screen keeps showing the project.
   const refresh = useCallback(async () => {
     // H20: saves and uploads from a previous visit land before the reload.
@@ -99,24 +123,53 @@ export function ProjectDetailScreen({
       return () => clearInterval(timer);
     }, [gallery, load]),
   );
-  if (error) {
-    // 403/404 are final for this audience; retrying cannot change the answer.
-    const final = error instanceof ApiError && (error.status === 403 || error.status === 404);
+  // 403/404 are final for this audience; retrying cannot change the answer.
+  const final = error instanceof ApiError && (error.status === 403 || error.status === 404);
+  const body = error ? (
     // Inside a ScrollView so the native header's inset keeps it below the bar.
-    return (
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 16 }}
-      >
-        <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />
-      </ScrollView>
-    );
-  }
-  if (!project) return <RequestFeedback loading />;
-  return gallery ? (
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16 }}>
+      <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />
+    </ScrollView>
+  ) : !project ? (
+    <RequestFeedback loading />
+  ) : gallery ? (
     <ProjectReadView project={project} onRefresh={refresh} titleHeader={embedded} />
   ) : (
     <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} embedded={embedded} />
+  );
+  if (!androidHeader) return body;
+  return (
+    <>
+      <AndroidDetailHeader
+        title={project?.name ?? tr("projectFields")}
+        onBack={() => safeBack(router, gallery ? "/projects/gallery" : "/(tabs)/queue")}
+      />
+      <View style={{ flex: 1, paddingTop: androidHeaderInset }}>{body}</View>
+    </>
+  );
+}
+
+/**
+ * The scroll-edge marker belongs to iOS's native header; on Android it throws while mounting
+ * ("[RNScreens] Failed to insert view"), which surfaced as "problem loading the project".
+ */
+function ScrollEdgeMarker({
+  hideEdges,
+  children,
+}: {
+  hideEdges: boolean;
+  children: NonNullable<ReactNode>;
+}) {
+  if (process.env.EXPO_OS !== "ios") return <View style={{ flex: 1 }}>{children}</View>;
+  return (
+    <ScrollViewMarker
+      style={{ flex: 1 }}
+      scrollEdgeEffects={
+        hideEdges ? { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" } : undefined
+      }
+    >
+      {children}
+    </ScrollViewMarker>
   );
 }
 
@@ -137,14 +190,7 @@ export function ProjectReadView({
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [refreshing, setRefreshing] = useState(false);
   return (
-    <ScrollViewMarker
-      style={{ flex: 1 }}
-      scrollEdgeEffects={
-        titleHeader
-          ? { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" }
-          : undefined
-      }
-    >
+    <ScrollEdgeMarker hideEdges={titleHeader}>
       <ScrollView
         refreshControl={
           onRefresh ? (
@@ -228,7 +274,7 @@ export function ProjectReadView({
           </Section>
         )}
       </ScrollView>
-    </ScrollViewMarker>
+    </ScrollEdgeMarker>
   );
 }
 
