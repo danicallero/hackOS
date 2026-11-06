@@ -424,7 +424,7 @@ changed — it stays the plain string object key it always was.
   `audit_log` row (`application_field_export`).
 
 **UI (`apps/web`).**
-- `(app)/applications/[id]/questions-card.tsx` `FileRestrictionsEditor` — a
+- `components/forms/field-editor/file-restrictions-editor.tsx` `FileRestrictionsEditor` — a
   "Shareable with sponsors" switch alongside the existing file-restriction
   inputs; `QuestionsCard.save()` includes it in the file-kind PATCH whitelist.
 - `components/common/template-field-control.tsx` — for a "file" field marked

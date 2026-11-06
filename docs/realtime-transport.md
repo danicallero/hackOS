@@ -190,4 +190,4 @@ errors and reconnect rates, and retire legacy endpoints only after supported
 installed versions permit it. The minimum supported build is
 `MOBILE_MIN_BUILD` (see [mobile-release](./mobile-release.md#minimum-supported-build));
 the web client no longer uses these endpoints and subscribes with
-`REALTIME_SCOPES` values only (`useEventSource`/`useAutoRefresh` take a scope).
+`REALTIME_SCOPES` values only (`useEventSource`/`useLiveReload` take a scope).

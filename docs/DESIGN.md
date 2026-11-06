@@ -367,7 +367,7 @@ keys remain stable and map to Phosphor components in `schedule-model.ts`.
    es/gl/en, narrow/wide layouts, keyboard focus and disabled controls. Also
    inspect real auth, table/form and judging screens for content-specific fit.
 4. Run `pnpm lint`, web typecheck/tests and the Chromium UI smoke suite.
-   `src/lib/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces
+   `src/styles/warning-contrast.test.ts` checks WCAG AA text on semantic surfaces
    and status washes, plus 3:1 field-boundary contrast across adjacent surfaces in both themes.
    Capture screenshots outside the source branch per `docs/ui-testing.md`.
 5. Update this edition section's reference and the web README in the same change.

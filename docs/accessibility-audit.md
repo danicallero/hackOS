@@ -100,7 +100,7 @@ overlays).
 | MEDIUM | `apps/web/src/app/(app)/schedule/schedule-cells.tsx:146`, `:396`, `:482`, `:625`; `schedule-activity-row.tsx:410` | Visibility, type, audience, publish-time and activity triggers were named only "Edit <field>" / "Edit item", hiding the visible value (found once the axe fixture had a real activity) | Buttons keep a visually hidden "Edit <field>:" prefix before the visible value; the type select (a combobox, which takes no name from content) carries the value in its label | Screen-reader users hear the current value; voice-control users can say what they see |
 | MEDIUM | `apps/web/src/app/(app)/permissions/grant-rules-overview.tsx:99`, `permissions/role-editor.tsx:353` | Search fields had no programmatic label | Localized `aria-label` | Search is identifiable |
 | MEDIUM | `apps/web/src/app/(app)/sponsor-faq/page.tsx:157` | Block-kind select unlabelled | Existing localized "Kind" label | Block type identifiable |
-| MEDIUM | `apps/web/src/components/forms/questions-card.tsx:1844` | Validation type, text condition and select-count labels had no `for`/`id` link | Unique matching ids | Builder validation controls are named; clicking a label focuses it |
+| MEDIUM | `apps/web/src/components/forms/field-editor/validation-editor.tsx` | Validation type, text condition and select-count labels had no `for`/`id` link | Unique matching ids | Builder validation controls are named; clicking a label focuses it |
 
 ### 2.4 Robust
 
