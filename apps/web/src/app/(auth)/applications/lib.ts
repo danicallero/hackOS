@@ -12,7 +12,7 @@ import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 
-export type TokenActionState = "loading" | "done" | "error" | "expired";
+type TokenActionState = "loading" | "done" | "error" | "expired";
 
 interface UseTokenActionOptions {
   token: string | null;

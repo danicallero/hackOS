@@ -76,7 +76,7 @@ describe("concurrent GET coalescing (#1227)", () => {
     const gone = new AbortController();
     const a = api.get("/api/z", { signal: gone.signal });
     gone.abort();
-    await expect(a).rejects.toBeDefined();
+    await expect(a).rejects.toMatchObject({ name: "AbortError" });
     const b = api.get("/api/z");
     expect(fetcher).toHaveBeenCalledTimes(2);
     calls[1].resolve({ ok: 1 });

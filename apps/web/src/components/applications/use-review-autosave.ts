@@ -1,0 +1,126 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
+import type { SaveState } from "@/lib/save-state";
+
+const AUTOSAVE_DELAY_MS = 700;
+
+interface Draft {
+  responseId: number;
+  score: number | null;
+  notes: string;
+  dirty: boolean;
+}
+
+function putMyReview(draft: Pick<Draft, "responseId" | "score" | "notes">) {
+  return api.put(`/api/responses/${draft.responseId}/my-review`, {
+    score: draft.score,
+    notes: draft.notes.trim() || null,
+  });
+}
+
+/**
+ * The reviewer's own score/notes for one response, autosaved after a pause.
+ *
+ * Only a local edit marks the draft dirty, so reseeding on navigation or
+ * applying an update broadcast by the other review window never re-PUTs an
+ * unchanged score — that is what keeps the modal and the popup from racing to
+ * save the same row. A dirty draft is flushed when the reviewer moves to
+ * another response or the owner unmounts.
+ */
+export function useReviewAutosave(
+  responseId: number,
+  canReview: boolean,
+  initial: { score: number | null; notes: string },
+  onSaved?: () => void,
+) {
+  const [score, setScore] = useState(initial.score);
+  const [notes, setNotes] = useState(initial.notes);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [dirty, setDirty] = useState(false);
+  const draftRef = useRef<Draft>({ responseId, ...initial, dirty: false });
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+
+  const edit = useCallback(
+    (next: { score: number | null; notes: string }) => {
+      draftRef.current = { responseId, ...next, dirty: true };
+      setScore(next.score);
+      setNotes(next.notes);
+      setDirty(true);
+      setSaveState("saving");
+    },
+    [responseId],
+  );
+
+  /** Starts over on `id`, first saving what was left unsaved on another response. */
+  const seed = useCallback(
+    (id: number, value: { score: number | null; notes: string }, state: SaveState = "saved") => {
+      const pending = draftRef.current;
+      if (pending.responseId !== id && pending.dirty && canReview) {
+        putMyReview(pending).catch((error) =>
+          console.error("[review:autosave] flush failed", error),
+        );
+      }
+      draftRef.current = { responseId: id, ...value, dirty: false };
+      setScore(value.score);
+      setNotes(value.notes);
+      setSaveState(state);
+      setDirty(false);
+    },
+    [canReview],
+  );
+
+  /** Mirrors a value saved elsewhere unless the reviewer has unsaved local edits; returns whether it applied. */
+  const applyRemote = useCallback(
+    (value: { score: number | null; notes: string; saveState: SaveState }): boolean => {
+      if (draftRef.current.dirty) return false;
+      setScore(value.score);
+      setNotes(value.notes);
+      setSaveState(value.saveState);
+      return true;
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      const pending = draftRef.current;
+      if (!pending.dirty || !canReview) return;
+      putMyReview(pending).catch((error) => console.error("[review:autosave] flush failed", error));
+    },
+    [canReview],
+  );
+
+  useEffect(() => {
+    // While navigating, the response id changes before the caller reseeds;
+    // never save the previous response's draft into the new one.
+    if (!dirty || !canReview || draftRef.current.responseId !== responseId) return;
+    const handle = window.setTimeout(async () => {
+      setSaveState("saving");
+      try {
+        await putMyReview({ responseId, score, notes });
+        if (draftRef.current.responseId === responseId) draftRef.current.dirty = false;
+        setSaveState("saved");
+        setDirty(false);
+        onSavedRef.current?.();
+      } catch (error) {
+        console.error("[review:autosave] save failed", error);
+        setSaveState("error");
+      }
+    }, AUTOSAVE_DELAY_MS);
+    return () => window.clearTimeout(handle);
+  }, [responseId, score, notes, dirty, canReview]);
+
+  return {
+    score,
+    notes,
+    saveState,
+    isDirty: () => draftRef.current.dirty,
+    setScore: (value: number | null) => edit({ score: value, notes }),
+    setNotes: (value: string) => edit({ score, notes: value }),
+    seed,
+    applyRemote,
+  };
+}

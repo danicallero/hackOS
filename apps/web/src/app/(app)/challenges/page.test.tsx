@@ -10,7 +10,7 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
-const state = vi.hoisted(() => ({ nonce: 0 }));
+const stream = vi.hoisted(() => ({ onEvent: undefined as undefined | ((e: unknown) => void) }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/challenges",
@@ -26,7 +26,12 @@ vi.mock("@/lib/i18n", () => {
 vi.mock("@/lib/session", () => ({
   useSessionContext: () => ({ canAny: () => true, me: { isSponsorRep: false } }),
 }));
-vi.mock("@/hooks/use-auto-refresh", () => ({ useAutoRefresh: () => state.nonce }));
+vi.mock("@/hooks/use-event-source", () => ({
+  useEventSource: (_scope: string, opts: { onEvent: (e: unknown) => void }) => {
+    stream.onEvent = opts.onEvent;
+    return { connected: true };
+  },
+}));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
@@ -38,6 +43,7 @@ vi.mock("@/lib/api", () => ({
       super(message);
     }
   },
+  isNotFoundError: (err: unknown) => (err as { status?: number })?.status === 404,
   api: { get: vi.fn(), post: vi.fn() },
 }));
 
@@ -65,13 +71,15 @@ describe("ChallengesPage background refresh (#1012)", () => {
     });
   }
   async function refresh() {
-    state.nonce += 1;
-    await render();
+    // A server event schedules a debounced refetch of the list.
+    await act(async () => {
+      stream.onEvent?.({});
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
   }
 
   beforeEach(() => {
     resetServerStateForTests();
-    state.nonce = 0;
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);

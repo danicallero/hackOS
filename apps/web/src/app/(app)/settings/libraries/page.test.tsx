@@ -11,22 +11,6 @@ vi.mock("@/lib/url-tab", () => ({ useUrlTab: () => ({ tab: "intolerances", setTa
 vi.mock("@/components/common/access-denied", () => ({
   AccessDenied: ({ ask }: { ask: string }) => <div data-testid="access-denied">{ask}</div>,
 }));
-vi.mock("@/components/common/page-layout", () => ({
-  PageLayout: ({ children }: { children: React.ReactNode }) => <main>{children}</main>,
-}));
-vi.mock("@/components/common/page-header", () => ({
-  PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
-}));
-vi.mock("@/components/common/tab-bar", () => ({
-  TabBar: ({ children }: { children: React.ReactNode }) => <nav>{children}</nav>,
-}));
-vi.mock("@/components/ui/tabs", () => ({
-  Tabs: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TabsContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  TabsTrigger: ({ children }: { children: React.ReactNode }) => (
-    <button type="button">{children}</button>
-  ),
-}));
 vi.mock("./intolerances-manager", () => ({
   IntolerancesManager: () => <div data-testid="intolerances-manager" />,
 }));

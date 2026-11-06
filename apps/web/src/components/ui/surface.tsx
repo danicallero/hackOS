@@ -56,18 +56,4 @@ function Section({ className, padding, ...props }: SectionProps) {
   );
 }
 
-export { OverlaySurface, Section, Surface, overlayVariants, surfaceVariants };
-
-function OverlaySurface({
-  className,
-  elevation,
-  ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof overlayVariants>) {
-  return (
-    <div
-      data-slot="overlay-surface"
-      className={cn(overlayVariants({ elevation }), className)}
-      {...props}
-    />
-  );
-}
+export { Section, Surface, overlayVariants };

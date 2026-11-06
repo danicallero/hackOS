@@ -1,15 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
+import type { TemplateField } from "@/lib/applications";
 import type { Translate } from "@/lib/i18n";
 import {
-  fieldErrorsFromApi,
-  fmtDateTime,
   formTypeLabel,
   isConfirmationExpiredError,
   missingRequiredFields,
   seedApplicationValues,
   statusLabel,
-  type TemplateField,
 } from "./lib";
 
 const translate: Translate = (key) => key;
@@ -23,26 +21,6 @@ describe("participant application presentation", () => {
     expect(formTypeLabel("Participant", translate)).toBe("Participant");
     expect(formTypeLabel("Mentor", translate)).toBe("Mentor");
     expect(formTypeLabel(null, translate)).toBe("roleUnassigned");
-  });
-
-  it("formats dates using the selected locale", () => {
-    const english = fmtDateTime("2026-07-17T10:00:00.000Z", "en");
-    const spanish = fmtDateTime("2026-07-17T10:00:00.000Z", "es");
-
-    expect(english).toContain("2026");
-    expect(spanish).toContain("2026");
-    expect(english).not.toBe(spanish);
-  });
-
-  it("maps API field validation to localized field messages", () => {
-    const error = new ApiError(400, "validation_error", "Invalid response", {
-      fieldReasons: { name: "required", age: "must_be_number", link: "other" },
-    });
-    expect(fieldErrorsFromApi(error, translate)).toEqual({
-      name: "fieldRequired",
-      age: "fieldMustBeNumber",
-      link: "fieldInvalid",
-    });
   });
 
   it("recognizes an expired confirmation response", () => {

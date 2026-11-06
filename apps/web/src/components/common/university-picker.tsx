@@ -20,6 +20,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -70,10 +71,6 @@ export function UniversityPicker({
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<University[]>([]);
-  // Starts true: a search always kicks off on mount.
-  const [loading, setLoading] = useState(true);
-  const [searchError, setSearchError] = useState(false);
   const [searchAttempt, setSearchAttempt] = useState(0);
   const [proposing, setProposing] = useState(false);
   // The id/name pair last resolved via the by-id lookup below (a preset value
@@ -81,53 +78,31 @@ export function UniversityPicker({
   // alongside its id so a stale label can't outlive a `value` change.
   const [resolvedLabel, setResolvedLabel] = useState<{ id: string; name: string } | null>(null);
 
-  // "loading"/"searchError" reset here, on the actions that start a new
-  // search, rather than at the top of the effect below — that effect only
-  // fires the debounced request itself.
-  function handleQueryChange(next: string) {
-    setQuery(next);
-    setLoading(true);
-    setSearchError(false);
-  }
   function retrySearch() {
     setSearchAttempt((attempt) => attempt + 1);
-    setLoading(true);
-    setSearchError(false);
   }
 
-  // Debounced search against the public directory.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: searchAttempt intentionally retries the unchanged query.
-  useEffect(() => {
-    // The list is only needed once the picker opens; a closed picker must not
-    // cost a request on every page that renders it (#1227).
-    if (!open) return;
-    let active = true;
-    const handle = setTimeout(async () => {
-      try {
-        const q = query.trim() || undefined;
-        const { universities } = await readServerState(
-          ["public", "universities", { q }],
-          (signal) =>
-            api.get<{ universities: University[] }>("/api/public/universities", {
-              query: { q },
-              signal,
-            }),
-        );
-        if (active) setOptions(universities);
-      } catch {
-        if (active) {
-          setOptions([]);
-          setSearchError(true);
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }, 200);
-    return () => {
-      active = false;
-      clearTimeout(handle);
-    };
-  }, [open, query, searchAttempt]);
+  // The list is only needed once the picker opens; a closed picker must not
+  // cost a request on every page that renders it (#1227). Results carry their
+  // query so stale ones read as loading until the current query has answered.
+  const trimmedQuery = query.trim();
+  const { result, error: searchError } = useDebouncedSearch(
+    query,
+    async (q) => {
+      const { universities } = await readServerState(
+        ["public", "universities", { q: q || undefined }],
+        (signal) =>
+          api.get<{ universities: University[] }>("/api/public/universities", {
+            query: { q: q || undefined },
+            signal,
+          }),
+      );
+      return { query: q, universities };
+    },
+    { enabled: open, delayMs: 200, retryKey: searchAttempt },
+  );
+  const options = result?.universities ?? [];
+  const loading = !searchError && result?.query !== trimmedQuery;
 
   const knownLabel = value ? (options.find((o) => String(o.id) === value)?.name ?? null) : null;
 
@@ -148,7 +123,7 @@ export function UniversityPicker({
         const match = universities.find((o) => String(o.id) === value);
         if (active && match) setResolvedLabel({ id: value, name: match.name });
       })
-      .catch(() => {});
+      .catch((error) => console.error("[university-picker] label lookup failed", error));
     return () => {
       active = false;
     };
@@ -221,7 +196,7 @@ export function UniversityPicker({
         <CommandInput
           placeholder={t("searchUniversitiesShortPlaceholder")}
           value={query}
-          onValueChange={handleQueryChange}
+          onValueChange={setQuery}
         />
         <CommandList aria-busy={loading || undefined} className="max-h-64 min-h-0 flex-1">
           {loading ? (

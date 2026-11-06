@@ -35,7 +35,7 @@ const state = vi.hoisted(() => ({
   ],
 }));
 vi.mock("@/lib/api", () => ({ api: { delete: state.remove } }));
-vi.mock("@/hooks/use-event-source", () => ({
+vi.mock("@/hooks/use-live-query", () => ({
   useLiveQuery: (
     _fetcher: unknown,
     _scope: unknown,

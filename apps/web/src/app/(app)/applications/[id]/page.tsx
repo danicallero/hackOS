@@ -22,7 +22,7 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -36,8 +36,11 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { TabBar } from "@/components/common/tab-bar";
 import { QuestionsCard } from "@/components/forms/questions-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import {
+  confirmDiscardUnsavedChanges,
+  useUnsavedChangesGuard,
+} from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
@@ -48,11 +51,8 @@ import {
 } from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
-import {
-  confirmDiscardUnsavedChanges,
-  useUnsavedChangesGuard,
-} from "@/lib/use-unsaved-changes-guard";
 import { ApplicationDangerZone, MetadataCard } from "./metadata-card";
 import { ResponsesTab } from "./responses-tab";
 
@@ -84,7 +84,22 @@ export default function ApplicationDetailPage() {
       : (applicationTabs[0] as (typeof applicationTabs)[number]);
   const { tab, setTab } = useUrlTab({ values: applicationTabs, defaultValue: defaultTab });
 
-  const [form, setForm] = useState<ApplicationForm | null>(null);
+  // H11-H14: every application workspace uses the protected metadata endpoint.
+  // This lets decision-only staff open a closed form without granting the
+  // builder's update controls. A failed live refresh keeps the last complete
+  // shell, so stats, tabs and the active list survive a transient error.
+  const {
+    data: form,
+    error: formError,
+    loading: formLoading,
+    refetch: refetchForm,
+  } = useLiveQuery(
+    () => api.get<ApplicationForm>(`/api/applications/${id}`),
+    domainScope(SSE_TOPICS.APPLICATIONS),
+    [EVENTS.DOMAIN_CHANGED],
+    { enabled: Number.isFinite(id), resourceKey: ["application", id, "form"] },
+  );
+  const loadForm = async () => refetchForm();
   const {
     data: stats,
     error: statsError,
@@ -100,11 +115,8 @@ export default function ApplicationDetailPage() {
     [EVENTS.DOMAIN_CHANGED],
     { enabled: canStats && Number.isFinite(id), resourceKey: ["application", id, "overview"] },
   );
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const loadedFormIdRef = useRef<number | null>(null);
 
   // The builder (Form settings + Questions) is the only tab with local
   // unsaved edits — track both cards' dirtiness so leaving the page (or
@@ -140,7 +152,7 @@ export default function ApplicationDetailPage() {
   async function changeTab(next: string) {
     if (!isApplicationTab(next) || next === tab) return;
     if (tab === "builder" && builderDirty) {
-      if (!(await confirmDiscardUnsavedChanges(true, t))) return;
+      if (!(await confirmDiscardUnsavedChanges(true))) return;
       metadataDirtyRef.current = false;
       questionsDirtyRef.current = false;
       flushSync(() => setBuilderDirty(false));
@@ -148,38 +160,7 @@ export default function ApplicationDetailPage() {
     setTab(next);
   }
 
-  const loadForm = useCallback(async () => {
-    try {
-      // H11-H14: every application workspace uses the protected metadata
-      // endpoint. This lets decision-only staff open a closed form without
-      // granting the builder's update controls.
-      const data = await api.get<ApplicationForm>(`/api/applications/${id}`);
-      setForm(data);
-      loadedFormIdRef.current = id;
-      setState("ready");
-    } catch (err) {
-      // A live refresh is background revalidation: keep the last complete
-      // application shell when it fails, so stats, tabs, and the active list
-      // never disappear for a transient network error.
-      if (loadedFormIdRef.current !== id) {
-        setErrorMsg(apiErrorText(err, t, t("couldNotLoadForm")));
-        setState("error");
-      }
-    }
-  }, [id, t]);
-
-  // Soft, in-place refresh instead of a hard reload when someone else edits
-  // this form, its questions, or a response changes its stats elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching the application form by id from the API on mount is a legitimate external-system sync
-    if (Number.isFinite(id)) void loadForm();
-    else setState("error");
-  }, [id, loadForm, liveRefresh]);
-
-  if (state === "loading") {
+  if (Number.isFinite(id) && formLoading && !form) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -187,10 +168,17 @@ export default function ApplicationDetailPage() {
     );
   }
 
-  if (state === "error") {
+  if (!Number.isFinite(id) || (formError && !form)) {
     return (
       <div className="space-y-6">
-        <EmptyState title={t("formNotFound")} description={errorMsg || t("formCouldNotBeLoaded")} />
+        <EmptyState
+          title={t("formNotFound")}
+          description={
+            formError
+              ? apiErrorText(formError, t, t("couldNotLoadForm"))
+              : t("formCouldNotBeLoaded")
+          }
+        />
       </div>
     );
   }
@@ -203,7 +191,7 @@ export default function ApplicationDetailPage() {
       await api.delete(`/api/applications/${id}`);
       router.push("/applications");
     } catch (err) {
-      setErrorMsg(apiErrorText(err, t, t("couldNotDeleteApplication")));
+      toast.error(apiErrorText(err, t, t("couldNotDeleteApplication")), t("deleteApplication"));
       setDeleteOpen(false);
     } finally {
       setDeleting(false);

@@ -21,8 +21,8 @@ import { SessionProvider } from "@/lib/session";
  * - Toaster: Sileo toasts for success, status, action and business-error feedback.
  *
  * There is no global "reload the page on any mutation" mechanism — every
- * page that needs live data owns a scoped `useAutoRefresh` (or a focused
- * `useLiveQuery`/`useEventSource`) subscription instead, so another user's
+ * page that needs live data owns a scoped `useLiveQuery` (or a focused
+ * `useLiveReload`/`useEventSource`) subscription instead, so another user's
  * unrelated write never blows away this tab's scroll position, open modal,
  * or in-progress form.
  */

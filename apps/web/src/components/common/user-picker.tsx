@@ -18,6 +18,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -74,50 +75,26 @@ export function UserPicker({
   const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<UserOption[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searchError, setSearchError] = useState(false);
   const [selected, setSelected] = useState<UserOption | null>(null);
 
-  // `search` is a fresh closure most renders (callers rarely memoize it); reading
-  // it via a ref instead of depending on it directly stops a mid-type re-render
-  // from restarting the debounce before it fires, which would otherwise stick
-  // the search on "Searching…" forever.
-  const searchRef = useRef(search);
-  useEffect(() => {
-    searchRef.current = search;
+  // `useDebouncedSearch` reads the latest `search` through a ref, so a
+  // caller's fresh closure each render never restarts the debounce.
+  const {
+    result,
+    loading,
+    error: searchError,
+  } = useDebouncedSearch(query, async (q) => ({ query: q, users: await search(q) }), {
+    enabled: open,
+    minLength: minQueryLength,
   });
+  const options = result?.users ?? [];
   const onResultsRef = useRef(onResults);
   useEffect(() => {
     onResultsRef.current = onResults;
   });
-
   useEffect(() => {
-    if (!open || query.trim().length < minQueryLength) return;
-    let active = true;
-    const requestedQuery = query.trim();
-    const handle = setTimeout(async () => {
-      setLoading(true);
-      setSearchError(false);
-      try {
-        const users = await searchRef.current(requestedQuery);
-        if (!active) return;
-        setOptions(users);
-        onResultsRef.current?.(requestedQuery, users);
-      } catch {
-        if (active) {
-          setOptions([]);
-          setSearchError(true);
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    }, 250);
-    return () => {
-      active = false;
-      clearTimeout(handle);
-    };
-  }, [open, query, minQueryLength]);
+    if (result) onResultsRef.current?.(result.query, result.users);
+  }, [result]);
 
   const [prevValue, setPrevValue] = useState(value);
   if (value !== prevValue) {

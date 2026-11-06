@@ -11,10 +11,9 @@ import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { StatisticsExportPanel } from "@/components/exports/statistics-export-panel";
-import type { PublicEvent } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { api } from "@/lib/api";
@@ -118,6 +117,7 @@ export default function LogisticsStatsPage() {
       .then((event) => {
         if (!phaseWasChosen.current) setPhase(defaultDataPhase(event));
       })
+      // Only picks the default phase; the page works with its current default.
       .catch(() => undefined);
   }, [canStats, setPhase]);
 

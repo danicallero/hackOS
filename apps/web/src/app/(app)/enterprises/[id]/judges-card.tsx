@@ -6,21 +6,20 @@
 // enterprises may bring outside judges — and adding one is silent.
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { UserPicker } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { normalizeSearchText } from "@/lib/search-text";
-import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
-
 import { mutateMembership } from "./membership-mutation";
 
 interface Judge {
@@ -32,32 +31,27 @@ interface Judge {
 
 export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
   const { t } = useLocale();
-  const [judges, setJudges] = useState<Judge[] | null>(null);
-  const [candidates, setCandidates] = useState<UserList["users"]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    try {
+  const {
+    data,
+    error,
+    refetch: load,
+  } = useLiveQuery(
+    async () => {
       const [roster, pool] = await Promise.all([
         api.get<{ judges: Judge[] }>(`/api/enterprises/${enterpriseId}/judges`),
         api.get<UserList>(`/api/enterprises/${enterpriseId}/judge-candidates`),
       ]);
-      setJudges(roster.judges);
-      setCandidates(pool.users);
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("searchFailed")), t("judges"));
-      setJudges([]);
-    }
-  }, [enterpriseId, t]);
-
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load, liveRefresh]);
+      return { judges: roster.judges, candidates: pool.users };
+    },
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["enterprise", enterpriseId, "judges"] },
+  );
+  const judges = data?.judges ?? null;
+  const candidates = useMemo(() => data?.candidates ?? [], [data]);
 
   const rosterIds = useMemo(() => new Set((judges ?? []).map((j) => j.userId)), [judges]);
 
@@ -130,7 +124,9 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
           </div>
         </div>
 
-        {judges === null ? (
+        {error ? (
+          <ContextualError message={apiErrorText(error, t, t("searchFailed"))} onRetry={load} />
+        ) : judges === null ? (
           <div className="flex justify-center py-6">
             <Spinner className="size-5" />
           </div>

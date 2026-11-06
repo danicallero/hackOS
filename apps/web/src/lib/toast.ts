@@ -7,7 +7,7 @@ import { apiErrorCopy } from "./api-error-text";
 import { isLanguage, translateMessage } from "./i18n";
 import type { Language } from "./types";
 
-export interface ToastOptions {
+interface ToastOptions {
   /** Localized action/event heading used when the feedback message cannot fit. */
   compactTitle?: string;
   autopilot?: SileoOptions["autopilot"];
@@ -25,12 +25,12 @@ export interface ToastOptions {
   };
 }
 
-export type ToastPromiseContent = ToastOptions & { title: string };
-export type ToastIconOptions = ToastOptions & {
+type ToastPromiseContent = ToastOptions & { title: string };
+type ToastIconOptions = ToastOptions & {
   icon: NonNullable<SileoOptions["icon"]>;
 };
 
-export interface ToastPromiseOptions<T> {
+interface ToastPromiseOptions<T> {
   compactTitle?: string;
   loading: ToastPromiseContent;
   success: ToastPromiseContent | ((value: T) => ToastPromiseContent);

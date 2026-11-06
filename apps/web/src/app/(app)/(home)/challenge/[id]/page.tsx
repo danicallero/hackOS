@@ -6,7 +6,7 @@ import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOu
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -21,10 +21,10 @@ import {
 } from "@/components/public/public-types";
 import { Button } from "@/components/ui/button";
 import { usePublishedWinners } from "@/hooks/use-published-winners";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
-import { getPublicChallenges } from "@/lib/public-content";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
@@ -42,59 +42,36 @@ function asPrizes(value: unknown): Prize[] {
 
 export default function PublicChallengePage() {
   const { language, t } = useLocale();
-  const tRef = useRef(t);
-  useEffect(() => {
-    tRef.current = t;
-  }, [t]);
   const { status } = useSessionContext();
   const authenticated = status === "authenticated";
   const { id } = useParams<{ id: string }>();
-  const winners = usePublishedWinners(`/api/public/challenges/${encodeURIComponent(id)}/winners`);
-  const [challenge, setChallenge] = useState<PublicChallenge | null | undefined>(undefined);
-  const [challengeError, setChallengeError] = useState<string | null>(null);
-  const [hasOpenApplications, setHasOpenApplications] = useState<boolean | null>(null);
-  const [applicationsLoading, setApplicationsLoading] = useState(true);
-  const [applicationsError, setApplicationsError] = useState<string | null>(null);
-
+  const {
+    winners,
+    error: winnersError,
+    refetch: refetchWinners,
+  } = usePublishedWinners(`/api/public/challenges/${encodeURIComponent(id)}/winners`);
   // H49: an unavailable public feed is different from a successful lookup with no matching id.
-  const load = useCallback(async () => {
-    setChallenge(undefined);
-    setChallengeError(null);
-    try {
-      const { items } = await getPublicChallenges<PublicChallenge>();
-      setChallenge(items.find((c) => String(c.id) === id) ?? null);
-    } catch (error) {
-      const tr = tRef.current;
-      setChallengeError(apiErrorText(error, tr, tr("couldNotLoadChallenge")));
-    }
-    // `t` is read through a ref so a locale change does not refetch (#1227).
-  }, [id]);
-
-  const loadApplications = useCallback(async () => {
-    setApplicationsLoading(true);
-    setApplicationsError(null);
-    try {
-      const { applications } = await api.get<{ applications: PublicApplicationForm[] }>(
-        "/api/public/applications",
-      );
-      setHasOpenApplications(applications.length > 0);
-    } catch (error) {
-      const tr = tRef.current;
-      setApplicationsError(apiErrorText(error, tr, tr("couldNotLoadApplicationForms")));
-    } finally {
-      setApplicationsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (status === "unauthenticated") void loadApplications();
-  }, [loadApplications, status]);
+  const {
+    data: feed,
+    error: challengeError,
+    reload: reloadChallenge,
+  } = useServerResource(["public", "challenges"], (signal) =>
+    api.get<{ items: PublicChallenge[] }>("/api/public/challenges", { signal }),
+  );
+  const challenge = feed ? (feed.items.find((c) => String(c.id) === id) ?? null) : undefined;
+  const {
+    data: applicationForms,
+    error: applicationsError,
+    loading: applicationsLoading,
+    reload: reloadApplications,
+  } = useServerResource(
+    ["public", "applications"],
+    (signal) =>
+      api.get<{ applications: PublicApplicationForm[] }>("/api/public/applications", { signal }),
+    { enabled: status === "unauthenticated" },
+  );
+  const hasOpenApplications = applicationForms ? applicationForms.applications.length > 0 : null;
+  const applicationsFailed = applicationsError != null;
 
   useEffect(() => {
     if (challenge) document.title = displayText(challenge.title, language);
@@ -130,7 +107,12 @@ export default function PublicChallengePage() {
         }
       />
 
-      {challengeError && <ContextualError message={challengeError} onRetry={() => void load()} />}
+      {challengeError ? (
+        <ContextualError
+          message={apiErrorText(challengeError, t, t("couldNotLoadChallenge"))}
+          onRetry={reloadChallenge}
+        />
+      ) : null}
 
       {challenge === undefined && !challengeError && (
         <div className="grid place-items-center py-24" role="status" aria-busy="true">
@@ -145,6 +127,14 @@ export default function PublicChallengePage() {
         <EmptyState
           title={t("challengeNotFoundTitle")}
           description={t("challengeUnpublishedDesc")}
+        />
+      )}
+
+      {challenge && winnersError != null && winners.length === 0 && (
+        <ContextualError
+          className="mb-6"
+          message={apiErrorText(winnersError, t, t("couldNotLoadWinners"))}
+          onRetry={refetchWinners}
         />
       )}
 
@@ -216,7 +206,7 @@ export default function PublicChallengePage() {
             )}
           </div>
 
-          {!authenticated && (applicationsLoading || applicationsError || hasOpenApplications) && (
+          {!authenticated && (applicationsLoading || applicationsFailed || hasOpenApplications) && (
             <div className="mt-10 border-t pt-6">
               {applicationsLoading && (
                 <div className="text-muted-foreground flex items-center gap-2" role="status">
@@ -224,14 +214,14 @@ export default function PublicChallengePage() {
                   <span className="sr-only">{t("loading")}</span>
                 </div>
               )}
-              {applicationsError && (
+              {applicationsFailed && (
                 <ContextualError
-                  message={applicationsError}
-                  onRetry={() => void loadApplications()}
+                  message={apiErrorText(applicationsError, t, t("couldNotLoadApplicationForms"))}
+                  onRetry={reloadApplications}
                 />
               )}
-              {(applicationsError || hasOpenApplications) && (
-                <Button size="lg" asChild className={applicationsError ? "mt-4" : undefined}>
+              {(applicationsFailed || hasOpenApplications) && (
+                <Button size="lg" asChild className={applicationsFailed ? "mt-4" : undefined}>
                   <Link href={withReturnPath("/signup", "/my-applications")}>{t("applyNow")}</Link>
                 </Button>
               )}

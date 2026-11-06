@@ -3,7 +3,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -12,9 +11,8 @@ import { Spinner } from "@/components/common/spinner";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { TrackTiming } from "@/components/projects/track-timing";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { api } from "@/lib/api";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Challenge, isScheduled, textForDisplay, visibilityTone } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
@@ -33,50 +31,25 @@ export default function ChallengeDetailPage() {
     CAPABILITIES.CHALLENGES_MANAGE,
   );
   const canAlert = canAdmin || Boolean(me?.isSponsorRep);
-  const [challenge, setChallenge] = useState<Challenge | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [notFound, setNotFound] = useState(false);
-  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
+  const validId = Number.isFinite(id);
+  // Soft, in-place refresh when another admin edits this challenge elsewhere.
+  // A failed background refetch keeps the loaded challenge (#1012).
+  const {
+    data: challenge,
+    error,
+    stale,
+    refetch,
+  } = useLiveQuery(
+    (signal) => api.get<Challenge>(`/api/challenges/${id}`, { signal }),
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    { enabled: validId, resourceKey: ["challenge", id] },
+  );
+  const shownError = error && (challenge === null || isNotFoundError(error)) ? error : null;
+  const notFound = !validId || isNotFoundError(shownError);
+  const errorMsg = shownError ? apiErrorText(shownError, t, t("couldNotLoadChallenge")) : "";
 
-  const load = useCallback(async () => {
-    // A background live-refresh shouldn't flash the whole editor away —
-    // only the very first load (before there's anything to show) should.
-    setStatus((s) => (s === "ready" ? s : "loading"));
-    try {
-      const data = await api.get<Challenge>(`/api/challenges/${id}`);
-      setChallenge(data);
-      setStatus("ready");
-      succeeded();
-    } catch (err) {
-      // A failed background refresh keeps the loaded challenge (#1012).
-      if (!failed(err)) return;
-      setErrorMsg(apiErrorText(err, t, t("couldNotLoadChallenge")));
-      setNotFound(isNotFoundError(err));
-      setStatus("error");
-    }
-  }, [id, t, succeeded, failed]);
-
-  // Soft, in-place refresh instead of a hard reload when another admin edits
-  // this challenge elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (Number.isFinite(id)) {
-      // fetching challenge data from the API on mount/refresh is a legitimate external-system sync
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void load();
-    } else {
-      setNotFound(true);
-      setStatus("error");
-    }
-  }, [id, load, liveRefresh, retryNonce]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a different challenge is a different resource, so its first load may show an error.
-  useEffect(() => reset(), [id, reset]);
-
-  if (status === "loading") {
+  if (validId && !shownError && !challenge) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -84,12 +57,12 @@ export default function ChallengeDetailPage() {
     );
   }
 
-  if (status === "error" || !challenge) {
+  if (!validId || shownError || !challenge) {
     if (!notFound) {
       return (
         <ContextualError
           message={errorMsg || t("couldNotLoadChallenge")}
-          onRetry={() => void load()}
+          onRetry={() => refetch()}
         />
       );
     }
@@ -105,12 +78,12 @@ export default function ChallengeDetailPage() {
 
   return (
     <PageLayout width="reading">
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <PageHeader
         title={textForDisplay(challenge.title)}
         secondaryActions={
           (canAdmin || me?.isSponsorRep || me?.isEnterpriseJudge) && (
-            <TrackTiming challengeId={id} onSaved={() => void load()} />
+            <TrackTiming challengeId={id} onSaved={() => refetch()} />
           )
         }
         primaryAction={
@@ -130,7 +103,7 @@ export default function ChallengeDetailPage() {
         }
       />
 
-      <EditCard challenge={challenge} canAdmin={canAdmin} onSaved={load} />
+      <EditCard challenge={challenge} canAdmin={canAdmin} onSaved={() => refetch()} />
     </PageLayout>
   );
 }

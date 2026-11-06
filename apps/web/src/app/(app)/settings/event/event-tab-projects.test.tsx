@@ -53,7 +53,7 @@ describe("project deadlines view", () => {
     const onDirtyChange = vi.fn();
     await act(async () =>
       root.render(
-        <EventConfigProvider refreshKey={0}>
+        <EventConfigProvider>
           <EventTab view="participants" onDirtyChange={onDirtyChange} />
         </EventConfigProvider>,
       ),
@@ -82,7 +82,7 @@ describe("project deadlines view", () => {
     const onDirtyChange = vi.fn();
     await act(async () =>
       root.render(
-        <EventConfigProvider refreshKey={0}>
+        <EventConfigProvider>
           <EventTab view="participants" onDirtyChange={onDirtyChange} />
         </EventConfigProvider>,
       ),

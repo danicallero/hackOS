@@ -49,6 +49,7 @@ export function NotificationOnboardingDialog() {
           Object.fromEntries(CATEGORIES.map((c) => [c, channelEnabled(loaded, c, "email")])),
         );
       })
+      // The prompt is optional: if preferences cannot load, skip it; it returns next session.
       .catch(() => undefined);
     return () => {
       cancelled = true;

@@ -1,10 +1,10 @@
 import type { QueueEntry, RoomView } from "@/lib/queue";
 
-export type OperatorQueueFilter = "all" | "attention" | "waiting" | "called" | "live";
+type OperatorQueueFilter = "all" | "attention" | "waiting" | "called" | "live";
 
-export type OperatorEntryKind = "active" | "called" | "waiting";
+type OperatorEntryKind = "active" | "called" | "waiting";
 
-export interface OperatorEntryRow {
+interface OperatorEntryRow {
   entry: QueueEntry;
   kind: OperatorEntryKind;
   room: RoomView;

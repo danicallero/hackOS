@@ -5,18 +5,12 @@
  * backend; when a shape is unclear, read the module.
  */
 import { api } from "./api";
+import type { Language } from "./types";
 
 export type NotificationChannel = "in_app" | "email" | "push";
-export type AnnouncementScreenPlacement = "none" | "embedded" | "fullscreen";
-export type AnnouncementTranslations = Partial<
-  Record<"es" | "gl" | "en", { title: string; body: string }>
->;
-export type AnnouncementTranslationFields = Record<
-  "es" | "gl" | "en",
-  { title: string; body: string }
->;
-
-export interface AnnouncementRecipient {
+type AnnouncementScreenPlacement = "none" | "embedded" | "fullscreen";
+type AnnouncementTranslations = Partial<Record<Language, { title: string; body: string }>>;
+interface AnnouncementRecipient {
   id: number;
   name: string | null;
   surname: string | null;
@@ -94,7 +88,7 @@ export interface AuditRow {
   created_at: string;
 }
 
-export interface AuditFilters {
+interface AuditFilters {
   entityType?: string;
   entityId?: string;
   actorId?: number;
@@ -131,8 +125,8 @@ export const notificationsApi = {
   translateAnnouncement: (body: {
     title: string;
     body: string;
-    sourceLanguage: "es" | "gl" | "en";
-    targetLanguages: ("es" | "gl" | "en")[];
+    sourceLanguage: Language;
+    targetLanguages: Language[];
   }) => api.post<{ translations: AnnouncementTranslations }>("/api/announcements/translate", body),
 
   listInbox: (opts: { unread?: boolean; limit: number; offset: number }) =>

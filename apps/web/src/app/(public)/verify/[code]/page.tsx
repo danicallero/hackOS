@@ -14,11 +14,16 @@ import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { PublicTopBar } from "@/components/layout/public-top-bar";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { api, isNotFoundError } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 
-type State = { kind: "loading" } | { kind: "valid" } | { kind: "revoked" } | { kind: "missing" };
+type State =
+  | { kind: "loading" }
+  | { kind: "valid" }
+  | { kind: "revoked" }
+  | { kind: "missing" }
+  | { kind: "error" };
 
 export default function VerifyCertificatePage() {
   const { t } = useLocale();
@@ -43,7 +48,10 @@ export default function VerifyCertificatePage() {
         setSuperseded(data.supersededAt !== null);
         setState({ kind: data.status });
       })
-      .catch(() => !cancelled && setState({ kind: "missing" }));
+      .catch((err) => {
+        // Only a definitive 404 means the code is unknown; an outage must not read as a forgery.
+        if (!cancelled) setState({ kind: isNotFoundError(err) ? "missing" : "error" });
+      });
     return () => {
       cancelled = true;
     };
@@ -101,7 +109,9 @@ export default function VerifyCertificatePage() {
                 <XCircleIcon className="size-5" weight="fill" aria-hidden="true" />
                 {state.kind === "revoked"
                   ? t("certificateStatusRevoked")
-                  : t("certificateNotFound")}
+                  : state.kind === "error"
+                    ? t("couldNotLoadCertificates")
+                    : t("certificateNotFound")}
               </p>
             )}
           </div>

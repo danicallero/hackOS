@@ -17,7 +17,7 @@ type CvState =
   | { status: "loading" }
   | { status: "ready"; url: string; filename: string }
   | { status: "missing" }
-  | { status: "error"; message: string | null };
+  | { status: "error" };
 
 /**
  * The file name from a `content-disposition` header: the RFC 5987
@@ -41,7 +41,9 @@ export function dispositionFilename(header: string | null): string | null {
 /**
  * Reads the CV as a blob with the session cookie (the API is another origin,
  * so an iframe pointed at it would depend on third-party cookies) and exposes
- * it as an object URL that is revoked when the viewer closes (#935).
+ * it as an object URL that is revoked when the viewer closes (#935). Raw
+ * `fetch` on purpose: `apiFetch` only parses JSON and `apiDownload` saves to
+ * disk, while this needs the blob, the filename header and a distinct 404.
  */
 function useCvBlob(path: string, open: boolean, attempt: number): CvState {
   const [state, setState] = useState<CvState>({ status: "loading" });
@@ -64,10 +66,7 @@ function useCvBlob(path: string, open: boolean, attempt: number): CvState {
           return;
         }
         if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as {
-            error?: { message?: string };
-          } | null;
-          setState({ status: "error", message: body?.error?.message ?? null });
+          setState({ status: "error" });
           return;
         }
         const raw = await res.blob();
@@ -82,7 +81,7 @@ function useCvBlob(path: string, open: boolean, attempt: number): CvState {
           filename: dispositionFilename(res.headers.get("content-disposition")) ?? "CV.pdf",
         });
       } catch {
-        if (!controller.signal.aborted) setState({ status: "error", message: null });
+        if (!controller.signal.aborted) setState({ status: "error" });
       }
     })();
     return () => {
@@ -216,7 +215,7 @@ export function CvViewer({
           <div className="flex flex-1 items-center justify-center">
             <ContextualError
               className="w-full max-w-md"
-              message={state.message ?? t("couldNotLoadCv")}
+              message={t("couldNotLoadCv")}
               onRetry={() => setAttempt((value) => value + 1)}
             />
           </div>

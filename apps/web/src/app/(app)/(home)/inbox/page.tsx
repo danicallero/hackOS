@@ -13,19 +13,17 @@ export default function InboxPage() {
     defaultValue: "messages",
   });
   return (
-    <>
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabBar className="h-auto flex-wrap [&_[data-slot=tabs-trigger]]:flex-auto [&_[data-slot=tabs-trigger]]:whitespace-normal">
-          <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
-          <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
-        </TabBar>
-        <TabsContent value="messages" className="pt-6">
-          <MessagesTab />
-        </TabsContent>
-        <TabsContent value="preferences" className="pt-6">
-          <PreferencesTab />
-        </TabsContent>
-      </Tabs>
-    </>
+    <Tabs value={tab} onValueChange={setTab}>
+      <TabBar className="h-auto flex-wrap [&_[data-slot=tabs-trigger]]:flex-auto [&_[data-slot=tabs-trigger]]:whitespace-normal">
+        <TabsTrigger value="messages">{t("messages")}</TabsTrigger>
+        <TabsTrigger value="preferences">{t("preferences")}</TabsTrigger>
+      </TabBar>
+      <TabsContent value="messages" className="pt-6">
+        <MessagesTab />
+      </TabsContent>
+      <TabsContent value="preferences" className="pt-6">
+        <PreferencesTab />
+      </TabsContent>
+    </Tabs>
   );
 }

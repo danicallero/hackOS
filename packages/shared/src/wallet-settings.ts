@@ -1,3 +1,4 @@
+import type { Language } from "./locale.js";
 /** Runtime Wallet customization (H28). Artwork is served by hackOS, not baked into deployments. */
 export const WALLET_ARTWORK_SLOTS = [
   "appleIcon",
@@ -49,7 +50,7 @@ export interface WalletSettings {
   artwork: Partial<Record<WalletArtworkSlot, WalletArtworkImage & { id: string }>>;
   artworkDefaults: Partial<Record<WalletArtworkSlot, WalletArtworkImage>>;
 }
-export type WalletAlert = Record<"es" | "gl" | "en", { title: string; body: string }>;
+export type WalletAlert = Record<Language, { title: string; body: string }>;
 export const WALLET_ACTION_LABELS = {
   en: {
     directions: "Get directions",

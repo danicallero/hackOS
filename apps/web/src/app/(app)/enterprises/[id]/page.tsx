@@ -10,7 +10,7 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -22,15 +22,15 @@ import { TabBar } from "@/components/common/tab-bar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { api } from "@/lib/api";
+import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { initials } from "@/lib/initials";
 import { useCan, useSessionContext } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
-import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs, initials } from "../shared";
+import { ENTERPRISE_TAB_ALIASES, type Enterprise, enterpriseTabs } from "../shared";
 import { ChallengesSummaryCard, EditCard, LogoCard, MembersCard } from "./enterprise-cards";
 import { JudgesCard } from "./judges-card";
 import { StandTagsCard } from "./stand-tags-card";
@@ -55,49 +55,25 @@ export default function EnterpriseDetailPage() {
     if (canManage && requested === "invitations") router.replace("/users/invites");
   }, [canManage, requested, router]);
 
-  const [enterprise, setEnterprise] = useState<Enterprise | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [notFound, setNotFound] = useState(false);
-  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
+  const validId = Number.isFinite(id);
+  // Soft, in-place refresh when another admin edits this enterprise elsewhere.
+  // A failed background refetch keeps the loaded enterprise (#1012).
+  const {
+    data: enterprise,
+    error,
+    stale,
+    refetch,
+  } = useLiveQuery(
+    (signal) => api.get<Enterprise>(`/api/enterprises/${id}`, { signal }),
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    { enabled: validId, resourceKey: ["enterprise", id] },
+  );
+  const shownError = error && (enterprise === null || isNotFoundError(error)) ? error : null;
+  const notFound = !validId || isNotFoundError(shownError);
+  const errorMsg = shownError ? apiErrorText(shownError, t, t("couldNotLoadEnterprise")) : "";
 
-  const load = useCallback(async () => {
-    // A background live-refresh shouldn't flash the whole page away — only
-    // the very first load (before there's anything to show) should.
-    setStatus((s) => (s === "ready" ? s : "loading"));
-    try {
-      const data = await api.get<Enterprise>(`/api/enterprises/${id}`);
-      setEnterprise(data);
-      setStatus("ready");
-      succeeded();
-    } catch (err) {
-      // A failed background refresh keeps the loaded enterprise (#1012).
-      if (!failed(err)) return;
-      setErrorMsg(apiErrorText(err, t, t("couldNotLoadEnterprise")));
-      setNotFound(isNotFoundError(err));
-      setStatus("error");
-    }
-  }, [id, t, succeeded, failed]);
-
-  // Soft, in-place refresh instead of a hard reload when another admin edits
-  // this enterprise elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (Number.isFinite(id)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void load();
-    } else {
-      setNotFound(true);
-      setStatus("error");
-    }
-  }, [id, load, liveRefresh, retryNonce]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a different enterprise is a different resource, so its first load may show an error.
-  useEffect(() => reset(), [id, reset]);
-
-  if (status === "loading") {
+  if (validId && !shownError && !enterprise) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -105,12 +81,12 @@ export default function EnterpriseDetailPage() {
     );
   }
 
-  if (status === "error" || !enterprise) {
+  if (!validId || shownError || !enterprise) {
     if (!notFound) {
       return (
         <ContextualError
           message={errorMsg || t("couldNotLoadEnterprise")}
-          onRetry={() => void load()}
+          onRetry={() => refetch()}
         />
       );
     }
@@ -126,7 +102,7 @@ export default function EnterpriseDetailPage() {
 
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <PageHeader
         leading={
           <Avatar size="lg">
@@ -174,8 +150,8 @@ export default function EnterpriseDetailPage() {
           <EditCard
             enterprise={enterprise}
             canManage={canManage}
-            onSaved={load}
-            logoUploader={<LogoCard enterprise={enterprise} onChanged={load} />}
+            onSaved={() => refetch()}
+            logoUploader={<LogoCard enterprise={enterprise} onChanged={() => refetch()} />}
           />
         </TabsContent>
         {tabs.includes("challenges") && (
@@ -198,11 +174,7 @@ export default function EnterpriseDetailPage() {
               enterpriseName={enterprise.name}
               scannable={enterprise.stand_scannable}
               canManage={canManage}
-              onScannableChange={(scannable) =>
-                setEnterprise((current) =>
-                  current ? { ...current, stand_scannable: scannable } : current,
-                )
-              }
+              onScannableChange={() => refetch()}
             />
           </TabsContent>
         )}

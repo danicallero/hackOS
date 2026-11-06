@@ -30,9 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { fromDatetimeLocal } from "@/lib/datetime";
-import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { eventDateFormat, fromDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import {
   type AccreditationLookup,
   logisticsApi,
@@ -41,7 +40,7 @@ import {
   personName,
 } from "@/lib/logistics";
 import { toast } from "@/lib/toast";
-import { hoursSince, TIME_FORMAT_OPTIONS } from "./shared";
+import { hoursSince } from "./shared";
 
 // ── Scan tab: unified accreditation + presence lookup ─────────────────────
 
@@ -57,10 +56,7 @@ export function ScanTab({
   onPresenceScanned: () => void;
 }) {
   const { language, t } = useLocale();
-  const timeFmt = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    ...TIME_FORMAT_OPTIONS,
-    timeZone: getEventTimeZone(),
-  });
+  const timeFmt = eventDateFormat(language, "dayMonthTime");
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonSearchResult[] | null>(null);
@@ -93,15 +89,19 @@ export function ScanTab({
     setManualScannedAt("");
   };
 
-  const loadPresenceByBadge = useCallback(async (badgeId: string) => {
-    try {
-      const result = await logisticsApi.presenceLookup(badgeId);
-      setPresCard(result);
-      setManualKind(result.pendingExit || result.openSince ? "out" : "in");
-    } catch {
-      setPresCard(null);
-    }
-  }, []);
+  const loadPresenceByBadge = useCallback(
+    async (badgeId: string) => {
+      try {
+        const result = await logisticsApi.presenceLookup(badgeId);
+        setPresCard(result);
+        setManualKind(result.pendingExit || result.openSince ? "out" : "in");
+      } catch (err) {
+        setPresCard(null);
+        setError(errorMessage(err, t, t("userLookupFailed")));
+      }
+    },
+    [t],
+  );
 
   const openCard = useCallback(
     async (userId: number) => {

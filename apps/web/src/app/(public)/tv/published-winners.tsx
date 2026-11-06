@@ -14,7 +14,7 @@ export function PublishedWinners({
   event: PublicEvent;
   children: React.ReactNode;
 }) {
-  const winners = usePublishedWinners("/api/tv/winners");
+  const { winners } = usePublishedWinners("/api/tv/winners");
   const { t, language } = useLocale();
   const [page, setPage] = useState(0);
   useEffect(() => {

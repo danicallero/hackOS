@@ -8,7 +8,7 @@ import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/csr/ListNumbers";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { DataTable } from "@/components/common/data-table";
 import { FilterMenu } from "@/components/common/filter-menu";
@@ -16,13 +16,11 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { Button } from "@/components/ui/button";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
-import { api } from "@/lib/api";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import { enterprisesResource, fetchListResource } from "@/lib/list-resources";
-import { peekServerState, revalidateServerState } from "@/lib/server-state";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { CreateEnterpriseModal } from "./create-enterprise-modal";
@@ -34,17 +32,34 @@ const ALL = "all";
 const NONE = "none";
 
 export default function EnterprisesPage() {
-  const { t, language } = useLocale();
+  const { t } = useLocale();
   const router = useRouter();
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
   const me = useMe();
-  // Stale-while-revalidate: a remount paints the last read at once.
-  const seeded = peekServerState<{ enterprises: Enterprise[] }>(enterprisesResource.key);
-  const [enterprises, setEnterprises] = useState<Enterprise[]>(() => seeded?.enterprises ?? []);
-  const [loading, setLoading] = useState(seeded === undefined);
-  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [sponsorRetryNonce, setSponsorRetryNonce] = useState(0);
+  // Soft, in-place refresh when another admin creates/edits an enterprise
+  // elsewhere. A failed background refetch keeps the list and selection (#1012).
+  const {
+    data,
+    error,
+    loading: listLoading,
+    stale,
+    refetch: load,
+  } = useLiveQuery(
+    (signal) => fetchListResource<{ enterprises: Enterprise[] }>(enterprisesResource, signal),
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: enterprisesResource.key, enabled: canManage },
+  );
+  const enterprises = useMemo(() => data?.enterprises ?? [], [data]);
+  const listError =
+    error && (data === null || isNotFoundError(error))
+      ? apiErrorText(error, t, t("couldNotLoadEnterprises"))
+      : null;
+  // A sponsor representative without manage access loads their own enterprise instead.
+  const [sponsorLoading, setSponsorLoading] = useState(true);
+  const [sponsorError, setSponsorError] = useState<string | null>(null);
+  const loading = canManage ? listLoading : sponsorLoading;
+  const loadError = canManage ? listError : sponsorError;
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -52,39 +67,23 @@ export default function EnterprisesPage() {
   const [kindFilter, setKindFilter] = useState(ALL);
   const [priorityFilter, setPriorityFilter] = useState<string[]>([]);
   const [reordering, setReordering] = useState(false);
-
-  const load = useCallback(async () => {
-    if (peekServerState(enterprisesResource.key) !== undefined) succeeded();
-    else if (!hasLoaded()) setLoading(true);
-    try {
-      const r = await revalidateServerState(enterprisesResource.key, (signal) =>
-        fetchListResource<{ enterprises: Enterprise[] }>(enterprisesResource, signal),
-      );
-      succeeded();
-      setLoadError(null);
-      setEnterprises(r.enterprises);
-      // Keep the admin's selection across live refreshes; drop deleted rows (#1012).
-      const remaining = new Set(r.enterprises.map((e) => String(e.id)));
-      setSelectedIds((current) => {
-        const next = new Set([...current].filter((id) => remaining.has(id)));
-        return next.size === current.size ? current : next;
-      });
-    } catch (err) {
-      // A failed background refresh keeps the list and selection (#1012).
-      if (!failed(err)) return;
-      setEnterprises([]);
-      setLoadError(apiErrorText(err, t, t("couldNotLoadEnterprises")));
-    } finally {
-      setLoading(false);
-    }
-  }, [t, succeeded, failed, hasLoaded]);
+  // Keep the admin's selection across live refreshes; drop deleted rows (#1012).
+  const [syncedData, setSyncedData] = useState(data);
+  if (data !== syncedData) {
+    setSyncedData(data);
+    const remaining = new Set(enterprises.map((e) => String(e.id)));
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((id) => remaining.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }
 
   const changeKind = useCallback(
     async (enterprise: Enterprise, kind: Enterprise["kind"]) => {
       if (kind === enterprise.kind) return;
       try {
         await api.patch(`/api/enterprises/${enterprise.id}`, { kind });
-        await load();
+        load();
       } catch (err) {
         toast.error(apiErrorText(err, t, t("couldNotUpdateEnterprise")), t("toastCompanyOrder"));
       }
@@ -92,10 +91,7 @@ export default function EnterprisesPage() {
     [load, t],
   );
 
-  const columns = useMemo(
-    () => buildEnterpriseColumns(t, LOCALE_CODES[language], changeKind),
-    [t, language, changeKind],
-  );
+  const columns = useMemo(() => buildEnterpriseColumns(t, changeKind), [t, changeKind]);
 
   const priorityOptions = useMemo(
     () =>
@@ -123,7 +119,7 @@ export default function EnterprisesPage() {
       setReordering(true);
       try {
         await api.post("/api/enterprises/reorder", { ids, priority });
-        await load();
+        load();
       } catch (err) {
         toast.error(apiErrorText(err, t, t("couldNotReorder")), t("toastCompanyOrder"));
       } finally {
@@ -151,7 +147,7 @@ export default function EnterprisesPage() {
           { compactTitle: t("toastCompanyVisibility") },
         );
         setSelectedIds(new Set());
-        await load();
+        load();
       } catch (err) {
         toast.error(
           apiErrorText(err, t, t("couldNotUpdateVisibility")),
@@ -164,50 +160,33 @@ export default function EnterprisesPage() {
     [selectedIds, load, t],
   );
 
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // creates/edits an enterprise elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (canManage) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      void load();
-      return;
-    }
-    if (!me?.isSponsorRep) {
-      setLoading(false);
-      return;
-    }
-    let alive = true;
-    setLoading(true);
-    setLoadError(null);
+  const isSponsorOnly = !canManage && Boolean(me?.isSponsorRep);
+  const sponsorAlive = useRef(true);
+  const loadOwnEnterprise = useCallback(() => {
+    setSponsorLoading(true);
+    setSponsorError(null);
     api
       .get<Enterprise>("/api/enterprises/mine")
       .then((enterprise) => {
-        if (alive) router.replace(`/enterprises/${enterprise.id}`);
+        if (sponsorAlive.current) router.replace(`/enterprises/${enterprise.id}`);
       })
       .catch((err) => {
-        if (!alive) return;
+        if (!sponsorAlive.current) return;
         const message = apiErrorText(err, t, t("couldNotLoadYourEnterprise"));
-        setLoadError(message);
+        setSponsorError(message);
         toast.error(message, t("toastDeleteCompany"));
-        setLoading(false);
+        setSponsorLoading(false);
       });
+  }, [router, t]);
+  useEffect(() => {
+    if (!isSponsorOnly) return;
+    sponsorAlive.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading the representative's own enterprise is an external-system sync
+    loadOwnEnterprise();
     return () => {
-      alive = false;
+      sponsorAlive.current = false;
     };
-  }, [
-    canManage,
-    load,
-    me?.isSponsorRep,
-    me?.visibleRoleName,
-    router,
-    liveRefresh,
-    sponsorRetryNonce,
-    retryNonce,
-    t,
-  ]);
+  }, [isSponsorOnly, loadOwnEnterprise]);
 
   if (!canManage && me?.isSponsorRep && loading) {
     return (
@@ -234,7 +213,7 @@ export default function EnterprisesPage() {
           getRowId={(enterprise) => String(enterprise.id)}
           error={{
             message: loadError,
-            onRetry: () => setSponsorRetryNonce((value) => value + 1),
+            onRetry: loadOwnEnterprise,
           }}
         />
       </PageLayout>
@@ -247,7 +226,7 @@ export default function EnterprisesPage() {
 
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => load()} />}
       <PageHeader
         title={t("enterprises")}
         primaryAction={
@@ -320,8 +299,8 @@ export default function EnterprisesPage() {
           searchable={(e) => `${e.name} ${e.website ?? ""}`}
           searchPlaceholder={t("searchEnterprisesPlaceholder")}
           pageSize={15}
-          loading={loading && !hasLoaded()}
-          error={loadError ? { message: loadError, onRetry: load } : undefined}
+          loading={loading}
+          error={loadError ? { message: loadError, onRetry: () => load() } : undefined}
           selectable
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
@@ -367,7 +346,7 @@ export default function EnterprisesPage() {
         onOpenChange={setCreateOpen}
         onCreated={async (created) => {
           setCreateOpen(false);
-          await load();
+          load();
           router.push(`/enterprises/${created.id}`);
         }}
       />

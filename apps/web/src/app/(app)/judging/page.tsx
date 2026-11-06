@@ -12,8 +12,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import type { Challenge } from "@/lib/challenges";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { workspaceAccess } from "@/lib/judging-workspace";
@@ -37,10 +39,9 @@ import {
 import { invalidateServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
 
-import { errorMessage, queueErrorToastContent } from "./helpers";
+import { queueErrorToastContent } from "./helpers";
 import { JudgingTopBar } from "./judging-top-bar";
 import { PresentationPanel } from "./presentation-panel";
 import { QueuePanel } from "./queue-panel";
@@ -88,7 +89,7 @@ export default function QueuePage() {
   const [reviewEditsAtRisk, setReviewEditsAtRisk] = useState(false);
   const { focusMode, changeFocusMode } = useFocusPreference();
   const selectReviewEntry = async (entry: QueueEntry | null) => {
-    if (!(await confirmDiscardUnsavedChanges(reviewEditsAtRisk, t))) return false;
+    if (!(await confirmDiscardUnsavedChanges(reviewEditsAtRisk))) return false;
     setSelectedReviewEntry(entry);
     return true;
   };
@@ -178,7 +179,7 @@ export default function QueuePage() {
         setRooms([]);
         setChallenges([]);
       } else {
-        const message = errorMessage(err, t, t("couldNotLoadQueueSetup"));
+        const message = apiErrorText(err, t, t("couldNotLoadQueueSetup"));
         setActionError(message);
         showQueueError(t, err, t("couldNotLoadQueueSetup"));
       }
@@ -316,7 +317,7 @@ export default function QueuePage() {
   const reviewEntry = reviewTarget;
   const showForm = reviewEntry != null && !windowOpen;
   const closeReview = async () => {
-    if (await confirmDiscardUnsavedChanges(reviewEditsAtRisk, t)) setSelectedReviewEntry(null);
+    if (await confirmDiscardUnsavedChanges(reviewEditsAtRisk)) setSelectedReviewEntry(null);
   };
   const projectPanel = (
     <PresentationPanel

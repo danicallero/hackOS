@@ -24,12 +24,15 @@ import { displayText } from "@/components/public/public-types";
 import { SponsorGrid } from "@/components/public/sponsor-grid";
 import { EventPhaseDisplay, useEventPhase } from "@/components/public/timer";
 import { Button } from "@/components/ui/button";
+import { useNow } from "@/hooks/use-now";
 import { api } from "@/lib/api";
-import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
+import { formatEventDate } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { getPublicChallenges, getPublicEvent, getPublicSponsors } from "@/lib/public-content";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
+import type { Language } from "@/lib/types";
 
 type Content = {
   event: PublicEvent;
@@ -41,12 +44,8 @@ type Content = {
   openApplications: PublicApplicationForm[];
 };
 
-const dateTime = (value: string, timezone: string, language: "es" | "gl" | "en") =>
-  new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: timezone,
-  }).format(new Date(value));
+const dateTime = (value: string, timezone: string, language: Language) =>
+  formatEventDate(value, language, "dateTimeMedium", timezone);
 
 /**
  * H8: label for a public form's `granted_role_name` — the name of its
@@ -68,12 +67,7 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
   const appLabel = status === "authenticated" ? t("goToApp") : t("logIn");
   const [content, setContent] = useState<Content | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Track "now" as ticking state for schedule filtering purity (60s refresh).
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow(60_000);
   const tRef = useRef(t);
   useEffect(() => {
     tRef.current = t;

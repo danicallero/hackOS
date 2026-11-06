@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { LiveScreen } from "@/app/(public)/tv/live-screen";
 import type { PublicEvent, PublicSponsor } from "@/components/public/public-types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
-import { getTvVenueConfig, type LiveScreenConfig, type TvVenueConfig } from "@/lib/tv";
+import { logisticsApi } from "@/lib/logistics";
+import { getTvVenueConfig, type LiveScreenConfig } from "@/lib/tv";
 
 /**
  * DESIGN.md §6 names "TV mode" directly as a case needing a live preview
@@ -17,39 +17,17 @@ import { getTvVenueConfig, type LiveScreenConfig, type TvVenueConfig } from "@/l
  * mirror above already covers.
  */
 
-interface PreviewData {
-  event: PublicEvent;
-  schedule: PublicScheduleItem[];
-  sponsors: PublicSponsor[];
-  venue: TvVenueConfig | null;
-}
-
 export function LiveModePreview({ config }: { config: LiveScreenConfig }) {
   const { t } = useLocale();
-  const [data, setData] = useState<PreviewData | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const [event, schedule, sponsorResult, venue] = await Promise.all([
-          api.get<PublicEvent>("/api/public/event"),
-          logisticsApi.publicSchedule(),
-          api.get<{ items: PublicSponsor[] }>("/api/public/sponsors?kind=sponsor"),
-          getTvVenueConfig(),
-        ]);
-        if (cancelled) return;
-        setData({ event, schedule: schedule.items, sponsors: sponsorResult.items, venue });
-      } catch {
-        if (!cancelled) setFailed(true);
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { data, error } = useServerResource(["tv", "draft-preview"], async (signal) => {
+    const [event, schedule, sponsorResult, venue] = await Promise.all([
+      api.get<PublicEvent>("/api/public/event", { signal }),
+      logisticsApi.publicSchedule(),
+      api.get<{ items: PublicSponsor[] }>("/api/public/sponsors?kind=sponsor", { signal }),
+      getTvVenueConfig(),
+    ]);
+    return { event, schedule: schedule.items, sponsors: sponsorResult.items, venue };
+  });
 
   return (
     <div className="space-y-2">
@@ -68,7 +46,7 @@ export function LiveModePreview({ config }: { config: LiveScreenConfig }) {
               fill
             />
           </div>
-        ) : failed ? (
+        ) : error ? (
           <div className="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center text-sm">
             {t("draftPreviewUnavailable")}
           </div>

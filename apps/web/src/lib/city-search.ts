@@ -12,7 +12,7 @@ export interface CityValue {
   country: string;
 }
 
-export type CitySource = "local" | "photon" | "open-meteo";
+type CitySource = "local" | "photon" | "open-meteo";
 
 interface CityIndex {
   countries: string[];
@@ -80,7 +80,7 @@ function countryName(code: string, language: string) {
 }
 
 /** Instant suggestions from the bundled index. Rows are sorted by population. */
-export async function searchLocalCities(query: string, language: string): Promise<CityValue[]> {
+async function searchLocalCities(query: string, language: string): Promise<CityValue[]> {
   const [name, ...rest] = query.split(",");
   const needle = normalizeCityText(name ?? "");
   if (needle.length < 2) return [];

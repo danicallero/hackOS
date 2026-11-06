@@ -14,7 +14,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { RoomFormPanel, type RoomFormValues } from "@/components/queue/room-form-panel";
 import { type RoomPatch, RoomsTable } from "@/components/queue/rooms-table";
 import { Button } from "@/components/ui/button";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { ApiError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -117,20 +117,13 @@ export function RoomManagement({ embedded = false }: { embedded?: boolean }) {
     editingRef.current = panelMode === "edit";
   }, [panelMode]);
 
-  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.QUEUE, [
-    EVENTS.QUEUE_ENTRY_CHANGED,
-    EVENTS.QUEUE_ROOM_CHANGED,
-  ]);
-  const isFirstLiveRefresh = useRef(true);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (isFirstLiveRefresh.current) {
-      isFirstLiveRefresh.current = false;
-      return;
-    }
-    if (editingRef.current) return;
-    void load();
-  }, [liveRefresh, load]);
+  useLiveReload(
+    REALTIME_SCOPES.QUEUE,
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+    () => {
+      if (!editingRef.current) void load();
+    },
+  );
 
   const openCreatePanel = () => {
     setDraftOpen(false);

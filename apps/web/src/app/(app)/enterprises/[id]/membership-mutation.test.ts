@@ -4,9 +4,6 @@ import { toast } from "@/lib/toast";
 import { mutateMembership } from "./membership-mutation";
 
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock("@/lib/api-error-text", () => ({
-  apiErrorText: (_error: unknown, _translate: Translate, fallback: string) => fallback,
-}));
 
 const t: Translate = (key) => key;
 

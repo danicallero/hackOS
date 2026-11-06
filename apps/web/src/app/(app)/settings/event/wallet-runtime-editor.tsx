@@ -56,7 +56,13 @@ const blankAlert: WalletAlert = {
   gl: { title: "", body: "" },
   en: { title: "", body: "" },
 };
-type OptionKey = "appleOptions" | "googleClassOptions" | "googleObjectOptions";
+const OPTION_KEYS = ["appleOptions", "googleClassOptions", "googleObjectOptions"] as const;
+type OptionKey = (typeof OPTION_KEYS)[number];
+const optionsToText = (settings: WalletSettings): Record<OptionKey, string> => ({
+  appleOptions: JSON.stringify(settings.appleOptions, null, 2),
+  googleClassOptions: JSON.stringify(settings.googleClassOptions, null, 2),
+  googleObjectOptions: JSON.stringify(settings.googleObjectOptions, null, 2),
+});
 function parsedOptions(value: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -231,11 +237,7 @@ export function WalletRuntimeEditor({
         setSettings(value);
         setSavedSnapshot(JSON.stringify({ ...value, artwork: null, artworkDefaults: null }));
         setError(null);
-        setOptionText({
-          appleOptions: JSON.stringify(value.appleOptions, null, 2),
-          googleClassOptions: JSON.stringify(value.googleClassOptions, null, 2),
-          googleObjectOptions: JSON.stringify(value.googleObjectOptions, null, 2),
-        });
+        setOptionText(optionsToText(value));
       })
       .catch((err) => {
         if (active) setError(apiErrorText(err, t, t("couldNotLoadEventSettings")));
@@ -271,20 +273,23 @@ export function WalletRuntimeEditor({
     const dirty =
       !!settings &&
       (JSON.stringify({ ...settings, artwork: null, artworkDefaults: null }) !== savedSnapshot ||
-        optionText.appleOptions !== JSON.stringify(settings.appleOptions, null, 2) ||
-        optionText.googleClassOptions !== JSON.stringify(settings.googleClassOptions, null, 2) ||
-        optionText.googleObjectOptions !== JSON.stringify(settings.googleObjectOptions, null, 2));
+        OPTION_KEYS.some((key) => optionText[key] !== optionsToText(settings)[key]));
     onDirtyChange(dirty);
     registerSave(
       settings
         ? async () => {
             const { artwork: _artwork, artworkDefaults: _defaults, ...body } = settings;
-            const next = await api.put<WalletSettings>("/api/event/wallet", {
-              ...body,
-              appleOptions: JSON.parse(optionText.appleOptions),
-              googleClassOptions: JSON.parse(optionText.googleClassOptions),
-              googleObjectOptions: JSON.parse(optionText.googleObjectOptions),
-            });
+            let parsed: Record<OptionKey, unknown>;
+            try {
+              parsed = {
+                appleOptions: JSON.parse(optionText.appleOptions),
+                googleClassOptions: JSON.parse(optionText.googleClassOptions),
+                googleObjectOptions: JSON.parse(optionText.googleObjectOptions),
+              };
+            } catch {
+              throw new Error(t("walletInvalidOptions"));
+            }
+            const next = await api.put<WalletSettings>("/api/event/wallet", { ...body, ...parsed });
             setSettings(next);
             setSavedSnapshot(JSON.stringify({ ...next, artwork: null, artworkDefaults: null }));
           }
@@ -294,18 +299,14 @@ export function WalletRuntimeEditor({
       registerSave(null);
       onDirtyChange(false);
     };
-  }, [settings, savedSnapshot, optionText, registerSave, onDirtyChange]);
+  }, [settings, savedSnapshot, optionText, registerSave, onDirtyChange, t]);
   async function restoreDefaults() {
     setBusy(true);
     try {
       const value = await api.delete<WalletSettings>("/api/event/wallet");
       setSettings(value);
       setSavedSnapshot(JSON.stringify({ ...value, artwork: null, artworkDefaults: null }));
-      setOptionText({
-        appleOptions: JSON.stringify(value.appleOptions, null, 2),
-        googleClassOptions: JSON.stringify(value.googleClassOptions, null, 2),
-        googleObjectOptions: JSON.stringify(value.googleObjectOptions, null, 2),
-      });
+      setOptionText(optionsToText(value));
       toast.success(t("saved"), { compactTitle: t("toastWalletSettings") });
     } catch (err) {
       report(err);

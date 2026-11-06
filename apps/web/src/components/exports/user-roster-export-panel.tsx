@@ -8,13 +8,10 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getFoodIntolerances } from "@/hooks/use-food-intolerances";
+import { exportCsv } from "@/lib/csv";
 import { pickText, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { UserListItem } from "@/lib/types";
-
-function csvValue(value: string) {
-  return `"${value.replaceAll('"', '""')}"`;
-}
 
 export function UserRosterExportPanel({
   users,
@@ -82,21 +79,12 @@ export function UserRosterExportPanel({
           .join(", "),
       foodIntoleranceNotes: (user: UserListItem) => user.foodIntoleranceNotes ?? "",
     };
-    const csv = [
-      fields.join(","),
+    exportCsv("user-roster.csv", [
+      fields,
       ...rows.map((user) =>
-        fields
-          .map((field) => fieldValues[field as keyof typeof fieldValues](user))
-          .map(csvValue)
-          .join(","),
+        fields.map((field) => fieldValues[field as keyof typeof fieldValues](user)),
       ),
-    ].join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "user-roster.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    ]);
     setExporting(false);
   };
   return (

@@ -14,7 +14,7 @@ import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGl
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { SkipForwardIcon } from "@phosphor-icons/react/dist/csr/SkipForward";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
+import { useNow } from "@/hooks/use-now";
 import { formatEventClock } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { hasWaitedTooLong } from "@/lib/judging-workspace";
@@ -57,11 +58,7 @@ export function JudgingStats({
 }) {
   const { t } = useLocale();
   // H29: refresh only the legacy ETA fallback; authoritative projections come from pace.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const now = useNow(30_000);
   const total = progress
     ? progress.waiting +
       progress.called +
@@ -332,7 +329,7 @@ export function QueuePanel({
  * Actions for a team at the door: Notify / Bring in / a round "More" menu for the
  * rarer moves (requeue, no-show, disqualify), all in one row of buttons.
  */
-export function CalledEntryActions({
+function CalledEntryActions({
   entry,
   busy,
   canJudge,
@@ -519,7 +516,7 @@ export function CalledEntryActions({
   );
 }
 
-export function QueueList({
+function QueueList({
   title,
   entries,
   empty,

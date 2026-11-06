@@ -15,7 +15,7 @@ interface Person {
   merged: number;
 }
 
-export interface GithubTotals {
+interface GithubTotals {
   commits: number;
   pullRequests: number;
   merged: number;

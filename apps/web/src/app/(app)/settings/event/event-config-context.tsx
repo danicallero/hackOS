@@ -5,9 +5,11 @@
 // own PUT (the API accepts partial bodies — fields it omits are left
 // unchanged, so one category's save can never clobber another's edits).
 
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { setEventTimeZone } from "@/lib/event-time";
@@ -28,11 +30,9 @@ const EventConfigContext = createContext<EventConfigContextValue | null>(null);
 export function EventConfigProvider({
   children,
   enabled = true,
-  refreshKey = 0,
 }: {
   children: React.ReactNode;
   enabled?: boolean;
-  refreshKey?: number;
 }) {
   const { t } = useLocale();
   const [config, setConfig] = useState<EventConfig | null>(null);
@@ -67,11 +67,16 @@ export function EventConfigProvider({
     }
   }, [t, enabled]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is the SSE nonce that intentionally retriggers this read.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetching event config from API is a legitimate external-system sync on mount.
     void load();
-  }, [load, refreshKey]);
+  }, [load]);
+
+  // Content changes reach the browser as the payload-free public invalidation; the legacy
+  // `/api/events/stream` path is not a realtime scope and the multiplexed stream rejects it.
+  useLiveReload(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.DATA_CHANGED], () => void load(), {
+    enabled,
+  });
 
   const applyConfig = useCallback((next: EventConfig) => {
     requestIdRef.current += 1;

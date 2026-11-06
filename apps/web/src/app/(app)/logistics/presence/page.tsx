@@ -10,7 +10,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { PresenceExportPanel } from "@/components/exports/presence-export-panel";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { useLocale } from "@/lib/i18n";
 import {
   type AccreditationRoleCount,

@@ -42,7 +42,7 @@ describe("navigation warm-up", () => {
 
   it("does not refetch a fresh entry and ignores unknown routes", async () => {
     warmRoute("/enterprises", holds(CAPABILITIES.SPONSORS_MANAGE));
-    await vi.waitFor(() => expect(peekServerState(enterprisesResource.key)).toBeDefined());
+    await vi.waitFor(() => expect(peekServerState(enterprisesResource.key)).toEqual({ ok: true }));
     warmRoute("/enterprises", holds(CAPABILITIES.SPONSORS_MANAGE));
     warmRoute("/nowhere", holds());
     expect(api.get).toHaveBeenCalledOnce();

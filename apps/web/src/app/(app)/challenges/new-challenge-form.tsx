@@ -4,13 +4,13 @@ import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DurationInput } from "@/components/common/duration-input";
 import { EntityCombobox } from "@/components/common/entity-combobox";
-import { PublicationControls } from "@/components/common/publication-controls";
+import { PublicationFormFields } from "@/components/common/publication-form-fields";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -35,11 +35,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
-import { type Challenge, EMPTY_I18N, i18nWithEnglishFallback, type Prize } from "@/lib/challenges";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { type Challenge, i18nWithEnglishFallback, type Prize } from "@/lib/challenges";
+import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
+import { EMPTY_I18N } from "@/lib/i18n-text";
+import { enterprisesResource, fetchListResource } from "@/lib/list-resources";
 import { toast } from "@/lib/toast";
 import { useUrlTab } from "@/lib/url-tab";
 
@@ -64,15 +67,20 @@ type EnterpriseSummary = { id: number; name: string };
 export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challenge) => void }) {
   const { t } = useLocale();
   const { tab: step, setTab: setStep } = useUrlTab({ values: STEPS, defaultValue: "basics" });
-  const [enterprises, setEnterprises] = useState<EnterpriseSummary[]>([]);
   const [prizes, setPrizes] = useState<Prize[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [titleI18n, setTitleI18n] = useState<I18nText>(EMPTY_I18N);
   const [descriptionI18n, setDescriptionI18n] = useState<I18nText>(EMPTY_I18N);
   const [criteriaI18n, setCriteriaI18n] = useState<I18nText>(EMPTY_I18N);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loadingData, setLoadingData] = useState(true);
-  const [retryNonce, setRetryNonce] = useState(0);
+  const {
+    data: enterpriseData,
+    error: loadError,
+    loading: loadingData,
+    reload,
+  } = useServerResource(enterprisesResource.key, (signal) =>
+    fetchListResource<{ enterprises: EnterpriseSummary[] }>(enterprisesResource, signal),
+  );
+  const enterprises = enterpriseData?.enterprises ?? [];
   const form = useForm<CreateValues>({
     mode: "onBlur",
     reValidateMode: "onBlur",
@@ -87,32 +95,6 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
     },
   });
   const [scheduledPublish, setScheduledPublish] = useState(false);
-  const visibility = form.watch("visibility");
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally retriggers this safe authoring-data load.
-  useEffect(() => {
-    let cancelled = false;
-    // populating form dropdown options from the API on mount/retry is a legitimate external-system sync
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoadingData(true);
-    setLoadError(null);
-    Promise.all([api.get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")])
-      .then(([enterpriseResult]) => {
-        if (cancelled) return;
-        setEnterprises(enterpriseResult.enterprises);
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setLoadError(apiErrorText(error, t, t("couldNotLoadChallengeData")));
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingData(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [retryNonce, t]);
 
   async function onSubmit(values: CreateValues) {
     const title = titleI18n.en.trim();
@@ -164,7 +146,7 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
     if (stepIndex < STEPS.length - 1) setStep(STEPS[stepIndex + 1]);
   };
 
-  if (loadingData && enterprises.length === 0 && !loadError) {
+  if (loadingData) {
     return (
       <div className="flex items-center justify-center py-20" role="status" aria-busy="true">
         <Spinner className="size-6" />
@@ -176,12 +158,12 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {loadError && (
+        {loadError ? (
           <ContextualError
-            message={loadError}
-            onRetry={() => setRetryNonce((value) => value + 1)}
+            message={apiErrorText(loadError, t, t("couldNotLoadChallengeData"))}
+            onRetry={reload}
           />
-        )}
+        ) : null}
 
         <Tabs value={step} onValueChange={(value) => setStep(value)}>
           <TabBar aria-label={t("challengeCreationSteps")}>
@@ -293,36 +275,11 @@ export function NewChallengeForm({ onCreated }: { onCreated: (challenge: Challen
 
           <TabsContent value="publish" className="space-y-6 pt-4">
             <SectionCard variant="plain" title={t("publicationTitle")}>
-              <PublicationControls
+              <PublicationFormFields
                 id="challenge-publication"
-                visibility={visibility}
-                hiddenValue="hidden"
-                publishedValue="visible"
-                hiddenLabel={t("hiddenOption")}
-                publishedLabel={t("visibleLabel")}
-                visibilityLabel={t("colVisibility")}
-                scheduleLabel={t("schedulePublicationLabel")}
-                publishAtLabel={t("publishAtLabel")}
+                form={form}
                 scheduled={scheduledPublish}
-                publishAt={form.watch("availableFrom")}
-                onVisibilityChange={(next) => {
-                  form.setValue("visibility", next, { shouldDirty: true });
-                  if (next === "visible") {
-                    setScheduledPublish(false);
-                    form.setValue("availableFrom", "", { shouldDirty: true });
-                  }
-                }}
-                onScheduledChange={(next) => {
-                  setScheduledPublish(next);
-                  form.setValue(
-                    "availableFrom",
-                    next ? toDatetimeLocal(new Date().toISOString()) : "",
-                    { shouldDirty: true },
-                  );
-                }}
-                onPublishAtChange={(value) =>
-                  form.setValue("availableFrom", value, { shouldDirty: true })
-                }
+                setScheduled={setScheduledPublish}
               />
             </SectionCard>
           </TabsContent>

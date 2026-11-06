@@ -27,7 +27,7 @@ import { Input } from "@/components/ui/input";
 import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
+import { fromLocalInputValue, toLocalInputValue } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";

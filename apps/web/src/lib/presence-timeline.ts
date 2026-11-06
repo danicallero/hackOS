@@ -10,7 +10,7 @@ import type {
   PresenceTimelineSignal,
 } from "./logistics";
 
-export interface PresenceTimelineRow {
+interface PresenceTimelineRow {
   signal: PresenceTimelineSignal;
   window: PresenceCertaintyWindow | null;
 }

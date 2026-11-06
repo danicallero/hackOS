@@ -1,4 +1,6 @@
-// Client-side CSV helpers for table exports built from already-loaded rows.
+// The one client-side CSV builder: every export of already-loaded rows goes through it.
+
+import { saveBlob } from "./download";
 
 const CSV_BOM = "﻿";
 
@@ -17,13 +19,12 @@ export function buildCsv(rows: string[][]): string {
   return `${CSV_BOM}${rows.map((row) => row.map(csvField).join(",")).join("\r\n")}\r\n`;
 }
 
+/** Saves already-built CSV text (see `buildCsv`) as `filename`. */
 export function downloadCsv(filename: string, csv: string): void {
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  saveBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
+}
+
+/** Builds the CSV for `rows` (formula-safe, BOM, CRLF) and saves it as `filename`. */
+export function exportCsv(filename: string, rows: string[][]): void {
+  downloadCsv(filename, buildCsv(rows));
 }

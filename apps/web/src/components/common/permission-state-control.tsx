@@ -4,7 +4,7 @@ import { type MessageKey, useLocale } from "@/lib/i18n";
 import type { PermissionState } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-export const PERMISSION_STATES: PermissionState[] = ["deny", "inherit", "allow"];
+const PERMISSION_STATES: PermissionState[] = ["deny", "inherit", "allow"];
 
 export function permissionStateMessageKey(state: PermissionState): MessageKey {
   return state === "allow"

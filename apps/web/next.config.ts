@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NextConfig } from "next";
+import { INDEXABLE_PUBLIC_PATHS } from "./src/lib/public-paths";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,10 +26,10 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
-      // Nothing is indexed except the public pages listed in app/robots.ts; icons, logos
+      // Nothing is indexed except the public pages listed in lib/public-paths.ts; icons, logos
       // and generated images included.
       {
-        source: "/:path((?!timetable|privacy|terms|gallery|llms\\.txt).+)",
+        source: `/:path((?!${INDEXABLE_PUBLIC_PATHS.map((path) => path.replaceAll(".", "\\.")).join("|")}).+)`,
         headers: [
           { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet, noimageindex" },
         ],

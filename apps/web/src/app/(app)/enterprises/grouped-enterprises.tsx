@@ -1,25 +1,12 @@
 "use client";
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useDroppable,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { closestCenter, DndContext, type DragEndEvent, useDroppable } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { createContext, useContext, useMemo } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DragHandle } from "@/components/common/drag-handle";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { TableRow } from "@/components/ui/table";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -107,10 +94,7 @@ export function GroupedEnterprises({
 }) {
   const { t } = useLocale();
   const groups = useMemo(() => groupEnterprises(enterprises), [enterprises]);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
   const tableColumns = useMemo(
     () => columns.filter((column) => column.id !== "priority"),
     [columns],

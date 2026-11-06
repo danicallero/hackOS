@@ -1,5 +1,6 @@
 import type { Language } from "./locale.js";
-export type ScheduleAudience = "sponsor" | "participant" | "mentor";
+export const SCHEDULE_AUDIENCES = ["sponsor", "participant", "mentor"] as const;
+export type ScheduleAudience = (typeof SCHEDULE_AUDIENCES)[number];
 const LANGUAGES: Language[] = ["es", "gl", "en"];
 export interface ScheduleInput {
   title: string;

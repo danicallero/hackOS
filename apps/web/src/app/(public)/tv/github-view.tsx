@@ -17,7 +17,7 @@ interface Ranking {
   people: Row[];
   teams: Row[];
 }
-export interface GithubActivity {
+interface GithubActivity {
   commits: Ranking;
   pullRequests: Ranking;
 }
@@ -67,6 +67,7 @@ export function GithubView({ event }: { event: PublicEvent }) {
       api
         .get<GithubActivity>("/api/tv/github")
         .then((next) => !cancelled && setData(next))
+        // An unattended screen keeps the last good ranking when a poll fails.
         .catch(() => undefined);
     void load();
     const timer = window.setInterval(load, REFRESH_MS);

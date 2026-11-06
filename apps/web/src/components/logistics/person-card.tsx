@@ -2,7 +2,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { useLocale } from "@/lib/i18n";
 import type { AccreditationLookup, PersonCard, PresenceLookup } from "@/lib/logistics";
 
-export function labelForIntolerance(item: { label: unknown }, fallback: string): string {
+function labelForIntolerance(item: { label: unknown }, fallback: string): string {
   if (typeof item.label === "string") return item.label;
   if (item.label && typeof item.label === "object") {
     const label = item.label as Record<string, unknown>;

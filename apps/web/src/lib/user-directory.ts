@@ -2,7 +2,7 @@ import { api } from "./api";
 import type { UserList, UserListItem } from "./types";
 
 /** H8/H10: directory consumers must not truncate membership or local filters at one API page. */
-export async function loadUserDirectory(signal: AbortSignal, q?: string): Promise<UserList> {
+export async function loadUserDirectory(signal?: AbortSignal, q?: string): Promise<UserList> {
   const users = new Map<number, UserListItem>();
   let offset = 0;
   let total: number;

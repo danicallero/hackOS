@@ -3,12 +3,11 @@
 // a generic humanized label; a curated subset (the highest-traffic/least
 // obvious ones) gets real copy via i18n keys instead.
 
-import { shortDateTimeFmt } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { AuditRow } from "@/lib/notifications";
 
 /** "queue_regenerate" -> "Queue regenerate", "queue_group.clear" -> "Queue group · Clear" */
-export function humanizeAction(action: string): string {
+function humanizeAction(action: string): string {
   return action
     .split(".")
     .map((segment) =>
@@ -75,8 +74,6 @@ export function getAuditSummary(
       });
   }
 }
-
-export const auditTimeFmt = shortDateTimeFmt;
 
 export function auditActorLabel(
   row: Pick<AuditRow, "actor_name" | "actor_surname" | "actor_email">,

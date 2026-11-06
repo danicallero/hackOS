@@ -1,23 +1,23 @@
 // H48/H59: CSV export of the staff schedule roster. Values are the human-readable
 // ones the table shows (localized times, audience names, yes/no), not raw ids.
 
+import { scheduleTypeLabel } from "@hackos/shared/display-labels";
+import { SCHEDULE_AUDIENCES } from "@hackos/shared/schedule-form";
 import { buildCsv } from "@/lib/csv";
-import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, type Translate } from "@/lib/i18n";
+import { formatEventDate } from "@/lib/datetime";
+import type { Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Language } from "@/lib/types";
 import {
   ownerNames,
-  SCHEDULE_AUDIENCES,
   scheduleAudienceLabel,
   scheduleDuration,
   scheduleStatus,
   scheduleStatusLabel,
-  scheduleTypeLabel,
 } from "./schedule-model";
 import { COLUMN_LABEL_KEYS, type ColumnId, type TableConfig } from "./schedule-table-config";
 
-export interface ScheduleExportContext {
+interface ScheduleExportContext {
   t: Translate;
   language: Language;
   /** IANA zone; omitted means the event's, which is what the roster displays (H45/H47). */
@@ -46,18 +46,7 @@ export function scheduleExportTitle(item: PublicScheduleItem, language: Language
 }
 
 function dateTime(iso: string | null, ctx: ScheduleExportContext): string {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(LOCALE_CODES[ctx.language], {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: ctx.timeZone ?? getEventTimeZone(),
-  }).format(date);
+  return formatEventDate(iso, ctx.language, "numericDateTime24", ctx.timeZone);
 }
 
 export function scheduleExportValue(

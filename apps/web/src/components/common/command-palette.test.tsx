@@ -15,7 +15,7 @@ vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({ language: "en", t: (key: string) => key }),
 }));
 // The sidebar's predicate over a stubbed session: gating stays capability-based.
-vi.mock("@/components/layout/app-sidebar", () => ({
+vi.mock("@/hooks/use-nav-visibility", () => ({
   useNavVisibility: () => (item: NavItem) => {
     const can = (capability: Capability) => session.capabilities.includes(capability);
     return isNavItemVisible(item, {
@@ -32,7 +32,7 @@ vi.mock("@/components/layout/app-sidebar", () => ({
 }));
 
 import { SAVE_SHORTCUT_ATTR, setCommandPaletteOpen } from "@/lib/shortcuts";
-import { CommandPalette } from "./command-palette";
+import { CommandPalette, rankDestination } from "./command-palette";
 import { FormActions } from "./form-actions";
 import { SearchField } from "./search-field";
 
@@ -278,5 +278,21 @@ describe("⌘S / Ctrl+S saves the focused save owner (#1182)", () => {
     const button = container.querySelector(`button[${SAVE_SHORTCUT_ATTR}]`);
     expect(button?.getAttribute(SAVE_SHORTCUT_ATTR)).toBe("unsaved");
     expect(button?.getAttribute("aria-keyshortcuts")).toBe("Control+S");
+  });
+});
+
+describe("rankDestination (#1182)", () => {
+  it("ranks a title prefix above keyword-only matches and drops scattered letters", () => {
+    const stats = rankDestination("/logistics/stats", "stats", ["Stats", "Logistics"]);
+    const profile = rankDestination("/profile", "stats", ["Profile and account", "Profile"]);
+    const viaKeyword = rankDestination("/x", "stats", ["Other", "Stats"]);
+    expect(stats).toBe(1);
+    expect(profile).toBe(0);
+    expect(viaKeyword).toBeLessThan(stats);
+    expect(viaKeyword).toBeGreaterThan(0);
+  });
+
+  it("ignores accents and case", () => {
+    expect(rankDestination("/a", "ESTAD", ["Estadísticas"])).toBe(1);
   });
 });

@@ -19,6 +19,7 @@ import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
+import { rolesApi } from "@/lib/roles-api";
 import type {
   EnterpriseSummary,
   Invite,
@@ -88,7 +89,7 @@ export function InviteUserDialog({
     setRolesLoading(true);
     setRolesError(null);
     try {
-      const roleData = await api.get<RoleSummary[]>("/api/roles");
+      const roleData = await rolesApi.list();
       setRoles(
         roleData.filter((role) => !role.isProtected && role.name.toLowerCase() !== "sponsor"),
       );

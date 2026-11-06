@@ -48,7 +48,7 @@ export type FieldValue =
   | undefined;
 
 /** Structural shape shared by both modules' local TemplateField types. */
-export interface TemplateFieldLike {
+interface TemplateFieldLike {
   key: string;
   label: I18nText;
   kind: string;

@@ -7,17 +7,14 @@
 // ordered array of fields the client renders dynamically. This is DISTINCT
 // from the judging panel `questionSchema` in @hackos/shared/questions — the
 // applications form uses FIELD_KINDS below and i18n labels {en,es,gl}
-// (plan/07 §2). Types are declared locally per module conventions.
+// (plan/07 §2).
 
 import { fromDatetimeLocal, shortDateTimeFmt, toDatetimeLocal } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
+import type { I18nText } from "@/lib/types";
 
-export interface I18nText {
-  en: string;
-  es: string;
-  gl: string;
-}
+export type { I18nText };
 
 export const FIELD_KINDS = [
   "text",
@@ -73,7 +70,7 @@ export interface FieldOption {
   label: I18nText;
 }
 
-export interface StatisticsConfig {
+interface StatisticsConfig {
   enabled: boolean;
   label?: I18nText;
   visualization?: "bar" | "pie" | "line";
@@ -125,8 +122,8 @@ export interface TemplateField {
  *  field's kind (text/textarea: length + pattern; number: min/max;
  *  multiselect: selection count). See `apps/api/.../schemas.ts` for the
  *  matching server-side enforcement. */
-export const TEXT_VALIDATION_CONDITIONS = ["contains", "not_contains", "email", "url"] as const;
-export type TextValidationCondition = (typeof TEXT_VALIDATION_CONDITIONS)[number];
+const TEXT_VALIDATION_CONDITIONS = ["contains", "not_contains", "email", "url"] as const;
+type TextValidationCondition = (typeof TEXT_VALIDATION_CONDITIONS)[number];
 
 export interface FieldValidation {
   min_length?: number;
@@ -231,24 +228,6 @@ export interface ApplicationStats {
   };
   counts_by_status?: Record<string, number>;
   draft_count?: number;
-}
-
-// ── status presentation ───────────────────────────────────────────────────────
-
-const STATUS_TONE: Record<string, Tone> = {
-  draft: "neutral",
-  review: "warning",
-  accepted_internal: "warning",
-  rejected_internal: "warning",
-  accepted: "success",
-  rejected: "danger",
-  confirmed: "success",
-  declined: "neutral",
-  expired: "warning",
-};
-
-export function statusTone(status: string): Tone {
-  return STATUS_TONE[status] ?? "neutral";
 }
 
 // ── granted-role display (H8) ─────────────────────────────────────────────────

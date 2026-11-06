@@ -3,9 +3,9 @@
 import { useCallback, useState } from "react";
 import { templateFieldId } from "@/components/common/template-field-control";
 import { validateFieldOnBlur } from "@/lib/application-validation";
+import type { TemplateField } from "@/lib/applications";
 import type { Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
-import type { TemplateField } from "../lib";
 
 interface Options {
   applicationId: number;

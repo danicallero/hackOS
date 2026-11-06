@@ -23,7 +23,7 @@ vi.mock("@/lib/api", () => {
     ApiError,
   };
 });
-vi.mock("@/hooks/use-auto-refresh", () => ({ useAutoRefresh: () => 0 }));
+vi.mock("@/hooks/use-live-reload", () => ({ useLiveReload: () => undefined }));
 vi.mock("@/lib/toast", () => ({ toast: { error: env.toastError, success: env.toastSuccess } }));
 const t = (key: string) => key;
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t, language: "en" }) }));

@@ -9,6 +9,7 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SaveStatus } from "@/components/common/save-status";
@@ -34,13 +35,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useRoles } from "@/hooks/use-roles";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type ApplicationForm, fromLocalInput, toLocalInput } from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
-import type { RoleSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // Runtime validator is built inside the component with useMemo so its error
@@ -98,7 +99,10 @@ export function MetadataCard({
 }) {
   const { t } = useLocale();
   const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const { roles: allRoles, error: rolesError, reload: reloadRoles } = useRoles();
+  // A protected role (system:superadmin today, CLI-only, H8) is never
+  // offerable as a grantable role — the assign route would 403 it anyway.
+  const roles = useMemo(() => allRoles.filter((role) => !role.isProtected), [allRoles]);
   const localizedMetaSchema = useMemo(
     () =>
       z.object({
@@ -130,15 +134,6 @@ export function MetadataCard({
       grants_role_ids: form.grants_role_ids.map(String),
     },
   });
-
-  useEffect(() => {
-    // A protected role (system:superadmin today, CLI-only, H8) is never
-    // offerable as a grantable role — the assign route would 403 it anyway.
-    api
-      .get<RoleSummary[]>("/api/roles")
-      .then((r) => setRoles(r.filter((role) => !role.isProtected)))
-      .catch(() => setRoles([]));
-  }, []);
 
   useEffect(() => {
     onDirtyChange?.(rhf.formState.isDirty);
@@ -370,6 +365,9 @@ export function MetadataCard({
                             emptyText={t("noRolesYet")}
                           />
                         </FormControl>
+                        {rolesError != null && (
+                          <ContextualError message={t("couldNotLoadRoles")} onRetry={reloadRoles} />
+                        )}
                         {form.has_confirmed_responses && (
                           <Alert>
                             <InfoIcon aria-hidden="true" />

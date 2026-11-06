@@ -29,7 +29,7 @@ export interface AccreditationRoleCount {
 }
 
 /** Fields the person search can return; pass the ones your station needs. */
-export type PersonSearchField = "email" | "badgeId" | "dni" | "shirtSize" | "notes" | "confirmed";
+type PersonSearchField = "email" | "badgeId" | "dni" | "shirtSize" | "notes" | "confirmed";
 
 export interface PersonSearchResult {
   userId: number;
@@ -59,7 +59,7 @@ export interface PersonDirectoryEntry {
   present: boolean;
 }
 
-export interface CheckInResult {
+interface CheckInResult {
   userId: number;
   badgeId: string;
   method: "qr" | "manual" | "nfc";
@@ -70,7 +70,7 @@ export interface CheckInResult {
   surname: string | null;
 }
 
-export interface RotateBadgeResult {
+interface RotateBadgeResult {
   userId: number;
   oldBadge: string | null;
   newBadge: string;
@@ -96,7 +96,7 @@ export interface PresenceLookup extends Omit<PersonCard, "userId"> {
   openSince: string | null;
 }
 
-export interface PresenceScanResult {
+interface PresenceScanResult {
   logged: true;
   timeLogId: number;
   userId: number;
@@ -105,7 +105,7 @@ export interface PresenceScanResult {
   manual: boolean;
 }
 
-export interface PresenceInterval {
+interface PresenceInterval {
   start: string;
   end: string;
   /** True when `end` is a real door 'out' scan; false when it's an estimate
@@ -170,7 +170,7 @@ export interface PresenceTimelineData {
   windows: PresenceCertaintyWindow[];
 }
 
-export interface TimeLogUpdateResult {
+interface TimeLogUpdateResult {
   id: number;
   userId: number;
   kind: "in" | "out";
@@ -264,7 +264,7 @@ export interface LogisticsStats {
   }>;
 }
 
-export interface ScannableActivity {
+interface ScannableActivity {
   activityId: number;
   name: string;
   category: string;
@@ -276,7 +276,7 @@ export interface ScannableActivity {
   repeats: number;
 }
 
-export type ScheduleAudience = "sponsor" | "participant" | "mentor";
+export type { ScheduleAudience };
 /**
  * Either a real hackOS account (userId set, name/surname/email from `users`)
  * or a free-text name with no login (freeTextName set) — never both.
@@ -320,7 +320,7 @@ export interface PublicScheduleItem {
   updatedAt?: string;
 }
 
-export interface MealScanBatchResult {
+interface MealScanBatchResult {
   batchId: number;
   accepted: number;
   duplicate: number;
@@ -352,9 +352,9 @@ export interface ScheduleInput {
   titleLanguage?: Language;
 }
 
-export type { ScheduleTranslation, ScheduleTranslations } from "@hackos/shared/schedule-form";
+export type { ScheduleTranslations } from "@hackos/shared/schedule-form";
 
-import type { ScheduleTranslations } from "@hackos/shared/schedule-form";
+import type { ScheduleAudience, ScheduleTranslations } from "@hackos/shared/schedule-form";
 
 /**
  * Resolves what a viewer sees for a schedule item's title/description (H50

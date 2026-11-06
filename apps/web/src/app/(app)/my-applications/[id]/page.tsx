@@ -27,12 +27,15 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { Section } from "@/components/ui/surface";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
-import { ApiError, api } from "@/lib/api";
+import { ApiError, api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { validationErrorSummary } from "@/lib/application-validation";
+import { groupApplicationFields } from "@/lib/application-field-groups";
+import { enrichTemplate, withLogisticsSection } from "@/lib/application-form";
+import { fieldErrorsFromApi, validationErrorSummary } from "@/lib/application-validation";
+import { formatEventDate } from "@/lib/datetime";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { useSessionContext } from "@/lib/session";
@@ -40,18 +43,12 @@ import { showErrorToast, toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import {
   type ActionError,
-  enrichTemplate,
   type FieldValue,
-  fieldErrorsFromApi,
-  fmtDateTime,
-  groupFieldsBySections,
   isConfirmationExpiredError,
-  isNotFoundError,
   type MutationKey,
   type MyResponseDetail,
   type PublicForm,
   seedApplicationValues,
-  withLogisticsSection,
 } from "../lib";
 import { ApplicationHeader } from "./application-header";
 import { ApplicationTimeline, ReadOnlyAnswers } from "./application-sections";
@@ -207,17 +204,9 @@ export default function MyApplicationDetailPage() {
   // discard an in-progress draft (it's only saved client-side until
   // "Save draft"/submit).
   const editableRef = useRef(false);
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
-  const isFirstLiveRefresh = useRef(true);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (isFirstLiveRefresh.current) {
-      isFirstLiveRefresh.current = false;
-      return;
-    }
-    if (editableRef.current) return;
-    void load();
-  }, [liveRefresh, load]);
+  useLiveReload(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED], () => {
+    if (!editableRef.current) void load();
+  });
 
   const status = confirmationExpired ? "expired" : response?.status; // already masked by the API
   const timelineResponse =
@@ -555,7 +544,7 @@ export default function MyApplicationDetailPage() {
         )}
 
         {template.length > 0 ? (
-          groupFieldsBySections(
+          groupApplicationFields(
             template,
             withLogisticsSection(response?.sections ?? form?.sections ?? [], asksForLogistics),
           ).map((group, i) => (
@@ -609,7 +598,9 @@ export default function MyApplicationDetailPage() {
 
       {response?.submitted_at && (
         <p className="text-muted-foreground text-center text-xs">
-          {t("submittedOnPrefix", { date: fmtDateTime(response.submitted_at, language) })}
+          {t("submittedOnPrefix", {
+            date: formatEventDate(response.submitted_at, language, "dateTime"),
+          })}
         </p>
       )}
 

@@ -32,6 +32,7 @@ import {
 import { useVerificationResend } from "@/hooks/use-verification-resend";
 import { signUp } from "@/lib/auth-client";
 import { LANGS, languageName, type Translate, useLocale } from "@/lib/i18n";
+import { passwordSchema } from "@/lib/password-schema";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import type { Language } from "@/lib/types";
@@ -42,7 +43,7 @@ function signupSchema(t: Translate) {
       name: z.string().min(1, t("required")),
       surname: z.string().min(1, t("required")),
       email: z.string().email(t("validEmail")),
-      password: z.string().min(8, t("atLeastEight")),
+      password: passwordSchema(t),
       confirmPassword: z.string(),
       language: z.enum(["en", "es", "gl"]),
     })

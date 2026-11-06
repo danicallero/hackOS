@@ -75,7 +75,7 @@ export interface PublicProfile {
 
 const HEADLINE_MAX = 80;
 const LOCATION_MAX = 60;
-export const BIO_MAX = 500;
+const BIO_MAX = 500;
 
 export function settingsFrom(profile: PublicProfile): Settings {
   return {

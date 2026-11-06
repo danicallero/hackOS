@@ -21,8 +21,11 @@ import { Label } from "@/components/ui/label";
 import { overlayVariants } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { useEventSource } from "@/hooks/use-event-source";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { apiErrorText } from "@/lib/api-error-text";
 import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
 import type { Challenge } from "@/lib/challenges";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { collaborationState } from "@/lib/judging-workspace";
 import { type Answers, normalizeAnswers } from "@/lib/question-answers";
@@ -42,10 +45,14 @@ import {
   saveReview,
 } from "@/lib/queue";
 import { toast } from "@/lib/toast";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { cn } from "@/lib/utils";
-import { EMPTY_PANEL, entryLabel, errorMessage } from "./helpers";
+import { EMPTY_PANEL, entryLabel } from "./helpers";
 import { JudgingEmptyState } from "./judging-empty-state";
+
+/** Quiet period after the last edit before a draft is saved (H36). */
+const AUTOSAVE_DEBOUNCE_MS = 800;
+/** Refresh cadence of the focused field lease; the server expires an abandoned one in 30 s. */
+const LEASE_REFRESH_MS = 10_000;
 
 function isTextQuestion(question: Question): boolean {
   return question.kind === "short_text" || question.kind === "long_text";
@@ -117,7 +124,7 @@ export function ReviewForm({
    */
   onUnsavedEditsAtRisk?: (atRisk: boolean) => void;
 }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const entryId = entry.id;
   const panel = roomPanel ?? challenge?.judging_panel_criteria ?? EMPTY_PANEL;
   const [scores, setScores] = useState<Answers>({});
@@ -219,7 +226,7 @@ export function ReviewForm({
         : Promise.resolve(null),
     ])
       .catch((err) => {
-        if (!cancelled) setSaveError(errorMessage(err, t, t("couldNotLoadReview")));
+        if (!cancelled) setSaveError(apiErrorText(err, t, t("couldNotLoadReview")));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -293,7 +300,7 @@ export function ReviewForm({
   // an abandoned tab and another judge can acquire the field within 30s.
   useEffect(() => {
     if (!entryId || !focusedField || !ownedFields.has(focusedField)) return;
-    const timer = window.setInterval(() => void acquireField(focusedField), 10_000);
+    const timer = window.setInterval(() => void acquireField(focusedField), LEASE_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [acquireField, entryId, focusedField, ownedFields]);
 
@@ -355,7 +362,7 @@ export function ReviewForm({
       } catch (err) {
         if (currentEntryRef.current !== entryId) return;
         const fallback = t("couldNotSaveReview");
-        const message = errorMessage(err, t, fallback);
+        const message = apiErrorText(err, t, fallback);
         setSaveError(message);
       } finally {
         savingRef.current = false;
@@ -368,7 +375,7 @@ export function ReviewForm({
   // biome-ignore lint/correctness/useExhaustiveDependencies: H36 notes edits restart the debounce while already dirty.
   useEffect(() => {
     if (!dirty || saving || saveError || !online || !canJudge || conflict) return;
-    const timer = window.setTimeout(() => void save(false, false), 800);
+    const timer = window.setTimeout(() => void save(false, false), AUTOSAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [canJudge, conflict, dirty, online, save, saveError, saving, notes]);
 
@@ -590,7 +597,7 @@ export function ReviewForm({
                       <span className="text-foreground font-medium">
                         {`${version.name ?? t("judgeFallback")} ${version.surname ?? ""}`.trim()}
                       </span>{" "}
-                      · {new Date(version.created_at).toLocaleString()} ·{" "}
+                      · {formatEventDate(version.created_at, language, "dateTime")} ·{" "}
                       {version.changed_fields.map(fieldLabel).join(", ")}
                     </li>
                   ))}

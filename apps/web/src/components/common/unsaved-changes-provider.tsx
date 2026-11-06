@@ -1,32 +1,13 @@
 "use client";
 
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import {
+  DISCARD_CONFIRMATION_EVENT,
+  UnsavedChangesContext,
+} from "@/hooks/use-unsaved-changes-guard";
 import { useLocale } from "@/lib/i18n";
-
-export const UnsavedChangesContext = createContext({
-  register: (_owner: object) => () => {},
-  confirm: (): Promise<boolean> => Promise.resolve(false),
-  navigate: (_href: string) => {},
-});
-
-const confirmationEvent = "hackos:confirm-discard";
-
-/** In-page decisions use the same asynchronous alert as navigation (#1180). */
-export function requestDiscardConfirmation(): Promise<boolean> {
-  return new Promise((resolve) => {
-    window.dispatchEvent(new CustomEvent(confirmationEvent, { detail: resolve }));
-  });
-}
 
 export function UnsavedChangesProvider({ children }: { children: React.ReactNode }) {
   const router = useContext(AppRouterContext);
@@ -63,9 +44,9 @@ export function UnsavedChangesProvider({ children }: { children: React.ReactNode
     const onRequest = (event: Event) => {
       void confirm().then((event as CustomEvent<(value: boolean) => void>).detail);
     };
-    window.addEventListener(confirmationEvent, onRequest);
+    window.addEventListener(DISCARD_CONFIRMATION_EVENT, onRequest);
     return () => {
-      window.removeEventListener(confirmationEvent, onRequest);
+      window.removeEventListener(DISCARD_CONFIRMATION_EVENT, onRequest);
       pending.current?.resolve(false);
       pending.current = null;
     };

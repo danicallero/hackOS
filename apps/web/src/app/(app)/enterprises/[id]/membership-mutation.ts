@@ -13,7 +13,7 @@ export async function mutateMembership({
   title,
 }: {
   request: () => Promise<unknown>;
-  refresh: () => Promise<void>;
+  refresh: () => void | Promise<void>;
   afterRequest?: () => void;
   setBusy: (busy: boolean) => void;
   t: Translate;

@@ -10,13 +10,14 @@ import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { FilterMenu } from "@/components/common/filter-menu";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Button } from "@/components/ui/button";
+import { useServerResource } from "@/hooks/use-server-resource";
 
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -43,73 +44,51 @@ const ALL = "__all__";
 
 export default function ReviewsOverviewPage() {
   const { t } = useLocale();
-  const [reviews, setReviews] = useState<ReviewRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [roomFilter, setRoomFilter] = useState(ALL);
   const [challengeFilter, setChallengeFilter] = useState(ALL);
   const [statusFilter, setStatusFilter] = useState(ALL);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const query: Record<string, string> = {};
-      if (roomFilter !== ALL) query.roomId = roomFilter;
-      if (challengeFilter !== ALL) query.challengeId = challengeFilter;
-      if (statusFilter !== ALL) query.status = statusFilter;
-      const { reviews: data } = await api.get<{ reviews: ReviewRow[] }>("/api/queue/reviews", {
-        query,
-      });
-      setReviews(data);
-    } catch (err) {
-      setLoadError(apiErrorText(err, t, t("couldNotLoadReviews")));
-    } finally {
-      setLoading(false);
-    }
-  }, [roomFilter, challengeFilter, statusFilter, t]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch pattern: load wraps setState for reviews queries
-    void load();
-  }, [load]);
+  const query: Record<string, string> = {};
+  if (roomFilter !== ALL) query.roomId = roomFilter;
+  if (challengeFilter !== ALL) query.challengeId = challengeFilter;
+  if (statusFilter !== ALL) query.status = statusFilter;
+  const list = useServerResource(["queue", "reviews", query], (signal) =>
+    api.get<{ reviews: ReviewRow[] }>("/api/queue/reviews", { query, signal }),
+  );
+  const reviews = list.data?.reviews ?? [];
+  const loadError = list.error ? apiErrorText(list.error, t, t("couldNotLoadReviews")) : null;
 
   // Filter options are derived from an unfiltered load's worth of rows the
   // caller can already see — no separate rooms/challenges fetch, and no risk
   // of listing a challenge/room this caller isn't scoped to.
-  const [allRooms, setAllRooms] = useState<Array<{ id: number; name: string }>>([]);
-  const [allChallenges, setAllChallenges] = useState<Array<{ id: number; title: string }>>([]);
-  useEffect(() => {
-    api
-      .get<{ reviews: ReviewRow[] }>("/api/queue/reviews")
-      .then(({ reviews: data }) => {
-        setAllRooms(
-          Array.from(
-            new Map(
-              data
-                .filter((r) => r.roomId != null && r.roomName != null)
-                .map((r) => [
-                  r.roomId as number,
-                  { id: r.roomId as number, name: r.roomName as string },
-                ]),
-            ).values(),
-          ),
-        );
-        setAllChallenges(
-          Array.from(
-            new Map(
-              data
-                .flatMap((r) => r.appliedChallenges)
-                .map((challenge) => [challenge.id, challenge] as const),
-            ).values(),
-          ),
-        );
-      })
-      .catch(() => {
-        setAllRooms([]);
-        setAllChallenges([]);
-      });
-  }, []);
+  const unfiltered = useServerResource(["queue", "reviews", {}], (signal) =>
+    api.get<{ reviews: ReviewRow[] }>("/api/queue/reviews", { signal }),
+  );
+  const allRooms = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (unfiltered.data?.reviews ?? [])
+            .filter((r) => r.roomId != null && r.roomName != null)
+            .map((r) => [
+              r.roomId as number,
+              { id: r.roomId as number, name: r.roomName as string },
+            ]),
+        ).values(),
+      ),
+    [unfiltered.data],
+  );
+  const allChallenges = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (unfiltered.data?.reviews ?? [])
+            .flatMap((r) => r.appliedChallenges)
+            .map((challenge) => [challenge.id, challenge] as const),
+        ).values(),
+      ),
+    [unfiltered.data],
+  );
 
   const columns = useMemo<Column<ReviewRow>[]>(
     () => [
@@ -250,8 +229,8 @@ export default function ReviewsOverviewPage() {
         data={reviews}
         getRowId={(r) => String(r.entryId)}
         getRowHref={(r) => `/queue/reviews/${r.entryId}`}
-        loading={loading}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={list.loading}
+        error={loadError ? { message: loadError, onRetry: list.reload } : undefined}
         searchable={(r) =>
           `${r.challengeTitle} ${r.appliedChallenges.map((challenge) => challenge.title).join(" ")} ${r.repoName} ${r.roomName ?? ""}`
         }

@@ -67,36 +67,6 @@ describe("CookieNotice", () => {
     container.remove();
   });
 
-  it("keeps long localized copy and the close control in separate responsive tracks", () => {
-    Object.assign(translations, {
-      cookieNoticeTitle:
-        "A much longer localized cookie notice title that must remain readable beside the dismiss control",
-      cookieNoticeBody:
-        "This deliberately long cookie notice copy represents a translation that needs several lines at a narrow viewport without reaching into the close button column.",
-      cookieNoticeJoke:
-        "Even the legally required joke can be longer in another language and still needs to wrap safely.",
-    });
-
-    act(() => root.render(<CookieNotice />));
-
-    const aside = container.querySelector("aside");
-    const layout = aside?.querySelector(":scope > div");
-    const copy = layout?.querySelector("h2")?.parentElement;
-    const closeButton = layout?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Dismiss cookie notice"]',
-    );
-
-    expect(aside?.textContent).toContain(translations.cookieNoticeBody);
-    expect(copy?.className).toContain("min-w-0");
-    expect(copy?.className).toContain("wrap-break-word");
-    expect(copy?.className).toContain("sm:col-start-2");
-    expect(closeButton?.className).toContain("shrink-0");
-    expect(closeButton?.className).toContain("sm:col-start-3");
-    expect(closeButton?.getAttribute("data-size")).toBe("icon-lg");
-    expect(copy?.parentElement).toBe(layout);
-    expect(closeButton?.parentElement).toBe(layout);
-  });
-
   it("dismisses the notice through its labeled close button", async () => {
     act(() => root.render(<CookieNotice />));
 

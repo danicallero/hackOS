@@ -10,7 +10,7 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -20,19 +20,22 @@ import { PageLayout } from "@/components/common/page-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { usePersistedState } from "@/hooks/use-persisted-state";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
-import { auditActorLabel, auditTimeFmt, getActionLabel } from "@/lib/audit-labels";
-import { fromDatetimeLocal } from "@/lib/datetime";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { auditActorLabel, getActionLabel } from "@/lib/audit-labels";
+import { formatEventDate, fromDatetimeLocal } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
-import { toast } from "@/lib/toast";
 
 const LIMIT = 50;
+const FILTER_DEBOUNCE_MS = 300;
 
-function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
+function AuditMobileRow({ row }: { row: AuditRow }) {
+  const { t, language } = useLocale();
   const entityLabel = `${row.entity_type} #${row.entity_id}`;
   const actorLabel = row.actor_id ? (auditActorLabel(row) ?? `#${row.actor_id}`) : t("systemActor");
   return (
@@ -46,7 +49,7 @@ function AuditMobileRow({ row, t }: { row: AuditRow; t: Translate }) {
             className="text-muted-foreground block text-xs tabular-nums"
             dateTime={row.created_at}
           >
-            {auditTimeFmt.format(new Date(row.created_at))}
+            {formatEventDate(row.created_at, language, "dateTime")}
           </time>
           <span className="text-sm font-medium">{getActionLabel(row.action, t)}</span>
         </div>
@@ -98,92 +101,52 @@ export default function AuditPage() {
   const { t, language } = useLocale();
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
   const [filters, setFilters] = usePersistedState("audit-list:filters", EMPTY_FILTERS);
-  const [debounced, setDebounced] = useState(filters);
+  const debounced = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
   const [offset, setOffset] = usePersistedState("audit-list:offset", 0);
-  const [items, setItems] = useState<AuditRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retryNonce, setRetryNonce] = useState(0);
-  const [vocabulary, setVocabulary] = useState<AuditVocabularyEntry[]>([]);
 
-  // Load once: the full {action, entityType} vocabulary actually present in
-  // audit_log, backing the Action/Entity type comboboxes below instead of
-  // free-text guessing.
-  useEffect(() => {
-    if (!canRead) return;
-    notificationsApi
-      .getAuditActions()
-      .then((r) => setVocabulary(r.items))
-      .catch(() => setVocabulary([]));
-  }, [canRead]);
+  // Back to page 1 when the debounced filters change, but not on mount, where
+  // `filters` may be a restored value and `offset` was restored alongside it.
+  const [offsetFilters, setOffsetFilters] = useState(debounced);
+  if (offsetFilters !== debounced) {
+    setOffsetFilters(debounced);
+    setOffset(0);
+  }
 
-  // Debounce the filter bar, and reset to page 1 on any change — but not on
-  // mount, where `filters` may be a restored value from browser navigation and
-  // the matching `offset` was restored right alongside it.
-  const filtersMounted = useRef(false);
-  useEffect(() => {
-    if (!filtersMounted.current) {
-      filtersMounted.current = true;
-      setDebounced(filters);
-      return;
-    }
-    const handle = setTimeout(() => {
-      setDebounced(filters);
-      setOffset(0);
-    }, 300);
-    return () => clearTimeout(handle);
-  }, [filters, setOffset]);
+  // The {action, entityType} vocabulary actually present in audit_log backs the
+  // comboboxes; without it they still accept typed values, so a failed read
+  // only leaves the suggestion lists empty.
+  const { data: vocabularyData } = useServerResource(
+    ["audit", "vocabulary"],
+    () => notificationsApi.getAuditActions(),
+    { enabled: canRead },
+  );
+  const vocabulary: AuditVocabularyEntry[] = vocabularyData?.items ?? [];
 
-  // Soft, in-place refresh instead of a hard reload — audit entries are
-  // created by every sensitive mutation in the app (H53), so this stays on
+  // Audit entries come from every sensitive mutation (H53), so this stays on
   // the audit-scoped stream.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.AUDIT), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    if (!canRead) {
-      // Setting loading state when authorization fails is a valid early-exit pattern; the effect cancels before any data fetch runs.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    if (!hasLoadedRef.current) setLoading(true);
-    setLoadError(null);
-    notificationsApi
-      .queryAudit({
-        entityType: debounced.entityType.trim() || undefined,
-        entityId: debounced.entityId.trim() || undefined,
-        actorQuery: debounced.actorQuery.trim() || undefined,
-        action: debounced.action.trim() || undefined,
-        dateFrom: fromDatetimeLocal(debounced.dateFrom) ?? undefined,
-        dateTo: fromDatetimeLocal(debounced.dateTo) ?? undefined,
-        limit: LIMIT,
-        offset,
-      })
-      .then((r) => {
-        if (cancelled) return;
-        hasLoadedRef.current = true;
-        setItems(r.items);
-        setTotal(r.total);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setItems([]);
-        setTotal(0);
-        const message = apiErrorText(err, t, t("couldNotLoadAuditLog"));
-        setLoadError(message);
-        toast.error(message, t("toastAudit"));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canRead, debounced, offset, liveRefresh, retryNonce, t]);
+  const query = {
+    entityType: debounced.entityType.trim() || undefined,
+    entityId: debounced.entityId.trim() || undefined,
+    actorQuery: debounced.actorQuery.trim() || undefined,
+    action: debounced.action.trim() || undefined,
+    dateFrom: fromDatetimeLocal(debounced.dateFrom) ?? undefined,
+    dateTo: fromDatetimeLocal(debounced.dateTo) ?? undefined,
+    limit: LIMIT,
+    offset,
+  };
+  const {
+    data: page,
+    error,
+    loading,
+    refetch,
+  } = useLiveQuery(
+    () => notificationsApi.queryAudit(query),
+    domainScope(SSE_TOPICS.AUDIT),
+    [EVENTS.DOMAIN_CHANGED],
+    { enabled: canRead, resourceKey: ["audit", "query", query] },
+  );
+  const items = page?.items ?? [];
+  const total = page?.total ?? 0;
 
   if (!canRead) {
     return <AccessDenied ask={t("auditLogAccessDeniedDesc")} />;
@@ -202,7 +165,9 @@ export default function AuditPage() {
     {
       id: "when",
       header: t("colWhen"),
-      cell: (r) => <span className="text-sm">{auditTimeFmt.format(new Date(r.created_at))}</span>,
+      cell: (r) => (
+        <span className="text-sm">{formatEventDate(r.created_at, language, "dateTime")}</span>
+      ),
     },
     {
       id: "action",
@@ -359,15 +324,15 @@ export default function AuditPage() {
         data={items}
         getRowId={(r) => String(r.id)}
         stateKey="audit-list"
-        loading={loading && !hasLoadedRef.current}
+        loading={loading && page === null}
         error={
-          loadError
-            ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
+          error
+            ? { message: apiErrorText(error, t, t("couldNotLoadAuditLog")), onRetry: refetch }
             : undefined
         }
         getRowHref={(r) => `/audit/${r.id}`}
         getRowLabel={(r) => `${getActionLabel(r.action, t)} ${r.entity_type} ${r.entity_id}`}
-        renderMobileRow={(r) => <AuditMobileRow row={r} t={t} />}
+        renderMobileRow={(r) => <AuditMobileRow row={r} />}
         empty={{
           icon: LogIcon,
           title: t("noAuditEntriesTitle"),

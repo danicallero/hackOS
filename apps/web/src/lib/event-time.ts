@@ -14,8 +14,7 @@ const { setEventTimeZone, getEventTimeZone, subscribe } = createEventTimeZoneSto
 
 export { getEventTimeZone, setEventTimeZone };
 
-/** Re-renders the caller when the event zone changes. */
-export function useEventTimeZone(): string {
+function useEventTimeZone(): string {
   return useSyncExternalStore(subscribe, getEventTimeZone, getEventTimeZone);
 }
 

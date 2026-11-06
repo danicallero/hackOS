@@ -19,31 +19,21 @@ import {
   useState,
 } from "react";
 import { isLanguage, LANGUAGE_COOKIE_MAX_AGE, LANGUAGE_PREFERENCE_KEY } from "./locale";
+import type { MessageKey } from "./message-key";
 import { useMe } from "./session";
-import type { Language } from "./types";
+import type { I18nText, Language } from "./types";
 
-export { isLanguage } from "./locale";
+export { isLanguage, LOCALE_CODES } from "./locale";
 
-/** i18n label as stored by the API (plan/07 §2): all three locales. */
-export interface I18nText {
-  en: string;
-  es: string;
-  gl: string;
-}
+export type { I18nText } from "./types";
 
 export const LANGS: Language[] = ["es", "gl", "en"];
-
-export const LOCALE_CODES: Record<Language, string> = {
-  es: "es-ES",
-  gl: "gl-ES",
-  en: "en-GB",
-};
 
 export function languageName(language: Language): string {
   return { es: "Castellano", gl: "Galego", en: "English" }[language];
 }
 
-export type MessageKey = keyof typeof webEn | keyof typeof commonEn;
+export type { MessageKey };
 export type Translate = (key: MessageKey, values?: Record<string, string | number>) => string;
 
 /**

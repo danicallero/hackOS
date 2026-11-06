@@ -35,7 +35,8 @@ import {
   certificatesApi,
   certificateTypesApi,
 } from "@/lib/certificates";
-import { LANGS, LOCALE_CODES, languageName, type MessageKey, useLocale } from "@/lib/i18n";
+import { eventDateFormat } from "@/lib/datetime";
+import { LANGS, languageName, type MessageKey, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
@@ -123,7 +124,7 @@ export function CertificatesPanel({
   const eligibility = data.eligibility;
   const awardInput =
     certifiedHours ?? (data.settings?.awardHours == null ? "" : String(data.settings.awardHours));
-  const dateFormat = new Intl.DateTimeFormat(LOCALE_CODES[language], { dateStyle: "medium" });
+  const dateFormat = eventDateFormat(language, "date");
 
   const rowMenu = (cert: Certificate) => (
     <DropdownMenu>

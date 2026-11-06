@@ -19,12 +19,12 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import {
-  fmtDateTime,
   formTypeLabel,
   type MyResponseSummary,
   type PublicForm,
@@ -140,7 +140,9 @@ export default function MyApplicationsPage() {
                   <div className="text-pretty font-medium">{r.application_name}</div>
                   <div className="text-muted-foreground text-xs">
                     {r.submitted_at
-                      ? t("submittedOnPrefix", { date: fmtDateTime(r.submitted_at, language) })
+                      ? t("submittedOnPrefix", {
+                          date: formatEventDate(r.submitted_at, language, "dateTime"),
+                        })
                       : t("notSubmittedYet")}
                   </div>
                 </div>
@@ -186,7 +188,9 @@ export default function MyApplicationsPage() {
                 <div className="text-pretty font-medium">{f.name}</div>
                 <div className="text-muted-foreground text-xs">
                   <span>{formTypeLabel(f.granted_role_name, t)}</span>
-                  {f.close_at ? t("closesInline", { date: fmtDateTime(f.close_at, language) }) : ""}
+                  {f.close_at
+                    ? t("closesInline", { date: formatEventDate(f.close_at, language, "dateTime") })
+                    : ""}
                 </div>
               </div>
               <Button asChild size="sm" className="w-full sm:w-auto">

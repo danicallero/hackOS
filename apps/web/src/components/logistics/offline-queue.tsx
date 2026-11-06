@@ -3,13 +3,14 @@ import { HardDriveIcon } from "@phosphor-icons/react/dist/ssr/HardDrive";
 import { SpinnerGapIcon } from "@phosphor-icons/react/dist/ssr/SpinnerGap";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import { StatusBadge } from "@/components/common/status-badge";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 
 import type { OfflineScan } from "@/lib/offline-queue";
 
 /** Local, not-yet-synced meal scans queued on this device (H25). */
 export function OfflineQueue({ items }: { items: OfflineScan[] }) {
-  const { t } = useLocale();
+  const { language, t } = useLocale();
   return (
     <div className="rounded-lg border">
       <div className="border-b px-4 py-2">
@@ -24,7 +25,7 @@ export function OfflineQueue({ items }: { items: OfflineScan[] }) {
             <div className="min-w-0">
               <p className="wrap-break-word text-pretty text-sm font-medium">{item.activityName}</p>
               <p className="text-muted-foreground text-xs">
-                {item.badgeId} · {new Date(item.scannedAt).toLocaleTimeString()}
+                {item.badgeId} · {formatEventDate(item.scannedAt, language, "clock")}
               </p>
             </div>
             <div className="flex max-w-full flex-col items-end gap-1 text-right">

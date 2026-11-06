@@ -6,17 +6,12 @@ import {
   type DragEndEvent,
   DragOverlay,
   type DragStartEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
 import {
   arrayMove,
   rectSortingStrategy,
   SortableContext,
   type SortingStrategy,
-  sortableKeyboardCoordinates,
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -43,6 +38,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
 import { StatCard, type StatTone, statToneSurfaceClass } from "@/components/common/stat-card";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -52,7 +48,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LOCALE_CODES, type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
+import { formatEventDate } from "@/lib/datetime";
+import { type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { uiPrefsApi } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
 import { ChartCard } from "./chart-card";
@@ -237,6 +234,7 @@ export function BeforePanels({
       writeLocalLayout(resolvedLayoutKey, next);
       const nextStore = { ...storedLayouts.current, [resolvedLayoutKey]: next };
       storedLayouts.current = nextStore;
+      // Layout is also kept locally above; the account sync is best-effort.
       void uiPrefsApi.set("applicationStatsLayouts", nextStore).catch(() => {});
     },
     [resolvedLayoutKey],
@@ -263,10 +261,7 @@ export function BeforePanels({
   const gridKeys = effectiveLayout.order.filter((key) => availablePanelKeys.includes(key));
   const renderedKeys = editMode ? gridKeys : visibleKeys;
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
 
   const onPanelDragEnd = (event: DragEndEvent) => {
     setActivePanel(null);
@@ -564,9 +559,7 @@ function buildDistributionDefinitions(
   if (!stats) return [];
   const hasPanel = (key: string) => stats.panel_keys?.includes(key) === true;
   const dateLabel = (bucket: string) =>
-    new Intl.DateTimeFormat(LOCALE_CODES[language], { day: "numeric", month: "short" }).format(
-      new Date(`${bucket}T00:00:00Z`),
-    );
+    formatEventDate(`${bucket}T00:00:00Z`, language, "dayMonth", "UTC");
   const definitions: DistributionDefinition[] = [];
   if (stats.shirt_sizes_confirmed) {
     definitions.push({
@@ -627,9 +620,7 @@ function buildDistributionDefinitions(
       title: t("submissionsByDay"),
       defaultChart: "line",
       rows: (series?.submissions_by_day_of_week ?? []).map((row) => ({
-        label: new Intl.DateTimeFormat(LOCALE_CODES[language], { weekday: "short" }).format(
-          new Date(Date.UTC(2024, 0, 7 + row.dow)),
-        ),
+        label: formatEventDate(Date.UTC(2024, 0, 7 + row.dow), language, "weekday", "UTC"),
         n: row.n,
       })),
     });
@@ -726,10 +717,7 @@ function OverviewPanel({
   const overview = stats?.overview;
   const rate =
     overview?.confirmation_rate != null ? Math.round(overview.confirmation_rate * 100) : null;
-  const kpiSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const kpiSensors = useSortableSensors();
   const onKpiDragEnd = (event: DragEndEvent) => {
     if (!event.over || event.active.id === event.over.id) return;
     const from = kpiOrder.indexOf(String(event.active.id));

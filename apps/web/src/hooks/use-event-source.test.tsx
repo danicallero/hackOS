@@ -3,8 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetServerStateForTests } from "@/lib/server-state";
 import { setSseIdentity } from "@/lib/sse-broker";
-import { mockRealtimeFetch } from "@/lib/sse-test-fixture";
-import { useLiveQuery } from "./use-event-source";
+import { mockRealtimeFetch } from "@/test/sse-test-fixture";
+import { useLiveQuery } from "./use-live-query";
 
 let fixture: ReturnType<typeof mockRealtimeFetch>;
 

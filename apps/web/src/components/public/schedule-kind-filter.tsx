@@ -16,7 +16,7 @@ import type { PublicScheduleItem } from "@/lib/logistics";
  * options are derived from `ACTIVITY_KINDS`' display order intersected with
  * what's actually present, not from a caller-specific feed shape.
  */
-export function itemActivityKind(item: PublicScheduleItem): ActivityKind {
+function itemActivityKind(item: PublicScheduleItem): ActivityKind {
   return toActivityKind(item.type) ?? DEFAULT_ACTIVITY_KIND;
 }
 

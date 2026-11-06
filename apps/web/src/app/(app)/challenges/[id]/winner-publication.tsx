@@ -6,12 +6,12 @@ import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
+import { fromLocalInputValue, toLocalInputValue } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 
 type Publication = { publishAt: string | null; publishedAt: string | null };
 /** H60: private editor data stays in this authorized challenge view only. */

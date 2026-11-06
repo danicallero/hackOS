@@ -5,9 +5,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSidebar } from "@/components/ui/sidebar";
+import { openCompanionWindow } from "@/lib/companion-window";
 import type { Translate } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import { openReviewWindow } from "./open-review-window";
 
 const FOCUS_MODE_KEY = "hackos.judging.focus-layout";
 const TRANSITION_MS = 500;
@@ -88,7 +88,14 @@ export function useReviewWindow(
       `/judging-popup/${reviewTargetId}?roomId=${activeRoomId}`,
       window.location.origin,
     ).toString();
-    const opened = await openReviewWindow(url, t("scoring"));
+    // Same companion window as the application review: outlives a trip to another tab.
+    const opened = await openCompanionWindow({
+      url,
+      title: t("scoring"),
+      name: "hackos-judging-review-window",
+      width: 440,
+      height: 680,
+    });
     if (!opened) {
       toast.error(t("reviewWindowBlocked"), { compactTitle: t("toastOpenReview") });
       return;
