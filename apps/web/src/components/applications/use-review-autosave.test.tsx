@@ -78,6 +78,24 @@ describe("useReviewAutosave", () => {
     expect(current.score).toBeNull();
   });
 
+  it("keeps the draft identity until the new response is seeded (H13)", () => {
+    act(() => root.render(<Harness responseId={7} />));
+    act(() => root.render(<Harness responseId={8} />));
+    expect(current.responseId).toBe(7);
+    act(() => current.seed(8, { score: 2, notes: "next applicant" }));
+    expect(current.responseId).toBe(8);
+    expect(current.notes).toBe("next applicant");
+  });
+
+  it("does not report an identical remote snapshot as a change (H13)", () => {
+    act(() => root.render(<Harness responseId={7} />));
+    let applied = true;
+    act(() => {
+      applied = current.applyRemote({ score: null, notes: "", saveState: "saved" });
+    });
+    expect(applied).toBe(false);
+  });
+
   it("reports a failed save as an error state", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     put.mockRejectedValue(new Error("boom"));

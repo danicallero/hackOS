@@ -380,13 +380,15 @@ export function ReviewModal({
   // never re-saves on its behalf, so the two never race to PUT the same row.
   useReviewSync(
     applicationId,
-    {
-      responseId: response.id,
-      score: reviewDraft.score,
-      notes: reviewDraft.notes,
-      saveState: reviewDraft.saveState,
-      status: modalStatus,
-    },
+    reviewDraft.responseId === response.id
+      ? {
+          responseId: response.id,
+          score: reviewDraft.score,
+          notes: reviewDraft.notes,
+          saveState: reviewDraft.saveState,
+          status: modalStatus,
+        }
+      : null,
     (message: ReviewSyncMessage) => {
       if (message.responseId !== response.id) return;
       if (reviewDraft.applyRemote(message) && message.saveState === "saved") {
