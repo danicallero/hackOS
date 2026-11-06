@@ -785,6 +785,8 @@ Keep actual multi-record objects independently bounded when ownership matters.
   8 px overlay radius. Below `sm`, full viewport width and `100dvh` height,
   no decorative gap or rounded desktop frame. Body has 20 px padding; header
   and actions stay outside its scroll. Footer respects the bottom safe area.
+- Nested selects default to trigger-anchored positioning inside overlays, so
+  viewport-based item alignment cannot scroll a transformed panel sideways.
 - Both use the shared overlay/backdrop, close affordance and focus management.
   Clicking outside, Escape, X and Cancel all dismiss through the same open
   change handler and restore focus to the trigger. Alert confirmations treat

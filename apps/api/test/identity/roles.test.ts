@@ -337,6 +337,38 @@ describe("H8 canonical event-access projection", () => {
 });
 
 describe("H8 roles CRUD and assignment API", () => {
+  it("hides internal Store-review roles without hiding similarly named real roles (H8)", async () => {
+    const app = await getApp();
+    const actor = await manager();
+    const { REVIEW_FIXTURE_ROLES } = await import(
+      "../../src/modules/identity/review-fixture-roles.js"
+    );
+    const hiddenIds = await Promise.all(
+      Object.values(REVIEW_FIXTURE_ROLES).map((role) => createRole([], { name: role.name })),
+    );
+    const realRoleId = await createRole([], { name: "App review volunteers" });
+    const { pool } = await import("../../src/db/pool.js");
+    for (const includeDeleted of [false, true]) {
+      if (includeDeleted)
+        await pool.query(
+          "UPDATE roles SET deleted_at = now(), is_seeded = true WHERE id = ANY($1::int[])",
+          [hiddenIds],
+        );
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/roles?includeDeleted=${includeDeleted}`,
+        headers: asUser(actor),
+      });
+      expect(response.statusCode).toBe(200);
+      const ids = response.json().map((role: { id: number }) => role.id);
+      expect(ids).toContain(realRoleId);
+      for (const id of hiddenIds) expect(ids).not.toContain(id);
+    }
+    expect(
+      (await pool.query("SELECT id FROM roles WHERE id = ANY($1::int[])", [hiddenIds])).rowCount,
+    ).toBe(hiddenIds.length);
+  });
+
   it("does not expose synthetic Store-review accounts as role members", async () => {
     const a = await getApp();
     const actor = await manager();

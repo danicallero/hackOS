@@ -18,6 +18,7 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { broadcast } from "../../../lib/sse.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
+import { REVIEW_FIXTURE_ROLES } from "../review-fixture-roles.js";
 import {
   assertActiveWildcardHolder,
   assertNotProtectedRole,
@@ -252,7 +253,7 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List roles by position",
         description:
-          "Lists every non-deleted role highest-position first (H8). Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue, never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
+          "Lists non-deleted roles highest-position first (H8), excluding the dedicated internal Store-review operator roles from both active and deleted catalogues. Each role's memberIds contains active, non-anonymized real accounts only; synthetic Store-review fixtures are excluded. Invitation managers get this same read access to choose deferred role pre-assignments; only PERMISSIONS_MANAGE can mutate. Pass includeDeleted=true (PERMISSIONS_MANAGE only) to ALSO list soft-deleted roles, scoped to is_seeded=true ones only — the trash/restore panel only ever offers back roles from the seeded default catalogue, never a custom role an admin created and later deleted. Non-deleted roles in the response are unaffected by this scoping.",
         querystring: z.object({ includeDeleted: z.coerce.boolean().default(false) }),
         response: { 200: z.array(roleResponse) },
       },
@@ -266,9 +267,10 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         ));
       const { rows } = await pool.query(
         `SELECT id FROM roles
-          WHERE deleted_at IS NULL OR ($1 AND is_seeded)
+          WHERE (deleted_at IS NULL OR ($1 AND is_seeded))
+            AND NOT (name = ANY($2::text[]))
           ORDER BY position DESC`,
-        [includeDeleted],
+        [includeDeleted, Object.values(REVIEW_FIXTURE_ROLES).map((role) => role.name)],
       );
       return Promise.all(rows.map((row: { id: number }) => loadRole(pool, row.id)));
     },

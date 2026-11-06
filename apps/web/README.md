@@ -845,6 +845,10 @@ fuzzy ranking and keywords after normalization; explicit custom filters still wi
 Directory and account autocomplete endpoints perform the same comparison server-side.
 Catalogue creation suggestions do not offer accent-only variants of current results.
 
+Select menus inside overlays default to trigger-anchored popper positioning.
+Viewport-based item alignment can overflow a transformed dialog and scroll its
+entire form sideways; explicit positioning choices remain supported.
+
 Directory pickers for degrees and universities keep long selected names within the
 field width; option names wrap inside a scrollable list. Confirmation dialogs,
 like editors, provide a dedicated child portal layer outside their scrolling body
