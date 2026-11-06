@@ -3,7 +3,7 @@
     "name": "hackOS",
     "slug": "hackos",
     "description": "The HackUDC participant and event operations app.",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "hackos",
