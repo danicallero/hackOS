@@ -8,7 +8,7 @@
  * helper moves with Tab/arrows and returns focus after an inline editor saves.
  */
 
-export type EditableTableNavigationDirection =
+type EditableTableNavigationDirection =
   | "next"
   | "previous"
   | "nextInRow"

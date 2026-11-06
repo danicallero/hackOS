@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { ShortcutKbd } from "@/components/common/shortcut-hint";
-import { useNavVisibility } from "@/components/layout/app-sidebar";
 import {
   CommandDialog,
   CommandEmpty,
@@ -12,6 +11,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useNavVisibility } from "@/hooks/use-nav-visibility";
 import { useLocale } from "@/lib/i18n";
 import { visibleNavGroups, visibleSubDestinations } from "@/lib/nav";
 import { normalizeSearchText } from "@/lib/search-text";

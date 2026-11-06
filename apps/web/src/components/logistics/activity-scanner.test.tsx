@@ -22,7 +22,7 @@ vi.mock("@/lib/session", () => ({
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({ t: (key: string) => key }),
 }));
-vi.mock("@/hooks/use-event-source", () => ({
+vi.mock("@/hooks/use-live-query", () => ({
   useLiveQuery: mocks.useLiveQuery,
 }));
 vi.mock("@/lib/logistics", () => ({

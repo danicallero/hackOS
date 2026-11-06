@@ -18,6 +18,7 @@ import { useElementSize } from "@/hooks/use-element-size";
 import { useEventSource } from "@/hooks/use-event-source";
 import { useFitToViewport } from "@/hooks/use-fit-to-viewport";
 import { useJitteredCallback } from "@/hooks/use-jittered-callback";
+import { useNow } from "@/hooks/use-now";
 import { api } from "@/lib/api";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
@@ -60,7 +61,7 @@ function columnsForWidth(width: number) {
   return Math.max(1, Math.floor((width + GRID_GAP) / (MIN_CARD_WIDTH + GRID_GAP)));
 }
 
-export type PackedGroupSegment = {
+type PackedGroupSegment = {
   span: number;
   roomOffset: number;
   roomCount: number;
@@ -896,11 +897,7 @@ function FullscreenAnnouncement({
  * re-renders the screen when a rotation boundary passes on its own — this
  * forces one on a fixed cadence well below the rotation interval. */
 function useAnnouncementRotationTick(): void {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((tick) => tick + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
+  useNow(1000);
 }
 
 export function TvDisplay() {

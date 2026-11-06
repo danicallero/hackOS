@@ -1,15 +1,4 @@
-import type { PublicScheduleItem } from "@/lib/logistics";
-
-export interface PublicEvent {
-  name: string | null;
-  tagline: string | null;
-  timezone: string;
-  hackingStartsAt: string | null;
-  hackingEndsAt: string | null;
-  showStartCountdown: boolean;
-  judgingStartsAt: string | null;
-  judgingEndsAt: string | null;
-}
+export type { PublicEvent } from "@/lib/types";
 
 /** GET /api/public/sponsors item. Keyed by `enterpriseId` — the feed has no `id`. */
 export interface PublicSponsor {
@@ -58,8 +47,6 @@ export interface PublicApplicationForm {
   description: string | null;
   close_at: string | null;
 }
-
-export type { PublicScheduleItem };
 
 export function displayText(
   value: Record<string, string> | null | undefined,

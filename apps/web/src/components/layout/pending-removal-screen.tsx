@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Button } from "@/components/ui/button";
+import { useNow } from "@/hooks/use-now";
 import { ApiError, api } from "@/lib/api";
 import { errorText } from "@/lib/api-error-text";
 import { signOut } from "@/lib/auth-client";
@@ -23,7 +24,7 @@ export function PendingRemovalScreen({
   refreshError?: Error | null;
 }) {
   const { t } = useLocale();
-  const [now, setNow] = useState(Date.now());
+  const now = useNow(1_000);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -62,11 +63,6 @@ export function PendingRemovalScreen({
       setRefreshing(false);
     }
   }, [onRefresh]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     const refreshTimer = setInterval(() => void refresh(), 15_000);

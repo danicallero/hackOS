@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 
 /** True only when this browser exposes a camera the page can request. */
-export function hasCameraSupport(): boolean {
+function hasCameraSupport(): boolean {
   return typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 }
 

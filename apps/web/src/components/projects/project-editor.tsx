@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useProjectDraft } from "@/hooks/use-project-draft";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { groupApplicationFields } from "@/lib/application-field-groups";
@@ -38,7 +39,6 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { invalidateProjectReads, type NativeProject, nativeProjects } from "@/lib/native-projects";
 import { useSessionContext } from "@/lib/session";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { GithubActivity } from "./github-activity";
 import { GithubLink } from "./github-link";
 import { ProjectChallenges } from "./project-challenges";

@@ -13,8 +13,10 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { TabBar } from "@/components/common/tab-bar";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useNow } from "@/hooks/use-now";
 
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { eventDateFormat } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
 import { SCHEDULE_CATEGORY_STYLES } from "./schedule-category-styles";
@@ -115,15 +117,11 @@ export function ScheduleTimeline({
   renderToolbar?: (controls: React.ReactNode) => React.ReactNode;
 }) {
   const { language, t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow(30_000);
   const [view, setView] = useState<"day" | "week">("day");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<PublicScheduleItem | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
   const today = instantToWallClock(new Date(now).toISOString(), timezone).slice(0, 10);
   const source = rangeItems ?? items;
   const visibleIds = new Set(items.map((item) => item.id));
@@ -150,23 +148,9 @@ export function ScheduleTimeline({
   const activeDay =
     days.find(([key]) => key === selectedDay) ?? days.find(([key]) => key === today) ?? days[0];
   const visible = view === "day" ? (activeDay ? [activeDay] : []) : days.slice(0, 7);
-  const dateFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: timezone,
-  });
-  const shortDate = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: timezone,
-  });
-  const timeFormatter = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: timezone,
-  });
+  const dateFormatter = eventDateFormat(language, "weekdayDayMonthLong", timezone);
+  const shortDate = eventDateFormat(language, "weekdayDayMonthText", timezone);
+  const timeFormatter = eventDateFormat(language, "clock", timezone);
   const hour = (instant: string) => {
     const wall = instantToWallClock(instant, timezone);
     return Number(wall.slice(11, 13)) + Number(wall.slice(14, 16)) / 60;

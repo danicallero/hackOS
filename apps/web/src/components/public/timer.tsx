@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useNow } from "@/hooks/use-now";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { PublicEvent } from "./public-types";
 
-function remaining(target: string | null) {
+function remaining(target: string | null, now: number) {
   if (!target) return null;
-  return Math.max(0, new Date(target).getTime() - Date.now());
+  return Math.max(0, new Date(target).getTime() - now);
 }
 
-export function formatted(ms: number | null) {
+function formatted(ms: number | null) {
   if (ms === null) return "--:--:--";
   const seconds = Math.floor(ms / 1000);
   const hours = Math.floor(seconds / 3600);
@@ -18,20 +18,11 @@ export function formatted(ms: number | null) {
 }
 
 export function EventTimer({ endsAt, className }: { endsAt: string | null; className?: string }) {
-  const [left, setLeft] = useState(() => remaining(endsAt));
-
-  useEffect(() => {
-    // Re-sync immediately when endsAt changes to avoid stale display before next tick.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLeft(remaining(endsAt));
-    const interval = window.setInterval(() => setLeft(remaining(endsAt)), 1000);
-    return () => window.clearInterval(interval);
-  }, [endsAt]);
-
-  return <time className={className}>{formatted(left)}</time>;
+  const now = useNow(1000);
+  return <time className={className}>{formatted(remaining(endsAt, now))}</time>;
 }
 
-export type EventPhase =
+type EventPhase =
   | { kind: "hacking-starts-in"; label: string; target: string }
   | { kind: "hacking-frozen"; label: string; ms: number }
   | { kind: "hacking-remaining"; label: string; target: string }
@@ -45,11 +36,7 @@ export type EventPhase =
  * opted in) counts down toward the start instead. Once hacking ends, the same
  * widget hands off to the judging window (queue_settings, H39) if one is set.
  */
-export function computeEventPhase(
-  event: PublicEvent | null,
-  now: number,
-  t: Translate,
-): EventPhase {
+function computeEventPhase(event: PublicEvent | null, now: number, t: Translate): EventPhase {
   if (!event) return { kind: "none" };
   const start = event.hackingStartsAt ? new Date(event.hackingStartsAt).getTime() : null;
   const end = event.hackingEndsAt ? new Date(event.hackingEndsAt).getTime() : null;
@@ -106,13 +93,7 @@ export function computeEventPhase(
 /** Ticks every second so callers can decide whether/how to render the current phase. */
 export function useEventPhase(event: PublicEvent | null): EventPhase {
   const { t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
+  const now = useNow(1000);
   return computeEventPhase(event, now, t);
 }
 

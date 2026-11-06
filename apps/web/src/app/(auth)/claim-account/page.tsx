@@ -38,6 +38,7 @@ import { signIn } from "@/lib/auth-client";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
 import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
+import { passwordSchema } from "@/lib/password-schema";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import type { InviteLookup, Language } from "@/lib/types";
@@ -48,7 +49,7 @@ function claimSchema(t: Translate) {
       email: z.string().email(t("validEmail")).or(z.literal("")),
       name: z.string().min(1, t("required")).max(200),
       surname: z.string().min(1, t("required")).max(200),
-      password: z.string().min(8, t("atLeastEight")),
+      password: passwordSchema(t),
       confirmPassword: z.string(),
       language: z.enum(["en", "es", "gl"]),
       shirtSize: z.string(),

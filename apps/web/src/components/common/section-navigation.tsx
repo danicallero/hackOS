@@ -17,7 +17,7 @@ import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
-export function ProjectsNavigation() {
+function ProjectsNavigation() {
   const { t } = useLocale();
   const { status, isPureApplicant, canAny, me } = useSessionContext();
   const pathname = usePathname();
@@ -66,7 +66,7 @@ export function ProjectsNavigation() {
   );
 }
 
-export function HomeNavigation() {
+function HomeNavigation() {
   const { t } = useLocale();
   const { isPureApplicant } = useSessionContext();
   const pathname = usePathname();

@@ -10,12 +10,9 @@ import { ExportSensitivityBadge } from "@/components/exports/export-sensitivity-
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { api } from "@/lib/api";
+import { api, apiDownload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { API_URL } from "@/lib/env";
-import type { Translate } from "@/lib/i18n";
 import { useLocale } from "@/lib/i18n";
-import { intentKey, settleIntentKey } from "@/lib/intent-key";
 import { toast } from "@/lib/toast";
 
 interface ActivityExportOption {
@@ -29,44 +26,6 @@ interface ActivityExportOption {
 }
 
 type ExportMode = "people" | "scans";
-
-function errorMessage(error: unknown, t: Translate, fallback: string): string {
-  return apiErrorText(error, t, fallback);
-}
-
-async function downloadActivityExport(
-  activityIds: number[],
-  mode: ExportMode,
-  language: string,
-): Promise<void> {
-  const requestBody = JSON.stringify({ activity_ids: activityIds, mode, language });
-  const intent = `POST activities.csv ${requestBody}`;
-  const response = await fetch(`${API_URL}/api/exports/activities.csv`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "content-type": "application/json",
-      "Idempotency-Key": intentKey(intent),
-    },
-    body: requestBody,
-  });
-  settleIntentKey(intent, response.status);
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      error?: { message?: string };
-    } | null;
-    throw new Error(payload?.error?.message ?? "Activity export failed");
-  }
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = mode === "people" ? "activity-attendance.csv" : "activity-scans.csv";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
 
 export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
   const { language, t } = useLocale();
@@ -94,7 +53,7 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
           : response.activities.map((activity) => String(activity.id));
       });
     } catch (loadError) {
-      const message = errorMessage(loadError, t, t("activityExportCatalogFailed"));
+      const message = apiErrorText(loadError, t, t("activityExportCatalogFailed"));
       setError(message);
     } finally {
       setLoading(false);
@@ -124,10 +83,14 @@ export function ActivityExportPanel({ trigger }: { trigger?: ReactNode }) {
     setExporting(true);
     setError(null);
     try {
-      await downloadActivityExport(selectedIds.map(Number), mode, language);
+      await apiDownload(
+        "/api/exports/activities.csv",
+        mode === "people" ? "activity-attendance.csv" : "activity-scans.csv",
+        { method: "POST", body: { activity_ids: selectedIds.map(Number), mode, language } },
+      );
       toast.success(t("activityExportDownloaded"), { compactTitle: t("toastExportActivities") });
     } catch (exportError) {
-      const message = errorMessage(exportError, t, t("activityExportFailed"));
+      const message = apiErrorText(exportError, t, t("activityExportFailed"));
       setError(message);
       toast.error(message, t("toastExportActivities"));
     } finally {

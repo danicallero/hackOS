@@ -58,6 +58,8 @@ function allTimeZones(): string[] {
 
 function offsetLabel(zone: string): string {
   try {
+    // Not a display preset: we need the zone-name part ("GMT+2") of an arbitrary
+    // candidate zone, so the event zone cannot apply here.
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: zone,
       timeZoneName: "shortOffset",

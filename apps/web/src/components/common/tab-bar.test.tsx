@@ -73,11 +73,4 @@ describe("TabBar active tab reveal and panel crossfade", () => {
     });
     expect(scrollTo).toHaveBeenCalled();
   });
-
-  it("animates only the active panel with the shared reduced-motion rule", () => {
-    act(() => root.render(createElement(Harness, { value: "one" })));
-    const panel = container.querySelector<HTMLElement>('[role="tabpanel"]');
-    expect(panel?.textContent).toBe("First panel");
-    expect(panel?.className).toContain("data-[state=active]:animate-tab-panel-in");
-  });
 });

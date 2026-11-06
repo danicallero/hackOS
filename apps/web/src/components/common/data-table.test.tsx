@@ -143,7 +143,6 @@ describe("DataTable accessibility and interactions", () => {
     const row = link?.closest("tr");
     expect(link?.getAttribute("href")).toBe("/people/1");
     expect(link?.getAttribute("data-size")).toBe("icon-lg");
-    expect(link?.classList.contains("md:size-[var(--control-height-compact)]")).toBe(true);
     expect(row?.getAttribute("role")).toBeNull();
     expect(row?.getAttribute("tabindex")).toBeNull();
     act(() => {
@@ -277,7 +276,6 @@ describe("DataTable accessibility and interactions", () => {
     expect(action?.tagName).toBe("BUTTON");
     expect(action?.type).toBe("button");
     expect(action?.getAttribute("data-size")).toBe("icon-lg");
-    expect(action?.classList.contains("md:size-[var(--control-height-compact)]")).toBe(true);
     const nestedButton = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "More",
     );

@@ -1,8 +1,8 @@
 "use client";
 
 import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
 import { Brand } from "@/components/common/brand";
+import { useNow } from "@/hooks/use-now";
 import { useTvScale } from "@/hooks/use-tv-scale";
 import { cn } from "@/lib/utils";
 import { MarqueeText } from "./marquee-text";
@@ -57,15 +57,13 @@ export function TvScreen({
   );
 }
 
+// Intentionally the display device's own clock and locale, not the event zone: a TV
+// header tells the room what time its screen thinks it is.
 const clockFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
 
 /** Wall clock, shared by every TV header. Ticks on the minute, not the second. */
-export function TvClock({ className }: { className?: string }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
+function TvClock({ className }: { className?: string }) {
+  const now = new Date(useNow(30_000));
   return (
     <time className={cn("font-mono tabular-nums", className)} dateTime={now.toISOString()}>
       {clockFormatter.format(now)}

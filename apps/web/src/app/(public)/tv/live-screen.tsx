@@ -1,7 +1,7 @@
 "use client";
 
 import { WifiHighIcon } from "@phosphor-icons/react/dist/csr/WifiHigh";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   PublicAnnouncement,
   PublicEvent,
@@ -9,6 +9,8 @@ import type {
 } from "@/components/public/public-types";
 import { EventPhaseDisplay, EventTimer, useEventPhase } from "@/components/public/timer";
 import { useElementSize } from "@/hooks/use-element-size";
+import { useNow } from "@/hooks/use-now";
+import { eventDateFormat } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import {
@@ -68,11 +70,7 @@ function Countdown({
   const { t } = useLocale();
   const phase = useEventPhase(event);
   const resolved = resolveTimer(config, event);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow(30_000);
   const progress = showProgress ? hackingProgress(event, now) : null;
 
   // Not `leading-none`: the frame clips overflow, and a line box exactly as
@@ -130,12 +128,8 @@ export function ScheduleBlock({
   /** A dedicated schedule screen already names itself in the shared top bar. */
   showHeading?: boolean;
 }) {
-  const { t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), SCHEDULE_TICK_MS);
-    return () => clearInterval(id);
-  }, []);
+  const { language, t } = useLocale();
+  const now = useNow(SCHEDULE_TICK_MS);
 
   // Rows split whatever height the block ends up with, so the agenda fills the
   // screen instead of stacking fixed-height rows above a void — and the scroll
@@ -162,14 +156,8 @@ export function ScheduleBlock({
   );
 
   const format = useMemo(
-    () =>
-      new Intl.DateTimeFormat(undefined, {
-        weekday: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZone: timezone,
-      }),
-    [timezone],
+    () => eventDateFormat(language, "weekdayClock", timezone),
+    [language, timezone],
   );
 
   return (

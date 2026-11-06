@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useServerResource } from "@/hooks/use-server-resource";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { validateFieldOnBlur } from "@/lib/application-validation";
@@ -20,7 +21,6 @@ import {
   type NativeProject,
   type ProjectDefinition,
 } from "@/lib/native-projects";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 
 type Challenge = {
   challengeId: number;
