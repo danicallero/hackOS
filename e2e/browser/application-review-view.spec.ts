@@ -23,7 +23,14 @@ test("review modal honours the standard view, view all and personal choices", as
     template: [
       { key: "dni", label: label("National ID"), kind: "text", required: false },
       { key: "born", label: label("Birth year"), kind: "birth_year", required: false },
-      { key: "city", label: label("Home city"), kind: "text", required: false },
+      {
+        key: "city",
+        label: label("Home city"),
+        kind: "text",
+        required: false,
+        help_text: label("Tell us where you live"),
+      },
+      { key: "degree", label: label("University degree"), kind: "degree", required: false },
     ],
     sections: [],
     review_hidden_fields: ["dni"],
@@ -48,7 +55,7 @@ test("review modal honours the standard view, view all and personal choices", as
     food_intolerances: [],
     food_intolerance_notes: null,
     status: "review",
-    responses: { dni: "12345678Z", born: birthYear, city: "A Coruña" },
+    responses: { dni: "12345678Z", born: birthYear, city: "A Coruña", degree: "101" },
     staff_notes: null,
     submitted_at: "2026-01-01T00:00:00.000Z",
     decision_sent_at: null,
@@ -69,7 +76,31 @@ test("review modal honours the standard view, view all and personal choices", as
     }
     if (url.pathname === "/api/applications/1") return route.fulfill({ json: application });
     if (url.pathname === "/api/applications/1/responses") {
-      return route.fulfill({ json: { responses: [response] } });
+      return route.fulfill({
+        json: {
+          responses: [
+            response,
+            {
+              ...response,
+              id: 11,
+              user_id: 23,
+              name: "Blake Applicant",
+              email: "blake@example.test",
+              responses: { ...response.responses, degree: "102" },
+            },
+          ],
+        },
+      });
+    }
+    if (url.pathname === "/api/public/degrees") {
+      const degrees = [
+        { id: 101, name: "Computer Engineering" },
+        { id: 102, name: "Mathematics" },
+      ];
+      const ids = url.searchParams.get("ids")?.split(",");
+      return route.fulfill({
+        json: { degrees: ids ? degrees.filter((d) => ids.includes(String(d.id))) : degrees },
+      });
     }
     if (url.pathname === "/api/public/food-intolerances") {
       return route.fulfill({ json: { intolerances: [] } });
@@ -84,6 +115,19 @@ test("review modal honours the standard view, view all and personal choices", as
   await page.getByRole("button", { name: "Avery Applicant" }).click();
 
   const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("combobox", { name: "University degree" })).toHaveText(
+    "Computer Engineering",
+  );
+  await expect(dialog.getByText("Tell us where you live")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Next candidate" }).click();
+  await expect(dialog.getByRole("combobox", { name: "University degree" })).toHaveText(
+    "Mathematics",
+  );
+  await dialog.getByRole("button", { name: "Previous candidate" }).click();
+  await expect(dialog.getByRole("combobox", { name: "University degree" })).toHaveText(
+    "Computer Engineering",
+  );
+  await page.screenshot({ path: testInfo.outputPath("review-degree-desktop.png") });
   await expect(dialog.getByText("Home city")).toBeVisible();
   await expect(dialog.getByText("National ID")).toHaveCount(0);
   await expect(dialog.getByText("Birth year")).toHaveCount(0);
@@ -107,4 +151,20 @@ test("review modal honours the standard view, view all and personal choices", as
   await page.reload();
   await expect(page.getByRole("dialog").getByText("Age", { exact: true })).toBeVisible();
   await expect(page.getByRole("dialog").getByText("Home city")).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/applications/1?tab=review&response=10");
+  await expect(dialog.getByRole("combobox", { name: "University degree" })).toHaveText(
+    "Computer Engineering",
+  );
+  await dialog.getByRole("button", { name: "Next candidate" }).click();
+  await expect(dialog.getByRole("combobox", { name: "University degree" })).toHaveText(
+    "Mathematics",
+  );
+  await dialog.getByRole("button", { name: "Previous candidate" }).click();
+  await expect(dialog.getByRole("combobox", { name: "University degree" })).toHaveText(
+    "Computer Engineering",
+  );
+  await expect(dialog.getByText("Tell us where you live")).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath("review-degree-mobile.png") });
 });
