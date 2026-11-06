@@ -15,6 +15,7 @@ import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import { purgeReviewFixtureAccount, resetReviewFixtureAccount } from "../removal.js";
 import { purgeReviewFixtureQueue } from "../review-fixture-queues.js";
+import { REVIEW_FIXTURE_ROLES } from "../review-fixture-roles.js";
 import { assignAttendeeRole } from "../role.js";
 
 /**
@@ -58,35 +59,6 @@ const FIXTURE_DEFINITIONS = [
 ] as const;
 
 const FIXTURE_KEYS = FIXTURE_DEFINITIONS.map((fixture) => fixture.key);
-const STAFF_CAPABILITIES = [
-  CAPABILITIES.ACCREDIT_SCAN,
-  CAPABILITIES.PRESENCE_SCAN,
-  CAPABILITIES.ACTIVITY_SCAN,
-] as const;
-/**
- * The queue operator runs the synthetic rooms and judges their projects. Every
- * queue and project route enforces the synthetic boundary for it (see
- * queue/fixture-boundary.ts), so these capabilities reach fixture data only.
- */
-const QUEUE_OPERATOR_CAPABILITIES = [
-  CAPABILITIES.QUEUE_STATUS,
-  CAPABILITIES.QUEUE_OPERATE,
-  CAPABILITIES.JUDGE_PANEL,
-  CAPABILITIES.PROJECTS_READ,
-  CAPABILITIES.PROJECTS_EDIT,
-] as const;
-const FIXTURE_ROLES = {
-  "staff-exit-operator": {
-    name: "App review exit staff",
-    position: -900000,
-    capabilities: STAFF_CAPABILITIES,
-  },
-  "staff-queue-operator": {
-    name: "App review queue staff",
-    position: -900001,
-    capabilities: QUEUE_OPERATOR_CAPABILITIES,
-  },
-} as const;
 
 const fixtureAccountSchema = z.object({
   fixtureKey: z.string(),
@@ -756,7 +728,7 @@ export function registerReviewFixtureRoutes(app: FastifyInstance): void {
           await client.query(`DELETE FROM anonymous_participants WHERE is_test_account = true`);
 
           const roleIds = new Map<string, number>();
-          for (const [fixtureKey, role] of Object.entries(FIXTURE_ROLES)) {
+          for (const [fixtureKey, role] of Object.entries(REVIEW_FIXTURE_ROLES)) {
             roleIds.set(fixtureKey, await configureFixtureRole(client, role));
           }
           for (const fixture of FIXTURE_DEFINITIONS) {

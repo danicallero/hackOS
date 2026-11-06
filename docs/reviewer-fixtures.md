@@ -54,6 +54,11 @@ explicit release/security approval for the reset operation.
 | `participant-explorer` | Participant | Non-destructive demo account, accredited and outside the venue. Owns six projects and walks every queue stage: *Aurora Rover* (submitted, repository, waiting in a queue shared by two challenges), *Pixel Garden* (scored), *Nimbus Notes* (called to room A), *Tidal Lab* (inside room A), *Ember Engine* (presenting in room B) and *Draft Notes* (draft). Sees two other teams' projects (*Lumen Labs*, *Orbit Kit*) in the Gallery and can report them. |
 | `staff-queue-operator` | Staff | Synthetic queue/judge operator (`queue:status`, `queue:operate`, `judge:panel`, `projects:read`, `projects:edit`) for the two synthetic rooms, their projects and challenges; it cannot reach any other queue, room, project or challenge. |
 
+The dedicated internal operator roles are excluded from the public role catalogue
+(`/api/roles`, including deleted-role listings). They remain assigned to the
+synthetic operators and continue to participate in authorization; shared real
+roles such as Participant remain visible.
+
 All six generated accounts hold an event-bearing role and receive a durable
 entrance ticket. This includes `staff-exit-operator`: its scan capabilities
 still restrict what it can do operationally, but it also retains the
