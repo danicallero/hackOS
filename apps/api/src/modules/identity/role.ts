@@ -1,4 +1,3 @@
-import type { FastifyRequest } from "fastify";
 import type { Queryable } from "../../db/pool.js";
 import { ConflictError } from "../../lib/errors.js";
 
@@ -30,9 +29,7 @@ export interface EffectiveRole {
 export async function getEffectiveRole(
   db: Queryable,
   userId: number,
-  request?: FastifyRequest,
 ): Promise<EffectiveRole | null> {
-  void request;
   const { rows } = await db.query(
     `SELECT r.name
        FROM user_roles ur
@@ -59,14 +56,13 @@ export async function getEffectiveRole(
 export async function mentorOrParticipantType(
   db: Queryable,
   userId: number,
-  request?: FastifyRequest,
 ): Promise<"mentor" | "participant" | null> {
   const { rows: activeRows } = await db.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
     [userId],
   );
   if (!activeRows[0]) return null;
-  const effective = await getEffectiveRole(db, userId, request);
+  const effective = await getEffectiveRole(db, userId);
   if (effective?.name === ATTENDEE_ROLE_NAMES.mentor) return "mentor";
   if (effective?.name === ATTENDEE_ROLE_NAMES.participant) return "participant";
   return null;
@@ -80,9 +76,8 @@ export async function mentorOrParticipantType(
 export async function getHighestVisibleRoleName(
   db: Queryable,
   userId: number,
-  request?: FastifyRequest,
 ): Promise<string | null> {
-  const effective = await getEffectiveRole(db, userId, request);
+  const effective = await getEffectiveRole(db, userId);
   return effective?.name ?? null;
 }
 

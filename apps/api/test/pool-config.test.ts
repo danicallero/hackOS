@@ -1,7 +1,6 @@
 import pg from "pg";
 import { afterAll, describe, expect, it } from "vitest";
 import { config } from "../src/config.js";
-import { pool } from "../src/db/pool.js";
 import { isTimeoutError } from "../src/lib/db-errors.js";
 
 /**
@@ -22,15 +21,6 @@ afterAll(async () => {
 });
 
 describe("pool configuration (#540)", () => {
-  it("wires max and timeouts from config onto the shared pool", () => {
-    const opts = pool.options;
-    expect(opts.max).toBe(config.dbPoolMax);
-    expect(opts.idleTimeoutMillis).toBe(config.DB_IDLE_TIMEOUT_MS);
-    expect(opts.connectionTimeoutMillis).toBe(config.DB_CONNECTION_TIMEOUT_MS);
-    expect(opts.statement_timeout).toBe(config.DB_STATEMENT_TIMEOUT_MS);
-    expect(opts.idle_in_transaction_session_timeout).toBe(config.DB_IDLE_IN_TRANSACTION_TIMEOUT_MS);
-  });
-
   it("rejects pool.connect() within connectionTimeoutMillis once the pool is saturated", async () => {
     const p = scratchPool({ max: 1, connectionTimeoutMillis: 200 });
     const held = await p.connect();

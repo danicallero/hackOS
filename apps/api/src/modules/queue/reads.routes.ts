@@ -10,13 +10,12 @@ import {
   requireAuth,
   requireCapability,
 } from "../../lib/capabilities.js";
-import { registerRealtimeRoutes } from "../../lib/realtime.routes.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
-import { requireScopedRefreshAccess, scopedRefreshTopic } from "../../lib/sse-access.js";
 import { sharedVisibleWinnerRows } from "../challenges/winner-publication.js";
 import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
 import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
+import { requireScopedRefreshAccess, scopedRefreshTopic } from "../realtime/access.js";
 import { queueTopicForFixture } from "./broadcast.js";
 import {
   accessibleRoomIds,
@@ -49,7 +48,6 @@ const scopedRefreshQuery = z.object({ topic: scopedRefreshTopic });
 /** Read APIs (H38-H42): scoped queue data, TV snapshots and SSE isolation. */
 export function registerReadsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  registerRealtimeRoutes(app);
 
   typed.get(
     "/api/queue/challenges/:challengeId/progress",

@@ -149,7 +149,7 @@ const sseReauthorizationsTotal = new client.Counter({
   registers: [register],
 });
 
-export interface PublicInvalidation {
+interface PublicInvalidation {
   topic: string;
   type: typeof EVENTS.DATA_CHANGED;
   data: Record<string, never>;

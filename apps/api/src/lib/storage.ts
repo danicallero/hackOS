@@ -146,7 +146,7 @@ export async function deleteObject(key: string): Promise<void> {
 }
 
 /** Public URL an object is served from once uploaded. */
-export function publicUrl(key: string): string {
+function publicUrl(key: string): string {
   const base = config.S3_PUBLIC_URL ?? `${config.S3_ENDPOINT}/${config.S3_BUCKET}`;
   return `${base.replace(/\/$/, "")}/${key}`;
 }

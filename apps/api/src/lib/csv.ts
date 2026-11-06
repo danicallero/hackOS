@@ -1,11 +1,13 @@
 import type { FastifyReply } from "fastify";
+import { contentDisposition } from "./http-headers.js";
 
 /** Plain text/csv rendering, no external dep. Shared by every CSV export route (H40, H54). */
 
+/** Quote when the cell holds a delimiter, quote or any line break (`\r` included). */
 export function csvCell(v: unknown): string {
   if (v === null || v === undefined) return "";
   const s = v instanceof Date ? v.toISOString() : String(v);
-  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
 
@@ -25,7 +27,7 @@ export function toCsv(header: string[], rows: unknown[][]): string {
 /** Send a CSV download. Exports carry personal data, so they are never cached. */
 export function sendCsv(reply: FastifyReply, filename: string, csv: string) {
   reply.header("content-type", "text/csv; charset=utf-8");
-  reply.header("content-disposition", `attachment; filename="${filename}"`);
+  reply.header("content-disposition", contentDisposition(filename));
   reply.header("cache-control", "private, no-store");
   return reply.send(csv);
 }

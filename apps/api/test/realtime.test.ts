@@ -6,8 +6,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import { pool } from "../src/db/pool.js";
 import { register } from "../src/lib/metrics.js";
-import { authorizeRealtimeScopes } from "../src/lib/realtime.routes.js";
 import { broadcast } from "../src/lib/sse.js";
+import { authorizeRealtimeScopes } from "../src/modules/realtime/routes.js";
 import {
   asUser,
   buildTestApp,

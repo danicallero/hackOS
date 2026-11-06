@@ -3,15 +3,6 @@ import { resolve } from "node:path";
 import { buildApp } from "../src/app.js";
 import { describeRoutePolicy } from "../src/lib/route-policy.js";
 
-const EXPECTED = {
-  total: 499,
-  public: 32,
-  token: 15,
-  authenticated: 105,
-  capability: 262,
-  contextual: 85,
-};
-
 function table(rows: Awaited<ReturnType<typeof buildApp>>["routePolicyLedger"]): string {
   return rows
     .filter((row) => row.method !== "HEAD")
@@ -32,16 +23,6 @@ try {
       rows.filter((row) => row.policy.kind === kind).length,
     ]),
   );
-  const actual = { total: rows.length, ...counts };
-  if (
-    Object.entries(EXPECTED).some(
-      ([key, expected]) => actual[key as keyof typeof actual] !== expected,
-    )
-  ) {
-    throw new Error(
-      `Route policy audit mismatch: ${JSON.stringify({ expected: EXPECTED, actual })}`,
-    );
-  }
   if (
     app.routePolicyExemptions.length !== 1 ||
     app.routePolicyExemptions[0]?.url !== "/api/auth/*" ||

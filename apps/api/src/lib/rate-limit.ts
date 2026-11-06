@@ -15,7 +15,7 @@ import { valkey } from "./valkey.js";
  * so ops can see rate limiting is degraded.
  */
 
-export interface RateLimitRule {
+interface RateLimitRule {
   windowSeconds: number;
   max: number;
 }

@@ -40,7 +40,7 @@ const STALE_IN_FLIGHT_MS = 30_000;
  * NULL-response rows (never completed, or the H54 pending-removal marker) are
  * kept 1 day, far past STALE_IN_FLIGHT_MS, so a reclaim is always possible.
  */
-export const IDEMPOTENCY_IN_FLIGHT_RETENTION_DAYS = 1;
+const IDEMPOTENCY_IN_FLIGHT_RETENTION_DAYS = 1;
 const PURGE_BATCH = 1000;
 
 /** Batched purge of expired rows; returns the number deleted. */

@@ -1,8 +1,12 @@
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { FIELD_ERROR_REASONS } from "@hackos/shared/error-reasons";
-import { isSimpleEmail, isSimpleUrl, MAX_IMAGES_PER_FIELD } from "@hackos/shared/forms";
+import {
+  isSimpleEmail,
+  isSimpleUrl,
+  MAX_IMAGES_PER_FIELD,
+  type TemplateField,
+} from "@hackos/shared/forms";
 import { normalizePhone } from "@hackos/shared/phone";
-import type { TemplateField } from "../modules/applications/schemas.js";
 import { BadRequestError } from "./errors.js";
 
 /**
