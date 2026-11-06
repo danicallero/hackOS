@@ -24,6 +24,7 @@ import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { readServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -189,7 +190,9 @@ export function UniversityPicker({
     }
   }
 
-  const exactMatch = options.some((o) => o.name.toLowerCase() === query.trim().toLowerCase());
+  const exactMatch = options.some(
+    (o) => normalizeSearchText(o.name) === normalizeSearchText(query),
+  );
   const canPropose =
     allowPropose &&
     status === "authenticated" &&

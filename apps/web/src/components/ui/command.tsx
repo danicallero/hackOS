@@ -1,11 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { Command as CommandPrimitive } from "cmdk"
+import { Command as CommandPrimitive, defaultFilter } from "cmdk"
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 
 import { useLocale } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { normalizeSearchText } from "@/lib/search-text"
 import {
   Dialog,
   DialogContent,
@@ -14,15 +15,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 
+const accentInsensitiveFilter: NonNullable<React.ComponentProps<typeof CommandPrimitive>["filter"]> = (
+  value, search, keywords,
+) => defaultFilter(
+  normalizeSearchText(value),
+  normalizeSearchText(search),
+  keywords?.map(normalizeSearchText),
+)
+
 function Command({
   className,
   label,
+  filter = accentInsensitiveFilter,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive>) {
   const { t } = useLocale()
   return (
     <CommandPrimitive
       label={label ?? t("genericSearchPlaceholder")}
+      filter={filter}
       data-slot="command"
       className={cn(
         "flex h-full w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground",

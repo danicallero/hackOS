@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/command";
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { cn } from "@/lib/utils";
 
 export interface MultiSelectOption {
@@ -116,8 +117,7 @@ export function MultiSelect({
           {onCreateOption &&
             searchQuery?.trim() &&
             !options.some(
-              (option) =>
-                option.label.toLocaleLowerCase() === searchQuery.trim().toLocaleLowerCase(),
+              (option) => normalizeSearchText(option.label) === normalizeSearchText(searchQuery),
             ) && (
               <CommandGroup>
                 <CommandItem

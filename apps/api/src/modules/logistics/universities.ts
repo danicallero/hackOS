@@ -144,7 +144,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Search the public university catalogue",
         description:
-          "Anonymous read-only autocomplete for application and profile university pickers. It accepts a name query or a comma-separated set of IDs.",
+          "Anonymous read-only autocomplete for application and profile university pickers. It accepts a case- and accent-insensitive name query or a comma-separated set of IDs.",
       },
     },
     async (req, reply) => {
@@ -169,7 +169,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
       let sql = `SELECT id, name FROM universities`;
       if (q) {
         params.push(`%${q}%`);
-        sql += ` WHERE name ILIKE $1`;
+        sql += ` WHERE unaccent(name) ILIKE unaccent($1)`;
       }
       sql += ` ORDER BY name LIMIT 50`;
       const { rows } = await pool.query(sql, params);

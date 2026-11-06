@@ -12,6 +12,31 @@ import {
 const getApp = useTestApp();
 
 describe("degree directory", () => {
+  it("searches names without accents while preserving stored spelling (H12)", async () => {
+    const app = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      "INSERT INTO university_degrees (name) VALUES ($1), ($2) RETURNING id, name",
+      ["Ingeniería Informática", "Unrelated catalogue entry"],
+    );
+    for (const q of [
+      "INGENIERIA",
+      "Ingeniería Informática",
+      "Ingeniería Informática".normalize("NFD"),
+    ]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/public/degrees?q=${encodeURIComponent(q)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().degrees).toEqual([rows[0]]);
+    }
+    const missing = await app.inject({ method: "GET", url: "/api/public/degrees?q=no-match" });
+    expect(missing.json().degrees).toEqual([]);
+    const byId = await app.inject({ method: "GET", url: `/api/public/degrees?ids=${rows[0].id}` });
+    expect(byId.json().degrees).toEqual([rows[0]]);
+  });
+
   for (const status of ["draft", "review"] as const) {
     it(`rejects deleting a degree still used by a ${status} response (H12)`, async () => {
       const a = await getApp();

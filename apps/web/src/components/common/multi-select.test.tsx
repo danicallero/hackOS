@@ -116,3 +116,24 @@ describe("MultiSelect", () => {
     ).toEqual(["Judge", "Mentor"]);
   });
 });
+
+it("does not suggest creating an accent-only variant of an existing catalogue option", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const picker = createRoot(host);
+  act(() =>
+    picker.render(
+      <MultiSelect
+        options={[{ value: "engineering", label: "Ingeniería" }]}
+        searchQuery="ingenieria"
+        value={[]}
+        onChange={() => {}}
+        onCreateOption={() => {}}
+      />,
+    ),
+  );
+  expect(host.textContent).not.toContain("addLibraryValue");
+  expect(host.textContent).toContain("Ingeniería");
+  act(() => picker.unmount());
+  host.remove();
+});

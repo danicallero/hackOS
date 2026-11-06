@@ -758,7 +758,7 @@ export async function listScheduleOwnerCandidates(
     `SELECT id, email, name, surname
        FROM users
       WHERE account_state = 'active' AND anonymized_at IS NULL
-        AND (email ILIKE $1 OR name ILIKE $1 OR surname ILIKE $1)
+        AND (email ILIKE $1 OR unaccent(name) ILIKE unaccent($1) OR unaccent(surname) ILIKE unaccent($1))
       ORDER BY name ASC NULLS LAST, surname ASC NULLS LAST, email ASC
       LIMIT $2`,
     [filter, limit],

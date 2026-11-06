@@ -19,6 +19,7 @@ import {
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { readServerState } from "@/lib/server-state";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -112,7 +113,7 @@ export function DegreePicker({
     status === "authenticated" &&
     query.trim().length > 1 &&
     !loading &&
-    !options.some((item) => item.name.toLowerCase() === query.trim().toLowerCase());
+    !options.some((item) => normalizeSearchText(item.name) === normalizeSearchText(query));
   return (
     <PopoverPrimitive.Root
       open={open}
