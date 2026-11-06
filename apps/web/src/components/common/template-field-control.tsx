@@ -100,8 +100,11 @@ export function TemplateFieldControl({
   onExternalLinkClick,
   onBlur: onFieldBlur,
   files = [],
+  hideHelpText = false,
 }: {
   field: TemplateFieldLike;
+  /** Omit applicant instructions in staff review panels. */
+  hideHelpText?: boolean;
   value: FieldValue;
   onChange?: (value: FieldValue) => void;
   disabled?: boolean;
@@ -141,7 +144,7 @@ export function TemplateFieldControl({
     value: o.value,
     label: pickText(o.label, lang),
   }));
-  const helpText = field.help_text ? pickText(field.help_text, lang) : "";
+  const helpText = !hideHelpText && field.help_text ? pickText(field.help_text, lang) : "";
   const customPlaceholder = field.placeholder ? pickText(field.placeholder, lang) : "";
   const id = templateFieldId(field.key, applicationId);
   const labelId = `${id}-label`;

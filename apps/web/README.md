@@ -890,6 +890,10 @@ category switches await `confirmDiscardUnsavedChanges` before changing state.
 
 ## Application review links and answer filters (H13/H14)
 
+Review answers show field labels and values without applicant helper descriptions,
+including during staff corrections. Degree names resolve by the current answer ID;
+navigating between responses never retains another applicant’s degree label.
+
 Opening a response in an application updates `?response=<numeric ID>`; closing
 it removes that parameter. Reloads and external URL changes restore the selected
 response independently of the local table filters. A response link without a tab
