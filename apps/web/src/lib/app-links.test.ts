@@ -17,8 +17,12 @@ describe("assetLinks (#935)", () => {
       "com.hackudc.os.debug",
     ]);
     expect(links[0]).toMatchObject({
-      relation: ["delegate_permission/common.handle_all_urls"],
+      relation: [
+        "delegate_permission/common.handle_all_urls",
+        "delegate_permission/common.get_login_creds",
+      ],
       target: { namespace: "android_app", sha256_cert_fingerprints: [FP] },
     });
+    expect(links[1].relation).toEqual(["delegate_permission/common.handle_all_urls"]);
   });
 });

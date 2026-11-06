@@ -16,7 +16,10 @@ export function assetLinks(fingerprintsEnv: string | undefined) {
   const certs = certFingerprints(fingerprintsEnv);
   if (certs.length === 0) return [];
   return PACKAGES.map((packageName) => ({
-    relation: ["delegate_permission/common.handle_all_urls"],
+    relation: [
+      "delegate_permission/common.handle_all_urls",
+      ...(packageName === "com.hackudc.os" ? ["delegate_permission/common.get_login_creds"] : []),
+    ],
     target: {
       namespace: "android_app",
       package_name: packageName,

@@ -93,6 +93,23 @@ Las etiquetas NFC y los QR de empresa llevan `https://${WEB_DOMAIN}/s/<código>`
   las huellas SHA-256 de la clave de subida y de la clave de firma de Play
   (Play Console → Integridad de la app). Sin ellas el fichero no lista apps y
   Android abre la página web `/s/<código>`, que también recoge la empresa.
+  La app de producción (`com.hackudc.os`) también declara
+  `delegate_permission/common.get_login_creds` para compartir credenciales;
+  el paquete debug solo declara apertura de enlaces.
+
+Para `os.hackudc.com`, la huella de firma facilitada por Play Console es:
+
+```dotenv
+ANDROID_APP_CERT_SHA256=B8:37:E8:30:74:CB:05:5C:1D:A8:B9:DC:8D:80:27:D8:24:D6:8B:06:3D:EB:88:05:31:81:56:53:B9:93:A9:FE
+```
+
+Configurarla en el `.env` del despliegue (conservar otras huellas válidas,
+separadas por comas) y recrear `web` con la nueva imagen. Comprobar que
+`https://os.hackudc.com/.well-known/assetlinks.json` devuelve HTTP 200 y contiene
+esa huella y ambas relaciones para `com.hackudc.os`; después pulsar
+«Turn on credential sharing» en Play Console. El endpoint tiene una caché de
+cinco minutos. No sustituirlo por un fichero estático: las otras instalaciones
+configuran sus propios certificados.
 
 El dominio de la web (`WEB_DOMAIN`, que el API usa como `WEB_URL`) debe ser el
 mismo que `EXPO_PUBLIC_EVENT_WEBSITE_URL` de la app.
