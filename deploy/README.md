@@ -561,10 +561,13 @@ correctamente.
 
 ## Service operations
 
-Interactive deployment validates the selected API/web image tags before
-confirmation. A release may publish only one unit; selecting both in that case
-reports the missing image and returns to the menu without deploying or closing
-the operator shell.
+Interactive deployment resolves production releases and explicitly selected SHAs
+before showing targets, and offers only units published in GHCR for that SHA.
+A web-only release offers Web; API/worker retain their independently deployed
+image tag. A release with both images also offers the combined target. A release
+with neither image reports that state and returns to the menu. The selected
+images are validated again before confirmation. Staging latest stays
+target-dependent and finds the newest published SHA for the selected units.
 
 ### Container resource metrics
 

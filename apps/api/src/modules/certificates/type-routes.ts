@@ -92,13 +92,13 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
         querystring: z.object({ q: z.string().max(200).default("") }),
         summary: "Find an account for certificate issuance",
         description:
-          "Active real/test-scoped accounts searched by name or email. Certificate managers can find staff, participants, sponsors and mentors without needing the unrelated role editor capability (#1083).",
+          "Active real/test-scoped accounts searched by case- and accent-insensitive name or email. Certificate managers can find staff, participants, sponsors and mentors without needing the unrelated role editor capability (#1083).",
       },
     },
     async (req) => {
       const scope = await fixtureReadFilter(pool, req.userId as number, "u");
       const { rows } = await pool.query(
-        `SELECT u.id,u.name,u.surname,u.email FROM users u WHERE u.account_state='active' AND u.anonymized_at IS NULL ${scope} AND (concat_ws(' ',u.name,u.surname) ILIKE $1 OR u.email ILIKE $1) ORDER BY u.name,u.surname,u.id LIMIT 30`,
+        `SELECT u.id,u.name,u.surname,u.email FROM users u WHERE u.account_state='active' AND u.anonymized_at IS NULL ${scope} AND (unaccent(concat_ws(' ',u.name,u.surname)) ILIKE unaccent($1) OR u.email ILIKE $1) ORDER BY u.name,u.surname,u.id LIMIT 30`,
         [`%${req.query.q}%`],
       );
       return { items: rows };

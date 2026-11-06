@@ -839,6 +839,12 @@ mode; new empty participant drafts begin editing. `CreateProjectPanel` collects
 a team and dynamic answers for administrative creation, independently of personal
 project creation. See [project access and lifecycle](../../docs/projects.md#unified-inspection-and-administration-h18h21).
 
+Picker searches ignore case and diacritics (`ingenieria` matches `Ingeniería`),
+without changing labels or stored selections. Shared Command filtering keeps its
+fuzzy ranking and keywords after normalization; explicit custom filters still win.
+Directory and account autocomplete endpoints perform the same comparison server-side.
+Catalogue creation suggestions do not offer accent-only variants of current results.
+
 Directory pickers for degrees and universities keep long selected names within the
 field width; option names wrap inside a scrollable list. Confirmation dialogs,
 like editors, provide a dedicated child portal layer outside their scrolling body

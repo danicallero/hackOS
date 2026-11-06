@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/command";
 import { useLocale } from "@/lib/i18n";
 import { visibleNavGroups, visibleSubDestinations } from "@/lib/nav";
+import { normalizeSearchText } from "@/lib/search-text";
 import {
   focusListSearch,
   HINTED_SHORTCUTS,
@@ -26,23 +27,15 @@ import {
   useCommandPaletteOpen,
 } from "@/lib/shortcuts";
 
-function normalize(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .trim();
-}
-
 /**
  * Title-first ranking (#1182): cmdk's default fuzzy match scatters letters
  * across the href and group labels, so "stats" matched unrelated pages and
  * outranked the real one. Keywords[0] is always the item title.
  */
 export function rankDestination(_value: string, search: string, keywords: string[] = []): number {
-  const query = normalize(search);
+  const query = normalizeSearchText(search);
   if (!query) return 1;
-  const [title = "", ...rest] = keywords.map(normalize);
+  const [title = "", ...rest] = keywords.map(normalizeSearchText);
   if (title.startsWith(query)) return 1;
   if (title.split(/[\s›/-]+/).some((word) => word.startsWith(query))) return 0.9;
   if (title.includes(query)) return 0.7;

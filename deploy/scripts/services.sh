@@ -1741,9 +1741,41 @@ deploy_release() {
 }
 
 deploy_target_shell() {
-  local requested="$1" tag option api_changed web_changed
+  local requested="$1" tag="" option api_changed web_changed
+  local subtitle="Only the selected unit is pulled and recreated"
   local choices=("API + worker" "Web" "API + worker and web")
-  if ! menu_select "Choose deployment target" "Only the selected unit is pulled and recreated" "${choices[@]}"; then
+  local units=(--api --web --both)
+  # Resolve fixed releases before offering targets. Staging latest remains
+  # target-dependent so each selection finds its newest published image set.
+  if [[ "$environment" == production || "$requested" != latest ]]; then
+    if ! tag="$(resolve_release_tag "$requested" false false 2>/dev/null)"; then
+      last_child_succeeded=false
+      printf '%s\n' "${c_red}Could not resolve release tag: ${requested}${c_reset}"
+      pause_shell
+      return 0
+    fi
+    api_changed=false; web_changed=false
+    published_for_unit hackos-api "$tag" && api_changed=true
+    published_for_unit hackos-web "$tag" && web_changed=true
+    choices=(); units=()
+    if [[ "$api_changed" == true ]]; then
+      choices+=("API + worker"); units+=(--api)
+    fi
+    if [[ "$web_changed" == true ]]; then
+      choices+=("Web"); units+=(--web)
+    fi
+    if [[ "$api_changed" == true && "$web_changed" == true ]]; then
+      choices+=("API + worker and web"); units+=(--both)
+    fi
+    if ((${#choices[@]} == 0)); then
+      last_child_succeeded=false
+      printf '%s\n' "${c_red}Release ${tag} has no published images in GHCR.${c_reset}"
+      pause_shell
+      return 0
+    fi
+    subtitle="${tag} · Available: ${choices[${#choices[@]} - 1]}"
+  fi
+  if ! menu_select "Choose deployment target" "$subtitle" "${choices[@]}"; then
     shell_quit=true
     return 0
   fi
@@ -1751,16 +1783,20 @@ deploy_target_shell() {
     back) return 0 ;;
     quit) shell_quit=true; return 0 ;;
   esac
-  case "$menu_choice" in
-    0) option=--api; api_changed=true; web_changed=false ;;
-    1) option=--web; api_changed=false; web_changed=true ;;
-    2) option=--both; api_changed=true; web_changed=true ;;
+  option="${units[$menu_choice]}"
+  case "$option" in
+    --api) api_changed=true; web_changed=false ;;
+    --web) api_changed=false; web_changed=true ;;
+    --both) api_changed=true; web_changed=true ;;
     *) return 0 ;;
   esac
-  if ! tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed" 2>/dev/null)"; then
-    printf '%s\n' "${c_red}Could not resolve release tag: ${requested}${c_reset}"
-    pause_shell
-    return 0
+  if [[ -z "$tag" ]]; then
+    if ! tag="$(resolve_release_tag "$requested" "$api_changed" "$web_changed" 2>/dev/null)"; then
+      last_child_succeeded=false
+      printf '%s\n' "${c_red}Could not resolve release tag: ${requested}${c_reset}"
+      pause_shell
+      return 0
+    fi
   fi
   # Registry validation calls die(); contain that exit within the menu (#544).
   if ! (validate_published_release "$tag" "$api_changed" "$web_changed") 2>/dev/null; then

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/command";
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { cn } from "@/lib/utils";
 
 const FALLBACK_ZONES = [
@@ -93,9 +94,11 @@ export function TimezonePicker({
   const { ref: anchorRef, portalProps, contentProps } = useDialogPortal(inDialog);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = normalizeSearchText(query);
     if (!q) return zones.slice(0, 50);
-    return zones.filter((zone) => zone.toLowerCase().replace(/_/g, " ").includes(q)).slice(0, 50);
+    return zones
+      .filter((zone) => normalizeSearchText(zone).replace(/_/g, " ").includes(q))
+      .slice(0, 50);
   }, [zones, query]);
 
   const currentOffset = value ? offsetLabel(value) : "";

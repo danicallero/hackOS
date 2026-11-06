@@ -47,8 +47,13 @@ for (const directory of ["degrees", "universities"] as const) {
       const dialog = page.getByRole("alertdialog");
       const picker = dialog.getByRole("combobox").first();
       await picker.click();
+      await page.getByRole("combobox", { name: /Search/ }).fill("ingenieria");
       const option = page.getByRole("option", { name: longName, exact: true });
       await expect(option).toBeVisible();
+      await page.screenshot({
+        path: info.outputPath(`${directory}-${width}-accent-search.png`),
+        style: "nextjs-portal { visibility: hidden }",
+      });
       await option.scrollIntoViewIfNeeded();
       await expect(option).toBeInViewport();
       await option.click();
