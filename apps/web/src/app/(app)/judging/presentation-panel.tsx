@@ -12,7 +12,6 @@ import { GitPullRequestIcon } from "@phosphor-icons/react/dist/csr/GitPullReques
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
-import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { QueueStatusDot } from "@/components/common/queue-status-badge";
@@ -23,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Surface } from "@/components/ui/surface";
+import { useNow } from "@/hooks/use-now";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -289,7 +289,7 @@ export function PresentationPanel({
   );
 }
 
-export function ProjectInfo({
+function ProjectInfo({
   entry,
   challenge,
   detailsOpen = false,
@@ -500,7 +500,7 @@ function Fact({
   );
 }
 
-export function PresentationTimer({
+function PresentationTimer({
   startedAt,
   totalMinutes,
   pausedAt = null,
@@ -513,7 +513,7 @@ export function PresentationTimer({
   totalMinutes: number | null;
 }) {
   const { t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
+  const now = useNow(1000);
 
   // #926: every judge and reload uses the persisted goal and pause state.
   const {
@@ -530,11 +530,6 @@ export function PresentationTimer({
       : timerTone === "warning"
         ? t("wrapUp")
         : null;
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   return (
     <div className="flex flex-col items-center gap-1.5">
@@ -573,12 +568,7 @@ function PreparationTimer({
   scheduledSeconds: number | null;
 }) {
   const { t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (startedAt) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [startedAt]);
+  const now = useNow(startedAt ? null : 1000);
   const seconds = preparationElapsedSeconds(enteredAt, startedAt, now);
   if (seconds == null) return null;
   return (

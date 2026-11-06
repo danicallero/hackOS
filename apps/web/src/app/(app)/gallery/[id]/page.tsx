@@ -34,8 +34,13 @@ export async function generateMetadata({
       },
       robots: INDEXABLE_ROBOTS,
     };
-  } catch {
-    return { robots: { index: false, follow: false } };
+  } catch (error) {
+    // Only a project that is closed or missing stays out of the index; a
+    // transient failure must not silently de-index a public page.
+    if (error instanceof ApiError && [403, 404].includes(error.status)) {
+      return { robots: { index: false, follow: false } };
+    }
+    throw error;
   }
 }
 export default async function ProjectGalleryPage({ params }: { params: Promise<{ id: string }> }) {

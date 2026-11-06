@@ -6,11 +6,17 @@
 // its full Starts date).
 
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
-import { scheduleItemToForm as sharedScheduleItemToForm } from "@hackos/shared/schedule-form";
+import { scheduleTypeLabel } from "@hackos/shared/display-labels";
+import {
+  prepareScheduleSubmission,
+  SCHEDULE_AUDIENCES,
+  scheduleItemToForm as sharedScheduleItemToForm,
+} from "@hackos/shared/schedule-form";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { PublicationControls } from "@/components/common/publication-controls";
 import { SectionCard } from "@/components/common/section-card";
@@ -46,12 +52,7 @@ import {
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import {
-  prepareScheduleSubmission,
-  SCHEDULE_AUDIENCES,
-  scheduleAudienceLabel,
-  scheduleTypeLabel,
-} from "./schedule-model";
+import { scheduleAudienceLabel } from "./schedule-model";
 
 const LANGUAGES = ["es", "gl", "en"] as const;
 
@@ -101,17 +102,15 @@ export function scheduleItemToForm(
   };
 }
 
-/** The non-viewer locales' hand-edited/machine-translated title+description, including the item's original primary language if it isn't the viewer's own (H50 extension). */
-export { scheduleItemToTranslations } from "@hackos/shared/schedule-form";
-
 export function scheduleDuplicateForm(
   item: PublicScheduleItem,
   accountLanguage: Language,
+  t: Translate,
 ): ScheduleInput {
   const form = scheduleItemToForm(item, accountLanguage);
   return {
     ...form,
-    title: form.title ? `${form.title} (copy)` : form.title,
+    title: form.title ? t("scheduleCopyTitle", { title: form.title }) : form.title,
     // A duplicated item should not unexpectedly appear on the public agenda.
     visibility: "hidden",
     publishAt: null,
@@ -143,7 +142,7 @@ function sameValue(left: unknown, right: unknown): boolean {
 }
 
 /** Merge a live server snapshot into the schedule editor without replacing fields edited locally. */
-export function mergeScheduleRefresh(
+function mergeScheduleRefresh(
   current: ScheduleInput,
   previous: ScheduleInput,
   next: ScheduleInput,
@@ -654,7 +653,7 @@ function Field({
  * hackOS account picked via UserPicker, or a free-text name with no login
  * (an external vendor, a volunteer). Mirrors the addScheduleOwner union.
  */
-export type PendingOwner = { kind: "user"; user: UserOption } | { kind: "freeText"; name: string };
+type PendingOwner = { kind: "user"; user: UserOption } | { kind: "freeText"; name: string };
 
 function pendingOwnerLabel(owner: PendingOwner): string {
   if (owner.kind === "freeText") return owner.name;
@@ -785,6 +784,7 @@ function PendingOwnersField({
 function OwnersField({ scheduleId }: { scheduleId: number }) {
   const { t } = useLocale();
   const [owners, setOwners] = useState<ScheduleOwner[] | null>(null);
+  const [ownersError, setOwnersError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [freeTextName, setFreeTextName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -793,10 +793,11 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
     try {
       const r = await logisticsApi.scheduleOwners(scheduleId);
       setOwners(r.owners);
-    } catch {
-      setOwners([]);
+      setOwnersError(null);
+    } catch (err) {
+      setOwnersError(apiErrorText(err, t, t("couldNotLoadOwners")));
     }
-  }, [scheduleId]);
+  }, [scheduleId, t]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -891,7 +892,9 @@ function OwnersField({ scheduleId }: { scheduleId: number }) {
             {t("addAction")}
           </Button>
         </div>
-        {owners === null ? (
+        {ownersError && owners === null ? (
+          <ContextualError message={ownersError} onRetry={() => void loadOwners()} />
+        ) : owners === null ? (
           <Spinner className="size-5" />
         ) : owners.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noOwnersYet")}</p>

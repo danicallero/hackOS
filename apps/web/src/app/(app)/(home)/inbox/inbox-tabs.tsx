@@ -39,7 +39,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { useNow } from "@/hooks/use-now";
 import { notifyNotificationsRead } from "@/hooks/use-unread-count";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
@@ -396,13 +397,8 @@ export function PreferencesTab() {
   const queuedRemovalCategories = useRef(new Set<string>());
   const processingRemovals = useRef(false);
 
-  // Track "now" as ticking state to avoid Date.now() calls during render.
-  // Updated every 30s since this only filters for "still upcoming" items, not per-second precision.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(id);
-  }, []);
+  // Only filters "still upcoming" items, so a 30 s tick is precise enough.
+  const now = useNow(30_000);
 
   const load = useCallback(async () => {
     try {
@@ -423,9 +419,8 @@ export function PreferencesTab() {
   }, [t]);
 
   useEffect(() => {
-    // Fetching notification preferences from the API is a legitimate external-system sync on mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load(); // NOSONAR: data-fetch-on-mount pattern; external API sync is intentional
+    void load();
   }, [load]);
 
   async function toggle(category: string, channel: NotificationChannel, enabled: boolean) {

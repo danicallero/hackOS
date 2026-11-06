@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { eventDateFormat } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { toast } from "@/lib/toast";
@@ -180,10 +181,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
     };
   }, [retryNonce, t]);
 
-  const dateFormat = useMemo(
-    () => new Intl.DateTimeFormat(language, { dateStyle: "medium" }),
-    [language],
-  );
+  const dateFormat = useMemo(() => eventDateFormat(language, "date"), [language]);
 
   function updateItem(enterpriseId: number, entry: CollectionItem["entry"]) {
     setCollection((current) =>

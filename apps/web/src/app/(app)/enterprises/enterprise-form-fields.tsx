@@ -3,10 +3,8 @@
 // Form sections shared by the create panel and the enterprise detail editor
 // (#1135), so both surfaces keep identical fields, validation and wiring.
 
-import type { Dispatch, SetStateAction } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { z } from "zod";
-import { PublicationControls } from "@/components/common/publication-controls";
 import {
   FormControl,
   FormDescription,
@@ -24,7 +22,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 
 const optionalUrl = z.string().url("Enter a valid URL").or(z.literal(""));
@@ -175,46 +172,5 @@ export function EnterpriseKindPriorityFields({ form }: { form: EnterpriseForm })
         )}
       />
     </>
-  );
-}
-
-export function EnterprisePublicationFields({
-  form,
-  scheduled,
-  setScheduled,
-}: {
-  form: EnterpriseForm;
-  scheduled: boolean;
-  setScheduled: Dispatch<SetStateAction<boolean>>;
-}) {
-  const { t } = useLocale();
-  return (
-    <PublicationControls
-      id="enterprise-publication"
-      visibility={form.watch("visibility")}
-      hiddenValue="hidden"
-      publishedValue="visible"
-      hiddenLabel={t("hiddenOption")}
-      publishedLabel={t("visibleLabel")}
-      visibilityLabel={t("colVisibility")}
-      scheduleLabel={t("schedulePublicationLabel")}
-      publishAtLabel={t("publishAtLabel")}
-      scheduled={scheduled}
-      publishAt={form.watch("availableFrom")}
-      onVisibilityChange={(next) => {
-        form.setValue("visibility", next, { shouldDirty: true });
-        if (next === "visible") {
-          setScheduled(false);
-          form.setValue("availableFrom", "", { shouldDirty: true });
-        }
-      }}
-      onScheduledChange={(next) => {
-        setScheduled(next);
-        form.setValue("availableFrom", next ? toDatetimeLocal(new Date().toISOString()) : "", {
-          shouldDirty: true,
-        });
-      }}
-      onPublishAtChange={(value) => form.setValue("availableFrom", value, { shouldDirty: true })}
-    />
   );
 }

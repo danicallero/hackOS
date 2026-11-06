@@ -37,32 +37,38 @@ describe("changedFields", () => {
 
 describe("fieldValueForDisplay", () => {
   it("renders prize names, or a placeholder when there are none", () => {
-    expect(fieldValueForDisplay("prizes", [{ name: "Best overall" }, { name: "Runner-up" }])).toBe(
-      "Best overall, Runner-up",
-    );
-    expect(fieldValueForDisplay("prizes", [])).toBe("—");
-    expect(fieldValueForDisplay("prizes", null)).toBe("—");
+    expect(
+      fieldValueForDisplay("prizes", [{ name: "Best overall" }, { name: "Runner-up" }], "en"),
+    ).toBe("Best overall, Runner-up");
+    expect(fieldValueForDisplay("prizes", [], "en")).toBe("—");
+    expect(fieldValueForDisplay("prizes", null, "en")).toBe("—");
   });
 
   it("renders judging criteria labels, falling back to the key", () => {
     expect(
-      fieldValueForDisplay("judging_panel_criteria", [
-        { key: "impact", label: { en: "Impact", es: "Impacto", gl: "Impacto" } },
-        { key: "no_label" },
-      ]),
+      fieldValueForDisplay(
+        "judging_panel_criteria",
+        [
+          { key: "impact", label: { en: "Impact", es: "Impacto", gl: "Impacto" } },
+          { key: "no_label" },
+        ],
+        "en",
+      ),
     ).toBe("Impact, no_label");
   });
 
   it("formats the scheduled reveal date, or a placeholder when unscheduled", () => {
-    expect(fieldValueForDisplay("available_from", "2026-08-01T10:00:00.000Z")).toBe(
-      new Date("2026-08-01T10:00:00.000Z").toLocaleString(),
+    expect(fieldValueForDisplay("available_from", "2026-08-01T10:00:00.000Z", "en")).toMatch(
+      /^01 Aug 2026, \d{2}:\d{2}$/,
     );
-    expect(fieldValueForDisplay("available_from", null)).toBe("—");
+    expect(fieldValueForDisplay("available_from", null, "en")).toBe("—");
   });
 
   it("renders plain and i18n text fields via textForDisplay", () => {
-    expect(fieldValueForDisplay("title", "Challenge")).toBe("Challenge");
-    expect(fieldValueForDisplay("title", { en: "Challenge", es: "", gl: "" })).toBe("Challenge");
-    expect(fieldValueForDisplay("title", "")).toBe("—");
+    expect(fieldValueForDisplay("title", "Challenge", "en")).toBe("Challenge");
+    expect(fieldValueForDisplay("title", { en: "Challenge", es: "", gl: "" }, "en")).toBe(
+      "Challenge",
+    );
+    expect(fieldValueForDisplay("title", "", "en")).toBe("—");
   });
 });

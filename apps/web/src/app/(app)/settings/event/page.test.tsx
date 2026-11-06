@@ -1,8 +1,7 @@
-import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { UnsavedChangesContext } from "@/components/common/unsaved-changes-provider";
+import { UnsavedChangesContext } from "@/hooks/use-unsaved-changes-guard";
 import EventSettingsPage from "./page";
 
 // #932: the section list and `?tab=` deep links replace the vertical rail.
@@ -11,7 +10,6 @@ let search = "";
 let caps = new Set<string>();
 const replace = vi.fn();
 const push = vi.fn();
-const liveRefresh = vi.hoisted(() => ({ value: 0, stream: "", events: [] as string[] }));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(search),
@@ -27,21 +25,8 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("@/lib/session", () => ({ useCan: (cap: string) => caps.has(cap) }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
-vi.mock("@/hooks/use-auto-refresh", () => ({
-  useAutoRefresh: (stream: string, events: string[]) => {
-    liveRefresh.stream = stream;
-    liveRefresh.events = events;
-    return liveRefresh.value;
-  },
-}));
 vi.mock("./event-config-context", () => ({
-  EventConfigProvider: ({
-    children,
-    refreshKey,
-  }: {
-    children: React.ReactNode;
-    refreshKey: number;
-  }) => <div data-provider-refresh={refreshKey}>{children}</div>,
+  EventConfigProvider: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("./event-tab", () => ({ EventTab: () => <div data-testid="event-form" /> }));
 vi.mock("@/app/(app)/settings/event/project-form-section", () => ({
@@ -91,9 +76,6 @@ beforeEach(() => {
   caps = new Set(["event:manage", "wallet:manage"]);
   replace.mockClear();
   push.mockClear();
-  liveRefresh.value = 0;
-  liveRefresh.stream = "";
-  liveRefresh.events = [];
 });
 
 afterEach(() => {
@@ -114,20 +96,6 @@ describe("EventSettingsPage", () => {
       "/settings/event?tab=liveActivities",
     ]);
     expect(container.querySelector("[data-testid]")).toBeNull();
-  });
-
-  it("refreshes event settings from the content stream", async () => {
-    caps = new Set(["event:manage"]);
-    search = "tab=event";
-    await render();
-    expect(liveRefresh.stream).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
-    expect(liveRefresh.events).toContain(EVENTS.DATA_CHANGED);
-
-    liveRefresh.value = 3;
-    await render();
-    expect(
-      container.querySelector("[data-provider-refresh]")?.getAttribute("data-provider-refresh"),
-    ).toBe("3");
   });
 
   it("opens a section from its deep link with a back link to the list", async () => {

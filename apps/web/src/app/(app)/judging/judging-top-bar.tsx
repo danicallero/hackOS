@@ -26,9 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Surface } from "@/components/ui/surface";
+import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { type ChallengeProgress, exportUrls, type Room, type RoomPace } from "@/lib/queue";
-import { exportHref } from "./helpers";
 import { JudgingStats } from "./queue-panel";
 
 export function JudgingTopBar({
@@ -183,13 +183,13 @@ export function JudgingTopBar({
               {challengeId && (
                 <DropdownMenuContent align="end" className="w-44">
                   <DropdownMenuItem asChild>
-                    <a href={exportHref(exportUrls(challengeId).queue)}>
+                    <a href={`${API_URL}${exportUrls(challengeId).queue}`}>
                       <DownloadSimpleIcon aria-hidden="true" className="size-4" />
                       {t("queueExportLabel")}
                     </a>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <a href={exportHref(exportUrls(challengeId).evaluations)}>
+                    <a href={`${API_URL}${exportUrls(challengeId).evaluations}`}>
                       <DownloadSimpleIcon aria-hidden="true" className="size-4" />
                       {t("evaluationsExport")}
                     </a>

@@ -3,7 +3,7 @@ import type { StatsChartType } from "./stats-chart";
 
 const CHART_TYPES: StatsChartType[] = ["bar", "pie", "line"];
 const STAT_TONES: StatTone[] = ["neutral", "success", "danger", "warning", "info"];
-export const OVERVIEW_KPI_KEYS = [
+const OVERVIEW_KPI_KEYS = [
   "submitted",
   "confirmed",
   "rejected",

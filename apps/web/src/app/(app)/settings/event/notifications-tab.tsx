@@ -52,8 +52,7 @@ export function NotificationsTab({ onDirtyChange }: { onDirtyChange: (dirty: boo
   const [pending, setPending] = useState(false);
 
   const isDirty = saved !== null && draft !== null && !sameDraft(saved, draft);
-  const invalid =
-    draft !== null && draft.scheduleRemindersEnabled && draft.scheduleReminderLeadMinutes === null;
+  const invalid = draft?.scheduleRemindersEnabled && draft.scheduleReminderLeadMinutes === null;
   const [saveState, setSaveState] = useCategorySaveState(isDirty, onDirtyChange);
 
   const load = useCallback(async () => {

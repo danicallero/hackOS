@@ -1,11 +1,8 @@
 // Enterprise (sponsor) management — shared types & helpers (H43/H44).
 // The API returns enterprise rows in snake_case (apps/api/.../sponsors/service.ts
 // COLUMNS) while create/update bodies are camelCase — kept apart deliberately.
-// Types are defined locally so we never touch @/lib/types.
 
-import type { Tone } from "@/lib/tones";
-
-export type Visibility = "visible" | "hidden";
+import type { Visibility } from "@/lib/challenges";
 
 /** Row shape returned by GET /api/enterprises and /api/enterprises/:id. */
 export interface Enterprise {
@@ -37,20 +34,7 @@ export const LOGO_CONTENT_TYPES = [
 
 export const LOGO_ACCEPT = LOGO_CONTENT_TYPES.join(",");
 
-export function visibilityTone(v: Visibility): Tone {
-  return v === "visible" ? "success" : "neutral";
-}
-
-/** An enterprise whose scheduled reveal is still in the future. */
-export function isScheduled(availableFrom: string | null): boolean {
-  if (!availableFrom) return false;
-  const at = new Date(availableFrom);
-  return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
-}
-
-export { initials } from "@/lib/initials";
-
-export type EnterpriseTab = "profile" | "challenges" | "judges" | "members" | "stand";
+type EnterpriseTab = "profile" | "challenges" | "judges" | "members" | "stand";
 
 /** Removed tabs keep old deep links working (#928, #929). */
 export const ENTERPRISE_TAB_ALIASES: Partial<Record<string, EnterpriseTab>> = {
@@ -79,7 +63,7 @@ export function enterpriseTabs({
   ];
 }
 
-export interface EnterpriseGroup {
+interface EnterpriseGroup {
   priority: number | null;
   items: Enterprise[];
 }

@@ -1,26 +1,14 @@
 "use client";
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { MagnifyingGlassIcon } from "@phosphor-icons/react/dist/csr/MagnifyingGlass";
 import { useMemo, useState } from "react";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { StatusBadge } from "@/components/common/status-badge";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Input } from "@/components/ui/input";
 import { useLocale } from "@/lib/i18n";
 import type { RoleSummary } from "@/lib/types";
@@ -65,10 +53,7 @@ export function RoleList({
     return sortable.filter((r) => r.name.toLowerCase().includes(needle));
   }, [sortable, query]);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -196,7 +181,7 @@ function RoleRow({
  * when there's no integer room left (adjacent positions), so the caller can
  * refuse the move instead of colliding with an existing role.
  */
-export function computeNewPosition(reordered: RoleSummary[], toIndex: number): number | null {
+function computeNewPosition(reordered: RoleSummary[], toIndex: number): number | null {
   const above = reordered[toIndex - 1];
   const below = reordered[toIndex + 1];
   if (!above && !below) return null;

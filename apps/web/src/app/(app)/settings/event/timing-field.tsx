@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocale } from "@/lib/i18n";
 
-export function parseTiming(raw: string, min: number, max: number): number | null {
+function parseTiming(raw: string, min: number, max: number): number | null {
   if (raw === "") return null;
   const value = Number(raw);
   return Number.isInteger(value) && value >= min && value <= max ? value : null;

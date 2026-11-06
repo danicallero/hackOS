@@ -32,7 +32,7 @@ vi.mock("@/lib/api", () => {
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
 }));
-vi.mock("@/hooks/use-auto-refresh", () => ({ useAutoRefresh: () => 0 }));
+vi.mock("@/hooks/use-live-reload", () => ({ useLiveReload: () => undefined }));
 vi.mock("@/hooks/use-mobile", () => ({ useIsMobile: () => false }));
 vi.mock("@/lib/session", () => ({ useCan: () => env.canManage }));
 vi.mock("@/lib/toast", () => ({
@@ -76,11 +76,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  try {
-    window.sessionStorage.clear();
-  } catch {
-    // Some jsdom/Node storage shims are not clearable; nothing to reset then.
-  }
+  window.sessionStorage.clear();
   env.canManage = true;
   for (const mock of [get, post, put, download, env.toastError, env.toastSuccess, env.toastInfo])
     mock.mockReset();

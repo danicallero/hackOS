@@ -27,7 +27,7 @@ import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { canAccessSponsorWorkspace } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -95,20 +95,24 @@ export default function QueueDetailPage() {
     }
   }, [queueGroupId]);
 
-  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.QUEUE, [
-    EVENTS.QUEUE_ENTRY_CHANGED,
-    EVENTS.QUEUE_ROOM_CHANGED,
-  ]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     if (!Number.isFinite(queueGroupId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus("error");
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, liveRefresh, queueGroupId]);
+  }, [load, queueGroupId]);
+
+  useLiveReload(
+    REALTIME_SCOPES.QUEUE,
+    [EVENTS.QUEUE_ENTRY_CHANGED, EVENTS.QUEUE_ROOM_CHANGED],
+    () => {
+      void load();
+    },
+    { enabled: Number.isFinite(queueGroupId) },
+  );
 
   const filteredEntries = useMemo(() => {
     const entries = queue?.entries ?? [];

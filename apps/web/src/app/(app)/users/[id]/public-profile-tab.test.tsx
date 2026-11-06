@@ -14,8 +14,8 @@ globalThis.ResizeObserver ??= class {
 const state = vi.hoisted(() => ({ canEdit: true, profile: null as PublicProfile | null }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock("@/lib/session", () => ({ useCan: () => state.canEdit }));
-vi.mock("@/lib/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: vi.fn() }));
-vi.mock("@/hooks/use-event-source", () => ({
+vi.mock("@/hooks/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: vi.fn() }));
+vi.mock("@/hooks/use-live-query", () => ({
   useLiveQuery: () => ({
     data: { generation: 0, profile: state.profile },
     error: null,

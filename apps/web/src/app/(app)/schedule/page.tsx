@@ -4,18 +4,10 @@
 // Participants use /timetable; never fall back to its public feed here.
 // Column preferences persist locally and across devices via /api/me/ui-prefs.
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
 import type { ActivityKind } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { scheduleItemToTranslations } from "@hackos/shared/schedule-form";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
@@ -27,6 +19,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,7 +48,6 @@ import {
   ScheduleFormModal,
   scheduleDuplicateForm,
   scheduleItemToForm,
-  scheduleItemToTranslations,
 } from "./schedule-form-modal";
 import {
   type DayGroup,
@@ -110,10 +102,7 @@ export default function SchedulePage() {
     () => ({ ...tableConfig.widths, ...liveWidths }),
     [tableConfig.widths, liveWidths],
   );
-  const rowDragSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const rowDragSensors = useSortableSensors();
 
   const handleColumnResize = useCallback((id: ColumnId, width: number) => {
     setLiveWidths((prev) => ({ ...prev, [id]: width }));
@@ -594,7 +583,7 @@ export default function SchedulePage() {
             if (!open) setDuplicatingItem(null);
           }}
           title={t("duplicateScheduleItem")}
-          initial={scheduleDuplicateForm(duplicatingItem, language)}
+          initial={scheduleDuplicateForm(duplicatingItem, language, t)}
           onSubmit={async (values, pendingOwners) => {
             const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
             await Promise.all(

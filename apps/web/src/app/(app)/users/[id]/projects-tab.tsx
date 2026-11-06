@@ -13,7 +13,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { type RepoWithExtras, userProjects } from "@/lib/projects";
 
-export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
+function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
   return [
     {
       id: "name",
@@ -59,7 +59,7 @@ export function buildProjectColumns(t: Translate): Column<RepoWithExtras>[] {
   ];
 }
 
-export function ProjectLink({ href, label }: { href: string; label: string }) {
+function ProjectLink({ href, label }: { href: string; label: string }) {
   return (
     <Button variant="ghost" size="sm" asChild className="px-2">
       <a href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>

@@ -54,6 +54,7 @@ const entry = { id: 501 } as QueueEntry;
 let container: HTMLDivElement;
 let root: Root;
 beforeEach(async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.resetAllMocks();
   queue.getReview.mockResolvedValue({ scores: {}, notes: null, status: "draft" });
   queue.getSessions.mockResolvedValue([]);
@@ -83,6 +84,7 @@ beforeEach(async () => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.useRealTimers();
 });
 it("saves numeric edits without untouched notes or text leases (H36)", async () => {
   await act(async () => fireEvent.click(getByRole(document.body, "button", { name: "6" })));
@@ -178,7 +180,7 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
-const waitPastAutosave = () => act(() => new Promise((done) => setTimeout(done, 900)));
+const waitPastAutosave = () => act(() => vi.advanceTimersByTimeAsync(900));
 
 it.each([
   ["reusing the form", undefined],

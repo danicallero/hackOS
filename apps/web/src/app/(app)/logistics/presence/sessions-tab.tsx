@@ -10,10 +10,10 @@ import { SectionCard } from "@/components/common/section-card";
 import { StatCard } from "@/components/common/stat-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, type Translate, useLocale } from "@/lib/i18n";
+import { eventDateFormat } from "@/lib/datetime";
+import { type Translate, useLocale } from "@/lib/i18n";
 import type { OpenPresenceSession, PresenceEstimate } from "@/lib/logistics";
-import { hoursSince, TIME_FORMAT_OPTIONS } from "./shared";
+import { hoursSince } from "./shared";
 
 type LoadError = { message: string; onRetry: () => void } | undefined;
 
@@ -92,10 +92,7 @@ export function SessionsTab({
   sessionsError: LoadError;
 }) {
   const { language, t } = useLocale();
-  const timeFmt = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    ...TIME_FORMAT_OPTIONS,
-    timeZone: getEventTimeZone(),
-  });
+  const timeFmt = eventDateFormat(language, "dayMonthTime");
 
   return (
     <div className="space-y-6">

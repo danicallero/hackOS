@@ -22,10 +22,11 @@ import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { api, apiDownload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import {
   LABEL_MAX,
@@ -217,13 +218,12 @@ export function StandTagsCard({
     }
   }, [enterpriseId, t]);
 
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, liveRefresh]);
+  }, [load]);
+
+  useLiveReload(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED], () => void load());
 
   async function add(body: { kind: "nfc"; uid: string } | { kind: "qr" }) {
     setBusy(body.kind);
@@ -272,8 +272,6 @@ export function StandTagsCard({
       setBusy(null);
     }
   }
-
-  const dateFormat = new Intl.DateTimeFormat(language, { dateStyle: "medium" });
 
   return (
     <SectionCard variant="plain" bodyClassName="pt-0">
@@ -383,7 +381,7 @@ export function StandTagsCard({
                       </IconButton>
                     </div>
                     <p className="text-muted-foreground text-xs">
-                      {dateFormat.format(new Date(tag.createdAt))}
+                      {formatEventDate(tag.createdAt, language, "date")}
                     </p>
                   </div>
                 </div>

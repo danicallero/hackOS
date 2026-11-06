@@ -1,9 +1,7 @@
 import type { MessageKey } from "@/lib/i18n";
 import type { Me } from "@/lib/types";
 
-export const PROFILE_PATH = "/settings/profile";
-
-export type ProfileTabId = "personal" | "public" | "wallet" | "account";
+type ProfileTabId = "personal" | "public" | "wallet" | "account";
 
 export type ProfileSectionId =
   | "personal"
@@ -24,7 +22,7 @@ export interface SectionDef {
   title?: MessageKey;
 }
 
-export interface TabDef {
+interface TabDef {
   id: ProfileTabId;
   title: MessageKey;
   sections: SectionDef[];

@@ -51,8 +51,6 @@ function channelLabel(channel: NotificationChannel, t: Translate): string {
 
 export const EMPTY_ANNOUNCEMENT_FORM: AnnouncementInput = emptyAnnouncementForm();
 
-export { announcementToForm } from "@hackos/shared/announcement-form";
-
 /**
  * Form modal for creating or editing announcements.
  * Handles trilingual content, scheduling, channel delivery, and recipient targeting.

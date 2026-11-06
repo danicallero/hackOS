@@ -7,11 +7,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Column } from "@/components/common/data-table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { apiAssetUrl } from "@/lib/directory";
-import { type Translate, useLocale } from "@/lib/i18n";
+import { type I18nText, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { getPublicChallenges } from "@/lib/public-content";
 import { cn } from "@/lib/utils";
-import { type ChallengeOption, challengeTitleText } from "../projects/shared";
 
 /** A public profile card (`DirectoryEntry`, #934), as `GET /api/me/diary` carries it. */
 export interface DirectoryEntry {
@@ -27,8 +26,13 @@ export interface DirectoryEntry {
 /** Localized challenge title by id; the API's `name` is the fallback. */
 export type ChallengeName = (challenge: { id: number; name: string }) => string;
 
+interface ChallengeOption {
+  id: number;
+  title: I18nText;
+}
+
 /** Avatar, name and headline; the whole row is the link, not this name. */
-export function Person({ entry }: { entry: DirectoryEntry }) {
+function Person({ entry }: { entry: DirectoryEntry }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
       <Avatar size="lg">
@@ -61,7 +65,7 @@ export function Challenges({
 }
 
 /** The private note under a saved person's name. */
-export function NoteLine({ note }: { note: string }) {
+function NoteLine({ note }: { note: string }) {
   return (
     <p className="text-muted-foreground line-clamp-2 text-sm whitespace-pre-line wrap-break-word">
       {note}
@@ -238,7 +242,7 @@ export function useChallengeNames() {
     };
   }, []);
   const titles = useMemo(
-    () => new Map(challenges.map((c) => [c.id, challengeTitleText(c.title, language)])),
+    () => new Map(challenges.map((c) => [c.id, pickText(c.title, language)])),
     [challenges, language],
   );
   const nameOf = useCallback<ChallengeName>(

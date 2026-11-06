@@ -15,7 +15,9 @@ import { RoomManagement } from "@/components/queue/room-management";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { type SseEnvelope, useLiveQuery } from "@/hooks/use-event-source";
+import type { SseEnvelope } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { usePersistedState } from "@/hooks/use-persisted-state";
 import { errorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { enqueueAllChallengeQueues, getAllRoomViews, type RoomView } from "@/lib/queue";
@@ -53,22 +55,17 @@ export default function QueueOperationsPage() {
   const tabsRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [arrivalHints, setArrivalHints] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.localStorage.getItem("queue-ops-arrival-hints") === "1",
+  // Stored as "1"/"0" before it was JSON; either reads back truthy/falsy.
+  const [storedArrivalHints, setArrivalHints] = usePersistedState<boolean | 0 | 1>(
+    "queue-ops-arrival-hints",
+    false,
+    { storage: "local" },
   );
+  const arrivalHints = Boolean(storedArrivalHints);
   const arrivalHintsRef = useRef(arrivalHints);
-
-  // Keep ref in sync with state for use in event handlers
   useEffect(() => {
     arrivalHintsRef.current = arrivalHints;
   }, [arrivalHints]);
-  const toggleArrivalHints = useCallback((checked: boolean) => {
-    setArrivalHints(checked);
-    arrivalHintsRef.current = checked;
-    window.localStorage.setItem("queue-ops-arrival-hints", checked ? "1" : "0");
-  }, []);
 
   const announceTeamEnter = useCallback(
     (event: SseEnvelope) => {
@@ -186,7 +183,7 @@ export default function QueueOperationsPage() {
                     size="sm"
                     id="arrival-hints"
                     checked={arrivalHints}
-                    onCheckedChange={toggleArrivalHints}
+                    onCheckedChange={setArrivalHints}
                   />
                   {t("arrivalHints")}
                 </label>

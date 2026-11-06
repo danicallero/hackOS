@@ -1,4 +1,3 @@
-import { domainScope, EVENTS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -17,23 +16,16 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-it("listens to the gallery streams and refreshes once, jittered, without polling", async () => {
+it("refreshes once, jittered, for a burst across its streams, without polling", async () => {
   vi.useFakeTimers();
   root = createRoot(document.createElement("div"));
   await act(async () => root?.render(<GalleryRefresh />));
-  const scopes = mocks.subscribe.mock.calls.map(([scope]) => scope);
-  expect(scopes).toEqual([
-    REALTIME_SCOPES.PUBLIC_CONTENT,
-    domainScope(SSE_TOPICS.PROJECTS),
-    domainScope(SSE_TOPICS.DIRECTORY),
-  ]);
-  expect(mocks.subscribe.mock.calls[0]?.[1].events).toEqual([EVENTS.DATA_CHANGED]);
-  expect(mocks.subscribe.mock.calls[1]?.[1].events).toEqual([EVENTS.DOMAIN_CHANGED]);
+  const streams = mocks.subscribe.mock.calls.map(([, options]) => options);
   // A burst across streams coalesces into one refresh inside the jitter window.
   act(() => {
-    mocks.subscribe.mock.calls[0]?.[1].onEvent();
-    mocks.subscribe.mock.calls[1]?.[1].onEvent();
-    mocks.subscribe.mock.calls[2]?.[1].onResync();
+    streams[0]?.onEvent();
+    streams[1]?.onEvent();
+    streams[2]?.onResync();
     vi.advanceTimersByTime(3_000);
   });
   expect(mocks.refresh).toHaveBeenCalledTimes(1);

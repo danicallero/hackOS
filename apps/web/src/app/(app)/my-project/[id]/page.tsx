@@ -13,10 +13,8 @@ import type { NativeProject } from "@/lib/native-projects";
 export default function MyProjectPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useLocale();
-  const resource = useServerResource(
-    ["project", id, "member"],
-    (signal) => api.get<NativeProject>(`/api/me/projects/${id}`, { signal }),
-    { enabled: true },
+  const resource = useServerResource(["project", id, "member"], (signal) =>
+    api.get<NativeProject>(`/api/me/projects/${id}`, { signal }),
   );
   const project = resource.data;
   if (resource.error)

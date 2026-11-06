@@ -4,7 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { CertificatesPanel } from "@/components/certificates/certificates-panel";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
@@ -13,10 +13,9 @@ import { Spinner } from "@/components/common/spinner";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { isNotFoundError, useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
-import { api } from "@/lib/api";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
@@ -54,48 +53,23 @@ export default function UserProfilePage() {
     aliases: { qr: "access", permissions: "access", presence: "attendance" },
   });
 
-  const [user, setUser] = useState<UserDetail | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [notFound, setNotFound] = useState(false);
-
+  const validId = Number.isFinite(userId);
+  const {
+    data: user,
+    error,
+    loading,
+    stale,
+    refetch,
+  } = useLiveQuery(
+    (signal) => api.get<UserDetail>(`/api/users/${userId}`, { signal }),
+    domainScope(SSE_TOPICS.IDENTITY),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["users", "detail", userId], enabled: validId },
+  );
   const { intolerances, error: dictionaryError, reload: reloadDictionary } = useFoodIntolerances();
-  const { succeeded, failed, reset, stale, retryNonce } = useBackgroundRefresh();
+  const load = useCallback(async () => refetch(), [refetch]);
 
-  const load = useCallback(async () => {
-    setStatus((current) => (current === "ready" ? "ready" : "loading"));
-    try {
-      const data = await api.get<UserDetail>(`/api/users/${userId}`);
-      setUser(data);
-      setStatus("ready");
-      succeeded();
-    } catch (err) {
-      // A failed background refresh keeps the loaded profile (#1012).
-      if (!failed(err)) return;
-      setErrorMsg(apiErrorText(err, t, t("couldNotLoadUserProfile")));
-      setNotFound(isNotFoundError(err));
-      setStatus("error");
-    }
-  }, [userId, t, succeeded, failed]);
-
-  // Soft, in-place refresh instead of a hard reload when this user's profile
-  // changes elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (Number.isFinite(userId)) void load();
-    else {
-      setNotFound(true);
-      setStatus("error");
-    }
-  }, [userId, load, liveRefresh, retryNonce]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a different user is a different resource, so its first load may show an error.
-  useEffect(() => reset(), [userId, reset]);
-
-  if (status === "loading") {
+  if (validId && loading && !error) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -103,12 +77,12 @@ export default function UserProfilePage() {
     );
   }
 
-  if (status === "error" || !user) {
-    if (!notFound) {
+  if (!validId || !user || (error && isNotFoundError(error))) {
+    if (validId && error && !isNotFoundError(error)) {
       return (
         <ContextualError
-          message={errorMsg || t("couldNotLoadUserProfile")}
-          onRetry={() => void load()}
+          message={apiErrorText(error, t, t("couldNotLoadUserProfile"))}
+          onRetry={() => refetch()}
         />
       );
     }
@@ -116,7 +90,9 @@ export default function UserProfilePage() {
       <div className="space-y-6">
         <EmptyState
           title={t("userNotFoundTitle")}
-          description={errorMsg || t("profileNotLoaded")}
+          description={
+            error ? apiErrorText(error, t, t("profileNotLoaded")) : t("profileNotLoaded")
+          }
         />
       </div>
     );
@@ -124,7 +100,7 @@ export default function UserProfilePage() {
 
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => refetch()} />}
       {dictionaryError ? (
         <ContextualError message={t("couldNotLoadDictionary")} onRetry={reloadDictionary} />
       ) : null}
@@ -153,7 +129,7 @@ export default function UserProfilePage() {
         </TabsContent>
         <TabsContent value="attendance" className="pt-2">
           <div className="space-y-6">
-            <PresenceSection userId={user.id} refreshKey={liveRefresh} />
+            <PresenceSection userId={user.id} />
             {canCertificates ? <CertificatesPanel staffUserId={user.id} /> : null}
             <details className="group rounded-lg border">
               <summary className="flex cursor-pointer list-none items-start justify-between gap-3 rounded-lg p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:p-5">
@@ -169,7 +145,7 @@ export default function UserProfilePage() {
                 />
               </summary>
               <div className="border-border border-t p-4 sm:p-5">
-                <PhysicalActivity userId={user.id} refreshKey={liveRefresh} embedded />
+                <PhysicalActivity userId={user.id} embedded />
               </div>
             </details>
           </div>

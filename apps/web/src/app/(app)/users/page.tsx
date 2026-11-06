@@ -10,7 +10,7 @@ import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import type { FilterDefinition } from "@/components/common/filter-menu";
 import { ListToolbar } from "@/components/common/list-toolbar";
@@ -28,15 +28,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
+import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { applicationStatusTone } from "@/lib/application-workflow";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { usersDirectoryKey } from "@/lib/list-resources";
 import { logisticsApi } from "@/lib/logistics";
-import { invalidateServerState, peekServerState, readServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserList, UserListItem } from "@/lib/types";
@@ -141,14 +144,6 @@ function applicationLabel(status: string | null, t: Translate): string {
   }
 }
 
-function applicationTone(status: string | null): "success" | "warning" | "danger" | "neutral" {
-  if (status === "confirmed") return "success";
-  if (status === "accepted" || status === "accepted_internal") return "warning";
-  if (status === "rejected" || status === "rejected_internal" || status === "declined")
-    return "danger";
-  return "neutral";
-}
-
 /** Presence needs the live occupancy set, so the column list is built per-render
  * (see `useCan(PRESENCE_SCAN | LOGISTICS_STATS)` in the page component). */
 /**
@@ -221,7 +216,7 @@ function buildColumns(
       header: t("colApplication"),
       sortValue: (u) => u.applicationStatus ?? "",
       cell: (u) => (
-        <StatusBadge tone={applicationTone(u.applicationStatus)} className="capitalize">
+        <StatusBadge tone={applicationStatusTone(u.applicationStatus ?? "")} className="capitalize">
           {applicationLabel(u.applicationStatus, t)}
         </StatusBadge>
       ),
@@ -326,7 +321,7 @@ function UserMobileRow({
                 <dt className="text-muted-foreground shrink-0">{column.header}:</dt>
                 <dd className="min-w-0">
                   {column.id === "application" ? (
-                    <StatusBadge tone={applicationTone(user.applicationStatus)}>
+                    <StatusBadge tone={applicationStatusTone(user.applicationStatus ?? "")}>
                       {values.application}
                     </StatusBadge>
                   ) : column.id === "presence" && presentIds !== null ? (
@@ -358,13 +353,25 @@ export default function UsersPage() {
   const isMobile = useIsMobile();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
-  const seeded = peekServerState<UserList>(usersDirectoryKey(q.trim()));
-  const [users, setUsers] = useState<UserListItem[]>(() => seeded?.users ?? []);
-  const [total, setTotal] = useState(() => seeded?.total ?? 0);
-  const [loading, setLoading] = useState(seeded === undefined);
-  const hasLoadedUsers = useRef(seeded !== undefined);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [retryNonce, setRetryNonce] = useState(0);
+  const query = useDebouncedValue(q.trim(), 250);
+  const {
+    data: directory,
+    error: directoryError,
+    loading: directoryLoading,
+    refetch: reloadUsers,
+  } = useLiveQuery(
+    (signal) => loadUserDirectory(signal, query),
+    domainScope(SSE_TOPICS.IDENTITY),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: usersDirectoryKey(query) },
+  );
+  const users = useMemo(() => directory?.users ?? [], [directory]);
+  const total = directory?.total ?? 0;
+  const loading = directoryLoading && directory === null;
+  const loadError =
+    directoryError && (directory === null || isNotFoundError(directoryError))
+      ? apiErrorText(directoryError, t, t("couldNotLoadUsers"))
+      : null;
   const [emailSelection, setEmailFilter] = usePersistedState<string | string[]>(
     "users-list:email",
     [],
@@ -419,18 +426,12 @@ export default function UsersPage() {
     }
   }, [visibleColumns, columnsHydrated]);
 
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // creates/edits a user elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
-
   // Live occupancy for the optional Presence column — only fetched for staff
   // who could otherwise see it via the presence/stats panels anyway.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
+  const loadPresence = useCallback(() => {
     if (!showPresence) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPresentIds(null);
-      return;
+      return () => {};
     }
     let cancelled = false;
     logisticsApi
@@ -444,39 +445,16 @@ export default function UsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [showPresence, liveRefresh]);
+  }, [showPresence]);
 
   useEffect(() => {
-    let cancelled = false;
-    const key = usersDirectoryKey(q.trim());
-    if (liveRefresh || retryNonce) invalidateServerState(key);
-    // Preserve populated rows during identity SSE refreshes (#732).
-    if (!hasLoadedUsers.current) setLoading(true);
-    setLoadError(null);
-    const handle = setTimeout(() => {
-      readServerState(key, (signal) => loadUserDirectory(signal, q.trim()))
-        .then((r) => {
-          if (cancelled) return;
-          hasLoadedUsers.current = true;
-          setUsers(r.users);
-          setTotal(r.total);
-        })
-        .catch((err) => {
-          if (cancelled) return;
-          setUsers([]);
-          setTotal(0);
-          setLoadError(apiErrorText(err, t, t("couldNotLoadUsers")));
-          toast.error(apiErrorText(err, t, t("couldNotLoadUsers")), t("columnPeople"));
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 250);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [q, liveRefresh, retryNonce, t]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    return loadPresence();
+  }, [loadPresence]);
+
+  useLiveReload(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED], () => {
+    loadPresence();
+  });
 
   const filteredUsers = useMemo(
     () =>
@@ -657,11 +635,7 @@ export default function UsersPage() {
           pageSize={50}
           pageSizeOptions={[25, 50, 100, 200]}
           loading={loading}
-          error={
-            loadError
-              ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
-              : undefined
-          }
+          error={loadError ? { message: loadError, onRetry: () => reloadUsers() } : undefined}
           empty={{
             icon: UsersIcon,
             title: t("noUsersYet"),

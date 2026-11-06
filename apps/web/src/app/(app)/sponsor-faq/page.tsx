@@ -43,8 +43,9 @@ import {
 import { Surface } from "@/components/ui/surface";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { EMPTY_I18N, textForDisplay } from "@/lib/challenges";
+import { textForDisplay } from "@/lib/challenges";
 import { type I18nText, useLocale } from "@/lib/i18n";
+import { EMPTY_I18N } from "@/lib/i18n-text";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import { getPublicEvent } from "@/lib/public-content";
 import { useCan, useMe } from "@/lib/session";

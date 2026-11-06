@@ -10,7 +10,6 @@ import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText"
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { PageHeader } from "@/components/common/page-header";
@@ -18,9 +17,9 @@ import { PageLayout } from "@/components/common/page-layout";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
   type ApplicationForm,
@@ -30,7 +29,6 @@ import {
 } from "@/lib/applications";
 import { useLocale } from "@/lib/i18n";
 import { applicationsResource, fetchListResource } from "@/lib/list-resources";
-import { peekServerState, revalidateServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 
 export default function ApplicationsPage() {
@@ -38,43 +36,22 @@ export default function ApplicationsPage() {
   const isMobile = useIsMobile();
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
-  // Stale-while-revalidate: a remount paints the last read at once.
-  const seeded = peekServerState<{ applications: ApplicationForm[] }>(applicationsResource.key);
-  const [forms, setForms] = useState<ApplicationForm[]>(() => seeded?.applications ?? []);
-  const [loading, setLoading] = useState(seeded === undefined);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
-
-  const load = useCallback(async () => {
-    if (peekServerState(applicationsResource.key) !== undefined) succeeded();
-    else if (!hasLoaded()) setLoading(true);
-    try {
-      // The API admits manage, review, and decide holders. It never infers
-      // builder permission merely from access to this directory.
-      const { applications } = await revalidateServerState(applicationsResource.key, (signal) =>
-        fetchListResource<{ applications: ApplicationForm[] }>(applicationsResource, signal),
-      );
-      setForms(applications);
-      succeeded();
-      setLoadError(null);
-    } catch (err) {
-      // A failed background refresh keeps the list (#1012).
-      if (!failed(err)) return;
-      setLoadError(apiErrorText(err, t, t("couldNotLoadApplicationForms")));
-    } finally {
-      setLoading(false);
-    }
-  }, [t, succeeded, failed, hasLoaded]);
-
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // creates/edits a form elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching the applications list from the API on mount is a legitimate external-system sync
-    load();
-  }, [load, liveRefresh, retryNonce]);
+  // Soft, in-place refresh when another admin creates/edits a form elsewhere.
+  // The API admits manage, review, and decide holders; it never infers builder
+  // permission merely from access to this directory. A failed background
+  // refetch keeps the list (#1012).
+  const { data, error, loading, stale, refetch } = useLiveQuery(
+    (signal) =>
+      fetchListResource<{ applications: ApplicationForm[] }>(applicationsResource, signal),
+    domainScope(SSE_TOPICS.APPLICATIONS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: applicationsResource.key },
+  );
+  const forms = data?.applications ?? [];
+  const loadError =
+    error && (data === null || isNotFoundError(error))
+      ? apiErrorText(error, t, t("couldNotLoadApplicationForms"))
+      : null;
 
   const columns: Column<ApplicationForm>[] = [
     {
@@ -135,7 +112,7 @@ export default function ApplicationsPage() {
 
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <PageHeader
         title={t("applications")}
         secondaryActions={
@@ -171,8 +148,8 @@ export default function ApplicationsPage() {
         data={forms}
         getRowId={(f) => String(f.id)}
         stateKey="applications-list"
-        loading={loading && !hasLoaded()}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={loading}
+        error={loadError ? { message: loadError, onRetry: () => refetch() } : undefined}
         getRowHref={(f) => `/applications/${f.id}`}
         getRowLabel={(f) => f.name}
         searchable={(f) => `${f.name} ${grantedRoleNameLabel(f.granted_role_name, t)}`}

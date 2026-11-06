@@ -1,8 +1,8 @@
 "use client";
 
 import type { Column } from "@/components/common/data-table";
+import { RevealCell, VisibilityBadge } from "@/components/common/publication-status";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
-import { StatusBadge } from "@/components/common/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Select,
@@ -11,13 +11,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatScheduledDateTime } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
-import { type Enterprise, initials, isScheduled, visibilityTone } from "./shared";
+import { initials } from "@/lib/initials";
+import type { Enterprise } from "./shared";
 
 export function buildEnterpriseColumns(
   t: Translate,
-  locale: string,
   onKindChange: (enterprise: Enterprise, kind: Enterprise["kind"]) => void,
 ): Column<Enterprise>[] {
   return [
@@ -59,38 +58,13 @@ export function buildEnterpriseColumns(
       id: "visibility",
       header: t("colVisibility"),
       sortValue: (e) => e.visibility,
-      cell: (e) => (
-        <StatusBadge tone={visibilityTone(e.visibility)} className="capitalize">
-          {e.visibility}
-        </StatusBadge>
-      ),
+      cell: (e) => <VisibilityBadge visibility={e.visibility} />,
     },
     {
       id: "reveal",
       header: t("colReveal"),
       sortValue: (e) => e.available_from ?? "",
-      cell: (e) => {
-        if (isScheduled(e.available_from)) {
-          return (
-            <div className="flex items-center gap-2">
-              <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
-              <span className="text-muted-foreground text-sm">
-                {formatScheduledDateTime(e.available_from as string, locale)}
-              </span>
-            </div>
-          );
-        }
-        if (e.visibility === "visible") {
-          return (
-            <span className="text-muted-foreground text-sm">
-              {e.available_from
-                ? formatScheduledDateTime(e.available_from, locale)
-                : t("immediate")}
-            </span>
-          );
-        }
-        return <span className="text-muted-foreground">—</span>;
-      },
+      cell: (e) => <RevealCell visibility={e.visibility} availableFrom={e.available_from} />,
     },
     {
       id: "kind",

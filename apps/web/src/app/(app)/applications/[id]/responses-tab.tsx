@@ -5,7 +5,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ChecksIcon } from "@phosphor-icons/react/dist/csr/Checks";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
@@ -14,12 +13,12 @@ import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTil
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ApplicationExportPanel } from "@/components/applications/application-export-panel";
 import { ReviewModal } from "@/components/applications/review-modal";
 import { ActionGroup } from "@/components/common/action-group";
 import { AlertModal } from "@/components/common/alert-modal";
-import { type Column, DataTable } from "@/components/common/data-table";
+import { DataTable } from "@/components/common/data-table";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -34,33 +33,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { api } from "@/lib/api";
+import { api, apiDownload, isNotFoundError, parseExportFailures } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
 import {
   type ApplicationWorkspace,
   applicationStatusLabel,
+  applicationStatusTone,
   rowsForWorkspace,
   statusesForWorkspace,
 } from "@/lib/application-workflow";
-import {
-  type FormSection,
-  fmtDateTime,
-  fmtScore,
-  type ResponseRow,
-  statusTone,
-  type TemplateField,
-} from "@/lib/applications";
-import { API_URL } from "@/lib/env";
+import type { FormSection, ResponseRow, TemplateField } from "@/lib/applications";
 import { pickText, useLocale } from "@/lib/i18n";
 import { useCan, useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
+import { buildResponseColumns } from "./response-columns";
 import { answerValues, hasDietaryRestrictions, matchesResponseSearch } from "./response-filters";
 import { ScoreSelection } from "./score-selection";
 import { SendDecisionsModal } from "./send-decisions-modal";
+import { useCatalogueNames } from "./use-catalogue-names";
 import { useResponseSelection } from "./use-response-selection";
 
 interface DurableBatchResult {
@@ -107,60 +100,51 @@ export function ResponsesTab({
   const canDecide = useCan(CAPABILITIES.APPLICATIONS_DECIDE);
   const canExportFiles = useCan(CAPABILITIES.EXPORTS_RUN);
   const fileFields = useMemo(() => (template ?? []).filter((f) => f.kind === "file"), [template]);
-  const exportUrl = useCallback(
-    (fieldKey: string, scope: "all" | "shared") =>
-      `${API_URL}/api/applications/${id}/fields/${encodeURIComponent(fieldKey)}/files.zip?scope=${scope}`,
-    [id],
+  // Soft, in-place refresh when a response changes (submitted, reviewed,
+  // decided) elsewhere. A failed background refetch keeps the table and the
+  // reviewer's selection (#1012).
+  const {
+    data: responsesData,
+    error,
+    loading,
+    stale,
+    refetch,
+  } = useLiveQuery(
+    (signal) =>
+      api.get<{ responses: ResponseRow[] }>(`/api/applications/${id}/responses`, { signal }),
+    domainScope(SSE_TOPICS.APPLICATIONS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["applications", id, "responses"] },
   );
-  const [allRows, setAllRows] = useState<ResponseRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
+  const allRows = useMemo(() => responsesData?.responses ?? [], [responsesData]);
+  const hasLoaded = responsesData !== null;
+  const loadError =
+    error && (responsesData === null || isNotFoundError(error))
+      ? apiErrorText(error, t, t("couldNotLoadResponses"))
+      : null;
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const { selectedId, setSelectedId } = useResponseSelection();
   const [answerFilters, setAnswerFilters] = useState<Record<string, string[]>>({});
   const [dietaryFilter, setDietaryFilter] = useState<string[]>([]);
   const { intolerances } = useFoodIntolerances();
-  const [catalogueNames, setCatalogueNames] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let active = true;
-    const load = async () => {
-      const names: Record<string, string> = {};
-      await Promise.all(
-        (["university", "degree"] as const).map(async (kind) => {
-          const fields = (template ?? []).filter((field) => field.kind === kind);
-          const ids = [
-            ...new Set(
-              allRows.flatMap((row) =>
-                fields.flatMap((field) => answerValues(row.responses[field.key])),
-              ),
-            ),
-          ];
-          const key = kind === "university" ? "universities" : "degrees";
-          // H13: bounded batches also resolve historical catalogue selections.
-          for (let start = 0; start < ids.length; start += 100) {
-            const data = await api.get<Record<string, Array<{ id: number; name: string }>>>(
-              `/api/public/${key}`,
-              { query: { ids: ids.slice(start, start + 100).join(",") } },
-            );
-            for (const item of data[key] ?? []) names[`${kind}:${item.id}`] = item.name;
-          }
-        }),
-      );
-      if (active) setCatalogueNames(names);
-    };
-    void load().catch((err) => {
-      if (active) toast.error(apiErrorText(err, t, t("couldNotLoadResponses")));
-    });
-    return () => {
-      active = false;
-    };
-  }, [allRows, template, t]);
+  const catalogueNames = useCatalogueNames(allRows, template);
   const [decisionStatusOverrides, setDecisionStatusOverrides] = useState<Record<number, string>>(
     {},
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // A new snapshot clears optimistic decisions and keeps the reviewer's
+  // selection, dropping rows that no longer exist (#1012).
+  const [syncedResponses, setSyncedResponses] = useState(responsesData);
+  if (responsesData !== syncedResponses) {
+    setSyncedResponses(responsesData);
+    setDecisionStatusOverrides({});
+    const remaining = new Set(allRows.map((row) => String(row.id)));
+    setSelectedIds((current) => {
+      const next = new Set([...current].filter((rowId) => remaining.has(rowId)));
+      return next.size === current.size ? current : next;
+    });
+  }
   const [sendOpen, setSendOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const exportTriggerRef = useRef<HTMLButtonElement>(null);
@@ -193,54 +177,12 @@ export function ResponsesTab({
     );
   }, [allRows, workspace, statusFilter, search, dietaryFilter, answerFilters]);
 
-  // Read through refs: navigating between responses or changing language must not
-  // recreate `load`, whose effect would refetch the whole table each time (#1227).
-  const selectedIdRef = useRef(selectedId);
-  selectedIdRef.current = selectedId;
-  const tRef = useRef(t);
-  tRef.current = t;
-  const load = useCallback(
-    async (force = false) => {
-      // Keep the current table snapshot stable while a response modal is open.
-      // In particular, accepting a review moves it out of this workspace; the
-      // reviewer should still be able to navigate the familiar set and use undo.
-      if (!force && selectedIdRef.current !== null) return;
-      if (!hasLoaded()) setLoading(true);
-      try {
-        const { responses } = await api.get<{ responses: ResponseRow[] }>(
-          `/api/applications/${id}/responses`,
-        );
-        setAllRows(responses);
-        setDecisionStatusOverrides({});
-        // Keep the reviewer's selection across live refreshes; drop removed rows (#1012).
-        const remaining = new Set(responses.map((row) => String(row.id)));
-        setSelectedIds((current) => {
-          const next = new Set([...current].filter((rowId) => remaining.has(rowId)));
-          return next.size === current.size ? current : next;
-        });
-        succeeded();
-        setLoadError(null);
-      } catch (err) {
-        // A failed background refresh keeps the table and selection (#1012).
-        if (!failed(err)) return;
-        setLoadError(apiErrorText(err, tRef.current, tRef.current("couldNotLoadResponses")));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [id, succeeded, failed, hasLoaded],
-  );
-
-  // Soft, in-place refresh instead of a hard reload when a response changes
-  // (submitted, reviewed, decided) elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.APPLICATIONS), [EVENTS.DOMAIN_CHANGED]);
-
-  // Coalesce live refreshes; categorical filters and search share the loaded snapshot.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    const handle = setTimeout(() => void load(true), 250);
-    return () => clearTimeout(handle);
-  }, [load, liveRefresh, retryNonce]);
+  // Keep the table snapshot stable while a response modal is open: accepting a
+  // review moves it out of this workspace, and the reviewer should still be
+  // able to navigate the familiar set and use undo.
+  const reloadUnlessModalOpen = () => {
+    if (selectedId === null) refetch();
+  };
 
   const selected = useMemo(() => {
     const row = allRows.find((r) => r.id === selectedId);
@@ -253,83 +195,7 @@ export function ResponsesTab({
     [visibleRows, selectedId],
   );
 
-  const columns: Column<ResponseRow>[] = [
-    {
-      id: "applicant",
-      header: t("applicantColumn"),
-      sortValue: (r) => (r.name ?? r.email).toLowerCase(),
-      cell: (r) => (
-        <div className="space-y-0.5">
-          <div className="font-medium">{r.name ?? "—"}</div>
-          <div className="text-muted-foreground text-xs">{r.email}</div>
-        </div>
-      ),
-    },
-    {
-      id: "status",
-      width: "w-36",
-      header: t("statusColumn"),
-      sortValue: (r) => r.status,
-      cell: (r) => (
-        <StatusBadge tone={statusTone(r.status)}>{applicationStatusLabel(r.status, t)}</StatusBadge>
-      ),
-    },
-    {
-      id: "score",
-      width: "w-28",
-      header: t("scoreColumn"),
-      align: "right",
-      sortValue: (r) => Number(r.avg_score ?? -1),
-      cell: (r) => (
-        <span className="inline-flex items-center gap-1.5 text-sm">
-          {r.reviews.some((review) => review.author_id === me?.id && review.score != null) && (
-            <CheckCircleIcon className="text-success size-3.5" aria-label={t("reviewedByYou")} />
-          )}
-          {fmtScore(r.avg_score)}
-          {r.review_count > 0 && (
-            <span className="text-muted-foreground text-xs"> · {r.review_count}</span>
-          )}
-        </span>
-      ),
-    },
-    {
-      id: "submitted",
-      width: "w-44",
-      header: t("dataStatusSubmitted"),
-      align: "right",
-      sortValue: (r) => r.submitted_at ?? "",
-      cell: (r) => (
-        <span className="text-muted-foreground text-sm">{fmtDateTime(r.submitted_at)}</span>
-      ),
-    },
-  ];
-
-  if (workspace === "sent") {
-    columns.push({
-      id: "communicated",
-      width: "w-44",
-      header: t("decisionDeliveryColumn"),
-      align: "right",
-      sortValue: (r) => r.decision_sent_at ?? "",
-      cell: (r) => (
-        <span className="text-muted-foreground text-sm tabular-nums">
-          {r.decision_sent_at ? fmtDateTime(r.decision_sent_at) : t("notSentYet")}
-        </span>
-      ),
-    });
-    columns.push({
-      id: "deadline",
-      width: "w-44",
-      header: t("confirmationDeadlineColumn"),
-      align: "right",
-      sortValue: (r) => r.confirmation_expires_at ?? "",
-      cell: (r) => (
-        <span className="text-muted-foreground text-sm tabular-nums">
-          {r.confirmation_expires_at ? fmtDateTime(r.confirmation_expires_at) : "—"}
-        </span>
-      ),
-    });
-  }
+  const columns = buildResponseColumns({ t, meId: me?.id, workspace });
 
   function fileLabel(field: TemplateField) {
     const label = pickText(field.label, language).trim();
@@ -338,44 +204,26 @@ export function ResponsesTab({
       : t("exportMenuAttachment", { number: fileFields.indexOf(field) + 1 });
   }
 
-  // Downloads via fetch (not a plain <a href>) so we can read the
-  // x-export-file-failures response header and surface it in the UI —
-  // browsers give JS no way to inspect headers of a navigation-triggered
-  // download (H56 follow-up: report + let staff manually handle failures).
+  // Downloads via fetch (not a plain <a href>) so the x-export-file-failures
+  // response header can be read and surfaced: browsers give JS no way to
+  // inspect headers of a navigation-triggered download (H56 follow-up: report
+  // + let staff manually handle failures).
   async function exportField(field: TemplateField, scope: "all" | "shared") {
-    const busyKey = `${field.key}:${scope}`;
-    setExportingKey(busyKey);
+    setExportingKey(`${field.key}:${scope}`);
     try {
-      const res = await fetch(exportUrl(field.key, scope), { credentials: "include" });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: { message?: string };
-        } | null;
-        throw new Error(body?.error?.message ?? t("exportFailed"));
-      }
-      const failuresHeader = res.headers.get("x-export-file-failures");
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = blobUrl;
-      link.download = `${field.key}-${scope}.zip`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(blobUrl);
-
-      if (failuresHeader) {
-        const parsed = JSON.parse(failuresHeader) as {
-          total: number;
-          items: ExportFileFailure[];
-        };
+      const headers = await apiDownload(
+        `/api/applications/${id}/fields/${encodeURIComponent(field.key)}/files.zip?scope=${scope}`,
+        `${field.key}-${scope}.zip`,
+      );
+      const failures = parseExportFailures<{ total: number; items: ExportFileFailure[] }>(headers);
+      if (failures) {
         setExportFailures({
           fieldKey: field.key,
           fieldLabel: fileLabel(field),
-          total: parsed.total,
-          items: parsed.items,
+          total: failures.total,
+          items: failures.items,
         });
-        toast.error(t("exportFilesFailedToast", { count: parsed.total }), t("exportFiles"));
+        toast.error(t("exportFilesFailedToast", { count: failures.total }), t("exportFiles"));
       } else {
         toast.success(t("exportFilesDownloaded"), { compactTitle: t("exportFiles") });
       }
@@ -406,7 +254,7 @@ export function ResponsesTab({
         skipped,
       });
       setSelectedIds(new Set());
-      await load();
+      reloadUnlessModalOpen();
       if (skipped.length === 0) toast.success(label, { compactTitle: t("toastDecisions") });
     } catch (err) {
       toast.error(apiErrorText(err, t, t("batchActionFailed")), t("toastDecisions"));
@@ -615,7 +463,7 @@ export function ResponsesTab({
           )
         }
       />
-      {selectedId !== null && hasLoaded() && !selected && !loadError && (
+      {selectedId !== null && hasLoaded && !selected && !loadError && (
         <Alert>
           <AlertTitle>{t("responseLinkUnavailable")}</AlertTitle>
           <Button variant="outline" size="sm" onClick={() => setSelectedId(null)}>
@@ -623,7 +471,7 @@ export function ResponsesTab({
           </Button>
         </Alert>
       )}
-      {stale && <StaleDataNotice onRetry={() => void load(true)} />}
+      {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <span role="status" aria-live="polite" className="text-muted-foreground text-xs tabular-nums">
         {t("tableResultCount", { count: rows.length })}
       </span>
@@ -985,7 +833,7 @@ export function ResponsesTab({
                   aria-hidden="true"
                 />
               </button>
-              <StatusBadge tone={statusTone(row.status)}>
+              <StatusBadge tone={applicationStatusTone(row.status)}>
                 {applicationStatusLabel(row.status, t)}
               </StatusBadge>
               <dl className="grid gap-2 text-xs">
@@ -1015,8 +863,8 @@ export function ResponsesTab({
         tableClassName={workspace === "sent" ? "min-w-[64rem]" : undefined}
         data={rows}
         getRowId={(r) => String(r.id)}
-        loading={loading && !hasLoaded()}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={loading}
+        error={loadError ? { message: loadError, onRetry: () => refetch() } : undefined}
         onRowClick={(r) => setSelectedId(r.id)}
         getRowLabel={(r) => r.name ?? r.email}
         selectable={canDecide}
@@ -1065,9 +913,9 @@ export function ResponsesTab({
           onClose={() => {
             setSelectedId(null);
             setDecisionStatusOverrides({});
-            void load(true);
+            refetch();
           }}
-          onChanged={() => load(true)}
+          onChanged={() => refetch()}
           workspace={workspace}
           onDecisionStatusChange={(status) => {
             setDecisionStatusOverrides((current) => ({
@@ -1086,7 +934,12 @@ export function ResponsesTab({
       )}
 
       {canDecide && (
-        <SendDecisionsModal id={id} open={sendOpen} onOpenChange={setSendOpen} onSent={load} />
+        <SendDecisionsModal
+          id={id}
+          open={sendOpen}
+          onOpenChange={setSendOpen}
+          onSent={reloadUnlessModalOpen}
+        />
       )}
     </div>
   );

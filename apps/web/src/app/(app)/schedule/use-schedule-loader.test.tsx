@@ -6,18 +6,22 @@ import type { PublicScheduleItem } from "@/lib/logistics";
 import { useScheduleLoader } from "./use-schedule-loader";
 
 const logistics = vi.hoisted(() => ({ schedule: vi.fn() }));
-const liveRefresh = vi.hoisted(() => ({ value: 0, stream: "", events: [] as string[] }));
+const liveReload = vi.hoisted(() => ({
+  scope: "",
+  events: [] as readonly string[],
+  reload: () => {},
+}));
 const translate = vi.hoisted(() => (key: string) => key);
 
 vi.mock("@/lib/logistics", () => ({ logisticsApi: logistics }));
 vi.mock("@/lib/api-error-text", () => ({
   apiErrorText: (_err: unknown, _t: unknown, fallback: string) => fallback,
 }));
-vi.mock("@/hooks/use-auto-refresh", () => ({
-  useAutoRefresh: (stream: string, events: string[]) => {
-    liveRefresh.stream = stream;
-    liveRefresh.events = events;
-    return liveRefresh.value;
+vi.mock("@/hooks/use-live-reload", () => ({
+  useLiveReload: (scope: string, events: readonly string[], reload: () => void) => {
+    liveReload.scope = scope;
+    liveReload.events = events;
+    liveReload.reload = reload;
   },
 }));
 
@@ -73,9 +77,9 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   logistics.schedule.mockReset();
-  liveRefresh.value = 0;
-  liveRefresh.stream = "";
-  liveRefresh.events = [];
+  liveReload.scope = "";
+  liveReload.events = [];
+  liveReload.reload = () => {};
 });
 
 afterEach(() => {
@@ -90,14 +94,13 @@ describe("schedule live loader", () => {
       .mockResolvedValueOnce({ items: [item("Updated title")] });
 
     await act(async () => root.render(<Harness />));
-    expect(liveRefresh.stream).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
-    expect(liveRefresh.events).toContain(EVENTS.DATA_CHANGED);
+    expect(liveReload.scope).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
+    expect(liveReload.events).toContain(EVENTS.DATA_CHANGED);
     await act(async () => {
       container.querySelector("button")?.click();
     });
 
-    liveRefresh.value = 1;
-    await act(async () => root.render(<Harness />));
+    await act(async () => liveReload.reload());
 
     expect(container.querySelector('[data-testid="selection"]')?.textContent).toBe("1");
     expect(container.querySelector('[data-testid="editing"]')?.textContent).toBe("Updated title");

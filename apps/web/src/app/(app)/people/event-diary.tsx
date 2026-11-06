@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -114,43 +114,47 @@ function DiaryPage() {
 
   const [entries, setEntries] = useState<DiaryEntry[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [retryNonce, setRetryNonce] = useState(0);
-  const [focusNonce, setFocusNonce] = useState(0);
   const loadedAt = useRef(0);
   const hasEntries = useRef(false);
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED]);
+  const generation = useRef(0);
 
-  useEffect(() => {
-    function onFocus() {
-      if (Date.now() - loadedAt.current > FOCUS_REFRESH_MS) setFocusNonce((n) => n + 1);
-    }
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the nonces are ping-only triggers that intentionally retrigger this effect.
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(() => {
+    const mine = ++generation.current;
     setLoadError(null);
     api
       .get<{ items: DiaryEntry[] }>("/api/me/diary")
       .then((r) => {
-        if (cancelled) return;
+        if (mine !== generation.current) return;
         loadedAt.current = Date.now();
         hasEntries.current = true;
         setEntries(r.items);
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (mine !== generation.current) return;
         const message = apiErrorText(err, t, t("diaryCouldNotLoad"));
         // A failed background refresh keeps what is already shown.
         if (hasEntries.current) toast.error(message, t("diary"));
         else setLoadError(message);
       });
+  }, [t]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- clears the previous error before a fresh read
+    load();
     return () => {
-      cancelled = true;
+      generation.current += 1;
     };
-  }, [liveRefresh, focusNonce, retryNonce, t]);
+  }, [load]);
+
+  useLiveReload(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED], load);
+
+  useEffect(() => {
+    function onFocus() {
+      if (Date.now() - loadedAt.current > FOCUS_REFRESH_MS) load();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [noteTarget, setNoteTarget] = useState<(DiaryMark & { title: string }) | null>(null);
@@ -269,11 +273,7 @@ function DiaryPage() {
         getRowLabel={(row) => row.person?.displayName ?? t("diaryPersonUnavailable")}
         renderMobileRow={(row) => <PersonMobileRow row={row} t={t} nameOf={nameOf} />}
         loading={entries === null && !loadError}
-        error={
-          loadError
-            ? { message: loadError, onRetry: () => setRetryNonce((value) => value + 1) }
-            : undefined
-        }
+        error={loadError ? { message: loadError, onRetry: load } : undefined}
         empty={{ icon: AddressBookIcon, title: t("diaryEmpty") }}
         filteredEmpty={{
           active: filtering,

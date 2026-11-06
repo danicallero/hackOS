@@ -4,14 +4,15 @@ import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
+import { ContextualError } from "@/components/common/contextual-error";
 import { DurationInput } from "@/components/common/duration-input";
 import { EmptyState } from "@/components/common/empty-state";
 import { EntityCombobox } from "@/components/common/entity-combobox";
-import { PublicationControls } from "@/components/common/publication-controls";
+import { PublicationFormFields } from "@/components/common/publication-form-fields";
 import {
   JudgingPanelBuilder,
   MultilingualInput,
@@ -38,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
 import {
@@ -96,7 +98,7 @@ export function EditCard({
 }: {
   challenge: Challenge;
   canAdmin: boolean;
-  onSaved: () => Promise<void>;
+  onSaved: () => void | Promise<void>;
 }) {
   const { t } = useLocale();
   const router = useRouter();
@@ -129,7 +131,7 @@ export function EditCard({
     challenge.visibility === "hidden" && Boolean(challenge.available_from),
   );
   const { reset } = form;
-  const visibility = form.watch("visibility");
+  const _visibility = form.watch("visibility");
 
   useEffect(() => {
     reset(toFormValues(challenge));
@@ -335,39 +337,12 @@ export function EditCard({
           <TabsContent value="publish" className="space-y-6 pt-4">
             <SectionCard variant="plain" bodyClassName="pt-0">
               <div className="space-y-5">
-                <PublicationControls
+                <PublicationFormFields
                   id="challenge-publication"
-                  visibility={visibility}
-                  hiddenValue="hidden"
-                  publishedValue="visible"
-                  hiddenLabel={t("hiddenOption")}
-                  publishedLabel={t("visibleLabel")}
-                  visibilityLabel={t("colVisibility")}
-                  scheduleLabel={t("schedulePublicationLabel")}
-                  publishAtLabel={t("publishAtLabel")}
+                  form={form}
                   scheduled={scheduledPublish}
-                  publishAt={form.watch("availableFrom")}
+                  setScheduled={setScheduledPublish}
                   disabled={!canAdmin}
-                  onVisibilityChange={(next) => {
-                    form.setValue("visibility", next, { shouldDirty: true });
-                    if (next === "visible") {
-                      setScheduledPublish(false);
-                      form.setValue("availableFrom", "", { shouldDirty: true });
-                    }
-                  }}
-                  onScheduledChange={(next) => {
-                    setScheduledPublish(next);
-                    form.setValue(
-                      "availableFrom",
-                      next ? toDatetimeLocal(new Date().toISOString()) : "",
-                      {
-                        shouldDirty: true,
-                      },
-                    );
-                  }}
-                  onPublishAtChange={(value) =>
-                    form.setValue("availableFrom", value, { shouldDirty: true })
-                  }
                 />
               </div>
             </SectionCard>
@@ -553,33 +528,23 @@ async function loadEligibleRepos(challengeId: number): Promise<EligibleRepo[]> {
 
 function WinnersCard({ challengeId }: { challengeId: number }) {
   const { t } = useLocale();
-  const [winners, setWinners] = useState<Winner[]>([]);
-  const [eligible, setEligible] = useState<EligibleRepo[]>([]);
-  const [loading, setLoading] = useState(true);
   const [newRepoId, setNewRepoId] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [{ winners: list }, repos] = await Promise.all([
-        api.get<{ winners: Winner[] }>(`/api/challenges/${challengeId}/winners`),
-        loadEligibleRepos(challengeId),
-      ]);
-      setWinners(list);
-      setEligible(repos);
-    } catch (err) {
-      toast.error(apiErrorText(err, t, t("couldNotLoadWinners")), t("winnersTabLabel"));
-    } finally {
-      setLoading(false);
-    }
-  }, [challengeId, t]);
-
-  useEffect(() => {
-    // fetching winners data from the API on mount is a legitimate external-system sync
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+  const {
+    data,
+    error: loadError,
+    loading,
+    reload: load,
+  } = useServerResource(["challenge", challengeId, "winners"], async () => {
+    const [{ winners }, eligible] = await Promise.all([
+      api.get<{ winners: Winner[] }>(`/api/challenges/${challengeId}/winners`),
+      loadEligibleRepos(challengeId),
+    ]);
+    return { winners, eligible };
+  });
+  const winners = data?.winners ?? [];
+  const eligible = data?.eligible ?? [];
 
   async function addWinner(repoId: number) {
     // Selecting a team always appends the next placement. Reordering a winner
@@ -593,7 +558,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
       await api.put(`/api/challenges/${challengeId}/winners/${rank}`, { repoId });
       toast.success(t("winnerSaved"), { compactTitle: t("toastAddWinner") });
       setNewRepoId("");
-      await load();
+      load();
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotSaveWinner")), t("toastAddWinner"));
     } finally {
@@ -606,7 +571,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
     try {
       await api.delete(`/api/challenges/${challengeId}/winners/${rank}`);
       toast.success(t("winnerRemoved"), { compactTitle: t("toastRemoveWinner") });
-      await load();
+      load();
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotRemoveWinner")), t("toastRemoveWinner"));
     } finally {
@@ -616,7 +581,12 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
 
   return (
     <SectionCard variant="plain" title={t("winnersTitle")} description={t("winnersDesc")}>
-      {loading ? (
+      {loadError ? (
+        <ContextualError
+          message={apiErrorText(loadError, t, t("couldNotLoadWinners"))}
+          onRetry={load}
+        />
+      ) : loading ? (
         <Spinner className="size-5" />
       ) : (
         <div className="space-y-4">

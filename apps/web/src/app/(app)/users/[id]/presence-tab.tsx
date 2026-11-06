@@ -4,6 +4,7 @@
 // four modals that edit or delete a log.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
@@ -29,11 +30,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { ApiError } from "@/lib/api";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import {
+  eventDateFormat,
+  formatDurationMinutes,
+  fromDatetimeLocal,
+  toDatetimeLocal,
+} from "@/lib/datetime";
 import { API_URL } from "@/lib/env";
-import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import {
   logisticsApi,
   type PresenceConflict,
@@ -55,7 +61,7 @@ interface PresenceData {
  * owns both the guaranteed/provisional summary and every signal/window. This
  * keeps edits, conflict repair, and freshness on the same read model.
  */
-export function PresenceSection({ userId, refreshKey }: { userId: number; refreshKey?: number }) {
+export function PresenceSection({ userId }: { userId: number }) {
   const { t } = useLocale();
   const { canAny } = useSessionContext();
   const canRead = canAny(CAPABILITIES.PRESENCE_SCAN, CAPABILITIES.LOGISTICS_STATS);
@@ -87,11 +93,12 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
     }
   }, [userId, canRead, t]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a ping-only nonce from the profile event stream.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
-  }, [load, refreshKey]);
+  }, [load]);
+
+  useLiveReload(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED], () => void load());
 
   if (state === "forbidden") {
     return (
@@ -150,13 +157,13 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
       <div className="grid gap-4 sm:grid-cols-2">
         <StatCard
           label={t("presenceGuaranteedHours")}
-          value={formatPresenceDuration(guaranteedMinutes(data.timeline.windows), t)}
+          value={formatDurationMinutes(guaranteedMinutes(data.timeline.windows), t)}
           hint={t("securedTime")}
           icon={ClockIcon}
         />
         <StatCard
           label={t("presenceProvisionalHours")}
-          value={formatPresenceDuration(provisionalMinutes(data.timeline.windows), t)}
+          value={formatDurationMinutes(provisionalMinutes(data.timeline.windows), t)}
           hint={t("provisionalWindow")}
         />
       </div>
@@ -268,16 +275,7 @@ export function PresenceSection({ userId, refreshKey }: { userId: number; refres
   );
 }
 
-function formatPresenceDuration(minutes: number, t: ReturnType<typeof useLocale>["t"]): string {
-  if (minutes < 60) return t("presenceMinutesValue", { minutes });
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return remainder === 0
-    ? t("presenceWholeHoursValue", { hours })
-    : t("presenceHoursMinutesValue", { hours, minutes: remainder });
-}
-
-export function EditTimeLogModal({
+function EditTimeLogModal({
   log,
   onClose,
   onSaved,
@@ -359,7 +357,7 @@ export function EditTimeLogModal({
   );
 }
 
-export function DeleteTimeLogModal({
+function DeleteTimeLogModal({
   log,
   onClose,
   onDeleted,
@@ -401,7 +399,7 @@ export function DeleteTimeLogModal({
   );
 }
 
-export function PresenceSignalModal({
+function PresenceSignalModal({
   userId,
   activities,
   signal,
@@ -420,13 +418,7 @@ export function PresenceSignalModal({
   const editingActivity = signal?.source === "activity";
   const resolvingConflict = Boolean(conflict);
   const bounds = conflict ? conflictBounds(conflict) : null;
-  const conflictDateTime = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    timeZone: getEventTimeZone(),
-  });
+  const conflictDateTime = eventDateFormat(language, "dayMonthTime");
   const [kind, setKind] = useState<"in" | "out" | "activity">(
     resolvingConflict ? "out" : editingActivity ? "activity" : "in",
   );
@@ -584,7 +576,7 @@ export function PresenceSignalModal({
   );
 }
 
-export function DeletePresenceActivityModal({
+function DeletePresenceActivityModal({
   signal,
   onClose,
   onDeleted,

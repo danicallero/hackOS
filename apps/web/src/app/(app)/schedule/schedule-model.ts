@@ -4,10 +4,13 @@ import {
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
+import type { ScheduleAudience } from "@hackos/shared/schedule-form";
+import { formatEventDate, formatHoursMinutes } from "@/lib/datetime";
 import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, type Translate } from "@/lib/i18n";
+import type { Translate } from "@/lib/i18n";
 import type { PublicScheduleItem } from "@/lib/logistics";
 import type { Tone } from "@/lib/tones";
+import type { Language } from "@/lib/types";
 
 export type ScheduleStatus = "draft" | "scheduled" | "public" | "staffOnly";
 
@@ -17,8 +20,6 @@ export const SCHEDULE_STATUS_TONES: Record<ScheduleStatus, Tone> = {
   public: "info",
   staffOnly: "neutral",
 };
-
-export { scheduleTypeLabel } from "@hackos/shared/display-labels";
 
 /**
  * A programme item's status is purely *who can see it*: shown, hidden, or
@@ -62,9 +63,6 @@ export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): strin
  * Anonymous/public web+TV feeds are served the same slice as "participant" —
  * there is no separate "public" audience.
  */
-export const SCHEDULE_AUDIENCES = ["sponsor", "participant", "mentor"] as const;
-export type ScheduleAudience = (typeof SCHEDULE_AUDIENCES)[number];
-
 export function scheduleAudienceLabel(audience: ScheduleAudience, t: Translate): string {
   const labels: Record<ScheduleAudience, string> = {
     sponsor: t("audienceSponsor"),
@@ -76,7 +74,7 @@ export function scheduleAudienceLabel(audience: ScheduleAudience, t: Translate):
 
 // --- Keyboard grid navigation (H59) ---------------------------------------
 
-export type ScheduleNavigationDirection =
+type ScheduleNavigationDirection =
   | "next"
   | "previous"
   | "nextInRow"
@@ -118,17 +116,10 @@ export function editingNavigationDirection(event: {
 /** Short "Fri 22/08" style day label for a run-of-show table (H59). */
 export function scheduleDayLabel(
   iso: string,
-  language: keyof typeof LOCALE_CODES,
+  language: Language,
   timeZone: string = getEventTimeZone(),
 ): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    timeZone,
-  }).format(date);
+  return formatEventDate(iso, language, "weekdayDayMonth", timeZone);
 }
 
 /** Stable event-zone calendar key used to group schedule rows (H59). */
@@ -139,28 +130,15 @@ export function scheduleDayKey(iso: string, timeZone: string = getEventTimeZone(
 /** "08:00" time-of-day for a run-of-show table's separate Start/End columns (H59). */
 export function scheduleTimeOfDay(
   iso: string,
-  language: keyof typeof LOCALE_CODES,
+  language: Language,
   timeZone: string = getEventTimeZone(),
 ): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone,
-  }).format(date);
+  return formatEventDate(iso, language, "clock24", timeZone);
 }
 
 /** "1:30" h:mm duration between two ISO timestamps, auto-computed (H59). */
 export function scheduleDuration(startsAt: string, endsAt: string): string {
-  const start = new Date(startsAt).getTime();
-  const end = new Date(endsAt).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end) || end <= start) return "";
-  const totalMinutes = Math.round((end - start) / 60_000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${hours}:${String(minutes).padStart(2, "0")}`;
+  return formatHoursMinutes((new Date(endsAt).getTime() - new Date(startsAt).getTime()) / 60_000);
 }
 
 /** HH:mm (event time) for populating a `<input type="time">` from an ISO timestamp. */
@@ -232,7 +210,7 @@ function addWallDays(ms: number, days: number, timeZone: string = getEventTimeZo
  */
 export const MAX_INLINE_ROLLED_HOURS = 12;
 
-export type ScheduleTimeEdit =
+type ScheduleTimeEdit =
   | { ok: true; startsAt: string; endsAt: string; rolledToNextDay: boolean }
   | { ok: false; reason: "invalidTime" | "rolledWindowTooLong" };
 
@@ -314,7 +292,7 @@ export function withDate(
 /** Length a freshly inserted row gets when nothing constrains it. */
 export const DRAFT_DEFAULT_MINUTES = 30;
 /** Where a row lands on a day that has no items yet. */
-export const DRAFT_DEFAULT_START_HOUR = 9;
+const DRAFT_DEFAULT_START_HOUR = 9;
 
 const MINUTE_MS = 60_000;
 
@@ -488,4 +466,3 @@ export function filterScheduleItems(
  * becomes the canonical text and `titleLanguage` tells the API which language
  * that is. Returns null when no language has a title.
  */
-export { prepareScheduleSubmission } from "@hackos/shared/schedule-form";

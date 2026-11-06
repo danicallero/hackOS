@@ -20,17 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useRoles } from "@/hooks/use-roles";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { shortDateTimeFmt } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
-import type {
-  EnterpriseInviteLink,
-  InviteListItem,
-  RoleSummary,
-  UserInviteLink,
-} from "@/lib/types";
+import type { EnterpriseInviteLink, InviteListItem, UserInviteLink } from "@/lib/types";
 import { InviteUserDialog } from "./invite-dialog";
 
 const dateFmt = shortDateTimeFmt;
@@ -90,7 +86,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
   const [emails, setEmails] = useState<InviteListItem[]>([]);
   const [links, setLinks] = useState<UserInviteLink[]>([]);
   const [enterpriseLinks, setEnterpriseLinks] = useState<EnterpriseInviteLink[]>([]);
-  const [roles, setRoles] = useState<RoleSummary[]>([]);
+  const { roles, error: rolesError, reload: reloadRoles } = useRoles({ enabled: !sponsorOnly });
   const [statusFilter, setStatusFilter] = useState<InviteStatus | "all">("active");
   const [selected, setSelected] = useState<Record | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,13 +115,13 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
     }
   }, [sponsorOnly, t]);
   useEffect(() => void load(), [load]);
-  useEffect(() => {
-    if (sponsorOnly) return;
-    void api
-      .get<RoleSummary[]>("/api/roles")
-      .then(setRoles)
-      .catch(() => setRoles([]));
-  }, [sponsorOnly]);
+
+  const loadFailure =
+    error ?? (rolesError ? apiErrorText(rolesError, t, t("couldNotLoadRoles")) : null);
+  const retryLoad = useCallback(() => {
+    void load();
+    reloadRoles();
+  }, [load, reloadRoles]);
 
   const roleNames = useMemo(
     () => new Map(roles.map((role) => [role.id, role.name] as const)),
@@ -348,7 +344,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
         getRowLabel={(row) => row.label}
         onRowClick={setSelected}
         loading={loading}
-        error={error ? { message: error, onRetry: load } : undefined}
+        error={loadFailure ? { message: loadFailure, onRetry: retryLoad } : undefined}
         searchable={(row) => `${row.label} ${row.enterprise ?? ""}`}
         searchPlaceholder={t("searchByEmailType")}
         empty={{ icon: EnvelopeSimpleIcon, title: t("noActiveInvitations") }}

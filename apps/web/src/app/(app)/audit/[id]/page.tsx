@@ -7,54 +7,41 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
-import { api } from "@/lib/api";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { diffAuditSnapshot, formatDiffValue } from "@/lib/audit-diff";
-import { auditActorLabel, auditTimeFmt, getActionLabel, getAuditSummary } from "@/lib/audit-labels";
+import { auditActorLabel, getActionLabel, getAuditSummary } from "@/lib/audit-labels";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
-import type { AuditRow } from "@/lib/notifications";
+import { notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 
 export default function AuditEntryPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
 
-  const [row, setRow] = useState<AuditRow | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  useEffect(() => {
-    if (!canRead || !Number.isFinite(id)) {
-      setState("error");
-      return;
-    }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching the audit entry by id from the API on mount is a legitimate external-system sync
-    api
-      .get<AuditRow>(`/api/audit/${id}`)
-      .then((r) => {
-        setRow(r);
-        setState("ready");
-      })
-      .catch((err) => {
-        setErrorMsg(apiErrorText(err, t, t("couldNotLoadAuditLog")));
-        setState("error");
-      });
-  }, [id, canRead, t]);
+  const valid = Number.isFinite(id);
+  const {
+    data: row,
+    error,
+    loading,
+  } = useServerResource(["audit", "entry", id], () => notificationsApi.getAuditEntry(id), {
+    enabled: canRead && valid,
+  });
 
   if (!canRead) {
     return <AccessDenied ask={t("auditLogAccessDeniedDesc")} />;
   }
 
-  if (state === "loading") {
+  if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Spinner className="size-6" />
@@ -62,10 +49,13 @@ export default function AuditEntryPage() {
     );
   }
 
-  if (state === "error" || !row) {
+  if (!row) {
     return (
       <div className="space-y-6">
-        <EmptyState title={t("auditEntryNotFound")} description={errorMsg} />
+        <EmptyState
+          title={t("auditEntryNotFound")}
+          description={error ? apiErrorText(error, t, t("couldNotLoadAuditLog")) : undefined}
+        />
       </div>
     );
   }
@@ -81,7 +71,7 @@ export default function AuditEntryPage() {
         title={getActionLabel(row.action, t)}
         meta={
           <span className="text-muted-foreground text-xs">
-            {auditTimeFmt.format(new Date(row.created_at))}
+            {formatEventDate(row.created_at, language, "dateTime")}
           </span>
         }
         state={

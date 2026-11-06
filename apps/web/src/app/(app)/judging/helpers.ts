@@ -9,7 +9,6 @@ import type { Question } from "@hackos/shared/questions";
 import { apiErrorReason } from "@/lib/api-error-reason";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Challenge, textForDisplay } from "@/lib/challenges";
-import { API_URL } from "@/lib/env";
 import type { Translate } from "@/lib/i18n";
 import type { QueueEntry } from "@/lib/queue";
 
@@ -45,14 +44,6 @@ export function secondsLabel(value: number | null | undefined): string {
   return `${sign}${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }
 
-export function exportHref(path: string): string {
-  return `${API_URL}${path}`;
-}
-
-export function errorMessage(err: unknown, t: Translate, fallback: string): string {
-  return apiErrorText(err, t, fallback);
-}
-
 /**
  * Keep queue errors scannable: a short context stays in Sileo's compact pill
  * while the server's useful explanation becomes the expandable description.
@@ -66,7 +57,7 @@ export function queueErrorToastContent(
   busyTitle: string,
   busyDescription: string,
 ) {
-  const message = errorMessage(err, t, fallbackTitle);
+  const message = apiErrorText(err, t, fallbackTitle);
   const isBusyTeam = apiErrorReason(err) === ERROR_REASONS.TEAM_MEMBER_BUSY;
   const title = isBusyTeam ? busyTitle : fallbackTitle;
   const description = isBusyTeam

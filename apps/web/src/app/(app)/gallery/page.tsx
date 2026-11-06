@@ -7,8 +7,10 @@ import { ProjectsSectionHeader } from "@/components/common/section-navigation";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { formatEventDate } from "@/lib/datetime";
 import { INDEXABLE_ROBOTS } from "@/lib/metadata";
 import type { NativeProject } from "@/lib/native-projects";
+import type { Language } from "@/lib/types";
 import { galleryContext } from "./data";
 import { GalleryProjectCard } from "./gallery-project-card";
 import { GalleryRefresh } from "./gallery-refresh";
@@ -23,19 +25,20 @@ interface GalleryChallenge {
 function galleryClosedNotice(
   error: ApiError,
   copy: { galleryNotOpen: string; galleryOpensOn: string },
-  language: string,
+  language: Language,
 ) {
   const details = error.details as
     | { reason?: string; opensAt?: string | null; timeZone?: string }
     | undefined;
   if (error.status !== 403 || !details?.reason?.startsWith("gallery_")) return null;
   if (details.reason !== "gallery_closed" || !details.opensAt) return copy.galleryNotOpen;
-  const date = new Intl.DateTimeFormat(language, {
-    dateStyle: "long",
-    timeStyle: "short",
-    // Server component: the client-side event-time store is unavailable here.
-    timeZone: details.timeZone || "UTC",
-  }).format(new Date(details.opensAt));
+  // Server component: the client-side event-time store is unavailable here.
+  const date = formatEventDate(
+    details.opensAt,
+    language,
+    "dateTimeLong",
+    details.timeZone || "UTC",
+  );
   return copy.galleryOpensOn.replace("{date}", date);
 }
 

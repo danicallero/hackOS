@@ -44,10 +44,10 @@ export interface DiaryHandlers {
   onRemove: (mark: DiaryMark, title: string) => void;
 }
 
-export const NOTE_MAX = 500;
+const NOTE_MAX = 500;
 
 /** Favourite toggle; only rendered for an entry that is already saved. */
-export function StarButton({
+function StarButton({
   mark,
   name,
   handlers,
@@ -77,7 +77,7 @@ export function StarButton({
 }
 
 /** Overflow menu of a saved entry: its private note and the explicit removal. */
-export function DiaryMenu({
+function DiaryMenu({
   mark,
   name,
   handlers,

@@ -7,21 +7,8 @@
 // drill-down), but every edit stays in this category's one draft and save
 // footer (R011): the PUT replaces the whole configuration.
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   LIVE_ACTIVITY_LEAD_MINUTES_MAX,
   LIVE_ACTIVITY_LEAD_MINUTES_MIN,
@@ -44,6 +31,7 @@ import { DrilldownBackButton } from "@/components/common/drilldown-back-button";
 import { FormActions } from "@/components/common/form-actions";
 import { IconButton } from "@/components/common/icon-button";
 import { SectionCard } from "@/components/common/section-card";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -87,7 +75,7 @@ const KIND_COPY: Record<LiveActivityConfigKind, { name: MessageKey; description:
   },
 };
 
-export function liveActivityKindName(kind: LiveActivityConfigKind, t: Translate): string {
+function liveActivityKindName(kind: LiveActivityConfigKind, t: Translate): string {
   return t(KIND_COPY[kind].name);
 }
 
@@ -146,7 +134,7 @@ function toDraft(settings: LiveActivitySettings): Draft {
 }
 
 /** PUT body: array order is priority (0 = highest), every kind exactly once. */
-export function toPayload(draft: Draft) {
+function toPayload(draft: Draft) {
   return {
     maxConcurrent: draft.maxConcurrent,
     leadMinutes: draft.leadMinutes,
@@ -381,10 +369,7 @@ function KindList({
   onMove: (kind: LiveActivityConfigKind, toIndex: number) => void;
 }) {
   const { t } = useLocale();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
