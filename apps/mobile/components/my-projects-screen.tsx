@@ -7,7 +7,13 @@ import { useBackDismiss } from "@/components/app-back-gesture";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import MyQueueScreen from "@/components/my-queue-screen";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
+import {
+  EmptyState,
+  LegacyHeaderIconButton,
+  LegacyScreenHeader,
+  Section,
+  Separator,
+} from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { GlassButton, NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -28,6 +34,7 @@ import {
 } from "@/lib/projects";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useSideRegion } from "@/lib/side-region";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
 import { colors, radius, type } from "@/theme";
@@ -113,7 +120,14 @@ export function MyProjectsScreen() {
   useBackDismiss(queueOpen, closeQueue);
   const openQueue = useCallback(() => setQueueOpen((current) => !current), []);
   const openNew = useCallback(() => router.push("/queue/new"), [router]);
+  const androidHeader = process.env.EXPO_OS === "android";
+  const androidTopInset = useAndroidTopInset();
   useLayoutEffect(() => {
+    // Android draws its own header (same as Schedule), below.
+    if (androidHeader) {
+      navigation.setOptions({ headerShown: false, gestureEnabled: !queueOpen });
+      return;
+    }
     navigation.setOptions({
       // Beside a side column the title is a left toolbar item on the bar row, exactly like
       // Contacts, so the bar blurs the same way; elsewhere the native large title stays.
@@ -145,6 +159,7 @@ export function MyProjectsScreen() {
           ),
     });
   }, [
+    androidHeader,
     navigation,
     t,
     glassAvailable,
@@ -172,6 +187,51 @@ export function MyProjectsScreen() {
   }
   return (
     <>
+      {androidHeader ? (
+        <LegacyScreenHeader
+          actions={
+            <>
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: radius.full, height: 44, width: 44 }}
+              >
+                <LegacyHeaderIconButton
+                  accessibilityLabel={queueOpen ? t("close") : t("projectQueue")}
+                  icon={queueOpen ? "xmark" : "list.number"}
+                  onPress={openQueue}
+                />
+              </GlassView>
+              {canCreate ? (
+                <GlassView
+                  colorScheme="auto"
+                  glassEffectStyle="regular"
+                  isInteractive
+                  style={{ borderRadius: radius.full, height: 44, width: 44 }}
+                >
+                  <LegacyHeaderIconButton
+                    accessibilityLabel={t("createProject")}
+                    icon="plus"
+                    onPress={openNew}
+                  />
+                </GlassView>
+              ) : null}
+            </>
+          }
+          cancelLabel={t("cancel")}
+          onCloseSearch={() => undefined}
+          onOpenSearch={() => undefined}
+          onSearchQueryChange={() => undefined}
+          searchEnabled={false}
+          searchLabel=""
+          searchOpen={false}
+          searchPlaceholder=""
+          searchQuery=""
+          title={queueOpen ? "" : t("projects")}
+          topInset={androidTopInset}
+        />
+      ) : null}
       {glassAvailable ? (
         <Stack.Toolbar placement="left">
           <Stack.Toolbar.View hidesSharedBackground>

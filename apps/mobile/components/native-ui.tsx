@@ -37,6 +37,7 @@ import { type HapticIntent, haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { colors, isAccessibilityTextSize, radius, space, type } from "@/theme";
+import { androidHeaderShadow, noTextShadow } from "@/theme/android-header";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
 
 export function Section({
@@ -675,6 +676,108 @@ export function LegacyHeaderIconButton({
         weight="semibold"
       />
     </Pressable>
+  );
+}
+
+/** The circular glass back control shared by every Android custom header. */
+export function LegacyBackButton({ onPress }: { onPress: () => void }) {
+  const { t } = useLocale();
+  return (
+    <GlassView
+      colorScheme="auto"
+      glassEffectStyle="regular"
+      isInteractive
+      style={{ borderRadius: radius.full, height: 44, width: 44 }}
+    >
+      <LegacyHeaderIconButton
+        accessibilityLabel={t("back")}
+        icon="chevron.left"
+        onPress={onPress}
+      />
+    </GlassView>
+  );
+}
+
+/** Fixed Android header height below the status bar; content starts at `insets.top + this + 16`. */
+const ANDROID_DETAIL_HEADER_BAR = 60;
+
+/** Top padding that clears {@link AndroidDetailHeader}. */
+export function useAndroidDetailHeaderInset(): number {
+  return useAndroidTopInset() + ANDROID_DETAIL_HEADER_BAR + 16;
+}
+
+function truncateHeaderTitle(title: string): string {
+  // Android's Text ellipsize can wrap before applying the tail ellipsis between two
+  // fixed-size icon buttons, so the title is cut deterministically.
+  const maxCharacters = 22;
+  return title.length > maxCharacters ? `${title.slice(0, maxCharacters - 1)}…` : title;
+}
+
+/**
+ * The Android detail header (activity detail, project): a circular back button, a bold
+ * title and an optional trailing action, drawn in the screen instead of the native bar.
+ * The screen sets `headerShown: false` and pads its content with
+ * {@link useAndroidDetailHeaderInset}.
+ */
+export function AndroidDetailHeader({
+  title,
+  onBack,
+  trailing,
+}: {
+  title: string;
+  onBack: () => void;
+  trailing?: ReactNode;
+}) {
+  const topInset = useAndroidTopInset();
+  return (
+    <View
+      style={{
+        alignItems: "center",
+        backgroundColor: colors.background,
+        flexDirection: "row",
+        gap: 8,
+        height: topInset + ANDROID_DETAIL_HEADER_BAR,
+        left: 0,
+        paddingBottom: 4,
+        paddingHorizontal: 16,
+        paddingTop: topInset + 8,
+        position: "absolute",
+        right: 0,
+        ...androidHeaderShadow,
+        top: 0,
+        zIndex: 10,
+      }}
+    >
+      <LegacyBackButton onPress={onBack} />
+      <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+        adjustsFontSizeToFit
+        minimumFontScale={CHROME_MIN_FONT_SCALE}
+        selectable
+        style={[
+          noTextShadow,
+          {
+            color: colors.label,
+            flex: 1,
+            flexBasis: 0,
+            fontSize: type.title2.fontSize,
+            fontWeight: "700",
+            flexShrink: 1,
+            height: 30,
+            includeFontPadding: false,
+            lineHeight: 30,
+            minWidth: 0,
+            overflow: "hidden",
+            width: 0,
+          },
+        ]}
+      >
+        {truncateHeaderTitle(title)}
+      </Text>
+      {trailing}
+    </View>
   );
 }
 

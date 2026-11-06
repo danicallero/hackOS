@@ -16,11 +16,11 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
-import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
 import {
   EmptyState,
-  LegacyHeaderIconButton,
+  LegacyBackButton,
   LegacyScreenHeader,
   Separator,
 } from "@/components/native-ui";
@@ -76,15 +76,7 @@ export function PeopleDirectoryScreen({
   requireBadge?: boolean;
 } = {}) {
   const listColumn = useOperatorListColumn();
-  const { activityId, autoSearch } = useLocalSearchParams<{
-    activityId?: string;
-    /** Set by the scanner's "search participants" entry point (H22-H26) so the
-     *  legacy (non-Liquid-Glass) header opens straight into search with the
-     *  keyboard up, instead of landing on the plain title + a search icon the
-     *  operator has to tap first. iOS's native `headerSearchBarOptions` bar
-     *  below isn't driven by `searchOpen`, so this has no effect there. */
-    autoSearch?: string;
-  }>();
+  const { activityId } = useLocalSearchParams<{ activityId?: string }>();
   const router = useRouter();
   const pathname = usePathname();
   const navigation = useNavigation();
@@ -92,7 +84,7 @@ export function PeopleDirectoryScreen({
   const insets = useSafeAreaInsets();
   const sync = useScannerSync();
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(autoSearch === "1");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [loading, setLoading] = useState(true);
@@ -350,25 +342,11 @@ export function PeopleDirectoryScreen({
       cancelLabel={t("cancel")}
       leading={
         embedded ? (
-          // The same circular glass chevron as the other legacy headers, closing the panel.
           <View style={{ alignItems: "center", height: 48, justifyContent: "center", width: 48 }}>
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ borderRadius: radius.full, height: 44, width: 44 }}
-            >
-              <LegacyHeaderIconButton
-                icon="chevron.left"
-                accessibilityLabel={backLabel ?? t("back")}
-                onPress={() => onClose?.()}
-              />
-            </GlassView>
+            <LegacyBackButton onPress={() => onClose?.()} />
           </View>
         ) : (
-          <LegacyHeaderIconButton
-            icon="chevron.left"
-            accessibilityLabel={t("back")}
+          <LegacyBackButton
             onPress={() =>
               safeBack(
                 router,

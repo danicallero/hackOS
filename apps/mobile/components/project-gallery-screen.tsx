@@ -2,18 +2,18 @@ import { SSE_TOPICS } from "@hackos/shared/events";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from "react-native";
+import { Platform, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import { FilterMenu, type FilterMenuProps } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { EntryBackToolbar } from "@/components/header-back-button";
-import { ActionButton, EmptyState, Section, Separator } from "@/components/native-ui";
+import {
+  ActionButton,
+  EmptyState,
+  LegacyBackButton,
+  LegacyScreenHeader,
+  Section,
+  Separator,
+} from "@/components/native-ui";
 import { ProjectDetailScreen } from "@/components/project-detail-screen";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -22,6 +22,7 @@ import { formatEventTime } from "@/lib/event-time";
 import { useBookCrease } from "@/lib/fold-region";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
+import { safeBack } from "@/lib/navigation";
 import { resolveListPaneWidth } from "@/lib/pane-width";
 import {
   fetchChallengeCatalogue,
@@ -29,9 +30,10 @@ import {
   mergeProjects,
   type NativeProject,
 } from "@/lib/projects";
+import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { listDetailLayout } from "@/lib/window-size";
-import { colors, radius, type } from "@/theme";
+import { colors } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 /** H18: a gallery that is not open yet is a date, not a permission error. */
@@ -109,6 +111,8 @@ export function ProjectGalleryScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const androidTopInset = useAndroidTopInset();
   const params = useLocalSearchParams<{ challengeId?: string }>();
   const [challengeIds, setChallengeIds] = useState<number[]>(
     params.challengeId ? [Number(params.challengeId)] : [],
@@ -159,6 +163,11 @@ export function ProjectGalleryScreen() {
   const listWidth = resolveListPaneWidth(windowWidth, paneLayout, crease);
   const readable = useParticipantLayout("list");
   useLayoutEffect(() => {
+    // Android draws its own header (same as Schedule and the People finder) below.
+    if (Platform.OS === "android") {
+      navigation.setOptions({ headerShown: false });
+      return;
+    }
     navigation.setOptions({
       title: t("gallery"),
       headerShown: true,
@@ -171,19 +180,15 @@ export function ProjectGalleryScreen() {
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
-      ...(Platform.OS === "ios"
-        ? {
-            headerSearchBarOptions: {
-              placeholder: t("projectSearch"),
-              autoCapitalize: "none",
-              hideWhenScrolling: false,
-              allowToolbarIntegration: false,
-              placement: "integratedButton",
-              onChangeText: (event: { nativeEvent: { text: string } }) =>
-                setSearch(event.nativeEvent.text),
-            },
-          }
-        : {}),
+      headerSearchBarOptions: {
+        placeholder: t("projectSearch"),
+        autoCapitalize: "none",
+        hideWhenScrolling: false,
+        allowToolbarIntegration: false,
+        placement: "integratedButton" as const,
+        onChangeText: (event: { nativeEvent: { text: string } }) =>
+          setSearch(event.nativeEvent.text),
+      },
     });
   });
   const load = useCallback(
@@ -315,6 +320,25 @@ export function ProjectGalleryScreen() {
   return (
     <>
       <EntryBackToolbar fallback="/(tabs)/queue" />
+      {Platform.OS === "android" ? (
+        <LegacyScreenHeader
+          actions={challenges.length > 0 ? filter : null}
+          cancelLabel={t("cancel")}
+          leading={<LegacyBackButton onPress={() => safeBack(router, "/(tabs)/queue")} />}
+          onCloseSearch={() => {
+            setSearchOpen(false);
+            setSearch("");
+          }}
+          onOpenSearch={() => setSearchOpen(true)}
+          onSearchQueryChange={setSearch}
+          searchLabel={t("projectSearch")}
+          searchOpen={searchOpen}
+          searchPlaceholder={t("projectSearch")}
+          searchQuery={search}
+          title={t("gallery")}
+          topInset={androidTopInset}
+        />
+      ) : null}
       {glassAvailable && challenges.length > 0 ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.View hidesSharedBackground>{filter}</Stack.Toolbar.View>
@@ -340,23 +364,6 @@ export function ProjectGalleryScreen() {
               justifyContent: empty ? "center" : undefined,
             }}
           >
-            {Platform.OS !== "ios" ? (
-              <TextInput
-                accessibilityLabel={t("projectSearch")}
-                value={search}
-                onChangeText={setSearch}
-                placeholder={t("projectSearch")}
-                placeholderTextColor={colors.tertiaryLabel}
-                style={{
-                  color: colors.label,
-                  padding: 12,
-                  minHeight: 44,
-                  fontSize: type.body.fontSize,
-                  backgroundColor: colors.surface,
-                  borderRadius: radius.control,
-                }}
-              />
-            ) : null}
             {closed ? (
               <EmptyState icon="clock" title={closed} />
             ) : error ? (

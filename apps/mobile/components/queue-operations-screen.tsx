@@ -24,7 +24,6 @@ import {
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { startQueueEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { canOperateQueues, isPadIdiom } from "@/lib/tabs";
-import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
@@ -54,7 +53,6 @@ export function QueueOperationsScreen() {
   const pathname = usePathname();
   const usesOthersStack = isPadIdiom() && pathname.includes("/others/operations");
   const headerNavigation = useNavigation(usesOthersStack ? "/(tabs)/others" : undefined);
-  const androidTopInset = useAndroidTopInset();
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const { width } = useWindowDimensions();
   const [realtimeConnected, setRealtimeConnected] = useState(false);
@@ -307,7 +305,7 @@ export function QueueOperationsScreen() {
           gap: 12,
           padding: 16,
           paddingBottom: tabBarBottomInset + 16,
-          paddingTop: 16 + androidTopInset,
+          paddingTop: 16,
         }}
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
@@ -353,7 +351,7 @@ export function QueueOperationsScreen() {
         gap: 12,
         padding: 16,
         paddingBottom: tabBarBottomInset + 16,
-        paddingTop: 16 + androidTopInset,
+        paddingTop: 16,
       }}
       columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined}
       refreshControl={

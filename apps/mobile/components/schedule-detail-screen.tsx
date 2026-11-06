@@ -6,7 +6,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { HeaderBackButton } from "@/components/header-back-button";
-import { EmptyState, LegacyHeaderIconButton } from "@/components/native-ui";
+import {
+  AndroidDetailHeader,
+  EmptyState,
+  LegacyHeaderIconButton,
+  useAndroidDetailHeaderInset,
+} from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import {
   ScheduleFormModal,
@@ -39,16 +44,10 @@ import { useCachedApi } from "@/lib/use-cached-api";
 import { itemCategory, useScheduleNotifications } from "@/lib/use-schedule-notifications";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { colors, radius, type } from "@/theme";
-import { CHROME_MAX_FONT_SIZE_MULTIPLIER, CHROME_MIN_FONT_SCALE } from "@/theme/dynamic-type";
+import { noTextShadow } from "@/theme/android-header";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 const CONTENT_PADDING = 20;
-const noTextShadow = {
-  textShadowColor: "transparent" as const,
-  textShadowOffset: { height: 0, width: 0 },
-  textShadowRadius: 0,
-};
-
 const sectionHeaderStyle = {
   color: colors.secondaryLabel,
   fontSize: type.footnote.fontSize,
@@ -85,6 +84,7 @@ export function ScheduleDetailScreen({
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const insets = useSafeAreaInsets();
+  const androidHeaderInset = useAndroidDetailHeaderInset();
   const readable = useParticipantLayout("form");
   const canManage = canManageSchedule(me?.capabilities ?? []);
   const canReadFull = canReadFullSchedule(me?.capabilities ?? []);
@@ -197,90 +197,34 @@ export function ScheduleDetailScreen({
     startsAt && endsAt
       ? `${formatEventTime(startsAt, language, clock, eventZone)}–${formatEventTime(endsAt, language, clock, eventZone)}${zoneHint ? ` ${zoneHint}` : ""}`
       : null;
-  const headerTitle = truncateHeaderTitle(item?.title ?? t("scheduleDetails"));
 
   return (
     <>
       {embedded ? null : usesCustomAndroidHeader ? (
-        <View
-          style={{
-            alignItems: "center",
-            backgroundColor: colors.background,
-            flexDirection: "row",
-            gap: 8,
-            height: insets.top + 60,
-            left: 0,
-            paddingBottom: 4,
-            paddingHorizontal: 16,
-            paddingTop: insets.top + 8,
-            position: "absolute",
-            right: 0,
-            shadowColor: "#000000",
-            shadowOffset: { height: 2, width: 0 },
-            shadowOpacity: 0.08,
-            shadowRadius: 6,
-            top: 0,
-            zIndex: 10,
-          }}
-        >
-          <GlassView
-            colorScheme="auto"
-            glassEffectStyle="regular"
-            isInteractive
-            style={{ borderRadius: radius.full, height: 44, width: 44 }}
-          >
-            <LegacyHeaderIconButton
-              accessibilityLabel={t("back")}
-              icon="chevron.left"
-              onPress={() => safeBack(router, "/(tabs)/schedule")}
-            />
-          </GlassView>
-          <Text
-            ellipsizeMode="tail"
-            numberOfLines={1}
-            maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-            adjustsFontSizeToFit
-            minimumFontScale={CHROME_MIN_FONT_SCALE}
-            selectable
-            style={[
-              noTextShadow,
-              {
-                color: colors.label,
-                flex: 1,
-                flexBasis: 0,
-                fontSize: type.title2.fontSize,
-                fontWeight: "700",
-                flexShrink: 1,
-                height: 30,
-                includeFontPadding: false,
-                lineHeight: 30,
-                minWidth: 0,
-                overflow: "hidden",
-                width: 0,
-              },
-            ]}
-          >
-            {headerTitle}
-          </Text>
-          {item && reminderOn !== null ? (
-            <GlassView
-              colorScheme="auto"
-              glassEffectStyle="regular"
-              isInteractive
-              style={{ borderRadius: radius.full, height: 44, width: 44 }}
-            >
-              <LegacyHeaderIconButton
-                accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
-                  name: item.title,
-                })}
-                accessibilityState={{ selected: reminderOn }}
-                icon={reminderOn ? "bell.fill" : "bell"}
-                tintColor={reminderOn ? colors.accent : colors.label}
-                onPress={() => void notifications.toggleEntry(item)}
-              />
-            </GlassView>
-          ) : null}
-        </View>
+        <AndroidDetailHeader
+          title={item?.title ?? t("scheduleDetails")}
+          onBack={() => safeBack(router, "/(tabs)/schedule")}
+          trailing={
+            item && reminderOn !== null ? (
+              <GlassView
+                colorScheme="auto"
+                glassEffectStyle="regular"
+                isInteractive
+                style={{ borderRadius: radius.full, height: 44, width: 44 }}
+              >
+                <LegacyHeaderIconButton
+                  accessibilityLabel={t(reminderOn ? "scheduleReminderOn" : "scheduleReminderOff", {
+                    name: item.title,
+                  })}
+                  accessibilityState={{ selected: reminderOn }}
+                  icon={reminderOn ? "bell.fill" : "bell"}
+                  tintColor={reminderOn ? colors.accent : colors.label}
+                  onPress={() => void notifications.toggleEntry(item)}
+                />
+              </GlassView>
+            ) : null
+          }
+        />
       ) : (
         <Stack.Screen
           options={{
@@ -365,7 +309,7 @@ export function ScheduleDetailScreen({
           paddingBottom: 40,
           // Embedded in the two-pane layout the pane already bounds the column.
           ...(embedded ? { paddingHorizontal: CONTENT_PADDING } : readable.content),
-          paddingTop: embedded ? topInset + 8 : usesCustomAndroidHeader ? insets.top + 76 : 0,
+          paddingTop: embedded ? topInset + 8 : usesCustomAndroidHeader ? androidHeaderInset : 0,
         }}
         style={{ backgroundColor: colors.background, flex: 1 }}
       >
@@ -593,14 +537,6 @@ function scheduleAudienceLabel(
 function ownerDisplayName(owner: ScheduleOwner): string {
   if (owner.freeTextName) return owner.freeTextName;
   return [owner.name, owner.surname].filter(Boolean).join(" ").trim() || owner.email || "";
-}
-
-function truncateHeaderTitle(title: string): string {
-  // Keep the fallback header deterministic on Android. Its Text ellipsize
-  // implementation can wrap before applying the tail ellipsis when it sits
-  // between two fixed-size icon buttons.
-  const maxCharacters = 22;
-  return title.length > maxCharacters ? `${title.slice(0, maxCharacters - 1)}…` : title;
 }
 
 function DetailTextSection({ label, value }: { label: string; value: string }) {
