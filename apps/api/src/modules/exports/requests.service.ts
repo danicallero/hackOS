@@ -1,9 +1,10 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { broadcast } from "../../lib/sse.js";
-import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 
 export type RequestType = "export" | "deletion";
 export type RequestStatus = "pending" | "processing" | "completed" | "failed";
@@ -57,10 +58,6 @@ function syntheticVisibilityCondition(includeSynthetic: boolean, alias = "r"): s
        AND fixture_marker.action = 'fixture_scope_marked'
        AND fixture_marker.after ->> 'is_test_account' = 'true'
   )`;
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
 /** H54: create an export/deletion request. Enqueueing the worker job is the caller's job, after commit. */

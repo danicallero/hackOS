@@ -6,6 +6,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { type AuthorizationContext, getEffectiveCapabilities } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { likeContains } from "../../lib/like.js";
 import { broadcast } from "../../lib/sse.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
 import { requestLiveActivitySync } from "../live-activities/kick.js";
@@ -753,7 +754,7 @@ export async function listScheduleOwnerCandidates(
   query: string,
   limit: number,
 ): Promise<OwnerCandidate[]> {
-  const filter = `%${query.trim()}%`;
+  const filter = likeContains(query.trim());
   const { rows } = await pool.query(
     `SELECT id, email, name, surname
        FROM users

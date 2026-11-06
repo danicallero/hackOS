@@ -2,9 +2,9 @@ import { randomBytes } from "node:crypto";
 import type pg from "pg";
 import { pool, type Queryable } from "../../db/pool.js";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
-import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { PASS_TYPE_IDENTIFIER, voidTicketPasses } from "./wallet-passes.js";
 
 /**

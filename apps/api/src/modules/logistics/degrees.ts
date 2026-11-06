@@ -6,7 +6,9 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { likeContains } from "../../lib/like.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { idParamSchema, PUBLIC_CATALOG_CACHE } from "./schemas.js";
@@ -18,7 +20,6 @@ const proposalRateLimit = rateLimitGuard(
   { windowSeconds: 3600, max: 5 },
   keyByUser,
 );
-const uniqueViolation = "23505";
 const normalize = (name: string) => name.trim().replace(/\s+/g, " ");
 
 async function create(actorId: number, name: string, suggested = false) {
@@ -141,7 +142,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       }
       const { rows } = await pool.query(
         `SELECT id, name FROM university_degrees ${q ? "WHERE unaccent(name) ILIKE unaccent($1)" : ""} ORDER BY name LIMIT 50`,
-        q ? [`%${q}%`] : [],
+        q ? [likeContains(q)] : [],
       );
       return { degrees: rows };
     },
@@ -164,7 +165,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
         reply.code(result.created ? 201 : 200);
         return result.degree;
       } catch (error) {
-        if ((error as { code?: string }).code === uniqueViolation)
+        if (isUniqueViolation(error))
           throw new ConflictError("You have already suggested a degree", {
             code: "degree_suggestion_exists",
           });
@@ -234,7 +235,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
           return rows[0];
         });
       } catch (error) {
-        if ((error as { code?: string }).code === uniqueViolation)
+        if (isUniqueViolation(error))
           throw new ConflictError("A degree with that name already exists");
         throw error;
       }

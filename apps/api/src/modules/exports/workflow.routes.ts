@@ -10,11 +10,12 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ConflictError, ForbiddenError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { subscribe } from "../../lib/sse.js";
 import { getObject } from "../../lib/storage.js";
-import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { createRequest, getRequest, listRequests, serializeRequest } from "./requests.service.js";
 import {
   createRequestBody,
@@ -133,7 +134,7 @@ export function registerWorkflowRoutes(app: FastifyInstance): void {
       reply.header("content-type", "application/json");
       reply.header(
         "content-disposition",
-        `attachment; filename="export-user-${row.subject_user_id}-${row.id}.json"`,
+        contentDisposition(`export-user-${row.subject_user_id}-${row.id}.json`),
       );
       reply.header("cache-control", "private, no-store");
       return reply.send(obj.Body as Readable);

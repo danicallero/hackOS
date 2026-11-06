@@ -1,4 +1,3 @@
-import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -8,6 +7,7 @@ import { requireCapability } from "../../lib/capabilities.js";
 import { recordsToCsv, sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { scannableActivitySql, scannableCategoriesParam } from "../logistics/scannable.js";
 import { activitiesExportBody, activitiesExportCatalogQuery } from "./schemas.js";
 
 type ExportLanguage = "es" | "gl" | "en";
@@ -44,8 +44,6 @@ function localizedText(
   return fallback;
 }
 
-const SCANNABLE_ACTIVITY_WHERE = "(a.category = ANY($1::text[]) OR a.requires_scan = true)";
-
 async function loadActivityCatalog(language: ExportLanguage): Promise<Record<string, unknown>[]> {
   const { rows } = await pool.query<ActivityCatalogRow>(
     `SELECT a.id, a.name, a.category, a.requires_scan, a.primary_language,
@@ -59,11 +57,11 @@ async function loadActivityCatalog(language: ExportLanguage): Promise<Record<str
         AND u.account_state = 'active' AND u.anonymized_at IS NULL
         AND u.is_test_account = false
        LEFT JOIN schedule s ON s.id = a.schedule_id
-      WHERE ${SCANNABLE_ACTIVITY_WHERE}
+      WHERE ${scannableActivitySql()}
       GROUP BY a.id, a.name, a.category, a.requires_scan, a.primary_language,
                a.name_i18n, a.description_i18n, s.starts_at, s.ends_at
       ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
-    [[...MEAL_ACTIVITY_KINDS]],
+    [scannableCategoriesParam()],
   );
 
   return rows.map((row) => ({
@@ -88,8 +86,8 @@ async function validateActivityIds(activityIds: number[]): Promise<number[]> {
     `SELECT a.id
        FROM activities a
       WHERE a.id = ANY($1::int[])
-        AND (a.category = ANY($2::text[]) OR a.requires_scan = true)`,
-    [uniqueIds, [...MEAL_ACTIVITY_KINDS]],
+        AND ${scannableActivitySql("a", 2)}`,
+    [uniqueIds, scannableCategoriesParam()],
   );
   const found = new Set(rows.map((row) => Number(row.id)));
   const invalid = uniqueIds.filter((id) => !found.has(id));

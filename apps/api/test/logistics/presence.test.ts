@@ -185,7 +185,7 @@ describe("H24 presence scan + estimation", () => {
     expect(est.json().present).toContain(uid);
 
     const { userHours } = await import("../../src/modules/logistics/presence.js");
-    const justArrivedHours = await userHours(uid);
+    const justArrivedHours = await userHours(uid, { actorId: null });
     expect(justArrivedHours.intervals).toHaveLength(1);
 
     // a meal an hour ago also contributes to the hours estimate

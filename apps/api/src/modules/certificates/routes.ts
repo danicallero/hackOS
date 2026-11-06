@@ -6,11 +6,12 @@ import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError, TooManyRequestsError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { consumeRateLimit } from "../../lib/rate-limit.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
 import { presenceTimeline } from "../logistics/presence.js";
-import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import {
   approveCertificateHours,
   availableCertificateTypes,
@@ -121,7 +122,10 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
   ): Promise<Buffer> => {
     const { pdf, filename } = await renderCertificate(id);
     reply.header("content-type", "application/pdf");
-    reply.header("content-disposition", `${disposition}; filename="${filename}"`);
+    reply.header(
+      "content-disposition",
+      contentDisposition(filename).replace(/^attachment/, disposition),
+    );
     reply.header("cache-control", "private, no-store");
     return Buffer.from(pdf);
   };
@@ -220,7 +224,7 @@ export function registerCertificateRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
-      return presenceTimeline(req.params.id, undefined, req.userId as number);
+      return presenceTimeline(req.params.id, { actorId: req.userId as number });
     },
   );
 

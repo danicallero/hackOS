@@ -3,18 +3,18 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type pg from "pg";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import { AppError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { assignAttendeeRole, hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
-import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
 import { reconcileTicketAccess } from "./tickets.js";
 import { enqueueWalletSync } from "./wallet-sync.js";
 
 /** Postgres unique_violation — thrown by the unique `users.badge_id` index. */
-const PG_UNIQUE_VIOLATION = "23505";
 
 async function voidBadgePasses(client: pg.PoolClient, userId: number): Promise<void> {
   await client.query(
@@ -242,7 +242,7 @@ export async function checkInUser(
         input.userId,
       ]);
     } catch (err) {
-      if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      if (isUniqueViolation(err)) {
         throw new ConflictError("Badge already assigned to another user", {
           badgeId: input.badgeId,
         });
@@ -371,7 +371,7 @@ export async function rotateBadge(
         userId,
       ]);
     } catch (err) {
-      if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+      if (isUniqueViolation(err)) {
         throw new ConflictError("New badge already assigned to another user", {
           badgeId: input.newBadgeId,
         });

@@ -4,9 +4,10 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { fixtureReadFilter } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { likeContains } from "../../lib/like.js";
 import { routeAccessOption } from "../../lib/route-policy.js";
-import { fixtureReadFilter } from "../logistics/review-fixture-scope.js";
 import { issueConfiguredCertificate, issueForSelf, listIssuedCertificates } from "./service.js";
 import {
   listCertificateTypes,
@@ -99,7 +100,7 @@ export function registerCertificateTypeRoutes(app: FastifyInstance) {
       const scope = await fixtureReadFilter(pool, req.userId as number, "u");
       const { rows } = await pool.query(
         `SELECT u.id,u.name,u.surname,u.email FROM users u WHERE u.account_state='active' AND u.anonymized_at IS NULL ${scope} AND (unaccent(concat_ws(' ',u.name,u.surname)) ILIKE unaccent($1) OR u.email ILIKE $1) ORDER BY u.name,u.surname,u.id LIMIT 30`,
-        [`%${req.query.q}%`],
+        [likeContains(req.query.q)],
       );
       return { items: rows };
     },

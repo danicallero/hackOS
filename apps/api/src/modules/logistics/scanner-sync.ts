@@ -1,7 +1,7 @@
-import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
+import { isSyntheticOperator, scannerSubjectScope } from "../../lib/fixture-subject-scope.js";
 import type { Language } from "../notifications/translate/index.js";
-import { isSyntheticOperator, scannerSubjectScope } from "./review-fixture-scope.js";
+import { scannableActivitySql, scannableCategoriesParam } from "./scannable.js";
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately
@@ -93,9 +93,9 @@ export async function scannerSnapshot(actorId?: number) {
               a.primary_language, a.name_i18n, a.description_i18n
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
-        WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
+        WHERE ${scannableActivitySql()}
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
-      [[...MEAL_ACTIVITY_KINDS]],
+      [scannableCategoriesParam()],
     ),
     pool.query(
       `SELECT user_id, activity_id, count(*)::int AS scan_count
