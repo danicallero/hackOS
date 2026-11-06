@@ -10,7 +10,7 @@ import type { SaveState } from "./save-state";
  * elsewhere, and none replaces a browser or screen-reader command (⌘F stays
  * the browser's find; list search uses `/` instead).
  */
-export interface Shortcut {
+interface Shortcut {
   /** `KeyboardEvent.key`, lower-case for letters. */
   key: string;
   /** Requires ⌘ on Apple platforms and Ctrl elsewhere. */
@@ -65,7 +65,7 @@ export function matchesShortcut(event: KeyEventLike, shortcut: Shortcut, apple: 
 }
 
 /** Text entry owns its keystrokes: inputs, textareas, selects, editors and comboboxes. */
-export function isEditableTarget(target: EventTarget | null): boolean {
+function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as Element).closest !== "function") return false;
   const element = target as HTMLElement;
   if (element.isContentEditable) return true;
@@ -164,7 +164,7 @@ function saveButtonFor(form: HTMLFormElement, doc: Document): HTMLButtonElement 
   return doc.querySelector<HTMLButtonElement>(`${SAVE_SELECTOR}[form="${CSS.escape(form.id)}"]`);
 }
 
-export interface SaveTarget {
+interface SaveTarget {
   form: HTMLFormElement;
   button: HTMLButtonElement;
 }
@@ -174,7 +174,7 @@ export interface SaveTarget {
  * when focus is outside any form — the only form in the active layer with
  * unsaved changes. Ambiguous pages resolve to null so the key does nothing.
  */
-export function findSaveTarget(doc: Document): SaveTarget | null {
+function findSaveTarget(doc: Document): SaveTarget | null {
   const active = doc.activeElement as (HTMLElement & { form?: HTMLFormElement | null }) | null;
   const focusedForm = active?.form ?? active?.closest?.("form") ?? null;
   if (focusedForm) {

@@ -1,5 +1,6 @@
 import type { ResponseRow } from "@/lib/applications";
 import type { Translate } from "@/lib/i18n";
+import type { Tone } from "@/lib/tones";
 
 // Three workspaces instead of four: "review" also makes the internal
 // accept/reject call (score → decide, no separate "decisions" tab that
@@ -11,7 +12,7 @@ import type { Translate } from "@/lib/i18n";
 // lifecycle.
 export type ApplicationWorkspace = "review" | "outbox" | "sent";
 
-export interface ApplicationWorkspaceCapabilities {
+interface ApplicationWorkspaceCapabilities {
   manage: boolean;
   review: boolean;
   decide: boolean;
@@ -51,6 +52,28 @@ export function rowsForWorkspace(
 /** Status filter options for a workspace — only statuses that tab can show. */
 export function statusesForWorkspace(workspace: ApplicationWorkspace): string[] {
   return [...WORKSPACE_STATUSES[workspace]];
+}
+
+const STATUS_TONE: Record<string, Tone> = {
+  draft: "neutral",
+  review: "warning",
+  accepted_internal: "warning",
+  rejected_internal: "warning",
+  accepted: "success",
+  rejected: "danger",
+  confirmed: "success",
+  declined: "neutral",
+  expired: "warning",
+};
+
+/**
+ * Staff-facing tone for a response status. A declined seat is neutral (the
+ * applicant's own choice, not a failure); unsent internal decisions and
+ * expiries are warnings. This is the one table: the applicant list, users
+ * directory and review views previously disagreed on declined/accepted.
+ */
+export function applicationStatusTone(status: string): Tone {
+  return STATUS_TONE[status] ?? "neutral";
 }
 
 export function applicationStatusLabel(status: string, t: Translate): string {

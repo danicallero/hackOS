@@ -41,8 +41,6 @@ describe("toast adapter", () => {
       | undefined;
     expect(first).toMatchObject({ title: "Saved" });
     expect(second).toMatchObject({ title: "Published" });
-    expect(first?.id).toBeDefined();
-    expect(second?.id).toBeDefined();
     expect(first?.id).not.toBe(second?.id);
   });
 

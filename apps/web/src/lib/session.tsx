@@ -173,7 +173,6 @@ export function useSessionContext(): SessionContextValue {
   return ctx;
 }
 
-/** Convenience: current user or null. */
 export function useMe(): Me | null {
   return useSessionContext().me;
 }

@@ -406,6 +406,7 @@
   "onThisDevice": "On this device",
   "userSearchFailed": "User search failed.",
   "userLookupFailed": "User lookup failed.",
+  "couldNotLoadOwners": "Could not load owners.",
   "checkInFailed": "Check-in failed.",
   "badgeAssigned": "Badge {badgeId} assigned to {name}.",
   "badgeRotatedTo": "Badge rotated to {badge}.",
@@ -989,6 +990,7 @@
   "scheduleItemUpdated": "Schedule item updated.",
   "duplicateScheduleItem": "Duplicate schedule item",
   "scheduleItemDuplicated": "Schedule item duplicated.",
+  "scheduleCopyTitle": "{title} (copy)",
   "couldNotSaveScheduleItem": "Could not save schedule item.",
   "titleLabel": "Title",
   "openingCeremonyPlaceholder": "Opening ceremony",
@@ -3790,5 +3792,7 @@
   "selectScoreMatches_one": "Select {count} match",
   "selectScoreMatches": "Select {count} matches",
   "searchApplicantsOrReviews": "Search name, email or review notes…",
-  "reviewAverageScore": "{score}/5 avg"
+  "reviewAverageScore": "{score}/5 avg",
+  "couldNotLoadMembers": "Could not load members.",
+  "couldNotLoadDegrees": "Could not load degrees."
 }

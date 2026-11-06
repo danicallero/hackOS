@@ -1,4 +1,4 @@
-import type { PublicEvent } from "@/components/public/public-types";
+import type { PublicEvent } from "@/lib/types";
 import { api } from "./api";
 import { readServerState } from "./server-state";
 

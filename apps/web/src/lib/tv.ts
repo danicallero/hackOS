@@ -1,6 +1,5 @@
-import type { PublicEvent } from "@/components/public/public-types";
 import { api } from "@/lib/api";
-import type { Language } from "@/lib/types";
+import type { Language, PublicEvent } from "@/lib/types";
 
 /**
  * TV display model (H41/H42): the mode currently selected for every venue
@@ -8,7 +7,7 @@ import type { Language } from "@/lib/types";
  * state machines are unit-tested rather than eyeballed on a projector.
  */
 
-export type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live" | "github";
+type TvModeName = "rooms" | "schedule" | "sponsors" | "wifi" | "live" | "github";
 
 /** Modes organisers may select from the TV control surface. */
 export const TV_CONTROL_MODES = [
@@ -39,7 +38,6 @@ export interface TvVenueConfig {
 export const getTvState = () => api.get<TvState>("/api/tv/mode");
 export const setTvMode = (mode: TvModeName, payload: unknown = null) =>
   api.patch<TvState>("/api/tv/mode", { mode, payload });
-/** Clears the manual selection and restores the rooms display. */
 export const clearTvMode = () => api.delete<TvState>("/api/tv/mode");
 export const getTvVenueConfig = () => api.get<TvVenueConfig>("/api/tv/config");
 /** Sets the wall's fixed display language; null clears the override. */
@@ -57,7 +55,7 @@ export type TimerTarget =
   | "judgingEndsAt"
   | "custom";
 
-export const TIMER_TARGETS: TimerTarget[] = [
+const TIMER_TARGETS: TimerTarget[] = [
   "auto",
   "hackingStartsAt",
   "hackingEndsAt",
@@ -131,7 +129,7 @@ export function liveConfigFrom(payload: unknown): LiveScreenConfig {
   };
 }
 
-export type ResolvedTimer =
+type ResolvedTimer =
   /** Defer to the shared hacking/judging phase logic (components/public/timer.tsx). */
   { kind: "phase" } | { kind: "fixed"; endsAt: string; label: string | null };
 
@@ -152,13 +150,13 @@ export const DEFAULT_ROTATION_SECONDS = 30;
 
 // ── schedule window ──────────────────────────────────────────────────────
 
-export interface ScheduleWindowItem {
+interface ScheduleWindowItem {
   id: number;
   startsAt: string;
   endsAt: string;
 }
 
-export interface ScheduleWindow<T> {
+interface ScheduleWindow<T> {
   /** The whole agenda in chronological order — the screen renders it and scrolls. */
   ordered: T[];
   /**
@@ -198,7 +196,7 @@ export function upcomingWindow<T extends ScheduleWindowItem>(
 // ── sponsor grid ─────────────────────────────────────────────────────────
 
 /** Logo-shaped tiles: wide rectangles, never stretched to fill a column. */
-export const SPONSOR_TILE_ASPECT = 3 / 2;
+const SPONSOR_TILE_ASPECT = 3 / 2;
 
 /**
  * The fewest columns whose rows still fit the block — fewest columns means the

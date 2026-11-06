@@ -2,21 +2,25 @@
 
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
 
+function storageFor(kind: "session" | "local"): Storage {
+  return kind === "local" ? window.localStorage : window.sessionStorage;
+}
+
 /**
- * Like useState, but the value survives navigating away and back (e.g. via
- * browser history navigation) by round-tripping through sessionStorage under
- * `key`. Scoped to the tab/session — never sent anywhere, never shared
- * across users. Pass `key: null` to opt out and behave like plain useState
- * (e.g. when the caller doesn't want this particular instance persisted).
+ * Like useState, but the value survives navigating away and back by
+ * round-tripping through web storage under `key`: sessionStorage by default
+ * (tab-scoped), localStorage with `{ storage: "local" }`. Never sent anywhere,
+ * never shared across users. Pass `key: null` to behave like plain useState.
  */
 export function usePersistedState<T>(
   key: string | null,
   initial: T,
+  { storage = "session" }: { storage?: "session" | "local" } = {},
 ): [T, Dispatch<SetStateAction<T>>] {
   const [state, setState] = useState<T>(() => {
     if (!key || typeof window === "undefined") return initial;
     try {
-      const raw = window.sessionStorage.getItem(key);
+      const raw = storageFor(storage).getItem(key);
       return raw ? (JSON.parse(raw) as T) : initial;
     } catch {
       return initial;
@@ -26,11 +30,11 @@ export function usePersistedState<T>(
   useEffect(() => {
     if (!key) return;
     try {
-      window.sessionStorage.setItem(key, JSON.stringify(state));
+      storageFor(storage).setItem(key, JSON.stringify(state));
     } catch {
-      // storage full/unavailable — state just won't survive a back-navigation
+      // storage full/unavailable (private mode): the value just won't survive
     }
-  }, [key, state]);
+  }, [key, state, storage]);
 
   return [state, setState];
 }

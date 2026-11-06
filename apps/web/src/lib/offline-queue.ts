@@ -28,7 +28,7 @@ export function isStaleOfflineScanError(error: unknown): boolean {
 }
 
 export const LEGACY_OFFLINE_KEY = "hackos:logistics:meal-scans";
-export const OFFLINE_KEY_PREFIX = "hackos:logistics:meal-scans:v2:";
+const OFFLINE_KEY_PREFIX = "hackos:logistics:meal-scans:v2:";
 const KEY_DATABASE = "hackos-logistics-offline-queue";
 const KEY_STORE = "keys";
 const QUEUE_VERSION = 2;

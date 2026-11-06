@@ -3,7 +3,7 @@
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { useCallback, useEffect } from "react";
 import { notificationsApi } from "@/lib/notifications";
-import { useLiveQuery } from "./use-event-source";
+import { useLiveQuery } from "./use-live-query";
 
 const PERSONAL_STREAM = REALTIME_SCOPES.PERSONAL;
 

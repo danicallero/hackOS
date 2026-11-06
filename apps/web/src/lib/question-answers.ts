@@ -2,7 +2,7 @@ import type { AnswerValue, Question } from "@hackos/shared/questions";
 
 export type Answers = Record<string, AnswerValue>;
 
-export function defaultValue(question: Question): AnswerValue {
+function defaultValue(question: Question): AnswerValue {
   switch (question.kind) {
     case "scale":
       return question.min;

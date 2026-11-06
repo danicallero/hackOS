@@ -1,3 +1,4 @@
+import { formatEventDate } from "./datetime";
 import type { I18nText } from "./i18n";
 import { pickText } from "./i18n";
 import type { Language } from "./types";
@@ -43,15 +44,10 @@ export function mealName(meal: MealPlanMeal, lang: Language): string {
   return pickText(meal.nameI18n, lang) || meal.name;
 }
 
-/** "Sat, Oct 12, 14:00–15:00" in the viewer's locale. */
+/** "Sat, 12 Oct, 14:00–15:00" in the event zone and the viewer's language. */
 export function mealWhen(meal: MealPlanMeal, lang: Language): string {
-  const day = new Intl.DateTimeFormat(lang, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  }).format(new Date(meal.startsAt));
-  const time = new Intl.DateTimeFormat(lang, { hour: "2-digit", minute: "2-digit" });
-  return `${day}, ${time.format(new Date(meal.startsAt))}–${time.format(new Date(meal.endsAt))}`;
+  const day = formatEventDate(meal.startsAt, lang, "weekdayDayMonthText");
+  return `${day}, ${formatEventDate(meal.startsAt, lang, "clock")}–${formatEventDate(meal.endsAt, lang, "clock")}`;
 }
 
 /**
@@ -59,7 +55,7 @@ export function mealWhen(meal: MealPlanMeal, lang: Language): string {
  * Storage can be unavailable (private mode, blocked site data): then the
  * prompt simply returns on the next load.
  */
-export function profileTasksDismissKey(userId: number): string {
+function profileTasksDismissKey(userId: number): string {
   return `hackos.profileTasksDismissed.${userId}`;
 }
 

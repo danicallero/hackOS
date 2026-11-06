@@ -3,7 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
-export interface UrlTabOptions<T extends string> {
+interface UrlTabOptions<T extends string> {
   values: readonly T[];
   defaultValue: T;
   /** Legacy values remain valid deep links while the UI uses the new grouping. */

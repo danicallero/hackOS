@@ -6,14 +6,9 @@ import { API_URL } from "./env";
  * These values are deliberately not derived from a full URL or event payload:
  * IDs, query strings, user agents and arbitrary text must never leave the tab.
  */
-export type RealtimeSurface =
-  | "participant-queue"
-  | "judging"
-  | "logistics"
-  | "public-tv"
-  | "content";
+type RealtimeSurface = "participant-queue" | "judging" | "logistics" | "public-tv" | "content";
 
-export type RealtimeTopic =
+type RealtimeTopic =
   | "queue"
   | "queue-review"
   | "logistics"

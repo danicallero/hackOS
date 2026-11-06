@@ -1,11 +1,22 @@
 "use client";
 
-import { useContext, useEffect, useRef } from "react";
-import {
-  requestDiscardConfirmation,
-  UnsavedChangesContext,
-} from "@/components/common/unsaved-changes-provider";
-import type { Translate } from "@/lib/i18n";
+import { createContext, useContext, useEffect, useRef } from "react";
+
+export const UnsavedChangesContext = createContext({
+  register: (_owner: object) => () => {},
+  confirm: (): Promise<boolean> => Promise.resolve(false),
+  navigate: (_href: string) => {},
+});
+
+/** Window event the provider answers with its discard alert. */
+export const DISCARD_CONFIRMATION_EVENT = "hackos:confirm-discard";
+
+/** In-page decisions use the same asynchronous alert as navigation (#1180). */
+function requestDiscardConfirmation(): Promise<boolean> {
+  return new Promise((resolve) => {
+    window.dispatchEvent(new CustomEvent(DISCARD_CONFIRMATION_EVENT, { detail: resolve }));
+  });
+}
 
 /**
  * Warns before losing unsaved edits (settings audit: "warn before navigating
@@ -116,7 +127,7 @@ export function useUnsavedChangesGuard(
 }
 
 /** Category-switch guard: returns false (and blocks the switch) when the user cancels. */
-export async function confirmDiscardUnsavedChanges(dirty: boolean, _t: Translate) {
+export async function confirmDiscardUnsavedChanges(dirty: boolean) {
   if (!dirty) return true;
   return requestDiscardConfirmation();
 }

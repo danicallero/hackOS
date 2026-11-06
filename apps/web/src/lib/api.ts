@@ -1,4 +1,5 @@
 import { isMaintenanceError, maintenancePhaseOf } from "@hackos/shared/maintenance";
+import { saveBlob } from "./download";
 import { API_URL } from "./env";
 import { intentKey, settleIntentKey } from "./intent-key";
 import { maintenanceStore } from "./maintenance";
@@ -19,6 +20,11 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+/** True only for a definitive "does not exist" answer, never 429/5xx/network. */
+export function isNotFoundError(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 404;
 }
 
 type Json = Record<string, unknown> | unknown[];
@@ -116,6 +122,55 @@ function coalescedGet<T>(path: string, options: RequestOptions): Promise<T> {
   });
 }
 
+type ErrorEnvelope = { error?: { code?: string; message?: string; details?: unknown } };
+
+/** Reads a JSON body; a malformed body only fails successful responses (a proxy's HTML error page must still surface as an `ApiError`). */
+async function readJson(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    if (res.ok) throw error;
+    return undefined;
+  }
+}
+
+/**
+ * The one place a failed response becomes an `ApiError`: parses the error
+ * envelope, applies the repeat-confirmation 409 contract, reads `Retry-After`
+ * and flags maintenance responses so every caller (JSON, upload, download)
+ * behaves alike.
+ */
+function throwApiError(res: Response, payload: unknown, fallbackMessage = "Request failed"): never {
+  if (
+    res.status === 409 &&
+    payload &&
+    typeof payload === "object" &&
+    "registered" in payload &&
+    (payload as { registered?: unknown }).registered === false
+  ) {
+    throw new ApiError(
+      res.status,
+      "repeat_confirmation_required",
+      (payload as { message?: string }).message ?? "Confirmation required",
+      payload,
+    );
+  }
+  const err = (payload as ErrorEnvelope | null | undefined)?.error;
+  const retryAfter = Number(res.headers.get("retry-after")) || undefined;
+  if (isMaintenanceError(res.status, err?.code)) {
+    maintenanceStore.mark(maintenancePhaseOf(err?.details));
+  }
+  throw new ApiError(
+    res.status,
+    err?.code ?? "unknown",
+    err?.message ?? (res.statusText || fallbackMessage),
+    err?.details,
+    retryAfter,
+  );
+}
+
 /**
  * Single entry point for every hackOS API call. Public reads omit cookies so
  * they remain usable from any origin; every other request carries the session
@@ -145,39 +200,8 @@ async function performFetch<T>(path: string, options: RequestOptions): Promise<T
 
   if (res.status === 204) return undefined as T;
 
-  const text = await res.text();
-  const payload = text ? JSON.parse(text) : undefined;
-
-  if (!res.ok) {
-    if (
-      res.status === 409 &&
-      payload &&
-      typeof payload === "object" &&
-      "registered" in payload &&
-      (payload as { registered?: unknown }).registered === false
-    ) {
-      throw new ApiError(
-        res.status,
-        "repeat_confirmation_required",
-        (payload as { message?: string }).message ?? "Confirmation required",
-        payload,
-      );
-    }
-    const err = (payload as { error?: { code?: string; message?: string; details?: unknown } })
-      ?.error;
-    const retryAfter = Number(res.headers.get("retry-after")) || undefined;
-    if (isMaintenanceError(res.status, err?.code)) {
-      maintenanceStore.mark(maintenancePhaseOf(err?.details));
-    }
-    throw new ApiError(
-      res.status,
-      err?.code ?? "unknown",
-      err?.message ?? res.statusText ?? "Request failed",
-      err?.details,
-      retryAfter,
-    );
-  }
-
+  const payload = await readJson(res);
+  if (!res.ok) throwApiError(res, payload);
   return payload as T;
 }
 
@@ -211,51 +235,61 @@ export async function apiUpload<T = unknown>(path: string, body: FormData): Prom
 
   if (res.status === 204) return undefined as T;
 
-  const text = await res.text();
-  const payload = text ? JSON.parse(text) : undefined;
-
-  if (!res.ok) {
-    const err = (payload as { error?: { code?: string; message?: string; details?: unknown } })
-      ?.error;
-    throw new ApiError(
-      res.status,
-      err?.code ?? "unknown",
-      err?.message ?? res.statusText ?? "Request failed",
-      err?.details,
-    );
-  }
-
+  const payload = await readJson(res);
+  if (!res.ok) throwApiError(res, payload);
   return payload as T;
+}
+
+interface DownloadOptions {
+  method?: "GET" | "POST";
+  /** JSON request body (POST exports). A POST carries an intent-stable `Idempotency-Key`. */
+  body?: Json;
 }
 
 /**
  * Download an authenticated API file (CSV, SVG, zip) and save it under the
  * name from its `content-disposition`, or `fallbackName`. Errors use the same
- * `ApiError` envelope as `apiFetch`.
+ * `ApiError` envelope as `apiFetch`. Resolves with the response headers so
+ * callers can read export metadata such as `x-export-file-failures`.
  */
-export async function apiDownload(path: string, fallbackName: string): Promise<void> {
-  const res = await fetch(buildUrl(path), { credentials: "include" });
-  if (!res.ok) {
-    const payload = (await res.json().catch(() => null)) as {
-      error?: { code?: string; message?: string; details?: unknown };
-    } | null;
-    throw new ApiError(
-      res.status,
-      payload?.error?.code ?? "unknown",
-      payload?.error?.message ?? res.statusText ?? "Download failed",
-      payload?.error?.details,
-    );
-  }
+export async function apiDownload(
+  path: string,
+  fallbackName: string,
+  options: DownloadOptions = {},
+): Promise<Headers> {
+  const { method = "GET", body } = options;
+  const intent = method === "POST" ? `POST ${path} ${JSON.stringify(body ?? null)}` : null;
+  const res = await fetch(buildUrl(path), {
+    method,
+    credentials: "include",
+    headers: {
+      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      ...(intent ? { "Idempotency-Key": intentKey(intent) } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  if (intent) settleIntentKey(intent, res.status);
+  if (!res.ok) throwApiError(res, await readJson(res), "Download failed");
   const name =
     /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
-  const url = URL.createObjectURL(await res.blob());
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  saveBlob(await res.blob(), name);
+  return res.headers;
+}
+
+/**
+ * Reads the `x-export-file-failures` header exports attach when some files
+ * could not be bundled. A missing, malformed or empty report is `null`: the
+ * download itself is still usable.
+ */
+export function parseExportFailures<T extends { total: number }>(headers: Headers): T | null {
+  const raw = headers.get("x-export-file-failures");
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as T;
+    return parsed.total > 0 ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export const api = {

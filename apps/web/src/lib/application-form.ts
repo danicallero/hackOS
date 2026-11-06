@@ -1,19 +1,11 @@
-import { groupApplicationFields } from "@/lib/application-field-groups";
-/**
- * Constants shared across the application-detail route's files (H11-H14).
- */
-
-import type { I18nText } from "@hackos/shared/questions";
 import type { FormSection, TemplateField } from "@/lib/applications";
+import type { I18nText } from "@/lib/types";
 
 /** Locale tab order for every trilingual editor on this page. */
 export const LOCALES = ["es", "en", "gl"] as const;
 
-/** A blank trilingual value — every i18n field must carry all three (plan/07 §2). */
-export const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
-
 /** Minimal shape of a food-intolerance dictionary entry (public endpoint). */
-export interface IntoleranceOption {
+interface IntoleranceOption {
   id: number;
   label: I18nText;
 }
@@ -27,12 +19,12 @@ export interface IntoleranceOption {
  */
 export const LOGISTICS_SECTION_KEY = "__logistics__";
 
-export const LOGISTICS_SECTION: FormSection = {
+const LOGISTICS_SECTION: FormSection = {
   key: LOGISTICS_SECTION_KEY,
   title: { en: "Logistics", es: "Logística", gl: "Loxística" },
 };
 
-function shirtSizePreviewField(sizes: string[]): TemplateField {
+function shirtSizeField(sizes: string[]): TemplateField {
   return {
     key: "shirt_size",
     label: { en: "T-shirt size", es: "Talla de camiseta", gl: "Talla de camiseta" },
@@ -43,13 +35,32 @@ function shirtSizePreviewField(sizes: string[]): TemplateField {
   };
 }
 
-const FOOD_NOTES_PREVIEW_FIELD: TemplateField = {
+const FOOD_NOTES_FIELD: TemplateField = {
   key: "food_intolerance_notes",
   label: { en: "Dietary notes", es: "Notas dietéticas", gl: "Notas dietéticas" },
   kind: "textarea",
   required: false,
   section_key: LOGISTICS_SECTION_KEY,
 };
+
+/** The dietary-restrictions multiselect plus its free-text notes field. */
+function foodIntoleranceFields(intolerances: IntoleranceOption[]): TemplateField[] {
+  return [
+    {
+      key: "food_intolerances",
+      label: {
+        en: "Dietary restrictions",
+        es: "Restricciones dietéticas",
+        gl: "Restricións dietéticas",
+      },
+      kind: "multiselect",
+      required: false,
+      options: intolerances.map((i) => ({ value: String(i.id), label: i.label })),
+      section_key: LOGISTICS_SECTION_KEY,
+    },
+    FOOD_NOTES_FIELD,
+  ];
+}
 
 /**
  * The shirt-size/dietary fields the server appends to the template at submit
@@ -66,22 +77,8 @@ export function logisticsPreviewFields(
   shirtSizes: string[],
 ): TemplateField[] {
   const extra: TemplateField[] = [];
-  if (askShirtSize) extra.push(shirtSizePreviewField(shirtSizes));
-  if (askFoodIntolerances) {
-    extra.push({
-      key: "food_intolerances",
-      label: {
-        en: "Dietary restrictions",
-        es: "Restricciones dietéticas",
-        gl: "Restricións dietéticas",
-      },
-      kind: "multiselect",
-      required: false,
-      options: intolerances.map((i) => ({ value: String(i.id), label: i.label })),
-      section_key: LOGISTICS_SECTION_KEY,
-    });
-    extra.push(FOOD_NOTES_PREVIEW_FIELD);
-  }
+  if (askShirtSize) extra.push(shirtSizeField(shirtSizes));
+  if (askFoodIntolerances) extra.push(...foodIntoleranceFields(intolerances));
   return extra;
 }
 
@@ -94,18 +91,22 @@ export function withLogisticsSection(
   return hasLogisticsFields ? [...sections, LOGISTICS_SECTION] : sections;
 }
 
-// ── sections grouping (H11) ─────────────────────────────────────────────────
-
-export interface FieldGroup {
-  /** null = ungrouped fields, rendered with no header. */
-  section: FormSection | null;
-  fields: TemplateField[];
-}
-
-/** Shared ordering for section members and standalone questions before/after sections. */
-export function groupFieldsBySections(
-  fields: TemplateField[],
-  sections: FormSection[],
-): FieldGroup[] {
-  return groupApplicationFields(fields, sections);
+/**
+ * Client mirror of the API's `enrichTemplate`: the public form endpoint serves
+ * the raw template, so the applicant form shows the logistics fields from the
+ * first render. The server re-enriches and validates on submit.
+ */
+export function enrichTemplate(
+  askShirtSize: boolean,
+  askFoodIntolerances: boolean,
+  template: TemplateField[],
+  intolerances: IntoleranceOption[],
+  shirtSizes: string[],
+): TemplateField[] {
+  let out = template;
+  if (askShirtSize && !out.some((f) => f.key === "shirt_size"))
+    out = [...out, shirtSizeField(shirtSizes)];
+  if (askFoodIntolerances && !out.some((f) => f.key === "food_intolerances"))
+    out = [...out, ...foodIntoleranceFields(intolerances)];
+  return out;
 }

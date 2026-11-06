@@ -9,7 +9,7 @@ import { normalizeSearchText } from "./search-text";
  */
 
 /** Domain a capability belongs to — the part before ":". "*" is the admin wildcard. */
-export function capabilityDomain(cap: string): string {
+function capabilityDomain(cap: string): string {
   return cap === "*" ? "admin" : (cap.split(":")[0] ?? cap);
 }
 

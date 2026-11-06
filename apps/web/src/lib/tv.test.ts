@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PublicEvent } from "@/components/public/public-types";
+import type { PublicEvent } from "@/lib/types";
 import {
   bestSponsorColumns,
   DEFAULT_LIVE_CONFIG,

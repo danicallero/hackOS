@@ -1,6 +1,6 @@
 import type { QueueStatus } from "./queue";
 
-export type JudgingAction =
+type JudgingAction =
   | "notify-enter"
   | "bring-in"
   | "pause-timer"
@@ -69,7 +69,7 @@ export function hasWaitedTooLong(
   return now - calledMs >= threshold * 60_000;
 }
 
-export type CollaborationState = "saving" | "saved" | "offline" | "conflict" | "unsaved";
+type CollaborationState = "saving" | "saved" | "offline" | "conflict" | "unsaved";
 
 /**
  * Judge access is association-based (`enterprise_judges`), not capability-based
@@ -119,9 +119,9 @@ export function collaborationState({
 
 // ── presentation timer (H39) ────────────────────────────────────────────────
 
-export type TimerTone = "default" | "warning" | "danger";
+type TimerTone = "default" | "warning" | "danger";
 
-export interface PresentationTimerState {
+interface PresentationTimerState {
   elapsedSeconds: number;
   /** Null when the presentation has no capped total to count against. */
   totalSeconds: number | null;

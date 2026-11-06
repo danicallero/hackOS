@@ -74,7 +74,7 @@ export interface NavItem {
  * queue and gains the Live judging workspace; nothing is removed to make
  * room for it (H55).
  */
-export interface Workspace {
+interface Workspace {
   id: string;
   label: import("./i18n").MessageKey;
   icon: PhosphorIcon;
@@ -151,7 +151,7 @@ export function isNavItemVisible(item: NavItem, ctx: NavVisibilityContext): bool
   return true;
 }
 
-export interface NavGroup {
+interface NavGroup {
   id: string;
   label: import("./i18n").MessageKey;
   items: NavItem[];
@@ -247,7 +247,7 @@ const EVENT_SETTINGS_TABS: NavItem[] = [
   }),
 ];
 
-export interface SubDestination {
+interface SubDestination {
   item: NavItem;
   parent: NavItem;
   groupId: string;

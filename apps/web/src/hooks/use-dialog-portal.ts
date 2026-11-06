@@ -9,10 +9,10 @@ import {
   useState,
 } from "react";
 
-export const OVERLAY_CONTAINER_SELECTOR =
+const OVERLAY_CONTAINER_SELECTOR =
   '[data-slot="popover-content"], [data-slot="dropdown-menu-content"], [data-slot="select-content"], [data-slot="alert-dialog-content"], [data-slot="dialog-content"], [data-slot="sheet-content"]';
 
-export function getOverlayContainer(anchor: HTMLElement | null) {
+function getOverlayContainer(anchor: HTMLElement | null) {
   const overlay = anchor?.closest<HTMLElement>(OVERLAY_CONTAINER_SELECTOR);
   if (!overlay) return null;
 
@@ -35,7 +35,7 @@ export function getOverlayContainer(anchor: HTMLElement | null) {
   return overlay;
 }
 
-export interface OverlayPortalContextValue {
+interface OverlayPortalContextValue {
   anchor: HTMLElement | null;
   container: HTMLElement | null;
   registerAnchor: (node: HTMLElement | null) => void;

@@ -1,7 +1,7 @@
 import { api, apiDownload } from "@/lib/api";
 import type { Language } from "@/lib/types";
 
-export type CertificateVariant = "participation" | "hours" | "activities";
+type CertificateVariant = "participation" | "hours" | "activities";
 
 export interface CertificateSettings {
   minHours: number | null;
@@ -27,7 +27,7 @@ export interface Certificate {
   outdated: boolean;
 }
 
-export interface CertificateEligibility {
+interface CertificateEligibility {
   hours: number;
   certifiedHours: number | null;
   reviewRequired: boolean;
@@ -81,7 +81,7 @@ export const certificatesApi = {
   download: (id: number) => apiDownload(`/api/certificates/${id}/pdf`, `certificate-${id}.pdf`),
 };
 
-export type CertificateText = Record<Language, string>;
+type CertificateText = Record<Language, string>;
 export interface CertificateTypeInput {
   name: CertificateText;
   title: CertificateText;
@@ -105,7 +105,7 @@ export interface CertificateType extends CertificateTypeInput {
   availability?: string | null;
   legacyVariant: CertificateVariant | "accepted_spot" | null;
 }
-export interface CertificateIssueInput {
+interface CertificateIssueInput {
   typeId: number;
   locale: Language;
   userId?: number;

@@ -8,7 +8,7 @@ import { useLayoutEffect, useRef, useState } from "react";
  * `min(w/1920, h/1080)` would read a 1080x1920 screen as 0.56 and render
  * postage-stamp text on a screen that is physically just as big.
  */
-export const TV_DESIGN_SHORT_SIDE = 1080;
+const TV_DESIGN_SHORT_SIDE = 1080;
 const MIN_SCALE = 0.45;
 const MAX_SCALE = 3;
 

@@ -2,9 +2,9 @@
 // for the detail route. Shallow only — these are flat domain-object
 // snapshots in practice, not deeply nested documents.
 
-export type AuditDiffStatus = "added" | "removed" | "changed";
+type AuditDiffStatus = "added" | "removed" | "changed";
 
-export interface AuditDiffRow {
+interface AuditDiffRow {
   key: string;
   status: AuditDiffStatus;
   before: unknown;
