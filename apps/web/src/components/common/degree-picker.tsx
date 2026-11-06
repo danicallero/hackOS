@@ -58,7 +58,7 @@ export function DegreePicker({
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<Degree[]>([]);
   const [loading, setLoading] = useState(true);
-  const [label, setLabel] = useState<string | null>(null);
+  const [resolvedLabel, setResolvedLabel] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => {
     // Only search once the picker opens (#1227).
     if (!open) return;
@@ -77,17 +77,25 @@ export function DegreePicker({
       clearTimeout(timer);
     };
   }, [open, query]);
+  const knownLabel = value ? options.find((item) => String(item.id) === value)?.name : null;
   useEffect(() => {
-    if (!value || options.some((item) => String(item.id) === value) || label) return;
+    if (!value || knownLabel || resolvedLabel?.id === value) return;
+    let active = true;
     readServerState(["public", "degrees", { ids: value }], (signal) =>
       api.get<{ degrees: Degree[] }>("/api/public/degrees", { query: { ids: value }, signal }),
     )
-      .then(({ degrees }) => setLabel(degrees[0]?.name ?? null))
+      .then(({ degrees }) => {
+        const match = degrees.find((degree) => String(degree.id) === value);
+        if (active && match) setResolvedLabel({ id: value, name: match.name });
+      })
       .catch(() => {});
-  }, [value, options, label]);
+    return () => {
+      active = false;
+    };
+  }, [value, knownLabel, resolvedLabel]);
   const select = (degree: Degree) => {
     onChange(String(degree.id));
-    setLabel(degree.name);
+    setResolvedLabel({ id: String(degree.id), name: degree.name });
     setQuery("");
     setOpen(false);
     onBlur?.();
@@ -99,7 +107,7 @@ export function DegreePicker({
     toast.success(t("degreeAdded"), { compactTitle: t("toastAddDegree") });
     select(degree);
   };
-  const currentLabel = options.find((item) => String(item.id) === value)?.name ?? label;
+  const currentLabel = knownLabel ?? (resolvedLabel?.id === value ? resolvedLabel.name : null);
   const canPropose =
     status === "authenticated" &&
     query.trim().length > 1 &&

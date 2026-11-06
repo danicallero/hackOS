@@ -1456,6 +1456,7 @@ function AnswersSection({
                       <TemplateFieldControl
                         key={f.key}
                         field={f}
+                        hideHelpText
                         applicationId={fieldEditing ? applicationId : undefined}
                         responseId={fieldEditing ? response.id : undefined}
                         value={value}
