@@ -14,34 +14,6 @@ import {
 const getApp = useTestApp();
 
 describe("university directory", () => {
-  it("searches names without accents while preserving stored spelling (H12)", async () => {
-    const app = await getApp();
-    const { pool } = await import("../../src/db/pool.js");
-    const { rows } = await pool.query(
-      "INSERT INTO universities (name) VALUES ($1), ($2) RETURNING id, name",
-      ["Universidade da Coruña", "Unrelated catalogue entry"],
-    );
-    for (const q of [
-      "coruna",
-      "Universidade da Coruña",
-      "Universidade da Coruña".normalize("NFD"),
-    ]) {
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/public/universities?q=${encodeURIComponent(q)}`,
-      });
-      expect(response.statusCode).toBe(200);
-      expect(response.json().universities).toEqual([rows[0]]);
-    }
-    const missing = await app.inject({ method: "GET", url: "/api/public/universities?q=no-match" });
-    expect(missing.json().universities).toEqual([]);
-    const byId = await app.inject({
-      method: "GET",
-      url: `/api/public/universities?ids=${rows[0].id}`,
-    });
-    expect(byId.json().universities).toEqual([rows[0]]);
-  });
-
   it("requires a signed-in user to propose and attributes a successful proposal", async () => {
     const a = await getApp();
     expect(

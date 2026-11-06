@@ -37,3 +37,32 @@ for (const [path, capability, key] of [
     expect(missing.json()[key]).toEqual([]);
   });
 }
+
+for (const [directory, table, name, query] of [
+  ["degrees", "university_degrees", "Ingeniería Informática", "INGENIERIA"],
+  ["universities", "universities", "Universidade da Coruña", "coruna"],
+] as const) {
+  it(`${directory} searches without accents while preserving stored spelling (H12)`, async () => {
+    const app = await getApp();
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query(
+      `INSERT INTO ${table} (name) VALUES ($1), ($2) RETURNING id, name`,
+      [name, "Unrelated catalogue entry"],
+    );
+    for (const q of [query, name, name.normalize("NFD")]) {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/public/${directory}?q=${encodeURIComponent(q)}`,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()[directory]).toEqual([rows[0]]);
+    }
+    const missing = await app.inject({ method: "GET", url: `/api/public/${directory}?q=no-match` });
+    expect(missing.json()[directory]).toEqual([]);
+    const byId = await app.inject({
+      method: "GET",
+      url: `/api/public/${directory}?ids=${rows[0].id}`,
+    });
+    expect(byId.json()[directory]).toEqual([rows[0]]);
+  });
+}
