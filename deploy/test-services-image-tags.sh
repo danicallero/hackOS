@@ -56,6 +56,8 @@ case "$*" in
         printf 'link: </v2/danicallero/hackos-web/tags/list?last=x&n=1000>; rel="next"\r\n' >"${headers:-/dev/null}"
         printf '%s\n' '{"tags":["sha-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]}'
       fi
+    elif [[ "${HACKOS_TEST_MISSING_API:-false}" == true && "$*" == *hackos-api/tags/list* ]]; then
+      printf '%s\n' '{"tags":[]}'
     elif [[ "${HACKOS_TEST_MISSING_WEB:-false}" == true && "$*" == *hackos-web/tags/list* ]]; then
       printf '%s\n' '{"tags":[]}'
     else
@@ -138,32 +140,60 @@ grep -Fxq 'true production sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa true tru
   exit 1
 }
 
-# A partial release can have an API image without the matching web tag. The
-# interactive preflight must report that and return, even though die() exits.
-env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
-  PATH="$test_dir/bin:$PATH" \
-  HACKOS_APP_DIR="$test_dir/app" \
-  HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
-  HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
-  HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
-  HACKOS_TEST_DEPLOY_LOG="$test_dir/deploy.log" \
-  HACKOS_TEST_MISSING_WEB=true \
-  bash -c '
-    services_source="$1"
-    set -- production status
-    source "$services_source" >/dev/null
-    menu_select() { menu_navigation=select; menu_choice=2; }
-    pause_shell() {
-      [[ "$last_child_succeeded" == false ]] || exit 1
-      printf "failure displayed; returning to menu\n"
-    }
-    deploy_target_shell latest
-    printf "operator shell still alive\n"
-  ' test "$services_script" >"$test_dir/menu.log"
-
-grep -Fq 'is not published in GHCR for the selected units' "$test_dir/menu.log"
-grep -Fxq 'operator shell still alive' "$test_dir/menu.log"
-
+# Fixed releases offer only published targets. The last option is both when
+# both exist, otherwise the single available unit. No registry-only check may
+# reach Docker/deploy.sh before the operator confirms.
+for scenario in both api web none; do
+  missing_api=false; missing_web=false
+  case "$scenario" in
+    api) missing_web=true ;;
+    web) missing_api=true ;;
+    none) missing_api=true; missing_web=true ;;
+  esac
+  for target in production staging; do
+    requested=sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    [[ "$target" != production ]] || requested=latest
+    env -u API_IMAGE_TAG -u WEB_IMAGE_TAG \
+      PATH="$test_dir/bin:$PATH" \
+      HACKOS_APP_DIR="$test_dir/app" \
+      HACKOS_COMPOSE_FILE="$test_dir/docker-compose.yml" \
+      HACKOS_CONFIG_FILE="$test_dir/hackos.env" \
+      HACKOS_TEST_DOCKER_LOG="$test_dir/docker.log" \
+      HACKOS_TEST_MISSING_API="$missing_api" \
+      HACKOS_TEST_MISSING_WEB="$missing_web" \
+      bash -c '
+        services_source="$1"; target="$2"; requested="$3"; scenario="$4"
+        set -- "$target" status
+        source "$services_source" >/dev/null
+        menu_select() {
+          shift 2
+          case "$scenario" in
+            both) [[ "$*" == "API + worker Web API + worker and web" ]] ;;
+            api) [[ "$#" == 1 && "$1" == "API + worker" ]] ;;
+            web) [[ "$#" == 1 && "$1" == Web ]] ;;
+            none) exit 1 ;;
+          esac || exit 1
+          menu_navigation=select; menu_choice=$(($# - 1))
+        }
+        read_shell_input() { shell_navigation=value; shell_input=DEPLOY; }
+        run_action() { printf "confirmed: %s\n" "$*"; }
+        pause_shell() { [[ "$scenario" == none && "$last_child_succeeded" == false ]] || exit 1; }
+        clear_shell() { :; }
+        deploy_target_shell "$requested"
+        printf "operator shell still alive\n"
+      ' test "$services_script" "$target" "$requested" "$scenario" >"$test_dir/menu.log"
+    grep -Fxq 'operator shell still alive' "$test_dir/menu.log"
+    if [[ "$scenario" == none ]]; then
+      grep -Fq 'has no published images in GHCR' "$test_dir/menu.log"
+      ! grep -Fq 'confirmed:' "$test_dir/menu.log"
+    else
+      option="--$scenario"
+      action=''
+      [[ "$target" != production ]] || action=' --promote'
+      grep -Fxq "confirmed: deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa deploy sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa $option$action" "$test_dir/menu.log"
+    fi
+  done
+done
 
 # GHCR lists tags in pages; a release whose tag is not on the first page must
 # still validate (the first page alone hid the newest main release).
