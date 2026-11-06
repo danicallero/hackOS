@@ -30,6 +30,8 @@ import {
   saveNetworkingProfile,
 } from "@/lib/networking-profile";
 import { cvErrorKey, deleteCv, pickCv, uploadCv } from "@/lib/profile-cv";
+import { isPadIdiom } from "@/lib/tabs";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
@@ -56,6 +58,8 @@ function asError(cause: unknown): Error {
 export default function NetworkingProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const sideInsets = useSideInsets();
+  const padIdiom = isPadIdiom();
   const { t } = useLocale();
   const readable = useParticipantLayout("form");
   const { me } = useMeContext();
@@ -372,7 +376,9 @@ export default function NetworkingProfileScreen() {
           <Stack.Screen
             options={{
               headerBackVisible: false,
-              headerLargeTitle: false,
+              headerLargeTitle: !padIdiom,
+              headerLargeTitleShadowVisible: false,
+              headerStyle: { backgroundColor: colors.background },
               headerShadowVisible: false,
               title: t("networkingTitle"),
             }}
@@ -395,110 +401,115 @@ export default function NetworkingProfileScreen() {
           </Stack.Toolbar>
         </>
       ) : null}
-      <View style={{ backgroundColor: colors.background, flex: 1 }}>
-        {profile?.cv && cvOpen ? (
-          <CvViewer
-            visible
-            title={fullName}
-            cvPath={editing ? OWN_CV_PATH : (profile.preview.cvUrl ?? OWN_CV_PATH)}
-            onClose={() => setCvOpen(false)}
+      {profile?.cv && cvOpen ? (
+        <CvViewer
+          visible
+          title={fullName}
+          cvPath={editing ? OWN_CV_PATH : (profile.preview.cvUrl ?? OWN_CV_PATH)}
+          onClose={() => setCvOpen(false)}
+        />
+      ) : null}
+      <ScrollView
+        testID="networking-profile-scroll"
+        style={{
+          backgroundColor: colors.background,
+          flex: 1,
+          ...(nativeHeader && !padIdiom
+            ? { paddingLeft: sideInsets.left, paddingRight: sideInsets.right }
+            : {}),
+        }}
+        alwaysBounceVertical
+        contentInsetAdjustmentBehavior={nativeHeader ? "automatic" : "never"}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          gap: 22,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: Math.max(32, insets.bottom + 16),
+          paddingTop: 16 + topInset,
+        }}
+      >
+        {nativeHeader ? null : (
+          <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 60 }}>
+            <Text
+              accessibilityRole="header"
+              selectable
+              style={{
+                color: colors.label,
+                fontSize: type.title3.fontSize,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
+            >
+              {t("networkingTitle")}
+            </Text>
+          </View>
+        )}
+
+        {profile && draft && stored ? (
+          <>
+            <Section footer={t("networkingAudience")}>
+              <ToggleRow
+                label={t("networkingShare")}
+                value={Boolean(shared)}
+                disabled={saving || togglingShare}
+                onChange={(directoryVisible) =>
+                  editing ? update({ directoryVisible }) : void toggleShare(directoryVisible)
+                }
+              />
+            </Section>
+            {/* Not shared yet: the card is a preview of what scanners will get. */}
+            <View style={{ gap: 24, opacity: shared ? 1 : 0.5 }}>
+              {renderCard(profile, editing ? draft : stored)}
+            </View>
+          </>
+        ) : failure?.message === "networkingLoadError" ? null : (
+          <RequestFeedback loading />
+        )}
+
+        {failure ? (
+          <RequestFeedback
+            error={failure.cause}
+            message={t(failure.message)}
+            onRetry={failure.retry}
           />
         ) : null}
-        <ScrollView
-          testID="networking-profile-scroll"
-          alwaysBounceVertical
-          contentInsetAdjustmentBehavior={nativeHeader ? "automatic" : "never"}
-          automaticallyAdjustKeyboardInsets
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{
-            gap: 22,
-            paddingVertical: 16,
-            ...readable.content,
-            paddingBottom: Math.max(32, insets.bottom + 16),
-            paddingTop: 16 + topInset,
-          }}
-        >
-          {nativeHeader ? null : (
-            <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 60 }}>
-              <Text
-                accessibilityRole="header"
-                selectable
-                style={{
-                  color: colors.label,
-                  fontSize: type.title3.fontSize,
-                  fontWeight: "700",
-                  textAlign: "center",
-                }}
-              >
-                {t("networkingTitle")}
-              </Text>
-            </View>
-          )}
+      </ScrollView>
 
-          {profile && draft && stored ? (
-            <>
-              <Section footer={t("networkingAudience")}>
-                <ToggleRow
-                  label={t("networkingShare")}
-                  value={Boolean(shared)}
-                  disabled={saving || togglingShare}
-                  onChange={(directoryVisible) =>
-                    editing ? update({ directoryVisible }) : void toggleShare(directoryVisible)
-                  }
-                />
-              </Section>
-              {/* Not shared yet: the card is a preview of what scanners will get. */}
-              <View style={{ gap: 24, opacity: shared ? 1 : 0.5 }}>
-                {renderCard(profile, editing ? draft : stored)}
-              </View>
-            </>
-          ) : failure?.message === "networkingLoadError" ? null : (
-            <RequestFeedback loading />
-          )}
-
-          {failure ? (
-            <RequestFeedback
-              error={failure.cause}
-              message={t(failure.message)}
-              onRetry={failure.retry}
-            />
-          ) : null}
-        </ScrollView>
-
-        {nativeHeader ? null : (
-          <>
+      {nativeHeader ? null : (
+        <>
+          <FloatingGlassButton
+            top={16 + topInset}
+            side="left"
+            icon="xmark"
+            accessibilityLabel={editing ? t("cancel") : t("back")}
+            disabled={saving}
+            onPress={() => (editing ? stopEditing() : router.back())}
+          />
+          {editing ? (
             <FloatingGlassButton
               top={16 + topInset}
-              side="left"
-              icon="xmark"
-              accessibilityLabel={editing ? t("cancel") : t("back")}
-              disabled={saving}
-              onPress={() => (editing ? stopEditing() : router.back())}
+              side="right"
+              icon="checkmark"
+              tintColor={colors.accent}
+              accessibilityLabel={t("save")}
+              accessibilityState={{ busy: saving }}
+              disabled={saving || !dirty || cvBusy !== null}
+              onPress={() => void save()}
             />
-            {editing ? (
-              <FloatingGlassButton
-                top={16 + topInset}
-                side="right"
-                icon="checkmark"
-                tintColor={colors.accent}
-                accessibilityLabel={t("save")}
-                accessibilityState={{ busy: saving }}
-                disabled={saving || !dirty || cvBusy !== null}
-                onPress={() => void save()}
-              />
-            ) : (
-              <FloatingGlassButton
-                top={16 + topInset}
-                side="right"
-                icon="pencil"
-                accessibilityLabel={t("networkingEdit")}
-                disabled={!stored || togglingShare}
-                onPress={startEditing}
-              />
-            )}
-          </>
-        )}
-      </View>
+          ) : (
+            <FloatingGlassButton
+              top={16 + topInset}
+              side="right"
+              icon="pencil"
+              accessibilityLabel={t("networkingEdit")}
+              disabled={!stored || togglingShare}
+              onPress={startEditing}
+            />
+          )}
+        </>
+      )}
     </>
   );
 }

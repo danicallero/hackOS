@@ -730,7 +730,10 @@ they are not device screenshots or proof of native toolbar behavior.
   elsewhere): X closes, pencil enters edit mode; while editing, X
   discards the changes (back to the preview) and the checkmark saves. On foldable
   iPhone with a vertical system bar the route uses a full-screen modal so its
-  native toolbar actions can join that side bar; other windows keep a sheet. Custom fallback
+  native toolbar actions can join that side bar; other windows keep a sheet. The
+  native title shares the page background (large on iPhone, compact in iPad
+  sheets) and its scroll view remains
+  directly under the screen so the title can collapse normally. Custom fallback
   controls and the title respect the measured sheet top safe area.
   **Edit mode** keeps the layout and edits in place: headline under the name,
   bio and where-to-find-you as inputs, the account photo through
