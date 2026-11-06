@@ -10,7 +10,7 @@ import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import type { FilterDefinition } from "@/components/common/filter-menu";
 import { ListToolbar } from "@/components/common/list-toolbar";
@@ -41,8 +41,7 @@ import { type Translate, useLocale } from "@/lib/i18n";
 import { usersDirectoryKey } from "@/lib/list-resources";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
-import { toast } from "@/lib/toast";
-import type { UserList, UserListItem } from "@/lib/types";
+import type { UserListItem } from "@/lib/types";
 import { loadUserDirectory } from "@/lib/user-directory";
 import { UsersActions } from "./users-actions";
 

@@ -130,7 +130,11 @@ function PersonReader({ userId }: { userId: number }) {
     rows.push({
       id: "challenges",
       label: t("challenges"),
-      value: <p className="wrap-anywhere">{entry.challenges.map(nameOf).join(", ")}</p>,
+      value: (
+        <p className="wrap-anywhere">
+          {entry.challenges.map((challenge) => nameOf(challenge)).join(", ")}
+        </p>
+      ),
     });
   }
 

@@ -16,7 +16,6 @@ import { GavelIcon } from "@phosphor-icons/react/dist/ssr/Gavel";
 import { GearIcon } from "@phosphor-icons/react/dist/ssr/Gear";
 import { HandshakeIcon } from "@phosphor-icons/react/dist/ssr/Handshake";
 import { HouseIcon } from "@phosphor-icons/react/dist/ssr/House";
-import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { ListNumbersIcon } from "@phosphor-icons/react/dist/ssr/ListNumbers";
 import { LogIcon } from "@phosphor-icons/react/dist/ssr/Log";
 import { MapPinIcon } from "@phosphor-icons/react/dist/ssr/MapPin";

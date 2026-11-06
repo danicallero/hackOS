@@ -59,7 +59,7 @@ export function Challenges({
   if (entry.challenges.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
     <span className="text-muted-foreground wrap-break-word text-sm">
-      {entry.challenges.map(nameOf).join(", ")}
+      {entry.challenges.map((challenge) => nameOf(challenge)).join(", ")}
     </span>
   );
 }
