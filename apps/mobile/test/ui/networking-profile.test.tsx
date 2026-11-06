@@ -5,6 +5,19 @@ const mockApiFetch = jest.fn();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockPickDocument = jest.fn();
+let mockNativeHeader = false;
+jest.mock("@/components/glass-view", () => ({
+  isRealLiquidGlassAvailable: () => mockNativeHeader,
+}));
+jest.mock("expo-router/stack", () => {
+  const ReactLib = require("react");
+  const { View, Pressable } = require("react-native");
+  const Toolbar = ({ children, placement }: { children: unknown; placement: string }) =>
+    ReactLib.createElement(View, { testID: `native-toolbar-${placement}` }, children);
+  Toolbar.Button = (props: object) =>
+    ReactLib.createElement(Pressable, { ...props, accessibilityRole: "button" });
+  return { __esModule: true, default: { Screen: () => null, Toolbar } };
+});
 
 jest.mock("expo-file-system", () => ({
   File: class extends Blob {
@@ -50,7 +63,9 @@ jest.mock("@/components/native-ui", () => {
       accessibilityLabel,
       disabled,
       onPress,
+      top,
     }: {
+      top: number;
       accessibilityLabel: string;
       disabled?: boolean;
       onPress: () => void;
@@ -60,6 +75,7 @@ jest.mock("@/components/native-ui", () => {
         accessibilityRole: "button",
         disabled,
         onPress,
+        style: { top },
       }),
     Section: box,
     Separator: () => null,
@@ -147,6 +163,7 @@ function opacityOf(element: { props: { style?: unknown } }): number | undefined 
 }
 
 beforeEach(() => {
+  mockNativeHeader = false;
   mockApiFetch.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
@@ -352,5 +369,45 @@ describe("NetworkingProfileScreen", () => {
     await waitFor(() => expect(screen.queryByRole("switch", { name: "directoryCv" })).toBeNull());
     expect(screen.getByRole("button", { name: "networkingCvUpload" })).toBeTruthy();
     alert.mockRestore();
+  });
+});
+
+describe("Networking profile safe areas and native controls (H55, #935)", () => {
+  test("fallback chrome clears a nonzero sheet top safe area", async () => {
+    mockApiFetch.mockResolvedValue(shared);
+    await renderMobile(<NetworkingProfileScreen />, { insets: { top: 47 } });
+    const edit = await screen.findByRole("button", { name: "networkingEdit" });
+    expect(StyleSheet.flatten(edit.props.style).top).toBe(63);
+    expect(
+      StyleSheet.flatten(
+        screen.getByTestId("networking-profile-scroll").props.contentContainerStyle,
+      ).paddingTop,
+    ).toBe(63);
+  });
+
+  test("Liquid Glass uses native toolbar actions instead of floating sheet controls", async () => {
+    const previousOs = process.env.EXPO_OS;
+    process.env.EXPO_OS = "ios";
+    mockNativeHeader = true;
+    try {
+      mockApiFetch.mockResolvedValue(shared);
+      await renderMobile(<NetworkingProfileScreen />);
+      await screen.findByRole("button", { name: "networkingEdit" });
+      expect(screen.getByTestId("native-toolbar-left")).toBeTruthy();
+      expect(screen.getByTestId("native-toolbar-right")).toBeTruthy();
+      expect(screen.getByRole("button", { name: "networkingEdit" }).props.style).toBeUndefined();
+      expect(screen.queryByText("networkingTitle")).toBeNull();
+      expect(
+        screen.getByTestId("networking-profile-scroll").props.contentInsetAdjustmentBehavior,
+      ).toBe("automatic");
+      await fireEvent.press(screen.getByRole("button", { name: "networkingEdit" }));
+      expect(screen.getByRole("button", { name: "save" })).toBeTruthy();
+      await fireEvent.press(screen.getByRole("button", { name: "cancel" }));
+      expect(screen.getByRole("button", { name: "networkingEdit" })).toBeTruthy();
+    } finally {
+      if (previousOs === undefined) delete process.env.EXPO_OS;
+      else process.env.EXPO_OS = previousOs;
+      mockNativeHeader = false;
+    }
   });
 });

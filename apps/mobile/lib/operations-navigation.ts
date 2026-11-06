@@ -11,7 +11,7 @@ export type OperationsNavigationAction = "noop" | "replace";
  * free-form stack launcher.
  *
  * Contract:
- * - tapping the active pseudo-tab is a no-op;
+ * - tapping the active pseudo-tab is a no-op, except Account subpages return to the profile;
  * - changing pseudo-tabs always replaces the current section instead of
  *   stacking duplicates;
  * - every destination declared in OVERFLOW_TAB_ROUTE participates without a
@@ -24,7 +24,14 @@ export function resolveOperationsNavigationAction(
   const currentSection = operationsSectionFromPathname(currentPathname);
   const targetSection = operationsSectionFromRoute(targetRoute);
 
-  if (currentSection === targetSection) return "noop";
+  if (currentSection === targetSection) {
+    if (
+      targetSection === "account" &&
+      normalizeOperationsPath(currentPathname) !== normalizeOperationsPath(targetRoute)
+    )
+      return "replace";
+    return "noop";
+  }
   return "replace";
 }
 

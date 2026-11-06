@@ -14,7 +14,21 @@ jest.mock("@/components/my-queue-screen", () => ({
   __esModule: true,
   default: () => null,
 }));
-jest.mock("@/components/header-back-button", () => ({ EntryBackToolbar: () => null }));
+jest.mock("@/components/header-back-button", () => ({
+  EntryBackToolbar: ({ fallback }: { fallback: string }) => {
+    const React = jest.requireActual("react");
+    const { Pressable, Text } = jest.requireActual("react-native");
+    return React.createElement(
+      Pressable,
+      {
+        accessibilityRole: "button",
+        accessibilityLabel: "back",
+        onPress: () => mockReplace(fallback),
+      },
+      React.createElement(Text, null, "back"),
+    );
+  },
+}));
 jest.mock("expo-router", () => ({
   useScrollToTop: jest.fn(),
   useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
@@ -936,4 +950,35 @@ it("shows retryable feedback for an incomplete project instead of rendering the 
   mockApi.mockResolvedValue(project);
   await fireEvent.press(screen.getByRole("button", { name: "retry" }));
   expect(await screen.findByDisplayValue("Rover")).toBeTruthy();
+});
+
+it("keeps the gallery back destination while a project loads or fails (H18, H55)", async () => {
+  mockParams = { id: "5", gallery: "1" };
+  mockApi.mockReturnValue(new Promise(() => {}));
+  await renderMobile(<ProjectDetailScreen />);
+  await fireEvent.press(screen.getByRole("button", { name: "back" }));
+  expect(mockReplace).toHaveBeenCalledWith("/projects/gallery");
+});
+
+it("keeps a way back on public project reads and final errors (H18, H55)", async () => {
+  mockParams = { id: "5", gallery: "1" };
+  mockApi.mockResolvedValue(project);
+  const view = await renderMobile(<ProjectDetailScreen />);
+  expect(await screen.findByText("projectTeam")).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "back" }));
+  expect(mockReplace).toHaveBeenCalledWith("/projects/gallery");
+  await view.unmount();
+
+  mockApi.mockRejectedValue(new ApiError("denied", 403));
+  await renderMobile(<ProjectDetailScreen />);
+  expect(await screen.findByText("apiErrorForbidden")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "back" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "retry" })).toBeNull();
+});
+
+it("leaves embedded project navigation with its owning pane (H18, H55)", async () => {
+  mockApi.mockResolvedValue(project);
+  await renderMobile(<ProjectDetailScreen embedded id="5" gallery="1" />);
+  expect(await screen.findByText("projectTeam")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "back" })).toBeNull();
 });

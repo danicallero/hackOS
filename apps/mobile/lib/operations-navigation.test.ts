@@ -78,4 +78,12 @@ describe("operations navigation", () => {
       );
     }
   });
+  it.each([
+    "/others/notification-settings/live-activities",
+    "/(tabs)/others/notification-settings/live-activities",
+    "/others/wallet",
+    "/others/storage",
+  ])("returns from %s to the Account root when its menu item is selected", (path) => {
+    expect(resolveOperationsNavigationAction(path, OVERFLOW_TAB_ROUTE.account)).toBe("replace");
+  });
 });
