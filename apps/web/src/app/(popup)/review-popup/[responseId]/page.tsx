@@ -77,13 +77,15 @@ function ReviewPopupInner() {
   // saving — even if the reviewer closes the main modal tab that opened it.
   useReviewSync(
     applicationId,
-    {
-      responseId,
-      score: review.score,
-      notes: review.notes,
-      saveState: review.saveState,
-      status: status ?? "",
-    },
+    review.responseId === responseId && status !== null
+      ? {
+          responseId,
+          score: review.score,
+          notes: review.notes,
+          saveState: review.saveState,
+          status,
+        }
+      : null,
     (message: ReviewSyncMessage) => {
       if (message.responseId !== responseId) {
         // The main tab navigated to a different applicant — follow it.

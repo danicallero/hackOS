@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ReviewSyncMessage, useReviewSync } from "./review-sync";
@@ -182,4 +182,49 @@ describe("useReviewSync", () => {
 
     expect(onMessageB).not.toHaveBeenCalled();
   });
+});
+
+it("does not echo applied remote state between two review composers (H13)", async () => {
+  const containers = [document.createElement("div"), document.createElement("div")];
+  const roots = containers.map((container) => createRoot(container));
+  let received = 0;
+  const edit: Array<(score: number) => void> = [];
+  function Composer({ initial }: { initial: number }) {
+    const [score, setScore] = useState(initial);
+    edit[initial] = setScore;
+    useReviewSync(
+      1,
+      { responseId: 10, score, notes: "", saveState: "saved", status: "review" },
+      (message) => {
+        received += 1;
+        // Bound a regression so the test can report the feedback loop.
+        if (received < 30) setScore(message.score ?? 0);
+      },
+    );
+    return null;
+  }
+  try {
+    await act(async () => {
+      roots[0].render(<Composer initial={1} />);
+      roots[1].render(<Composer initial={5} />);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    received = 0;
+    await act(async () => {
+      edit[1](2);
+      edit[5](4);
+    });
+    for (let turn = 0; turn < 20; turn += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+    }
+    expect(received).toBeLessThanOrEqual(4);
+  } finally {
+    act(() => {
+      for (const root of roots) root.unmount();
+    });
+  }
 });

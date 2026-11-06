@@ -35,6 +35,9 @@ export function useReviewAutosave(
   initial: { score: number | null; notes: string },
   onSaved?: () => void,
 ) {
+  // H13: navigation changes the prop before reseeding; never publish the old
+  // applicant’s draft under the new response id.
+  const [draftResponseId, setDraftResponseId] = useState(responseId);
   const [score, setScore] = useState(initial.score);
   const [notes, setNotes] = useState(initial.notes);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -64,6 +67,7 @@ export function useReviewAutosave(
         );
       }
       draftRef.current = { responseId: id, ...value, dirty: false };
+      setDraftResponseId(id);
       setScore(value.score);
       setNotes(value.notes);
       setSaveState(state);
@@ -76,12 +80,14 @@ export function useReviewAutosave(
   const applyRemote = useCallback(
     (value: { score: number | null; notes: string; saveState: SaveState }): boolean => {
       if (draftRef.current.dirty) return false;
+      if (value.score === score && value.notes === notes && value.saveState === saveState)
+        return false;
       setScore(value.score);
       setNotes(value.notes);
       setSaveState(value.saveState);
       return true;
     },
-    [],
+    [score, notes, saveState],
   );
 
   useEffect(
@@ -114,6 +120,7 @@ export function useReviewAutosave(
   }, [responseId, score, notes, dirty, canReview]);
 
   return {
+    responseId: draftResponseId,
     score,
     notes,
     saveState,

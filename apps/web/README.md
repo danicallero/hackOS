@@ -925,6 +925,11 @@ dietary restrictions use current user logistics data; the general With dietary
 restrictions filter includes either selected restrictions or nonblank dietary notes.
 Filter values stay local and clear through the standard chips/reset action.
 
+Review synchronization broadcasts only drafts seeded for the active response. Applying
+a remote draft does not echo it back to other tabs or companion windows, and an
+identical remote snapshot does not reload the response list. Arrow navigation
+therefore retains each applicant’s score and notes without a request loop (H13).
+
 DataTable reports `onVisibleRowsChange` only when the row objects or their order
 change. Parent components may store that sequence and recreate column definitions
 without causing a sorted-table render loop that starves route transitions (H13).
