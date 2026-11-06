@@ -14,6 +14,7 @@ import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { positiveInt } from "../../lib/schemas.js";
 import { requireApplication } from "../applications/service.js";
 import { statisticsPanelKeys } from "../applications/stats.js";
 import { lockRoleGraph, requireRoleMutationAuthority } from "../identity/role-authority.js";
@@ -79,7 +80,7 @@ const statisticsScopeAccessBody = z
   .strict();
 
 const statisticsScopeAccessDeleteParams = z.object({
-  roleId: z.coerce.number().int().positive(),
+  roleId: positiveInt,
 });
 
 const statisticsScopeAccessDeleteQuery = z.object({
@@ -96,7 +97,11 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
     {
       preHandler: requireAuth,
       config: routeAccess({ kind: "authenticated" }),
-      schema: { summary: "List statistics scopes available to the caller" },
+      schema: {
+        description:
+          "Application and role scopes whose panels the caller may read. Panels are granted per scope and role.",
+        summary: "List statistics scopes available to the caller",
+      },
     },
     async (req) => {
       const scopes = await accessibleStatisticsScopes(
@@ -236,6 +241,8 @@ export function registerStatisticsRoutes(app: FastifyInstance): void {
       preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
+        description:
+          "Sets whether a role sees one panel of one scope. Needs `statistics:manage` and authority over the target role's position; audited as `access_changed`.",
         summary: "Set a generic statistics scope panel override",
         body: statisticsScopeAccessBody,
       },

@@ -48,8 +48,6 @@ export async function syncFieldLibraries(
       result.push(rest);
       continue;
     }
-    if (field.library_id && !rows.some((row) => row.id === field.library_id))
-      throw new BadRequestError("Library does not belong to this form");
     const id = field.library_id ?? randomUUID();
     if (!field.library_id)
       await db.query(

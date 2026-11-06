@@ -1,4 +1,5 @@
 import type { Queryable } from "../../db/pool.js";
+import { likeContains } from "../../lib/like.js";
 
 /**
  * H53 audit surface: read-only filtered query over audit_log. Every sensitive
@@ -47,7 +48,7 @@ export async function queryAuditLog(
   if (filters.entityId) addCondition("al.entity_id = ?", filters.entityId);
   if (filters.actorId !== undefined) addCondition("al.actor_id = ?", filters.actorId);
   if (filters.actorQuery) {
-    const needle = `%${filters.actorQuery}%`;
+    const needle = likeContains(filters.actorQuery);
     params.push(needle, needle);
     conditions.push(
       `(u.name || ' ' || u.surname ILIKE $${params.length - 1} OR u.email ILIKE $${params.length})`,

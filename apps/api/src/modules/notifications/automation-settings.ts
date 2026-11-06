@@ -13,7 +13,7 @@ import { getQueue } from "../../lib/queues.js";
  * cleaned table never silences reminders.
  */
 
-export const SCHEDULE_REMINDERS_QUEUE = "schedule-reminders";
+const SCHEDULE_REMINDERS_QUEUE = "schedule-reminders";
 
 export async function readNotificationAutomationSettings(
   db: Queryable = pool,
