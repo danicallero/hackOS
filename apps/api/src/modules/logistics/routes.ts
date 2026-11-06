@@ -1051,7 +1051,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         querystring: scheduleOwnerCandidatesQuery,
         summary: "Search schedule owner candidates",
         description:
-          "Minimal account identity fields for a SCHEDULE_MANAGE holder assigning a schedule item's responsible person(s) (H59) — deliberately not gated by the broader USERS_READ.",
+          "Case- and accent-insensitive account name search for a SCHEDULE_MANAGE holder assigning a schedule item's responsible person(s) (H59) — deliberately not gated by the broader USERS_READ.",
       },
     },
     async (req) => ({

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { Command, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { EntityCombobox } from "./entity-combobox";
 import { FileUploadField } from "./file-upload-field";
 import { MultiSelect } from "./multi-select";
@@ -141,4 +142,65 @@ it("upload validation marks the control invalid even when the parent has no erro
   const button = getByRole(host, "button", { name: "CV" });
   expect(button.getAttribute("aria-invalid")).toBe("true");
   expect(button.getAttribute("aria-describedby")).toBe(getByRole(host, "alert").id);
+});
+
+for (const kind of ["entity", "multi"] as const) {
+  it(`${kind} search ignores accents and keeps the original label and selected ID`, async () => {
+    const accented = [
+      { value: "engineering", label: "Ingeniería" },
+      { value: "maths", label: "Matemáticas" },
+    ];
+    const onChange = vi.fn();
+    await act(async () =>
+      root.render(
+        kind === "entity" ? (
+          <EntityCombobox
+            options={accented}
+            value=""
+            getId={(o) => o.value}
+            getLabel={(o) => o.label}
+            onChange={onChange}
+          />
+        ) : (
+          <MultiSelect options={accented} value={[]} onChange={onChange} />
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    await act(async () => user.click(getByRole(host, "combobox")));
+    const dialog = getByRole(document.body, "dialog");
+    const input = getByRole(dialog, "combobox");
+    for (const query of ["ingenieria", "INGENIERÍA", "ingeniería".normalize("NFD")]) {
+      await act(async () => {
+        await user.clear(input);
+        await user.type(input, query);
+      });
+      expect(getByRole(dialog, "option", { name: "Ingeniería" }).textContent).toContain(
+        "Ingeniería",
+      );
+      expect(queryByRole(dialog, "option", { name: "Matemáticas" })).toBeNull();
+    }
+    await act(async () => user.click(getByRole(dialog, "option", { name: "Ingeniería" })));
+    expect(onChange).toHaveBeenCalledWith(kind === "entity" ? "engineering" : ["engineering"]);
+  });
+}
+
+it("searches accented keywords with the shared Command filter", async () => {
+  await act(async () =>
+    root.render(
+      <Command>
+        <CommandInput />
+        <CommandList>
+          <CommandItem value="code-1" keywords={["Ingeniería"]}>
+            Engineering
+          </CommandItem>
+          <CommandItem value="code-2">Unrelated</CommandItem>
+        </CommandList>
+      </Command>,
+    ),
+  );
+  const user = userEvent.setup();
+  await act(async () => user.type(getByRole(host, "combobox"), "ingenieria"));
+  expect(getByRole(host, "option", { name: "Engineering" })).toBeDefined();
+  expect(queryByRole(host, "option", { name: "Unrelated" })).toBeNull();
 });

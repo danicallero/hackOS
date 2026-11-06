@@ -15,6 +15,7 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { AlertModal } from "./alert-modal";
 import { ContextualError } from "./contextual-error";
@@ -47,7 +48,7 @@ export function LibraryManager({
   useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   const items = catalogue.data?.items ?? [];
   const filtered = items.filter((item) =>
-    item.name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
+    normalizeSearchText(item.name).includes(normalizeSearchText(query)),
   );
   async function addValue() {
     if (!query.trim()) return;
@@ -126,9 +127,7 @@ export function LibraryManager({
         onChange={(event) => setQuery(event.target.value)}
       />
       {query.trim() &&
-        !items.some(
-          (item) => item.name.toLocaleLowerCase() === query.trim().toLocaleLowerCase(),
-        ) && (
+        !items.some((item) => normalizeSearchText(item.name) === normalizeSearchText(query)) && (
           <Button type="button" variant="outline" disabled={busy} onClick={() => void addValue()}>
             {t("addLibraryValue", { name: query.trim() })}
           </Button>

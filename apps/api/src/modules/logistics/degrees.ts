@@ -121,7 +121,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Search the public degree catalogue",
         description:
-          "Anonymous autocomplete for degree application fields. Accepts a name query or comma-separated IDs.",
+          "Anonymous autocomplete for degree application fields. Accepts a case- and accent-insensitive name query or comma-separated IDs.",
       },
     },
     async (req, reply) => {
@@ -140,7 +140,7 @@ export function registerDegreeRoutes(app: FastifyInstance): void {
         return { degrees: rows };
       }
       const { rows } = await pool.query(
-        `SELECT id, name FROM university_degrees ${q ? "WHERE name ILIKE $1" : ""} ORDER BY name LIMIT 50`,
+        `SELECT id, name FROM university_degrees ${q ? "WHERE unaccent(name) ILIKE unaccent($1)" : ""} ORDER BY name LIMIT 50`,
         q ? [`%${q}%`] : [],
       );
       return { degrees: rows };

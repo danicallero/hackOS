@@ -17,6 +17,7 @@ import { useAutoRefresh } from "@/hooks/use-auto-refresh";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
+import { normalizeSearchText } from "@/lib/search-text";
 import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
 
@@ -64,12 +65,14 @@ export function JudgesCard({ enterpriseId }: { enterpriseId: number }) {
   // the picker filters it client-side instead of refetching per keystroke.
   const searchCandidates = useCallback(
     async (query: string) => {
-      const q = query.trim().toLowerCase();
+      const q = normalizeSearchText(query);
       const available = candidates.filter((user) => !rosterIds.has(user.id));
       if (!q) return available.slice(0, 20);
       return available
         .filter((user) =>
-          [user.name, user.surname, user.email].filter(Boolean).join(" ").toLowerCase().includes(q),
+          normalizeSearchText(
+            [user.name, user.surname, user.email].filter(Boolean).join(" "),
+          ).includes(q),
         )
         .slice(0, 20);
     },

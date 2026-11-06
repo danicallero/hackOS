@@ -1,5 +1,6 @@
 import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
 import type { MessageKey, Translate } from "@/lib/i18n";
+import { normalizeSearchText } from "./search-text";
 
 /**
  * Capability presentation helpers (H8). The catalogue is derived entirely from
@@ -96,22 +97,22 @@ export function selectableCapabilities(): string[] {
 
 /**
  * The capability catalogue, grouped by domain, filtered to entries whose
- * code or prettified label matches `query` (case-insensitive). Empty groups
+ * code or prettified label matches `query` (case- and accent-insensitive). Empty groups
  * are dropped rather than shown with zero rows.
  */
 export function filterCapabilitiesByDomain(
   query: string,
   t: Translate,
 ): { domain: string; capabilities: string[] }[] {
-  const needle = query.trim().toLowerCase();
+  const needle = normalizeSearchText(query);
   if (!needle) return capabilitiesByDomain();
   return capabilitiesByDomain()
     .map((group) => ({
       domain: group.domain,
       capabilities: group.capabilities.filter(
         (cap) =>
-          cap.toLowerCase().includes(needle) ||
-          prettifyCapability(cap, t).toLowerCase().includes(needle),
+          normalizeSearchText(cap).includes(needle) ||
+          normalizeSearchText(prettifyCapability(cap, t)).includes(needle),
       ),
     }))
     .filter((group) => group.capabilities.length > 0);
