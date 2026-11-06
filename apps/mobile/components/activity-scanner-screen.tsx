@@ -681,10 +681,7 @@ export function ActivityScannerScreen({
               ? setPeopleOpen(true)
               : router.push({
                   pathname: "/(tabs)/activities/people",
-                  params:
-                    process.env.EXPO_OS === "android"
-                      ? { activityId: String(activityId), autoSearch: "1" }
-                      : { activityId: String(activityId) },
+                  params: { activityId: String(activityId) },
                 })
           }
           onValue={(value) => void scanned(value)}

@@ -51,8 +51,10 @@ jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => false,
 }));
 jest.mock("@/components/native-ui", () => ({
+  AndroidDetailHeader: () => null,
   EmptyState: () => null,
   LegacyHeaderIconButton: () => null,
+  useAndroidDetailHeaderInset: () => 0,
 }));
 jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
 jest.mock("@/components/schedule-form-modal", () => ({
