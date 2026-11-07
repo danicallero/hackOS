@@ -67,6 +67,18 @@ async function open(userId: number, scopes: string[]) {
 }
 
 describe("multiplexed authorization and wire contract (#892)", () => {
+  it("keeps library managers' domain refreshes and personal notifications on one stream (H8, #892)", async () => {
+    const user = await createUserWithCapabilities([CAPABILITIES.INTOLERANCES_MANAGE]);
+    const connection = await open(user, ["personal", "domain:logistics"]);
+    await broadcast(SSE_TOPICS.LOGISTICS, EVENTS.DOMAIN_CHANGED, {});
+    await broadcast(`${SSE_TOPICS.USER_PREFIX}${user}`, EVENTS.USER_NOTIFICATION, { own: true });
+    await expect.poll(connection.text).toContain('"topic":"domain:logistics"');
+    await expect.poll(connection.text).toContain('"topic":"personal"');
+    expect((await app.inject({ url: url(["logistics"]), headers: asUser(user) })).statusCode).toBe(
+      403,
+    );
+  });
+
   it("rejects anonymous, arbitrary, privileged and oversized scope requests before opening SSE", async () => {
     const user = await createUser();
     expect((await app.inject({ url: url(["personal"]) })).statusCode).toBe(401);
