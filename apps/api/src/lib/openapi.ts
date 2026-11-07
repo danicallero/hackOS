@@ -1,4 +1,3 @@
-import { createRequire } from "node:module";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import type { FastifyInstance } from "fastify";
@@ -6,9 +5,6 @@ import { jsonSchemaTransform, jsonSchemaTransformObject } from "fastify-type-pro
 import { config } from "../config.js";
 import { isProbePath, pathMatchesPrefix } from "./request-path.js";
 import { openApiSecurityForPolicy } from "./route-policy.js";
-
-const require = createRequire(import.meta.url);
-const pkg = require("../../package.json") as { version: string };
 
 // One entry per tag `docsTagFor` can return. Keeps /documentation's sidebar
 // grouped and readable instead of an alphabetical dump of every route.
@@ -314,12 +310,13 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
 }
 
 /** Serve the generated OpenAPI document and Swagger UI at /documentation. */
-export async function registerApiDocs(app: FastifyInstance): Promise<void> {
+/** `version` is read by the caller: `package.json` is a different relative path from `src/` and from the bundled `dist/`. */
+export async function registerApiDocs(app: FastifyInstance, version: string): Promise<void> {
   await app.register(swagger, {
     openapi: {
       info: {
         title: "hackOS API",
-        version: pkg.version,
+        version,
         description:
           "Hackathon management API. Routes are grouped by domain below; " +
           "each schema is the single source of truth for both validation and " +

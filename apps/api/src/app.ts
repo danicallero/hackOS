@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -24,6 +25,9 @@ import { authContextPlugin } from "./plugins/auth-context.js";
 import { clientFloorPlugin } from "./plugins/client-floor.js";
 import { maintenancePlugin } from "./plugins/maintenance.js";
 import { requestContextPlugin } from "./plugins/request-context.js";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
 
 export type App = FastifyInstance;
 
@@ -116,7 +120,7 @@ export async function buildApp(): Promise<App> {
   app.addHook("onSend", idempotencyOnSend);
   registerMutationRefreshHook(app);
 
-  await registerApiDocs(app);
+  await registerApiDocs(app, pkg.version);
 
   registerErrorHandler(app);
 
