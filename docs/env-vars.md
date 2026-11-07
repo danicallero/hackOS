@@ -220,7 +220,7 @@ El API no recibe variables de correo ni la cuenta root de MinIO.
 
 | Grupo | Variables |
 |---|---|
-| Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG`, `METRICS_PORT=9464` |
+| Proceso | `NODE_ENV=production`, `WORKERS_INLINE=false`, `LOG_LEVEL`, `LOG_EXPO_PUSH_TICKETS`, `LOG_EXPO_PUSH_UNSAFE_DEBUG`, `METRICS_PORT=9464`, `METRICS_HOST` (opcional, por defecto `0.0.0.0`) |
 | Pool y outbox | `DB_POOL_MAX`, `DB_IDLE_TIMEOUT_MS`, `DB_CONNECTION_TIMEOUT_MS`, `DB_STATEMENT_TIMEOUT_MS`, `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `NOTIFICATION_OUTBOX_BATCH_SIZE` |
 | Correo | `MAIL_PROVIDER`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_AUTH_FROM_ADDRESS`, `MAIL_AUTH_FROM_NAME`, `MAIL_REPLY_TO`, `MAIL_SES_CONFIGURATION_SET`, `SMTP_HOST`, `SMTP_TLS_SERVERNAME`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE`, `SMTP_REQUIRE_TLS` |
 | Wallet | El mismo bloque de Wallet que usa API, porque el worker empuja sincronizaciones de pases. |

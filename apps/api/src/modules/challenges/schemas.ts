@@ -134,5 +134,3 @@ export const setWinnerBody = z
     repoId: z.number().int().positive(),
   })
   .strict();
-
-export type SetWinnerBody = z.infer<typeof setWinnerBody>;

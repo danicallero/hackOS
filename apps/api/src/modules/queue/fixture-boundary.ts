@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { pool } from "../../db/pool.js";
-import { assertFixtureQueueScopes } from "../logistics/review-fixture-scope.js";
+import { assertFixtureQueueScopes } from "../../lib/fixture-queue-scope.js";
 
 type Resource = "room" | "entry" | "queueGroup" | "challenge" | "repo";
 type Target = { resource: Resource; id: number };

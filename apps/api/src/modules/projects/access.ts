@@ -8,11 +8,11 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import type {
   ContextualPolicyResolver,
   ContextualResourceLocator,
 } from "../../lib/route-policy.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 
 export interface RepositoryResource {
   id: number;
@@ -38,7 +38,7 @@ function repoIdFrom(request: FastifyRequest, locator: ContextualResourceLocator)
  * global; relationship access remains only the caller's assigned/owned
  * challenges and never expands to another enterprise or room.
  */
-export async function resolveRepositoryAccessScope(
+async function resolveRepositoryAccessScope(
   request: FastifyRequest,
 ): Promise<RepositoryAccessScope> {
   return repositoryAccessForUser(request.userId, getRequestAuthorizationContext(request));

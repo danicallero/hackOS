@@ -7,7 +7,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
 import { requireCapability } from "../../lib/capabilities.js";
+import { csvCell, toCsv } from "../../lib/csv.js";
 import { BadRequestError } from "../../lib/errors.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getObject, objectExists } from "../../lib/storage.js";
 import type { TemplateField } from "../applications/schemas.js";
@@ -707,7 +709,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       });
 
       reply.header("content-type", "application/zip");
-      reply.header("content-disposition", 'attachment; filename="applications-export.zip"');
+      reply.header("content-disposition", contentDisposition("applications-export.zip"));
       reply.header("cache-control", "private, no-store");
       if (failures.length > 0) {
         reply.header(
@@ -722,8 +724,7 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       const archive = new ZipArchive({ zlib: { level: 9 } });
       const sent = reply.send(archive);
       try {
-        const csv = `\uFEFF${[headers.map(csvCell).join(","), ...csvRows.map((row) => row.map(csvCell).join(","))].join("\r\n")}\r\n`;
-        archive.append(csv, { name: "applications.csv" });
+        archive.append(toCsv(headers.map(csvCell), csvRows), { name: "applications.csv" });
         for (const document of readableDocuments) {
           try {
             const object = await getObject(document.fileKey);
@@ -743,11 +744,4 @@ export function registerApplicationBatchExportRoutes(app: FastifyInstance): void
       return sent;
     },
   );
-}
-
-function csvCell(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  const text = value instanceof Date ? value.toISOString() : String(value);
-  if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
-  return text;
 }

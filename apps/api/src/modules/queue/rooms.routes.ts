@@ -6,17 +6,17 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import {
   getRequestAuthorizationContext,
+  requireAnyCapability,
   requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ConflictError, NotFoundError } from "../../lib/errors.js";
-import { idempotencyGuard } from "../../lib/idempotency.js";
-import { requestLiveActivitySync } from "../live-activities/kick.js";
 import {
   assertFixtureQueueScope,
   assertFixtureRoomEnterpriseScope,
-} from "../logistics/review-fixture-scope.js";
-import { requireAnyCapability } from "./access.js";
+} from "../../lib/fixture-queue-scope.js";
+import { idempotencyGuard } from "../../lib/idempotency.js";
+import { requestLiveActivitySync } from "../live-activities/kick.js";
 import { actor } from "./actor.js";
 import {
   broadcastQueueEvent,
@@ -648,7 +648,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        summary: "Pause a room",
+        description:
+          "Called teams go back to the top of their challenge queue in arrival order without a no-show penalty; teams already in the room or presenting finish normally, and call-next skips the room until it resumes. Repeating it on a paused room is a no-op (H35).",
+        params: roomIdParam,
+      },
     },
     async (req) => {
       const userId = actor(req.userId);
@@ -671,7 +676,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        summary: "Resume a room",
+        description:
+          "Reopens a paused room and refills its waiting area immediately instead of waiting for the next pump tick (H35).",
+        params: roomIdParam,
+      },
     },
     async (req) => {
       const userId = actor(req.userId);
@@ -693,6 +703,11 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
           anyOf: [CAPABILITIES.QUEUE_OPERATE, CAPABILITIES.QUEUE_ADMIN],
         },
       },
+      schema: {
+        summary: "Read queue settings",
+        description:
+          "The singleton judging configuration: window, handoff buffer, pre-call ETA and called-too-long threshold.",
+      },
     },
     async () => (await pool.query(`SELECT * FROM queue_settings WHERE id = 1`)).rows[0],
   );
@@ -702,7 +717,12 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       preHandler: requireCapability(CAPABILITIES.QUEUE_ADMIN),
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { body: queueSettingsBody },
+      schema: {
+        summary: "Update queue settings",
+        description:
+          "Judging window, handoff buffer, pre-call ETA, requeue prompt default and the called-too-long threshold. Fields left out keep their value. Audited, and the queue Live Activity is resynced (H38, H53).",
+        body: queueSettingsBody,
+      },
     },
     async (req) => {
       // H53: judging timings (window, pre-call ETA, called-too-long) are event
@@ -753,7 +773,13 @@ export function registerRoomsRoutes(app: FastifyInstance): void {
     {
       preHandler: [requireCapability(CAPABILITIES.QUEUE_ADMIN), idempotencyGuard],
       config: { routeAccessPolicy: { kind: "capability", capability: CAPABILITIES.QUEUE_ADMIN } },
-      schema: { params: challengeIdParam, body: enqueueChallengeBody },
+      schema: {
+        summary: "Enqueue a challenge's projects",
+        description:
+          "Creates queue entries for the given projects, or for every submitted project of the challenge when `repoIds` is omitted. Projects already queued are returned in `alreadyQueued`; the call is safe to repeat.",
+        params: challengeIdParam,
+        body: enqueueChallengeBody,
+      },
     },
     async (req) => {
       const userId = actor(req.userId);

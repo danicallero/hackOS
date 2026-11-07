@@ -4,9 +4,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../../db/pool.js";
 import { requireAuth, requireCapability } from "../../../lib/capabilities.js";
+import { assertFixtureSubjectScope } from "../../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
-import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { getMealPlan, replaceMealPlan } from "../meal-plan.js";
 
 /**

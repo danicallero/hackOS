@@ -10,6 +10,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { likeContains } from "../../lib/like.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import {
   batchDecideSchema,
@@ -101,7 +102,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         filters.push(`r.status = $${params.length}`);
       }
       if (req.query.search) {
-        params.push(`%${req.query.search}%`);
+        params.push(likeContains(req.query.search));
         filters.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length})`);
       }
       const { rows } = await pool.query(

@@ -1,7 +1,7 @@
-import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
+import { isSyntheticOperator, scannerSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { occupancyEstimate } from "./presence.js";
-import { isSyntheticOperator, scannerSubjectScope } from "./review-fixture-scope.js";
+import { scannableActivitySql, scannableCategoriesParam } from "./scannable.js";
 
 export interface ActivityAggregate {
   activityId: number;
@@ -83,8 +83,8 @@ export async function scannableActivities(
       ? "a.category = ANY($1::text[])"
       : category === "activity"
         ? "a.requires_scan = true AND NOT (a.category = ANY($1::text[]))"
-        : "a.category = ANY($1::text[]) OR a.requires_scan = true";
-  return aggregateActivities(where, [[...MEAL_ACTIVITY_KINDS]]);
+        : scannableActivitySql();
+  return aggregateActivities(where, [scannableCategoriesParam()]);
 }
 
 /**
@@ -126,9 +126,9 @@ export async function hourlyFlow() {
        JOIN activities a ON a.id = al.activity_id
        JOIN users u ON u.id = al.user_id
         AND u.account_state = 'active' AND u.anonymized_at IS NULL AND u.is_test_account = false
-      WHERE a.category = ANY($1::text[]) OR a.requires_scan = true
+      WHERE ${scannableActivitySql()}
       GROUP BY 1, 2 ORDER BY 1`,
-    [[...MEAL_ACTIVITY_KINDS]],
+    [scannableCategoriesParam()],
   );
   const toRow = (row: { bucket: Date; n: number }) => ({
     bucket: row.bucket.toISOString(),
@@ -153,7 +153,7 @@ export async function logisticsStats() {
       WHERE badge_id IS NOT NULL AND account_state = 'active' AND anonymized_at IS NULL
         AND is_test_account = false`,
   );
-  const occ = await occupancyEstimate(undefined, undefined);
+  const occ = await occupancyEstimate({ actorId: null });
   const meals = await scannableActivities("meal");
   const activities = await scannableActivities("activity");
   const accreditedByRole = await accreditationCountsByRole();
@@ -250,7 +250,7 @@ export async function scannerRoleStats(actorId?: number): Promise<
       ORDER BY role, has_capabilities`,
   );
 
-  const occ = await occupancyEstimate(undefined, actorId);
+  const occ = await occupancyEstimate({ actorId: actorId ?? null });
   const present = new Set(occ.present);
 
   return rows.map((row) => ({

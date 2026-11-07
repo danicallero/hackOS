@@ -1,6 +1,6 @@
 import type pg from "pg";
 import { ConflictError } from "../../lib/errors.js";
-import { inspectFixtureRoomScope } from "../logistics/review-fixture-scope.js";
+import { inspectFixtureRoomScope } from "../../lib/fixture-queue-scope.js";
 
 type FixtureQueueRow = {
   fixture_key: string;

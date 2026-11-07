@@ -7,6 +7,7 @@ import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, UnauthorizedError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { routeAccessOption } from "../../lib/route-policy.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import {
   APP_CALLBACK_URL,
@@ -42,7 +43,7 @@ import {
 
 const params = z.object({ id: z.coerce.number().int().positive() });
 const member = {
-  config: { routeAccessPolicy: { kind: "authenticated" as const } },
+  ...routeAccessOption({ kind: "authenticated" }),
   preHandler: [requireAuth, idempotencyGuard],
 };
 
@@ -149,7 +150,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   r.get(
     "/api/github/callback",
     {
-      config: { routeAccessPolicy: { kind: "authenticated" as const } },
+      ...routeAccessOption({ kind: "authenticated" }),
       // Expired session: bounce through login and resume this exact callback (H18).
       preHandler: [
         async (req, reply) => {
@@ -220,7 +221,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   r.get(
     "/api/me/github",
     {
-      config: { routeAccessPolicy: { kind: "authenticated" as const } },
+      ...routeAccessOption({ kind: "authenticated" }),
       preHandler: requireAuth,
       schema: {
         summary: "Read my linked GitHub account",
@@ -328,12 +329,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   );
 
   const projectsRead = {
-    config: {
-      routeAccessPolicy: {
-        kind: "capability" as const,
-        capability: CAPABILITIES.PROJECTS_READ,
-      },
-    },
+    ...routeAccessOption({ kind: "capability", capability: CAPABILITIES.PROJECTS_READ }),
     preHandler: requireCapability(CAPABILITIES.PROJECTS_READ),
   };
 
@@ -370,7 +366,7 @@ export function registerGithubRoutes(app: FastifyInstance) {
   r.get(
     "/api/tv/github",
     {
-      config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-tv" } },
+      ...routeAccessOption({ kind: "public", anonymousCategory: "public-tv" }),
       schema: {
         summary: "Read the GitHub activity ranking",
         description:
@@ -390,7 +386,7 @@ export async function registerGithubWebhook(app: FastifyInstance) {
     scoped.post(
       "/api/github/webhook",
       {
-        config: { routeAccessPolicy: { kind: "token", policy: "github-webhook-signature" } },
+        ...routeAccessOption({ kind: "token", policy: "github-webhook-signature" }),
         schema: {
           summary: "GitHub App webhook",
           description:

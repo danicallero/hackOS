@@ -1,14 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import {
-  asUser,
-  buildTestApp,
-  createUser,
-  createUserWithCapabilities,
-  truncateAll,
-} from "../helpers.js";
+import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
 import { admitParticipant } from "../projects/fixtures.js";
 
 /**
@@ -40,15 +34,10 @@ let app: App;
 let reader: number;
 let keySeq = 0;
 
-beforeAll(async () => {
-  app = await buildTestApp();
-});
+const getApp = useTestApp();
 beforeEach(async () => {
-  await truncateAll();
+  app = await getApp();
   reader = await person("Reader", "Zed");
-});
-afterAll(async () => {
-  await app.close();
 });
 
 async function person(name = "Ana", surname = "Pérez") {

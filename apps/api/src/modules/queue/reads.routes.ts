@@ -10,13 +10,13 @@ import {
   requireAuth,
   requireCapability,
 } from "../../lib/capabilities.js";
-import { registerRealtimeRoutes } from "../../lib/realtime.routes.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { positiveInt } from "../../lib/schemas.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { subscribe } from "../../lib/sse.js";
-import { requireScopedRefreshAccess, scopedRefreshTopic } from "../../lib/sse-access.js";
 import { sharedVisibleWinnerRows } from "../challenges/winner-publication.js";
 import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
+import { requireScopedRefreshAccess, scopedRefreshTopic } from "../realtime/access.js";
 import { queueTopicForFixture } from "./broadcast.js";
 import {
   accessibleRoomIds,
@@ -49,7 +49,6 @@ const scopedRefreshQuery = z.object({ topic: scopedRefreshTopic });
 /** Read APIs (H38-H42): scoped queue data, TV snapshots and SSE isolation. */
 export function registerReadsRoutes(app: FastifyInstance): void {
   const typed = app.withTypeProvider<ZodTypeProvider>();
-  registerRealtimeRoutes(app);
 
   typed.get(
     "/api/queue/challenges/:challengeId/progress",
@@ -66,7 +65,11 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "challengeId" },
         },
       },
-      schema: { params: challengeIdParam },
+      schema: {
+        summary: "Challenge queue progress",
+        description: "Counts of the challenge's queue entries by status (H40).",
+        params: challengeIdParam,
+      },
     },
     async (req) =>
       challengeProgress(req.params.challengeId, await isSyntheticOperator(pool, req.userId!)),
@@ -155,7 +158,12 @@ export function registerReadsRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "roomId" },
         },
       },
-      schema: { params: roomIdParam },
+      schema: {
+        summary: "Room assignments",
+        description:
+          "The room's enterprise pool, the queue group serving it and the judges that follow it (H46).",
+        params: roomIdParam,
+      },
     },
     async (req) => roomAssignments(req.params.roomId),
   );
@@ -177,7 +185,7 @@ export function registerReadsRoutes(app: FastifyInstance): void {
       },
       schema: {
         params: roomIdParam,
-        querystring: z.object({ challengeId: z.coerce.number().int().positive().optional() }),
+        querystring: z.object({ challengeId: positiveInt.optional() }),
         summary: "Read track pacing in a room",
         description:
           "A track-wide target, learned presentation/preparation cycle, scheduled judging close and realistic finish. An optional challengeId selects a served track in a multi-track room; ETA is never clipped to the advisory judge goal (H38/H39).",

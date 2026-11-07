@@ -1,10 +1,8 @@
 import type { Queryable } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
-import {
-  assertFixtureSubjectScope,
-  isSyntheticOperator,
-} from "../logistics/review-fixture-scope.js";
+import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { likeContains } from "../../lib/like.js";
 import { type NotificationChannel, notifyMany } from "./service.js";
 import type { Language } from "./translate/index.js";
 
@@ -33,7 +31,7 @@ export interface AnnouncementInput {
   recipientUserIds: number[];
 }
 
-export const SCREEN_PLACEMENTS = ["none", "embedded", "fullscreen"] as const;
+const SCREEN_PLACEMENTS = ["none", "embedded", "fullscreen"] as const;
 export type ScreenPlacement = (typeof SCREEN_PLACEMENTS)[number];
 export type AnnouncementLanguage = Language;
 export type AnnouncementTranslation = { title: string; body: string };
@@ -54,7 +52,7 @@ function isCompleteTranslation(
  * announcement may intentionally contain just one language; those canonical
  * fields are the final fallback for every recipient (H50).
  */
-export function normalizeAnnouncementContent(input: {
+function normalizeAnnouncementContent(input: {
   title: string;
   body: string;
   translations: AnnouncementTranslations;
@@ -269,7 +267,7 @@ async function replaceAnnouncementRecipients(
   );
 }
 
-export async function getAnnouncementRecipientIds(
+async function getAnnouncementRecipientIds(
   db: Queryable,
   announcementId: number,
 ): Promise<number[]> {
@@ -330,7 +328,7 @@ export async function listAnnouncementRecipientCandidates(
   limit: number,
   actorId?: number,
 ): Promise<AnnouncementRecipient[]> {
-  const filter = `%${query.trim()}%`;
+  const filter = likeContains(query.trim());
   const fixtureMarker = actorId == null ? false : await isSyntheticOperator(db, actorId);
   const { rows } = await db.query(
     `SELECT id, email, name, surname
@@ -689,7 +687,7 @@ export async function fanOutAnnouncement(db: Queryable, announcement: Announceme
 }
 
 /** Currently-visible now AND not yet fanned out — used both at create-time (immediate visibility) and by the publisher poll (timed reveal). */
-export function isCurrentlyVisible(a: Pick<Announcement, "publish_at" | "expires_at">): boolean {
+function isCurrentlyVisible(a: Pick<Announcement, "publish_at" | "expires_at">): boolean {
   const now = Date.now();
   const publishOk = !a.publish_at || new Date(a.publish_at).getTime() <= now;
   const expiryOk = !a.expires_at || new Date(a.expires_at).getTime() > now;

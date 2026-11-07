@@ -1,4 +1,4 @@
-import pg from "pg";
+import { hasFlag, requireEmailFlag, withClientTransaction } from "./superadmin-cli.mjs";
 
 /**
  * Grants superadmin (ADMIN_ALL / '*') to an EXISTING user account (H8).
@@ -7,29 +7,10 @@ import pg from "pg";
  *   node scripts/grant-superadmin.mjs --email user@example.com [--allow-existing-admin]
  */
 
-function readFlag(name) {
-  const i = process.argv.indexOf(name);
-  if (i === -1) return undefined;
-  return process.argv[i + 1];
-}
-
-function hasFlag(name) {
-  return process.argv.includes(name);
-}
-
-const email = readFlag("--email")?.trim().toLowerCase();
+const email = requireEmailFlag();
 const allowExistingAdmin = hasFlag("--allow-existing-admin");
 
-if (!email) {
-  throw new Error("Missing required flag: --email");
-}
-
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await client.connect();
-
-try {
-  await client.query("BEGIN");
-
+const message = await withClientTransaction(async (client) => {
   if (!allowExistingAdmin) {
     const { rows: existingAdmins } = await client.query(
       `SELECT 1 FROM user_effective_capabilities WHERE capability = $1 LIMIT 1`,
@@ -102,11 +83,6 @@ try {
     [userId, JSON.stringify({ email, capability: "*", roleId })],
   );
 
-  await client.query("COMMIT");
-  console.log(`Granted superadmin for user #${userId} (${email}) via role #${roleId}.`);
-} catch (err) {
-  await client.query("ROLLBACK");
-  throw err;
-} finally {
-  await client.end();
-}
+  return `Granted superadmin for user #${userId} (${email}) via role #${roleId}.`;
+});
+console.log(message);

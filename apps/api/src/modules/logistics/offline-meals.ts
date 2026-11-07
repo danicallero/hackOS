@@ -4,12 +4,12 @@ import { EVENTS } from "@hackos/shared/events";
 import type { Job } from "bullmq";
 import { pool, withTransaction } from "../../db/pool.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { fixtureSubjectScopeErrors } from "../../lib/fixture-subject-scope.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { broadcast } from "../../lib/sse.js";
 import { logisticsTopicForFixture } from "./active-broadcast.js";
 import { activityScan } from "./activities.js";
 import { assertBadgeScanTimestamp, resolveByBadges } from "./badge.js";
-import { fixtureSubjectScopeErrors } from "./review-fixture-scope.js";
 
 const QUEUE_NAME = "logistics.meal-scans";
 

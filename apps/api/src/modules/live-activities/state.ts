@@ -28,12 +28,12 @@ type QueueStatus = Awaited<ReturnType<typeof myQueueStatus>>[number];
 /** Entry states the queue Live Activity tracks; `presenting`/`completed` are over for the participant. */
 const LIVE_QUEUE_STATUSES = new Set(["waiting", "called", "in_room"]);
 
-export function queueDeepLink(): string {
+function queueDeepLink(): string {
   return `${config.MOBILE_APP_SCHEME}://queue`;
 }
 
 /** Tap and the Scan action both open the scanner already bound to the activity (H25, H26). */
-export function activityScanDeepLink(activityId: number): string {
+function activityScanDeepLink(activityId: number): string {
   return `${config.MOBILE_APP_SCHEME}://scan?activity=${activityId}`;
 }
 

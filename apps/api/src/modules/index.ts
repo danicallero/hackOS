@@ -15,6 +15,7 @@ import { registerNotificationsModule } from "./notifications/index.js";
 import { registerProjectsModule } from "./projects/index.js";
 import { registerFixtureBoundaryGuard } from "./queue/fixture-boundary.js";
 import { registerQueueModule } from "./queue/index.js";
+import { registerRealtimeModule } from "./realtime/index.js";
 import { registerReportsModule } from "./reports/index.js";
 import { registerSponsorsModule } from "./sponsors/index.js";
 import { registerStatisticsModule } from "./statistics/index.js";
@@ -44,6 +45,7 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerNotificationsModule(app); // WS-F  (H50-H53)
   await registerProjectsModule(app); // WS-B1 (H16-H17)
   await registerQueueModule(app); // WS-B2 (H29-H42)
+  registerRealtimeModule(app); // #892 multiplexed realtime stream
   registerReportsModule(app); // H18 content reports
   await registerSponsorsModule(app); // WS-G  (H43-H45)
   await registerStatisticsModule(app); // H27 generic statistics dashboard

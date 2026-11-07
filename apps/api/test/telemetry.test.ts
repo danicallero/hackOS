@@ -1,21 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
-import { buildTestApp } from "./helpers.js";
+import { useTestApp } from "./helpers.js";
 
+const getApp = useTestApp();
 let app: App;
 
 beforeAll(async () => {
-  app = await buildTestApp();
-});
-
-afterAll(async () => {
-  await app.close();
-  const { stopQueues } = await import("../src/lib/queues.js");
-  const { closeValkey } = await import("../src/lib/valkey.js");
-  const { pool } = await import("../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
+  app = await getApp();
 });
 
 describe("browser refetch-storm telemetry (H38, #544)", () => {

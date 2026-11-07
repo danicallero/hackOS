@@ -1,10 +1,14 @@
-import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { AppError, BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import {
+  assertFixtureSubjectScope,
+  fixtureReadFilter,
+  isSyntheticOperator,
+} from "../../lib/fixture-subject-scope.js";
 import { type AccountRemovalAction, runAccountRemoval } from "../identity/removal.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
@@ -19,11 +23,7 @@ import {
   type PresenceEvent,
   totalPresenceMs,
 } from "./estimate.js";
-import {
-  assertFixtureSubjectScope,
-  fixtureReadFilter,
-  isSyntheticOperator,
-} from "./review-fixture-scope.js";
+import { scannableActivitySql, scannableCategoriesParam } from "./scannable.js";
 
 const MS_PER_HOUR = 3_600_000;
 // Advisory-lock namespace for presence writes; -1 can't collide with a real
@@ -178,7 +178,7 @@ async function openSessionAsOf(
  * accepted or needs reconciliation first — mirrors the accreditation lookup
  * UX. Never a mutation.
  */
-export async function presenceLookup(badgeId: string, actorId?: number) {
+export async function presenceLookup(badgeId: string, actorId: number | null) {
   const userId = await resolveByBadge(pool, badgeId, { allowPendingExit: true });
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const card = await loadPersonCard(pool, userId, {
@@ -340,10 +340,11 @@ export async function presenceScan(
  * genuinely open until staff record a real `out`, or until the event-end
  * closer force-closes it at event_ends_at (presence-closer.ts).
  */
-export async function openSessions(at?: number, actorId?: number) {
+export async function openSessions(opts: { actorId: number | null; at?: number }) {
+  const { actorId, at } = opts;
   const now = at ?? (await databaseNow()).getTime();
   const windowMs = await certaintyWindowMs();
-  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
+  const fixtureFilter = await fixtureReadFilter(pool, actorId ?? undefined, "u");
   const { rows } = await pool.query(
     `SELECT tl.id AS session_id, tl.user_id, tl.scanned_at AS since, u.name, u.surname, u.account_state,
             GREATEST(tl.scanned_at, COALESCE(la.last_activity, tl.scanned_at)) AS last_signal
@@ -457,12 +458,16 @@ async function loadEvents(
   return map;
 }
 
+/** No actor (system caller) reads the real partition; a synthetic operator reads the synthetic one (H54). */
+async function isSyntheticActor(actorId: number | null): Promise<boolean> {
+  return actorId != null && (await isSyntheticOperator(pool, actorId));
+}
+
 /** H24/H27: how many people are estimated to be in the venue right now. */
-export async function occupancyEstimate(cutoff?: number, actorId?: number) {
-  const at = cutoff ?? (await databaseNow()).getTime();
-  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+export async function occupancyEstimate(opts: { actorId: number | null; cutoff?: number }) {
+  const at = opts.cutoff ?? (await databaseNow()).getTime();
   const map = await loadEvents(undefined, {
-    accountScope: syntheticOperator ? "synthetic" : "real",
+    accountScope: (await isSyntheticActor(opts.actorId)) ? "synthetic" : "real",
   });
   const suspiciousGapMs = await certaintyWindowMs();
   const present: number[] = [];
@@ -476,19 +481,17 @@ export async function occupancyEstimate(cutoff?: number, actorId?: number) {
 /** H24: estimated attendance hours for one user (e.g. university-credit minimum). */
 export async function userHours(
   userId: number,
-  cutoff?: number,
-  actorId?: number,
-  options: { verifiedOnly?: boolean } = {},
+  opts: { actorId: number | null; cutoff?: number; verifiedOnly?: boolean },
 ) {
-  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
-  const now = cutoff ?? (await databaseNow()).getTime();
+  if (opts.actorId != null) await assertFixtureSubjectScope(pool, opts.actorId, userId);
+  const now = opts.cutoff ?? (await databaseNow()).getTime();
   const events = (await loadEvents(userId)).get(userId) ?? [];
   const suspiciousGapMs = await certaintyWindowMs();
   const intervals = buildPresenceIntervals(events, now, { suspiciousGapMs });
   return {
     userId,
     hours: round2(
-      (options.verifiedOnly ? guaranteedPresenceMs : totalPresenceMs)(events, now, {
+      (opts.verifiedOnly ? guaranteedPresenceMs : totalPresenceMs)(events, now, {
         suspiciousGapMs,
       }) / MS_PER_HOUR,
     ),
@@ -501,13 +504,14 @@ export async function userHours(
 }
 
 /** H24: estimated hours for every user with presence signals (bulk, admin display). */
-export async function allHours(
-  cutoff?: number,
-  actorId?: number,
-  options: { verifiedOnly?: boolean } = {},
-) {
-  const now = cutoff ?? (await databaseNow()).getTime();
-  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+export async function allHours(opts: {
+  actorId: number | null;
+  cutoff?: number;
+  verifiedOnly?: boolean;
+}) {
+  const { actorId } = opts;
+  const now = opts.cutoff ?? (await databaseNow()).getTime();
+  const syntheticOperator = await isSyntheticActor(actorId);
   const map = await loadEvents(undefined, {
     accountScope: syntheticOperator ? "synthetic" : "real",
   });
@@ -515,7 +519,7 @@ export async function allHours(
   const userIds = [...map.keys()];
   if (userIds.length === 0) return [];
 
-  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
+  const fixtureFilter = await fixtureReadFilter(pool, actorId ?? undefined, "u");
   const { rows: people } = await pool.query(
     `SELECT u.id, u.name, u.surname FROM users u
       WHERE u.id = ANY($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL
@@ -537,7 +541,7 @@ export async function allHours(
         name: nameById.get(userId)?.name ?? null,
         surname: nameById.get(userId)?.surname ?? null,
         hours: round2(
-          (options.verifiedOnly ? guaranteedPresenceMs : totalPresenceMs)(events, now, {
+          (opts.verifiedOnly ? guaranteedPresenceMs : totalPresenceMs)(events, now, {
             suspiciousGapMs,
           }) / MS_PER_HOUR,
         ),
@@ -554,9 +558,13 @@ export async function allHours(
  * but surfaces every window (including ones that expired unconfirmed) via
  * `buildPresenceBreakdown` so the export can show why a stretch didn't count.
  */
-export async function hoursWithBreakdown(userIds?: number[], cutoff?: number, actorId?: number) {
-  const now = cutoff ?? (await databaseNow()).getTime();
-  const syntheticOperator = actorId != null && (await isSyntheticOperator(pool, actorId));
+export async function hoursWithBreakdown(
+  userIds: number[] | undefined,
+  opts: { actorId: number | null; cutoff?: number },
+) {
+  const { actorId } = opts;
+  const now = opts.cutoff ?? (await databaseNow()).getTime();
+  const syntheticOperator = await isSyntheticActor(actorId);
   // Scope the signals query itself when a subset is requested (e.g. the
   // single-participant export) instead of loading every participant's whole
   // event history and filtering in memory — that made even a one-person
@@ -569,7 +577,7 @@ export async function hoursWithBreakdown(userIds?: number[], cutoff?: number, ac
   const allIds = [...map.keys()].filter((id) => wantedIds == null || wantedIds.has(id));
   if (allIds.length === 0) return [];
 
-  const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
+  const fixtureFilter = await fixtureReadFilter(pool, actorId ?? undefined, "u");
   const { rows: people } = await pool.query(
     `SELECT u.id, u.name, u.surname, u.dni FROM users u
       WHERE u.id = ANY($1) AND u.account_state = 'active' AND u.anonymized_at IS NULL
@@ -614,7 +622,7 @@ function round2(n: number): number {
 // ── raw scan admin — view/correct individual time_logs (H24 usability) ─────
 
 /** List every raw door scan for a user, oldest first, for admin review/edit. */
-export async function listTimeLogs(userId: number, actorId?: number) {
+export async function listTimeLogs(userId: number, actorId: number | null) {
   if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
   const { rows } = await pool.query(
     `SELECT tl.id, tl.kind, tl.scanned_at, tl.scanned_by, tl.notes,
@@ -938,9 +946,12 @@ export async function deletePresenceActivity(actorId: number, id: number) {
   return { deleted: true as const };
 }
 
-export async function presenceTimeline(userId: number, cutoff?: number, actorId?: number) {
-  if (actorId != null) await assertFixtureSubjectScope(pool, actorId, userId);
-  const now = cutoff ?? (await databaseNow()).getTime();
+export async function presenceTimeline(
+  userId: number,
+  opts: { actorId: number | null; cutoff?: number },
+) {
+  if (opts.actorId != null) await assertFixtureSubjectScope(pool, opts.actorId, userId);
+  const now = opts.cutoff ?? (await databaseNow()).getTime();
   const suspiciousGapMs = await certaintyWindowMs();
   const [{ rows }, { rows: activityRows }] = await Promise.all([
     pool.query(
@@ -980,12 +991,11 @@ export async function presenceTimeline(userId: number, cutoff?: number, actorId?
       `SELECT a.id, a.name, a.category
          FROM activities a
          LEFT JOIN schedule s ON s.id = a.schedule_id
-        WHERE a.category = ANY($2::text[])
-           OR a.requires_scan = true
+        WHERE ${scannableActivitySql("a", 2)}
            OR EXISTS (SELECT 1 FROM activity_logs al
                        WHERE al.activity_id = a.id AND al.user_id = $1)
         ORDER BY s.starts_at ASC NULLS LAST, a.name ASC, a.id ASC`,
-      [userId, [...MEAL_ACTIVITY_KINDS]],
+      [userId, scannableCategoriesParam()],
     ),
   ]);
   const signals = rows.map((row) => ({

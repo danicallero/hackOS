@@ -2,7 +2,7 @@ import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { pool } from "../../db/pool.js";
 import { toCsv } from "../../lib/csv.js";
 import { NotFoundError } from "../../lib/errors.js";
-import { fixtureReadFilter } from "./review-fixture-scope.js";
+import { fixtureReadFilter } from "../../lib/fixture-subject-scope.js";
 
 /**
  * Logistics read side of sponsor meal plans (#933). Aggregates stay under

@@ -3,9 +3,10 @@ import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { MaintenanceError } from "../lib/errors.js";
 import { getMaintenanceStatus } from "../lib/maintenance.js";
+import { PROBE_PATHS, pathOf } from "../lib/request-path.js";
 
 /** Stay reachable while the database is being replaced (#539). */
-const ALLOWED_PATHS = new Set(["/healthz", "/readyz", "/metrics", MAINTENANCE_STATUS_PATH]);
+const ALLOWED_PATHS = new Set<string>([...PROBE_PATHS, MAINTENANCE_STATUS_PATH]);
 
 /**
  * While `deploy/scripts/restore.sh` holds the maintenance lock, every route
@@ -15,7 +16,7 @@ const ALLOWED_PATHS = new Set(["/healthz", "/readyz", "/metrics", MAINTENANCE_ST
  */
 export const maintenancePlugin = fp(async (app: FastifyInstance) => {
   app.addHook("onRequest", async (req, reply) => {
-    const requestPath = req.url.split("?", 1)[0] ?? req.url;
+    const requestPath = pathOf(req.url);
     if (req.method === "OPTIONS" || ALLOWED_PATHS.has(requestPath)) return;
     const status = await getMaintenanceStatus();
     if (!status.active) return;

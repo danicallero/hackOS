@@ -2,7 +2,7 @@ import { deflateSync } from "node:zlib";
 import { PDFDocument, type PDFFont, rgb, StandardFonts } from "pdf-lib";
 import QRCode from "qrcode";
 
-export type CopyLocale = "es" | "gl" | "en";
+type CopyLocale = "es" | "gl" | "en";
 
 /** Height a document must leave free at the bottom of every page for the footer (#1083). */
 export const COPY_FOOTER_RESERVE = 120;
@@ -121,7 +121,7 @@ function qrPng(text: string, scale = 6, margin = 1): Buffer {
   ]);
 }
 
-export interface CopyFooterInput {
+interface CopyFooterInput {
   issuer: string;
   /** The verification code printed as CSV and resolved by `verifyUrl`. */
   code: string;

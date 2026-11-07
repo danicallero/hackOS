@@ -14,6 +14,8 @@ import {
 } from "../../lib/capabilities.js";
 import { sendCsv } from "../../lib/csv.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import {
@@ -53,7 +55,6 @@ import {
   userHours,
 } from "./presence.js";
 import { exportHoursCsv } from "./presence-export.js";
-import { isSyntheticOperator } from "./review-fixture-scope.js";
 import { queryScanLog, staffScanCounts, staffScanRanking } from "./scan-log.js";
 import { scannerSnapshot } from "./scanner-sync.js";
 import {
@@ -507,13 +508,13 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   typed.get(
     "/api/presence/estimate",
     { ...routeAccess(access.presenceRead), preHandler: presenceRead },
-    async (req) => occupancyEstimate(undefined, actor(req.userId)),
+    async (req) => occupancyEstimate({ actorId: actor(req.userId) }),
   );
 
   typed.get(
     "/api/presence/hours",
     { ...routeAccess(access.presenceRead), preHandler: presenceRead },
-    async (req) => allHours(undefined, actor(req.userId)),
+    async (req) => allHours({ actorId: actor(req.userId) }),
   );
 
   // Staff reconciliation queue: open sessions, stale ones flagged (H24).
@@ -521,7 +522,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
     "/api/presence/open",
     { ...routeAccess(access.presenceRead), preHandler: presenceRead },
     async (req) => ({
-      items: await openSessions(undefined, actor(req.userId)),
+      items: await openSessions({ actorId: actor(req.userId) }),
     }),
   );
 
@@ -532,7 +533,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       preHandler: presenceRead,
       schema: { params: userIdParam },
     },
-    async (req) => userHours(req.params.userId, undefined, actor(req.userId)),
+    async (req) => userHours(req.params.userId, { actorId: actor(req.userId) }),
   );
 
   // H24/H54: bulk + single-user hours CSV exports, gated stricter than plain
@@ -556,9 +557,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         userIds: req.query.userIds,
         actorId: actor(req.userId),
       });
-      reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header("content-disposition", 'attachment; filename="presence-hours.csv"');
-      return reply.send(csv);
+      return sendCsv(reply, "presence-hours.csv", csv);
     },
   );
 
@@ -581,12 +580,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         userIds: [req.params.userId],
         actorId: actor(req.userId),
       });
-      reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header(
-        "content-disposition",
-        `attachment; filename="presence-hours-${req.params.userId}.csv"`,
-      );
-      return reply.send(csv);
+      return sendCsv(reply, `presence-hours-${req.params.userId}.csv`, csv);
     },
   );
 
@@ -620,7 +614,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           "has a log against so an existing signal stays editable.",
       },
     },
-    async (req) => presenceTimeline(req.params.userId, undefined, actor(req.userId)),
+    async (req) => presenceTimeline(req.params.userId, { actorId: actor(req.userId) }),
   );
 
   typed.post(
@@ -1169,7 +1163,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       );
       return reply
         .type("application/vnd.apple.pkpass")
-        .header("content-disposition", `attachment; filename="${req.params.purpose}.pkpass"`)
+        .header("content-disposition", contentDisposition(`${req.params.purpose}.pkpass`))
         .header("x-apple-pass-type-identifier", passTypeIdentifier)
         .header("x-apple-pass-serial-number", serialNumber)
         .send(pkpass);
@@ -1319,7 +1313,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       );
       return reply
         .type("application/vnd.apple.pkpass")
-        .header("content-disposition", `attachment; filename="${req.params.purpose}.pkpass"`)
+        .header("content-disposition", contentDisposition(`${req.params.purpose}.pkpass`))
         .header("x-apple-pass-type-identifier", passTypeIdentifier)
         .header("x-apple-pass-serial-number", serialNumber)
         .send(pkpass);

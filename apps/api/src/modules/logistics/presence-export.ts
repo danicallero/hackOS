@@ -56,7 +56,7 @@ export async function exportHoursCsv(options: HoursExportOptions): Promise<strin
   const { format, minHours, userIds, actorId } = options;
 
   if (format === "reduced") {
-    const rows = (await allHours(undefined, actorId)).filter(
+    const rows = (await allHours({ actorId: actorId ?? null })).filter(
       (r) => userIds == null || userIds.includes(r.userId),
     );
     const filtered = minHours == null ? rows : rows.filter((r) => r.hours >= minHours);
@@ -77,7 +77,7 @@ export async function exportHoursCsv(options: HoursExportOptions): Promise<strin
     );
   }
 
-  const people = await hoursWithBreakdown(userIds, undefined, actorId);
+  const people = await hoursWithBreakdown(userIds, { actorId: actorId ?? null });
   const filtered = minHours == null ? people : people.filter((p) => p.hours >= minHours);
   const contact = await contactFieldsById(filtered.map((p) => p.userId));
   const rows: Record<string, unknown>[] = [];

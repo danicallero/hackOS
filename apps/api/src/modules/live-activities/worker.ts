@@ -168,7 +168,7 @@ function timeRange(props: { startsAt: string; endsAt: string }, timezone: string
  * project is unsubmitted (deadline). The queue.called notification (H51,
  * non-optional) already rings, so no alert carries a sound.
  */
-export function alertFor(props: LiveActivityProps, timezone: string): ApnsAlert {
+function alertFor(props: LiveActivityProps, timezone: string): ApnsAlert {
   switch (props.kind) {
     case "activity":
     case "attendee_activity": {

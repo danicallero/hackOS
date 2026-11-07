@@ -1,11 +1,11 @@
 import { questionnaireSchema } from "@hackos/shared/questions";
 import { z } from "zod";
+import { idParam, positiveInt } from "../../lib/schemas.js";
 
-export const idParam = z.object({ id: z.coerce.number().int().positive() });
-export const roomIdParam = z.object({ roomId: z.coerce.number().int().positive() });
-export const repoIdParam = z.object({ repoId: z.coerce.number().int().positive() });
-export const challengeIdParam = z.object({ challengeId: z.coerce.number().int().positive() });
-export const entryIdParam = z.object({ entryId: z.coerce.number().int().positive() });
+export const roomIdParam = idParam("roomId");
+export const repoIdParam = idParam("repoId");
+export const challengeIdParam = idParam("challengeId");
+export const entryIdParam = idParam("entryId");
 export const createRoomBody = z.object({
   name: z.string().min(1),
   location: z.string().nullish(),
@@ -18,22 +18,22 @@ export const updateRoomBody = z.object({
 });
 
 export const assignRoomEnterpriseBody = z.object({
-  enterpriseId: z.coerce.number().int().positive(),
+  enterpriseId: positiveInt,
 });
 
 // ── shared judging queues (H46) ──────────────────────────────────────────────
 export const queueGroupIdParam = z.object({
-  queueGroupId: z.coerce.number().int().positive(),
+  queueGroupId: positiveInt,
 });
 export const enterpriseQueueGroupParam = z.object({
-  id: z.coerce.number().int().positive(),
-  queueGroupId: z.coerce.number().int().positive(),
+  id: positiveInt,
+  queueGroupId: positiveInt,
 });
 export const previewMergeBody = z.object({
-  challengeIds: z.array(z.coerce.number().int().positive()).min(1),
+  challengeIds: z.array(positiveInt).min(1),
 });
 export const mergeQueueGroupsBody = z.object({
-  challengeIds: z.array(z.coerce.number().int().positive()).min(2),
+  challengeIds: z.array(positiveInt).min(2),
   displayName: z.string().min(1).max(120),
 });
 export const updateQueueGroupBody = z
@@ -46,7 +46,7 @@ export const updateQueueGroupBody = z
   });
 /** Exactly which rooms serve a queue — the whole set, not a delta. */
 export const queueGroupRoomsBody = z.object({
-  roomIds: z.array(z.coerce.number().int().positive()),
+  roomIds: z.array(positiveInt),
 });
 
 export const roomQueueStateBody = z.object({
@@ -65,7 +65,7 @@ export const queueSettingsBody = z.object({
 });
 
 export const enqueueChallengeBody = z.object({
-  repoIds: z.array(z.coerce.number().int().positive()).optional(),
+  repoIds: z.array(positiveInt).optional(),
 });
 
 export const callNextBody = z.object({ force: z.boolean().optional() });
@@ -83,7 +83,7 @@ export const moveToPositionBody = z.object({
 
 export const manualCallBody = z.object({
   targetStatus: z.enum(["called", "in_room"]),
-  roomId: z.coerce.number().int().positive(),
+  roomId: positiveInt,
   reason: z.string().optional(),
 });
 
@@ -99,7 +99,7 @@ export const reviewPatchBody = z.object({
   releaseLeases: z.boolean().optional(),
 });
 
-export const sessionJoinBody = z.object({ roomId: z.coerce.number().int().positive().optional() });
+export const sessionJoinBody = z.object({ roomId: positiveInt.optional() });
 
 export const reviewLeaseBody = z.object({
   field: z.string().min(1).max(256),
@@ -109,8 +109,8 @@ export const searchQuery = z.object({ q: z.string().min(1) });
 
 /** GET /api/queue/reviews(.csv) filters — sponsor-scoping happens server-side. */
 export const reviewsQuery = z.object({
-  challengeId: z.coerce.number().int().positive().optional(),
-  roomId: z.coerce.number().int().positive().optional(),
+  challengeId: positiveInt.optional(),
+  roomId: positiveInt.optional(),
   status: z.enum(["draft", "submitted", "none"]).optional(),
 });
 
@@ -120,7 +120,7 @@ export const reviewMessageBody = z.object({
 });
 
 /** Every view a screen can show (H42). "live" combines countdown + schedule + sponsors + Wi-Fi. */
-export const tvModeName = z.enum(["rooms", "schedule", "sponsors", "wifi", "live", "github"]);
+const tvModeName = z.enum(["rooms", "schedule", "sponsors", "wifi", "live", "github"]);
 
 export const tvModeBody = z
   .object({

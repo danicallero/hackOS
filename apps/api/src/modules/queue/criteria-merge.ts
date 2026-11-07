@@ -19,7 +19,7 @@ import type { Queryable } from "../../db/pool.js";
  */
 
 /** Case-, whitespace- and trailing-punctuation-insensitive label text. */
-export function normalizeQuestionText(text: string): string {
+function normalizeQuestionText(text: string): string {
   return text
     .normalize("NFKD")
     .replace(/\p{Diacritic}/gu, "")

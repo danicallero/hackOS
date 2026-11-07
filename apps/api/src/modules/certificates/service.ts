@@ -13,11 +13,11 @@ import {
   ForbiddenError,
   NotFoundError,
 } from "../../lib/errors.js";
+import { assertFixtureSubjectScope, fixtureReadFilter } from "../../lib/fixture-subject-scope.js";
 import { stampCopyFooter } from "../../lib/pdf-copy-footer.js";
 import { userUniversityIdSql } from "../../lib/user-university.js";
 import { hasEventAccess } from "../identity/role.js";
 import { allHours, userHours } from "../logistics/presence.js";
-import { assertFixtureSubjectScope, fixtureReadFilter } from "../logistics/review-fixture-scope.js";
 import {
   type CertificateLocale,
   type CertificateSnapshot,
@@ -326,7 +326,7 @@ async function typeGate(
 export async function eligibilityFor(userId: number): Promise<Eligibility> {
   const [settings, { hours }, approval] = await Promise.all([
     readSettings(),
-    userHours(userId, undefined, undefined, { verifiedOnly: true }),
+    userHours(userId, { actorId: null, verifiedOnly: true }),
     readApproval(userId),
   ]);
   return evaluate(settings, hours, approval);
@@ -614,7 +614,7 @@ async function insertCertificate(
     if (definition.attendancePolicy && opts.userId != null) {
       const { hours } = pre
         ? { hours: pre.hours }
-        : await userHours(opts.userId, undefined, undefined, { verifiedOnly: true });
+        : await userHours(opts.userId, { actorId: null, verifiedOnly: true });
       const eligibility = evaluate(settings, hours, approval);
       if (exempt) {
         certificateHours = approval?.certifiedHours ?? settings.awardHours ?? hours;
@@ -1183,7 +1183,7 @@ export async function certificateParticipants(
   );
   const [settings, hours, approvals] = await Promise.all([
     readSettings(),
-    allHours(undefined, actorId, { verifiedOnly: true }),
+    allHours({ actorId, verifiedOnly: true }),
     pool.query(
       `SELECT user_id, certified_hours, reason, approved_by, approved_at FROM certificate_approvals`,
     ),

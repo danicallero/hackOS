@@ -203,7 +203,7 @@ export async function loadLiveActivityContext(
 
   let occupancy: Promise<number> | undefined;
   const presentCount = () => {
-    occupancy ??= occupancyEstimate().then((o) => o.presentCount);
+    occupancy ??= occupancyEstimate({ actorId: null }).then((o) => o.presentCount);
     return occupancy;
   };
   // Staff activities (denominator) and the desk share one read per tick.

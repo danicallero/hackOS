@@ -2,6 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { StatisticsParticipantStatus } from "@hackos/shared/statistics";
 import { pool, type Queryable } from "../../db/pool.js";
 import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
+import { CSV_BOM, csvCell } from "../../lib/csv.js";
 import { ForbiddenError } from "../../lib/errors.js";
 import type { StatisticsConfig } from "../applications/schemas.js";
 import type { ApplicationRow } from "../applications/service.js";
@@ -661,10 +662,5 @@ export async function statisticsCsv(
     for (const row of distribution.buckets)
       add(distribution.field.key, row.value, row.n, total > 0 ? row.n / total : null);
   }
-  return `\uFEFF${lines.join("\r\n")}\r\n`;
-}
-
-function csvCell(value: unknown): string {
-  const text = String(value ?? "");
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  return `${CSV_BOM}${lines.join("\r\n")}\r\n`;
 }

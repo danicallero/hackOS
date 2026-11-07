@@ -1,10 +1,10 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { SSE_TOPICS } from "@hackos/shared/events";
 import { z } from "zod";
-import { pool } from "../db/pool.js";
-import { hasEventAccess } from "../modules/identity/role.js";
-import { type AuthorizationContext, userHasCapability } from "./capabilities.js";
-import { ForbiddenError, UnauthorizedError } from "./errors.js";
+import { pool } from "../../db/pool.js";
+import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
+import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { hasEventAccess } from "../identity/role.js";
 
 export const scopedRefreshTopic = z.enum([
   SSE_TOPICS.APPLICATIONS,
@@ -22,7 +22,6 @@ const logisticsRefreshCapabilities = [
   CAPABILITIES.PRESENCE_SCAN,
   CAPABILITIES.ACTIVITY_SCAN,
   CAPABILITIES.LOGISTICS_STATS,
-  CAPABILITIES.INTOLERANCES_MANAGE,
   CAPABILITIES.SCHEDULE_READ,
   CAPABILITIES.SCHEDULE_MANAGE,
 ] as const;

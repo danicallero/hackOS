@@ -256,7 +256,6 @@ async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
     `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
             show_start_countdown,
-
             presence_auto_entry_at, presence_certainty_window_minutes,
             venue_name, venue_latitude, venue_longitude,
             wifi_ssid, wifi_password,
@@ -517,7 +516,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
             (id, name, tagline, timezone, event_starts_at, event_ends_at,
              hacking_starts_at, hacking_ends_at,
              show_start_countdown,
-
              presence_auto_entry_at, presence_certainty_window_minutes,
              venue_name, venue_latitude, venue_longitude,
              wifi_ssid, wifi_password,
@@ -552,7 +550,6 @@ export function registerEventRoutes(app: FastifyInstance): void {
          RETURNING name, tagline, timezone, event_starts_at, event_ends_at,
                    hacking_starts_at, hacking_ends_at,
                    show_start_countdown,
-
                    presence_auto_entry_at, presence_certainty_window_minutes,
                    venue_name, venue_latitude, venue_longitude,
                    wifi_ssid, wifi_password,

@@ -3,19 +3,21 @@ import { REALTIME_LIMITS, REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/eve
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { pool } from "../db/pool.js";
-import { logisticsTopicForFixture } from "../modules/logistics/active-broadcast.js";
-import { isSyntheticOperator } from "../modules/logistics/review-fixture-scope.js";
-import { queueTopicForFixture } from "../modules/queue/broadcast.js";
-import { assertEntryJudgeAccess } from "../modules/queue/contextual-access.js";
+import { pool } from "../../db/pool.js";
 import {
   assertActiveAuthenticatedUser,
   createAuthorizationContext,
   userHasCapability,
-} from "./capabilities.js";
-import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
-import { type SseSubscription, subscribeMany } from "./sse.js";
-import { requireScopedRefreshAccess, scopedRefreshTopic } from "./sse-access.js";
+} from "../../lib/capabilities.js";
+import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { type SseSubscription, subscribeMany } from "../../lib/sse.js";
+import { logisticsTopicForFixture } from "../logistics/active-broadcast.js";
+import { queueTopicForFixture } from "../queue/broadcast.js";
+import { assertEntryJudgeAccess } from "../queue/contextual-access.js";
+import { requireScopedRefreshAccess, scopedRefreshTopic } from "./access.js";
+
+const REVIEW_SCOPE_PATTERN = /^review:[1-9]\d{0,9}$/;
+const MAX_INT4 = 2147483647;
 
 const scopeSchema = z.union([
   z.enum([
@@ -29,8 +31,8 @@ const scopeSchema = z.union([
   z.templateLiteral([REALTIME_SCOPES.DOMAIN_PREFIX, scopedRefreshTopic]),
   z
     .string()
-    .regex(/^review:[1-9]\d{0,9}$/)
-    .refine((scope) => Number(scope.slice(7)) <= 2147483647),
+    .regex(REVIEW_SCOPE_PATTERN)
+    .refine((scope) => Number(scope.slice(REALTIME_SCOPES.REVIEW_PREFIX.length)) <= MAX_INT4),
 ]);
 const querySchema = z.object({
   scopes: z
@@ -58,7 +60,7 @@ export async function authorizeRealtimeScopes(
   const fresh = Object.create(req) as FastifyRequest;
   fresh.authorizationContext = createAuthorizationContext(req.userId);
   const context = fresh.authorizationContext;
-  const synthetic = await isSyntheticOperator(pool, req.userId!);
+  const synthetic = await context.actorIsSyntheticOperator;
   const requireAny = async (caps: readonly (typeof CAPABILITIES)[keyof typeof CAPABILITIES][]) => {
     for (const cap of caps) if (await userHasCapability(context, cap)) return;
     throw new ForbiddenError("Missing realtime scope capability");
@@ -106,7 +108,7 @@ export async function authorizeRealtimeScopes(
           );
           await requireScopedRefreshAccess(req.userId, domain, context);
           topic = domain === SSE_TOPICS.LOGISTICS ? logisticsTopicForFixture(synthetic) : domain;
-        } else if (/^review:[1-9]\d{0,9}$/.test(scope)) {
+        } else if (REVIEW_SCOPE_PATTERN.test(scope)) {
           const entryId = Number(scope.slice(REALTIME_SCOPES.REVIEW_PREFIX.length));
           await assertEntryJudgeAccess(fresh, entryId);
           topic = `${SSE_TOPICS.QUEUE_REVIEW_PREFIX}${entryId}`;

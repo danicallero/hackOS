@@ -375,7 +375,7 @@ export function registerProjectRoutes(app: FastifyInstance): void {
   // while the event's H19 policy is on; recorded in docs/projects.md.
   // Every mutation here is additionally gated by the hacking window and by
   // "admitted participant" eligibility (assertWithinHackingWindow /
-  // isAdmittedParticipant in service.ts).
+  // hasEventAccess in service.ts).
 
   r.patch(
     "/api/me/projects/:id",

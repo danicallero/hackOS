@@ -20,7 +20,7 @@ import { callNextForRoom } from "./service.js";
  * H29/H35 (#544): automatic work is derived from the active room state and
  * judging schedule. Manual queue actions remain available outside the window.
  */
-export const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
+const QUEUE_PUMP_QUEUE_NAME = "queue-pump";
 
 /**
  * Top up a SINGLE room's `called` buffer to `max_in_waiting_area` from its

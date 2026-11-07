@@ -7,6 +7,7 @@ import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { routeAccessOption } from "../../lib/route-policy.js";
 import { replaceLibraryAnswers } from "./service.js";
 
 const params = z.object({ id: z.uuid() });
@@ -33,7 +34,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
     "/api/form-libraries/:id",
     {
       preHandler: requireAuth,
-      config: { routeAccessPolicy: { kind: "authenticated" } },
+      ...routeAccessOption({ kind: "authenticated" }),
       schema: {
         params,
         summary: "Read a question library",
@@ -55,7 +56,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
     "/api/form-libraries/:id/proposals",
     {
       preHandler: [requireAuth, idempotencyGuard],
-      config: { routeAccessPolicy: { kind: "authenticated" } },
+      ...routeAccessOption({ kind: "authenticated" }),
       schema: {
         params,
         body: z.object({ name }),
@@ -92,7 +93,7 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
         : "/api/applications/:applicationId/libraries/:id/manage",
       {
         preHandler: [requireCapability(capability), idempotencyGuard],
-        config: { routeAccessPolicy: { kind: "capability", capability } },
+        ...routeAccessOption({ kind: "capability", capability }),
         schema: {
           params: project
             ? params
@@ -139,13 +140,13 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
               throw new BadRequestError(
                 "Merge duplicate library values instead of renaming them to the same name",
               );
-            const before = values.rows.find((row) => row.id === item.id)!;
-            await replaceLibraryAnswers(db, library, before.name, item.name);
+            const existing = values.rows.find((row) => row.id === item.id)!;
+            await replaceLibraryAnswers(db, library, existing.name, item.name);
             await db.query(`UPDATE form_library_values SET name=$2 WHERE id=$1`, [
               item.id,
               item.name,
             ]);
-            before.name = item.name;
+            existing.name = item.name;
           }
           const deleting = new Set(q.body.deleteIds);
           if (q.body.merge) {

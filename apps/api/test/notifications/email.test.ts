@@ -9,6 +9,7 @@ import {
   getMailpitMessage,
   listMailpitMessages,
   MAILPIT_BASE,
+  waitForMailpit,
 } from "./mailpit-helpers.js";
 import {
   enqueueOutbox,
@@ -34,18 +35,6 @@ afterAll(async () => {
   await closeValkey();
   await pool.end();
 });
-
-async function waitForMailpit(count: number, timeoutMs = 5000) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const messages = await listMailpitMessages();
-    if (messages.length >= count) return messages;
-    if (Date.now() > deadline) {
-      throw new Error(`Mailpit: expected ${count} messages, got ${messages.length}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
 
 describe("SMTP via Mailpit (default dev provider)", () => {
   it("delivers a real branded email end-to-end through the dispatcher (H52)", async () => {

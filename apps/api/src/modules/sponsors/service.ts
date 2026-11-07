@@ -2,17 +2,17 @@ import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { TRIGGER_EVENTS } from "@hackos/shared/role-grant-triggers";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import {
+  assertFixtureEnterpriseScope,
+  assertFixtureEnterpriseScopes,
+} from "../../lib/fixture-queue-scope.js";
+import { assertFixtureSubjectScope, isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { broadcast } from "../../lib/sse.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleGrantRule } from "../identity/role-grants.js";
 import { broadcastForActiveUser } from "../logistics/active-broadcast.js";
-import {
-  assertFixtureEnterpriseScope,
-  assertFixtureEnterpriseScopes,
-  assertFixtureSubjectScope,
-  isSyntheticOperator,
-} from "../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import type {
@@ -82,10 +82,6 @@ async function assertEnterpriseScopes(
   enterpriseIds: readonly number[],
 ): Promise<void> {
   if (actorId != null) await assertFixtureEnterpriseScopes(db, actorId, enterpriseIds);
-}
-
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
 async function publishTicketAccess(

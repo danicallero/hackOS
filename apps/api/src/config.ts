@@ -18,6 +18,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
   HOST: z.string().default("0.0.0.0"),
+  /** Prometheus listener of the dedicated worker process (`node dist/worker.js`). */
+  METRICS_PORT: z.coerce.number().int().min(1).max(65_535).default(9464),
+  METRICS_HOST: z.string().default("0.0.0.0"),
 
   DATABASE_URL: z.string().default("postgres://hackos:hackos@localhost:5433/hackos"),
   /**
@@ -462,5 +465,3 @@ export const config = {
       parsed.GOOGLE_WALLET_PRIVATE_KEY_PEM,
   ),
 };
-
-export type Config = typeof config;

@@ -2,6 +2,8 @@ import { ALL_CAPABILITIES, CAPABILITIES, type Capability } from "@hackos/shared/
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { pool, type Queryable } from "../db/pool.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "./errors.js";
+import { isSyntheticOperator } from "./fixture-subject-scope.js";
+import { liveUserSql } from "./sql-predicates.js";
 
 /**
  * The one authorization snapshot used by a request or transaction (H8, #714).
@@ -28,7 +30,7 @@ function resolveCapabilities(userId: number | null, db: Queryable): Promise<Read
       `SELECT uec.capability
          FROM users u
          JOIN user_effective_capabilities uec ON uec.user_id = u.id
-        WHERE u.id = $1 AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
+        WHERE u.id = $1 AND ${liveUserSql("u")}`,
       [userId],
     )
     .then((result) => new Set(result.rows.map((r: { capability: string }) => r.capability)));
@@ -36,9 +38,7 @@ function resolveCapabilities(userId: number | null, db: Queryable): Promise<Read
 
 function resolveSyntheticOperator(userId: number | null, db: Queryable): Promise<boolean> {
   if (userId == null) return Promise.resolve(false);
-  return db
-    .query(`SELECT is_test_account FROM users WHERE id = $1`, [userId])
-    .then((result) => result.rows[0]?.is_test_account === true);
+  return isSyntheticOperator(db, userId);
 }
 
 /** Create an explicit request or transaction authorization context (H8, #714). */
@@ -70,22 +70,10 @@ export function getRequestAuthorizationContext(req: FastifyRequest): Authorizati
 }
 
 /**
- * Capability resolution (H8). A hierarchical, position-ordered multi-role model replaces
- * capability groups as the authorization source: a user may hold several
- * roles; roles sit on one global reorderable hierarchy (`roles.position`,
- * higher = more priority); each role holds an ALLOW/DENY/INHERIT tri-state
- * per capability.
- *
- * For one capability, the chain is the user's OWN assigned roles ordered by
- * position descending: the first ALLOW/DENY found wins; INHERIT skips to the
- * next-lower-position role the user also holds (never to the next role in
- * the *global* hierarchy — a role the user doesn't have is invisible to the
- * chain). An all-INHERIT chain, or no roles at all, denies (deny-by-default).
- * `*` still means "every capability" exactly as before.
- *
- * Authorization always reads PostgreSQL. The context promise prevents
- * repeated queries by stacked preHandlers without sharing a stale snapshot
- * across requests (H8, H53, #714).
+ * Effective capabilities for a context (H8). The resolution rule (position-ordered
+ * ALLOW/DENY/INHERIT chain over the user's own roles, deny-by-default, `*` meaning
+ * every capability) lives in the `user_effective_capabilities` view. Always read
+ * from PostgreSQL; the context's lazy promise only dedupes stacked preHandlers (#714).
  */
 export async function getEffectiveCapabilities(
   context: AuthorizationContext,
@@ -150,7 +138,7 @@ export function requireAnyCapability(...capabilities: Capability[]): preHandlerH
 export async function assertActiveAuthenticatedUser(req: FastifyRequest): Promise<void> {
   if (req.userId == null) throw new UnauthorizedError();
   const { rows } = await pool.query(
-    `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL`,
+    `SELECT 1 FROM users u WHERE u.id = $1 AND ${liveUserSql("u")}`,
     [req.userId],
   );
   if (!rows[0]) throw new UnauthorizedError("This account is closed or being removed");

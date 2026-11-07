@@ -24,8 +24,8 @@ import { issueUnverifiedRemovalLink, webUrl } from "../identity/unverified-remov
 
 const QUEUE_NAME = "lifecycle-reminders";
 
-export const REMINDER_INTERVAL_DAYS = 5;
-export const MAX_REMINDERS = 3;
+const REMINDER_INTERVAL_DAYS = 5;
+const MAX_REMINDERS = 3;
 const BATCH_SIZE = 200;
 /** A reminder is read days after it is sent, unlike the one-hour sign-up link. */
 const VERIFICATION_LINK_TTL_SECONDS = 3 * 24 * 3600;
@@ -36,7 +36,7 @@ function levelOf(alreadySent: number): (typeof LEVELS)[number] {
   return LEVELS[Math.min(alreadySent, MAX_REMINDERS - 1)] as (typeof LEVELS)[number];
 }
 
-export async function remindUnverifiedAccounts(db: Queryable): Promise<number> {
+async function remindUnverifiedAccounts(db: Queryable): Promise<number> {
   const { rows } = await db.query<{
     id: number;
     email: string;
@@ -81,7 +81,7 @@ export async function remindUnverifiedAccounts(db: Queryable): Promise<number> {
   return rows.length;
 }
 
-export async function remindDraftApplications(db: Queryable): Promise<number> {
+async function remindDraftApplications(db: Queryable): Promise<number> {
   const { rows } = await db.query<{
     id: number;
     user_id: number;

@@ -1,14 +1,13 @@
 import "./env.js";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
 import {
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 import { admitParticipant } from "../projects/fixtures.js";
 
@@ -18,17 +17,10 @@ let app: App;
 let owner: number;
 let keySeq = 0;
 
-beforeAll(async () => {
-  app = await buildTestApp();
-});
+const getApp = useTestApp();
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
+  app = await getApp();
   owner = await createUserWithCapabilities([]);
-});
-afterAll(async () => {
-  await app.close();
 });
 
 const PERSONAL_KEYS = ["email", "badgeId", "dni", "foodIntolerances", "surname", "notes"];

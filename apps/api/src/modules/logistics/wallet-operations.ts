@@ -4,6 +4,7 @@ import { config } from "../../config.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { ConflictError, TooManyRequestsError } from "../../lib/errors.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { getQueue, registerWorker } from "../../lib/queues.js";
 import { ApplePushUnregisteredError, sendApplePush } from "./apple-push.js";
 import {
@@ -11,7 +12,6 @@ import {
   refreshGooglePassObject,
   sendGoogleWalletAlert,
 } from "./google-wallet.js";
-import { isSyntheticOperator } from "./review-fixture-scope.js";
 import type { GoogleObjectType, PassRow } from "./wallet-passes.js";
 import { PASS_TYPE_IDENTIFIER } from "./wallet-passes.js";
 import { ensureWalletSettings } from "./wallet-settings.js";

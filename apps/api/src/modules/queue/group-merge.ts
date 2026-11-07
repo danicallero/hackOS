@@ -3,7 +3,7 @@ import type { Question } from "@hackos/shared/questions";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { broadcastQueueEvent } from "./broadcast.js";
 import { challengePanels, mergeJudgingPanels } from "./criteria-merge.js";
 import {

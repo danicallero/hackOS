@@ -1,11 +1,12 @@
 import { SSE_TOPICS, type SseEnvelope } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
-import { broadcast } from "../../lib/sse.js";
+import { AppError } from "../../lib/errors.js";
 import {
   type FixtureRoomScope,
   inspectFixtureRoomScope,
   inspectFixtureRoomScopes,
-} from "../logistics/review-fixture-scope.js";
+} from "../../lib/fixture-queue-scope.js";
+import { broadcast } from "../../lib/sse.js";
 import { queueGroupFixtureMarker } from "./fixture-scope.js";
 
 /** Queue resources whose marker determines the operator SSE topic. */
@@ -48,8 +49,8 @@ export async function queueFixtureMarker(
   if (resource === "queueGroup") {
     try {
       return await queueGroupFixtureMarker(db, resourceId);
-    } catch {
-      return null;
+    } catch (err) {
+      return failClosed(err, "queue group");
     }
   }
 
@@ -98,11 +99,20 @@ function entryMarkerPrecheck(row: EntryMarkerRow | undefined): boolean | null {
   return row.challenge_is_test_account === true;
 }
 
+/**
+ * An inconsistent fixture scope (AppError) is the expected fail-closed case;
+ * anything else is an outage that would silently drop realtime events, so log it.
+ */
+function failClosed(err: unknown, what: string): null {
+  if (!(err instanceof AppError)) console.error(`[queue] unable to resolve ${what} marker`, err);
+  return null;
+}
+
 async function groupMarkerOrNull(db: Queryable, queueGroupId: number): Promise<boolean | null> {
   try {
     return await queueGroupFixtureMarker(db, queueGroupId);
-  } catch {
-    return null;
+  } catch (err) {
+    return failClosed(err, "queue group");
   }
 }
 

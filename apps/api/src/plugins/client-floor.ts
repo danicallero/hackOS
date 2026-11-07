@@ -3,6 +3,7 @@ import fp from "fastify-plugin";
 import { config } from "../config.js";
 import { UpgradeRequiredError } from "../lib/errors.js";
 import { observeMobileClient } from "../lib/metrics.js";
+import { isProbePath, pathOf } from "../lib/request-path.js";
 
 /** Sent by the mobile app on every request: the native build number (#999). */
 export const BUILD_HEADER = "x-hackos-build";
@@ -28,10 +29,8 @@ export const clientFloorPlugin = fp(async (app: FastifyInstance) => {
   app.addHook("onRequest", async (req) => {
     const build = mobileBuildOf(req);
     if (build === null) return;
-    const requestPath = req.url.split("?", 1)[0] ?? req.url;
-    if (requestPath === "/healthz" || requestPath === "/readyz" || requestPath === "/metrics") {
-      return;
-    }
+    const requestPath = pathOf(req.url);
+    if (isProbePath(requestPath)) return;
     const minBuild = config.MOBILE_MIN_BUILD;
     const reported = typeof req.headers[BUILD_HEADER] === "string" && build > 0;
     const label = reported ? String(build) : "unreported";

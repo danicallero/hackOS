@@ -1,4 +1,4 @@
-import pg from "pg";
+import { withClient } from "./superadmin-cli.mjs";
 
 /**
  * Lists every account currently holding superadmin (ADMIN_ALL / '*') via the
@@ -8,10 +8,7 @@ import pg from "pg";
  *   node scripts/list-superadmins.mjs
  */
 
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await client.connect();
-
-try {
+await withClient(async (client) => {
   const { rows } = await client.query(
     `SELECT u.id, u.email, u.name, u.surname, ur.assigned_at
        FROM user_roles ur
@@ -31,6 +28,4 @@ try {
       );
     }
   }
-} finally {
-  await client.end();
-}
+});
