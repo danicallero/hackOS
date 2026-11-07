@@ -6,12 +6,13 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { idParam } from "../../lib/schemas.js";
 import { broadcastQueueEventWithMarker } from "./broadcast.js";
 import { requireChallengeJudgeOrCapability } from "./contextual-access.js";
 import { assertQueueChallengeScope } from "./fixture-scope.js";
 import { notifyChallengeQueueChanged } from "./notify.js";
 
-const params = z.object({ challengeId: z.coerce.number().int().positive() });
+const params = idParam("challengeId");
 const access = {
   config: {
     routeAccessPolicy: {

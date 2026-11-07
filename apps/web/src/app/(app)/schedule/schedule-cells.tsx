@@ -1,4 +1,5 @@
 "use client";
+import { SCHEDULE_AUDIENCES } from "@hackos/shared/schedule-form";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -36,7 +37,6 @@ import {
   ownerDisplayName,
   ownerNames,
   parseTimeOfDay,
-  SCHEDULE_AUDIENCES,
   SCHEDULE_STATUS_TONES,
   type ScheduleStatus,
   scheduleAudienceLabel,

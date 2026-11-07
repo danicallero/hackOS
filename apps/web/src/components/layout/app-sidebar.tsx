@@ -25,11 +25,11 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useNavVisibility } from "@/hooks/use-nav-visibility";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
 import { warmRoute } from "@/lib/list-resources";
 import {
-  isNavItemVisible,
   type NavItem,
   PERSONAL_NAV,
   readLastWorkspace,
@@ -58,24 +58,6 @@ function UnreadLabelDot() {
       className="bg-destructive ml-auto size-2 shrink-0 rounded-full group-data-[collapsible=icon]:hidden"
     />
   );
-}
-
-/** Sidebar visibility predicate (H8/H55), shared with quick search (#1182). */
-export function useNavVisibility() {
-  const { can, canAny, me, isPureApplicant } = useSessionContext();
-  return (item: NavItem) =>
-    isNavItemVisible(item, {
-      can,
-      canAny,
-      isEnterpriseJudge: me?.isEnterpriseJudge ?? false,
-      isSponsorRep: me?.isSponsorRep ?? false,
-      isPureApplicant,
-      // Default true while `me` is still loading, matching isPureApplicant's
-      // "show, then narrow down" pattern so the sidebar doesn't flash empty.
-      hasProject: me ? me.hasProject || me.canCreateProject : true,
-      hasQueueItems: me ? me.hasQueueItems : true,
-      hasStatisticsPanels: me ? me.hasStatisticsPanels : true,
-    });
 }
 
 function matchesPath(pathname: string, href: string) {

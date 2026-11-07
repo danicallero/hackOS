@@ -12,20 +12,8 @@
 // in place (renaming would orphan everyone holding it). To rename, add the new
 // size and remove the old one — the API refuses to drop a size still in use.
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  rectSortingStrategy,
-  SortableContext,
-  sortableKeyboardCoordinates,
-} from "@dnd-kit/sortable";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { rectSortingStrategy, SortableContext } from "@dnd-kit/sortable";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useState } from "react";
@@ -35,6 +23,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
 import { SaveStatus } from "@/components/common/save-status";
 import { SubmitButton } from "@/components/common/submit-button";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -73,10 +62,7 @@ export function ShirtSizesManager() {
   });
   const { reset, formState, control } = form;
   const shirtSizeFields = useFieldArray({ control, name: "shirtSizes" });
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
   const [saveState, setSaveState] = useCategorySaveState(formState.isDirty, NOOP_DIRTY_CHANGE);
 
   useEffect(() => {

@@ -1,15 +1,14 @@
 import "./env.js";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { processDataSubjectRequest } from "../../src/modules/exports/worker.js";
 import {
   assignRole,
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 
 /**
@@ -23,23 +22,11 @@ import {
  * anonymous_participants audit trail.
  */
 
+const getApp = useTestApp();
 let app: App;
 
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
-  app ??= await buildTestApp();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  const { pool } = await import("../../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
+  app = await getApp();
 });
 
 describe("anonymization strips non-visible role assignments (H8, H53, H54)", () => {

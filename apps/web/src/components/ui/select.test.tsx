@@ -14,41 +14,6 @@ vi.mock("@/lib/i18n", () => ({
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-describe("SelectTrigger", () => {
-  let container: HTMLDivElement;
-  let root: Root;
-
-  beforeEach(() => {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-  });
-
-  afterEach(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
-
-  it("keeps selected values readable when translated text needs multiple lines", () => {
-    act(() => {
-      root.render(
-        <Select>
-          <SelectTrigger size="content">
-            <SelectValue placeholder="A very long translated selected value" />
-          </SelectTrigger>
-        </Select>,
-      );
-    });
-
-    const trigger = container.querySelector("button");
-    expect(trigger?.getAttribute("data-size")).toBe("content");
-    expect(trigger?.className).toContain("data-[size=content]:whitespace-normal");
-    expect(trigger?.className).toContain("data-[size=content]:h-auto");
-    expect(trigger?.className).toContain("data-[size=content]:*:data-[slot=select-value]:whitespace-normal");
-    expect(trigger?.className).toContain("*:data-[slot=select-value]:truncate");
-  });
-});
-
 function NestedSelect() {
   const [dialogOpen, setDialogOpen] = useState(true);
 

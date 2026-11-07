@@ -5,7 +5,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -21,33 +21,16 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ApiError, api } from "@/lib/api";
+import { useVerificationResend } from "@/hooks/use-verification-resend";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
-import { toast } from "@/lib/toast";
 
 function verifyEmailSchema(t: Translate) {
   return z.object({ email: z.string().email(t("validEmail")) });
 }
 type Values = z.infer<ReturnType<typeof verifyEmailSchema>>;
-
-/** Keep API details in diagnostics while presenting stable H3 copy. */
-function localizedResendError(error: ApiError, t: Translate): string {
-  const code = error.code.toUpperCase();
-  console.error("[auth:resend-verification] request failed", {
-    code,
-    status: error.status,
-    error,
-  });
-
-  if (code === "INVALID_EMAIL") return t("validEmail");
-  if (code === "TOO_MANY_REQUESTS" || error.status === 429) {
-    return t("couldNotSendVerificationEmail");
-  }
-  return t("couldNotSendVerificationEmail");
-}
 
 /**
  * Maps Better Auth's verify-email error codes to distinct, actionable copy
@@ -85,7 +68,6 @@ function VerifyEmailInner() {
   // originally interrupted from, falling back to the schedule.
   const rawNext = params.get("next");
   const next = safeReturnPath(rawNext, "/event");
-  const [cooldown, setCooldown] = useState(0);
   // The emailed link lands here with the token instead of hitting the API:
   // link scanners GET every URL in a message, so verification only happens on
   // an explicit click (a navigation, which scanners never perform).
@@ -97,40 +79,17 @@ function VerifyEmailInner() {
     resolver: zodResolver(schema),
     defaultValues: { email: params.get("email") ?? "" },
   });
-
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const t = setInterval(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(t);
-  }, [cooldown]);
+  // Keep the interrupted destination alive across a resend too (#188).
+  const { cooldown, error, resend, resending } = useVerificationResend(
+    form.watch("email"),
+    rawNext ? `/verify-email?verified=1&next=${encodeURIComponent(next)}` : undefined,
+  );
 
   // Verification auto-signs-in (autoSignInAfterVerification): pick up the new
   // session so the user is logged in without a second sign-in.
   useEffect(() => {
     if (verified) void refresh();
   }, [verified, refresh]);
-
-  async function onSubmit(values: Values) {
-    try {
-      await api.post("/api/auth/resend-verification", {
-        email: values.email,
-        // Keep the interrupted destination alive across a resend too (#188).
-        ...(rawNext
-          ? { callbackURL: `/verify-email?verified=1&next=${encodeURIComponent(next)}` }
-          : {}),
-      });
-      toast.success(t("verificationEmailSent"), { compactTitle: t("toastVerifyEmail") });
-      setCooldown(60); // H3: 60s between attempts
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 429) setCooldown(err.retryAfter ?? 60);
-        form.setError("root", { message: localizedResendError(err, t) });
-        return;
-      }
-      console.error("[auth:resend-verification] request failed", err);
-      form.setError("root", { message: t("couldNotSendVerificationEmail") });
-    }
-  }
 
   if (token && !errorInfo && !verified) {
     const callback = safeReturnPath(params.get("callback"), "/verify-email?verified=1");
@@ -197,7 +156,7 @@ function VerifyEmailInner() {
           </Alert>
         )}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(resend)} className="space-y-4">
             <FormField
               control={form.control}
               name="email"
@@ -211,16 +170,12 @@ function VerifyEmailInner() {
                 </FormItem>
               )}
             />
-            {form.formState.errors.root && (
+            {error && (
               <Alert variant="destructive">
-                <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
+                <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            <SubmitButton
-              className="w-full"
-              pending={form.formState.isSubmitting}
-              disabled={cooldown > 0}
-            >
+            <SubmitButton className="w-full" pending={resending} disabled={cooldown > 0}>
               {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendVerificationEmail")}
             </SubmitButton>
           </form>

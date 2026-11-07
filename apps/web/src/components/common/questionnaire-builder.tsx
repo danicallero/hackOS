@@ -6,17 +6,8 @@ import {
   type DragEndEvent,
   DragOverlay,
   type DragStartEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import {
   type I18nText,
   type Question,
@@ -44,6 +35,7 @@ import {
   useReducedDragMotion,
 } from "@/components/common/drag-handle";
 import { IconButton } from "@/components/common/icon-button";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -66,12 +58,10 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useClickOutside } from "@/hooks/use-click-outside";
+import { LOCALES } from "@/lib/application-form";
 import { i18nWithEnglishFallback, type Prize } from "@/lib/challenges";
 import { type Translate, useLocale } from "@/lib/i18n";
-
-/** Fixed locale order for translation inputs — English is always the primary
- *  column throughout this builder (see MultilingualInput below). */
-const LOCALES = ["es", "en", "gl"] as const;
+import { EMPTY_I18N } from "@/lib/i18n-text";
 
 type BuilderKind = QuestionKind;
 
@@ -93,8 +83,6 @@ function buildQuestionTypes(
     },
   ];
 }
-
-const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
 
 function questionTypeLabel(kind: string, t: Translate): string {
   return buildQuestionTypes(t).find((type) => type.kind === kind)?.label ?? kind;
@@ -219,7 +207,7 @@ export function PrizeBuilder({
 }
 
 /** Judging panel builder (H30/H44) — mirrors the application form editor's
- *  row pattern (`FieldEditor` in components/forms/questions-card.tsx): a
+ *  row pattern (`FieldEditor` in components/forms/field-editor/field-editor.tsx): a
  *  collapsed preview row that expands into the full editor on click, plus
  *  drag-and-drop reordering, minus that editor's sections feature (a
  *  judging panel is always a flat list, issue #423). */
@@ -237,10 +225,7 @@ export function JudgingPanelBuilder({
   const questionTypes = useMemo(() => buildQuestionTypes(t), [t]);
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const dndSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const dndSensors = useSortableSensors();
 
   const update = (index: number, question: Question) =>
     onChange(value.map((existing, i) => (i === index ? question : existing)));

@@ -19,7 +19,7 @@ function responseFileKeys(value: unknown): string[] {
   if (typeof value === "string") return value ? [value] : [];
   return Array.isArray(value) ? value.filter((key) => typeof key === "string") : [];
 }
-export async function nativeMember(db: Queryable, userId: number, id: number) {
+async function nativeMember(db: Queryable, userId: number, id: number) {
   const result = await db.query(
     `SELECT 1 FROM submissions s JOIN users u ON u.id=s.user_id JOIN repos r ON r.id=s.repo_id AND r.is_test_account=u.is_test_account WHERE repo_id=$1 AND user_id=$2 AND status='active' AND u.account_state='active' AND u.anonymized_at IS NULL`,
     [id, userId],

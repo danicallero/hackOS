@@ -2,7 +2,7 @@ import "./env.js";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { createUser } from "../helpers.js";
-import { clearMailpit, getMailpitMessage, listMailpitMessages } from "./mailpit-helpers.js";
+import { clearMailpit, getMailpitMessage, waitForMailpit } from "./mailpit-helpers.js";
 import { resetNotificationsState } from "./notif-helpers.js";
 
 /**
@@ -16,18 +16,6 @@ beforeEach(async () => {
   await resetNotificationsState();
   await clearMailpit();
 });
-
-async function waitForMailpit(count: number, timeoutMs = 5000) {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const messages = await listMailpitMessages();
-    if (messages.length >= count) return messages;
-    if (Date.now() > deadline) {
-      throw new Error(`Mailpit: expected ${count} messages, got ${messages.length}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-}
 
 afterAll(async () => {
   const { stopQueues } = await import("../../src/lib/queues.js");

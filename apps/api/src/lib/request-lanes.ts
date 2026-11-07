@@ -3,7 +3,7 @@ import { REALTIME_SCOPES, SSE_TOPICS } from "@hackos/shared/events";
 export const REQUEST_LANES = ["P0", "P1", "P2", "P3"] as const;
 export type RequestLane = (typeof REQUEST_LANES)[number];
 
-export interface RequestLaneInput {
+interface RequestLaneInput {
   method?: string;
   url: string;
   userId?: number | null;

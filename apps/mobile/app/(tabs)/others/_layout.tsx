@@ -19,6 +19,9 @@ const compactHeaderOptions = {
   headerTransparent: Platform.OS === "ios",
 } as const;
 
+/** H55: preserve the owning screen underneath a directly opened child. */
+export const unstable_settings = { anchor: "account" };
+
 export default function OthersLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();

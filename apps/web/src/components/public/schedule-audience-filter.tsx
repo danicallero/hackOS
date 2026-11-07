@@ -25,7 +25,7 @@ export type ViewerScheduleSegment = "staff" | ScheduleAudience;
 
 const SEGMENT_ORDER: ViewerScheduleSegment[] = ["staff", "sponsor", "participant", "mentor"];
 
-export function itemScheduleSegments(item: PublicScheduleItem): ViewerScheduleSegment[] {
+function itemScheduleSegments(item: PublicScheduleItem): ViewerScheduleSegment[] {
   return item.audiences && item.audiences.length > 0 ? item.audiences : ["staff"];
 }
 

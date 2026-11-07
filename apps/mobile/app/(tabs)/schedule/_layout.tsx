@@ -9,6 +9,9 @@ import { colors, type } from "@/theme";
  * bell presents the inbox as a sheet on this stack (H51) with an inline title
  * between its toolbar groups; notification settings live in Account.
  */
+/** H55: preserve the owning screen underneath a directly opened child. */
+export const unstable_settings = { anchor: "index" };
+
 export default function ScheduleLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();

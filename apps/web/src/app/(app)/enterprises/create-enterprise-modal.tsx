@@ -5,6 +5,7 @@ import { BuildingsIcon } from "@phosphor-icons/react/dist/csr/Buildings";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { PublicationFormFields } from "@/components/common/publication-form-fields";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,6 @@ import {
   EnterpriseKindPriorityFields,
   EnterpriseLogoUrlFields,
   EnterpriseProfileFields,
-  EnterprisePublicationFields,
   enterpriseFormSchema,
 } from "./enterprise-form-fields";
 import { type Enterprise, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "./shared";
@@ -179,7 +179,8 @@ export function CreateEnterpriseModal({
           </div>
           <div className="space-y-5 border-t pt-5">
             <EnterpriseKindPriorityFields form={form} />
-            <EnterprisePublicationFields
+            <PublicationFormFields
+              id="enterprise-publication"
               form={form}
               scheduled={scheduledPublish}
               setScheduled={setScheduledPublish}

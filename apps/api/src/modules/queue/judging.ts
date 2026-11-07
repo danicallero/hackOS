@@ -4,6 +4,7 @@ import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { likeContains } from "../../lib/like.js";
 import { broadcast } from "../../lib/sse.js";
 import { broadcastQueueEventWithMarker } from "./broadcast.js";
 import { resolveChallengePanel } from "./criteria-merge.js";
@@ -363,7 +364,7 @@ export async function listActiveJudgingSessions(entryId: number) {
 
 export async function searchChallengeQueue(challengeId: number, q: string, fixtureMarker: boolean) {
   await assertQueueChallengeReadScope(pool, challengeId, fixtureMarker);
-  const like = `%${q}%`;
+  const like = likeContains(q);
   // H46: a merged queue group holds several challenges under one queue —
   // search every sibling challenge, not just the one the caller passed in,
   // or teams enqueued under another challenge in the same group go missing.

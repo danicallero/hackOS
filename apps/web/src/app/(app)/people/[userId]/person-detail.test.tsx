@@ -4,8 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
 import { API_URL } from "@/lib/env";
+import { resetServerStateForTests } from "@/lib/server-state";
 
-const env = vi.hoisted(() => ({ refreshNonce: 0, autoRefresh: vi.fn() }));
+const env = vi.hoisted(() => ({ eventSource: vi.fn() }));
 
 vi.mock("@/lib/api", () => ({
   api: { get: vi.fn() },
@@ -18,15 +19,19 @@ vi.mock("@/lib/api", () => ({
       super(message);
     }
   },
+  isNotFoundError: (err: unknown) => (err as { status?: number } | null)?.status === 404,
 }));
-vi.mock("@/hooks/use-auto-refresh", () => ({
-  useAutoRefresh: (...args: unknown[]) => {
-    env.autoRefresh(...args);
-    return env.refreshNonce;
+vi.mock("@/hooks/use-event-source", () => ({
+  useEventSource: (...args: unknown[]) => {
+    env.eventSource(...args);
+    return { connected: true };
   },
 }));
 const t = (key: string) => key;
-vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t, language: "es" }) }));
+vi.mock("@/lib/i18n", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/i18n")>()),
+  useLocale: () => ({ t, language: "es" }),
+}));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -60,8 +65,8 @@ async function render(userId = 42) {
 }
 
 beforeEach(() => {
-  env.refreshNonce = 0;
-  env.autoRefresh.mockReset();
+  env.eventSource.mockReset();
+  resetServerStateForTests();
   person = entry();
   get.mockReset();
   get.mockImplementation(((path: string) => {
@@ -96,7 +101,7 @@ describe("PersonDetail (#934, #935)", () => {
     });
     await render();
 
-    expect(get).toHaveBeenCalledWith("/api/directory/42");
+    expect(get).toHaveBeenCalledWith("/api/directory/42", expect.anything());
     expect(container.querySelector("h1")?.textContent).toBe("Ana P.");
     const text = container.textContent ?? "";
     expect(text).toContain("Backend and data");
@@ -121,7 +126,10 @@ describe("PersonDetail (#934, #935)", () => {
     expect(document.querySelector("[role=dialog]")?.textContent).toContain("cvViewerTitle");
     vi.unstubAllGlobals();
     expect(container.querySelector("a[href='/people']")?.textContent).toBe("backToPeople");
-    expect(env.autoRefresh).toHaveBeenCalledWith("domain:directory", ["domain.changed"]);
+    expect(env.eventSource).toHaveBeenCalledWith(
+      "domain:directory",
+      expect.objectContaining({ events: ["domain.changed"] }),
+    );
   });
 
   it("lists every project and work group the person is in", async () => {

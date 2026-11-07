@@ -5,15 +5,21 @@ import { z } from "zod";
 import { requireAnyCapability, requireAuth } from "../../lib/capabilities.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as routeAccess } from "../../lib/route-policy.js";
-import { createReport, listReports, moderatedKinds, resolveReport } from "./service.js";
-
-const reasons = ["inappropriate", "harassment", "spam", "other"] as const;
+import { idParams } from "../../lib/schemas.js";
+import {
+  createReport,
+  listReports,
+  moderatedKinds,
+  REPORT_REASONS,
+  REPORT_STATUSES,
+  resolveReport,
+} from "./service.js";
 
 const createBody = z
   .object({
     projectId: z.number().int().positive().optional(),
     userId: z.number().int().positive().optional(),
-    reason: z.enum(reasons),
+    reason: z.enum(REPORT_REASONS),
     details: z.string().trim().max(500).nullish(),
   })
   .refine((body) => (body.projectId === undefined) !== (body.userId === undefined), {
@@ -21,9 +27,8 @@ const createBody = z
   });
 
 const listQuery = z.object({
-  status: z.enum(["open", "actioned", "dismissed", "all"]).default("open"),
+  status: z.enum([...REPORT_STATUSES, "all"]).default("open"),
 });
-const idParams = z.object({ id: z.coerce.number().int().positive() });
 const resolveBody = z.object({
   status: z.enum(["actioned", "dismissed"]),
   note: z.string().trim().max(500).nullish(),
@@ -37,9 +42,9 @@ const person = z.object({
 const reportSchema = z.object({
   id: z.number(),
   kind: z.enum(["project", "profile"]),
-  reason: z.enum(reasons),
+  reason: z.enum(REPORT_REASONS),
   details: z.string().nullable(),
-  status: z.enum(["open", "actioned", "dismissed"]),
+  status: z.enum(REPORT_STATUSES),
   createdAt: z.string(),
   resolvedAt: z.string().nullable(),
   reporter: person,

@@ -14,6 +14,7 @@ import {
   type RoleGraphClient,
   requireRoleAssignmentAuthorityMany,
 } from "../identity/role-authority.js";
+import { grantedRoleNameSql } from "./granted-role.js";
 import type { TemplateField } from "./schemas.js";
 import {
   createApplicationSchema,
@@ -132,14 +133,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   // grants none. Derived from grants_role_ids so it can never drift from
   // what the form actually grants the way a separately-set `type` string
   // could.
-  const GRANTED_ROLE_NAME_EXPR = `(
-        SELECT r.name
-          FROM application_grants_roles agr
-          JOIN roles r ON r.id = agr.role_id AND r.deleted_at IS NULL
-         WHERE agr.application_id = applications.id
-         ORDER BY r.position DESC
-         LIMIT 1
-      ) AS granted_role_name`;
+  const GRANTED_ROLE_NAME_EXPR = grantedRoleNameSql("applications", "granted_role_name");
   const COLUMNS = `id, name, template, sections, description, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
                    review_hidden_fields, current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},

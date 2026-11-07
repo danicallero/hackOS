@@ -141,7 +141,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
           json: { ...shellUser, capabilities: [CAPABILITIES.APPLICATIONS_MANAGE] },
         });
       else if (path === "/api/applications/1") await route.fulfill({ json: form });
-      else if (path === "/api/roles") await route.fulfill({ json: { roles: [] } });
+      else if (path === "/api/roles") await route.fulfill({ json: [] });
       else await route.fulfill({ json: {} });
     });
     await page.goto("/applications/1?tab=builder");

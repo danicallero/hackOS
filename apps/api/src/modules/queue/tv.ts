@@ -55,7 +55,7 @@ const DEFAULT_MODE: TvMode = {
 };
 
 /** The raw manually selected mode. */
-export async function getTvMode(): Promise<TvMode | null> {
+async function getTvMode(): Promise<TvMode | null> {
   try {
     const raw = await valkey.get(TV_MODE_KEY);
     if (!raw) return null;
@@ -160,7 +160,7 @@ export async function clearTvMode(): Promise<TvState> {
 }
 
 /** Resolves the current state and broadcasts it to the fleet unconditionally. */
-export async function publishTvState(): Promise<TvState> {
+async function publishTvState(): Promise<TvState> {
   const state = await resolveTvState();
   await broadcast(SSE_TOPICS.TV, EVENTS.TV_MODE_CHANGED, state);
   return state;

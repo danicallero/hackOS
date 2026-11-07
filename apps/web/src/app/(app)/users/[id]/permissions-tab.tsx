@@ -8,34 +8,33 @@ import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EntityCombobox } from "@/components/common/entity-combobox";
 import { IconButton } from "@/components/common/icon-button";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
+import { useRoles } from "@/hooks/use-roles";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { capabilityDescription, prettifyCapability } from "@/lib/capability-presentation";
 import { useLocale } from "@/lib/i18n";
+import { rolesApi } from "@/lib/roles-api";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import type { EnterpriseSummary, RoleSummary, UserDetail } from "@/lib/types";
+import type { EnterpriseSummary, UserDetail } from "@/lib/types";
 
 export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChanged: () => void }) {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.PERMISSIONS_MANAGE);
-  const [allRoles, setAllRoles] = useState<RoleSummary[]>([]);
+  const {
+    roles: allRoles,
+    error: rolesError,
+    reload: reloadRoles,
+  } = useRoles({ enabled: canManage });
   const [roleIdsToAdd, setRoleIdsToAdd] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!canManage) return;
-    api
-      .get<RoleSummary[]>("/api/roles")
-      .then(setAllRoles)
-      .catch(() => setAllRoles([]));
-  }, [canManage]);
 
   const assignedIds = new Set(user.roles.map((r) => r.id));
   const addable = allRoles.filter((r) => !assignedIds.has(r.id));
@@ -46,7 +45,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
     const added: string[] = [];
     try {
       for (const roleId of roleIdsToAdd) {
-        await api.post(`/api/roles/${roleId}/users/${user.id}`, {});
+        await rolesApi.addMember(Number(roleId), user.id);
         added.push(roleId);
       }
       toast.success(t("rolesAdded"), { compactTitle: t("toastAssignRole") });
@@ -65,7 +64,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
   async function removeRole(roleId: number) {
     setBusy(true);
     try {
-      await api.delete(`/api/roles/${roleId}/users/${user.id}`);
+      await rolesApi.removeMember(roleId, user.id);
       toast.success(t("roleRemoved"), { compactTitle: t("toastRemoveRole") });
       onChanged();
     } catch (err) {
@@ -105,6 +104,13 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
           ) : undefined
         }
       >
+        {rolesError != null && (
+          <ContextualError
+            className="mb-3"
+            message={t("couldNotLoadRoles")}
+            onRetry={reloadRoles}
+          />
+        )}
         {user.roles.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noRolesForUser")}</p>
         ) : (
@@ -152,7 +158,7 @@ export function PermissionsTab({ user, onChanged }: { user: UserDetail; onChange
   );
 }
 
-export function EnterpriseMemberships({
+function EnterpriseMemberships({
   userId,
   onChanged,
 }: {
@@ -163,17 +169,20 @@ export function EnterpriseMemberships({
   const [enterprises, setEnterprises] = useState<{ id: number; name: string }[] | null>(null);
   const [allEnterprises, setAllEnterprises] = useState<EnterpriseSummary[]>([]);
   const [busy, setBusy] = useState(false);
+  const [membershipsFailed, setMembershipsFailed] = useState(false);
+  const [directoryFailed, setDirectoryFailed] = useState(false);
   const canManage = useCan(CAPABILITIES.SPONSORS_MANAGE);
 
   const loadMemberships = useCallback(() => {
     let cancelled = false;
+    setMembershipsFailed(false);
     api
       .get<{ enterprises: { id: number; name: string }[] }>(`/api/users/${userId}/enterprises`)
       .then((r) => {
         if (!cancelled) setEnterprises(r.enterprises);
       })
       .catch(() => {
-        if (!cancelled) setEnterprises([]);
+        if (!cancelled) setMembershipsFailed(true);
       });
     return () => {
       cancelled = true;
@@ -182,13 +191,17 @@ export function EnterpriseMemberships({
 
   useEffect(loadMemberships, [loadMemberships]);
 
-  useEffect(() => {
-    if (!canManage) return;
+  const loadDirectory = useCallback(() => {
+    setDirectoryFailed(false);
     api
       .get<{ enterprises: EnterpriseSummary[] }>("/api/enterprises")
       .then((r) => setAllEnterprises(r.enterprises))
-      .catch(() => setAllEnterprises([]));
-  }, [canManage]);
+      .catch(() => setDirectoryFailed(true));
+  }, []);
+
+  useEffect(() => {
+    if (canManage) loadDirectory();
+  }, [canManage, loadDirectory]);
 
   const memberIds = new Set((enterprises ?? []).map((e) => e.id));
   const addable = allEnterprises.filter((enterprise) => !memberIds.has(enterprise.id));
@@ -227,7 +240,16 @@ export function EnterpriseMemberships({
         ) : undefined
       }
     >
-      {enterprises === null ? (
+      {directoryFailed && (
+        <ContextualError
+          className="mb-3"
+          message={t("couldNotLoadEnterprises")}
+          onRetry={loadDirectory}
+        />
+      )}
+      {membershipsFailed ? (
+        <ContextualError message={t("couldNotLoadEnterprises")} onRetry={() => loadMemberships()} />
+      ) : enterprises === null ? (
         <Spinner className="size-4" />
       ) : enterprises.length === 0 ? (
         <p className="text-muted-foreground text-sm">{t("noEnterpriseAffiliations")}</p>

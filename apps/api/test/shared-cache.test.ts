@@ -1,16 +1,10 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { afterAll, describe, expect, it } from "vitest";
-import { pool } from "../src/db/pool.js";
+import { describe, expect, it } from "vitest";
 import { invalidateSharedCache, sharedCache } from "../src/lib/shared-cache.js";
 import { broadcast } from "../src/lib/sse.js";
+import { useTestApp } from "./helpers.js";
 
-afterAll(async () => {
-  const { stopQueues } = await import("../src/lib/queues.js");
-  const { closeValkey } = await import("../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
+useTestApp();
 
 describe("sharedCache (H18, H47, H45)", () => {
   it("computes once for concurrent callers and serves later ones from the cache", async () => {

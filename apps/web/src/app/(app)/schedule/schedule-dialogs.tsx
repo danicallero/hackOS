@@ -1,6 +1,8 @@
 "use client";
 
 import { ACTIVITY_KINDS, type ActivityKind } from "@hackos/shared/activity-kinds";
+import { scheduleTypeLabel } from "@hackos/shared/display-labels";
+import { SCHEDULE_AUDIENCES } from "@hackos/shared/schedule-form";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CalendarPlusIcon } from "@phosphor-icons/react/dist/csr/CalendarPlus";
 import { FunnelSimpleIcon } from "@phosphor-icons/react/dist/csr/FunnelSimple";
@@ -15,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import type { PublicScheduleItem, ScheduleAudience } from "@/lib/logistics";
-import { SCHEDULE_AUDIENCES, scheduleAudienceLabel, scheduleTypeLabel } from "./schedule-model";
+import { scheduleAudienceLabel } from "./schedule-model";
 
 // The Manage Schedule table's popovers and modals (H59): the audience filter,
 // the bulk publish-date popover, and the date prompt a row dropped on the

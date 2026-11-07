@@ -30,12 +30,12 @@ const MAX_ATTEMPTS = 8;
 const BASE_DELAY_MS = 30_000; // 30s
 const MAX_DELAY_MS = 30 * 60_000; // 30min cap
 
-export function backoffDelayMs(attempts: number): number {
+function backoffDelayMs(attempts: number): number {
   const delay = BASE_DELAY_MS * 2 ** Math.max(0, attempts - 1);
   return Math.min(delay, MAX_DELAY_MS);
 }
 
-export interface DrainResult {
+interface DrainResult {
   claimed: number;
   sent: number;
   failed: number;

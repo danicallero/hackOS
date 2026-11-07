@@ -1,6 +1,7 @@
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { pool } from "../db/pool.js";
+import { pathOf } from "./request-path.js";
 import { broadcast } from "./sse.js";
 
 const positiveId = (value: unknown): number | null => {
@@ -10,7 +11,7 @@ const positiveId = (value: unknown): number | null => {
 
 /** Account facts outside role/enterprise services: snapshot both sides of removals (#892). */
 async function targets(req: FastifyRequest): Promise<number[]> {
-  const path = req.url.split("?", 1)[0] ?? "";
+  const path = pathOf(req.url);
   const body = (req.body ?? {}) as Record<string, unknown>;
   const ids = new Set<number>();
   const add = (value: unknown) => {

@@ -276,13 +276,20 @@ overflow section as the selected row.
 Selection simulates tab navigation
 (`apps/mobile/lib/operations-navigation.ts`
 `resolveOperationsNavigationAction`): picking the section already on screen
-is a no-op, and picking another always `router.replace()`s — a tab switch,
+is a no-op (except Account subpages, which return to the profile), and picking another always `router.replace()`s — a tab switch,
 never a stack push — so overflow screens don't stack duplicates and back
 behaviour stays sane. Direct tabs use the headless Expo Router tab state
 (`JUMP_TO`) and emit `tabPress`, preserving each tab's stack and its
 scroll-to-top/live-activity handlers; deeper screens inside a section still
 push normally on top of it. Pathname matching normalizes Expo Router route groups first
 (`/others/...` vs `/(tabs)/others/...`).
+
+The direct Account tab and its overflow-menu entry target
+`/(tabs)/others/account` (H55). Selecting it from an Account subpage returns to
+the profile even while that section is already selected. Settings keep Account
+highlighted, but their active state does not make them the tab destination.
+The same destination applies to the foldable rail, tab scrubbing and hardware
+keyboard shortcuts.
 
 Section classification covers the whole Others stack: `queue`, `diary` and
 `operations` own their route (plus `others/team/*`, opened from queue
@@ -331,7 +338,8 @@ union or a default destination. Adding an overflow page therefore requires a
 key plus its icon, route, and localized-label descriptors (enforced by
 TypeScript `Record`s). `operations-navigation.test.ts` iterates every declared
 key and verifies grouped/ungrouped pathname recognition, same-section no-op,
-all cross-section replacements, and entry from outside the overflow stack.
+Account child returns, all cross-section replacements, and entry from outside
+the overflow stack.
 This guards every new destination without requiring someone to remember an
 extra hand-written navigation case. Keep this registry free of React Native
 runtime imports so its contract tests remain deterministic outside Expo.

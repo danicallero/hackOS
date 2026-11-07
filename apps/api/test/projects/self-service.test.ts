@@ -11,7 +11,7 @@ import { admitParticipant, createChallenge, setHackingWindow } from "./fixtures.
  * /decline teammates, leave, delete as the sole remaining member. Every
  * mutation is additionally gated by the hacking window
  * (assertWithinHackingWindow) and, for invites, by "admitted participant"
- * eligibility on the invitee (isAdmittedParticipant) — see service.ts.
+ * eligibility on the invitee (hasEventAccess) — see service.ts.
  *
  * Projects here are seeded through the staff-side POST /api/repos (H18) so
  * each test controls the hacking window independently of H19's creation

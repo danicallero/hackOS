@@ -15,7 +15,7 @@ import type { FormSection, TemplateField } from "@/lib/applications";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
-export interface ReviewViewGroup {
+interface ReviewViewGroup {
   section: FormSection | null;
   fields: TemplateField[];
 }

@@ -4,6 +4,7 @@
 // window and current/scheduled/expired status. Gated by announcements:manage;
 // consumes the CRUD API in apps/api/src/modules/notifications/routes/announcements.ts.
 
+import { announcementToForm } from "@hackos/shared/announcement-form";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
@@ -12,7 +13,7 @@ import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -23,8 +24,8 @@ import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { StatusBadge } from "@/components/common/status-badge";
 import type { UserOption } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -33,11 +34,7 @@ import { notificationsApi } from "@/lib/notifications";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Tone } from "@/lib/tones";
-import {
-  AnnouncementFormModal,
-  announcementToForm,
-  EMPTY_ANNOUNCEMENT_FORM,
-} from "./announcement-form";
+import { AnnouncementFormModal, EMPTY_ANNOUNCEMENT_FORM } from "./announcement-form";
 import { TestEmailModal } from "./test-email-modal";
 
 type AnnouncementStatus = "scheduled" | "live" | "expired";
@@ -85,42 +82,31 @@ export default function AnnouncementsPage() {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const canSendEmail = useCan(CAPABILITIES.NOTIFICATIONS_SEND);
-  const [items, setItems] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<Announcement | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Announcement | null>(null);
 
-  const load = useCallback(async () => {
-    if (!hasLoaded()) setLoading(true);
-    try {
-      const result = await notificationsApi.listAnnouncements();
-      succeeded();
-      setLoadError(null);
-      setItems(result.items);
-    } catch (err) {
-      // A failed background refresh keeps the list (#1012).
-      if (!failed(err)) return;
-      setLoadError(apiErrorText(err, t, t("couldNotLoadAnnouncements")));
-    } finally {
-      setLoading(false);
-    }
-  }, [t, succeeded, failed, hasLoaded]);
-
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // publishes/edits/deletes an announcement elsewhere (H50).
-  const liveRefresh = useAutoRefresh(REALTIME_SCOPES.PUBLIC_CONTENT, [EVENTS.DATA_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (canManage) void load();
-    else setLoading(false);
-  }, [canManage, load, liveRefresh, retryNonce]);
+  // Soft, in-place refresh when another admin publishes/edits/deletes an
+  // announcement elsewhere (H50). A failed background refetch keeps the list (#1012).
+  const {
+    data,
+    error,
+    loading,
+    stale,
+    refetch: load,
+  } = useLiveQuery(
+    async () => (await notificationsApi.listAnnouncements()).items,
+    REALTIME_SCOPES.PUBLIC_CONTENT,
+    [EVENTS.DATA_CHANGED],
+    { resourceKey: ["announcements", "list"], enabled: canManage },
+  );
+  const items = data ?? [];
+  const loadError =
+    error && (data === null || isNotFoundError(error))
+      ? apiErrorText(error, t, t("couldNotLoadAnnouncements"))
+      : null;
 
   async function openEdit(item: Announcement) {
     try {
@@ -138,7 +124,7 @@ export default function AnnouncementsPage() {
       await notificationsApi.deleteAnnouncement(item.id);
       toast.success(t("announcementDeleted"), { compactTitle: t("deleteAnnouncementAria") });
       setDeleting(null);
-      await load();
+      load();
     } catch (err) {
       const message = apiErrorText(err, t, t("couldNotDeleteAnnouncement"));
       setDeleteError(message);
@@ -217,7 +203,7 @@ export default function AnnouncementsPage() {
 
   return (
     <PageLayout>
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => load()} />}
       <PageHeader
         title={t("announcements")}
         secondaryActions={canSendEmail ? <TestEmailModal /> : undefined}
@@ -233,8 +219,8 @@ export default function AnnouncementsPage() {
         columns={columns}
         data={items}
         getRowId={(a) => String(a.id)}
-        loading={loading && !hasLoaded()}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={loading}
+        error={loadError ? { message: loadError, onRetry: () => load() } : undefined}
         searchable={(a) => `${a.title} ${a.body}`}
         searchPlaceholder={t("searchAnnouncementsPlaceholder")}
         pageSize={15}
@@ -307,7 +293,7 @@ export default function AnnouncementsPage() {
           await notificationsApi.createAnnouncement(values);
           toast.success(t("announcementCreated"), { compactTitle: t("toastCreateAnnouncement") });
           setCreateOpen(false);
-          await load();
+          load();
         }}
       />
 
@@ -326,7 +312,7 @@ export default function AnnouncementsPage() {
             await notificationsApi.updateAnnouncement(editingItem.id, values);
             toast.success(t("announcementUpdated"), { compactTitle: t("publishAnnouncement") });
             setEditingItem(null);
-            await load();
+            load();
           }}
         />
       )}

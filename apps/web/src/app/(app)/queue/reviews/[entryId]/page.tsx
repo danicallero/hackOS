@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiErrorText } from "@/lib/api-error-text";
 import { changedFieldLabel, requiredUnanswered } from "@/lib/attempt-review";
 import { textForDisplay } from "@/lib/challenges";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { type Answers, normalizeAnswers } from "@/lib/question-answers";
 import {
@@ -44,7 +45,7 @@ import { toast } from "@/lib/toast";
 export default function ReviewDetailPage() {
   const params = useParams<{ entryId: string }>();
   const entryId = Number(params.entryId);
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const { can } = useSessionContext();
   const canMessage = can(CAPABILITIES.NOTIFICATIONS_SEND);
 
@@ -208,7 +209,9 @@ export default function ReviewDetailPage() {
             <div>
               <dt className="text-muted-foreground text-sm">{t("lastUpdated")}</dt>
               <dd className="text-sm">
-                {review.updatedAt ? new Date(review.updatedAt).toLocaleString() : "—"}
+                {review.updatedAt
+                  ? formatEventDate(review.updatedAt, language, "dateTimeMedium")
+                  : "—"}
               </dd>
             </div>
           </dl>
@@ -308,7 +311,7 @@ export default function ReviewDetailPage() {
                 <span className="text-foreground font-medium">
                   {version.authorName || t("judgeFallback")}
                 </span>{" "}
-                · {new Date(version.createdAt).toLocaleString()} ·{" "}
+                · {formatEventDate(version.createdAt, language, "dateTimeMedium")} ·{" "}
                 {version.changedFields.map((f) => changedFieldLabel(f, panel, t)).join(", ")}
               </li>
             ))}

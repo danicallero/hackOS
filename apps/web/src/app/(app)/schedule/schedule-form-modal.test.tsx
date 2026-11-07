@@ -2,12 +2,13 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScheduleInput } from "@/lib/logistics";
+import type { PublicScheduleItem, ScheduleInput } from "@/lib/logistics";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
   mergeScheduleTranslationsRefresh,
   ScheduleFormModal,
+  scheduleDuplicateForm,
 } from "./schedule-form-modal";
 
 // #966: an activity with an audience can show that audience a Live Activity.
@@ -130,5 +131,24 @@ describe("schedule translation refresh merge", () => {
         { es: { title: "Server title", description: "New description" } },
       ),
     ).toEqual({ es: { title: "Local title", description: "New description" } });
+  });
+});
+
+describe("scheduleDuplicateForm", () => {
+  it("marks the copy through the localized title and keeps it off the public agenda", () => {
+    const item = {
+      id: 1,
+      title: "Workshop",
+      titleI18n: {},
+      primaryLanguage: "en",
+      startsAt: "2026-10-11T10:00:00.000Z",
+      endsAt: "2026-10-11T11:00:00.000Z",
+      visibility: "shown",
+      publishAt: "2026-10-01T00:00:00.000Z",
+    } as unknown as PublicScheduleItem;
+    const form = scheduleDuplicateForm(item, "en", (key, params) =>
+      key === "scheduleCopyTitle" ? `${params?.title} (copy)` : key,
+    );
+    expect(form).toMatchObject({ title: "Workshop (copy)", visibility: "hidden", publishAt: null });
   });
 });

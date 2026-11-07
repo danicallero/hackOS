@@ -42,7 +42,7 @@ export interface MailConfig {
   smtpRequireTls: boolean;
 }
 
-export function mailConfigFromEnv(): MailConfig {
+function mailConfigFromEnv(): MailConfig {
   return {
     provider: config.MAIL_PROVIDER,
     fromAddress: config.MAIL_FROM_ADDRESS,

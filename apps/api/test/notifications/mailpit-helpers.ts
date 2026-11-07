@@ -33,3 +33,15 @@ export async function getMailpitMessage(id: string): Promise<{
     ReplyTo: { Address: string }[];
   };
 }
+
+export async function waitForMailpit(count: number, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const messages = await listMailpitMessages();
+    if (messages.length >= count) return messages;
+    if (Date.now() > deadline) {
+      throw new Error(`Mailpit: expected ${count} messages, got ${messages.length}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}

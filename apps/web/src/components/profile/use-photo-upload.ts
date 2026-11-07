@@ -6,7 +6,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
-export const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const PHOTO_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**

@@ -25,7 +25,7 @@ backend, one workstream at a time.
 
 Realtime readers share one authenticated fetch/SSE transport per tab through
 `lib/sse-broker.ts`, with canonical identity owned by `SessionProvider` and
-100 ms scope-union coalescing. `useEventSource`, `useAutoRefresh` and `useLiveQuery` take a
+100 ms scope-union coalescing. `useEventSource`, `useLiveReload` and `useLiveQuery` take a
 `REALTIME_SCOPES` value (`domainScope(topic)` / `reviewScope(id)` for the
 parameterized ones), never a stream URL; recovery and sequence gaps stay scope-specific. Public TV uses one
 payload-free stream. See [realtime transport](../../docs/realtime-transport.md)
@@ -98,13 +98,17 @@ change, shared by concurrent readers and reused for 30 seconds. A caller's own
 `refetch()`/`reload()` bypasses the cached value. Do not add module-level
 caches or `useEffect` + `api.get` reads, and never turn a failed read into an
 empty or hard-coded list: expose `error` and render `ContextualError` with a
-retry. `useAutoRefresh` pages are migrated as they are touched.
+retry.
+A page that owns its own loader (form state it must not clobber, optimistic
+local rows) keeps a `load()` callback and adds `useLiveReload(scope, events,
+load)`, which calls it once per debounced burst of events; there is no nonce to
+thread through an effect.
 
 The food-intolerance dictionary follows this shared pattern through
 `useFoodIntolerances()` for mounted readers and `getFoodIntolerances()` for
-one-shot reads. The libraries manager invalidates and refreshes the shared key
-after edits and logistics updates, then publishes the result to mounted
-readers. The schedule editor and event settings subscribe to the content stream
+one-shot reads. The libraries managers (universities, degrees, intolerances) read through
+`useLibraryList`, a `useLiveQuery` over the logistics domain; an edit calls its
+`refetch()`, which bypasses the cached value. The schedule editor and event settings subscribe to the content stream
 and merge new server values into open forms while keeping fields the user has
 changed.
 
@@ -119,9 +123,9 @@ read runs and is dropped by `invalidateServerState` or an identity change.
 `useServerResource` and `useLiveQuery` paint the peeked value on their first
 render (no `loading`) and revalidate in the background; if that revalidation
 fails the painted data stays and no error replaces it. Pages that still own a
-hand-written loader (challenges, enterprises, applications, users, schedule)
+hand-written loader (challenges, enterprises, applications, schedule)
 seed their state from `peekServerState` and load through
-`revalidateServerState` (users keeps its `readServerState` + invalidate flow). `lib/list-resources.ts` holds
+`revalidateServerState`. `lib/list-resources.ts` holds
 each main list's key and request so the page and the navigation warm-up
 (`warmRoute`, called from sidebar links on hover/focus and gated by the viewer's
 capabilities) share one cache entry. Tests that mount a cached page must call
@@ -129,16 +133,15 @@ capabilities) share one cache entry. Tests that mount a cached page must call
 
 ### Background refresh failures
 
-A page whose `load()` is re-run by `useAutoRefresh` must not treat a failed
-background refetch like a failed first load (event-day 429s would blank the
-screen). Use `hooks/use-background-refresh.ts`: call `succeeded()` after a load
-and `failed(err)` in its `catch`. `failed` returns true only for a first-load
-failure or a 404, so only then show `ContextualError` (or "not found" for a
-404). Otherwise keep the data and user-local state such as selections
-(reconcile selections against the new rows, never clear them), render
-`StaleDataNotice`, and add `retryNonce` to the load effect for the built-in
-exponential-backoff retry. No toast per failed refetch. Call `reset()` when the
-page switches to a different resource.
+A failed background refetch must not look like a failed first load (event-day
+429s would blank the screen). `useLiveQuery` applies this itself: once data is
+painted, a failed refetch keeps `data`, flips `stale` on and retries with
+exponential backoff (5 s doubling to 60 s) until a read succeeds. Render
+`StaleDataNotice` from `stale`, and show `ContextualError` (or "not found") only
+when `data` is null or `isNotFoundError(error)` (from `@/lib/api`; a 404 is
+definitive even over loaded data). Keep user-local state such as selections and
+reconcile it against new rows with the "adjust state while rendering" pattern
+(never clear it). No toast per failed refetch.
 
 ## Toasts
 
@@ -921,6 +924,11 @@ checkboxes retain false, and numeric answers retain zero. Shirt size and individ
 dietary restrictions use current user logistics data; the general With dietary
 restrictions filter includes either selected restrictions or nonblank dietary notes.
 Filter values stay local and clear through the standard chips/reset action.
+
+Review synchronization broadcasts only drafts seeded for the active response. Applying
+a remote draft does not echo it back to other tabs or companion windows, and an
+identical remote snapshot does not reload the response list. Arrow navigation
+therefore retains each applicant’s score and notes without a request loop (H13).
 
 DataTable reports `onVisibleRowsChange` only when the row objects or their order
 change. Parent components may store that sequence and recreate column definitions

@@ -307,7 +307,8 @@ distributed to other Expo Router apps without importing hackOS code.
   operator has queue access — routes under `app/(tabs)/others/`) are intentionally
   pseudo-tabs (`lib/operations-navigation.ts`):
 
-  - Selecting the pseudo-tab whose section is already on screen is a no-op.
+  - Selecting the pseudo-tab whose section is already on screen is a no-op, except
+    Account returns from a settings child to its profile root.
   - Changing pseudo-tabs always uses `replace()`, never `push()`, so repeated
     selections do not stack duplicate queue/diary/account screens.
   - Deeper screens inside a section (e.g. the person drill-downs) still push
@@ -337,6 +338,22 @@ distributed to other Expo Router apps without importing hackOS code.
   re-press, sets `scrollToOverflowEnabled`, and moves a page iOS restored to
   y 0 back to its true top. Android rests at 0 and is unchanged. A guard test
   fails when a screen with the automatic inset calls `useScrollToTop` directly.
+
+**Back navigation (H55, H18–H20).** The Schedule, Scanner, Activities,
+My Projects and Account stacks declare a route anchor, so opening a child
+from a notification or cold deep link retains its owning screen underneath.
+Top-level tabs keep their normal tab navigation. Selecting Account (by a
+tap, tab scrub, shortcut or overflow menu) returns to the account profile,
+rather than restoring a previously opened notification setting. Project and challenge routes
+also keep their explicit native back toolbar while loading, after an error,
+and when displaying public read-only content. Embedded detail panes omit that
+route-level control; their list owns selection. A directly opened gallery
+project returns to Gallery, while a private project returns to My Projects.
+Live Activities preferences also render an entry back toolbar for direct openings
+(#966). On foldable iPhone this is a native symbol item in the system vertical
+bar; when stack history exists the native back item remains in charge. Entry
+toolbar actions replace with the owning page rather than popping unrelated
+parent-tab history.
 
 ## Design system
 
@@ -709,8 +726,16 @@ they are not device screenshots or proof of native toolbar behavior.
   switch saves on its own (optimistic, rolled back with a localized error if the
   PUT fails); a card that is not shared yet is drawn at half opacity and the
   sheet starts in edit mode. The header follows the other form sheets
-  (`FloatingGlassButton`): X closes, pencil enters edit mode; while editing, X
-  discards the changes (back to the preview) and the checkmark saves.
+  (native header/toolbars on iOS Liquid Glass, safe-area-inset floating controls
+  elsewhere): X closes, pencil enters edit mode; while editing, X
+  discards the changes (back to the preview) and the checkmark saves. On foldable
+  iPhone with a vertical system bar the route uses a full-screen modal so its
+  native toolbar actions can join that side bar; other windows keep a sheet. The
+  native compact title shares the page background on every device. The profile
+  uses the presentation width with symmetric gutters instead of a narrow,
+  leading-aligned form column. Its scroll view attaches directly to the native
+  screen. Custom fallback
+  controls and the title respect the measured sheet top safe area.
   **Edit mode** keeps the layout and edits in place: headline under the name,
   bio and where-to-find-you as inputs, the account photo through
   `ProfilePhotoMenu`. Small eyes (`VisibilityToggle`, a `switch` role) sit on

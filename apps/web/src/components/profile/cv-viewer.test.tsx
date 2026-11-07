@@ -202,7 +202,9 @@ describe("CvViewer (#935)", () => {
     await render();
     await open();
     const alert = dialog()?.querySelector("[role=alert]");
-    expect(alert?.textContent).toContain("Storage unavailable");
+    // Server error copy is English; the viewer shows its own localized text.
+    expect(alert?.textContent).toContain("couldNotLoadCv");
+    expect(alert?.textContent).not.toContain("Storage unavailable");
 
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     const retry = [...(dialog()?.querySelectorAll("button") ?? [])].find(

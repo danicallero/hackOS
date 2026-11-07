@@ -1,3 +1,4 @@
+import type { Language } from "@hackos/shared/locale";
 import { config } from "../../../config.js";
 import { ServiceUnavailableError } from "../../../lib/errors.js";
 import type { AnnouncementTranslation } from "../announcements-service.js";
@@ -22,7 +23,7 @@ export function isTranslationAvailable(): boolean {
 }
 
 /** Originally H50 (announcements); the same es/gl/en set is now shared by every translatable entity. */
-export type Language = "es" | "gl" | "en";
+export type { Language };
 
 /** Language codes line up 1:1 with ours for both providers, Galician included — kept explicit rather than assumed. */
 const LANGUAGE_CODES: Record<Language, string> = { es: "es", gl: "gl", en: "en" };

@@ -33,13 +33,13 @@ vi.mock("@/lib/toast", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
   showErrorToast: vi.fn(),
 }));
-vi.mock("@/lib/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: vi.fn() }));
+vi.mock("@/hooks/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: vi.fn() }));
 // Minimal useLiveQuery: one read on mount; `live.refetch` stands in for a stream event.
 const live = vi.hoisted(() => ({
   refetch: (_trigger?: string) => {},
   args: [] as unknown[],
 }));
-vi.mock("@/hooks/use-event-source", async () => {
+vi.mock("@/hooks/use-live-query", async () => {
   const React = await import("react");
   return {
     useLiveQuery: (fetcher: () => Promise<unknown>, ...args: unknown[]) => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Spinner } from "@/components/common/spinner";
-import { ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
@@ -120,15 +120,10 @@ export function WalletButtons({ purpose, accessToken, className }: WalletButtons
   );
 }
 
-/** Bypasses the shared api client — no session cookie should go out with a scoped token (issue #369). */
-async function scopedGoogleSaveUrl(
-  purpose: WalletPurpose,
-  token: string,
-): Promise<{ saveUrl: string }> {
-  const res = await fetch(
-    `${API_URL}/api/wallet/scoped/google/${purpose}?token=${encodeURIComponent(token)}`,
-    { credentials: "omit" },
-  );
-  if (!res.ok) throw new ApiError(res.status, "wallet_scope_failed", "Wallet link unavailable");
-  return res.json() as Promise<{ saveUrl: string }>;
+/** `credentials: "omit"`: no session cookie should go out with a scoped token (issue #369). */
+function scopedGoogleSaveUrl(purpose: WalletPurpose, token: string): Promise<{ saveUrl: string }> {
+  return api.get<{ saveUrl: string }>(`/api/wallet/scoped/google/${purpose}`, {
+    query: { token },
+    credentials: "omit",
+  });
 }

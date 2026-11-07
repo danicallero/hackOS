@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/form";
 import { authClient } from "@/lib/auth-client";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { passwordSchema } from "@/lib/password-schema";
 import { withReturnPath } from "@/lib/return-path";
 import { toast } from "@/lib/toast";
 
@@ -43,7 +44,7 @@ function localizedResetError(error: AuthError, t: Translate): string {
 function resetPasswordSchema(t: Translate) {
   return z
     .object({
-      password: z.string().min(8, t("atLeastEight")),
+      password: passwordSchema(t),
       confirm: z.string(),
     })
     .refine((v) => v.password === v.confirm, {

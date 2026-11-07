@@ -38,7 +38,7 @@ interface AuditRow {
   created_at: string;
 }
 
-export function AuditLogSection({ userId }: { userId: number }) {
+function AuditLogSection({ userId }: { userId: number }) {
   const { language, t } = useLocale();
   const canAudit = useCan(CAPABILITIES.AUDIT_READ);
   const [items, setItems] = useState<AuditRow[]>([]);

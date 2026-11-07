@@ -66,6 +66,11 @@ It uses the default SSE message frame, so all events advance the scope's gap
 cursor even when no consumer wants that event type. Legacy endpoints retain
 their named events and numeric SSE ids.
 
+Library managers with only `INTOLERANCES_MANAGE` can combine `domain:logistics`
+with `personal` for catalogue refreshes and notifications (H8). This does not
+grant the operational `logistics` scope, which retains its scanner/stats/schedule
+capability guard.
+
 Sequence ids belong to the underlying topic, never the physical connection.
 Clients track each logical scope independently. There is **no event replay**
 and no multiplexed `Last-Event-ID` cursor: reconnect/foreground recovery
@@ -190,4 +195,4 @@ errors and reconnect rates, and retire legacy endpoints only after supported
 installed versions permit it. The minimum supported build is
 `MOBILE_MIN_BUILD` (see [mobile-release](./mobile-release.md#minimum-supported-build));
 the web client no longer uses these endpoints and subscribes with
-`REALTIME_SCOPES` values only (`useEventSource`/`useAutoRefresh` take a scope).
+`REALTIME_SCOPES` values only (`useEventSource`/`useLiveReload` take a scope).

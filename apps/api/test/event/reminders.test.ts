@@ -1,6 +1,6 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool, withTransaction } from "../../src/db/pool.js";
 import { prepareEventReminder } from "../../src/modules/event/reminder-email.js";
@@ -10,32 +10,21 @@ import { renderEmailTemplate } from "../../src/modules/notifications/templates.j
 import {
   assignRole,
   asUser,
-  buildTestApp,
   createRole,
   createUser,
   createUserWithCapabilities,
-  truncateAll,
+  useTestApp,
 } from "../helpers.js";
 
+const getApp = useTestApp();
 let app: App;
 beforeEach(async () => {
-  await truncateAll();
-  const { valkey } = await import("../../src/lib/valkey.js");
-  await valkey.flushdb();
   await pool.query(
     "INSERT INTO event_config (id, name, timezone, event_starts_at) VALUES (1, 'HackUDC 2027', 'Europe/Madrid', now() + interval '7 days')",
   );
 });
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../../src/lib/queues.js");
-  const { closeValkey } = await import("../../src/lib/valkey.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
-});
 async function request(userId: number, scheduledAt: string | null, key = crypto.randomUUID()) {
-  app ??= await buildTestApp();
+  app = await getApp();
   return app.inject({
     method: "PUT",
     url: "/api/event",
@@ -69,7 +58,7 @@ describe("scheduled event-access reminder (H45,H52)", () => {
     );
   });
   it("rolls back event edits when scheduling fails and enforces the field capability", async () => {
-    app ??= await buildTestApp();
+    app = await getApp();
     const manager = await createUserWithCapabilities([CAPABILITIES.EVENT_MANAGE]);
     // H45/H52 / #895: reject a database-relative past instant so this
     // exercises transaction rollback independently of host/database skew.

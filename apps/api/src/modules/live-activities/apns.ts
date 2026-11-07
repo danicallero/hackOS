@@ -25,14 +25,14 @@ const APNS_HOSTS = {
  * widget extension (packages/expo-widgets/ios/Widgets/WidgetLiveActivity.swift).
  * A push-to-start with any other `attributes-type` is silently dropped.
  */
-export const EXPO_WIDGETS_ATTRIBUTES_TYPE = "LiveActivityAttributes";
+const EXPO_WIDGETS_ATTRIBUTES_TYPE = "LiveActivityAttributes";
 
 /**
  * An `end` without a `dismissal-date` keeps the final state on the Lock Screen
  * for up to 4 h, and a date 15 min out kept finished activities up long after
  * their end (#966). The activity is over: remove it as soon as the end lands.
  */
-export const END_DISMISSAL_SECONDS = 0;
+const END_DISMISSAL_SECONDS = 0;
 
 /** Apple accepts a provider token for up to an hour; refresh well before that. */
 const JWT_TTL_MS = 50 * 60 * 1000;
@@ -56,7 +56,7 @@ export interface LiveActivityPushInput {
   attributes?: { url: string };
   staleDate?: Date;
   relevanceScore?: number;
-  /** End only: when iOS removes it from the Lock Screen (default: 15 min later). */
+  /** End only: when iOS removes it from the Lock Screen (default: removed immediately, see END_DISMISSAL_SECONDS). */
   dismissalDate?: Date;
 }
 

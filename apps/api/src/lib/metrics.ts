@@ -9,7 +9,7 @@ export const register = new client.Registry();
 client.collectDefaultMetrics({ register, prefix: "hackos_" });
 
 /** Event-day metrics use only fixed lane/method/outcome labels (#544). */
-export const httpRequestsTotal = new client.Counter({
+const httpRequestsTotal = new client.Counter({
   name: "hackos_http_requests_total",
   help: "HTTP requests started, by admission lane and method",
   labelNames: ["lane", "method"],
@@ -37,7 +37,7 @@ export const httpRequestsInFlight = new client.Gauge({
   registers: [register],
 });
 
-export const requestAdmissionWaitSeconds = new client.Histogram({
+const requestAdmissionWaitSeconds = new client.Histogram({
   name: "hackos_http_request_admission_wait_seconds",
   help: "Time spent waiting for a request admission slot, by lane",
   labelNames: ["lane"],
@@ -52,7 +52,7 @@ export const requestAdmissionQueueSize = new client.Gauge({
   registers: [register],
 });
 
-export const participantInvalidationsTotal = new client.Counter({
+const participantInvalidationsTotal = new client.Counter({
   name: "hackos_queue_participant_invalidations_total",
   help: "Participant queue invalidation jobs by outcome",
   labelNames: ["outcome"],

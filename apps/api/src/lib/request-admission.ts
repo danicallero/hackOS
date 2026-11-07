@@ -19,7 +19,7 @@ interface Waiter {
   settled: boolean;
 }
 
-export interface RequestAdmissionOptions {
+interface RequestAdmissionOptions {
   maxConcurrent: number;
   reservedHighPriority?: number;
   /** Bound best-effort waiters so participant storms can be shed safely. */

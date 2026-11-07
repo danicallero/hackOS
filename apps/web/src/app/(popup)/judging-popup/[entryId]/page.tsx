@@ -1,7 +1,7 @@
 "use client";
 
 // Companion window for the judging panel's evaluation: only the scoring form,
-// never the room shell, so it can sit beside another tab (see open-review-window.ts).
+// never the room shell, so it can sit beside another tab (see use-judging-layout.ts).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useParams, useSearchParams } from "next/navigation";

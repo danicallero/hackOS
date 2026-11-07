@@ -28,13 +28,13 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useShirtSizes } from "@/hooks/use-shirt-sizes";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { Language, Me } from "@/lib/types";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 
 const LANGS: Language[] = ["es", "gl", "en"];
 

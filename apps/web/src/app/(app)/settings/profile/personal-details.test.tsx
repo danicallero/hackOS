@@ -27,7 +27,7 @@ vi.mock("@/lib/i18n", () => ({
   pickText: (text: Record<string, string> | null) => text?.en ?? "",
   useLocale: () => ({ language: "en", t: (key: string) => key }),
 }));
-vi.mock("@/lib/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: () => {} }));
+vi.mock("@/hooks/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: () => {} }));
 vi.mock("@/hooks/use-shirt-sizes", () => ({
   useShirtSizes: () => ({ sizes: ["M"], loading: false, error: null, reload: () => {} }),
 }));

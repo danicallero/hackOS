@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { applicationStatusLabel } from "@/lib/application-workflow";
+import { applicationStatusLabel, applicationStatusTone } from "@/lib/application-workflow";
 import {
   type ApplicationForm,
   type FormSection,
@@ -20,7 +20,8 @@ import {
   type ReviewEntry,
   type TemplateField,
 } from "@/lib/applications";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { formatEventDate } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 
 interface UserApplicationRow {
@@ -157,14 +158,12 @@ export function ApplicationTab({ userId }: { userId: number }) {
                 {grantedRoleNameLabel(r.application_granted_role_name, t)}
                 {r.submitted_at
                   ? t("submittedOnInline", {
-                      date: new Intl.DateTimeFormat(LOCALE_CODES[language], {
-                        dateStyle: "medium",
-                      }).format(new Date(r.submitted_at)),
+                      date: formatEventDate(r.submitted_at, language, "date"),
                     })
                   : t("draftInline")}
               </p>
             </div>
-            <StatusBadge tone={statusTone(r.status)} dot={false}>
+            <StatusBadge tone={applicationStatusTone(r.status)} dot={false}>
               {applicationStatusLabel(r.status, t)}
             </StatusBadge>
             <Button
@@ -195,13 +194,4 @@ export function ApplicationTab({ userId }: { userId: number }) {
       )}
     </SectionCard>
   );
-}
-
-/** Maps an application response status to a StatusBadge tone. */
-export function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
-  if (status === "confirmed" || status === "accepted") return "success";
-  if (status === "accepted_internal") return "warning";
-  if (status === "rejected" || status === "rejected_internal" || status === "declined")
-    return "danger";
-  return "neutral";
 }

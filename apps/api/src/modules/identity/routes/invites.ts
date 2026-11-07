@@ -17,6 +17,7 @@ import { idempotencyGuard } from "../../../lib/idempotency.js";
 import { keyByIp, rateLimitGuard } from "../../../lib/rate-limit.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { getEventName } from "../../event/service.js";
+import { languageSchema } from "../../logistics/schemas.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { auth } from "../auth.js";
 import {
@@ -199,6 +200,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
+        summary: "Create an invite",
+        description:
+          "Creates a single-use email invite with pre-assigned roles and sends it. Sponsor invites require an enterprise; an email that already has an account is a conflict (H8/H10).",
         body: z.object({
           email: z.string().email(),
           kind: inviteKind,
@@ -368,6 +372,9 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
+        summary: "Regenerate an invite",
+        description:
+          "Expires the current token and issues a new one for the same email and roles, then re-sends the email. Refuses accepted invites (H9).",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 201: inviteResponse },
       },
@@ -449,6 +456,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
+        summary: "Expire an invite",
+        description: "Immediately invalidates an unused invite (H9).",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ success: z.literal(true) }) },
       },
@@ -485,6 +494,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
+        summary: "Renew an invite",
+        description: "Extends the validity of an unused invite from now (H9).",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ expiresAt: z.string() }) },
       },
@@ -537,6 +548,8 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       preHandler: [manage, idempotencyGuard],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.INVITES_MANAGE }),
       schema: {
+        summary: "Resend an invite email",
+        description: "Re-queues the invite email with the same token; refuses used invites (H9).",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ success: z.literal(true) }) },
       },
@@ -588,6 +601,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       // token-enumeration scanning.
       preHandler: rateLimitGuard("invite-lookup", { windowSeconds: 60, max: 30 }, keyByIp),
       schema: {
+        summary: "Look up an invite",
         description:
           "Inspect an invite token before accepting it (H9/H10) — resolves an email-bound invite or a reusable account link. Public, unauthenticated; rate limited to 30/min per IP (#538).",
         querystring: z.object({ token: z.string().min(1) }),
@@ -684,6 +698,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
       // per IP against token brute-forcing.
       preHandler: rateLimitGuard("invite-accept", { windowSeconds: 3600, max: 20 }, keyByIp),
       schema: {
+        summary: "Accept an invite",
         description:
           "Redeem an invite token and create the invitee's account (H9/H10). Public, unauthenticated; rate limited to 20/hour per IP (#538).",
         body: z.object({
@@ -692,7 +707,7 @@ export function registerInviteRoutes(app: FastifyInstance): void {
           name: z.string().min(1).max(200),
           surname: z.string().min(1).max(200),
           password: z.string().min(8).max(128),
-          language: z.enum(["en", "es", "gl"]).optional(),
+          language: languageSchema.optional(),
           foodIntolerances: z.array(z.number().int()).default([]),
           foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
           // Optional: only participants must supply a shirt size (enforced in the

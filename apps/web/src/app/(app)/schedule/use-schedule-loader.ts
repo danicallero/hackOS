@@ -2,7 +2,7 @@
 
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { useCallback, useEffect } from "react";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { Translate } from "@/lib/i18n";
 import { scheduleResource } from "@/lib/list-resources";
@@ -24,12 +24,6 @@ export function useScheduleLoader({
   setSelectedIds: React.Dispatch<React.SetStateAction<Set<number>>>;
   setEditingItem: React.Dispatch<React.SetStateAction<PublicScheduleItem | null>>;
 }) {
-  // Schedule edits reach the browser as the payload-free public invalidation;
-  // the `content` topic itself carries staff notes and is not a subscribable scope.
-  const liveRefresh = useAutoRefresh(canRead ? REALTIME_SCOPES.PUBLIC_CONTENT : "", [
-    EVENTS.DATA_CHANGED,
-  ]);
-
   const load = useCallback(
     (options?: { preserveSelection?: boolean }) => {
       setError(null);
@@ -55,8 +49,17 @@ export function useScheduleLoader({
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (canRead) load({ preserveSelection: liveRefresh > 0 });
-  }, [canRead, load, liveRefresh]);
+    if (canRead) load();
+  }, [canRead, load]);
+
+  // Schedule edits reach the browser as the payload-free public invalidation;
+  // the `content` topic itself carries staff notes and is not a subscribable scope.
+  useLiveReload(
+    REALTIME_SCOPES.PUBLIC_CONTENT,
+    [EVENTS.DATA_CHANGED],
+    () => load({ preserveSelection: true }),
+    { enabled: canRead },
+  );
 
   return load;
 }

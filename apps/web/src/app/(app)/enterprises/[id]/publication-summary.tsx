@@ -1,8 +1,9 @@
 "use client";
 
-import { StatusBadge } from "@/components/common/status-badge";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
-import { type Enterprise, visibilityTone } from "../shared";
+import { VisibilityBadge } from "@/components/common/publication-status";
+import { formatEventDate } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
+import type { Enterprise } from "../shared";
 
 /** Read-only publication state for sponsor reps, who cannot edit it (H43, #928). */
 export function PublicationSummary({
@@ -17,19 +18,14 @@ export function PublicationSummary({
       <div>
         <dt className="text-muted-foreground">{t("colVisibility")}</dt>
         <dd className="mt-1">
-          <StatusBadge tone={visibilityTone(enterprise.visibility)}>
-            {enterprise.visibility === "visible" ? t("visibleLabel") : t("hiddenOption")}
-          </StatusBadge>
+          <VisibilityBadge visibility={enterprise.visibility} />
         </dd>
       </div>
       {enterprise.visibility === "hidden" && revealAt && !Number.isNaN(revealAt.getTime()) && (
         <div>
           <dt className="text-muted-foreground">{t("publishAtLabel")}</dt>
           <dd className="mt-1">
-            {new Intl.DateTimeFormat(LOCALE_CODES[language], {
-              dateStyle: "medium",
-              timeStyle: "short",
-            }).format(revealAt)}
+            {formatEventDate(enterprise.available_from, language, "dateTimeMedium")}
           </dd>
         </div>
       )}

@@ -9,7 +9,7 @@ import { loadUserDirectory } from "@/lib/user-directory";
  * warm-up below reads the very same entries, so hovering a link fills the
  * cache the destination paints from.
  */
-export interface ListResource {
+interface ListResource {
   key: ServerStateKey;
   path: string;
   query?: Record<string, string | number | boolean | undefined | null>;
@@ -27,7 +27,7 @@ export const applicationsResource: ListResource = {
   key: ["applications", "forms"],
   path: "/api/applications",
 };
-export const projectsResource: ListResource = {
+const projectsResource: ListResource = {
   key: ["projects", "management"],
   path: "/api/repos",
 };
@@ -35,7 +35,7 @@ export const projectsResource: ListResource = {
 export const usersDirectoryKey = (q: string): ServerStateKey => ["users", "directory", q];
 export const scheduleResource: ListResource = { key: ["schedule", "items"], path: "/api/schedule" };
 
-export function fetchListResource<T>(resource: ListResource, signal: AbortSignal): Promise<T> {
+export function fetchListResource<T>(resource: ListResource, signal?: AbortSignal): Promise<T> {
   return api.get<T>(resource.path, { signal, query: resource.query });
 }
 

@@ -1,7 +1,8 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { pool, withTransaction } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import {
   BadRequestError,
   ConflictError,
@@ -13,9 +14,13 @@ import { savedByReader } from "../directory/service.js";
 import { hasEventAccess } from "../identity/role.js";
 import { canViewProject, projectViewer } from "../projects/policy.js";
 
+export const REPORT_REASONS = ["inappropriate", "harassment", "spam", "other"] as const;
+export const REPORT_STATUSES = ["open", "actioned", "dismissed"] as const;
 export type ReportKind = "project" | "profile";
-export type ReportStatus = "open" | "actioned" | "dismissed";
-export type ReportReason = "inappropriate" | "harassment" | "spam" | "other";
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+const reportKind = (repoId: number | null): ReportKind => (repoId === null ? "profile" : "project");
 
 /** A reporter may keep this many reports open at once. */
 const MAX_OPEN_REPORTS = 10;
@@ -65,30 +70,47 @@ export async function createReport(reporterId: number, input: NewReport) {
     throw new BadRequestError("A report needs a project or a person");
   }
 
-  return withTransaction(async (client) => {
-    const { rows: existing } = await client.query<{ id: number }>(
+  const findOpen = async (db: Queryable) => {
+    const { rows } = await db.query<{ id: number }>(
       `SELECT id FROM content_reports
         WHERE reporter_id = $1 AND status = 'open'
           AND repo_id IS NOT DISTINCT FROM $2 AND target_user_id IS NOT DISTINCT FROM $3`,
       [reporterId, projectId, targetUserId],
     );
-    if (existing[0]) return { id: existing[0].id, status: "open" as const };
-    const { rows: open } = await client.query<{ count: number }>(
-      `SELECT count(*)::int AS count FROM content_reports
+    return rows[0];
+  };
+
+  try {
+    return await insertReport();
+  } catch (err) {
+    // A concurrent identical report won the partial unique index: return it.
+    if (!isUniqueViolation(err)) throw err;
+    const existing = await findOpen(pool);
+    if (!existing) throw err;
+    return { id: existing.id, status: "open" as const };
+  }
+
+  function insertReport() {
+    return withTransaction(async (client) => {
+      const existing = await findOpen(client);
+      if (existing) return { id: existing.id, status: "open" as const };
+      const { rows: open } = await client.query<{ count: number }>(
+        `SELECT count(*)::int AS count FROM content_reports
         WHERE reporter_id = $1 AND status = 'open'`,
-      [reporterId],
-    );
-    if ((open[0]?.count ?? 0) >= MAX_OPEN_REPORTS) {
-      throw new TooManyRequestsError("Too many open reports");
-    }
-    const { rows } = await client.query<{ id: number }>(
-      `INSERT INTO content_reports (reporter_id, repo_id, target_user_id, reason, details)
+        [reporterId],
+      );
+      if ((open[0]?.count ?? 0) >= MAX_OPEN_REPORTS) {
+        throw new TooManyRequestsError("Too many open reports");
+      }
+      const { rows } = await client.query<{ id: number }>(
+        `INSERT INTO content_reports (reporter_id, repo_id, target_user_id, reason, details)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [reporterId, projectId, targetUserId, input.reason, input.details?.trim() || null],
-    );
-    return { id: (rows[0] as { id: number }).id, status: "open" as const };
-  });
+        [reporterId, projectId, targetUserId, input.reason, input.details?.trim() || null],
+      );
+      return { id: (rows[0] as { id: number }).id, status: "open" as const };
+    });
+  }
 }
 
 interface ReportRow {
@@ -137,7 +159,7 @@ export async function listReports(
   );
   return rows.map((row) => ({
     id: row.id,
-    kind: (row.repo_id === null ? "profile" : "project") as ReportKind,
+    kind: reportKind(row.repo_id),
     reason: row.reason,
     details: row.details,
     status: row.status,
@@ -174,16 +196,10 @@ export async function resolveReport(
       [reportId],
     );
     const report = rows[0];
-    const kind: ReportKind | null = !report
-      ? null
-      : report.repo_id === null
-        ? "profile"
-        : "project";
     // Out-of-scope reports are indistinguishable from missing ones.
     if (
       !report ||
-      kind === null ||
-      !kinds.includes(kind) ||
+      !kinds.includes(reportKind(report.repo_id)) ||
       report.reporter_test !== viewer.fixtureMarker
     ) {
       throw new NotFoundError("Report not found");

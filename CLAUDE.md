@@ -174,5 +174,5 @@ substitute — they assert behaviour, not spacing or alignment.
 New routes are not exempt from having real docs: a route registered without an
 explicit `description` in its schema shows a visible
 `"No description yet — add one to this route's schema."` placeholder in
-`/documentation` (see `apps/api/src/app.ts`) — treat that placeholder the same
+`/documentation` (see `apps/api/src/lib/openapi.ts`) — treat that placeholder the same
 as a failing lint, not as acceptable output.

@@ -4,9 +4,10 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { getRequestAuthorizationContext, requireCapability } from "../../lib/capabilities.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { broadcast, subscribe } from "../../lib/sse.js";
-import { isSyntheticOperator } from "../logistics/review-fixture-scope.js";
 import { actor } from "./actor.js";
 import {
   requireChallengeExport,
@@ -75,7 +76,12 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Read a team's evaluation",
+        description:
+          "The attempt's evaluation with its answers and notes, for the judge panel (H36).",
+        params: entryIdParam,
+      },
     },
     async (req) => getAttemptReview(req.params.entryId),
   );
@@ -115,7 +121,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: reviewPatchBody },
+      schema: {
+        summary: "Save a team's evaluation",
+        description:
+          "Upserts answers and notes. Numeric and select answers merge per field (H36); text answers and notes need a short-lived editing lease held by the caller (#850).",
+        params: entryIdParam,
+        body: reviewPatchBody,
+      },
     },
     async (req) =>
       upsertAttemptReview(req.params.entryId, actor(req.userId), req.body, {
@@ -229,7 +241,11 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "List evaluation versions",
+        description: "Saved versions of the attempt's evaluation, for the judge panel (H36).",
+        params: entryIdParam,
+      },
     },
     async (req) => listAttemptReviewVersions(req.params.entryId),
   );
@@ -246,7 +262,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam, body: sessionJoinBody },
+      schema: {
+        summary: "Join the judging session",
+        description:
+          "Registers the caller's presence on the team's evaluation so other judges see who is reviewing it (H36).",
+        params: entryIdParam,
+        body: sessionJoinBody,
+      },
     },
     async (req) => joinJudgingSession(req.params.entryId, actor(req.userId), req.body.roomId),
   );
@@ -262,7 +284,12 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "Leave the judging session",
+        description:
+          "Removes the caller's presence and releases their editing leases on the evaluation (H36).",
+        params: entryIdParam,
+      },
     },
     async (req) => {
       const judgeId = actor(req.userId);
@@ -292,7 +319,11 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "entryId" },
         },
       },
-      schema: { params: entryIdParam },
+      schema: {
+        summary: "List active judging sessions",
+        description: "Judges currently present on the team's evaluation (H36).",
+        params: entryIdParam,
+      },
     },
     async (req) => listActiveJudgingSessions(req.params.entryId),
   );
@@ -311,7 +342,13 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "challengeId" },
         },
       },
-      schema: { params: challengeIdParam, querystring: searchQuery },
+      schema: {
+        summary: "Search a challenge queue",
+        description:
+          "Finds a team by project name, project id or entry id across the challenge and its sibling challenges. Results say whether an evaluation already exists, so the UI opens it instead of creating another (H37).",
+        params: challengeIdParam,
+        querystring: searchQuery,
+      },
     },
     async (req) =>
       searchChallengeQueue(
@@ -333,13 +370,17 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "challengeId" },
         },
       },
-      schema: { params: challengeIdParam },
+      schema: {
+        summary: "Export the challenge queue as CSV",
+        description: "CSV download of the challenge's queue entries (H40).",
+        params: challengeIdParam,
+      },
     },
     async (req, reply) => {
       reply.header("content-type", "text/csv; charset=utf-8");
       reply.header(
         "content-disposition",
-        `attachment; filename="challenge-${req.params.challengeId}-queue.csv"`,
+        contentDisposition(`challenge-${req.params.challengeId}-queue.csv`),
       );
       return exportQueueCsv(req.params.challengeId, await isSyntheticOperator(pool, req.userId!));
     },
@@ -356,13 +397,17 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "params", field: "challengeId" },
         },
       },
-      schema: { params: challengeIdParam },
+      schema: {
+        summary: "Export challenge evaluations as CSV",
+        description: "CSV download of the challenge's evaluations (H40).",
+        params: challengeIdParam,
+      },
     },
     async (req, reply) => {
       reply.header("content-type", "text/csv; charset=utf-8");
       reply.header(
         "content-disposition",
-        `attachment; filename="challenge-${req.params.challengeId}-evaluations.csv"`,
+        contentDisposition(`challenge-${req.params.challengeId}-evaluations.csv`),
       );
       return exportEvaluationsCsv(
         req.params.challengeId,
@@ -386,7 +431,12 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "query", field: "challengeId" },
         },
       },
-      schema: { querystring: reviewsQuery },
+      schema: {
+        summary: "List evaluations",
+        description:
+          "Evaluations across challenges. Admins see every challenge inside their fixture boundary; sponsor representatives only their own enterprise's, enforced in the query rather than by a capability. Never cached.",
+        querystring: reviewsQuery,
+      },
     },
     async (req, reply) => {
       reply.header("cache-control", "private, no-store");
@@ -496,12 +546,16 @@ export function registerJudgingRoutes(app: FastifyInstance): void {
           resource: { source: "query", field: "challengeId" },
         },
       },
-      schema: { querystring: reviewsQuery },
+      schema: {
+        summary: "Export evaluations as CSV",
+        description: "CSV download of the evaluations the caller's scope allows (H40).",
+        querystring: reviewsQuery,
+      },
     },
     async (req, reply) => {
       const scope = await resolveReviewScope(getRequestAuthorizationContext(req));
       reply.header("content-type", "text/csv; charset=utf-8");
-      reply.header("content-disposition", `attachment; filename="reviews.csv"`);
+      reply.header("content-disposition", contentDisposition("reviews.csv"));
       return exportReviewsCsv(scope, req.query);
     },
   );

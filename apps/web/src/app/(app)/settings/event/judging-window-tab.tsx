@@ -18,9 +18,9 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useNow } from "@/hooks/use-now";
 import { apiErrorText } from "@/lib/api-error-text";
-import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
-import { fromLocalInputValue } from "@/lib/event-datetime";
+import { fromDatetimeLocal, fromLocalInputValue, toDatetimeLocal } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { getQueueSettings, type QueueSettings, updateQueueSettings } from "@/lib/queue";
 import type { SaveState } from "@/lib/save-state";
@@ -63,12 +63,7 @@ function formatDuration(ms: number, t: Translate): string {
 
 function PacePreview({ startsAt, endsAt }: { startsAt: string; endsAt: string }) {
   const { t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(interval);
-  }, []);
+  const now = useNow(1000);
 
   const start = fromLocalInputValue(startsAt);
   const end = fromLocalInputValue(endsAt);

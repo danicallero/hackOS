@@ -4,6 +4,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { pool } from "../../db/pool.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import {
   CV_MAX_BYTES,
@@ -16,7 +17,6 @@ import {
   uploadOperation,
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
-import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import {
   moderationBody,
   moderationParams,

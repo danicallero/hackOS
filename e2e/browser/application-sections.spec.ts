@@ -27,36 +27,38 @@ for (const width of [1440, 393]) {
                 CAPABILITIES.APPLICATIONS_DECIDE,
               ],
             }
-          : path === "/api/applications/1"
-            ? {
-                id: 1,
-                name: "Participant form",
-                template: persistedTemplate ?? [
-                  {
-                    key: "alpha",
-                    label: { en: "Alpha field", es: "Alpha field", gl: "Alpha field" },
-                    kind: "text",
-                    required: false,
-                    section_key: "about",
-                  },
-                ],
-                sections: [
-                  { key: "about", title: { en: "About you", es: "About you", gl: "About you" } },
-                ],
-                grants_role_ids: [],
-                description: null,
-                open_at: null,
-                close_at: null,
-                capacity: 100,
-                confirmation_window_hours: 48,
-                ask_shirt_size: false,
-                ask_food_intolerances: false,
-                current_form_version: 1,
-                has_confirmed_responses: false,
-              }
-            : path === "/api/applications/1/responses"
-              ? { responses: [] }
-              : {};
+          : path === "/api/roles"
+            ? []
+            : path === "/api/applications/1"
+              ? {
+                  id: 1,
+                  name: "Participant form",
+                  template: persistedTemplate ?? [
+                    {
+                      key: "alpha",
+                      label: { en: "Alpha field", es: "Alpha field", gl: "Alpha field" },
+                      kind: "text",
+                      required: false,
+                      section_key: "about",
+                    },
+                  ],
+                  sections: [
+                    { key: "about", title: { en: "About you", es: "About you", gl: "About you" } },
+                  ],
+                  grants_role_ids: [],
+                  description: null,
+                  open_at: null,
+                  close_at: null,
+                  capacity: 100,
+                  confirmation_window_hours: 48,
+                  ask_shirt_size: false,
+                  ask_food_intolerances: false,
+                  current_form_version: 1,
+                  has_confirmed_responses: false,
+                }
+              : path === "/api/applications/1/responses"
+                ? { responses: [] }
+                : {};
       await route.fulfill({ json: data });
     });
 

@@ -5,7 +5,9 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
+import { isUniqueViolation } from "../../lib/db-errors.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { likeContains } from "../../lib/like.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import {
   type RouteAccessPolicy,
@@ -27,7 +29,6 @@ const proposalRateLimit = rateLimitGuard(
 );
 
 /** Postgres unique_violation — thrown by the unique `universities.name` index. */
-const PG_UNIQUE_VIOLATION = "23505";
 
 function normalizeUniversityName(name: string): string {
   return name.trim().replace(/\s+/g, " ");
@@ -168,7 +169,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
       const params: unknown[] = [];
       let sql = `SELECT id, name FROM universities`;
       if (q) {
-        params.push(`%${q}%`);
+        params.push(likeContains(q));
         sql += ` WHERE unaccent(name) ILIKE unaccent($1)`;
       }
       sql += ` ORDER BY name LIMIT 50`;
@@ -196,7 +197,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
         reply.code(result.created ? 201 : 200);
         return result.university;
       } catch (err) {
-        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+        if (isUniqueViolation(err)) {
           throw new ConflictError("You have already suggested a university", {
             code: "university_suggestion_exists",
           });
@@ -259,7 +260,7 @@ export function registerUniversityRoutes(app: FastifyInstance): void {
           return rows[0];
         });
       } catch (err) {
-        if ((err as { code?: string }).code === PG_UNIQUE_VIOLATION) {
+        if (isUniqueViolation(err)) {
           throw new ConflictError("A university with that name already exists", {
             name: req.body.name,
           });

@@ -1,9 +1,7 @@
-import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import type { Queryable } from "../../db/pool.js";
 import { withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
-import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { sharedCache } from "../../lib/shared-cache.js";
 import { broadcast } from "../../lib/sse.js";
@@ -116,19 +114,4 @@ export async function sharedVisibleWinnerRows(db: Queryable, userId: number | nu
   return sharedCache("public-content", "visible-winners", 15, () =>
     visibleWinnerRows(db, null, undefined, true),
   );
-}
-export async function canReadPrivateWinners(
-  db: Queryable,
-  userId: number | null,
-  challengeId: number,
-) {
-  if (userId === null) return false;
-  const context = createAuthorizationContext(userId, db);
-  if (await userHasCapability(context, CAPABILITIES.CHALLENGES_MANAGE)) return true;
-  return !!(
-    await db.query(
-      `SELECT 1 FROM challenges c JOIN sponsors author ON author.id=c.author JOIN sponsors mine ON mine.enterprise_id=author.enterprise_id JOIN users u ON u.id=mine.user_id WHERE c.id=$1 AND mine.user_id=$2 AND u.account_state='active' AND u.anonymized_at IS NULL`,
-      [challengeId, userId],
-    )
-  ).rowCount;
 }

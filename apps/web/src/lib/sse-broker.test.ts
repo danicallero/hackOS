@@ -1,8 +1,8 @@
 import { domainScope, REALTIME_SCOPES, reviewScope } from "@hackos/shared/events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mockRealtimeFetch } from "@/test/sse-test-fixture";
 import { physicalSseConnectionStats } from "./realtime-telemetry";
 import { setSseIdentity, subscribeToSse } from "./sse-broker";
-import { mockRealtimeFetch } from "./sse-test-fixture";
 
 const origin = "https://api.test";
 const mux = `${origin}/api/realtime/stream`;

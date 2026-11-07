@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { eventDateFormat } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import type { LogisticsStats } from "@/lib/logistics";
 import { hourlyFlowRows } from "./event-series";
 import type { StatsChartDatum } from "./stats-chart";
@@ -15,11 +16,7 @@ export function useEventChartRows(stats: LogisticsStats | null): {
 } {
   const { language, t } = useLocale();
   return useMemo(() => {
-    const format = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-    });
+    const format = eventDateFormat(language, "dayMonthHour");
     return {
       hourly: hourlyFlowRows(
         stats?.hourly,

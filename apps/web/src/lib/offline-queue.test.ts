@@ -147,7 +147,7 @@ describe("web scanner restart persistence", () => {
     await saveOfflineQueue(7, [saved]);
     const [stored] = [...values.values()];
 
-    expect(stored).toBeDefined();
+    expect(stored).toBeTypeOf("string");
     expect(stored).not.toContain("BADGE-7");
     expect(stored).not.toContain("Dinner");
     expect(await loadOfflineQueue(7)).toEqual([saved]);

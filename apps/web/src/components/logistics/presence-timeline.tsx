@@ -5,11 +5,11 @@ import { PulseIcon } from "@phosphor-icons/react/dist/ssr/Pulse";
 import { TimerIcon } from "@phosphor-icons/react/dist/ssr/Timer";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import { WrenchIcon } from "@phosphor-icons/react/dist/ssr/Wrench";
-import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
-import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { useNow } from "@/hooks/use-now";
+import { eventDateFormat, formatDurationMinutes } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 import type {
   PresenceCertaintyWindow,
   PresenceConflict,
@@ -18,15 +18,6 @@ import type {
 } from "@/lib/logistics";
 import { durationMinutes, timelineRows } from "@/lib/presence-timeline";
 import { cn } from "@/lib/utils";
-
-function formatDuration(minutes: number, t: ReturnType<typeof useLocale>["t"]): string {
-  if (minutes < 60) return t("presenceMinutesValue", { minutes });
-  const hours = Math.floor(minutes / 60);
-  const remainder = minutes % 60;
-  return remainder === 0
-    ? t("presenceWholeHoursValue", { hours })
-    : t("presenceHoursMinutesValue", { hours, minutes: remainder });
-}
 
 export function PresenceTimeline({
   data,
@@ -42,15 +33,9 @@ export function PresenceTimeline({
   onResolve?: (conflict: PresenceConflict) => void;
 }) {
   const { language, t } = useLocale();
-  const dateTime = new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: getEventTimeZone(),
-  });
+  const dateTime = eventDateFormat(language, "dayMonthTime");
   const rows = timelineRows(data.signals, data.windows);
-  const gapLabel = formatDuration(data.certaintyWindowMinutes, t);
+  const gapLabel = formatDurationMinutes(data.certaintyWindowMinutes, t);
 
   return (
     <div className="space-y-4">
@@ -260,12 +245,7 @@ function WindowMeter({
   gapLabel: string;
 }) {
   const { t } = useLocale();
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow(1000);
 
   const total = Date.parse(window.deadline) - Date.parse(window.start);
   const secured = window.securedUntil
@@ -307,7 +287,10 @@ function WindowMeter({
         {window.securedUntil && (
           <span className="text-success font-medium">
             {t("presenceSecuredFor", {
-              duration: formatDuration(durationMinutes(window.start, window.securedUntil), t),
+              duration: formatDurationMinutes(
+                durationMinutes(window.start, window.securedUntil),
+                t,
+              ),
             })}
           </span>
         )}

@@ -7,6 +7,7 @@
 
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ACTIVITY_KINDS, isMealActivityKind } from "@hackos/shared/activity-kinds";
+import { scheduleTypeLabel } from "@hackos/shared/display-labels";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVertical";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
@@ -40,7 +41,6 @@ import {
   scheduleDuration,
   scheduleStatus,
   scheduleTimeOfDay,
-  scheduleTypeLabel,
   timeInputValue,
   withTimeOfDayAcrossMidnight,
 } from "./schedule-model";

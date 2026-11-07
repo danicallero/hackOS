@@ -6,11 +6,10 @@
 // is no admin GET — we list via the public search endpoint — and mutate via the
 // guarded POST/DELETE /api/universities (capability INTOLERANCES_MANAGE).
 
-import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -36,8 +35,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { useBackgroundRefresh } from "@/hooks/use-background-refresh";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useLibraryList } from "@/hooks/use-library-list";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -55,11 +54,28 @@ type Values = z.infer<typeof schema>;
 
 export function UniversitiesManager() {
   const { t } = useLocale();
-  const [entries, setEntries] = useState<University[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { succeeded, failed, hasLoaded, stale, retryNonce } = useBackgroundRefresh();
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // Debounce so the server search doesn't fire on every keystroke.
+  const query = useDebouncedValue(search.trim(), 250);
+  const {
+    data,
+    loading,
+    errorMessage: loadError,
+    stale,
+    refetch: load,
+  } = useLibraryList(
+    ["libraries", "universities", query],
+    async (signal) =>
+      (
+        await api.get<{ universities: University[] }>("/api/public/universities", {
+          query: { q: query || undefined },
+          cache: "no-cache",
+          signal,
+        })
+      ).universities,
+    "couldNotLoadDirectory",
+  );
+  const entries = data ?? [];
   // `undefined` => closed; `null` => create; a row => edit.
   const [editing, setEditing] = useState<University | null | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<University | null>(null);
@@ -76,36 +92,6 @@ export function UniversitiesManager() {
     defaultValues: { name: "" },
   });
   const { reset } = form;
-
-  const load = useCallback(async () => {
-    if (!hasLoaded()) setLoading(true);
-    try {
-      const { universities } = await api.get<{ universities: University[] }>(
-        "/api/public/universities",
-        { query: { q: search.trim() || undefined }, cache: "no-cache" },
-      );
-      succeeded();
-      setLoadError(null);
-      setEntries(universities);
-    } catch (err) {
-      // A failed background refresh keeps the list (#1012).
-      if (!failed(err)) return;
-      setLoadError(apiErrorText(err, t, t("couldNotLoadDirectory")));
-    } finally {
-      setLoading(false);
-    }
-  }, [search, t, succeeded, failed, hasLoaded]);
-
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // edits the universities library elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.LOGISTICS), [EVENTS.DOMAIN_CHANGED]);
-
-  // Debounce so the server search doesn't fire on every keystroke.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    const handle = setTimeout(() => void load(), 250);
-    return () => clearTimeout(handle);
-  }, [load, liveRefresh, retryNonce]);
 
   const formOpen = editing !== undefined;
 
@@ -125,7 +111,7 @@ export function UniversitiesManager() {
         toast.success(t("universityAdded"), { compactTitle: t("toastSaveUniversity") });
       }
       setEditing(undefined);
-      await load();
+      load();
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotSaveUniversity")), t("toastSaveUniversity"));
     }
@@ -138,7 +124,7 @@ export function UniversitiesManager() {
       await api.delete(`/api/universities/${deleteTarget.id}`);
       toast.success(t("universityDeleted"), { compactTitle: t("deleteUniversityTitle") });
       setDeleteTarget(null);
-      await load();
+      load();
     } catch (err) {
       toast.error(
         err instanceof ApiError &&
@@ -170,7 +156,7 @@ export function UniversitiesManager() {
       toast.success(t("universitiesNormalized"), { compactTitle: t("normalizeUniversityTitle") });
       setNormalizationSource(null);
       setNormalizationTargetId("");
-      await load();
+      load();
     } catch (err) {
       setNormalizationError(apiErrorText(err, t, t("couldNotNormalizeUniversities")));
     } finally {
@@ -189,7 +175,7 @@ export function UniversitiesManager() {
 
   return (
     <div className="space-y-4">
-      {stale && <StaleDataNotice onRetry={() => void load()} />}
+      {stale && <StaleDataNotice onRetry={() => load()} />}
       <LibraryToolbar
         search={search}
         onSearchChange={setSearch}
@@ -203,8 +189,8 @@ export function UniversitiesManager() {
         columns={columns}
         data={entries}
         getRowId={(row) => String(row.id)}
-        loading={loading && !hasLoaded()}
-        error={loadError ? { message: loadError, onRetry: load } : undefined}
+        loading={loading}
+        error={loadError ? { message: loadError, onRetry: () => load() } : undefined}
         filteredEmpty={{
           active: search.trim().length > 0,
           onClear: () => {

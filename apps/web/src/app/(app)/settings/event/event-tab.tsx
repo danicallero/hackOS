@@ -42,7 +42,7 @@ import { Switch } from "@/components/ui/switch";
 import { useCategorySaveState } from "@/hooks/use-category-save-state";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { fromLocalInputValue, toLocalInputValue } from "@/lib/event-datetime";
+import { fromLocalInputValue, toLocalInputValue } from "@/lib/datetime";
 import { getEventTimeZone } from "@/lib/event-time";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
@@ -187,7 +187,7 @@ function CountdownPreview({
   );
 }
 
-export type EventTabView = "general" | "schedule" | "participants";
+type EventTabView = "general" | "schedule" | "participants";
 
 export function EventTab({
   view,

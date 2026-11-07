@@ -12,7 +12,7 @@ import {
 import type { Language } from "@hackos/shared/locale";
 import { config } from "../../config.js";
 import { pool, type Queryable } from "../../db/pool.js";
-import { scannerSubjectScope } from "../logistics/review-fixture-scope.js";
+import { scannerSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { readLeadMinutes, readLiveActivityTimings } from "./settings.js";
 
 /**
@@ -81,7 +81,7 @@ export async function loadLiveAttendeeItems(
   }));
 }
 
-export function scheduleDeepLink(scheduleId: number): string {
+function scheduleDeepLink(scheduleId: number): string {
   return `${config.MOBILE_APP_SCHEME}://schedule/${scheduleId}`;
 }
 
@@ -109,12 +109,6 @@ export function buildAttendeeActivityLiveProps(
 }
 
 // ── Submission deadline (H19, H20) ─────────────────────────────────────────
-
-/**
- * Unsubmitted teams get one alerting update when this little time is left
- * (default; the event setting `deadlineClosing` overrides it).
- */
-export const DEADLINE_CLOSING_MINUTES = DEADLINE_CLOSING_MINUTES_DEFAULT;
 
 export interface DeadlineWindow {
   startsAt: Date | null;
@@ -193,7 +187,7 @@ export async function loadSubmissionFacts(
   return result;
 }
 
-export function projectDeepLink(): string {
+function projectDeepLink(): string {
   return `${config.MOBILE_APP_SCHEME}://project`;
 }
 
@@ -202,7 +196,7 @@ export function buildDeadlineLiveProps(
   fact: SubmissionFact | undefined,
   language: Language,
   now: Date,
-  closingMinutes: number = DEADLINE_CLOSING_MINUTES,
+  closingMinutes: number = DEADLINE_CLOSING_MINUTES_DEFAULT,
 ): DeadlineLiveProps {
   const submission = fact?.submission ?? null;
   const closing = window.endsAt.getTime() - now.getTime() <= closingMinutes * 60_000;
@@ -228,7 +222,7 @@ export function buildDeadlineLiveProps(
 
 // ── Accreditation desk (H22, H24, H27) ─────────────────────────────────────
 
-export const ACCREDITATION_RECENT_MINUTES = 10;
+const ACCREDITATION_RECENT_MINUTES = 10;
 
 /**
  * Decision: event_config has no check-in window, so the desk's window is
@@ -296,7 +290,7 @@ export async function loadAccreditationCounts(
   return result;
 }
 
-export function accreditationDeepLink(): string {
+function accreditationDeepLink(): string {
   return `${config.MOBILE_APP_SCHEME}://scan`;
 }
 

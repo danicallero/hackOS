@@ -4,12 +4,13 @@ import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 // Curated degree directory: same self-service proposal limits as universities,
 // with staff create, rename and deletion controls in the shared Libraries area.
 import { GraduationCapIcon } from "@phosphor-icons/react/dist/csr/GraduationCap";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import type { Column } from "@/components/common/data-table";
 import { DataTable } from "@/components/common/data-table";
 import { DegreePicker } from "@/components/common/degree-picker";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useLibraryList } from "@/hooks/use-library-list";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
@@ -32,10 +35,27 @@ interface Degree {
 }
 export function DegreesManager() {
   const { t } = useLocale();
-  const [entries, setEntries] = useState<Degree[]>([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const query = useDebouncedValue(search.trim(), 200);
+  const {
+    data,
+    loading,
+    errorMessage: error,
+    stale,
+    refetch: load,
+  } = useLibraryList(
+    ["libraries", "degrees", query],
+    async (signal) =>
+      (
+        await api.get<{ degrees: Degree[] }>("/api/public/degrees", {
+          query: { q: query || undefined },
+          cache: "no-cache",
+          signal,
+        })
+      ).degrees,
+    "couldNotLoadDirectory",
+  );
+  const entries = data ?? [];
   const [editing, setEditing] = useState<Degree | null | undefined>();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
@@ -44,25 +64,6 @@ export function DegreesManager() {
   const [normalizationTargetId, setNormalizationTargetId] = useState("");
   const [normalizing, setNormalizing] = useState(false);
   const [normalizationError, setNormalizationError] = useState<string | null>(null);
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await api.get<{ degrees: Degree[] }>("/api/public/degrees", {
-        query: { q: search.trim() || undefined },
-        cache: "no-cache",
-      });
-      setEntries(result.degrees);
-      setError(null);
-    } catch (cause) {
-      setError(apiErrorText(cause, t, t("couldNotLoadDirectory")));
-    } finally {
-      setLoading(false);
-    }
-  }, [search, t]);
-  useEffect(() => {
-    const timer = setTimeout(() => void load(), 200);
-    return () => clearTimeout(timer);
-  }, [load]);
   const openEditor = (degree: Degree | null) => {
     setEditing(degree);
     setName(degree?.name ?? "");
@@ -75,7 +76,7 @@ export function DegreesManager() {
       else await api.post("/api/degrees", { name });
       toast.success(t("degreeSaved"), { compactTitle: t("toastSaveDegree") });
       setEditing(undefined);
-      await load();
+      load();
     } catch (cause) {
       toast.error(apiErrorText(cause, t, t("couldNotSaveDegree")), t("toastSaveDegree"));
     } finally {
@@ -89,7 +90,7 @@ export function DegreesManager() {
       await api.delete(`/api/degrees/${deleting.id}`);
       toast.success(t("degreeDeleted"), { compactTitle: t("toastDeleteDegree") });
       setDeleting(null);
-      await load();
+      load();
     } catch (cause) {
       toast.error(apiErrorText(cause, t, t("couldNotDeleteDegree")), t("toastDeleteDegree"));
     } finally {
@@ -114,7 +115,7 @@ export function DegreesManager() {
       toast.success(t("degreesNormalized"), { compactTitle: t("toastSaveDegree") });
       setNormalizationSource(null);
       setNormalizationTargetId("");
-      await load();
+      load();
     } catch (cause) {
       setNormalizationError(apiErrorText(cause, t, t("couldNotNormalizeDegrees")));
     } finally {
@@ -131,6 +132,7 @@ export function DegreesManager() {
   ];
   return (
     <div className="space-y-4">
+      {stale && <StaleDataNotice onRetry={() => load()} />}
       <LibraryToolbar
         search={search}
         onSearchChange={setSearch}
@@ -145,7 +147,7 @@ export function DegreesManager() {
         getRowId={(row) => String(row.id)}
         loading={loading}
         filteredEmpty={{ active: search.trim().length > 0, onClear: () => setSearch("") }}
-        error={error ? { message: error, onRetry: load } : undefined}
+        error={error ? { message: error, onRetry: () => load() } : undefined}
         empty={{ icon: GraduationCapIcon, title: t("noDegreesYetTitle") }}
         rowActions={(row) => (
           <DropdownMenu>

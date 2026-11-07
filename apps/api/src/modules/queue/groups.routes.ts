@@ -1,9 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
-import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
+import { idParams } from "../../lib/schemas.js";
 import {
   assertCanManageEnterpriseJudging,
   requireEnterpriseJudgeManager,
@@ -32,7 +32,7 @@ import {
 import { clearQueueGroup, enqueueQueueGroup } from "./service.js";
 
 const enterpriseParam = { source: "params", field: "id" } as const;
-const enterpriseIdParam = z.object({ id: z.coerce.number().int().positive() });
+const enterpriseIdParam = idParams;
 
 function auditRequest(req: FastifyRequest) {
   return {

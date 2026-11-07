@@ -17,6 +17,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from "../../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../../lib/idempotency.js";
 import {
   deleteReplacedObject,
@@ -32,7 +33,6 @@ import {
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
 import { photoPublishedInDirectory, savedByReader } from "../../directory/service.js";
-import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
 import { hasEventAccess } from "../role.js";
 
 /**

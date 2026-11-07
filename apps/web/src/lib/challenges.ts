@@ -55,8 +55,6 @@ export function isScheduled(availableFrom: string | null): boolean {
   return !Number.isNaN(at.getTime()) && at.getTime() > Date.now();
 }
 
-export const EMPTY_I18N: I18nText = { en: "", es: "", gl: "" };
-
 /** Normalise a possibly-null i18n value from the API into an editable I18nText. */
 export function asI18n(value: unknown, fallbackEn: string): I18nText {
   if (value && typeof value === "object") {
@@ -86,7 +84,7 @@ export function canAccessSponsorWorkspace(canAdmin: boolean, isSponsorRep: boole
 }
 
 /** Challenge publication state, distinct from raw `visibility`/`available_from` (H45). */
-export type ChallengeState = "draft" | "scheduled" | "public";
+type ChallengeState = "draft" | "scheduled" | "public";
 
 export function challengeState(
   challenge: Pick<Challenge, "visibility" | "available_from">,
@@ -100,7 +98,7 @@ export function challengeState(
  * The next missing action for a challenge, in priority order (H44). One
  * direct next step, not an enumeration of everything filled in — audit §4.3.
  */
-export type ChallengeNextAction =
+type ChallengeNextAction =
   | "addDescription"
   | "addCriteria"
   | "addPrize"

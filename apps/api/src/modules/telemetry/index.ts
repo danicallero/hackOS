@@ -31,7 +31,7 @@ export const browserRefetchStormBody = z.object({
 
 export type BrowserRefetchStorm = z.infer<typeof browserRefetchStormBody>;
 
-export function recordBrowserRefetchStorm(observation: BrowserRefetchStorm): void {
+function recordBrowserRefetchStorm(observation: BrowserRefetchStorm): void {
   const labels = {
     surface: observation.surface,
     topic: observation.topic,

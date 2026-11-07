@@ -186,7 +186,7 @@ function RoomEnterpriseCell({
   );
 }
 
-export function DraftRoomRow({
+function DraftRoomRow({
   saving,
   onCancel,
   onCreate,

@@ -406,6 +406,7 @@
   "onThisDevice": "Neste dispositivo",
   "userSearchFailed": "A busca de usuarios fallou.",
   "userLookupFailed": "Non se puido buscar o usuario.",
+  "couldNotLoadOwners": "Non se puideron cargar os responsables.",
   "checkInFailed": "Non se puido rexistrar a entrada.",
   "badgeAssigned": "Acreditación {badgeId} asignada a {name}.",
   "badgeRotatedTo": "Acreditación cambiada a {badge}.",
@@ -989,6 +990,7 @@
   "scheduleItemUpdated": "Elemento do programa actualizado.",
   "duplicateScheduleItem": "Duplicar elemento do programa",
   "scheduleItemDuplicated": "Elemento do programa duplicado.",
+  "scheduleCopyTitle": "{title} (copia)",
   "couldNotSaveScheduleItem": "Non se puido gardar o elemento do programa.",
   "titleLabel": "Título",
   "openingCeremonyPlaceholder": "Cerimonia de apertura",
@@ -3790,5 +3792,7 @@
   "selectScoreMatches_one": "Seleccionar {count} coincidencia",
   "selectScoreMatches": "Seleccionar {count} coincidencias",
   "searchApplicantsOrReviews": "Buscar nome, correo ou notas de revisión…",
-  "reviewAverageScore": "{score}/5 media"
+  "reviewAverageScore": "{score}/5 media",
+  "couldNotLoadMembers": "Non se puideron cargar os membros.",
+  "couldNotLoadDegrees": "Non se puideron cargar os graos."
 }

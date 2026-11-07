@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api";
 import { type I18nText, type MessageKey, pickText, type Translate } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
 
-export interface ValidationField {
+interface ValidationField {
   key: string;
   project_video?: boolean;
   options?: { value: string }[];

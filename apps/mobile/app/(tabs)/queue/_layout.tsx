@@ -8,6 +8,9 @@ import { colors } from "@/theme/colors";
  * own header; New project is a modal sheet (Cancel / Create) and the
  * invitation inbox is a pushed list.
  */
+/** H55: preserve the owning screen underneath a directly opened child. */
+export const unstable_settings = { anchor: "index" };
+
 export default function QueueLayout() {
   const stackScreenOptions = useTabStackScreenOptions();
   const { t } = useLocale();

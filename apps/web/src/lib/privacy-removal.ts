@@ -8,7 +8,6 @@ import { isOfflineQueueStorageKey, LEGACY_OFFLINE_KEY } from "@/lib/offline-queu
 export type {
   AccountRemovalAction,
   AccountRemovalProgress,
-  AccountRemovalProgressStatus,
 } from "@hackos/shared/account-removal";
 
 const ACCOUNT_REMOVAL_PROGRESS_KEY = "hackos:account-removal-progress";

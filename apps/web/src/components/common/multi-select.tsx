@@ -21,7 +21,7 @@ import { useLocale } from "@/lib/i18n";
 import { normalizeSearchText } from "@/lib/search-text";
 import { cn } from "@/lib/utils";
 
-export interface MultiSelectOption {
+interface MultiSelectOption {
   value: string;
   label: string;
   description?: string;

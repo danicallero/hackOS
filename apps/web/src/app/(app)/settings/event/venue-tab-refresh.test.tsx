@@ -1,3 +1,4 @@
+import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { fireEvent } from "@testing-library/dom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -12,6 +13,18 @@ const translate = vi.hoisted(() => (key: string) => key);
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
   api: apiMock,
+}));
+const liveReload = vi.hoisted(() => ({
+  scope: "",
+  events: [] as readonly string[],
+  reload: () => {},
+}));
+vi.mock("@/hooks/use-live-reload", () => ({
+  useLiveReload: (scope: string, events: readonly string[], reload: () => void) => {
+    liveReload.scope = scope;
+    liveReload.events = events;
+    liveReload.reload = reload;
+  },
 }));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: translate }) }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -33,10 +46,10 @@ function eventConfig(venueName: string, wifiSsid: string): EventConfig {
 let container: HTMLDivElement;
 let root: Root;
 
-async function render(refreshKey: number) {
+async function render() {
   await act(async () => {
     root.render(
-      <EventConfigProvider refreshKey={refreshKey}>
+      <EventConfigProvider>
         <VenueTab onDirtyChange={vi.fn()} />
       </EventConfigProvider>,
     );
@@ -61,13 +74,15 @@ describe("VenueTab live refresh", () => {
     apiMock.get
       .mockResolvedValueOnce(eventConfig("Old venue", "Old network"))
       .mockResolvedValueOnce(eventConfig("New venue", "New network"));
-    await render(0);
+    await render();
 
     const name = container.querySelector<HTMLInputElement>('input[name="venueName"]');
     await act(async () =>
       fireEvent.change(name as HTMLInputElement, { target: { value: "Locally edited venue" } }),
     );
-    await render(1);
+    expect(liveReload.scope).toBe(REALTIME_SCOPES.PUBLIC_CONTENT);
+    expect(liveReload.events).toContain(EVENTS.DATA_CHANGED);
+    await act(async () => liveReload.reload());
 
     expect(name?.value).toBe("Locally edited venue");
     expect(container.querySelector<HTMLInputElement>('input[name="wifiSsid"]')?.value).toBe(

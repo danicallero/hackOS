@@ -995,3 +995,73 @@ submitted, in-review and other non-actionable states retain their status.
 ### Exceptions
 An action whose label does not communicate the current state may still need
 an independent status indicator.
+
+
+## [R030] Test a tab's destination after visiting its settings
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-11-06
+
+### Trigger
+A tab owns a stack containing profile, settings or other secondary pages.
+
+### Mistake
+Checked that Account was highlighted and that the profile route worked, but
+selecting the tab restored the last Live Activities settings page instead.
+
+### Lesson
+A tab's active state and its return destination are separate behavior. A direct
+route check does not establish what happens when the tab is pressed again.
+
+### Action
+Exercise the complete path: open a child, leave its tab, return, then reselect
+while the child is visible. Apply the intended return rule to direct taps,
+vertical rails, scrubbing, shortcuts and overflow selections.
+
+### Validation
+Verify the resulting route and rendered page after the tab action, including
+a previously opened notification setting. Cover grouped and ungrouped paths.
+For native secondary screens, also inspect the back item in the foldable
+vertical bar and execute its action. Parent-tab history does not establish
+that the current stack has a screen below or that Back reaches its owner.
+
+### Exceptions
+Tabs explicitly designed to preserve their last child retain that behavior.
+
+## [R031] Verify modal chrome against the actual safe area and system bar
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-11-06
+
+### Trigger
+A modal or secondary screen supplies its own title and floating actions.
+
+### Mistake
+Assumed an iOS sheet had no top inset, allowing a title and actions under the
+status bar. Floating controls also stayed horizontal in a foldable side-bar layout.
+
+### Lesson
+A screenshot is not valid until system indicators and app controls have been
+inspected at full size. A native toolbar can join the foldable system column
+only when its presentation spans that window.
+
+### Action
+Prefer the established native header and symbol toolbars. Measure the modal's
+own safe area for fallback controls. Choose the presentation deliberately when
+its controls must share the system side column.
+
+### Validation
+Inspect iPhone, iPad and both foldable orientations, including the actual status
+bar, home indicator and action positions. Verify the resulting presentation,
+not just the presence of buttons in a component test. Compare the title size,
+header background and scroll-edge transition with the existing native screens;
+correct button placement alone does not establish a finished header. Check
+content alignment and width against the modal bounds as well: a window-sized
+form cap can leave the profile narrow and pinned to one side.
+
+### Exceptions
+An intentionally independent sheet retains its own horizontal toolbar.

@@ -120,11 +120,18 @@ export async function runEventRemindersOnce(): Promise<number> {
 registerWorker(QUEUE_NAME, async () => {
   await runEventRemindersOnce();
 });
+const REMINDER_TICK_MS = 15_000;
+
 export async function scheduleEventReminders(): Promise<void> {
   if (config.isTest) return;
   await getQueue(QUEUE_NAME).add(
     QUEUE_NAME,
     {},
-    { repeat: { every: 15_000 }, jobId: QUEUE_NAME, removeOnComplete: true, removeOnFail: true },
+    {
+      repeat: { every: REMINDER_TICK_MS },
+      jobId: QUEUE_NAME,
+      removeOnComplete: true,
+      removeOnFail: true,
+    },
   );
 }

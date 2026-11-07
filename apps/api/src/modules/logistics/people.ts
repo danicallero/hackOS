@@ -1,5 +1,6 @@
 import { pool } from "../../db/pool.js";
-import { fixtureReadFilter } from "./review-fixture-scope.js";
+import { fixtureReadFilter } from "../../lib/fixture-subject-scope.js";
+import { likeContains } from "../../lib/like.js";
 
 // ── H22/H23: unified person lookup ─────────────────────────────────────────
 
@@ -93,7 +94,7 @@ export async function searchPeople(
 
   // `unaccent` makes the comparison accent-insensitive while
   // the stored names keep their accents: "ana per" finds "Ana Pérez".
-  const like = `%${needle}%`;
+  const like = likeContains(needle);
   const fuzzy = await pool.query(
     `SELECT u.id FROM users u
       WHERE u.account_state = 'active' AND u.anonymized_at IS NULL

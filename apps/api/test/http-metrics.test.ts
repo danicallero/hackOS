@@ -1,7 +1,7 @@
 import { get } from "node:http";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/app.js";
-import { buildTestApp } from "./helpers.js";
+import { useTestApp } from "./helpers.js";
 
 const {
   httpResponsesTotal,
@@ -10,6 +10,7 @@ const {
   requestAdmissionQueueSize,
 } = await import("../src/lib/metrics.js");
 
+const getApp = useTestApp();
 let app: App;
 let address: string;
 let blockHandler = async () => {};
@@ -19,7 +20,7 @@ const walletRoute =
   "/api/wallet/apple/v1/devices/:deviceLibraryIdentifier/registrations/:passTypeIdentifier";
 
 beforeAll(async () => {
-  app = await buildTestApp();
+  app = await getApp();
   const options = {
     config: { routeAccessPolicy: { kind: "public", anonymousCategory: "public-content" } },
   } as const;
@@ -36,16 +37,6 @@ beforeAll(async () => {
 beforeEach(() => {
   httpResponsesTotal.reset();
   httpRequestDurationSeconds.reset();
-});
-
-afterAll(async () => {
-  await app?.close();
-  const { stopQueues } = await import("../src/lib/queues.js");
-  const { closeValkey } = await import("../src/lib/valkey.js");
-  const { pool } = await import("../src/db/pool.js");
-  await stopQueues();
-  await closeValkey();
-  await pool.end();
 });
 
 function deferred() {

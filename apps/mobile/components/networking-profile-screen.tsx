@@ -1,8 +1,10 @@
 import { useRouter } from "expo-router";
+import Stack from "expo-router/stack";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -28,8 +30,10 @@ import {
   saveNetworkingProfile,
 } from "@/lib/networking-profile";
 import { cvErrorKey, deleteCv, pickCv, uploadCv } from "@/lib/profile-cv";
+import { isPadIdiom } from "@/lib/tabs";
+import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { colors, type } from "@/theme";
-import { useParticipantLayout } from "@/theme/layout-participant";
+import { useScreenGutter } from "@/theme/layout";
 
 const AVATAR_SIZE = 112;
 
@@ -54,8 +58,10 @@ function asError(cause: unknown): Error {
 export default function NetworkingProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const sideInsets = useSideInsets();
+  const padIdiom = isPadIdiom();
   const { t } = useLocale();
-  const readable = useParticipantLayout("form");
+  const gutter = useScreenGutter();
   const { me } = useMeContext();
   const [profile, setProfile] = useState<NetworkingProfile | null>(null);
   const [stored, setStored] = useState<NetworkingDraft | null>(null);
@@ -74,7 +80,8 @@ export default function NetworkingProfileScreen() {
     projects: [],
     challenges: [],
   });
-  const topInset = process.env.EXPO_OS === "android" ? insets.top : 0;
+  const nativeHeader = process.env.EXPO_OS === "ios" && isRealLiquidGlassAvailable();
+  const topInset = nativeHeader ? 0 : insets.top;
 
   const apply = useCallback((next: NetworkingProfile) => {
     if (next.preview.projects.length > 0) {
@@ -363,7 +370,36 @@ export default function NetworkingProfileScreen() {
   const shared = editing ? draft?.directoryVisible : stored?.directoryVisible;
 
   return (
-    <View style={{ backgroundColor: colors.background, flex: 1 }}>
+    <>
+      {nativeHeader ? (
+        <>
+          <Stack.Screen
+            options={{
+              headerBackVisible: false,
+              headerLargeTitle: false,
+              headerStyle: { backgroundColor: colors.background },
+              headerShadowVisible: false,
+              title: t("networkingTitle"),
+            }}
+          />
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.Button
+              icon="xmark"
+              accessibilityLabel={editing ? t("cancel") : t("back")}
+              disabled={saving}
+              onPress={() => (editing ? stopEditing() : router.back())}
+            />
+          </Stack.Toolbar>
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              icon={editing ? "checkmark" : "pencil"}
+              accessibilityLabel={editing ? t("save") : t("networkingEdit")}
+              disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
+              onPress={() => (editing ? void save() : startEditing())}
+            />
+          </Stack.Toolbar>
+        </>
+      ) : null}
       {profile?.cv && cvOpen ? (
         <CvViewer
           visible
@@ -373,31 +409,43 @@ export default function NetworkingProfileScreen() {
         />
       ) : null}
       <ScrollView
+        testID="networking-profile-scroll"
+        style={{
+          backgroundColor: colors.background,
+          flex: 1,
+          ...(nativeHeader && !padIdiom
+            ? { paddingLeft: sideInsets.left, paddingRight: sideInsets.right }
+            : {}),
+        }}
         alwaysBounceVertical
+        contentInsetAdjustmentBehavior={nativeHeader ? "automatic" : "never"}
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           gap: 22,
           paddingVertical: 16,
-          ...readable.content,
+          width: "100%",
+          paddingHorizontal: gutter,
           paddingBottom: Math.max(32, insets.bottom + 16),
           paddingTop: 16 + topInset,
         }}
       >
-        <View style={{ justifyContent: "center", minHeight: 44 }}>
-          <Text
-            accessibilityRole="header"
-            selectable
-            style={{
-              color: colors.label,
-              fontSize: type.title3.fontSize,
-              fontWeight: "700",
-              textAlign: "center",
-            }}
-          >
-            {t("networkingTitle")}
-          </Text>
-        </View>
+        {nativeHeader ? null : (
+          <View style={{ justifyContent: "center", minHeight: 44, paddingHorizontal: 60 }}>
+            <Text
+              accessibilityRole="header"
+              selectable
+              style={{
+                color: colors.label,
+                fontSize: type.title3.fontSize,
+                fontWeight: "700",
+                textAlign: "center",
+              }}
+            >
+              {t("networkingTitle")}
+            </Text>
+          </View>
+        )}
 
         {profile && draft && stored ? (
           <>
@@ -429,36 +477,40 @@ export default function NetworkingProfileScreen() {
         ) : null}
       </ScrollView>
 
-      <FloatingGlassButton
-        top={16 + topInset}
-        side="left"
-        icon="xmark"
-        accessibilityLabel={editing ? t("cancel") : t("back")}
-        disabled={saving}
-        onPress={() => (editing ? stopEditing() : router.back())}
-      />
-      {editing ? (
-        <FloatingGlassButton
-          top={16 + topInset}
-          side="right"
-          icon="checkmark"
-          tintColor={colors.accent}
-          accessibilityLabel={t("save")}
-          accessibilityState={{ busy: saving }}
-          disabled={saving || !dirty || cvBusy !== null}
-          onPress={() => void save()}
-        />
-      ) : (
-        <FloatingGlassButton
-          top={16 + topInset}
-          side="right"
-          icon="pencil"
-          accessibilityLabel={t("networkingEdit")}
-          disabled={!stored || togglingShare}
-          onPress={startEditing}
-        />
+      {nativeHeader ? null : (
+        <>
+          <FloatingGlassButton
+            top={16 + topInset}
+            side="left"
+            icon="xmark"
+            accessibilityLabel={editing ? t("cancel") : t("back")}
+            disabled={saving}
+            onPress={() => (editing ? stopEditing() : router.back())}
+          />
+          {editing ? (
+            <FloatingGlassButton
+              top={16 + topInset}
+              side="right"
+              icon="checkmark"
+              tintColor={colors.accent}
+              accessibilityLabel={t("save")}
+              accessibilityState={{ busy: saving }}
+              disabled={saving || !dirty || cvBusy !== null}
+              onPress={() => void save()}
+            />
+          ) : (
+            <FloatingGlassButton
+              top={16 + topInset}
+              side="right"
+              icon="pencil"
+              accessibilityLabel={t("networkingEdit")}
+              disabled={!stored || togglingShare}
+              onPress={startEditing}
+            />
+          )}
+        </>
       )}
-    </View>
+    </>
   );
 }
 

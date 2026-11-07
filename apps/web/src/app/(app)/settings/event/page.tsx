@@ -8,7 +8,6 @@
 // Each category retains its own capability and save scope (H8, H39).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { BellIcon } from "@phosphor-icons/react/dist/csr/Bell";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
@@ -33,10 +32,9 @@ import { ProjectFormSection } from "@/app/(app)/settings/event/project-form-sect
 import { AccessDenied } from "@/components/common/access-denied";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 import { CertificatesTab } from "./certificates-tab";
 import { EventConfigProvider } from "./event-config-context";
 import { EventTab } from "./event-tab";
@@ -116,11 +114,6 @@ export default function EventSettingsPage() {
   const canProjectForm = useCan(CAPABILITIES.PROJECTS_EDIT);
   const canDanger = useCan(CAPABILITIES.ADMIN_ALL);
   const canReadEventConfig = canEvent || canVenue || canWallet || canPresence || canInvites;
-  // Content changes reach the browser as the payload-free public invalidation; the legacy
-  // `/api/events/stream` path is not a realtime scope and the multiplexed stream rejects it.
-  const liveRefresh = useAutoRefresh(canReadEventConfig ? REALTIME_SCOPES.PUBLIC_CONTENT : "", [
-    EVENTS.DATA_CHANGED,
-  ]);
   const canByCategory: Record<Category, boolean> = {
     event: canEvent,
     schedule: canEvent,
@@ -200,7 +193,7 @@ export default function EventSettingsPage() {
   const showBack = active !== null && visibleCategories.length > 1;
 
   return (
-    <EventConfigProvider enabled={canReadEventConfig} refreshKey={liveRefresh}>
+    <EventConfigProvider enabled={canReadEventConfig}>
       <PageLayout width="content">
         <PageHeader
           title={active ? labels[active] : t("eventSettings")}

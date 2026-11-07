@@ -25,7 +25,7 @@ function reviewSyncChannelName(applicationId: number): string {
   return `hackos-review-sync-${applicationId}`;
 }
 
-export function openReviewSyncChannel(applicationId: number): BroadcastChannel | null {
+function openReviewSyncChannel(applicationId: number): BroadcastChannel | null {
   if (typeof BroadcastChannel === "undefined") return null;
   try {
     return new BroadcastChannel(reviewSyncChannelName(applicationId));
@@ -36,12 +36,13 @@ export function openReviewSyncChannel(applicationId: number): BroadcastChannel |
 
 /**
  * Subscribes to the application's review channel and re-posts `state`
- * whenever it changes. `onRemoteMessage` only ever receives messages posted
+ * whenever it changes locally. A null state waits for the active response to
+ * finish seeding; received state is never echoed. `onRemoteMessage` receives messages posted
  * by *other* tabs/windows (own broadcasts are filtered out by `source`).
  */
 export function useReviewSync(
   applicationId: number | null,
-  state: Omit<ReviewSyncMessage, "source">,
+  state: Omit<ReviewSyncMessage, "source"> | null,
   onRemoteMessage: (message: ReviewSyncMessage) => void,
 ): void {
   const instanceId = useRef<string>(undefined);
@@ -49,16 +50,20 @@ export function useReviewSync(
     instanceId.current = crypto.randomUUID();
   }
   const channelRef = useRef<BroadcastChannel | null>(null);
+  const remoteStateRef = useRef<string | null>(null);
   const onRemoteMessageRef = useRef(onRemoteMessage);
   onRemoteMessageRef.current = onRemoteMessage;
 
   useEffect(() => {
     if (!applicationId) return;
+    remoteStateRef.current = null;
     const channel = openReviewSyncChannel(applicationId);
     channelRef.current = channel;
     if (!channel) return;
     function handleMessage(event: MessageEvent<ReviewSyncMessage>) {
       if (event.data?.source === instanceId.current) return;
+      const { responseId, score, notes, saveState, status } = event.data;
+      remoteStateRef.current = JSON.stringify([responseId, score, notes, saveState, status]);
       onRemoteMessageRef.current(event.data);
     }
     channel.addEventListener("message", handleMessage);
@@ -69,9 +74,14 @@ export function useReviewSync(
     };
   }, [applicationId]);
 
-  const { responseId, score, notes, saveState, status } = state;
+  const { responseId, score, notes, saveState, status } = state ?? {};
   useEffect(() => {
-    if (!applicationId) return;
+    if (!applicationId || responseId === undefined) return;
+    // H13: applying another window’s state must not broadcast it back. Two
+    // different drafts crossing during arrow navigation otherwise echo forever.
+    const snapshot = JSON.stringify([responseId, score, notes, saveState, status]);
+    if (snapshot === remoteStateRef.current) return;
+    remoteStateRef.current = null;
     channelRef.current?.postMessage({
       responseId,
       score,

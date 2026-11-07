@@ -20,7 +20,7 @@ import { emailTemplateExists, translateEmail } from "../../lib/i18n.js";
 
 export type { Language };
 
-export const SUPPORTED_LANGUAGES: Language[] = LANGS;
+const SUPPORTED_LANGUAGES: Language[] = LANGS;
 
 export function normalizeLanguage(lang: string | null | undefined): Language {
   return SUPPORTED_LANGUAGES.includes(lang as Language) ? (lang as Language) : "en";

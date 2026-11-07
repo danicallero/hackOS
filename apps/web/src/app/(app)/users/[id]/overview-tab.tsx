@@ -79,7 +79,7 @@ export function OverviewTab({
   );
 }
 
-export function intoleranceNames(ids: number[], dict: Intolerance[], lang: Language): string {
+function intoleranceNames(ids: number[], dict: Intolerance[], lang: Language): string {
   if (!ids.length) return "";
   const byId = new Map(dict.map((i) => [i.id, i]));
   return ids
@@ -90,7 +90,7 @@ export function intoleranceNames(ids: number[], dict: Intolerance[], lang: Langu
     .join(", ");
 }
 
-export function Field({ label, value }: { label: string; value: React.ReactNode }) {
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
   const empty = value === null || value === undefined || value === "";
   return (
     <div className="grid grid-cols-1 gap-1 sm:grid-cols-[10rem_1fr] sm:gap-4">
@@ -100,7 +100,7 @@ export function Field({ label, value }: { label: string; value: React.ReactNode 
   );
 }
 
-export function ReadOnlyOverview({
+function ReadOnlyOverview({
   user,
   intolerances,
 }: {
@@ -128,7 +128,7 @@ export function ReadOnlyOverview({
   );
 }
 
-export function StaffEditForm({
+function StaffEditForm({
   user,
   intolerances,
   onUpdated,

@@ -26,8 +26,8 @@ import { IconButton } from "@/components/common/icon-button";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { VisibilityBadge } from "@/components/common/publication-status";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
-import { StatusBadge } from "@/components/common/status-badge";
 import { CompanyTagChip } from "@/components/sponsors/company-tag-chip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { ApiError, api, apiDownload } from "@/lib/api";
@@ -49,7 +49,6 @@ import { initials } from "@/lib/initials";
 import { useCan } from "@/lib/session";
 import { normalizeUid, type StandSummary, type StandTag, standQrSvgPath } from "@/lib/stands";
 import { toast } from "@/lib/toast";
-import { isScheduled } from "../enterprises/shared";
 import { LinkNfcDialog } from "./link-nfc-dialog";
 
 type Busy = { id: number; action: "scannable" | "qr" | "download" } | null;
@@ -78,14 +77,6 @@ function StandLogo({ stand, className }: { stand: StandSummary; className?: stri
       )}
     </Avatar>
   );
-}
-
-function VisibilityBadge({ stand, t }: { stand: StandSummary; t: Translate }) {
-  if (stand.visibility === "visible")
-    return <StatusBadge tone="success">{t("visibleLabel")}</StatusBadge>;
-  if (isScheduled(stand.availableFrom))
-    return <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>;
-  return <StatusBadge tone="neutral">{t("hiddenOption")}</StatusBadge>;
 }
 
 function ScannableSwitch({
@@ -208,7 +199,7 @@ function buildColumns(t: Translate, actions: StandActions): Column<StandSummary>
       id: "visibility",
       header: t("colVisibility"),
       sortValue: (s) => s.visibility,
-      cell: (s) => <VisibilityBadge stand={s} t={t} />,
+      cell: (s) => <VisibilityBadge visibility={s.visibility} availableFrom={s.availableFrom} />,
     },
     {
       id: "scannable",
@@ -245,7 +236,7 @@ function StandMobileRow({
           >
             {stand.name}
           </Link>
-          <VisibilityBadge stand={stand} t={t} />
+          <VisibilityBadge visibility={stand.visibility} availableFrom={stand.availableFrom} />
         </div>
         {stand.tags.length > 0 && <TagList stand={stand} />}
       </div>
@@ -300,13 +291,14 @@ export default function CompanyTagsPage() {
     }
   }, [t]);
 
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (canManage) void load();
-  }, [canManage, load, liveRefresh]);
+  }, [canManage, load]);
+
+  useLiveReload(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED], () => void load(), {
+    enabled: canManage,
+  });
 
   const patch = useCallback((enterpriseId: number, change: Partial<StandSummary>) => {
     setStands((current) =>

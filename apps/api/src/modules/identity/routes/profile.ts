@@ -15,11 +15,13 @@ import {
   userHasCapability,
 } from "../../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../../lib/fixture-subject-scope.js";
 import { idempotencyGuard, replayCompletedIdempotency } from "../../../lib/idempotency.js";
+import { likeContains } from "../../../lib/like.js";
 import { photoUrl } from "../../../lib/profile-files.js";
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { getEventTimezone } from "../../event/service.js";
-import { assertFixtureSubjectScope } from "../../logistics/review-fixture-scope.js";
+import { languageSchema } from "../../logistics/schemas.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
@@ -54,7 +56,6 @@ import { lockRoleGraph, SUPERADMIN_ROLE_NAME } from "../role-authority.js";
  * - PATCH /api/users/:id  — staff, USERS_WRITE; wider field set; audited.
  */
 
-const LANGUAGES = ["en", "es", "gl"] as const;
 const DIETARY_DATA_STATES = ["not_provided", "present"] as const;
 
 /** H8: a user's complete assigned-role set, for a secondary "all roles" list next to the single displayed role. */
@@ -71,7 +72,7 @@ const selfPatchSchema = z
   .object({
     name: z.string().min(1).max(200).optional(),
     surname: z.string().min(1).max(200).optional(),
-    language: z.enum(LANGUAGES).optional(),
+    language: languageSchema.optional(),
     // Logistics data a participant owns and manages on their own settings page.
     foodIntolerances: z.array(z.number().int()).optional(),
     foodIntoleranceNotes: z.string().max(2000).nullable().optional(),
@@ -894,7 +895,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       const { q, limit, offset } = req.query;
       const needle = q?.trim().replace(/\s+/g, " ") || null;
-      const filter = needle ? `%${needle}%` : null;
+      const filter = needle ? likeContains(needle) : null;
       // `unaccent` makes name/surname matching accent-insensitive.
       const where = filter
         ? `WHERE account_state = 'active' AND anonymized_at IS NULL
@@ -989,6 +990,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        summary: "Read a user's profile",
         description:
           "A staff member's view of another user's profile. `visibleRoleName` is the single " +
           "highest-visible role also shown elsewhere; `roles` is that user's complete " +
@@ -1041,6 +1043,8 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        summary: "List a user's projects",
+        description: "Staff read (USERS_READ) of the projects the user belongs to.",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: z.object({ projects: z.array(userProjectSchema) }) },
       },
@@ -1058,6 +1062,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
       schema: {
+        summary: "Update a user's profile",
+        description:
+          "Staff edit (USERS_WRITE) of the wider profile field set. Audited in the same transaction (H53).",
         params: z.object({ id: z.coerce.number().int() }),
         body: staffPatchSchema,
         response: { 200: userResponseSchema },
@@ -1151,6 +1158,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
+        summary: "Delete a user account",
+        description:
+          "Admin removal (ADMIN_ALL) of another account. Answers 202 while external cleanup is pending; refuses the caller's own account (H54).",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
@@ -1190,6 +1200,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_WRITE),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
       schema: {
+        summary: "Change a user's email",
+        description:
+          "Staff correction (USERS_WRITE) of the primary email. The new address counts as verified, an address already in use is a conflict, and the change is audited (H53).",
         params: z.object({ id: z.coerce.number().int() }),
         body: z.object({ email: z.string().email() }).strict(),
         response: { 200: userResponseSchema },
@@ -1246,6 +1259,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: [requireCapability(CAPABILITIES.ADMIN_ALL), adminRemovalIdempotency],
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.ADMIN_ALL }),
       schema: {
+        summary: "Anonymize a user account",
+        description:
+          "Admin anonymization (ADMIN_ALL) of another account; refuses the caller's own account and accounts with no operational history to anonymize (H54).",
         params: z.object({ id: z.coerce.number().int() }),
         response: { 200: removalCompletedResponseSchema, 202: removalPendingResponseSchema },
       },
@@ -1283,6 +1299,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        summary: "Read a user's activity history",
+        description:
+          "Staff read (USERS_READ) of the user's activity and meal passes, badge check-ins and door scans (H24-H26).",
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: z.object({
@@ -1391,6 +1410,9 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       preHandler: requireCapability(CAPABILITIES.USERS_READ),
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.USERS_READ }),
       schema: {
+        summary: "List a user's application responses",
+        description:
+          "Staff read (USERS_READ) of every application response the user submitted, with staff notes and reviews.",
         params: z.object({ id: z.coerce.number().int() }),
         response: {
           200: z.object({

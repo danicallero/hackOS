@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { answersFromPlan, type MealPlan, mealPlanBody } from "./meal-plan";
+import { afterEach, describe, expect, it } from "vitest";
+import { setEventTimeZone } from "./event-time";
+import { answersFromPlan, type MealPlan, mealPlanBody, mealWhen } from "./meal-plan";
 
 function meal(activityId: number, attending: boolean | null, locked = false) {
   return {
@@ -33,5 +34,16 @@ describe("meal plan body (#933)", () => {
         { activityId: 3, attending: true },
       ],
     });
+  });
+});
+
+describe("mealWhen", () => {
+  afterEach(() => setEventTimeZone("Europe/Madrid"));
+
+  it("reads the meal in the event zone, whatever the device zone", () => {
+    setEventTimeZone("Europe/Madrid");
+    expect(mealWhen(meal(1, null), "en")).toMatch(/Mon,? 12 Oct,? 14:00.15:00/);
+    setEventTimeZone("America/New_York");
+    expect(mealWhen(meal(1, null), "en")).toMatch(/08:00.09:00/);
   });
 });

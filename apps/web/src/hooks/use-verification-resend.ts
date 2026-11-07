@@ -10,6 +10,7 @@ export function useVerificationResend(email: string, callbackURL?: string) {
   const { t } = useLocale();
   const [cooldown, setCooldown] = useState(0);
   const [resending, setResending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -23,6 +24,7 @@ export function useVerificationResend(email: string, callbackURL?: string) {
   const resend = useCallback(async () => {
     if (cooldown > 0 || resending) return;
     setResending(true);
+    setError(null);
     try {
       await api.post("/api/auth/resend-verification", {
         email,
@@ -30,13 +32,17 @@ export function useVerificationResend(email: string, callbackURL?: string) {
       });
       toast.success(t("verificationEmailSent"), { compactTitle: t("toastVerifyEmail") });
       setCooldown(60);
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 429) setCooldown(error.retryAfter ?? 60);
-      toast.error(t("couldNotSendVerificationEmail"), t("toastVerifyEmail"));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) setCooldown(err.retryAfter ?? 60);
+      const invalidEmail = err instanceof ApiError && err.code.toUpperCase() === "INVALID_EMAIL";
+      const message = invalidEmail ? t("validEmail") : t("couldNotSendVerificationEmail");
+      console.error("[auth:resend-verification] request failed", err);
+      setError(message);
+      toast.error(message, t("toastVerifyEmail"));
     } finally {
       setResending(false);
     }
   }, [callbackURL, cooldown, email, resending, t]);
 
-  return { cooldown, resend, resending };
+  return { cooldown, error, resend, resending };
 }

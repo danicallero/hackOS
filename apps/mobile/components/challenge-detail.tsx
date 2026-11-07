@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { SheetModal } from "@/components/app-sheet";
+import { EntryBackToolbar } from "@/components/header-back-button";
 import { EmptyState, FloatingGlassButton, Section, Separator } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { NavRow } from "@/components/project-ui";
@@ -196,10 +197,13 @@ export function ChallengeDetailScreen() {
     () => router.push({ pathname: "/projects/gallery", params: { challengeId: String(id) } }),
     [router, id],
   );
-  if (error) return <RequestFeedback error={error} onRetry={() => void load()} />;
-  if (challenge === undefined) return <RequestFeedback loading />;
-  if (challenge === null) return <EmptyState icon="trophy" title={t("challengeNotFound")} />;
-  return (
+  const body = error ? (
+    <RequestFeedback error={error} onRetry={() => void load()} />
+  ) : challenge === undefined ? (
+    <RequestFeedback loading />
+  ) : challenge === null ? (
+    <EmptyState icon="trophy" title={t("challengeNotFound")} />
+  ) : (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
@@ -212,6 +216,12 @@ export function ChallengeDetailScreen() {
     >
       <ChallengeDetailBody challenge={challenge} onOpenProjects={openProjects} />
     </ScrollView>
+  );
+  return (
+    <>
+      <EntryBackToolbar fallback="/(tabs)/queue" />
+      {body}
+    </>
   );
 }
 

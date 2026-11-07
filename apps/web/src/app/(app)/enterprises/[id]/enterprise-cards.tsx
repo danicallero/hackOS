@@ -11,7 +11,9 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
+import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { PublicationFormFields } from "@/components/common/publication-form-fields";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { SponsorLogo } from "@/components/common/sponsor-logo";
@@ -22,7 +24,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText, errorText } from "@/lib/api-error-text";
 import {
@@ -34,6 +36,7 @@ import {
 } from "@/lib/challenges";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { initials } from "@/lib/initials";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type { UserList } from "@/lib/types";
@@ -42,10 +45,9 @@ import {
   EnterpriseKindPriorityFields,
   EnterpriseLogoUrlFields,
   EnterpriseProfileFields,
-  EnterprisePublicationFields,
   enterpriseFormSchema,
 } from "../enterprise-form-fields";
-import { type Enterprise, initials, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
+import { type Enterprise, LOGO_ACCEPT, LOGO_CONTENT_TYPES } from "../shared";
 import { mutateMembership } from "./membership-mutation";
 import { PublicationSummary } from "./publication-summary";
 
@@ -100,38 +102,38 @@ export function ChallengesSummaryCard({
 }) {
   const { t } = useLocale();
   const { me } = useSessionContext();
-  const [challenges, setChallenges] = useState<Challenge[] | null>(null);
 
   const isOwnEnterprise = !canManage && me?.isSponsorRep;
-
-  const load = useCallback(async () => {
-    try {
+  const {
+    data: challenges,
+    error,
+    refetch,
+  } = useLiveQuery(
+    async () => {
       if (canManage) {
         const res = await api.get<{ challenges: Challenge[] }>("/api/challenges");
-        setChallenges(filterChallengesForEnterprise(res.challenges, enterprise.name));
-        return;
+        return filterChallengesForEnterprise(res.challenges, enterprise.name);
       }
-      if (isOwnEnterprise) {
-        const res = await api.get<{ challenges: Challenge[] }>("/api/challenges/mine");
-        setChallenges(res.challenges);
-        return;
-      }
-      setChallenges([]);
-    } catch {
-      setChallenges([]);
-    }
-  }, [canManage, enterprise.name, isOwnEnterprise]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-  }, [load]);
+      return (await api.get<{ challenges: Challenge[] }>("/api/challenges/mine")).challenges;
+    },
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    {
+      enabled: canManage || Boolean(isOwnEnterprise),
+      resourceKey: ["enterprise", enterprise.id, "challenges", canManage ? "all" : "mine"],
+    },
+  );
 
   if (!canManage && !isOwnEnterprise) return null;
 
   return (
     <SectionCard variant="plain" bodyClassName="pt-0">
-      {challenges === null ? (
+      {error ? (
+        <ContextualError
+          message={apiErrorText(error, t, t("couldNotLoadChallenges"))}
+          onRetry={refetch}
+        />
+      ) : challenges === null ? (
         <div className="flex justify-center py-6">
           <Spinner className="size-5" />
         </div>
@@ -184,28 +186,21 @@ interface Member {
 
 export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
   const { t } = useLocale();
-  const [members, setMembers] = useState<Member[] | null>(null);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const loadMembers = useCallback(async () => {
-    try {
-      const r = await api.get<{ members: Member[] }>(`/api/enterprises/${enterpriseId}/members`);
-      setMembers(r.members);
-    } catch {
-      setMembers([]);
-    }
-  }, [enterpriseId]);
-
-  // Soft, in-place refresh instead of a hard reload when membership changes
-  // elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.SPONSORS), [EVENTS.DOMAIN_CHANGED]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadMembers();
-  }, [loadMembers, liveRefresh]);
+  // Membership changes elsewhere refresh the list in place.
+  const {
+    data,
+    error: membersError,
+    refetch: loadMembers,
+  } = useLiveQuery(
+    () => api.get<{ members: Member[] }>(`/api/enterprises/${enterpriseId}/members`),
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["enterprise", enterpriseId, "members"] },
+  );
+  const members = data?.members ?? null;
 
   const memberUserIds = useMemo(() => new Set((members ?? []).map((m) => m.userId)), [members]);
   const searchAvailableUsers = useCallback(
@@ -274,7 +269,12 @@ export function MembersCard({ enterpriseId }: { enterpriseId: number }) {
           </div>
         </div>
 
-        {members === null ? (
+        {membersError ? (
+          <ContextualError
+            message={apiErrorText(membersError, t, t("couldNotLoadMembers"))}
+            onRetry={loadMembers}
+          />
+        ) : members === null ? (
           <div className="flex justify-center py-6">
             <Spinner className="size-5" />
           </div>
@@ -316,7 +316,7 @@ export function LogoCard({
   onChanged,
 }: {
   enterprise: Enterprise;
-  onChanged: () => Promise<void>;
+  onChanged: () => void | Promise<void>;
 }) {
   const { t } = useLocale();
   const defaultInputRef = useRef<HTMLInputElement>(null);
@@ -418,7 +418,7 @@ export function EditCard({
 }: {
   enterprise: Enterprise;
   canManage: boolean;
-  onSaved: () => Promise<void>;
+  onSaved: () => void | Promise<void>;
   /** Immediate-upload logo controls, shown with the logo URL fields. */
   logoUploader: React.ReactNode;
 }) {
@@ -505,7 +505,8 @@ export function EditCard({
                 {t("publicationTitle")}
               </h2>
               {canManage ? (
-                <EnterprisePublicationFields
+                <PublicationFormFields
+                  id="enterprise-publication"
                   form={form}
                   scheduled={scheduledPublish}
                   setScheduled={setScheduledPublish}

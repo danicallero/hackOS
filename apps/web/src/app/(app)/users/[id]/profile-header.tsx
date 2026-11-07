@@ -240,7 +240,7 @@ function RemovalAlerts({ removal }: { removal: AccountRemoval }) {
  * `dialogOnly` (narrow headers) keeps just the confirmation: the trigger
  * lives in the "More actions" menu and the alerts under the header.
  */
-export function DeleteAccountButton({
+function DeleteAccountButton({
   user,
   removal,
   dialogOnly = false,

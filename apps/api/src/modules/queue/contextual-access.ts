@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastif
 import { pool } from "../../db/pool.js";
 import { getRequestAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
-import { fixtureRoomIds } from "../logistics/review-fixture-scope.js";
+import { fixtureRoomIds } from "../../lib/fixture-queue-scope.js";
 import {
   assertQueueChallengeScope,
   assertQueueEntryScope,

@@ -16,6 +16,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { useDialogPortal } from "@/hooks/use-dialog-portal";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
@@ -57,27 +58,27 @@ export function DegreePicker({
   const { ref, portalProps, contentProps } = useDialogPortal(inDialog);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [options, setOptions] = useState<Degree[]>([]);
-  const [loading, setLoading] = useState(true);
   const [resolvedLabel, setResolvedLabel] = useState<{ id: string; name: string } | null>(null);
-  useEffect(() => {
-    // Only search once the picker opens (#1227).
-    if (!open) return;
-    let active = true;
-    const timer = setTimeout(() => {
-      const q = query.trim() || undefined;
-      readServerState(["public", "degrees", { q }], (signal) =>
-        api.get<{ degrees: Degree[] }>("/api/public/degrees", { query: { q }, signal }),
-      )
-        .then((result) => active && setOptions(result.degrees))
-        .catch(() => active && setOptions([]))
-        .finally(() => active && setLoading(false));
-    }, 200);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [open, query]);
+  const trimmedQuery = query.trim();
+  // Only search once the picker opens (#1227). Results carry their query so
+  // stale ones read as loading until the current query has answered.
+  const { result, error: searchError } = useDebouncedSearch(
+    query,
+    async (q) => {
+      const { degrees } = await readServerState(
+        ["public", "degrees", { q: q || undefined }],
+        (signal) =>
+          api.get<{ degrees: Degree[] }>("/api/public/degrees", {
+            query: { q: q || undefined },
+            signal,
+          }),
+      );
+      return { query: q, degrees };
+    },
+    { enabled: open, delayMs: 200 },
+  );
+  const options = result?.degrees ?? [];
+  const loading = !searchError && result?.query !== trimmedQuery;
   const knownLabel = value ? options.find((item) => String(item.id) === value)?.name : null;
   useEffect(() => {
     if (!value || knownLabel || resolvedLabel?.id === value) return;
@@ -89,7 +90,7 @@ export function DegreePicker({
         const match = degrees.find((degree) => String(degree.id) === value);
         if (active && match) setResolvedLabel({ id: value, name: match.name });
       })
-      .catch(() => {});
+      .catch((error) => console.error("[degree-picker] label lookup failed", error));
     return () => {
       active = false;
     };
@@ -166,13 +167,16 @@ export function DegreePicker({
             <CommandInput
               placeholder={t("searchDegreesPlaceholder")}
               value={query}
-              onValueChange={(next) => {
-                setQuery(next);
-                setLoading(true);
-              }}
+              onValueChange={setQuery}
             />
             <CommandList className="max-h-64 min-h-0 flex-1">
-              <CommandEmpty>{loading ? t("loading") : t("typeToSearchDegrees")}</CommandEmpty>
+              <CommandEmpty>
+                {loading
+                  ? t("loading")
+                  : searchError
+                    ? t("couldNotLoadDegrees")
+                    : t("typeToSearchDegrees")}
+              </CommandEmpty>
               <CommandGroup>
                 {options.map((degree) => (
                   <CommandItem

@@ -65,7 +65,7 @@ export interface Room {
   updated_at: string;
 }
 
-export interface RoomQueueState {
+interface RoomQueueState {
   room_id: number;
   is_paused: boolean;
   max_in_waiting_area: number;
@@ -110,7 +110,7 @@ export interface RoomView {
 }
 
 /** Why call-next passes over a waiting team (H30 occupancy or H38 eligibility). */
-export type CrossRoomSkip =
+type CrossRoomSkip =
   | {
       entryId: number;
       position: number | null;
@@ -169,7 +169,7 @@ export interface RoomPace {
   calledTooLongThresholdMinutes: number;
 }
 
-export interface RoomChallengeAssignment {
+interface RoomChallengeAssignment {
   challenge_id: number;
   title: string;
   visibility: string;
@@ -186,7 +186,7 @@ export interface RoomChallengeAssignment {
  * Read-only: judges are rostered on the enterprise that owns the room's
  * challenge (`/api/enterprises/:id/judges`), not on the room itself.
  */
-export interface RoomJudgeAssignment {
+interface RoomJudgeAssignment {
   queue_group_id: number;
   enterprise_id: number;
   user_id: number;
@@ -201,7 +201,7 @@ export interface RoomJudgeAssignment {
 }
 
 /** The queue group a room serves; null when the room is unassigned. */
-export interface RoomQueueGroupAssignment {
+interface RoomQueueGroupAssignment {
   id: number;
   display_name: string;
   enterprise_id: number;
@@ -214,7 +214,7 @@ export interface RoomQueueGroupAssignment {
 }
 
 /** The enterprise a room's pool belongs to; null when the room is unassigned. */
-export interface RoomEnterpriseAssignment {
+interface RoomEnterpriseAssignment {
   enterprise_id: number;
   enterprise_name: string;
   assigned_at: string;
@@ -268,7 +268,7 @@ export interface QueueGroup {
   evaluationStarted: boolean;
 }
 
-export interface AssignableRoom {
+interface AssignableRoom {
   id: number;
   name: string;
   queueGroupId: number | null;
@@ -314,12 +314,6 @@ export interface MergedPanelPreview {
   renamedKeys: Array<{ from: string; to: string }>;
 }
 
-/** One enterprise's queues. `listQueueGroups` is the cross-enterprise view. */
-export const listEnterpriseQueueGroups = (enterpriseId: number) =>
-  api
-    .get<{ groups: QueueGroup[] }>(`/api/enterprises/${enterpriseId}/queue-groups`)
-    .then((r) => r.groups);
-
 export const previewQueueGroupMerge = (enterpriseId: number, challengeIds: number[]) =>
   api.post<MergedPanelPreview>(`/api/enterprises/${enterpriseId}/queue-groups/preview-merge`, {
     challengeIds,
@@ -351,30 +345,6 @@ export const setQueueGroupRooms = (queueGroupId: number, roomIds: number[]) =>
 
 export const moveQueueEntry = (entryId: number, position: number) =>
   api.post(`/api/queue/entries/${entryId}/move-to`, { position });
-
-/** GET /api/queue/me — participant view (H38). */
-export interface MyQueueRoom {
-  id: number;
-  name: string;
-  location: string | null;
-}
-
-export interface MyQueueEntry {
-  /** The participant projection is one row per project queue. */
-  entryId: number;
-  challengeId: number;
-  challengeTitle: string;
-  repoId: number;
-  repoName: string;
-  status: QueueStatus | string;
-  position: number | null;
-  etaMinutes: number | null;
-  calledAt: string | null;
-  /** The concrete room the entry was called to; null while still waiting. */
-  room: MyQueueRoom | null;
-  /** Every room serving this challenge's queue group — the full set a waiting team can be called to. */
-  rooms: MyQueueRoom[];
-}
 
 // ── reads ────────────────────────────────────────────────────────────────
 export const getRoomView = (roomId: number, signal?: AbortSignal) =>
@@ -490,11 +460,11 @@ export function collapseRepoQueueMemberships(entries: RepoChallenge[]): RepoChal
 
 export const getRepoChallenges = (repoId: number) =>
   api.get<RepoChallenge[]>(`/api/queue/repos/${repoId}/challenges`);
-export const getMyQueue = () => api.get<MyQueueEntry[]>("/api/queue/me");
 export const listRooms = () => api.get<Room[]>("/api/queue/rooms");
 export const getQueueSettings = () => api.get<QueueSettings>("/api/queue/settings");
 
 // ── room control (H29, H35) ────────────────────────────────────────────────
+// Without a caller key `apiFetch` mints an intent-stable one for every mutation (#995).
 const idem = (key?: string) => (key ? { headers: { "Idempotency-Key": key } } : undefined);
 
 export const pauseRoom = (roomId: number, idempotencyKey?: string) =>
@@ -543,7 +513,7 @@ export const enqueueAllChallengeQueues = (idempotencyKey?: string) =>
     alreadyQueued: number;
   }>("/api/queue/challenges/enqueue-all", {}, idem(idempotencyKey));
 
-export interface QueueGenerationResult {
+interface QueueGenerationResult {
   challenges: Array<{
     challengeId: number;
     inserted: number;
@@ -599,7 +569,7 @@ export const moveQueueEntryToPosition = (
     idem(idempotencyKey),
   );
 // ── judging / evaluation (H36-H37) ─────────────────────────────────────────
-export interface AttemptReview {
+interface AttemptReview {
   attempt_id: number;
   scores: Record<string, unknown>;
   notes: string | null;

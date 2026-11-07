@@ -22,7 +22,7 @@ import { type EmailPayload, normalizeLanguage, renderEmailTemplate } from "./tem
  */
 
 export type NotificationChannel = "in_app" | "email" | "push";
-export const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
+const ALL_CHANNELS: NotificationChannel[] = ["in_app", "email", "push"];
 /** Channels used when a caller doesn't name any explicitly. */
 export const DEFAULT_CHANNELS: NotificationChannel[] = ALL_CHANNELS;
 
@@ -46,8 +46,6 @@ export interface NotifyOptions {
   /** Explicit fixture marker for system/queue fan-out without an actor. */
   fixtureMarker?: boolean;
 }
-
-export { CHALLENGE_CATEGORY, EMAIL_OPT_IN_CATEGORIES };
 
 /** True when this person has at least one registered push device (mobile app signed in). */
 export async function hasPushDevice(db: Queryable, userId: number): Promise<boolean> {
@@ -106,7 +104,7 @@ export async function resolveChannels(
   return applyChannelRules(category, candidates, overrides, hasDevice);
 }
 
-export interface ResolveChannelsRequest {
+interface ResolveChannelsRequest {
   userId: number;
   category: string;
   candidates: NotificationChannel[];
@@ -296,7 +294,7 @@ export async function notifyMany(db: Queryable, items: NotifyOptions[]): Promise
 
 // ── H51 preferences API ─────────────────────────────────────────────────────
 
-export interface PreferenceRow {
+interface PreferenceRow {
   category: string;
   channel: NotificationChannel;
   enabled: boolean;

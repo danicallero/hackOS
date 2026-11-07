@@ -27,7 +27,7 @@ import { Freshness } from "./freshness";
 import { errorMessage, FRESHNESS_LABEL_KEYS, type FreshnessKind } from "./model";
 import type { StatsChartType } from "./stats-chart";
 
-export interface LiveStatsState {
+interface LiveStatsState {
   data: LogisticsStats | null;
   error: unknown;
   loading: boolean;
@@ -210,7 +210,7 @@ export function DuringPanel({
   );
 }
 
-export function StaffRankingSection() {
+function StaffRankingSection() {
   const { t } = useLocale();
   const [rows, setRows] = useState<StaffScanRankingRow[]>([]);
   const [loading, setLoading] = useState(true);

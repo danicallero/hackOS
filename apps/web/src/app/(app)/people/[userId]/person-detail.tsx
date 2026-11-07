@@ -4,7 +4,6 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -14,20 +13,13 @@ import { SocialLinks } from "@/components/profile/social-links";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
-import { ApiError, api } from "@/lib/api";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
-import { getPublicChallenges } from "@/lib/public-content";
-import { type ChallengeOption, challengeTitleText } from "../../projects/shared";
-
-type State =
-  | { status: "loading" }
-  | { status: "ready"; entry: DirectoryEntry }
-  | { status: "missing" }
-  | { status: "error"; message: string };
+import { useChallengeNames } from "../person-row";
 
 /** Singular and plural row labels per project kind. */
 const PROJECT_KIND: Record<"project" | "workGroup", [MessageKey, MessageKey]> = {
@@ -45,58 +37,21 @@ export function PersonDetail({ userId }: { userId: number }) {
 }
 
 function PersonReader({ userId }: { userId: number }) {
-  const { t, language } = useLocale();
-  const [state, setState] = useState<State>({ status: "loading" });
-  const [retryNonce, setRetryNonce] = useState(0);
-  const [challenges, setChallenges] = useState<ChallengeOption[]>([]);
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.DIRECTORY), [EVENTS.DOMAIN_CHANGED]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getPublicChallenges<ChallengeOption>()
-      .then((r) => {
-        if (!cancelled) setChallenges(r.items);
-      })
-      .catch(() => {
-        // Challenge titles fall back to the names the profile returns.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh and retryNonce are ping-only nonces that retrigger this read.
-  useEffect(() => {
-    let cancelled = false;
-    if (!Number.isSafeInteger(userId) || userId <= 0) {
-      setState({ status: "missing" });
-      return;
-    }
-    api
-      .get<DirectoryEntry>(`/api/directory/${userId}`)
-      .then((entry) => {
-        if (!cancelled) setState({ status: "ready", entry });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        // Hidden and missing profiles share the 404, so both read as "not found".
-        if (err instanceof ApiError && err.status === 404) setState({ status: "missing" });
-        else {
-          setState({
-            status: "error",
-            message: apiErrorText(err, t, t("couldNotLoadPerson")),
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, liveRefresh, retryNonce, t]);
-
-  const titles = useMemo(
-    () => new Map(challenges.map((c) => [c.id, challengeTitleText(c.title, language)])),
-    [challenges, language],
+  const { t } = useLocale();
+  const { nameOf } = useChallengeNames();
+  const validId = Number.isSafeInteger(userId) && userId > 0;
+  const {
+    data: entry,
+    error,
+    refetch,
+  } = useLiveQuery(
+    (signal) => api.get<DirectoryEntry>(`/api/directory/${userId}`, { signal }),
+    domainScope(SSE_TOPICS.DIRECTORY),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["directory", "person", userId], enabled: validId },
   );
+  // Hidden and missing profiles share the 404, so both read as "not found".
+  const missing = !validId || isNotFoundError(error);
 
   const back = (
     <Link
@@ -108,10 +63,10 @@ function PersonReader({ userId }: { userId: number }) {
     </Link>
   );
 
-  if (state.status !== "ready") {
+  if (!entry || missing) {
     return (
       <PageLayout width="reading">
-        {state.status === "loading" ? (
+        {!missing && !error ? (
           <div className="flex items-start gap-3" aria-busy="true">
             <Skeleton className="size-16 rounded-full" />
             <div className="flex-1 space-y-2 pt-1">
@@ -122,16 +77,13 @@ function PersonReader({ userId }: { userId: number }) {
           </div>
         ) : (
           <>
-            <PageHeader
-              context={back}
-              title={state.status === "missing" ? t("personNotFound") : t("columnPeople")}
-            />
-            {state.status === "missing" ? (
+            <PageHeader context={back} title={missing ? t("personNotFound") : t("columnPeople")} />
+            {missing ? (
               <EmptyState title={t("personNotFound")} />
             ) : (
               <ContextualError
-                message={state.message}
-                onRetry={() => setRetryNonce((value) => value + 1)}
+                message={apiErrorText(error, t, t("couldNotLoadPerson"))}
+                onRetry={() => refetch()}
               />
             )}
           </>
@@ -140,7 +92,6 @@ function PersonReader({ userId }: { userId: number }) {
     );
   }
 
-  const { entry } = state;
   const rows: { id: string; label: string; value: React.ReactNode }[] = [];
   if (entry.socials.length > 0) {
     rows.push({
@@ -181,9 +132,7 @@ function PersonReader({ userId }: { userId: number }) {
       label: t("challenges"),
       value: (
         <p className="wrap-anywhere">
-          {entry.challenges
-            .map((challenge) => titles.get(challenge.id) || challenge.name)
-            .join(", ")}
+          {entry.challenges.map((challenge) => nameOf(challenge)).join(", ")}
         </p>
       ),
     });

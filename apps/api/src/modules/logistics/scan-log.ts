@@ -1,5 +1,5 @@
 import { pool } from "../../db/pool.js";
-import { assertFixtureSubjectScope, fixtureReadFilter } from "./review-fixture-scope.js";
+import { assertFixtureSubjectScope, fixtureReadFilter } from "../../lib/fixture-subject-scope.js";
 
 /**
  * Team-wide scan history and per-staff counts (extends H22-H27): every scan

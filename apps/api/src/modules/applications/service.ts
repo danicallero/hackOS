@@ -7,6 +7,7 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit, auditMany } from "../../lib/audit.js";
 import { assertVerifiedPrimaryEmail } from "../../lib/email-verification.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { validateResponses } from "../../lib/form-validation.js";
 import { translateEmail } from "../../lib/i18n.js";
 import { broadcast } from "../../lib/sse.js";
@@ -14,12 +15,12 @@ import { getEventName, getEventTimezone } from "../event/service.js";
 import { activeLibraryFields, validateLibraryAnswers } from "../form-libraries/service.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { applyRoleAssignmentRevokeRules } from "../identity/role-grants.js";
-import { assertFixtureSubjectScope } from "../logistics/review-fixture-scope.js";
 import { reconcileTicketAccess } from "../logistics/tickets.js";
 import { issueWalletAccessToken } from "../logistics/wallet-access.js";
 import { enqueueWalletSync } from "../logistics/wallet-sync.js";
 import { notify } from "../notifications/service.js";
 import { type EmailPayload, normalizeLanguage } from "../notifications/templates.js";
+import { grantedRoleNameSql } from "./granted-role.js";
 import type { FormSection, TemplateField } from "./schemas.js";
 
 /**
@@ -66,7 +67,7 @@ export interface ResponseRow {
   updated_at: Date;
 }
 
-export type ConfirmVia = "email_link" | "web" | "admin_override";
+type ConfirmVia = "email_link" | "web" | "admin_override";
 
 /**
  * Persist an explicit minimising policy for every field.  The field schema is
@@ -91,7 +92,7 @@ export function anonymousRetentionConfiguration(template: TemplateField[]) {
     }));
 }
 
-export interface ApplicationFormVersion {
+interface ApplicationFormVersion {
   id: number | string;
   application_id: number;
   version: number;
@@ -142,10 +143,7 @@ export async function ensureApplicationFormVersion(
 
 // ── loaders ──────────────────────────────────────────────────────────────────
 
-export async function getApplication(
-  db: Queryable,
-  id: number,
-): Promise<ApplicationRow | undefined> {
+async function getApplication(db: Queryable, id: number): Promise<ApplicationRow | undefined> {
   const { rows } = await db.query(`SELECT * FROM applications WHERE id = $1`, [id]);
   return rows[0];
 }
@@ -183,7 +181,7 @@ export function extractDni(responses: Record<string, unknown>): string | null {
  * on the user row. Drafts may temporarily contain them so applicants can resume
  * before submit, but no submitted/staff-edited response JSON may retain a copy.
  */
-export function stripDietaryResponses(responses: Record<string, unknown>): Record<string, unknown> {
+function stripDietaryResponses(responses: Record<string, unknown>): Record<string, unknown> {
   const sanitized = { ...responses };
   delete sanitized.food_intolerances;
   delete sanitized.food_intolerance_notes;
@@ -207,7 +205,7 @@ function shirtSizeField(sizes: string[]): TemplateField {
 }
 
 /** If the application asks for a shirt size, append the field to the template. */
-export async function augmentTemplate(
+async function augmentTemplate(
   askShirtSize: boolean,
   template: TemplateField[],
 ): Promise<TemplateField[]> {
@@ -461,7 +459,7 @@ export async function deleteDraft(userId: number, applicationId: number): Promis
 
 // ── submit (H12) ─────────────────────────────────────────────────────────────
 
-export interface SubmitInput {
+interface SubmitInput {
   responses?: Record<string, unknown>;
   food_intolerances: number[];
   food_intolerance_notes?: string | null;
@@ -1340,7 +1338,7 @@ export async function revokeSpot(actorId: number, responseId: number): Promise<R
 
 // ── decision pool (review dashboard) ─────────────────────────────────────────
 
-export interface DecisionPoolRow {
+interface DecisionPoolRow {
   id: number;
   user_id: number;
   name: string | null;
@@ -1353,7 +1351,7 @@ export interface DecisionPoolRow {
   review_count: number;
 }
 
-export interface DecisionPool {
+interface DecisionPool {
   accepted: { unsent: DecisionPoolRow[]; sent: DecisionPoolRow[] };
   rejected: { unsent: DecisionPoolRow[]; sent: DecisionPoolRow[] };
   declined: { manual: DecisionPoolRow[]; expired: DecisionPoolRow[] };
@@ -1631,7 +1629,7 @@ async function decisionNotificationPayload(
   };
 }
 
-export interface ResponseDetail {
+interface ResponseDetail {
   response: ResponseRow;
   user: {
     name: string | null;
@@ -1705,12 +1703,7 @@ export async function getResponseDetail(
             u.name AS first_name, u.surname AS last_name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
             a.id AS app_id, a.name AS app_name,
-            (SELECT r2.name
-               FROM application_grants_roles agr
-               JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
-              WHERE agr.application_id = a.id
-              ORDER BY r2.position DESC
-              LIMIT 1) AS granted_role_name,
+            ${grantedRoleNameSql("a", "granted_role_name")},
             a.template,
             a.sections,
             a.ask_shirt_size, a.ask_food_intolerances, a.review_hidden_fields
@@ -1859,7 +1852,7 @@ export interface ConfirmResult {
  * page to say "this ticket belongs to m•••@example.com — sign in as them to
  * use the app". Never a session.
  */
-export interface EmailConfirmResult extends ConfirmResult {
+interface EmailConfirmResult extends ConfirmResult {
   holderName: string;
   walletToken: string;
   walletTokenExpiresAt: string;
@@ -1870,7 +1863,7 @@ export interface EmailConfirmResult extends ConfirmResult {
  * m•••@example.com — enough for the holder of the link to recognize their own
  * account without printing a full address to whoever the mail was forwarded to.
  */
-export function maskEmail(email: string): string {
+function maskEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at <= 0) return "•••";
   return `${email[0]}•••${email.slice(at)}`;
@@ -2175,12 +2168,7 @@ export async function listUserResponsesForStaff(userId: number): Promise<
 > {
   const { rows } = await pool.query(
     `SELECT r.id, r.application_id, a.name AS application_name,
-            (SELECT r2.name
-               FROM application_grants_roles agr
-               JOIN roles r2 ON r2.id = agr.role_id AND r2.deleted_at IS NULL
-              WHERE agr.application_id = a.id
-              ORDER BY r2.position DESC
-              LIMIT 1) AS application_granted_role_name,
+            ${grantedRoleNameSql("a", "application_granted_role_name")},
             r.status, r.decision_sent_at, r.submitted_at
      FROM application_responses r
      JOIN applications a ON a.id = r.application_id

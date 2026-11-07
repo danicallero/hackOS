@@ -106,7 +106,7 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
     triggerName: "activities",
   },
   account: {
-    href: "/(tabs)/others",
+    href: "/(tabs)/others/account",
     icon: "person.crop.circle",
     labelKey: "tabAccount",
     selectedIcon: "person.crop.circle.fill",
@@ -127,7 +127,7 @@ const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/operations", name: "operations" },
   { href: "/(tabs)/scan", name: "scan" },
   { href: "/(tabs)/activities", name: "activities" },
-  { href: "/(tabs)/others", name: "others" },
+  { href: "/(tabs)/others/account", name: "others" },
 ];
 
 /** Account owns its subpages but not the queue/diary/operations pseudo-tabs that share `/others`. */
@@ -303,9 +303,15 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
         colorScheme={fallbackColorScheme}
         onTabPress={(tab, wasSelected) => {
           void haptic("selection");
-          if (wasSelected) emitTabReselect(tab.name);
+          // H55: Account owns pushed settings; pressing its tab returns to the profile.
+          if (tab.name === TAB_DEFINITIONS.account.triggerName) {
+            router.navigate(OVERFLOW_TAB_ROUTE.account);
+          } else if (wasSelected) emitTabReselect(tab.name);
         }}
-        onTabSelect={() => void haptic("selection")}
+        onTabSelect={(index) => {
+          void haptic("selection");
+          if (visibleTabKeys[index] === "account") router.navigate(OVERFLOW_TAB_ROUTE.account);
+        }}
         overflow={
           overflowIds.length > 0 ? (
             <OpaqueOverflowMenu

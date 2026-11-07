@@ -23,7 +23,7 @@ export const GROUP_SIBLING_CHALLENGE_IDS_SQL = `
    WHERE self.challenge_id = $1`;
 
 /** Every challenge the room currently serves, via its queue_group. */
-export const ROOM_CHALLENGE_IDS_SQL = `
+const ROOM_CHALLENGE_IDS_SQL = `
   SELECT qgc.challenge_id
     FROM room_queue_groups rqg
     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id
@@ -31,7 +31,7 @@ export const ROOM_CHALLENGE_IDS_SQL = `
    WHERE rqg.room_id = $1`;
 
 /** Every challenge a marker-scoped operator's room currently serves. */
-export const ROOM_CHALLENGE_IDS_FOR_MARKER_SQL = `
+const ROOM_CHALLENGE_IDS_FOR_MARKER_SQL = `
   SELECT qgc.challenge_id
     FROM room_queue_groups rqg
     JOIN queue_group_challenges qgc ON qgc.queue_group_id = rqg.queue_group_id

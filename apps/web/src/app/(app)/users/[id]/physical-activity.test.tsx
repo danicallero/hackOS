@@ -1,6 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetServerStateForTests } from "@/lib/server-state";
 import { PhysicalActivity } from "./physical-activity";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -8,7 +9,15 @@ import { PhysicalActivity } from "./physical-activity";
 
 const getActivity = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/api", () => ({ api: { get: getActivity } }));
+const stream = vi.hoisted(() => ({ onEvent: () => {} }));
+
+vi.mock("@/lib/api", () => ({ api: { get: getActivity }, isNotFoundError: () => false }));
+vi.mock("@/hooks/use-event-source", () => ({
+  useEventSource: (_scope: string, options: { onEvent: () => void }) => {
+    stream.onEvent = options.onEvent;
+    return { connected: true };
+  },
+}));
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({ t: (key: string) => key }),
 }));
@@ -29,6 +38,7 @@ describe("PhysicalActivity freshness", () => {
   let root: Root;
 
   beforeEach(() => {
+    resetServerStateForTests();
     getActivity.mockResolvedValue({ passes: [] });
     container = document.createElement("div");
     document.body.append(container);
@@ -41,18 +51,18 @@ describe("PhysicalActivity freshness", () => {
     getActivity.mockReset();
   });
 
-  it("reloads when the profile event-stream nonce changes", async () => {
+  it("reloads when the profile event stream reports a change", async () => {
     await act(async () => {
-      root.render(<PhysicalActivity userId={42} refreshKey={0} embedded />);
+      root.render(<PhysicalActivity userId={42} embedded />);
       await Promise.resolve();
     });
     expect(getActivity).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      root.render(<PhysicalActivity userId={42} refreshKey={1} embedded />);
-      await Promise.resolve();
+      stream.onEvent();
+      await new Promise((resolve) => setTimeout(resolve, 200));
     });
     expect(getActivity).toHaveBeenCalledTimes(2);
-    expect(getActivity).toHaveBeenLastCalledWith("/api/users/42/activity");
+    expect(getActivity.mock.calls[1]?.[0]).toBe("/api/users/42/activity");
   });
 });

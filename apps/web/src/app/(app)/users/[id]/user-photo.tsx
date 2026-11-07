@@ -18,7 +18,7 @@ import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { fullName, initials } from "./shared";
+import { fullName, userInitials } from "./shared";
 
 const AVATAR = "size-14 ring-1 ring-border sm:size-16";
 
@@ -35,7 +35,7 @@ export function UserPhoto({ user, onChanged }: { user: UserDetail; onChanged: ()
   const avatar = (
     <Avatar className={AVATAR}>
       {user.image && <AvatarImage src={apiAssetUrl(user.image)} alt={fullName(user)} />}
-      <AvatarFallback className="text-lg">{initials(user)}</AvatarFallback>
+      <AvatarFallback className="text-lg">{userInitials(user)}</AvatarFallback>
     </Avatar>
   );
   if (!canWrite) return avatar;

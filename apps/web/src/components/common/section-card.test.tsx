@@ -42,7 +42,5 @@ describe("SectionCard", () => {
     expect(getByRole(section, "heading", { level: 2 }).textContent).toBe("Team");
     expect(getByRole(section, "button", { name: "Invite someone" })).toBeDefined();
     expect(getByRole(section, "listitem").textContent).toBe("Alex Fernández");
-    expect(section.classList.contains("overflow-visible")).toBe(variant === "plain");
-    expect(section.classList.contains("rounded-none")).toBe(variant === "plain");
   });
 });

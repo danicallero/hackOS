@@ -7,11 +7,11 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError, UnauthorizedError } from "../../lib/errors.js";
+import { assertFixtureEnterpriseScope } from "../../lib/fixture-queue-scope.js";
 import type {
   ContextualPolicyResolver,
   ContextualResourceLocator,
 } from "../../lib/route-policy.js";
-import { assertFixtureEnterpriseScope } from "../logistics/review-fixture-scope.js";
 
 /** How a user was allowed to touch an enterprise. */
 export type EnterpriseAccess = "admin" | "owner";
@@ -29,7 +29,7 @@ function enterpriseIdFrom(request: FastifyRequest, locator: ContextualResourceLo
 }
 
 /** True when `userId` holds a sponsor row on `enterpriseId`. */
-export async function ownsEnterprise(userId: number, enterpriseId: number): Promise<boolean> {
+async function ownsEnterprise(userId: number, enterpriseId: number): Promise<boolean> {
   const { rowCount } = await pool.query(
     `SELECT 1 FROM sponsors WHERE user_id = $1 AND enterprise_id = $2`,
     [userId, enterpriseId],
@@ -44,7 +44,7 @@ export async function ownsEnterprise(userId: number, enterpriseId: number): Prom
  * Returns how access was granted so the caller can restrict which fields an
  * owner (vs. an admin) is allowed to change.
  */
-export async function assertCanEditEnterprise(
+async function assertCanEditEnterprise(
   context: AuthorizationContext,
   enterpriseId: number,
 ): Promise<EnterpriseAccess> {

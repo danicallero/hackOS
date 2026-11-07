@@ -13,6 +13,7 @@ import "react-native-reanimated";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
 import { AlertHost } from "@/components/alert-host";
 import { AppBackGesture } from "@/components/app-back-gesture";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { MaintenanceScreen } from "@/components/maintenance-screen";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
 import { SessionState } from "@/components/session-state";
@@ -41,7 +42,7 @@ import {
 import { registerForPushNotifications } from "@/lib/push";
 import { useOrientationPolicy } from "@/lib/screen-orientation";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
-import { sideRegionForInsets } from "@/lib/side-region";
+import { sideRegionForInsets, useSideRegion } from "@/lib/side-region";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
 import { useLocalReminders } from "@/lib/use-local-reminders";
@@ -490,6 +491,11 @@ function RootLayoutNav({
 }) {
   const colorScheme = useColorScheme();
   const safeInsets = useSideInsets();
+  const sideRegion = useSideRegion();
+  const networkingPresentation =
+    process.env.EXPO_OS === "ios" && sideRegion.edge && !sideRegion.tabletRail
+      ? "fullScreenModal"
+      : "modal";
   const { refetch } = useMeContext();
   const showRestoringSession = useDelayedVisibility(!me && loading, 500);
   const canEnterApp = canEnterMobileApp(authenticated, me?.hasEventAccess);
@@ -610,7 +616,11 @@ function RootLayoutNav({
           />
           <Stack.Screen
             name="networking-profile"
-            options={{ contentStyle: noSidePadding, headerShown: false, presentation: "modal" }}
+            options={{
+              contentStyle: noSidePadding,
+              headerShown: process.env.EXPO_OS === "ios" && isRealLiquidGlassAvailable(),
+              presentation: networkingPresentation,
+            }}
           />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}

@@ -1,23 +1,11 @@
 "use client";
 
-import {
-  closestCenter,
-  DndContext,
-  type DragEndEvent,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { closestCenter, DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { useCallback, useEffect, useState } from "react";
 import { DragHandle, SortableItem } from "@/components/common/drag-handle";
+import { useSortableSensors } from "@/components/common/use-sortable-sensors";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -212,6 +200,7 @@ export function useScheduleTableConfig(): [TableConfig, (next: TableConfig) => v
     } catch {
       // Best-effort only.
     }
+    // The local copy above already applied; the account copy is a best-effort sync.
     void uiPrefsApi.set("scheduleTable", next).catch(() => {});
   }, []);
 
@@ -226,10 +215,7 @@ export function ColumnConfigPopover({
   onChange: (next: TableConfig) => void;
 }) {
   const { t } = useLocale();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  const sensors = useSortableSensors();
 
   function toggle(id: ColumnId, visible: boolean) {
     const hidden = visible ? config.hidden.filter((h) => h !== id) : [...config.hidden, id];

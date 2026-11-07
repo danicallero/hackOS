@@ -5,14 +5,18 @@
 // GET /api/challenges/:id/versions is populated by every update/publish/unpublish
 // (apps/api/src/modules/challenges/service.ts snapshotOf()).
 
-import { useCallback, useEffect, useState } from "react";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { useCallback, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
+import { useLiveQuery } from "@/hooks/use-live-query";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { textForDisplay } from "@/lib/challenges";
+import { formatEventDate } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import type { Language } from "@/lib/types";
 
 export interface VersionSnapshot {
   title: unknown;
@@ -54,7 +58,11 @@ export function changedFields(
 }
 
 /** Human-readable rendering of one snapshot field, for the before/after diff. */
-export function fieldValueForDisplay(key: keyof VersionSnapshot, value: unknown): string {
+export function fieldValueForDisplay(
+  key: keyof VersionSnapshot,
+  value: unknown,
+  language: Language,
+): string {
   if (key === "prizes") {
     const prizes = value as { name?: unknown }[] | null;
     if (!prizes || prizes.length === 0) return "—";
@@ -68,15 +76,24 @@ export function fieldValueForDisplay(key: keyof VersionSnapshot, value: unknown)
       .join(", ");
   }
   if (key === "available_from") {
-    return typeof value === "string" && value ? new Date(value).toLocaleString() : "—";
+    return typeof value === "string" && value ? formatEventDate(value, language, "dateTime") : "—";
   }
   return textForDisplay(value as never) || "—";
 }
 
 export function VersionHistory({ challengeId }: { challengeId: number }) {
-  const { t } = useLocale();
-  const [versions, setVersions] = useState<Version[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { t, language } = useLocale();
+  const {
+    data,
+    error,
+    refetch: load,
+  } = useLiveQuery(
+    () => api.get<{ versions: Version[] }>(`/api/challenges/${challengeId}/versions`),
+    domainScope(SSE_TOPICS.SPONSORS),
+    [EVENTS.DOMAIN_CHANGED],
+    { resourceKey: ["challenge", challengeId, "versions"] },
+  );
+  const versions = data?.versions ?? null;
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const toggleExpanded = useCallback((id: number) => {
@@ -91,25 +108,11 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
     });
   }, []);
 
-  const load = useCallback(() => {
-    setError(null);
-    api
-      .get<{ versions: Version[] }>(`/api/challenges/${challengeId}/versions`)
-      .then((r) => {
-        setVersions(r.versions);
-      })
-      .catch((err) => {
-        setError(apiErrorText(err, t, t("couldNotLoadVersions")));
-      });
-  }, [challengeId, t]);
-
-  useEffect(() => {
-    // fetching version history from the API on mount is a legitimate external-system sync
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-  }, [load]);
-
-  if (error) return <ContextualError message={error} onRetry={load} />;
+  if (error) {
+    return (
+      <ContextualError message={apiErrorText(error, t, t("couldNotLoadVersions"))} onRetry={load} />
+    );
+  }
   if (versions === null) return <Spinner className="size-5" />;
   if (versions.length === 0) {
     return <EmptyState title={t("noVersionsYetTitle")} />;
@@ -128,7 +131,7 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
                 {textForDisplay(version.snapshot.title as never) || t("untitledChallenge")}
               </p>
               <time className="text-muted-foreground text-xs" dateTime={version.created_at}>
-                {new Date(version.created_at).toLocaleString()}
+                {formatEventDate(version.created_at, language, "dateTime")}
               </time>
             </div>
             <p className="text-muted-foreground text-xs">
@@ -160,10 +163,10 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
                     <dd className="mt-0.5 space-y-0.5">
                       {previous && (
                         <p className="text-muted-foreground line-through">
-                          {fieldValueForDisplay(f.key, previous.snapshot[f.key])}
+                          {fieldValueForDisplay(f.key, previous.snapshot[f.key], language)}
                         </p>
                       )}
-                      <p>{fieldValueForDisplay(f.key, version.snapshot[f.key])}</p>
+                      <p>{fieldValueForDisplay(f.key, version.snapshot[f.key], language)}</p>
                     </dd>
                   </div>
                 ))}

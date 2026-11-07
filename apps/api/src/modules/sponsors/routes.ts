@@ -7,6 +7,7 @@ import { z } from "zod";
 import { requireAnyCapability, requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { sendCsv, toCsv } from "../../lib/csv.js";
 import { BadRequestError, ForbiddenError, UnauthorizedError } from "../../lib/errors.js";
+import { contentDisposition } from "../../lib/http-headers.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
 import { sharedCache } from "../../lib/shared-cache.js";
@@ -460,7 +461,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
     async (req, reply) => {
       const { name, code } = await standQrTag(actor(req.userId), req.params.id, req.params.tagId);
       reply.header("content-type", "image/svg+xml; charset=utf-8");
-      reply.header("content-disposition", `attachment; filename="${standQrFilename(name, code)}"`);
+      reply.header("content-disposition", contentDisposition(standQrFilename(name, code)));
       reply.header("cache-control", "private, no-store");
       return reply.send(standQrSvg(code, name));
     },
@@ -573,7 +574,7 @@ export function registerSponsorRoutes(app: FastifyInstance): void {
       }
       void archive.finalize();
       reply.header("content-type", "application/zip");
-      reply.header("content-disposition", `attachment; filename="company-qr-codes.zip"`);
+      reply.header("content-disposition", contentDisposition("company-qr-codes.zip"));
       reply.header("cache-control", "private, no-store");
       return reply.send(archive);
     },

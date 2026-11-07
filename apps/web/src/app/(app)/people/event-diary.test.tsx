@@ -25,7 +25,7 @@ vi.mock("@/lib/api", () => ({
   api: { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() },
   ApiError: class ApiError extends Error {},
 }));
-vi.mock("@/hooks/use-auto-refresh", () => ({ useAutoRefresh: () => 0 }));
+vi.mock("@/hooks/use-live-reload", () => ({ useLiveReload: () => undefined }));
 vi.mock("@/lib/session", () => ({
   useSessionContext: () => ({ isPureApplicant: env.isPureApplicant }),
 }));

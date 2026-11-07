@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { groupFieldsBySections, LOCALES } from "@/lib/application-form";
+import { groupApplicationFields } from "@/lib/application-field-groups";
+import { LOCALES } from "@/lib/application-form";
 import type { FormSection, TemplateField } from "@/lib/applications";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { Language } from "@/lib/types";
@@ -62,7 +63,7 @@ export function FormPreviewModal({
   );
 }
 
-export function FormPreviewPanel({
+function FormPreviewPanel({
   fields,
   sections,
   locale,
@@ -72,7 +73,7 @@ export function FormPreviewPanel({
   locale: Language;
 }) {
   const { t } = useLocale();
-  const groups = groupFieldsBySections(fields, sections);
+  const groups = groupApplicationFields(fields, sections);
   return (
     <div className="space-y-6">
       {groups.map((group, i) => (
@@ -112,13 +113,7 @@ function FieldGroupFields({ fields, locale }: { fields: TemplateField[]; locale:
  * kinds with nothing else to configure beyond title/type (text/date/etc — the
  * choice kinds render their editable `OptionsEditor` instead).
  */
-export function AnswerPreviewControl({
-  field: f,
-  locale,
-}: {
-  field: TemplateField;
-  locale: Language;
-}) {
+function AnswerPreviewControl({ field: f, locale }: { field: TemplateField; locale: Language }) {
   const { t } = useLocale();
   const opts = f.options ?? [];
   const fieldId = `preview-${f.key}`;
@@ -186,7 +181,7 @@ export function AnswerPreviewControl({
  * label + a disabled answer control matching its kind + help text. Shared by
  * the builder's preview modal and, unfocused, by the question card itself —
  * a question shows its live preview until you click into it to edit (see
- * `FieldEditor` in questions-card.tsx).
+ * `FieldEditor` in forms/field-editor).
  */
 export function FieldPreviewRow({ field: f, locale }: { field: TemplateField; locale: Language }) {
   const { t } = useLocale();

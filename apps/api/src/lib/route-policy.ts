@@ -1,6 +1,7 @@
 import { ALL_CAPABILITIES, type Capability } from "@hackos/shared/capabilities";
 import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
 import { requireVerifiedEmail } from "./email-verification.js";
+import { isProbePath } from "./request-path.js";
 
 /**
  * H1's verification boundary. `caller` is enforced by the shared
@@ -94,12 +95,7 @@ declare module "fastify" {
 }
 
 function isApplicationRoute(route: RouteOptions): boolean {
-  return (
-    route.url === "/healthz" ||
-    route.url === "/readyz" ||
-    route.url === "/metrics" ||
-    route.url.startsWith("/api/")
-  );
+  return isProbePath(route.url) || route.url.startsWith("/api/");
 }
 
 function validatePolicy(policy: RouteAccessPolicy, route: RouteOptions): void {

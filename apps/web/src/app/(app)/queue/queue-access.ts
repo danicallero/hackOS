@@ -1,4 +1,4 @@
-export interface QueueOperationsAccessInput {
+interface QueueOperationsAccessInput {
   canOperate: boolean;
   canAdmin: boolean;
   canJudge: boolean;

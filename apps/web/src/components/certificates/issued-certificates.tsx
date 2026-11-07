@@ -27,6 +27,7 @@ import {
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Certificate, certificatesApi, certificateTypesApi } from "@/lib/certificates";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import { IssueCertificateDialog } from "./issue-certificate-dialog";
@@ -76,8 +77,7 @@ export function IssuedCertificates() {
     {
       id: "issued",
       header: t("certificateIssuedDate"),
-      cell: (c) =>
-        new Intl.DateTimeFormat(language, { dateStyle: "medium" }).format(new Date(c.issuedAt)),
+      cell: (c) => formatEventDate(c.issuedAt, language, "date"),
       sortValue: (c) => c.issuedAt,
     },
     {

@@ -22,7 +22,7 @@ export function SendDecisionsModal({
   id: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSent: () => Promise<void>;
+  onSent: () => void | Promise<void>;
 }) {
   const { t } = useLocale();
   const [includeRejected, setIncludeRejected] = useState(false);

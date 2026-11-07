@@ -1,4 +1,5 @@
 import { SSE_TOPICS } from "@hackos/shared/events";
+import { pathOf } from "./request-path.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -14,7 +15,7 @@ declare module "fastify" {
  * the domain services retain ownership of richer operational events (H29-H53).
  */
 export function mutationDomainForPath(url: string): string | null {
-  const path = url.split("?", 1)[0] ?? url;
+  const path = pathOf(url);
   const matches = (prefix: string): boolean => path === prefix || path.startsWith(`${prefix}/`);
 
   // H60 private winner edits never invalidate other sponsors or public readers.
@@ -111,7 +112,7 @@ export function mutationDomainForPath(url: string): string | null {
  * queue groups and judging data stay on authenticated topics (H45, #533).
  */
 export function publicContentMutationForPath(url: string): boolean {
-  const path = url.split("?", 1)[0] ?? url;
+  const path = pathOf(url);
   const singleResource = (prefix: string): boolean => new RegExp(`^${prefix}/[^/]+$`).test(path);
 
   return (
@@ -134,7 +135,7 @@ export function publicContentMutationForPath(url: string): boolean {
  * changes are rarer; open profile views pick those up when refocused.
  */
 export function directoryMutationForPath(url: string): boolean {
-  const path = url.split("?", 1)[0] ?? url;
+  const path = pathOf(url);
   return (
     path === "/api/me" ||
     path === "/api/me/photo" ||

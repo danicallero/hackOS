@@ -10,9 +10,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption as access } from "../../lib/route-policy.js";
-import { isSyntheticOperator } from "./review-fixture-scope.js";
 import { createWalletOperation, operationSummary } from "./wallet-operations.js";
 import {
   readBundledAppleArtwork,

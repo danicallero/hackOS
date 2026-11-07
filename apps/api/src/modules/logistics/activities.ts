@@ -5,11 +5,12 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { isImplausiblyFuture } from "../../lib/clock.js";
 import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { resolveByTicket } from "./accreditation.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
 import { assertBadgeScanTimestamp, resolveByBadge } from "./badge.js";
 import { loadPersonCard, type PersonCard } from "./cards.js";
-import { assertFixtureSubjectScope } from "./review-fixture-scope.js";
+import { isScannableActivity } from "./scannable.js";
 
 interface ScanResult {
   status: number;
@@ -56,7 +57,7 @@ export async function activityScan(
   ]);
   if (!act.rows[0]) throw new NotFoundError("Activity not found");
   const isMeal = isMealActivityKind(act.rows[0].category);
-  if (!isMeal && !act.rows[0].requires_scan) {
+  if (!isScannableActivity(act.rows[0])) {
     throw new BadRequestError("Activity is not scannable", { activityId });
   }
 

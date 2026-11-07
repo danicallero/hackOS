@@ -881,7 +881,8 @@ async function invalidateWalletProviders(
         throw error;
       }
     }
-  } catch {
+  } catch (error) {
+    console.error("[removal] wallet provider cleanup failed", error);
     throw new ServiceUnavailableError(
       "Account wallet cleanup is waiting for an external provider. Your access has already been revoked; retry the operation later.",
       { code: "removal_provider_pending" },
@@ -904,7 +905,8 @@ async function deleteStorageArtifacts(
     for (const prefix of preparation.uploadPrefixes) await deletePrefix(prefix);
     for (const prefix of preparation.exportPrefixes) await deletePrefix(prefix);
     for (const key of preparation.storageKeys) await deleteObject(key);
-  } catch {
+  } catch (error) {
+    console.error(`[removal] storage cleanup failed for user ${preparation.targetId}`, error);
     throw new ServiceUnavailableError(
       "Account cleanup is waiting for private storage. Your access has already been revoked; retry the operation later.",
       { code: "removal_storage_pending" },
@@ -957,7 +959,8 @@ async function enqueueRemovalRetry(
         removeOnFail: { age: 24 * 60 * 60, count: 1_000 },
       },
     );
-  } catch {
+  } catch (error) {
+    console.error("[removal] unable to enqueue removal retry job", error);
     // The database remains removal_pending even if Valkey is unavailable;
     // an operator can safely retry the admin endpoint after infrastructure
     // recovery. Never turn a completed revocation into an access restore.

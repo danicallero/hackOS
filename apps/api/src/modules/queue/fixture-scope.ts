@@ -5,8 +5,8 @@ import {
   assertFixtureQueueScope,
   inspectFixtureEnterpriseScopeOfQueueGroup,
   inspectFixtureRoomScopesOfQueueGroup,
-  isSyntheticOperator,
-} from "../logistics/review-fixture-scope.js";
+} from "../../lib/fixture-queue-scope.js";
+import { isSyntheticOperator } from "../../lib/fixture-subject-scope.js";
 
 type QueueFixtureMarkers = {
   has_synthetic: boolean;
@@ -116,7 +116,7 @@ export type QueueChallengeFixtureScope = {
  * queue. The group marker also validates every member challenge, enterprise,
  * and queued repository before the read proceeds.
  */
-export async function resolveQueueChallengeScope(
+async function resolveQueueChallengeScope(
   client: Queryable,
   challengeId: number,
 ): Promise<QueueChallengeFixtureScope> {

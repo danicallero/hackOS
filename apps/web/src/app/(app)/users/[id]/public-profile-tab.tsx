@@ -20,13 +20,13 @@ import {
   settingsFrom,
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 
 /** Staff moderation uses the existing user permissions; consent stays with the owner (#935). */
 export function PublicProfileTab({
@@ -136,6 +136,7 @@ export function PublicProfileTab({
       className="max-w-4xl"
       onSubmit={(event) => {
         event.preventDefault();
+        // mutate() already surfaces the failure in the form error.
         void mutate("save").catch(() => {});
       }}
     >
@@ -257,6 +258,7 @@ function ModerationAction({
       onConfirm={() => {
         void onConfirm()
           .then(() => setOpen(false))
+          // onConfirm already surfaces the failure; just close the dialog.
           .catch(() => setOpen(false));
       }}
     />

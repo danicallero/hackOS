@@ -27,10 +27,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import type { SaveState } from "@/lib/save-state";
 import { toast } from "@/lib/toast";
-import { confirmDiscardUnsavedChanges } from "@/lib/use-unsaved-changes-guard";
 
 const queueProjects = [
   "Open Campus",
@@ -67,7 +67,7 @@ export function SurfacesPreview() {
       <Tabs
         value={tab}
         onValueChange={async (value) => {
-          if (await confirmDiscardUnsavedChanges(readingDirty, t)) {
+          if (await confirmDiscardUnsavedChanges(readingDirty)) {
             setReadingDirty(false);
             setTab(value);
           }
@@ -429,7 +429,7 @@ function EditorPreview({
   const [size, setSize] = useState<"default" | "wide" | "expanded">("default");
   async function changeOpen(next: boolean) {
     if (state === "saving") return;
-    if (!next && !(await confirmDiscardUnsavedChanges(state === "unsaved", t))) return;
+    if (!next && !(await confirmDiscardUnsavedChanges(state === "unsaved"))) return;
     setState("saved");
     onOpenChange(next);
   }

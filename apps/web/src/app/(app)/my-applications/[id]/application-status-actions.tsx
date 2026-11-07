@@ -12,8 +12,9 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { SectionCard } from "@/components/common/section-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
-import { type ActionError, fmtDateTime, type MyResponseDetail } from "../lib";
+import type { ActionError, MyResponseDetail } from "../lib";
 
 interface ApplicationStatusActionsProps {
   response: MyResponseDetail | null;
@@ -51,7 +52,7 @@ export function ApplicationStatusActions({
           {response?.confirmation_expires_at && (
             <p className="text-sm font-medium tabular-nums">
               {t("deadlineLabel", {
-                date: fmtDateTime(response.confirmation_expires_at, language),
+                date: formatEventDate(response.confirmation_expires_at, language, "dateTime"),
               })}
             </p>
           )}

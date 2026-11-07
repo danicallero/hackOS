@@ -1,4 +1,4 @@
-import pg from "pg";
+import { requireEmailFlag, withClientTransaction } from "./superadmin-cli.mjs";
 
 /**
  * Revokes superadmin (system:superadmin) from an EXISTING user account (H8).
@@ -17,24 +17,9 @@ import pg from "pg";
  *   node scripts/revoke-superadmin.mjs --email user@example.com
  */
 
-function readFlag(name) {
-  const i = process.argv.indexOf(name);
-  if (i === -1) return undefined;
-  return process.argv[i + 1];
-}
+const email = requireEmailFlag();
 
-const email = readFlag("--email")?.trim().toLowerCase();
-
-if (!email) {
-  throw new Error("Missing required flag: --email");
-}
-
-const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await client.connect();
-
-try {
-  await client.query("BEGIN");
-
+const message = await withClientTransaction(async (client) => {
   const { rows: users } = await client.query(`SELECT id FROM users WHERE email = $1`, [email]);
   if (!users[0]) {
     throw new Error(`User not found: ${email}`);
@@ -112,11 +97,6 @@ try {
     [userId, JSON.stringify({ email, capability: "*", roleId })],
   );
 
-  await client.query("COMMIT");
-  console.log(`Revoked superadmin from user #${userId} (${email}) (role #${roleId}).`);
-} catch (err) {
-  await client.query("ROLLBACK");
-  throw err;
-} finally {
-  await client.end();
-}
+  return `Revoked superadmin from user #${userId} (${email}) (role #${roleId}).`;
+});
+console.log(message);

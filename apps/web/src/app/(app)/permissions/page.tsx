@@ -43,18 +43,18 @@ import {
 } from "@/components/ui/select";
 import { Section } from "@/components/ui/surface";
 import { Switch } from "@/components/ui/switch";
-import { useAutoRefresh } from "@/hooks/use-auto-refresh";
+import { useLiveReload } from "@/hooks/use-live-reload";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type Translate, useLocale } from "@/lib/i18n";
+import { invalidatePermissionsResources, PERMISSIONS_RESOURCES } from "@/lib/permissions-resources";
+import { rolesApi } from "@/lib/roles-api";
 import { readServerState } from "@/lib/server-state";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import type {
   PermissionState,
-  RoleDetail,
-  RoleSeedDiff,
   RoleSummary,
   RoleTemplate,
   UserList,
@@ -65,7 +65,6 @@ import { GrantRulesOverviewModal } from "./grant-rules-overview";
 import { permissionTemplateName } from "./helpers";
 import { RoleEditor } from "./role-editor";
 import { RoleList } from "./role-list";
-import { invalidatePermissionsResources, PERMISSIONS_RESOURCES } from "./server-state";
 
 // H8: one role hierarchy with the selected role persisted in ?role=<id>.
 // Desktop uses two panes; below md, the same state drives a mobile drill-down.
@@ -172,9 +171,7 @@ function PermissionsPageContent() {
       setLoadError(null);
       if (opts?.force) invalidatePermissionsResources();
       const [rolesResult, templatesResult, usersResult] = await Promise.allSettled([
-        readServerState(PERMISSIONS_RESOURCES.roles, (signal) =>
-          api.get<RoleSummary[]>("/api/roles", { signal }),
-        ),
+        readServerState(PERMISSIONS_RESOURCES.roles, (signal) => rolesApi.list(signal)),
         readServerState(PERMISSIONS_RESOURCES.templates, (signal) =>
           api.get<RoleTemplate[]>("/api/role-templates", { signal }),
         ),
@@ -197,7 +194,7 @@ function PermissionsPageContent() {
   const loadTrash = useCallback(async () => {
     setTrashLoading(true);
     try {
-      const all = await api.get<RoleSummary[]>("/api/roles", { query: { includeDeleted: true } });
+      const all = await rolesApi.listWithDeleted();
       setDeletedRoles(all.filter((r) => r.deletedAt !== null));
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotLoadRoles")), t("announcementRolesLabel"));
@@ -215,8 +212,7 @@ function PermissionsPageContent() {
   async function restoreRole(roleId: number) {
     setRestoringId(roleId);
     try {
-      await api.post<RoleDetail>(`/api/roles/${roleId}/restore`, {});
-      invalidatePermissionsResources();
+      await rolesApi.restore(roleId);
       toast.success(t("roleRestored"), { compactTitle: t("toastRestoreRole") });
       setDeletedRoles((prev) => prev.filter((r) => r.id !== roleId));
       await load();
@@ -227,20 +223,17 @@ function PermissionsPageContent() {
     }
   }
 
-  // Soft, in-place refresh instead of a hard reload when another admin
-  // creates/edits a role elsewhere.
-  const liveRefresh = useAutoRefresh(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED]);
-
-  // Only the very first run is a real (spinner-showing) load; every
-  // subsequent retrigger is the liveRefresh nonce bumping, which must stay
-  // silent (see the comment on `load`).
-  const isFirstLoad = useRef(true);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: liveRefresh is a ping-only nonce, intentionally added to retrigger this effect.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load({ silent: !isFirstLoad.current, force: !isFirstLoad.current });
-    isFirstLoad.current = false;
-  }, [load, liveRefresh]);
+    void load();
+  }, [load]);
+
+  // Soft, in-place refresh when another admin creates/edits a role. Silent so
+  // RoleList and its DndContext survive; forced because no event invalidated
+  // the shared values.
+  useLiveReload(domainScope(SSE_TOPICS.IDENTITY), [EVENTS.DOMAIN_CHANGED], () => {
+    void load({ silent: true, force: true });
+  });
 
   function applyRole(updated: RoleSummary) {
     setRoles((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
@@ -249,14 +242,13 @@ function PermissionsPageContent() {
   async function onCreate(values: CreateValues) {
     const template = templates.find((tpl) => tpl.key === values.templateKey);
     try {
-      const role = await api.post<RoleDetail>("/api/roles", {
+      const role = await rolesApi.create({
         name: values.name,
         position: Number(values.position),
         isVisible: values.isVisible,
         eventAccess: values.eventAccess,
         templateKey: template?.key,
       });
-      invalidatePermissionsResources();
       toast.success(t("roleCreated"), { compactTitle: t("createRole") });
       setCreateOpen(false);
       form.reset({
@@ -277,10 +269,7 @@ function PermissionsPageContent() {
     const before = roles;
     setRoles((prev) => prev.map((r) => (r.id === roleId ? { ...r, position: newPosition } : r)));
     try {
-      const updated = await api.patch<RoleDetail>(`/api/roles/${roleId}/position`, {
-        position: newPosition,
-      });
-      invalidatePermissionsResources();
+      const updated = await rolesApi.move(roleId, newPosition);
       applyRole(updated);
     } catch (err) {
       setRoles(before);
@@ -293,8 +282,7 @@ function PermissionsPageContent() {
     values: { name: string; isVisible: boolean; eventAccess: boolean },
   ) {
     try {
-      const r = await api.patch<RoleDetail>(`/api/roles/${roleId}`, values);
-      invalidatePermissionsResources();
+      const r = await rolesApi.update(roleId, values);
       applyRole(r);
       toast.success(t("roleUpdated"), { compactTitle: t("toastSaveRole") });
     } catch (err) {
@@ -307,8 +295,7 @@ function PermissionsPageContent() {
     capabilities: { capability: string; state: PermissionState }[],
   ) {
     try {
-      const r = await api.put<RoleDetail>(`/api/roles/${roleId}/capabilities`, { capabilities });
-      invalidatePermissionsResources();
+      const r = await rolesApi.setCapabilities(roleId, capabilities);
       applyRole(r);
       toast.success(t("capabilitiesSaved"), { compactTitle: t("toastSavePermissions") });
     } catch (err) {
@@ -318,8 +305,7 @@ function PermissionsPageContent() {
 
   async function onAddMember(roleId: number, userId: number, user?: UserListItem) {
     try {
-      const r = await api.post<RoleDetail>(`/api/roles/${roleId}/users/${userId}`, {});
-      invalidatePermissionsResources();
+      const r = await rolesApi.addMember(roleId, userId);
       if (user) mergeUsers([user]);
       applyRole(r);
       toast.success(t("memberAdded"), { compactTitle: t("toastAssignRole") });
@@ -330,8 +316,7 @@ function PermissionsPageContent() {
 
   async function onRemoveMember(roleId: number, userId: number) {
     try {
-      const r = await api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`);
-      invalidatePermissionsResources();
+      const r = await rolesApi.removeMember(roleId, userId);
       applyRole(r);
     } catch (err) {
       toast.error(apiErrorText(err, t, t("couldNotRemoveMemberRole")), t("toastRemoveRole"));
@@ -347,11 +332,12 @@ function PermissionsPageContent() {
   // memberIds regardless of completion order.
   async function onRemoveMembers(roleId: number, userIds: number[]) {
     const results = await Promise.allSettled(
-      userIds.map((userId) => api.delete<RoleDetail>(`/api/roles/${roleId}/users/${userId}`)),
+      userIds.map((userId) => rolesApi.removeMember(roleId, userId)),
     );
+    // All-failed batches skip the per-item invalidation; the final refetch below reads fresh.
     invalidatePermissionsResources();
     try {
-      applyRole(await api.get<RoleDetail>(`/api/roles/${roleId}`));
+      applyRole(await rolesApi.get(roleId));
     } catch {
       // Best-effort resync; the per-item results below already drive the toast.
     }
@@ -377,8 +363,7 @@ function PermissionsPageContent() {
 
   async function onResetToDefault(roleId: number) {
     try {
-      const r = await api.post<RoleDetail>(`/api/roles/${roleId}/reset-to-default`, {});
-      invalidatePermissionsResources();
+      const r = await rolesApi.reset(roleId);
       applyRole(r);
       toast.success(t("resetToDefaultDone"), { compactTitle: t("toastResetRole") });
     } catch (err) {
@@ -388,8 +373,7 @@ function PermissionsPageContent() {
 
   async function onDelete(roleId: number) {
     try {
-      await api.delete<{ deleted: true }>(`/api/roles/${roleId}`);
-      invalidatePermissionsResources();
+      await rolesApi.remove(roleId);
       toast.success(t("roleDeleted"), { compactTitle: t("deleteRole") });
       setRoles((prev) => prev.filter((r) => r.id !== roleId));
       selectRole(null);
@@ -492,7 +476,7 @@ function PermissionsPageContent() {
       onRemoveMembers={(userIds) => onRemoveMembers(selectedRole.id, userIds)}
       onDelete={() => onDelete(selectedRole.id)}
       searchUsers={searchUsers}
-      loadSeedDiff={() => api.get<RoleSeedDiff>(`/api/roles/${selectedRole.id}/seed-diff`)}
+      loadSeedDiff={() => rolesApi.seedDiff(selectedRole.id)}
       onResetToDefault={() => onResetToDefault(selectedRole.id)}
       mobile={isMobile}
       onBack={() => selectRole(null)}

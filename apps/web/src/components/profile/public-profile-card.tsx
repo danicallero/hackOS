@@ -21,7 +21,8 @@ import {
   settingsFrom,
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
-import { useLiveQuery } from "@/hooks/use-event-source";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { DirectoryEntry } from "@/lib/directory";
@@ -29,7 +30,6 @@ import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Me } from "@/lib/types";
-import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard";
 
 export { DirectoryCard } from "@/components/profile/public-profile-form";
 export type { DirectoryEntry } from "@/lib/directory";
@@ -74,7 +74,7 @@ export function displayName(me: Pick<Me, "name" | "surname">, showSurname: boole
  * challenges come from the saved preview, because the API only projects them
  * for the stored settings (#934, #935).
  */
-export function previewEntry(
+function previewEntry(
   me: Pick<Me, "name" | "surname" | "image">,
   settings: Settings,
   saved: DirectoryEntry,

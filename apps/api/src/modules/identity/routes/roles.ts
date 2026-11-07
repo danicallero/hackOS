@@ -281,7 +281,13 @@ export function registerRoleRoutes(app: FastifyInstance): void {
     {
       preHandler: manage,
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
-      schema: { params: roleIdParams, response: { 200: roleResponse } },
+      schema: {
+        summary: "Read a role",
+        description:
+          "Full role definition with its capabilities, for PERMISSIONS_MANAGE holders (H8).",
+        params: roleIdParams,
+        response: { 200: roleResponse },
+      },
     },
     async (req) => loadRole(pool, req.params.roleId),
   );
@@ -784,6 +790,8 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       preHandler: manage,
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
+        description:
+          "Assigns the role to the user, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
         summary: "Assign a role to a user",
         params: z.object({
           roleId: z.coerce.number().int(),
@@ -849,6 +857,8 @@ export function registerRoleRoutes(app: FastifyInstance): void {
       preHandler: manage,
       config: routeAccess({ kind: "capability", capability: CAPABILITIES.PERMISSIONS_MANAGE }),
       schema: {
+        description:
+          "Removes the role from the user, enforcing role-authority rules. Audited in the same transaction (H8/H53).",
         summary: "Remove a role from a user",
         params: z.object({
           roleId: z.coerce.number().int(),
@@ -914,6 +924,8 @@ export function registerRoleRoutes(app: FastifyInstance): void {
         anyOf: [CAPABILITIES.PERMISSIONS_MANAGE, CAPABILITIES.INVITES_MANAGE],
       }),
       schema: {
+        description:
+          "The user's complete assigned-role set, for PERMISSIONS_MANAGE or INVITES_MANAGE holders (H8).",
         summary: "List a user's assigned roles",
         params: z.object({ userId: z.coerce.number().int() }),
         response: {

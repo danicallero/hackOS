@@ -2,9 +2,8 @@
  * Constants and name helpers shared across the user-profile route's files.
  */
 
-import { getEventTimeZone } from "@/lib/event-time";
-import { LOCALE_CODES } from "@/lib/i18n";
-import type { UserDetail } from "@/lib/types";
+import { formatEventDate } from "@/lib/datetime";
+import type { Language, UserDetail } from "@/lib/types";
 
 export { roleDisplayName } from "@hackos/shared/display-labels";
 
@@ -12,7 +11,7 @@ export function fullName(u: Pick<UserDetail, "name" | "surname" | "email">): str
   return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;
 }
 
-export function initials(u: Pick<UserDetail, "name" | "surname" | "email">): string {
+export function userInitials(u: Pick<UserDetail, "name" | "surname" | "email">): string {
   const a = u.name?.trim()?.[0];
   const b = u.surname?.trim()?.[0];
   if (a || b) return `${a ?? ""}${b ?? ""}`.toUpperCase();
@@ -20,12 +19,6 @@ export function initials(u: Pick<UserDetail, "name" | "surname" | "email">): str
 }
 
 /** Shared clock format for every timestamp on this profile (logs, presence, activity). */
-export function formatUserDate(value: string | Date, language: "es" | "gl" | "en"): string {
-  return new Intl.DateTimeFormat(LOCALE_CODES[language], {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: getEventTimeZone(),
-  }).format(new Date(value));
+export function formatUserDate(value: string | Date, language: Language): string {
+  return formatEventDate(value, language, "dayMonthTime");
 }

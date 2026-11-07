@@ -1,6 +1,8 @@
 import type { Capability } from "@hackos/shared/capabilities";
+import type { Language } from "@hackos/shared/locale";
+import type { I18nText } from "@hackos/shared/questions";
 import type { PassFieldLabels, PassFieldVisibility } from "@hackos/shared/wallet-pass-labels";
-import type { I18nText, MessageKey } from "./i18n";
+import type { MessageKey } from "./message-key";
 
 export interface Me {
   id: number;
@@ -64,7 +66,7 @@ export interface Me {
   notificationOnboardingRequired: boolean;
 }
 
-export type Language = "en" | "es" | "gl";
+export type { I18nText, Language };
 
 export interface UserListItem {
   id: number;
@@ -92,7 +94,7 @@ export interface UserList {
 }
 
 /** H8: an entry in a user's full assigned-role list (see `Me.roles`/`UserDetail.roles`). */
-export interface AssignedRoleSummary {
+interface AssignedRoleSummary {
   id: number;
   name: string;
   position: number;
@@ -334,4 +336,16 @@ export interface UserInviteLink {
 export interface EnterpriseSummary {
   id: number;
   name: string;
+}
+
+/** GET /api/public/event: the event's public timing and display flags. */
+export interface PublicEvent {
+  name: string | null;
+  tagline: string | null;
+  timezone: string;
+  hackingStartsAt: string | null;
+  hackingEndsAt: string | null;
+  showStartCountdown: boolean;
+  judgingStartsAt: string | null;
+  judgingEndsAt: string | null;
 }
