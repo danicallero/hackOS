@@ -1,10 +1,22 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, StyleSheet } from "react-native";
+import { Alert, Platform, StyleSheet } from "react-native";
 
 const mockApiFetch = jest.fn();
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockPickDocument = jest.fn();
+const mockHeaderOptions = jest.fn();
+jest.mock("@/components/adaptive-frame", () => ({
+  withSheetFrame: (Screen: unknown) => (props: object) => {
+    const ReactLib = require("react");
+    const { View } = require("react-native");
+    return ReactLib.createElement(
+      View,
+      { testID: "networking-sheet-frame" },
+      ReactLib.createElement(Screen, props),
+    );
+  },
+}));
 let mockNativeHeader = false;
 jest.mock("@/components/glass-view", () => ({
   isRealLiquidGlassAvailable: () => mockNativeHeader,
@@ -16,7 +28,16 @@ jest.mock("expo-router/stack", () => {
     ReactLib.createElement(View, { testID: `native-toolbar-${placement}` }, children);
   Toolbar.Button = (props: object) =>
     ReactLib.createElement(Pressable, { ...props, accessibilityRole: "button" });
-  return { __esModule: true, default: { Screen: () => null, Toolbar } };
+  return {
+    __esModule: true,
+    default: {
+      Screen: ({ options }: { options: object }) => {
+        mockHeaderOptions(options);
+        return null;
+      },
+      Toolbar,
+    },
+  };
 });
 
 jest.mock("expo-file-system", () => ({
@@ -114,6 +135,7 @@ jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 
 import { NetworkingInvite } from "@/components/networking-invite";
 import NetworkingProfileScreen from "@/components/networking-profile-screen";
+import NetworkingProfileRoute from "../../app/networking-profile";
 import { renderMobile } from "./render";
 
 const profile = {
@@ -164,6 +186,7 @@ function opacityOf(element: { props: { style?: unknown } }): number | undefined 
 
 beforeEach(() => {
   mockNativeHeader = false;
+  mockHeaderOptions.mockReset();
   mockApiFetch.mockReset();
   mockPush.mockReset();
   mockBack.mockReset();
@@ -375,7 +398,8 @@ describe("NetworkingProfileScreen", () => {
 describe("Networking profile safe areas and native controls (H55, #935)", () => {
   test("fallback chrome clears a nonzero sheet top safe area", async () => {
     mockApiFetch.mockResolvedValue(shared);
-    await renderMobile(<NetworkingProfileScreen />, { insets: { top: 47 } });
+    await renderMobile(<NetworkingProfileRoute />, { insets: { top: 47 } });
+    expect(screen.getByTestId("networking-sheet-frame")).toBeTruthy();
     const edit = await screen.findByRole("button", { name: "networkingEdit" });
     expect(StyleSheet.flatten(edit.props.style).top).toBe(63);
     expect(
@@ -391,8 +415,12 @@ describe("Networking profile safe areas and native controls (H55, #935)", () => 
     mockNativeHeader = true;
     try {
       mockApiFetch.mockResolvedValue(shared);
-      await renderMobile(<NetworkingProfileScreen />);
+      await renderMobile(<NetworkingProfileRoute />);
       await screen.findByRole("button", { name: "networkingEdit" });
+      expect(mockHeaderOptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ headerLargeTitle: false }),
+      );
+      expect(screen.queryByTestId("networking-sheet-frame")).toBeNull();
       expect(screen.getByTestId("native-toolbar-left")).toBeTruthy();
       expect(screen.getByTestId("native-toolbar-right")).toBeTruthy();
       expect(screen.getByRole("button", { name: "networkingEdit" }).props.style).toBeUndefined();
@@ -408,6 +436,47 @@ describe("Networking profile safe areas and native controls (H55, #935)", () => 
       if (previousOs === undefined) delete process.env.EXPO_OS;
       else process.env.EXPO_OS = previousOs;
       mockNativeHeader = false;
+    }
+  });
+  test("iPad sheet keeps a compact title and does not inherit the window side column", async () => {
+    const previousOs = process.env.EXPO_OS;
+    const padDescriptor = Object.getOwnPropertyDescriptor(Platform, "isPad");
+    process.env.EXPO_OS = "ios";
+    Object.defineProperty(Platform, "isPad", { configurable: true, value: true });
+    mockNativeHeader = true;
+    try {
+      mockApiFetch.mockResolvedValue(shared);
+      await renderMobile(<NetworkingProfileRoute />, { insets: { left: 200 } });
+      await screen.findByRole("button", { name: "networkingEdit" });
+      expect(mockHeaderOptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ headerLargeTitle: false }),
+      );
+      expect(
+        StyleSheet.flatten(screen.getByTestId("networking-profile-scroll").props.style).paddingLeft,
+      ).toBeUndefined();
+    } finally {
+      if (previousOs === undefined) delete process.env.EXPO_OS;
+      else process.env.EXPO_OS = previousOs;
+      if (padDescriptor) Object.defineProperty(Platform, "isPad", padDescriptor);
+      else Reflect.deleteProperty(Platform, "isPad");
+      mockNativeHeader = false;
+    }
+  });
+  test("wide networking content fills its presentation instead of a leading form column", async () => {
+    const dimensions = jest
+      .spyOn(require("react-native"), "useWindowDimensions")
+      .mockReturnValue({ width: 1200, height: 900, scale: 2, fontScale: 1 });
+    try {
+      mockApiFetch.mockResolvedValue(shared);
+      await renderMobile(<NetworkingProfileRoute />);
+      const content = StyleSheet.flatten(
+        screen.getByTestId("networking-profile-scroll").props.contentContainerStyle,
+      );
+      expect(content.width).toBe("100%");
+      expect(content.maxWidth).toBeUndefined();
+      expect(content.alignSelf).toBeUndefined();
+    } finally {
+      dimensions.mockRestore();
     }
   });
 });

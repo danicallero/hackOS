@@ -1057,7 +1057,11 @@ its controls must share the system side column.
 ### Validation
 Inspect iPhone, iPad and both foldable orientations, including the actual status
 bar, home indicator and action positions. Verify the resulting presentation,
-not just the presence of buttons in a component test.
+not just the presence of buttons in a component test. Compare the title size,
+header background and scroll-edge transition with the existing native screens;
+correct button placement alone does not establish a finished header. Check
+content alignment and width against the modal bounds as well: a window-sized
+form cap can leave the profile narrow and pinned to one side.
 
 ### Exceptions
 An intentionally independent sheet retains its own horizontal toolbar.
