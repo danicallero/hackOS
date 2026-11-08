@@ -57,6 +57,11 @@ application filter. Each phase serves one organizing moment:
   attendance-hours table. Confirmed comes from the selected application scopes;
   the other figures are event-wide.
 
+Applications and confirmations over time display cumulative daily totals with a shaded,
+line. Missing days between the first and last bucket retain the previous total.
+The tooltip and keyboard data disclosure show the total and a smaller `+N` daily
+increment. API buckets and CSV exports retain daily counts.
+
 Every chart in all three phases has a full-screen view (`ChartCard`). The
 hourly series come from `hourly` in `GET /api/logistics/stats`: UTC-hour
 buckets of accreditations (`users.badge_assigned_at`), meal servings and

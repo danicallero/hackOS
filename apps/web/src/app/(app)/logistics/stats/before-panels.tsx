@@ -53,6 +53,7 @@ import { type MessageKey, pickText, type Translate, useLocale } from "@/lib/i18n
 import { uiPrefsApi } from "@/lib/logistics";
 import { cn } from "@/lib/utils";
 import { ChartCard } from "./chart-card";
+import { cumulativeDailyRows } from "./cumulative-series";
 import type { ApplicationStats } from "./model";
 import type { StatsChartDatum, StatsChartType } from "./stats-chart";
 import {
@@ -586,10 +587,7 @@ function buildDistributionDefinitions(
       key: "applications-over-time",
       title: t("applicationsOverTime"),
       defaultChart: "line",
-      rows: (series?.submissions_by_day ?? []).map((row) => ({
-        label: dateLabel(row.bucket),
-        n: row.n,
-      })),
+      rows: cumulativeDailyRows(series?.submissions_by_day ?? [], dateLabel),
     });
   }
   if (series?.confirmations_by_day !== undefined || hasPanel("confirmations-over-time")) {
@@ -597,10 +595,7 @@ function buildDistributionDefinitions(
       key: "confirmations-over-time",
       title: t("confirmationsOverTime"),
       defaultChart: "line",
-      rows: (series?.confirmations_by_day ?? []).map((row) => ({
-        label: dateLabel(row.bucket),
-        n: row.n,
-      })),
+      rows: cumulativeDailyRows(series?.confirmations_by_day ?? [], dateLabel),
     });
   }
   if (series?.submissions_by_hour_of_day !== undefined || hasPanel("applications-by-hour")) {
