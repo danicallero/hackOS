@@ -98,5 +98,18 @@
   "apiErrorRateLimited": "Too many attempts. Wait a moment and try again.",
   "apiErrorServer": "Something went wrong on our side. Try again, or contact staff if it persists.",
   "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge.",
-  "apiError_certificate_review_required": "Awaiting attendance review"
+  "apiError_certificate_review_required": "Awaiting attendance review",
+  "apiError_helper_not_eligible": "Only mentors, sponsor representatives and staff can offer help.",
+  "apiError_helper_profile_incomplete": "Choose at least one topic before publishing.",
+  "apiError_help_request_active": "There is already an active help request.",
+  "apiError_help_request_already_claimed": "Another helper already took this request.",
+  "apiError_help_request_closed": "This help request is closed.",
+  "apiError_help_request_not_claimable": "You cannot take your own request.",
+  "apiError_help_request_not_claimer": "Only the helper who took this request can release it.",
+  "apiError_help_request_not_claimed": "Only a request someone has taken can be marked as solved.",
+  "apiError_topic_name_taken": "Another topic already has this name. Merge them instead.",
+  "apiError_topic_reserved": "Other is already available on every request.",
+  "apiError_topic_unknown": "One of the topics no longer exists. Refresh and try again.",
+  "apiError_availability_overlap": "Availability intervals must not overlap.",
+  "apiError_availability_invalid": "Each interval must end after it starts and last at most 24 hours."
 }

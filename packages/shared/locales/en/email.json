@@ -115,6 +115,32 @@
         "subject": "Reminder: {{title}}",
         "body": "Hi,\n\n{{title}} starts at {{startsAtLabel}}.{{locationLine}}\n\nSee you there!"
       }
+    },
+    "helpdesk": {
+      "request": {
+        "subject": "Help requested: {{topics}}",
+        "body": "Someone needs help with {{topics}} at {{location}}. Open the help desk to take it."
+      },
+      "requestOther": {
+        "subject": "Help requested",
+        "body": "Someone needs help at {{location}}. Open the help desk to take it."
+      },
+      "onMyWay": {
+        "subject": "{{helperName}} is on the way",
+        "body": "{{helperName}} took your help request and is heading to {{location}}."
+      },
+      "meetAt": {
+        "subject": "Meet {{helperName}} at {{meetingLocation}}",
+        "body": "{{helperName}} took your help request and will meet you at {{meetingLocation}}."
+      },
+      "released": {
+        "subject": "Your help request is open again",
+        "body": "The helper who took it can no longer come. Other helpers can still take it."
+      },
+      "cancelled": {
+        "subject": "Help request cancelled",
+        "body": "The person or team who asked for help no longer needs it."
+      }
     }
   },
   "push": {
@@ -150,6 +176,32 @@
       "reminder": {
         "title": "{{title}}",
         "body": "Starts at {{startsAtLabel}}{{locationSuffix}}"
+      }
+    },
+    "helpdesk": {
+      "request": {
+        "title": "Help needed: {{topics}}",
+        "body": "At {{location}}. Open the help desk to take it."
+      },
+      "requestOther": {
+        "title": "Help needed",
+        "body": "At {{location}}. Open the help desk to take it."
+      },
+      "onMyWay": {
+        "title": "{{helperName}} is on the way",
+        "body": "Heading to {{location}}."
+      },
+      "meetAt": {
+        "title": "Meet {{helperName}} at {{meetingLocation}}",
+        "body": "They took your help request."
+      },
+      "released": {
+        "title": "Help request open again",
+        "body": "The helper who took it can no longer come."
+      },
+      "cancelled": {
+        "title": "Help request cancelled",
+        "body": "They no longer need help."
       }
     }
   }

@@ -944,3 +944,12 @@ to the first page;
 200 is the API batch size, not a roster limit. Joined displays date and time
 in the event zone and sorts by the full creation instant. Directory failures remain
 visible and retryable rather than silently leaving role members unresolved.
+
+## Help desk (H61–H67)
+
+`/help-desk` provides helper browsing, shared-bio profile editing, dated availability,
+individual/team requests, the helper inbox and coverage. Its profile editor is also
+reachable from My profile for eligible accepted mentors before confirmation.
+The networking reader keeps its badge-scan boundary; published helpers have a
+separate projection that exposes only help desk data. See [web help desk](../../docs/help-desk-web.md)
+for routes, authorization, save ownership and validation.

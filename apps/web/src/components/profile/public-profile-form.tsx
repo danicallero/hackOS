@@ -223,7 +223,13 @@ function TextField({
   );
 }
 
-function BioField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function BioField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const { t } = useLocale();
   const id = useId();
   return (
@@ -372,6 +378,9 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
         {entry.locationNote && (
           <p className="text-muted-foreground text-sm wrap-anywhere">{entry.locationNote}</p>
         )}
+        {entry.helpTopics?.length ? (
+          <p className="pt-1 text-sm">{entry.helpTopics.map((topic) => topic.name).join(" · ")}</p>
+        ) : null}
         {entry.bio && <p className="pt-1 text-sm whitespace-pre-line wrap-anywhere">{entry.bio}</p>}
         {(entry.socials ?? []).length > 0 && <SocialLinks links={entry.socials} className="pt-1" />}
         {entry.cvUrl && (

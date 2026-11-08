@@ -93,6 +93,14 @@ function PersonReader({ userId }: { userId: number }) {
   }
 
   const rows: { id: string; label: string; value: React.ReactNode }[] = [];
+  if (entry.helpTopics?.length)
+    rows.push({
+      id: "knowledge",
+      label: t("helpDeskKnowledge"),
+      value: (
+        <p className="wrap-anywhere">{entry.helpTopics.map((topic) => topic.name).join(" · ")}</p>
+      ),
+    });
   if (entry.socials.length > 0) {
     rows.push({
       id: "links",

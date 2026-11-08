@@ -16,7 +16,14 @@ const PROJECT_KINDS: { kind: "project"; one: MessageKey; many: MessageKey }[] = 
 
 export type ProfileCardData = Pick<
   DirectoryEntry,
-  "displayName" | "headline" | "bio" | "locationNote" | "socials" | "projects" | "challenges"
+  | "displayName"
+  | "headline"
+  | "bio"
+  | "locationNote"
+  | "socials"
+  | "projects"
+  | "challenges"
+  | "helpTopics"
 >;
 
 /**
@@ -290,6 +297,13 @@ export function ProfileCard({
         </Section>
       ) : null}
 
+      {data.helpTopics?.length ? (
+        <Section title={t("helpTopics")}>
+          <Text selectable style={{ ...type.body, color: colors.label, padding: 16 }}>
+            {data.helpTopics.map((topic) => topic.name).join(", ")}
+          </Text>
+        </Section>
+      ) : null}
       {afterBio}
 
       {data.socials.length > 0 ? (

@@ -51,7 +51,10 @@ function categoryOf(data: Record<string, unknown> | undefined): string | undefin
  *
  * Returns a cleanup function; call once from the root layout.
  */
-export function setupNotificationListeners(navigateToQueue: () => void): () => void {
+export function setupNotificationListeners(
+  navigateToQueue: () => void,
+  navigateToHelpRequest?: (requestId: number) => void,
+): () => void {
   const received = Notifications.addNotificationReceivedListener((event) => {
     // #966: an Android Live Update data push delivered while open renders
     // immediately (the background task handles the other states).
@@ -68,6 +71,9 @@ export function setupNotificationListeners(navigateToQueue: () => void): () => v
     notifyLiveActivityPush(data);
     emitCategory(category);
     if (category?.startsWith("queue")) navigateToQueue();
+    const requestId = Number(data?.requestId);
+    if (category === "helpdesk" && Number.isSafeInteger(requestId) && requestId > 0)
+      navigateToHelpRequest?.(requestId);
   };
 
   const responded = Notifications.addNotificationResponseReceivedListener((response) => {

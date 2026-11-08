@@ -12,6 +12,7 @@ import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
+import { HelperProfileLink } from "../../help-desk/profile/profile-link";
 import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
@@ -89,7 +90,7 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
 
   return (
     <PageLayout width="reading">
-      <PageHeader title={t("myProfile")} />
+      <PageHeader title={t("myProfile")} secondaryActions={<HelperProfileLink />} />
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar width="content">
           {tabs.map((item) => (

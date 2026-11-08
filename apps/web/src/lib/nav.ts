@@ -333,6 +333,16 @@ const PROFILE_SUBITEMS: NavItem[] = [
  */
 export const PERSONAL_NAV: NavItem[] = [
   {
+    title: "helpDeskTitle",
+    href: "/help-desk",
+    icon: QuestionIcon,
+    anyCapability: [
+      CAPABILITIES.HELPDESK_REQUEST,
+      CAPABILITIES.HELPDESK_OFFER,
+      CAPABILITIES.HELPDESK_COVERAGE,
+    ],
+  },
+  {
     title: "home",
     href: "/event",
     icon: HouseIcon,

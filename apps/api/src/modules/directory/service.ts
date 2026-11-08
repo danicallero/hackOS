@@ -34,6 +34,8 @@ export interface DirectoryEntry {
   /** Deprecated: the first of `projects`, kept for app builds that predate it. */
   project: DirectoryProject | null;
   challenges: { id: number; name: string }[];
+  /** H61: knowledge of a published helper profile; `[]` otherwise. */
+  helpTopics: { id: number; name: string }[];
 }
 
 export interface DirectoryProject {
@@ -53,6 +55,7 @@ interface EntryRow {
   has_cv: boolean;
   projects: DirectoryProject[];
   challenges: DirectoryEntry["challenges"];
+  help_topics: DirectoryEntry["helpTopics"];
 }
 
 /**
@@ -172,7 +175,14 @@ function entrySql(profiles: string): string {
            SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.title) ORDER BY c.title, c.id)
              FROM challenges c
             WHERE ${CHALLENGE_OF_PROJECTS}
-         ), '[]'::jsonb) AS challenges
+         ), '[]'::jsonb) AS challenges,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
+             FROM helper_profiles hp
+             JOIN helper_topics ht ON ht.user_id = hp.user_id
+             JOIN help_topics t ON t.id = ht.topic_id
+            WHERE hp.user_id = u.id AND hp.published
+         ), '[]'::jsonb) AS help_topics
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
@@ -201,6 +211,7 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
     projects,
     project: projects[0] ?? null,
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
+    helpTopics: (row.help_topics ?? []).map((t) => ({ id: Number(t.id), name: t.name })),
   };
 }
 

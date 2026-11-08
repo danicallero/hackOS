@@ -48,6 +48,7 @@ the hardware-free native screen suite.
 - [Participant screens](#participant-screens)
 - [Event diary (#935)](#event-diary-935)
 - [Company tags (#935)](#company-tags-935)
+- [Help desk (H61–H67)](#help-desk-h61h67)
 - [Operator screens](#operator-screens)
   - [Queue operations](#queue-operations)
   - [Scanner](#scanner)
@@ -74,6 +75,7 @@ documented in full in its own section below.
 | H50 | Announcement admin CRUD (audience/recipient targeting, channels, screen placement) | [Participant screens](#participant-screens) |
 | H59 | Horario admin CRUD, audience filter, category notifications | [Participant screens](#participant-screens) |
 | H28 | Apple & Google Wallet, badge-rotation invalidation | [Participant screens](#participant-screens) |
+| H61–H67 | Help desk: helper profile, availability, directory, requests, claims, coverage | [Help desk](#help-desk-h61h67) |
 | H22 | Accreditation scanner | [Scanner](#scanner) |
 | H23 | Badge replacement, offline-first, deferred revocation sync | [Scanner](#scanner) |
 | H24 | Presence (door in/out) scanner, manual back-dated entries | [Scanner](#scanner) |
@@ -1578,6 +1580,80 @@ mocked),
 Diary `collect` test and `lib/tabs.test.ts`. It has not been tested on NFC
 hardware, and the universal/app links have not been opened on a device or
 simulator build yet.
+
+### Help desk (H61–H67)
+
+API contract: [`help-desk-contract.md`](./help-desk-contract.md); behaviour:
+[`help-desk.md`](./help-desk.md). Every value shown is read from the API;
+nothing is derived locally except form validation (`lib/help-desk.ts`).
+
+**Entry and navigation.** Any of `helpdesk:request`, `helpdesk:offer` or
+`helpdesk:coverage` adds a **Help desk** tab (`lib/tabs.ts` `canUseHelpDesk`;
+key `help-desk`). It is the first overflow-order destination, so it takes a
+spare direct cell before Queue and Contacts: participants see Schedule, Queue,
+Help desk, Contacts, Account; with scanner capabilities Schedule, Scanner and
+Activities stay direct, Help desk takes the fourth cell and Contacts moves
+behind Others. Routes: the tab owns a Stack at `app/(tabs)/help-desk/`
+(`index`, `helpers`, `helper/[id]`, `new-request`, `request/[id]`,
+`coverage`); `app/(tabs)/others/help-desk.tsx` is the Others-menu pseudo-tab
+rendering the same root. Pressing the tab (also via the rail, scrub and
+keyboard shortcut paths) navigates to the root, like Account.
+`app/helper-profile.tsx` and `app/help-topics.tsx` are root routes so an accepted mentor without event
+access (`GET /api/me/helper-profile` → `eligible`) can prepare a profile; the
+mobile access gate lets only that route through (`use-helper-preparation-access`).
+
+**Root (`components/help-desk/home-screen.tsx`).** Participants default to
+their own and team requests (`/api/helpdesk/requests/mine`); eligible helpers
+default to the open inbox (`inbox?scope=open`) with My claims; people with both
+get a segmented control over all three lists. Request rows show the ask, who and
+where, topics and a status pill; an empty list uses the shared empty state.
+Request help, Helpers, My helper profile and Helper coverage follow as one
+grouped list, each gated by capability; coverage-only accounts see no request or
+helper actions.
+
+**Building blocks (`components/help-desk/primitives.tsx`, `rows.tsx`).** Screens
+reuse the app's own patterns rather than bespoke layouts: inset-grouped
+`Section`s, `NavRow`/`InfoRow`, `PersonAvatar` rows, `StatusPill`, `EmptyState`
+and native large titles. Forms use borderless fields with the label as the
+placeholder in 56 pt rows (as New project). A choice from a list is a
+`ChoiceRow` with a trailing checkmark, never a switch. Catalogue selection
+(`TopicField`) is one row that opens `app/help-topics.tsx`, a modal sheet with
+native search, checkmark rows and "Add" for a missing topic (the same pattern as
+the project challenge picker); the form and the sheet share one draft through
+`lib/help-topic-selection.ts`. Request creation is a modal form (Close / Send in
+the toolbar). Data refreshes revalidate in place: the last response stays on
+screen, identical responses do not re-render, and only a user pull spins the
+refresh control, so a push or SSE refresh never blanks a page or loses a draft.
+
+**Helper profile (H61, H62).** `profile-screen.tsx` publishes explicitly
+(separate from networking consent), edits the shared public bio, picks topics
+from the shared catalogue (search, and add a missing topic with the real
+`POST /api/helpdesk/topics`) and edits a multi-day schedule of dated intervals
+saved with one Save (profile first, then schedule). A schedule is stated availability; presence
+(H24) is shown separately ("Inside the venue"). Back with unsaved changes asks
+before discarding.
+
+**Directory (H63).** Published helpers as photo rows with topics and a
+scheduled / inside-the-venue line; search is a field in the page (a native
+bottom search bar would sit under the custom tab bar). Detail shows the
+avatar, headline, status pills, bio, topic chips and the dated schedule.
+
+**Requests (H64–H66).** New request: details, location, up to 5 topics or
+Other, for me or one of my teams (`/api/helpdesk/projects`; the choice appears
+only when the person has teams). Detail shows the
+server's `viewer` permissions only: claim (on my way / meet at a location),
+release, resolve, cancel (confirmed). A competing claim shows the localized
+conflict and refetches. Meeting instructions cannot be edited in place: release
+and reclaim. Push taps and inbox rows (category `helpdesk`) open the request.
+
+**Coverage (H67).** `coverage-screen.tsx`: date range, scheduled vs available
+now (scheduled and inside), per-topic coverage and slots from
+`GET /api/helpdesk/coverage`.
+
+**Realtime.** Screens refetch on focus, `helpdesk.request.changed`,
+`domain:helpdesk` changes and notification events.
+
+Tests: `lib/help-desk.test.ts`, `lib/tabs.test.ts`, `test/ui/help-desk*.test.tsx`.
 
 ## Operator screens
 

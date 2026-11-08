@@ -22,6 +22,7 @@ import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { CaretUpIcon } from "@phosphor-icons/react/dist/csr/CaretUp";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -61,6 +62,7 @@ const PERSONAL_STREAM = REALTIME_SCOPES.PERSONAL;
 
 function categoryLabelMap(t: Translate): Record<string, string> {
   return {
+    helpdesk: t("helpDeskTitle"),
     queue: t("categoryQueueCalls"),
     challenge: t("challenges"),
     announcements: t("announcements"),
@@ -243,7 +245,17 @@ export function MessagesTab() {
               payloadField(item.payload, "title") ??
               categoryLabel(item.category, [], t);
             const body = payloadField(item.payload, "body");
-            const details = payloadDetails(item.payload);
+            const helpRequestId =
+              item.category === "helpdesk" && item.payload && typeof item.payload === "object"
+                ? (item.payload as { requestId?: unknown }).requestId
+                : null;
+            const helpLink =
+              typeof helpRequestId === "number" &&
+              Number.isSafeInteger(helpRequestId) &&
+              helpRequestId > 0
+                ? `/help-desk/requests/${helpRequestId}`
+                : null;
+            const details = helpLink ? [] : payloadDetails(item.payload);
             const isOpen = expanded.has(item.id);
             return (
               <li
@@ -301,6 +313,11 @@ export function MessagesTab() {
                       <p className="whitespace-pre-line wrap-break-word text-sm leading-relaxed">
                         {body}
                       </p>
+                    )}
+                    {helpLink && (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={helpLink}>{t("helpDeskViewRequest")}</Link>
+                      </Button>
                     )}
                     {details.length > 0 && (
                       <dl className="grid max-w-xl gap-x-6 gap-y-2 border-t border-border/40 pt-4 text-xs sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">

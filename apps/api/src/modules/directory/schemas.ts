@@ -15,7 +15,7 @@ function publicText(max: number) {
 }
 
 // #935: a bio keeps its line breaks; every other control character is refused.
-const bioText = z
+export const bioText = z
   .string()
   .transform((value) => value.replace(/\r\n?/g, "\n").trim())
   .refine((value) => value.length <= 500, { message: "Must be at most 500 characters" })

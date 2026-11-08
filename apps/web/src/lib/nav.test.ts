@@ -58,7 +58,7 @@ function visibleDestinationLabels(ctx: NavVisibilityContext, language: (typeof L
 describe("stable personal area (audit §3.1)", () => {
   it("is visible to every authenticated account regardless of capability", () => {
     const ctx = contextFor([]);
-    for (const item of PERSONAL_NAV) {
+    for (const item of PERSONAL_NAV.filter((item) => item.href !== "/help-desk")) {
       expect(isNavItemVisible(item, ctx)).toBe(true);
     }
   });
@@ -456,5 +456,20 @@ describe("quick search sub-destinations (#1182)", () => {
         expect(subItem.href.startsWith(`${item.href}?tab=`)).toBe(true);
       }
     }
+  });
+});
+
+// H61-H67 are additive to the personal area, with independent capability gates.
+describe("help desk navigation", () => {
+  const item = PERSONAL_NAV.find((item) => item.href === "/help-desk")!;
+  it("hides the desk without access and shows it for each help capability", () => {
+    expect(isNavItemVisible(item, contextFor([]))).toBe(false);
+    for (const cap of [
+      CAPABILITIES.HELPDESK_REQUEST,
+      CAPABILITIES.HELPDESK_OFFER,
+      CAPABILITIES.HELPDESK_COVERAGE,
+      CAPABILITIES.ADMIN_ALL,
+    ])
+      expect(isNavItemVisible(item, contextFor([cap]))).toBe(true);
   });
 });

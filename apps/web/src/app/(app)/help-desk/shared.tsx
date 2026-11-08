@@ -1,0 +1,150 @@
+"use client";
+import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import { useEffect, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
+import { MultiSelect } from "@/components/common/multi-select";
+import { StatusBadge } from "@/components/common/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useLiveQuery } from "@/hooks/use-live-query";
+import { useServerResource } from "@/hooks/use-server-resource";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
+import { formatEventDate } from "@/lib/datetime";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import type { AvailabilityInterval, HelperCard, HelpTopic } from "./model";
+
+export function useHelpdesk<T>(key: readonly (string | number)[], path: string, enabled = true) {
+  const resource = useLiveQuery(
+    (signal) => api.get<T>(path, { signal }),
+    domainScope(SSE_TOPICS.HELPDESK),
+    [EVENTS.DOMAIN_CHANGED, EVENTS.HELPDESK_REQUEST_CHANGED],
+    { resourceKey: ["helpdesk", ...key], enabled },
+  );
+  const timeSensitive = ["helpers", "helper", "coverage"].includes(String(key[0]));
+  useEffect(() => {
+    if (!enabled || !timeSensitive) return;
+    // H62/H67: a schedule boundary changes coverage without a domain mutation.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") resource.refetch();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [enabled, timeSensitive, resource.refetch]);
+  return resource;
+}
+export function HelpdeskError({
+  error,
+  retry,
+  fallback = "helpDeskLoadError",
+}: {
+  error: unknown;
+  retry?: () => void;
+  fallback?: MessageKey;
+}) {
+  const { t } = useLocale();
+  return <ContextualError message={apiErrorText(error, t, t(fallback))} onRetry={retry} />;
+}
+export function HelpdeskLoading() {
+  return (
+    <div className="space-y-4" aria-busy="true">
+      {[1, 2, 3].map((n) => (
+        <Skeleton key={n} className="h-24 w-full" />
+      ))}
+    </div>
+  );
+}
+export function TopicsPicker({
+  value,
+  onChange,
+  disabled,
+  id,
+  inDialog = false,
+}: {
+  value: HelpTopic[];
+  onChange: (topics: HelpTopic[]) => void;
+  disabled?: boolean;
+  id?: string;
+  inDialog?: boolean;
+}) {
+  const { t } = useLocale();
+  const [q, setQ] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<unknown>(null);
+  const resource = useServerResource(["helpdesk", "topics", q], (signal) =>
+    api.get<{ topics: HelpTopic[] }>("/api/helpdesk/topics", { signal, query: { q, limit: 50 } }),
+  );
+  const options = [
+    ...new Map(
+      [...value, ...(resource.data?.topics ?? [])].map((topic) => [topic.id, topic]),
+    ).values(),
+  ];
+  return (
+    <div className="space-y-2">
+      <MultiSelect
+        id={id}
+        aria-label={id ? undefined : t("helpDeskKnowledge")}
+        disabled={disabled}
+        inDialog={inDialog}
+        options={options.map((topic) => ({ value: String(topic.id), label: topic.name }))}
+        value={value.map((topic) => String(topic.id))}
+        onChange={(ids) =>
+          onChange(
+            ids.map((id) => options.find((topic) => String(topic.id) === id)!).filter(Boolean),
+          )
+        }
+        creating={creating}
+        onCreateOption={async (name) => {
+          setCreating(true);
+          setCreateError(null);
+          try {
+            const result = await api.post<{ topic: HelpTopic }>("/api/helpdesk/topics", { name });
+            onChange([...value.filter((topic) => topic.id !== result.topic.id), result.topic]);
+            setQ("");
+            resource.reload();
+          } catch (error) {
+            setCreateError(error);
+          } finally {
+            setCreating(false);
+          }
+        }}
+        searchQuery={q}
+        onSearchChange={setQ}
+        placeholder={t("selectPlaceholder")}
+      />
+      {createError ? <HelpdeskError error={createError} /> : null}
+      {resource.error ? <HelpdeskError error={resource.error} retry={resource.reload} /> : null}
+    </div>
+  );
+}
+export function HelperPresence({ helper }: { helper: HelperCard }) {
+  const { t } = useLocale();
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-2">
+      <StatusBadge tone={helper.scheduledNow ? "info" : "neutral"}>
+        {t(helper.scheduledNow ? "helpDeskScheduledNow" : "helpDeskNotScheduled")}
+      </StatusBadge>
+      <StatusBadge tone={helper.present ? "success" : "neutral"}>
+        {t(helper.present ? "helpDeskPresent" : "helpDeskOutside")}
+      </StatusBadge>
+    </div>
+  );
+}
+export function Availability({ intervals }: { intervals: AvailabilityInterval[] }) {
+  const { t, language } = useLocale();
+  return intervals.length ? (
+    <ul className="space-y-2 text-sm tabular-nums">
+      {intervals.map((interval) => (
+        <li key={`${interval.startsAt}/${interval.endsAt}`}>
+          <time dateTime={interval.startsAt}>
+            {formatEventDate(interval.startsAt, language, "dateTime")}
+          </time>{" "}
+          –{" "}
+          <time dateTime={interval.endsAt}>
+            {formatEventDate(interval.endsAt, language, "dateTime")}
+          </time>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p className="text-muted-foreground text-sm">{t("helpDeskNoSchedule")}</p>
+  );
+}

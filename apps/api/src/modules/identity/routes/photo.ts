@@ -33,7 +33,14 @@ import {
 import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
 import { photoPublishedInDirectory, savedByReader } from "../../directory/service.js";
+import { photoPublishedInHelpDesk } from "../../helpdesk/helpers.js";
 import { hasEventAccess } from "../role.js";
+
+const HELPDESK_BROWSE = [
+  CAPABILITIES.HELPDESK_REQUEST,
+  CAPABILITIES.HELPDESK_OFFER,
+  CAPABILITIES.HELPDESK_COVERAGE,
+] as const;
 
 /**
  * Account photo (#934). The owner uploads it to private object storage; it
@@ -60,11 +67,20 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
       throw err;
     }
   }
-  return (
+  if (
     (await savedByReader(pool, readerId, subjectId)) &&
     (await hasEventAccess(pool, readerId)) &&
     (await photoPublishedInDirectory(pool, subjectId))
-  );
+  ) {
+    return true;
+  }
+  // H63: a published helper's card photo, for anyone who may browse helpers.
+  for (const capability of HELPDESK_BROWSE) {
+    if (await userHasCapability(context, capability)) {
+      return photoPublishedInHelpDesk(pool, subjectId);
+    }
+  }
+  return false;
 }
 
 /**

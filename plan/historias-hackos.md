@@ -493,6 +493,90 @@ operational notifications arrive via Expo Push Notifications.
 
 ---
 
+## 12. Help desk & helpers
+
+The help desk connects participants with people offering help: mentors,
+sponsor representatives and staff. A helper profile extends the person's
+existing public profile, sharing the same identity and bio rather than
+creating a separate copy. Helpers explicitly publish their help desk profile;
+participants can browse published helpers and their stated schedules without
+scanning a badge. This help desk visibility is separate from badge-scan
+networking consent and does not make every attendee's profile browsable.
+Access to help desk actions follows capabilities (H8).
+On mobile, Help desk is a direct tab for participants and helpers during the
+event: participants land on their own/team requests and helpers on their
+inbox, with the helper directory and every other authorized view reachable
+alongside. Accounts that can both request and offer help keep both views.
+When space is tight, Contacts moves to overflow; staff scanners remain
+directly accessible (H55).
+
+**H61. Publish my helper profile and knowledge**
+As an accepted mentor, sponsor representative or staff member I want to create
+and publish a helper profile connected to my public profile, edit my bio and
+select the topics I can help with, so participants know what to ask me about.
+My bio is the same on both profiles. Knowledge topics come from one shared,
+searchable catalogue, like the university or degree picker — for example
+Frontend, Angular and Vite — reused by helper profiles and help requests.
+My selected knowledge is visible on my helper profile and when someone views
+my shared public profile. Accepted mentors can prepare their helper profile
+after acceptance; sponsor representatives and staff can do so without a mentor
+application.
+
+**H62. Set my help availability**
+As a helper I want to state when I will be available at the venue, with
+multiple dated start/end intervals across event days, and edit that schedule
+when my plans change. My stated schedule is visible in the help desk.
+Scheduled availability and actual venue presence are distinct: being scheduled
+does not mean I have entered the building, and entering does not create an
+availability interval. Actual presence uses the same attendance/presence
+system as H24.
+
+**H63. Browse helpers at the help desk**
+As a participant I want to browse published helpers, see their bio, knowledge
+topics and stated availability schedule, and find people who can help with a
+topic without first scanning their badge. I can distinguish scheduled
+availability from current venue presence. Browsing a helper does not create a
+badge-scan contact or grant access to unrelated private profile data.
+
+**H64. Request help for myself or my team**
+As a participant I want to send a help request for myself or my project team,
+describe what I need, select one or more topics from the shared knowledge
+catalogue and say where we are, so a suitable helper can find us. The topic
+picker also offers Other for needs outside the catalogue. I can follow the
+request and see who has claimed it and their meeting instructions; for a team
+request, those updates are visible to the team.
+
+**H65. Notify suitable helpers and fall back to general help**
+As a participant requesting help I want the system to notify available helpers
+who are currently inside the venue and whose knowledge matches any requested
+topic. Availability requires both a current stated availability interval (H62)
+and venue presence (H24). If Other is selected, the request goes to all
+available, present helpers, regardless of knowledge. If no available, present
+helper matches the requested knowledge, the system uses that same Other
+fallback rather than leaving the request without a general-help audience.
+Mentors, sponsor representatives and staff with published helper profiles all
+participate in this routing; a scheduled helper outside the venue is not
+counted as present.
+
+**H66. Claim a help request and arrange where to meet**
+As a helper I want to claim an open help request and either notify the
+participant or team that I am on my way to their stated location, or ask them
+to come to a specific location I provide. The requester or team receives the
+claim and meeting instructions. Only one helper can claim a request: if two
+claim simultaneously, exactly one succeeds and the other sees that it has
+already been claimed. Retrying a claim or its notification must not create
+duplicate claims or deliveries.
+
+**H67. See helper coverage throughout the event**
+As the organization I want to view helper availability across the event,
+including how many helpers are scheduled at any given time and which knowledge
+topics they cover, so I can identify gaps and plan support. For the current
+time I can also distinguish scheduled coverage from helpers actually inside
+the venue, using H24 presence rather than assuming everyone scheduled arrived.
+Mentor, sponsor and staff helpers all count toward coverage.
+
+---
+
 ## Proposed development order
 
 The queue block is non-negotiable. FastTrack must improve; the rest is optional.
