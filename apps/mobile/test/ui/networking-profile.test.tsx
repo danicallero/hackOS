@@ -57,10 +57,13 @@ jest.mock("expo-file-system", () => ({
     }
   },
 }));
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush, back: mockBack }) }));
+jest.mock("expo-router", () => ({
+  useFocusEffect: (effect: () => void) => require("react").useEffect(effect, [effect]),
+  useRouter: () => ({ push: mockPush, back: mockBack }),
+}));
 // The help desk section (H61) has its own requests and tests; here it stays out of the call counts.
 jest.mock("@/components/help-desk/helper-profile-section", () => ({
-  HelperProfileSection: () => null,
+  HelperSettingsLink: () => null,
 }));
 jest.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
@@ -432,7 +435,12 @@ describe("Networking profile safe areas and native controls (H55, #935)", () => 
       await renderMobile(<NetworkingProfileRoute />);
       await screen.findByRole("button", { name: "networkingEdit" });
       expect(mockHeaderOptions).toHaveBeenLastCalledWith(
-        expect.objectContaining({ headerLargeTitle: false }),
+        expect.objectContaining({
+          headerLargeTitle: false,
+          headerTransparent: true,
+          headerBlurEffect: "none",
+          scrollEdgeEffects: { top: "soft" },
+        }),
       );
       expect(screen.queryByTestId("networking-sheet-frame")).toBeNull();
       expect(screen.getByTestId("native-toolbar-left")).toBeTruthy();
@@ -463,7 +471,12 @@ describe("Networking profile safe areas and native controls (H55, #935)", () => 
       await renderMobile(<NetworkingProfileRoute />, { insets: { left: 200 } });
       await screen.findByRole("button", { name: "networkingEdit" });
       expect(mockHeaderOptions).toHaveBeenLastCalledWith(
-        expect.objectContaining({ headerLargeTitle: false }),
+        expect.objectContaining({
+          headerLargeTitle: false,
+          headerTransparent: true,
+          headerBlurEffect: "none",
+          scrollEdgeEffects: { top: "soft" },
+        }),
       );
       expect(
         StyleSheet.flatten(screen.getByTestId("networking-profile-scroll").props.style).paddingLeft,

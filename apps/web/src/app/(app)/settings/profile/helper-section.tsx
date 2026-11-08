@@ -32,12 +32,11 @@ export function HelperSection({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   return (
     <div className="space-y-8">
       <HelperForm
-        key={`${profile.published}-${profile.topics.map((topic) => topic.id).join(",")}`}
+        key={`${profile.published}-${profile.ownChallengesOnly}-${profile.topics.map((topic) => topic.id).join(",")}`}
         profile={profile}
         onSaved={own.mutate}
         onDirtyChange={onDirtyChange}
       />
-      <AvailabilityEditor profile={profile} onSaved={own.mutate} />
     </div>
   );
 }
@@ -56,11 +55,13 @@ function HelperForm({
   const id = useId();
   const [published, setPublished] = useState(profile.published);
   const [topics, setTopics] = useState(profile.topics);
+  const [ownOnly, setOwnOnly] = useState(profile.ownChallengesOnly ?? false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [missingTopics, setMissingTopics] = useState(false);
   const dirty =
     published !== profile.published ||
+    ownOnly !== (profile.ownChallengesOnly ?? false) ||
     topics.map((x) => x.id).join(",") !== profile.topics.map((x) => x.id).join(",");
   useUnsavedChangesGuard(dirty);
   useEffect(() => {
@@ -90,6 +91,7 @@ function HelperForm({
             await api.put<MyHelperProfile>("/api/me/helper-profile", {
               published,
               topicIds: topics.map((topic) => topic.id),
+              ...(profile.canLimitToChallenges ? { ownChallengesOnly: ownOnly } : {}),
             }),
           );
           toast.success(t("helpDeskSaved"), { compactTitle: t("helpDeskProfile") });
@@ -107,15 +109,24 @@ function HelperForm({
           label={t("helpDeskPublish")}
           hint={t("helpDeskPublishingNote")}
         />
+        <AvailabilityEditor profile={profile} onSaved={onSaved} />
         <div className="space-y-2">
           <Label htmlFor={id}>{t("helpDeskKnowledge")}</Label>
-          <TopicsPicker id={id} value={topics} onChange={setTopics} disabled={pending} />
+          <TopicsPicker id={id} value={topics} onChange={setTopics} disabled={pending} allowAdd />
           {showMissing ? (
             <p role="alert" className="text-destructive text-sm">
               {t("helpDeskPublishNeedsTopic")}
             </p>
           ) : null}
         </div>
+        {profile.canLimitToChallenges ? (
+          <SwitchRow
+            checked={ownOnly}
+            onChange={setOwnOnly}
+            label={t("helpDeskOwnChallengesOnly")}
+            hint={profile.ownChallenges?.map((challenge) => challenge.name).join(" · ")}
+          />
+        ) : null}
       </fieldset>
       {error ? <HelpdeskError error={error} fallback="helpDeskSaveError" /> : null}
       <FormActions

@@ -327,17 +327,17 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
           if (tab.name === TAB_DEFINITIONS.account.triggerName) {
             router.navigate(OVERFLOW_TAB_ROUTE.account);
           } else if (tab.name === TAB_DEFINITIONS["help-desk"].triggerName) {
-            // H61-H67: the tab owns pushed pages. Selecting it is handled by
-            // onTabSelect; pressing it again pops straight to its root, so
-            // repeated taps settle there instead of stepping between pages.
-            reselectHelpDesk(router, wasSelected);
+            // H61-H67: both entering and reselecting open the root; do not
+            // resume the last coverage/profile page from another tab.
+            if (wasSelected) reselectHelpDesk(router, true);
+            else router.replace(TAB_DEFINITIONS["help-desk"].href);
           } else if (wasSelected) emitTabReselect(tab.name);
         }}
         onTabSelect={(index) => {
           void haptic("selection");
           if (visibleTabKeys[index] === "account") router.navigate(OVERFLOW_TAB_ROUTE.account);
           if (visibleTabKeys[index] === "help-desk")
-            router.navigate(TAB_DEFINITIONS["help-desk"].href);
+            router.replace(TAB_DEFINITIONS["help-desk"].href);
         }}
         overflow={
           overflowIds.length > 0 ? (

@@ -140,6 +140,10 @@
       "cancelled": {
         "subject": "Solicitude de axuda cancelada",
         "body": "Quen pediu axuda xa non a necesita."
+      },
+      "resolved": {
+        "subject": "Solicitude de axuda resolta",
+        "body": "{{actorName}} marcou esta solicitude como resolta."
       }
     }
   },
@@ -202,6 +206,10 @@
       "cancelled": {
         "title": "Solicitude de axuda cancelada",
         "body": "Xa non necesitan axuda."
+      },
+      "resolved": {
+        "title": "Solicitude de axuda resolta",
+        "body": "{{actorName}} marcou esta solicitude como resolta."
       }
     }
   }

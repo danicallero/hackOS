@@ -175,6 +175,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | GET | `/api/helpdesk/projects` | capability:helpdesk:request |
 | POST | `/api/helpdesk/requests` | capability:helpdesk:request + email-verification:caller |
 | GET | `/api/helpdesk/requests/:id` | contextual:helpdesk-request-party (params.id) |
+| PATCH | `/api/helpdesk/requests/:id` | contextual:helpdesk-request-party (params.id) + email-verification:caller |
 | POST | `/api/helpdesk/requests/:id/cancel` | contextual:helpdesk-request-party (params.id) + email-verification:caller |
 | POST | `/api/helpdesk/requests/:id/claim` | contextual:helpdesk-helper + email-verification:caller |
 | POST | `/api/helpdesk/requests/:id/release` | contextual:helpdesk-helper + email-verification:caller |

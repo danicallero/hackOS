@@ -314,14 +314,23 @@ export async function getHelperCv(userId: number): Promise<{ key: string; filena
   return readSharedCv(userId, "u.is_test_account = false");
 }
 
+/** H64, H66: a requester's shared CV; needs a shared (visible) profile. The caller checked access. */
+export async function getRequesterCv(userId: number): Promise<{ key: string; filename: string }> {
+  return readSharedCv(userId, VISIBLE_WHERE);
+}
+
 /**
  * H61, H63: a published helper's public profile exactly as people see it after
  * scanning their badge, honouring the per-field switches but independent of
  * `directory_visible` and diary saves. Creates nothing. The caller has
  * already checked the helper is listed.
  */
-export async function helperProfileEntry(db: Queryable, userId: number): Promise<DirectoryEntry> {
-  return preview(db, userId, await readProfile(db, userId), `/api/directory/${userId}/cv`);
+export async function helperProfileEntry(
+  db: Queryable,
+  userId: number,
+  cvPath = `/api/directory/${userId}/cv`,
+): Promise<DirectoryEntry> {
+  return preview(db, userId, await readProfile(db, userId), cvPath);
 }
 
 /**
@@ -375,7 +384,7 @@ const DEFAULT_PROFILE: ProfileRow = {
   onboarding_completed_at: null,
 };
 
-const OWN_CV_PATH = "/api/me/public-profile/cv";
+export const OWN_CV_PATH = "/api/me/public-profile/cv";
 
 /** The staff CV route of user management (#935 moderation). */
 export function staffCvPath(userId: number): string {

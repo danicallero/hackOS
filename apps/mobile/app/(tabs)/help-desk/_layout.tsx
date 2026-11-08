@@ -14,6 +14,7 @@ export default function HelpDeskLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="new-request" options={helpSheetOptions} />
       <Stack.Screen name="helper/[id]" options={transparentDetailHeaderOptions} />
+      <Stack.Screen name="requester/[id]" options={transparentDetailHeaderOptions} />
     </Stack>
   );
 }

@@ -17,6 +17,13 @@ export interface EffectiveRole {
   name: string;
 }
 
+/** H8: shared SQL projection for lists and individual public-role reads. */
+export function highestVisibleRoleNameSql(userRef: string): string {
+  return `(SELECT r.name FROM user_roles ur JOIN roles r ON r.id = ur.role_id
+    WHERE ur.user_id = ${userRef} AND r.is_visible AND r.deleted_at IS NULL
+    ORDER BY r.position DESC LIMIT 1)`;
+}
+
 /**
  * H8's actual "public role" concept: the user's highest-position role among
  * their assigned roles that is marked `is_visible` — or null if they hold no
@@ -30,17 +37,9 @@ export async function getEffectiveRole(
   db: Queryable,
   userId: number,
 ): Promise<EffectiveRole | null> {
-  const { rows } = await db.query(
-    `SELECT r.name
-       FROM user_roles ur
-       JOIN roles r ON r.id = ur.role_id
-      WHERE ur.user_id = $1 AND r.is_visible = true AND r.deleted_at IS NULL
-      ORDER BY r.position DESC
-      LIMIT 1`,
-    [userId],
-  );
+  const { rows } = await db.query(`SELECT ${highestVisibleRoleNameSql("$1")} AS name`, [userId]);
   const row = rows[0] as { name: string } | undefined;
-  if (!row) return null;
+  if (!row?.name) return null;
   return { name: row.name };
 }
 

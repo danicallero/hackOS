@@ -19,8 +19,9 @@ key + same body = same response, no second write or delivery).
 | `HELPDESK_MANAGE` | `helpdesk:manage` | Rename and merge knowledge topics | Event Director |
 
 `*` passes every check. **Browsing** helpers needs any of `helpdesk:request`, `helpdesk:offer`,
-`helpdesk:coverage`. The topic catalogue (`GET`/`POST /api/helpdesk/topics`)
-also accepts eligible helpers without a capability (accepted mentors).
+`helpdesk:coverage`. The topic catalogue (`GET /api/helpdesk/topics`)
+also accepts eligible helpers without a capability (accepted mentors); adding a
+topic (`POST`) needs eligibility or `helpdesk:manage`.
 
 **Helper eligibility** (`eligible` in `GET /api/me/helper-profile`): the
 caller holds `helpdesk:offer`, **or** has an accepted/confirmed application
@@ -61,18 +62,22 @@ type HelperCard = {
   photoUrl: string | null;      // only when the public profile's showPhoto is on
   headline: string | null;      // shared public-profile headline
   bio: string | null;           // shared public-profile bio (single source)
-  kind: HelperKind;             // sponsor > mentor > staff
-  affiliation: string | null;   // enterprise name for sponsors
+  kind: HelperKind;             // routing/coverage category, not the role label
+  visibleRoleName: string | null; // highest assigned visible role (H8), as on badges
+  affiliation: string | null;
+  affiliationLogoUrl: string | null;   // enterprise name for sponsors
   topics: HelpTopic[];          // sorted by name
   availability: AvailabilityInterval[]; // ascending, includes past intervals
   scheduledNow: boolean;        // now inside one of the intervals
   present: boolean;             // H24: latest door scan is "in"
-  availableNow: boolean;        // scheduledNow && present (what H65 routing uses)
+  availableNow: boolean;        // present (schedule is advisory; H65 routing uses actual presence)
 };
 
 // GET /api/helpdesk/helpers/:userId only (the list returns bare HelperCard).
 // Shared client type: HelperDetail<P> in @hackos/shared/help-desk.
 type HelperDetail = HelperCard & {
+  ownChallengesOnly: boolean;   // sponsor restricts their support to own challenges
+  ownChallenges: { id: number; name: string }[]; // restriction details, [] otherwise
   profile: DirectoryEntry;      // exactly GET /api/directory/:userId: displayName, photoUrl, headline,
                                 // bio, locationNote, socials, cvUrl, projects, project, challenges,
                                 // helpTopics; honours the person's own public-profile switches
@@ -85,12 +90,12 @@ type MyHelperProfile = {
   bio: string | null;           // same value as GET /api/me/public-profile bio
   topics: HelpTopic[];
   availability: AvailabilityInterval[];
-  preview: HelperCard;          // what browsers see once published
+  preview: HelperCard & { profile: DirectoryEntry }; // exactly what others get from GET /api/helpdesk/helpers/:userId, even unpublished (cvUrl is the owner route)
 };
 
 type HelpRequestStatus = "open" | "claimed" | "resolved" | "cancelled";
 type MeetingMode = "on_my_way" | "meet_at";
-type RoutingOutcome = "matched" | "fallback" | "none";
+type RoutingOutcome = "matched" | "fallback" | "sponsor" | "none";
 
 type HelpRequest = {
   id: number;
@@ -99,21 +104,26 @@ type HelpRequest = {
   location: string;
   topics: HelpTopic[];
   other: boolean;
+  challenge: { id: number; name: string } | null; // optional target challenge
+  preferSponsor: boolean;       // requester prefers a sponsor to come
   project: { id: number; name: string } | null; // team request when set
   requester: { userId: number; displayName: string } | null; // null after the requester's account removal
-  routing: RoutingOutcome;      // matched: knowledge match; fallback: Other / no match → all available helpers; none: nobody available
+  routing: RoutingOutcome;      // sponsor: preferSponsor applied; matched: knowledge match; fallback: Other / no match → all available helpers; none: nobody available
   notifiedCount: number;
   claim: null | {
-    helper: { userId: number; displayName: string; photoUrl: string | null; kind: HelperKind; affiliation: string | null } | null;
+    helper: { userId: number; displayName: string; photoUrl: string | null; kind: HelperKind; visibleRoleName: string | null; affiliation: string | null } | null;
     mode: MeetingMode;
     meetingLocation: string | null; // set when mode = "meet_at"
     claimedAt: string;
   };
   createdAt: string;
+  queuedAt: string;             // FCFS key; an edit moves the request to the end
+  queuePosition: number | null; // 1-based among all open requests; null otherwise
   resolvedAt: string | null;
   cancelledAt: string | null;
   viewer: {                     // what the caller may do now
     canCancel: boolean;
+    canEdit: boolean;           // open and caller on the requesting side
     canClaim: boolean;
     canRelease: boolean;
     canResolve: boolean;
@@ -134,7 +144,7 @@ type CoverageReport = {
     at: string;
     scheduled: number;          // scheduledNow
     present: number;            // inside the venue (H24), scheduled or not
-    available: number;          // scheduled AND present
+    available: number;          // present, whether scheduled or not
     topics: { id: number; name: string; scheduled: number; available: number }[];
   };
   uncoveredTopics: HelpTopic[]; // topics on open requests with no available helper now
@@ -148,7 +158,7 @@ type CoverageReport = {
 | Method & path | Guard | Body / query | Response |
 | --- | --- | --- | --- |
 | `GET /api/helpdesk/topics` | browse or eligible helper | `?q=<text>&limit=1..50` (default 20; `q` matches anywhere, case/accent-insensitive) | `{ topics: HelpTopic[] }` |
-| `POST /api/helpdesk/topics` | browse or eligible helper | `{ name: string }` (1-60 chars, trimmed, inner spaces collapsed) | `201 { topic, created: true }` or `200 { topic, created: false }` when an equivalent name exists. Rate-limited (20/hour/user). |
+| `POST /api/helpdesk/topics` | eligible helper or `helpdesk:manage` (else 403 `helper_not_eligible`) | `{ name: string }` (1-60 chars, trimmed, inner spaces collapsed) | `201 { topic, created: true }` or `200 { topic, created: false }` when an equivalent name exists. Rate-limited (20/hour/user). |
 | `PATCH /api/helpdesk/topics/:id` | `helpdesk:manage` | `{ name }` | `HelpTopic`; 409 `topic_name_taken` |
 | `POST /api/helpdesk/topics/:id/merge` | `helpdesk:manage` | `{ targetId }` | `HelpTopic` (target); moves profiles and requests, deletes source |
 
@@ -158,8 +168,8 @@ type CoverageReport = {
 
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
-| `GET /api/me/helper-profile` | authenticated | — | `MyHelperProfile` (works before event access; `eligible:false` when not a helper) |
-| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs ≥1 topic (409 `helper_profile_incomplete`). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Does not touch public-profile sharing. |
+| `GET /api/me/helper-profile` | authenticated | — | `MyHelperProfile` (works before event access; `eligible:false` when not a helper). Also `ownChallengesOnly`, `canLimitToChallenges` (sponsor with ≥1 own challenge) and `ownChallenges: {id, name}[]`, and `suggestedInterval: {startsAt, endsAt} \| null` (event_config hacking window, else event window, else null; clients prefill new availability with it). |
+| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing), ownChallengesOnly?: boolean (400 unless `canLimitToChallenges`; omitted keeps the stored value) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs ≥1 topic (409 `helper_profile_incomplete`). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Turning publication on (unpublished → published) also sets the public profile's `directory_visible` (and `consented_at`) in the same transaction, audited as changed field `directoryVisible`; unpublishing never unshares. Help desk readers get `profile.cvUrl` when the helper shares their CV and download it from `GET /api/directory/:userId/cv`, as a badge scanner would. |
 | `PUT /api/me/helper-profile/availability` | eligible | `{ intervals: AvailabilityInterval[] }` (0-30, each ≤24 h, no overlaps; replaces the set) | `MyHelperProfile`; 400 `availability_overlap` / `availability_invalid` |
 
 ### Browse helpers (H63)
@@ -177,16 +187,18 @@ readable by browsers through the existing photo route.
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
 | `GET /api/helpdesk/projects` | `helpdesk:request` | — | `{ projects: {id, name}[] }` the caller's active projects (team targets) |
-| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, projectId?: number \| null }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 403 when not a member of `projectId`. |
+| `GET /api/helpdesk/challenges` | `helpdesk:request` | — | `{ challenges: {id, name, mine}[] }` visible non-test challenges, the caller's own project challenges first (`mine: true`) |
+| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, projectId?: number \| null, challengeId?: number \| null (visible challenge, else 400), preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 403 when not a member of `projectId`. |
 | `GET /api/helpdesk/requests/mine` | `helpdesk:request` | — | `{ requests: HelpRequest[] }` own + teams', newest first |
-| `GET /api/helpdesk/requests/:id` | requester, team member, helper (`helpdesk:offer` eligible), coverage | — | `HelpRequest`; 404 otherwise |
+| `GET /api/helpdesk/requests/:id` | requester, team member, helper (`helpdesk:offer` eligible), coverage, `helpdesk:manage` | — | `HelpRequest & { requesterProfile: DirectoryEntry \| null }` — the profile only for a routed helper, the claimer or `helpdesk:manage`, and only while the requester shares their public profile; 404 otherwise |
+| `PATCH /api/helpdesk/requests/:id` | requester or team member | `{ description, location, topicIds, other, challengeId?, preferSponsor? }` (creation rules) | `HelpRequest`, moved to the end of the queue and re-routed (only new matches are notified); 409 `help_request_already_claimed` when claimed, `help_request_closed` when resolved/cancelled |
 | `POST /api/helpdesk/requests/:id/cancel` | requester or team member | — | `HelpRequest` (`cancelled`); 409 `help_request_closed` when resolved/cancelled |
 
 ### Requests — helper side (H65, H66)
 
 | Method & path | Guard | Body / query | Response |
 | --- | --- | --- | --- |
-| `GET /api/helpdesk/inbox` | eligible helper | `?scope=open\|mine` (default `open`) | `{ requests: HelpRequest[] }` — `open`: every open request, the ones routed to me first; `mine`: claimed by me (claimed, then resolved) |
+| `GET /api/helpdesk/inbox` | eligible helper | `?scope=open\|mine` (default `open`) | `{ requests: HelpRequest[] }` — `open`: every open request in first-come, first-served order (`queuedAt`, id); `mine`: claimed by me (claimed, then resolved) |
 | `POST /api/helpdesk/requests/:id/claim` | eligible + published helper | `{ mode: "on_my_way" } \| { mode: "meet_at", meetingLocation: string (1-120) }` | `HelpRequest` (`claimed`). Exactly one concurrent claim wins; others get 409 `help_request_already_claimed`. A retry by the winner returns the same claim without a second notification. |
 | `POST /api/helpdesk/requests/:id/release` | the claimer | — | `HelpRequest` back to `open` (claim cleared, requester notified; audience not re-notified); 409 `help_request_not_claimer` |
 | `POST /api/helpdesk/requests/:id/resolve` | the claimer, requester or team member | — | `HelpRequest` (`resolved`); 409 `help_request_not_claimed` while open, `help_request_closed` once closed |
@@ -222,3 +234,18 @@ Localized text: `apiError_<code>` in `packages/shared/locales/*/common.json`.
 | `topic_unknown` | 400 |
 | `availability_overlap` | 400 |
 | `availability_invalid` | 400 |
+
+
+Resolution queues `helpdesk.resolved` through the existing in-app and push
+channels for the requester/team and claimer, excluding the actor. The payload
+contains `kind: "request_resolved"`, `requestId` and the actor name; a repeated
+transition returns 409 and does not enqueue another notification. Claims retain
+`helpdesk.onMyWay` and `helpdesk.meetAt`, including the support person's name and
+the destination.
+
+Sponsor preference requires `challengeId` on both creation and edit (400 without
+it). Preferred recipients are the available representatives of that challenge's
+company, using the existing challenge-sponsor relation; an unrelated sponsor
+matching a topic does not qualify for preference. If no preferred representative
+is inside, ordinary topic/Other fallback applies. Planned intervals never gate
+current availability or notifications.

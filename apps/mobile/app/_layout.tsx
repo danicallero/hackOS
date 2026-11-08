@@ -677,6 +677,7 @@ function RootLayoutNav({
         </Stack.Protected>
         <Stack.Protected guard={authenticated && (canEnterApp || helperAccess.eligible)}>
           <Stack.Screen name="helper-profile" options={{ headerShown: true }} />
+          <Stack.Screen name="help-challenges" options={helpSheetOptions} />
           <Stack.Screen name="help-topics" options={helpSheetOptions} />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}

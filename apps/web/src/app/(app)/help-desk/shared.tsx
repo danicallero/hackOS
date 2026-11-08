@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { MultiSelect } from "@/components/common/multi-select";
 import { StatusBadge } from "@/components/common/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { useServerResource } from "@/hooks/use-server-resource";
@@ -51,18 +52,25 @@ export function HelpdeskLoading() {
     </div>
   );
 }
+const OTHER = "other";
 export function TopicsPicker({
   value,
   onChange,
   disabled,
   id,
   inDialog = false,
+  other,
+  allowAdd = false,
 }: {
   value: HelpTopic[];
   onChange: (topics: HelpTopic[]) => void;
   disabled?: boolean;
   id?: string;
   inDialog?: boolean;
+  /** Request forms only: Other is the last row of the same list. */
+  other?: { value: boolean; onChange: (other: boolean) => void };
+  /** Support profile only: eligible people may add topics to the catalogue (the API refuses others). */
+  allowAdd?: boolean;
 }) {
   const { t } = useLocale();
   const [q, setQ] = useState("");
@@ -76,6 +84,12 @@ export function TopicsPicker({
       [...value, ...(resource.data?.topics ?? [])].map((topic) => [topic.id, topic]),
     ).values(),
   ];
+  const choices = [
+    ...(other
+      ? [{ value: OTHER, label: t("helpDeskOther"), description: t("helpDeskOtherHint") }]
+      : []),
+    ...options.map((topic) => ({ value: String(topic.id), label: topic.name })),
+  ];
   return (
     <div className="space-y-2">
       <MultiSelect
@@ -83,28 +97,43 @@ export function TopicsPicker({
         aria-label={id ? undefined : t("helpDeskKnowledge")}
         disabled={disabled}
         inDialog={inDialog}
-        options={options.map((topic) => ({ value: String(topic.id), label: topic.name }))}
-        value={value.map((topic) => String(topic.id))}
-        onChange={(ids) =>
+        options={choices}
+        value={[...value.map((topic) => String(topic.id)), ...(other?.value ? [OTHER] : [])]}
+        onChange={(ids) => {
+          // Other excludes the catalogue: picking one side clears the other.
+          const pickedOther = ids.includes(OTHER) && !other?.value;
+          const topicIds = pickedOther ? [] : ids.filter((id) => id !== OTHER);
+          other?.onChange(pickedOther || (ids.includes(OTHER) && topicIds.length === 0));
           onChange(
-            ids.map((id) => options.find((topic) => String(topic.id) === id)!).filter(Boolean),
-          )
-        }
-        creating={creating}
-        onCreateOption={async (name) => {
-          setCreating(true);
-          setCreateError(null);
-          try {
-            const result = await api.post<{ topic: HelpTopic }>("/api/helpdesk/topics", { name });
-            onChange([...value.filter((topic) => topic.id !== result.topic.id), result.topic]);
-            setQ("");
-            resource.reload();
-          } catch (error) {
-            setCreateError(error);
-          } finally {
-            setCreating(false);
-          }
+            topicIds.map((id) => options.find((topic) => String(topic.id) === id)!).filter(Boolean),
+          );
         }}
+        creating={creating}
+        searchPlaceholder={t(allowAdd ? "helpDeskFindOrAddTopic" : "helpDeskFindTopic")}
+        onCreateOption={
+          allowAdd
+            ? async (name) => {
+                setCreating(true);
+                setCreateError(null);
+                try {
+                  const result = await api.post<{ topic: HelpTopic }>("/api/helpdesk/topics", {
+                    name,
+                  });
+                  other?.onChange(false);
+                  onChange([
+                    ...value.filter((topic) => topic.id !== result.topic.id),
+                    result.topic,
+                  ]);
+                  setQ("");
+                  resource.reload();
+                } catch (error) {
+                  setCreateError(error);
+                } finally {
+                  setCreating(false);
+                }
+              }
+            : undefined
+        }
         searchQuery={q}
         onSearchChange={setQ}
         placeholder={t("selectPlaceholder")}
@@ -134,4 +163,9 @@ export function HelperPresence({
       </StatusBadge>
     </div>
   );
+}
+
+/** H61: who the person is on the support team, as a capsule; the company stays in the text. */
+export function RolePill({ role }: { role: string | null }) {
+  return role ? <Badge variant="secondary">{role}</Badge> : null;
 }

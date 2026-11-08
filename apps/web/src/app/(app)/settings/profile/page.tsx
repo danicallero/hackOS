@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { CertificatesPanel } from "@/components/certificates/certificates-panel";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
@@ -62,7 +62,14 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
-  const onHelperDirty = useDirtySetter(setDirty, "helpDesk");
+  // The Help desk tab hosts the same networking-profile editor above its own settings.
+  const [helperDirty, setHelperDirty] = useState(false);
+  const [profileDirty, setProfileDirty] = useState(false);
+  const setHelpDeskDirty = useDirtySetter(setDirty, "helpDesk");
+  useEffect(() => {
+    onPublicDirty(profileDirty);
+    setHelpDeskDirty(helperDirty || profileDirty);
+  }, [helperDirty, profileDirty, setHelpDeskDirty, onPublicDirty]);
   const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
@@ -70,9 +77,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
       case "personal":
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
-        return <PublicProfileCard onDirtyChange={onPublicDirty} />;
       case "helpDesk":
-        return <HelperSection onDirtyChange={onHelperDirty} />;
+        return null; // One persistent editor below is shared by both tabs (H61).
       case "meals":
         return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
       case "passes":
@@ -110,22 +116,42 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
             </TabsTrigger>
           ))}
         </TabBar>
-        {tabs.map((item) => (
+        {visited.has("public") || visited.has("help-desk") ? (
           <TabsContent
-            key={item.id}
-            value={item.id}
+            value={tab === "help-desk" ? "help-desk" : "public"}
             forceMount
-            hidden={item.id !== tab}
-            className="divide-y divide-border/60 pt-2"
+            hidden={tab !== "public" && tab !== "help-desk"}
+            className="pt-2"
           >
-            {visited.has(item.id) &&
-              item.sections.map((section) => (
-                <ProfileSection key={section.id} section={section} tabTitle={item.title}>
-                  {body(section.id)}
-                </ProfileSection>
-              ))}
+            <ProfileSection
+              section={{ id: "public" }}
+              tabTitle={tab === "help-desk" ? "helpDeskTitle" : "publicProfileTitle"}
+            >
+              {me.hasEventAccess ? <PublicProfileCard onDirtyChange={setProfileDirty} /> : null}
+              <div hidden={tab !== "help-desk"}>
+                <HelperSection onDirtyChange={setHelperDirty} />
+              </div>
+            </ProfileSection>
           </TabsContent>
-        ))}
+        ) : null}
+        {tabs
+          .filter((item) => item.id !== "public" && item.id !== "help-desk")
+          .map((item) => (
+            <TabsContent
+              key={item.id}
+              value={item.id}
+              forceMount
+              hidden={item.id !== tab}
+              className="divide-y divide-border/60 pt-2"
+            >
+              {visited.has(item.id) &&
+                item.sections.map((section) => (
+                  <ProfileSection key={section.id} section={section} tabTitle={item.title}>
+                    {body(section.id)}
+                  </ProfileSection>
+                ))}
+            </TabsContent>
+          ))}
       </Tabs>
       <nav
         aria-label={t("legalLinksLabel")}

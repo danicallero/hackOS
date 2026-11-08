@@ -65,10 +65,14 @@ check in the work process for the whole task, not only at startup.
   staging-reset lineage begins with `0001_hackos_baseline.sql`; retired
   development history lives in `apps/api/db/migration-history/` and is never
   applied.
+- **One PR, one migration.** Consolidate schema changes belonging to the same
+  unmerged PR into its single migration before delivery. If it was applied only
+  to a disposable local review database, reconcile or recreate that local
+  database when consolidating; never rewrite a shared environment's ledger.
 - Every active migration has a unique four-digit sequence prefix and is
-  immutable after application; `_migrations` stores a SHA-256 checksum and the
+  immutable after application to a shared environment; `_migrations` stores a SHA-256 checksum and the
   runner fails before later work when an applied file changes. Use a new
-  migration for a correction.
+  migration for a correction to already merged/applied shared history.
 - **Numbering bands per workstream** (avoids parallel collisions):
   `0001-0099` foundation · `01xx` identity · `02xx` applications ·
   `03xx` projects/devpost · `04xx` queue/judging · `05xx` logistics ·

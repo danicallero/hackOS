@@ -16,6 +16,7 @@ import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 import { type HelpRequest, REQUEST_STATUS } from "./model";
+import { RequestForm } from "./requests/request-form";
 
 const STATUS_TONE: Record<HelpRequest["status"], Tone> = {
   open: "warning",
@@ -34,6 +35,18 @@ function topicNames(request: HelpRequest, t: Translate) {
     ...request.topics.map((topic) => topic.name),
     ...(request.other ? [t("helpDeskOther")] : []),
   ].join(" · ");
+}
+
+/** Challenge, topics and sponsor preference as one quiet line under the need. */
+function contextLine(request: HelpRequest, t: Translate, position?: number) {
+  return [
+    request.challenge?.name,
+    topicNames(request, t),
+    request.preferSponsor ? t("helpDeskSponsorPreferred") : null,
+    position ? t("helpDeskQueuePosition", { position }) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 /** H66: the meeting arrangement the requesting side must act on. */
@@ -64,6 +77,18 @@ function MeetingLine({ request, t }: { request: HelpRequest; t: Translate }) {
   );
 }
 
+/** H64: a helper opens the requester's public profile when they share one. */
+function RequesterLink({ request }: { request: HelpRequest }) {
+  return (
+    <Link
+      href={`/help-desk/requests/${request.id}/requester`}
+      className="underline underline-offset-4"
+    >
+      {request.requesterProfile?.displayName ?? request.requester?.displayName}
+    </Link>
+  );
+}
+
 export function RequestStatus({ request }: { request: HelpRequest }) {
   const { t } = useLocale();
   return (
@@ -91,6 +116,13 @@ export function RequestTable({
   audience: "helper" | "requester";
 }) {
   const { t, language } = useLocale();
+  // H65: the inbox lists open requests in queue order, oldest first.
+  const positions = new Map<number, number>();
+  if (audience === "helper") {
+    let place = 0;
+    for (const item of requests)
+      if (item.status === "open") positions.set(item.id, item.queuePosition ?? ++place);
+  }
   const columns: Column<HelpRequest>[] = [
     {
       id: "request",
@@ -98,7 +130,9 @@ export function RequestTable({
       cell: (request) => (
         <div className="min-w-0 max-w-md space-y-0.5 whitespace-normal">
           <p className="line-clamp-2 font-medium wrap-anywhere">{request.description}</p>
-          <p className="text-muted-foreground text-xs">{topicNames(request, t)}</p>
+          <p className="text-muted-foreground text-xs">
+            {contextLine(request, t, positions.get(request.id))}
+          </p>
         </div>
       ),
     },
@@ -170,7 +204,9 @@ export function RequestTable({
               </span>
               <RequestStatus request={request} />
             </div>
-            <p className="text-muted-foreground text-xs">{topicNames(request, t)}</p>
+            <p className="text-muted-foreground text-xs">
+              {contextLine(request, t, positions.get(request.id))}
+            </p>
             <p className="text-muted-foreground text-xs wrap-anywhere">
               {[
                 audience === "requester" && !request.project
@@ -206,6 +242,7 @@ export function RequestDetail({
   const { t, language } = useLocale();
   const [pending, setPending] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function act(action: "release" | "resolve" | "cancel") {
     setPending(true);
@@ -222,9 +259,28 @@ export function RequestDetail({
   }
   const meeting = meetingText(request, t);
   const rows = [
-    { id: "for", label: t("helpDeskFor"), value: requestFor(request, t) },
+    {
+      id: "for",
+      label: t("helpDeskFor"),
+      value: !request.requesterProfile ? (
+        requestFor(request, t)
+      ) : request.project ? (
+        <>
+          {request.project.name} · <RequesterLink request={request} />
+        </>
+      ) : (
+        <RequesterLink request={request} />
+      ),
+    },
     { id: "where", label: t("helpDeskWhere"), value: request.location },
-    { id: "topics", label: t("helpDeskTopics"), value: topicNames(request, t) },
+    {
+      id: "topics",
+      label: t("helpDeskTopics"),
+      value: topicNames(request, t),
+    },
+    ...(request.challenge
+      ? [{ id: "challenge", label: t("helpDeskChallenge"), value: request.challenge.name }]
+      : []),
     {
       id: "created",
       label: t("created"),
@@ -241,7 +297,16 @@ export function RequestDetail({
             <MeetingLine request={request} t={t} />
           </p>
         ) : null}
-        {request.status === "open" && request.routing !== "matched" ? (
+        {request.status === "open" && request.queuePosition ? (
+          <p className="text-muted-foreground text-sm">
+            {t("helpDeskQueuePosition", { position: request.queuePosition })}
+          </p>
+        ) : null}
+        {request.preferSponsor ? (
+          <p className="text-muted-foreground text-sm">{t("helpDeskSponsorPreferred")}</p>
+        ) : null}
+        {request.status === "open" &&
+        (request.routing === "none" || request.routing === "fallback") ? (
           <p className="text-muted-foreground text-sm">
             {t(request.routing === "none" ? "helpDeskNoAudience" : "helpDeskFallback")}
           </p>
@@ -259,6 +324,11 @@ export function RequestDetail({
         ))}
       </dl>
       <div className="flex flex-wrap justify-end gap-2">
+        {request.viewer.canEdit ? (
+          <Button variant="outline" disabled={pending} onClick={() => setEditing(true)}>
+            {t("helpDeskEdit")}
+          </Button>
+        ) : null}
         {request.viewer.canRelease ? (
           <Button variant="outline" disabled={pending} onClick={() => void act("release")}>
             {t("helpDeskRelease")}
@@ -279,6 +349,15 @@ export function RequestDetail({
         ) : null}
       </div>
       {error ? <ContextualError message={error} /> : null}
+      <Modal open={editing} onOpenChange={setEditing} title={t("helpDeskEdit")}>
+        <RequestForm
+          request={request}
+          onSaved={() => {
+            setEditing(false);
+            reload();
+          }}
+        />
+      </Modal>
       <AlertModal
         open={confirmCancel}
         onOpenChange={setConfirmCancel}

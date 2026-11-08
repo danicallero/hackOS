@@ -28,3 +28,41 @@ describe("help desk boundaries (H61–H67)", () => {
     }
   });
 });
+
+describe("filterHelpers (H63)", () => {
+  const card = (
+    userId: number,
+    name: string,
+    kind: "mentor" | "sponsor" | "staff",
+    topics: number[],
+  ) =>
+    ({
+      userId,
+      displayName: name,
+      kind,
+      topics: topics.map((id) => ({ id, name: `T${id}` })),
+    }) as unknown as import("@/lib/help-desk").HelperCard;
+  const list = [
+    card(1, "Ada", "mentor", [1]),
+    card(2, "Bo", "sponsor", [1, 2]),
+    card(3, "Cy", "staff", []),
+  ];
+  it("combines roles, knowledge and search", () => {
+    const { filterHelpers } = require("./help-desk");
+    expect(filterHelpers(list, { query: "", kinds: [], topicIds: [] })).toHaveLength(3);
+    expect(
+      filterHelpers(list, { query: "", kinds: ["mentor", "sponsor"], topicIds: [] }),
+    ).toHaveLength(2);
+    expect(
+      filterHelpers(list, { query: "", kinds: [], topicIds: [2] }).map(
+        (h: { userId: number }) => h.userId,
+      ),
+    ).toEqual([2]);
+    expect(
+      filterHelpers(list, { query: "t1", kinds: ["sponsor"], topicIds: [1] }).map(
+        (h: { userId: number }) => h.userId,
+      ),
+    ).toEqual([2]);
+    expect(filterHelpers(list, { query: "zz", kinds: [], topicIds: [] })).toEqual([]);
+  });
+});

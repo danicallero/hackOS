@@ -234,6 +234,9 @@ As logistics I want to scan badges at the door to register entries and exits
 (with the option to log a manual pass with a past time if there was an outage).
 The system estimates presence by combining door, meal and activity records —
 we need to know how many hours each person spent (university credits, etc.).
+A help request resolved in person (H66) is also an in-person checkpoint for the
+helper and the requester: it can secure presence a door entry opened, but never
+creates presence by itself.
 
 **H25. Serve meals**
 As staff at the meal line I want to scan each person's badge. Each meal is an
@@ -544,19 +547,24 @@ describe what I need, select one or more topics from the shared knowledge
 catalogue and say where we are, so a suitable helper can find us. The topic
 picker also offers Other for needs outside the catalogue. I can follow the
 request and see who has claimed it and their meeting instructions; for a team
-request, those updates are visible to the team.
+request, those updates are visible to the team. I can also pick a specific
+challenge the help is about, and ask that a sponsor from that challenge’s company come to help if one is
+available. The sponsor preference requires a selected challenge.
 
 **H65. Notify suitable helpers and fall back to general help**
 As a participant requesting help I want the system to notify available helpers
 who are currently inside the venue and whose knowledge matches any requested
-topic. Availability requires both a current stated availability interval (H62)
-and venue presence (H24). If Other is selected, the request goes to all
+topic. Availability follows actual venue presence (H24); the stated intervals (H62)
+are a plan and do not prevent a published helper inside the venue from receiving requests. If Other is selected, the request goes to all
 available, present helpers, regardless of knowledge. If no available, present
 helper matches the requested knowledge, the system uses that same Other
 fallback rather than leaving the request without a general-help audience.
 Mentors, sponsor representatives and staff with published helper profiles all
 participate in this routing; a scheduled helper outside the venue is not
-counted as present.
+counted as present. Sponsors of the chosen challenge are notified regardless of
+topic; if the requester prefers a sponsor and one from the chosen challenge’s company is available, only those sponsors
+are notified. A sponsor can choose to be notified of, and see, only requests
+about their own challenges.
 
 **H66. Claim a help request and arrange where to meet**
 As a helper I want to claim an open help request and either notify the
@@ -565,7 +573,8 @@ to come to a specific location I provide. The requester or team receives the
 claim and meeting instructions. Only one helper can claim a request: if two
 claim simultaneously, exactly one succeeds and the other sees that it has
 already been claimed. Retrying a claim or its notification must not create
-duplicate claims or deliveries.
+duplicate claims or deliveries. A request marked as resolved counts as a
+verified in-person presence checkpoint for the helper and the requester (H24).
 
 **H67. See helper coverage throughout the event**
 As the organization I want to view helper availability across the event,

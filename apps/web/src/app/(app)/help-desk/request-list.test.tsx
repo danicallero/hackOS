@@ -36,12 +36,17 @@ const request: HelpRequest = {
   project: null,
   requester: { userId: 1, displayName: "Ana" },
   routing: "matched",
+  challenge: null,
+  preferSponsor: false,
   notifiedCount: 1,
   claim: null,
   createdAt: "2027-02-27T10:00:00Z",
   resolvedAt: null,
   cancelledAt: null,
+  queuedAt: "2027-02-27T10:00:00Z",
+  queuePosition: null,
   viewer: {
+    canEdit: false,
     canClaim: true,
     canCancel: false,
     canRelease: false,
@@ -141,6 +146,7 @@ describe("claiming help (H66)", () => {
                 displayName: "Bea",
                 photoUrl: null,
                 kind: "mentor",
+                visibleRoleName: "Mentor",
                 affiliation: null,
               },
               mode: "on_my_way",
@@ -155,5 +161,55 @@ describe("claiming help (H66)", () => {
     );
     const link = container.querySelector('a[href="/help-desk/helpers/7"]');
     expect(link?.textContent).toBe("Bea");
+  });
+  it("shows the challenge and the sponsor preference", async () => {
+    await act(async () =>
+      root.render(
+        <RequestDetail
+          request={{
+            ...request,
+            routing: "sponsor",
+            challenge: { id: 4, name: "Best use of Postgres" },
+            preferSponsor: true,
+          }}
+          reload={vi.fn()}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("Best use of Postgres");
+    expect(container.textContent).toContain("helpDeskSponsorPreferred");
+    expect(container.textContent).not.toContain("helpDeskFallback");
+  });
+  it("links the requester to their public profile only when one is shared", async () => {
+    const entry = { userId: 1, displayName: "Ana" } as NonNullable<HelpRequest["requesterProfile"]>;
+    await act(async () =>
+      root.render(
+        <RequestDetail request={{ ...request, requesterProfile: entry }} reload={vi.fn()} />,
+      ),
+    );
+    expect(container.querySelector('a[href="/help-desk/requests/9/requester"]')?.textContent).toBe(
+      "Ana",
+    );
+    await act(async () =>
+      root.render(
+        <RequestDetail request={{ ...request, requesterProfile: null }} reload={vi.fn()} />,
+      ),
+    );
+    expect(container.querySelector('a[href="/help-desk/requests/9/requester"]')).toBeNull();
+  });
+  it("offers Edit only to the requester of an editable request and shows its queue place", async () => {
+    const labels = () => [...container.querySelectorAll("button")].map((b) => b.textContent);
+    await act(async () =>
+      root.render(
+        <RequestDetail
+          request={{ ...request, queuePosition: 3, viewer: { ...request.viewer, canEdit: true } }}
+          reload={vi.fn()}
+        />,
+      ),
+    );
+    expect(labels()).toContain("helpDeskEdit");
+    expect(container.textContent).toContain("helpDeskQueuePosition");
+    await act(async () => root.render(<RequestDetail request={request} reload={vi.fn()} />));
+    expect(labels()).not.toContain("helpDeskEdit");
   });
 });

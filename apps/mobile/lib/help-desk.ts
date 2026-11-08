@@ -1,4 +1,4 @@
-import type { AvailabilityInterval } from "@hackos/shared/help-desk";
+import type { AvailabilityInterval, HelperCard } from "@hackos/shared/help-desk";
 import { apiFetch } from "./api";
 import { eventDayKey, formatEventTime } from "./event-time";
 import { canUseHelpDesk } from "./tabs";
@@ -13,6 +13,12 @@ export type {
   MeetingMode,
   MyHelperProfile,
 } from "@hackos/shared/help-desk";
+
+/** A challenge a request or sponsor can be tied to (H65 extension). */
+export interface HelpChallenge {
+  id: number;
+  name: string;
+}
 export { coverageDays, validAvailability, validHelpRequest } from "@hackos/shared/help-desk";
 
 export const canBrowseHelpDesk = canUseHelpDesk;
@@ -22,6 +28,30 @@ export function helpMutation<T>(path: string, body?: unknown, method = "POST"): 
     headers: { "content-type": "application/json" },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
+}
+
+export interface HelperFilter {
+  query: string;
+  kinds: HelperCard["kind"][];
+  roles?: string[];
+  topicIds: number[];
+}
+
+/** H63: roles and knowledge are multi-select (any of each group); search matches name or topic. */
+export function filterHelpers(helpers: HelperCard[], filter: HelperFilter): HelperCard[] {
+  const needle = filter.query.trim().toLocaleLowerCase();
+  return helpers.filter(
+    (helper) =>
+      (filter.kinds.length === 0 || filter.kinds.includes(helper.kind)) &&
+      (!filter.roles?.length ||
+        (helper.visibleRoleName !== null && filter.roles.includes(helper.visibleRoleName))) &&
+      (filter.topicIds.length === 0 ||
+        helper.topics.some((topic) => filter.topicIds.includes(topic.id))) &&
+      (!needle ||
+        [helper.displayName, ...helper.topics.map((topic) => topic.name)].some((value) =>
+          value.toLocaleLowerCase().includes(needle),
+        )),
+  );
 }
 
 const DAY = { weekday: "short", day: "numeric", month: "short" } as const;

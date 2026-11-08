@@ -101,6 +101,8 @@ function DayRow({
 }) {
   const group = useRef<HTMLDivElement>(null);
   const width = (stepMinutes / DAY_MINUTES) * 100;
+  // Counts sit inside the bars while a slot is wide enough to hold one.
+  const labelled = stepMinutes >= 60;
   const focusIndex = Math.max(
     0,
     day.slots.findIndex((slot) => slot.startsAt === selected),
@@ -164,9 +166,11 @@ function DayRow({
                 {slot.scheduled > 0 ? (
                   <span
                     aria-hidden="true"
-                    className="bg-chart-1 w-[calc(100%-2px)] max-w-6 rounded-t-[4px] group-hover:opacity-80"
+                    className="bg-chart-1 flex w-[calc(100%-2px)] max-w-6 justify-center rounded-t-[4px] pt-0.5 text-[10px] leading-none font-medium text-white tabular-nums group-hover:opacity-80 dark:text-black"
                     style={{ height: `${(slot.scheduled / max) * 100}%` }}
-                  />
+                  >
+                    {labelled && (slot.scheduled / max) * 64 >= 14 ? slot.scheduled : null}
+                  </span>
                 ) : (
                   <span
                     aria-hidden="true"

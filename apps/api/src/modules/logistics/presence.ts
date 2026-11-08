@@ -356,8 +356,13 @@ export async function openSessions(opts: { actorId: number | null; at?: number }
        ) tl
        JOIN users u ON u.id = tl.user_id
        LEFT JOIN LATERAL (
-         SELECT max(logged_at) AS last_activity FROM activity_logs
-          WHERE user_id = tl.user_id AND logged_at >= tl.scanned_at
+         SELECT max(signal_at) AS last_activity FROM (
+           SELECT logged_at AS signal_at FROM activity_logs
+            WHERE user_id = tl.user_id AND logged_at >= tl.scanned_at
+           UNION ALL
+           SELECT hc.resolved_at FROM (${HELP_CHECKPOINTS_SQL}) hc
+            WHERE hc.user_id = tl.user_id AND hc.resolved_at >= tl.scanned_at
+         ) s
        ) la ON true
       WHERE tl.kind = 'in'
         AND (
@@ -397,6 +402,20 @@ export async function openSessions(opts: { actorId: number | null; at?: number }
 // ── presence estimation reads (H24) ───────────────────────────────────────
 
 /**
+ * H66: a help request resolved (never cancelled) is an in-person checkpoint at
+ * `resolved_at` for the helper who claimed it and the person who asked. It is
+ * a third presence source next to door scans and activity scans (see
+ * `PresenceEvent` kind `help`): it can secure a window a door entry opened but
+ * never opens presence by itself.
+ */
+const HELP_CHECKPOINTS_SQL = `
+  SELECT requester_id AS user_id, id, resolved_at FROM help_requests
+   WHERE status = 'resolved' AND resolved_at IS NOT NULL AND requester_id IS NOT NULL
+  UNION ALL
+  SELECT claimed_by, id, resolved_at FROM help_requests
+   WHERE status = 'resolved' AND resolved_at IS NOT NULL AND claimed_by IS NOT NULL`;
+
+/**
  * Load raw presence signals (door in/out + activity scans) grouped per user.
  * Passing a single userId or a userIds array scopes the query accordingly;
  * omitted, every active participant's signals are loaded (bulk endpoints).
@@ -427,6 +446,12 @@ async function loadEvents(
     : `WHERE al.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM users u WHERE u.id = al.user_id
           AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
+  const helpFilter = scoped
+    ? `WHERE hc.user_id ${idCondition}
+         AND EXISTS (SELECT 1 FROM users u WHERE u.id = hc.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`
+    : `WHERE EXISTS (SELECT 1 FROM users u WHERE u.id = hc.user_id
+          AND u.account_state = 'active' AND u.anonymized_at IS NULL${testAccountFilter})`;
   const params = scoped ? [userIds] : [];
   const { rows } = await pool.query(
     `SELECT tl.user_id, extract(epoch from tl.scanned_at) * 1000 AS t, tl.kind,
@@ -436,7 +461,11 @@ async function loadEvents(
      SELECT al.user_id, extract(epoch from al.logged_at) * 1000 AS t, 'activity' AS kind,
             a.name AS activity_name
        FROM activity_logs al
-       JOIN activities a ON a.id = al.activity_id ${activityFilter}`,
+       JOIN activities a ON a.id = al.activity_id ${activityFilter}
+     UNION ALL
+     SELECT hc.user_id, extract(epoch from hc.resolved_at) * 1000 AS t, 'help' AS kind,
+            NULL::text AS activity_name
+       FROM (${HELP_CHECKPOINTS_SQL}) hc ${helpFilter}`,
     params,
   );
 
@@ -979,6 +1008,15 @@ export async function presenceTimeline(
                      WHERE subject.id = al.user_id
                        AND subject.account_state = 'active'
                        AND subject.anonymized_at IS NULL)
+     UNION ALL
+     SELECT hc.id, 'help', 'help', hc.resolved_at, NULL::integer, NULL::text, 'helpdesk',
+            NULL::text, NULL::integer, NULL::text, NULL::text
+       FROM (${HELP_CHECKPOINTS_SQL}) hc
+      WHERE hc.user_id = $1
+        AND EXISTS (SELECT 1 FROM users subject
+                     WHERE subject.id = hc.user_id
+                       AND subject.account_state = 'active'
+                       AND subject.anonymized_at IS NULL)
      ORDER BY occurred_at ASC, id ASC`,
       [userId],
     ),
@@ -1000,7 +1038,7 @@ export async function presenceTimeline(
   ]);
   const signals = rows.map((row) => ({
     id: Number(row.id),
-    source: row.source as "door" | "activity",
+    source: row.source as "door" | "activity" | "help",
     kind: row.kind as PresenceEvent["kind"],
     occurredAt: (row.occurred_at as Date).toISOString(),
     activityId: row.activity_id == null ? null : Number(row.activity_id),
@@ -1030,9 +1068,11 @@ export async function presenceTimeline(
     from: string;
     to: string;
   }> = [];
-  for (let i = 1; i < signals.length; i++) {
-    const prev = signals[i - 1];
-    const curr = signals[i];
+  // Help checkpoints are not door state, so they never separate two entries.
+  const doorAndActivity = signals.filter((signal) => signal.source !== "help");
+  for (let i = 1; i < doorAndActivity.length; i++) {
+    const prev = doorAndActivity[i - 1];
+    const curr = doorAndActivity[i];
     if (prev && curr && prev.kind === "in" && curr.kind === "in") {
       conflicts.push({
         firstLogId: prev.id,

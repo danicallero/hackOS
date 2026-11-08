@@ -145,21 +145,22 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(container.textContent).not.toContain("roles-body");
   });
 
-  it("adds the help desk to the public profile for an eligible helper (H61)", async () => {
+  it("gives an eligible helper a Help desk tab next to the public profile (H61)", async () => {
     helper.eligible = true;
-    nav.search = "tab=public";
+    nav.search = "tab=help-desk";
     await render();
-    expect(openPanel()[0].textContent).toContain("public-body");
     expect(openPanel()[0].textContent).toContain("helper-body");
+    // The networking-profile editor sits above the help desk settings.
+    expect(openPanel()[0].textContent).toContain("public-body");
   });
 
   it("lets an accepted mentor without event access prepare the help desk section (H61)", async () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     helper.eligible = true;
-    nav.search = "tab=public";
+    nav.search = "tab=help-desk";
     await render();
-    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "accountTitle"]);
+    expect(tabs()).toEqual(["personalDetails", "helpDeskTitle", "accountTitle"]);
     expect(openPanel()[0].textContent).toContain("helper-body");
     expect(openPanel()[0].textContent).not.toContain("public-body");
   });

@@ -439,3 +439,16 @@ describe("Help desk tab reselect (H61-H67)", () => {
     expect(router.dismissAll).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Help desk tab entry (H61-H67)", () => {
+  it("opens its root instead of restoring coverage when coming from another tab", async () => {
+    const replace = jest.fn();
+    mockUseRouter.mockReturnValue({ replace, navigate: jest.fn() });
+    mockUsePathname.mockReturnValue("/schedule");
+    mockPrimaryTabs.mockReturnValue(["schedule", "help-desk"]);
+    mockOverflowTabs.mockReturnValue([]);
+    await render(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
+    await fireEvent.press(screen.getByTestId("opaque-tab-help-desk"));
+    expect(replace).toHaveBeenCalledWith("/(tabs)/help-desk");
+  });
+});

@@ -1,13 +1,16 @@
 "use client";
 import { useId, useState } from "react";
+import { AlertModal } from "@/components/common/alert-modal";
+import { SwitchRow } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -15,66 +18,98 @@ import { Textarea } from "@/components/ui/textarea";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
-import type { HelpTopic } from "../model";
+import type { HelpChallengeOption, HelpRequest, HelpTopic } from "../model";
 import { HelpdeskError, TopicsPicker } from "../shared";
-export function RequestForm({ onSaved }: { onSaved: () => void }) {
+/** Creates a request, or with `request` edits an open one (it moves to the end of the queue). */
+export function RequestForm({ onSaved, request }: { onSaved: () => void; request?: HelpRequest }) {
   const { t } = useLocale();
   const id = useId();
-  const [project, setProject] = useState("self");
-  const [topics, setTopics] = useState<HelpTopic[]>([]);
-  const [other, setOther] = useState(false);
-  const [description, setDescription] = useState("");
-  const [location, setLocation] = useState("");
+  const [project, setProject] = useState(request?.project ? String(request.project.id) : "self");
+  const [topics, setTopics] = useState<HelpTopic[]>(request?.topics ?? []);
+  const [other, setOther] = useState(request?.other ?? false);
+  const [challenge, setChallenge] = useState(
+    request?.challenge ? String(request.challenge.id) : "none",
+  );
+  const [preferSponsor, setPreferSponsor] = useState(request?.preferSponsor ?? false);
+  const [description, setDescription] = useState(request?.description ?? "");
+  const [location, setLocation] = useState(request?.location ?? "");
+  const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [invalid, setInvalid] = useState(false);
   const projects = useServerResource(["helpdesk", "projects"], (signal) =>
     api.get<{ projects: { id: number; name: string }[] }>("/api/helpdesk/projects", { signal }),
   );
+  const challenges = useServerResource(["helpdesk", "challenges"], (signal) =>
+    api.get<{ challenges: HelpChallengeOption[] }>("/api/helpdesk/challenges", {
+      signal,
+    }),
+  );
+  const mine = challenges.data?.challenges.filter((item) => item.mine) ?? [];
+  const rest = challenges.data?.challenges.filter((item) => !item.mine) ?? [];
+  async function save() {
+    setPending(true);
+    setError(null);
+    try {
+      const body = {
+        topicIds: topics.map((topic) => topic.id),
+        other,
+        challengeId: challenge === "none" ? null : Number(challenge),
+        preferSponsor,
+        description: description.trim(),
+        location: location.trim(),
+      };
+      if (request) await api.patch(`/api/helpdesk/requests/${request.id}`, body);
+      else
+        await api.post("/api/helpdesk/requests", {
+          projectId: project === "self" ? null : Number(project),
+          ...body,
+        });
+      setConfirming(false);
+      onSaved();
+    } catch (err) {
+      setConfirming(false);
+      setError(err);
+    } finally {
+      setPending(false);
+    }
+  }
   return (
     <form
       className="space-y-5"
-      onSubmit={async (event) => {
+      onSubmit={(event) => {
         event.preventDefault();
         if (!topics.length && !other) {
           setInvalid(true);
           return;
         }
-        setPending(true);
-        setError(null);
-        try {
-          await api.post("/api/helpdesk/requests", {
-            projectId: project === "self" ? null : Number(project),
-            topicIds: topics.map((topic) => topic.id),
-            other,
-            description: description.trim(),
-            location: location.trim(),
-          });
-          onSaved();
-        } catch (err) {
-          setError(err);
-        } finally {
-          setPending(false);
-        }
+        if (request) setConfirming(true);
+        else void save();
       }}
     >
       <fieldset className="space-y-5" disabled={pending}>
-        <div className="space-y-2">
-          <Label htmlFor={`${id}-for`}>{t("helpDeskFor")}</Label>
-          <Select value={project} onValueChange={setProject} disabled={pending || projects.loading}>
-            <SelectTrigger id={`${id}-for`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="self">{t("helpDeskMyself")}</SelectItem>
-              {projects.data?.projects.map((project) => (
-                <SelectItem key={project.id} value={String(project.id)}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {request ? null : (
+          <div className="space-y-2">
+            <Label htmlFor={`${id}-for`}>{t("helpDeskFor")}</Label>
+            <Select
+              value={project}
+              onValueChange={setProject}
+              disabled={pending || projects.loading}
+            >
+              <SelectTrigger id={`${id}-for`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="self">{t("helpDeskMyself")}</SelectItem>
+                {projects.data?.projects.map((project) => (
+                  <SelectItem key={project.id} value={String(project.id)}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         {projects.error ? <HelpdeskError error={projects.error} retry={projects.reload} /> : null}
         <div className="space-y-2">
           <Label htmlFor={`${id}-topics`}>{t("helpDeskTopics")}</Label>
@@ -83,6 +118,7 @@ export function RequestForm({ onSaved }: { onSaved: () => void }) {
             id={`${id}-topics`}
             value={topics}
             onChange={setTopics}
+            other={{ value: other, onChange: setOther }}
             disabled={pending}
           />
           {topics.length > 5 ? (
@@ -96,15 +132,54 @@ export function RequestForm({ onSaved }: { onSaved: () => void }) {
             </p>
           ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id={`${id}-other`}
-            checked={other}
-            onCheckedChange={(value) => setOther(value === true)}
-          />
-          <Label htmlFor={`${id}-other`}>{t("helpDeskOther")}</Label>
+        <div className="space-y-2">
+          <Label htmlFor={`${id}-challenge`}>{t("helpDeskChallenge")}</Label>
+          <Select
+            value={challenge}
+            onValueChange={(value) => {
+              setChallenge(value);
+              if (value === "none") setPreferSponsor(false);
+            }}
+            disabled={challenges.loading}
+          >
+            <SelectTrigger id={`${id}-challenge`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">{t("helpDeskNoChallenge")}</SelectItem>
+              {mine.length ? (
+                <SelectGroup>
+                  <SelectLabel>{t("helpDeskMyChallenges")}</SelectLabel>
+                  {mine.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ) : null}
+              {rest.length ? (
+                <SelectGroup>
+                  {mine.length ? <SelectLabel>{t("helpDeskAllChallenges")}</SelectLabel> : null}
+                  {rest.map((item) => (
+                    <SelectItem key={item.id} value={String(item.id)}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              ) : null}
+            </SelectContent>
+          </Select>
+          {challenges.error ? (
+            <HelpdeskError error={challenges.error} retry={challenges.reload} />
+          ) : null}
         </div>
-        <p className="text-muted-foreground text-sm text-pretty">{t("helpDeskRoutingNote")}</p>
+        <SwitchRow
+          checked={preferSponsor && challenge !== "none"}
+          disabled={challenge === "none"}
+          onChange={setPreferSponsor}
+          label={t("helpDeskPreferSponsor")}
+          hint={t("helpDeskPreferSponsorHint")}
+        />
         <div className="space-y-2">
           <Label htmlFor={`${id}-description`}>{t("helpDeskDescription")}</Label>
           <Textarea
@@ -129,9 +204,19 @@ export function RequestForm({ onSaved }: { onSaved: () => void }) {
       {error ? <HelpdeskError error={error} fallback="helpDeskSaveError" /> : null}
       <div className="flex justify-end">
         <Button type="submit" loading={pending} disabled={topics.length > 5}>
-          {t("helpDeskSend")}
+          {t(request ? "saveChanges" : "helpDeskSend")}
         </Button>
       </div>
+      <AlertModal
+        open={confirming}
+        onOpenChange={setConfirming}
+        title={t("helpDeskEdit")}
+        description={t("helpDeskEditConfirm")}
+        cancelLabel={t("cancel")}
+        confirmLabel={t("helpDeskEditAndMove")}
+        pending={pending}
+        onConfirm={() => void save()}
+      />
     </form>
   );
 }

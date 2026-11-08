@@ -5,7 +5,7 @@ it. Endpoint shapes for clients live in
 [`help-desk-contract.md`](./help-desk-contract.md); route schemas in
 `/documentation` carry the same rules. Module:
 `apps/api/src/modules/helpdesk/`. Tests: `apps/api/test/helpdesk/`.
-Migration: `0901_help_desk.sql`.
+Migration: `0901_help_desk.sql` includes the complete unmerged PR schema, challenge routing and FCFS edits.
 
 ## Who can do what (H8)
 
@@ -23,10 +23,13 @@ role carries it. Application roles are granted only on confirmation
 profile right after acceptance (H61) without event access. Eligibility is
 evaluated on every read: an ineligible helper's card disappears from
 browsing, routing and coverage even if it was published, and they cannot
-claim. The catalogue (`GET`/`POST /api/helpdesk/topics`) also accepts eligible
-helpers for the same reason.
+claim. The catalogue (`GET /api/helpdesk/topics`) also accepts eligible
+helpers for the same reason; `POST` (adding a topic) is limited to eligible
+helpers and `helpdesk:manage`, so requesters get 403 `helper_not_eligible`.
 
-**Kind** (display only): `sponsor` when the person belongs to an enterprise
+**Public role.** Cards and expanded profiles expose `visibleRoleName`: the highest-position assigned visible, non-deleted role, using the same identity projection as badges. Hidden roles are never exposed. This label is independent of routing kind; sponsor company stays in `affiliation`.
+
+**Kind** (routing/coverage category only): `sponsor` when the person belongs to an enterprise
 (`sponsors`), else `mentor` when they hold, or were accepted for a form
 granting, the seeded Mentor role, else `staff`.
 
@@ -36,13 +39,13 @@ granting, the seeded Mentor role, else `staff`.
 `published_at`). Name, photo, headline and bio are projected from `users` and
 `user_public_profiles`, never copied. The helper profile is the public profile:
 the bio and every other field are edited only in the public profile editor, and
-`PUT /api/me/helper-profile` takes just `published` and `topicIds`. The helper
+`PUT /api/me/helper-profile` takes `published`, `topicIds` and, for sponsors with challenges, `ownChallengesOnly`. Turning publication on also sets the public profile's `directory_visible` in the same transaction (audited as `directoryVisible`); unpublishing never unshares. `GET` adds `suggestedInterval` (hacking window, else event window) for prefilling availability. The helper
 detail (`GET /api/helpdesk/helpers/:userId`) returns the directory's own entry
 as `profile`, honouring the person's per-field switches; publication is the
 consent for help desk readers, who also get the CV (while `share_cv` is on)
 and photo routes for that helper. Publishing does not change
-public-profile sharing consent (`directory_visible`), and sharing a public
-profile does not publish a helper card. The card follows the public profile's
+per-field sharing switches; publishing enables `directory_visible`, and sharing a public
+profile alone does not publish a helper card. The card follows the public profile's
 surname and photo switches; the photo route serves a published helper's photo
 to anyone with a help desk capability while the photo switch is on.
 
@@ -58,7 +61,7 @@ the other.
 ## Knowledge catalogue
 
 `help_topics` is one self-service list shared by profiles and requests, like
-the university picker: anyone who may use the help desk can add a topic, and
+the university picker: eligible helpers and catalogue managers can add a topic, and
 equivalent names (case, accents, spacing; `name_key`) resolve to the existing
 row instead of a duplicate. "Other" is not a row — requests carry `other` —
 and its translations are reserved. `helpdesk:manage` renames topics and
@@ -68,7 +71,7 @@ merges duplicates (profiles and requests move to the target).
 
 `GET /api/helpdesk/helpers` lists published, eligible, real (non-fixture)
 helpers with topics, stated schedule, `scheduledNow`, `present` and
-`availableNow` (both). Exposing `present` for published helpers is a
+`availableNow` (actual presence; the stated schedule is advisory). Exposing `present` for published helpers is a
 deliberate H63 requirement; nobody else's presence is exposed. Browsing
 creates no diary contact and returns nothing beyond the card.
 
@@ -83,19 +86,39 @@ locked check), so double submits cannot open two.
 
 **Routing (H65)** runs once, at creation, inside the creating transaction:
 
-1. The audience is every listed helper inside a current availability
-   interval **and** present, excluding the requesting side.
+1. The audience is every listed helper currently present at the venue,
+   excluding the requesting side. Planned availability intervals do not gate it.
 2. Without Other, helpers knowing **any** requested topic are notified
    (`routing: matched`).
 3. With Other, or when no audience member matches, the whole audience is
    notified (`fallback`).
+   A sponsor who limited themselves to their own challenges
+   (`own_challenges_only`) is a candidate only for requests about one of
+   those challenges (a sponsor's challenges are those authored by any sponsor
+   of the same enterprise, `sponsorChallengeIds` in `queue/reviews.ts`).
+   Sponsors of the request's `challenge` match regardless of topic, in
+   addition to topic matches.
+3b. `preferSponsor` requires a selected challenge. With at least one available
+   sponsor from that challenge’s company, only those sponsors are notified (`routing: sponsor`); otherwise routing continues
+   as above. A limited sponsor also sees and claims only requests about their
+   challenges in the inbox (others answer 404).
 4. An empty audience leaves `routing: none`. The request still appears in
    every helper's open inbox; nobody is notified later automatically.
 
 Each notified helper gets a `help_request_recipients` row and one inbox +
 push notice (category `helpdesk`, email never). Helpers see every open
-request in `GET /api/helpdesk/inbox?scope=open`, the ones routed to them
-first.
+request in `GET /api/helpdesk/inbox?scope=open` in first-come, first-served
+order (`queued_at`, then id); `viewer.notified` marks the ones routed to them.
+Open requests carry `queuedAt` and `queuePosition` (1-based among all open
+requests).
+
+**Editing (H64).** The requester or a team member can `PATCH` an open request
+(same fields and validation as creation). The row is locked `FOR UPDATE`, so a
+simultaneous claim and edit serialize: an edit after a claim answers 409
+`help_request_already_claimed`, a claim after an edit takes the edited request.
+Editing sets `queued_at = now()` (end of the queue; `created_at` is unchanged),
+re-runs routing and notifies only helpers who were not already recipients.
+It is audited (`edited`, changed field names only) and broadcast once.
 
 **Lifecycle.**
 
@@ -117,6 +140,14 @@ open / claimed ──cancel (requesting side)──▶ cancelled
   told, the original audience is not notified again.
 - **Resolve**: only from `claimed`, by the claimer or the requesting side.
 - **Cancel**: requesting side, from `open` or `claimed`; a claimer is told.
+
+**Requester profile and presence.** `GET /api/helpdesk/requests/:id` adds
+`requesterProfile` (the requester's directory entry) for helpers the request
+was routed to, its claimer and `helpdesk:manage`, only while the requester
+shares their public profile; the requester's photo and CV routes open for the
+same viewers. A resolved request is a presence checkpoint at `resolved_at`
+for the claimer and the requester (see the logistics section of
+`docs/api-reference.md`): it never creates presence by itself.
 
 Every transition is audited (`help_request` entity) in the same
 transaction, and broadcasts `helpdesk.request.changed` `{requestId, status}`

@@ -5,6 +5,7 @@ import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { GearSixIcon } from "@phosphor-icons/react/dist/csr/GearSix";
 import { HandIcon } from "@phosphor-icons/react/dist/csr/Hand";
 import { ImagesIcon } from "@phosphor-icons/react/dist/csr/Images";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
@@ -13,10 +14,18 @@ import { UserCircleIcon } from "@phosphor-icons/react/dist/csr/UserCircle";
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { RequestHelpAction } from "@/app/(app)/help-desk/requests/request-help-action";
 import { ActionGroup } from "@/components/common/action-group";
+import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
@@ -180,7 +189,6 @@ function HelpDeskNavigation() {
   const { t } = useLocale();
   const { can, canAny } = useSessionContext();
   const pathname = usePathname();
-  const own = useOwnHelperProfile();
   const items = [
     {
       href: "/help-desk",
@@ -207,21 +215,6 @@ function HelpDeskNavigation() {
       visible: can(CAPABILITIES.HELPDESK_OFFER),
       active: pathname.startsWith("/help-desk/inbox"),
     },
-    {
-      href: "/help-desk/coverage",
-      label: t("helpDeskCoverage"),
-      icon: ChartBarIcon,
-      visible: can(CAPABILITIES.HELPDESK_COVERAGE),
-      active: pathname.startsWith("/help-desk/coverage"),
-    },
-    {
-      // H61: edited with the public profile; eligibility covers accepted mentors.
-      href: "/settings/profile?tab=public",
-      label: t("helpDeskProfile"),
-      icon: UserCircleIcon,
-      visible: own.data?.eligible === true,
-      active: false,
-    },
   ];
   return (
     <ActionGroup role="navigation" aria-label={t("helpDeskTitle")}>
@@ -239,18 +232,59 @@ function HelpDeskNavigation() {
   );
 }
 
+/** H61/H67: Coverage and the caller's own support profile live in the header's options menu. */
+function HelpDeskOptions() {
+  const { t } = useLocale();
+  const { can } = useSessionContext();
+  const own = useOwnHelperProfile();
+  const entries = [
+    {
+      href: "/help-desk/coverage",
+      label: t("helpDeskCoverage"),
+      icon: ChartBarIcon,
+      visible: can(CAPABILITIES.HELPDESK_COVERAGE),
+    },
+    {
+      // Eligibility covers accepted mentors before their role is assigned.
+      href: "/settings/profile?tab=help-desk",
+      label: t("helpDeskMySupportProfile"),
+      icon: UserCircleIcon,
+      visible: own.data?.eligible === true,
+    },
+  ].filter((entry) => entry.visible);
+  if (entries.length === 0) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <IconButton label={t("helpDeskOptions")} variant="outline">
+          <GearSixIcon aria-hidden="true" />
+        </IconButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {entries.map(({ href, label, icon: Icon }) => (
+          <DropdownMenuItem key={href} asChild>
+            <Link href={href}>
+              <Icon aria-hidden="true" />
+              {label}
+            </Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 /** H61-H67: the help desk's title and sibling routes, the same on each of its lists. */
-export function HelpDeskSectionHeader({
-  meta,
-  primaryAction,
-}: {
-  meta?: React.ReactNode;
-  primaryAction?: React.ReactNode;
-}) {
+export function HelpDeskSectionHeader({ meta }: { meta?: React.ReactNode }) {
   const { t } = useLocale();
   return (
     <div className="space-y-(--page-section-gap)">
-      <PageHeader title={t("helpDeskTitle")} meta={meta} primaryAction={primaryAction} />
+      <PageHeader
+        title={t("helpDeskTitle")}
+        meta={meta}
+        secondaryActions={<HelpDeskOptions />}
+        primaryAction={<RequestHelpAction />}
+      />
       <HelpDeskNavigation />
     </div>
   );

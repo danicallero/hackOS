@@ -1,10 +1,15 @@
+jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#000" }) }));
+
 import { act, render, screen, waitFor } from "@testing-library/react-native";
 import { Text as MockText } from "react-native";
 
 const mockFetch = jest.fn();
+jest.mock("@/components/filter-menu", () => ({ FilterMenu: () => null }));
+jest.mock("@/components/app-menu", () => ({ MenuView: () => null }));
 jest.mock("expo-router", () => ({
   useFocusEffect: (cb: () => unknown) => require("react").useEffect(cb, [cb]),
   useRouter: () => ({ push: jest.fn() }),
+  useNavigation: () => ({ setOptions: jest.fn() }),
 }));
 jest.mock("expo-router/stack", () => ({
   __esModule: true,

@@ -1,4 +1,5 @@
 "use client";
+import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import { MAX_AVAILABILITY_INTERVALS } from "@hackos/shared/help-desk";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useId, useState } from "react";
@@ -6,7 +7,6 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -14,8 +14,8 @@ import { formatDurationMinutes } from "@/lib/datetime";
 import { useEventTimeZone, useEventZoneHint } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import type { AvailabilityInterval, MyHelperProfile } from "./model";
-import { durationMinutes, eventDay, intervalFrom, intervalProblem } from "./schedule";
-import { ScheduleDays, useDayLabel } from "./schedule-view";
+import { durationMinutes, intervalProblem } from "./schedule";
+import { ScheduleDays } from "./schedule-view";
 
 /**
  * Stated availability (H62): the saved intervals as rows per event day, an
@@ -51,7 +51,7 @@ export function AvailabilityEditor({
   return (
     <div className="space-y-3">
       <div className="flex min-h-(--control-height-compact) items-center justify-between gap-3">
-        <h3 className="type-label">{t("helpDeskSchedule")}</h3>
+        <h3 className="type-label">{t("helpDeskPlanTitle")}</h3>
         <Button
           type="button"
           variant="outline"
@@ -73,12 +73,14 @@ export function AvailabilityEditor({
           void replace(profile.availability.filter((item) => item.startsAt !== removed.startsAt))
         }
       />
+      <p className="text-muted-foreground text-sm text-pretty">{t("helpDeskPlanNote")}</p>
       {error && !adding ? (
         <ContextualError message={apiErrorText(error, t, t("helpDeskSaveError"))} />
       ) : null}
       {adding ? (
         <AddIntervalDialog
           existing={profile.availability}
+          suggested={profile.suggestedInterval}
           pending={pending}
           error={error}
           onClose={() => setAdding(false)}
@@ -93,12 +95,14 @@ export function AvailabilityEditor({
 
 function AddIntervalDialog({
   existing,
+  suggested,
   pending,
   error,
   onClose,
   onAdd,
 }: {
   existing: AvailabilityInterval[];
+  suggested: AvailabilityInterval | null | undefined;
   pending: boolean;
   error: unknown;
   onClose: () => void;
@@ -108,33 +112,32 @@ function AddIntervalDialog({
   const id = useId();
   const zone = useEventTimeZone();
   const zoneHint = useEventZoneHint(language);
-  const dayLabel = useDayLabel();
-  const last = existing.at(-1);
-  const [day, setDay] = useState(() => eventDay(last?.startsAt ?? new Date().toISOString(), zone));
-  const [from, setFrom] = useState("10:00");
-  const [to, setTo] = useState("13:00");
+  // Prefilled with the event's hacking window; every field stays editable.
+  const [from, setFrom] = useState(() =>
+    instantToWallClock(suggested?.startsAt ?? "", zone).slice(0, 16),
+  );
+  const [to, setTo] = useState(() =>
+    instantToWallClock(suggested?.endsAt ?? "", zone).slice(0, 16),
+  );
   const [submitted, setSubmitted] = useState(false);
-  const interval = intervalFrom(day, from, to, zone);
+  const startsAt = from ? wallClockToInstant(from, zone) : null;
+  const endsAt = to ? wallClockToInstant(to, zone) : null;
+  const ordered = startsAt && endsAt && Date.parse(endsAt) > Date.parse(startsAt);
+  const interval = startsAt && endsAt && ordered ? { startsAt, endsAt } : null;
   const problem = interval ? intervalProblem(interval, existing) : null;
-  const message = !interval
-    ? submitted
-      ? t("helpDeskIntervalIncomplete")
-      : null
-    : problem === "overlap"
-      ? t("helpDeskIntervalOverlap")
-      : problem === "tooLong"
-        ? t("helpDeskIntervalTooLong")
-        : null;
-  const summary =
-    interval && !problem
-      ? [
-          dayLabel(day),
-          formatDurationMinutes(durationMinutes(interval), t),
-          to <= from ? t("helpDeskEndsNextDay") : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")
-      : null;
+  const message =
+    !startsAt || !endsAt
+      ? submitted
+        ? t("helpDeskIntervalIncomplete")
+        : null
+      : !ordered
+        ? t("helpDeskIntervalOrder")
+        : problem === "overlap"
+          ? t("helpDeskIntervalOverlap")
+          : problem === "tooLong"
+            ? t("helpDeskIntervalTooLong")
+            : null;
+  const summary = interval && !problem ? formatDurationMinutes(durationMinutes(interval), t) : null;
   return (
     <Modal
       open
@@ -149,45 +152,32 @@ function AddIntervalDialog({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
+          // The dialog renders inside the helper form's React tree.
+          event.stopPropagation();
           setSubmitted(true);
           if (interval && !problem) onAdd(interval);
         }}
       >
         <fieldset disabled={pending} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor={`${id}-day`}>{t("helpDeskDay")}</Label>
+            <Label htmlFor={`${id}-from`}>{t("helpDeskFrom")}</Label>
             <DateTimeInput
-              id={`${id}-day`}
-              type="date"
-              value={day}
-              onChange={(value) => setDay(value.slice(0, 10))}
+              id={`${id}-from`}
+              type="datetime-local"
+              value={from}
+              onChange={setFrom}
+              aria-describedby={`${id}-status`}
             />
           </div>
-          <div className="grid grid-cols-2 items-start gap-3">
-            <div className="min-w-0 space-y-2">
-              <Label htmlFor={`${id}-from`}>{t("helpDeskFrom")}</Label>
-              <Input
-                id={`${id}-from`}
-                type="time"
-                step={900}
-                value={from}
-                onChange={(event) => setFrom(event.target.value)}
-                aria-invalid={Boolean(message)}
-                aria-describedby={`${id}-status`}
-              />
-            </div>
-            <div className="min-w-0 space-y-2">
-              <Label htmlFor={`${id}-to`}>{t("helpDeskTo")}</Label>
-              <Input
-                id={`${id}-to`}
-                type="time"
-                step={900}
-                value={to}
-                onChange={(event) => setTo(event.target.value)}
-                aria-invalid={Boolean(message)}
-                aria-describedby={`${id}-status`}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor={`${id}-to`}>{t("helpDeskTo")}</Label>
+            <DateTimeInput
+              id={`${id}-to`}
+              type="datetime-local"
+              value={to}
+              onChange={setTo}
+              aria-describedby={`${id}-status`}
+            />
           </div>
           <p
             id={`${id}-status`}

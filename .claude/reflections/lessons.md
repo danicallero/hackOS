@@ -1090,15 +1090,41 @@ header options of a screen already accepted as native (People, Account) instead
 of inventing them, and treat "at rest" and "scrolled" as separate checks.
 
 ### Action
-Use a transparent native header with the soft scroll-edge effect and no
-`headerStyle`/`headerBlurEffect` override; keep the ScrollView the direct child.
-For sheets with a transparent bar, add the header height to the content inset
-explicitly. Share sheet options in one helper rather than per route.
+Reuse `fixedScrollHeaderOptions` in `lib/screen-header-options.ts` for a fixed
+section title. The accepted composition is a transparent native stack header,
+`headerLargeTitle: false`, `headerBlurEffect: "none"` and
+`scrollEdgeEffects: { top: "soft" }`, with no opaque `headerStyle`. Put the
+visible `screenTitleElement` in a leading `Stack.Toolbar.View` with
+`hidesSharedBackground`; keep the native navigation title populated but
+transparent. On Help desk's crowded toolbar its hidden native title is 1 pt,
+so it does not compete with the visible title and the three controls. Keep
+that detail when reproducing this exact header; do not change the visible
+`SCREEN_TITLE` typography.
+
+Use the same options in the route layout and screen; a static opaque layout
+can contradict the screen. Apply the root options via `navigation.setOptions`
+in `useLayoutEffect`, as Activities does. Keep the scrolling content first in
+a full-height page container, use automatic content inset adjustment for lists,
+and allow the content to pass underneath the native bar. Transparent sheets
+need the measured header height added to content padding explicitly.
+
+For multiselect filters use Schedule's actual `FilterMenu` (persistent SwiftUI
+toggles), including a Clear filters item when active. Keep it in its own native
+toolbar view with the shared background hidden and a fixed spacer before the
+other actions. Do not squeeze it beside a segmented control or replace it
+with a menu that closes or resets focus after each selection.
+
+Do not substitute a permanent or scroll-toggled system material for the soft
+edge effect: it gives a frosted rectangle and changes the appearance at rest.
+Do not keep guessing at shared options while the user reports regressions;
+compare against the accepted screen and capture the actual result.
 
 ### Validation
 On the Liquid Glass simulator, capture each new page and sheet at rest (first
 row fully below the bar) and scrolled (content visibly under the blur), with no
-LogBox errors on screen.
+LogBox errors on screen. Include all toolbar actions (especially the filter),
+change tabs and return, open/close a sheet, and test several scroll positions;
+a single successful capture does not establish that the effect is stable.
 
 ### Exceptions
 A screen that intentionally has no header (full-bleed camera, Account root)

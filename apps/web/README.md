@@ -952,8 +952,10 @@ and coverage. Lists use `ListToolbar`/`FilterMenu`/`DataTable`, like Users. The
 page header and sibling navigation come from `HelpDeskSectionHeader`
 (`components/common/section-navigation.tsx`), rendered by each page, not by a
 layout. A helper record renders the same `PersonProfile` as the people reader,
-fed by the API's `profile`. Helpers edit it in My profile → Public profile
-(`settings/profile/helper-section.tsx`: publish, knowledge, availability); the
+fed by the API's `profile`. Helpers edit it in My profile → Help desk
+(`settings/profile/helper-section.tsx`: publish, availability, knowledge,
+sponsor challenge limit); Request help is the header action of every help desk
+page (`RequestHelpAction`); the
 old `/help-desk/profile` route redirects there and stays reachable for accepted
 mentors before confirmation. See [web help desk](../../docs/help-desk-web.md)
 for routes, authorization, save ownership and validation.

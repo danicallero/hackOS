@@ -1,41 +1,59 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { EmptyState, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { CheckRow } from "@/components/searchable-picker";
-import { type HelpRequest, type HelpTopic, helpMutation, validHelpRequest } from "@/lib/help-desk";
+import { alert } from "@/lib/alert";
+import {
+  type HelpChallenge,
+  type HelpRequest,
+  type HelpTopic,
+  helpMutation,
+  validHelpRequest,
+} from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { has } from "@/lib/tabs";
 import { useHelpDraftGuard } from "@/lib/use-help-draft-guard";
 import { useHelpResource } from "@/lib/use-help-resource";
-import { HelpInput, HelpPage, HelpText, TopicField } from "./primitives";
+import { ChallengeField, HelpInput, HelpPage, HelpText, TopicField } from "./primitives";
 import { RequestRow } from "./rows";
 
 /** Server-backed request list: the caller's own/team requests, the helper inbox or their claims. */
-export function HelpRequestList({ path }: { path: string }) {
+export function HelpRequestList({
+  path,
+  statuses = [],
+}: {
+  path: string;
+  statuses?: HelpRequest["status"][];
+}) {
   const router = useRouter();
   const { t } = useLocale();
   const result = useHelpResource<{ requests: HelpRequest[] }>(path);
+  const requests = result.data?.requests.filter(
+    (request) => statuses.length === 0 || statuses.includes(request.status),
+  );
   return (
     <>
       <RequestFeedback
+        compact
         loading={result.loading && !result.data}
         error={result.error}
         onRetry={() => void result.load()}
       />
-      {result.data?.requests.length === 0 ? (
+      {requests?.length === 0 ? (
         <EmptyState icon="lifepreserver" title={t("helpNoRequests")} />
       ) : null}
-      {result.data?.requests.length ? (
+      {requests?.length ? (
         <Section>
-          {result.data.requests.map((request, index) => (
+          {requests.map((request, index) => (
             <View key={request.id}>
               {index > 0 ? <Separator inset={50} /> : null}
               <RequestRow
                 request={request}
+                own={path === "/api/helpdesk/requests/mine"}
                 onPress={() =>
                   router.push({
                     pathname: "/(tabs)/help-desk/request/[id]",
@@ -55,8 +73,13 @@ export function HelpRequestList({ path }: { path: string }) {
 export function NewHelpRequestScreen() {
   const { t } = useLocale();
   const router = useRouter();
+  // `edit` is the id of an open request being replaced (PATCH); it moves to the end of the queue.
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
   const { me } = useMeContext();
   const allowed = has(me?.capabilities ?? [], CAPABILITIES.HELPDESK_REQUEST);
+  const existing = useHelpResource<HelpRequest>(
+    edit ? `/api/helpdesk/requests/${encodeURIComponent(edit)}` : null,
+  );
   const teams = useHelpResource<{ projects: { id: number; name: string }[] }>(
     allowed ? "/api/helpdesk/projects" : null,
   );
@@ -64,31 +87,93 @@ export function NewHelpRequestScreen() {
   const [location, setLocation] = useState("");
   const [topics, setTopics] = useState<HelpTopic[]>([]);
   const [other, setOther] = useState(false);
+  const [challenge, setChallenge] = useState<HelpChallenge | null>(null);
+  const [preferSponsor, setPreferSponsor] = useState(false);
   const [projectId, setProjectId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [created, setCreated] = useState<number | null>(null);
-  const changeTopics = useCallback((next: HelpTopic[]) => setTopics(next), []);
-  useHelpDraftGuard(
-    !created && (!!description || !!location || topics.length > 0 || other || projectId !== null),
-    busy,
-  );
+  const prefilled = useRef(false);
   useEffect(() => {
-    if (created)
+    const request = existing.data;
+    if (!request || prefilled.current) return;
+    prefilled.current = true;
+    setDescription(request.description);
+    setLocation(request.location);
+    setTopics(request.topics);
+    setOther(request.other);
+    setChallenge(request.challenge);
+    setPreferSponsor(request.preferSponsor);
+  }, [existing.data]);
+  const changeTopics = useCallback((next: HelpTopic[]) => setTopics(next), []);
+  const changeChallenge = useCallback((next: HelpChallenge | null) => {
+    setChallenge(next);
+    if (!next) setPreferSponsor(false);
+  }, []);
+  const original = existing.data;
+  const dirty = edit
+    ? !!original &&
+      (description !== original.description ||
+        location !== original.location ||
+        other !== original.other ||
+        preferSponsor !== original.preferSponsor ||
+        challenge?.id !== original.challenge?.id ||
+        topics.map((topic) => topic.id).join() !== original.topics.map((topic) => topic.id).join())
+    : !!description ||
+      !!location ||
+      topics.length > 0 ||
+      other ||
+      challenge !== null ||
+      preferSponsor ||
+      projectId !== null;
+  useHelpDraftGuard(!created && dirty, busy);
+  useEffect(() => {
+    if (created && edit) router.back();
+    else if (created)
       router.replace({ pathname: "/(tabs)/help-desk/request/[id]", params: { id: created } });
-  }, [created, router]);
+  }, [created, edit, router]);
   const valid = validHelpRequest(description, location, topics, other);
   async function submit() {
     if (busy || !valid) return;
+    if (edit) {
+      // A saved edit sends the request to the back of the queue: confirm before sending.
+      alert(t("helpEdit"), t("helpEditConfirm"), [
+        { text: t("cancel"), style: "cancel" },
+        { text: t("helpEditSend"), isPreferred: true, onPress: () => void send() },
+      ]);
+      return;
+    }
+    await send();
+  }
+  async function send() {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
+      if (edit) {
+        await helpMutation<HelpRequest>(
+          `/api/helpdesk/requests/${encodeURIComponent(edit)}`,
+          {
+            description: description.trim(),
+            location: location.trim(),
+            topicIds: topics.map((topic) => topic.id),
+            other,
+            challengeId: challenge?.id ?? null,
+            preferSponsor,
+          },
+          "PATCH",
+        );
+        setCreated(Number(edit));
+        return;
+      }
       const request = await helpMutation<HelpRequest>("/api/helpdesk/requests", {
         description: description.trim(),
         location: location.trim(),
         topicIds: topics.map((topic) => topic.id),
         other,
         projectId,
+        ...(challenge ? { challengeId: challenge.id } : {}),
+        preferSponsor,
       });
       setCreated(request.id);
     } catch (cause) {
@@ -97,15 +182,15 @@ export function NewHelpRequestScreen() {
       setBusy(false);
     }
   }
-  const projects = teams.data?.projects ?? [];
+  const projects = edit ? [] : (teams.data?.projects ?? []);
   return (
     <HelpPage
-      title={t("helpRequest")}
+      title={t(edit ? "helpEdit" : "helpRequest")}
       form
       onClose={() => router.back()}
       action={{
         icon: "checkmark",
-        label: t("helpSend"),
+        label: t(edit ? "helpSaveEdit" : "helpSend"),
         disabled: !valid || busy,
         onPress: () => void submit(),
       }}
@@ -156,9 +241,24 @@ export function NewHelpRequestScreen() {
             />
           </Section>
           <Section>
-            <TopicField selected={topics} onChange={changeTopics} maximum={5} disabled={busy} />
+            <TopicField
+              selected={topics}
+              onChange={changeTopics}
+              maximum={5}
+              other={other}
+              onOtherChange={setOther}
+              disabled={busy}
+            />
             <Separator inset={16} />
-            <ToggleRow label={t("helpOther")} value={other} disabled={busy} onChange={setOther} />
+            <ChallengeField selected={challenge} onChange={changeChallenge} disabled={busy} />
+          </Section>
+          <Section footer={t("helpPreferSponsorNote")}>
+            <ToggleRow
+              label={t("helpPreferSponsor")}
+              value={preferSponsor && !!challenge}
+              disabled={busy || !challenge}
+              onChange={setPreferSponsor}
+            />
           </Section>
           <RequestFeedback error={error} message={error?.message ?? t("helpSaveError")} />
         </>

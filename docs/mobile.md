@@ -489,7 +489,10 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 
 **Bar colour.** The navigation theme paints the same page background behind
 floating bars and sidebars, avoiding a visible seam with the navigation library's
-default canvas on iPad and Duo. Activities, My Projects and Contacts paint their native header with the page colour
+default canvas on iPad and Duo. Help desk and Activities reuse `fixedScrollHeaderOptions`
+(`lib/screen-header-options.ts`) with a fixed `SCREEN_TITLE` leading title and native soft
+scroll-edge blur: clear at rest, blurred under scrolling content, without a permanent material
+background. Their list stays first in the native descendant chain. My Projects and Contacts paint their native header with the page colour
 (`headerStyle.backgroundColor`), like Schedule: the system blur materials read whiter than the page. The
 two-pane Schedule keeps per-column title bands, with `components/system-blur.tsx` (`expo-blur`, a native
 dependency) behind the detail title.
@@ -1598,11 +1601,12 @@ behind Others. Routes: the tab owns a Stack at `app/(tabs)/help-desk/`
 `coverage`); `app/(tabs)/others/help-desk.tsx` is the Others-menu pseudo-tab
 rendering the same root. Pressing the tab (also via the rail, scrub and
 keyboard shortcut paths) navigates to the root, like Account.
-Helper settings live in the public profile editor (`app/networking-profile.tsx`),
-because a helper profile extends that same profile. `app/helper-profile.tsx`
-is kept as a root route only so an accepted mentor without event access
-(`GET /api/me/helper-profile` → `eligible`) can prepare them before
-confirmation; with access it redirects to the networking profile. The mobile
+The public profile editor (`app/networking-profile.tsx`) has one Help desk row
+(On / Off = published) that opens `app/helper-profile.tsx`, the help desk
+settings page; the editor re-reads the profile when it regains focus because
+publishing also shares it. The same page serves an accepted mentor without
+event access (`GET /api/me/helper-profile` → `eligible`), with Sign out
+instead of Back. The mobile
 access gate lets only that route and `app/help-topics.tsx` through
 (`use-helper-preparation-access`).
 
@@ -1611,11 +1615,12 @@ their own and team requests (`/api/helpdesk/requests/mine`); eligible helpers
 default to the open inbox (`inbox?scope=open`) with My claims; people with both
 get a segmented control over all three lists. Request rows show the ask, who and
 where, topics and a status pill; an empty list uses the shared empty state.
-Request help, Helpers, My helper profile and Helper coverage follow as one
-grouped list, each gated by capability; coverage-only accounts see no request or
+Support team, My support profile (opens the help desk settings page) and Support coverage follow as one
+grouped list, each gated by capability; a gear menu (Coverage, My support profile) sits left of the Request help
+button, which is the trailing toolbar button (`hand.raised`, `helpdesk:request` only; a native toolbar item, so it joins the system column on foldables like other trailing actions); coverage-only accounts see no request or
 helper actions.
 
-**Native chrome.** Every help desk page and sheet uses one header
+**Native chrome.** The tab root uses the reusable fixed title described above; pushed pages and sheets retain their native titles. Every help desk page and sheet uses one header
 configuration, the People/Account one: a transparent native header with the
 soft scroll-edge effect, no `headerStyle` colour and no custom blur, with the
 `ScrollView` as the screen's direct child. Sheets (`new-request`,
@@ -1642,20 +1647,40 @@ avatar that collapses into the Dynamic Island — fed by
 one "Stated availability" section: a Now row (scheduled vs inside the venue,
 H24) and one row per event day. Editing happens in the same public profile
 editor: `components/help-desk/helper-profile-section.tsx` sits under the card
-for eligible helpers with the publish switch (its own consent, separate from
-badge networking), knowledge topics and availability. Each change saves at once,
+for eligible helpers with the publish switch (publishing also turns the public
+profile's share switch on, and the screen mirrors it; unpublishing leaves
+sharing as is), knowledge topics, the "When do you plan to be at the venue?"
+availability block (Add opens the from/to picker prefilled with the API's
+`suggestedInterval` for the first interval) and, for sponsors with challenges
+(`canLimitToChallenges`), an "Only requests about my challenges" switch with
+the challenge names as its footer. Each change saves at once,
 like the profile's share switch; the bio stays one of the card's own fields.
 Availability rows open a sheet with Start / End date-and-time rows (Calendar's
 event editor), Save, and a confirmed Remove; the full list is sent as the
 replacement the API expects.
 
-**Directory (H63).** Published helpers as photo rows with topics and a
-scheduled / inside-the-venue line, with the same native header search as
-People.
+**Directory (H63).** The Support team: photo rows with the role (a sponsor's
+company), topics and a scheduled / inside-the-venue line, the same native header
+search as People, and Schedule's persistent `FilterMenu` beside it (Role and
+Knowledge multi-selects over the loaded list, `filterHelpers` in
+`lib/help-desk.ts`). The root's first row opens it with "N available".
 
-**Requests (H64–H66).** New request (sheet, Close / Send): details and location
-in one group, topics plus an Other switch in another, for me or one of my teams
-(checkmark rows, only when the person has teams). Detail reads like a Calendar
+**Requests (H64–H66).** New request (sheet, Close / Send): for me or one of my teams
+(checkmark rows, only when the person has teams), details and location in one
+group, Knowledge topics and Challenge rows in another, and a "Prefer a sponsor"
+switch with its one-line consequence. "Other" is its own group above the catalogue in the topic
+picker (`app/help-topics.tsx`, laid out like the challenge picker's None; the
+draft in `lib/help-topic-selection.ts` carries `other`). Other and catalogue
+topics exclude each other (choosing one clears the other); the API still gets
+`other: true` with `topicIds: []`. The form row shows the choice. Every picker
+sheet (`SearchablePickerSheet`) has xmark (Close: restores the draft as it was
+when the sheet opened) left and checkmark (confirm) right; the project
+challenges picker saves each tap, so its Close only dismisses. Challenge opens
+`app/help-challenges.tsx` (`challenge-picker-screen.tsx`, draft in
+`lib/help-challenge-selection.ts`): "None" plus `GET /api/helpdesk/challenges`,
+the requester's own project challenges first; one tap chooses and closes.
+Request rows show the challenge and "Prefers a sponsor" on a secondary line;
+the detail has Challenge and Prefer a sponsor rows. Detail reads like a Calendar
 event: the ask as the title with a status row and time, then location,
 requester, team and topics, then a Helper section whose row opens the claiming
 helper's profile (the API lets the requester and team read it) followed by the
@@ -1671,7 +1696,9 @@ returns by default: Now (scheduled vs inside the venue), requested topics
 nobody available covers, topics covered now, then one section per event day in
 which consecutive hours with the same helpers merge into one range
 (`coverageDays`, `@hackos/shared/help-desk`), so a gap reads as one
-"Nobody scheduled" row.
+"Nobody scheduled" row. Each day opens with a 24-hour bar strip
+(`coverage-chart.tsx`, plain Views): bar height is people scheduled, a tinted
+full-height bar is an hour inside the event with nobody, and a line marks now.
 
 **Realtime.** Screens refetch on focus, `helpdesk.request.changed`,
 `domain:helpdesk` changes and notification events.
@@ -2844,3 +2871,26 @@ The root iOS back recognizer covers side navigation and the bottom dock outside 
 Project detail validates required project collections before mounting the editor (H20). A malformed response uses the existing retryable RequestFeedback state. Gallery removes the unused detail column when there are no results, centres its empty detail placeholder, and avoids inheriting the large-title offset for its embedded project header. The New project sheet uses matching header/body backgrounds with native X/check toolbar actions.
 
 Android draws its own headers instead of the native bar on Gallery, My Projects, the People finder, project detail and activity detail (H8, H18, H22-H26). Lists use `LegacyScreenHeader` (28 pt title, circular `LegacyBackButton`, filter and the same magnifier search as People); detail screens use `AndroidDetailHeader` and pad their body with `useAndroidDetailHeaderInset()`. The People finder never opens its search on arrival, from the scanner, an activity or the tab: the magnifier opens it. The read-only project view skips `ScrollViewMarker` on Android, where it threw "[RNScreens] Failed to insert view" and showed "problem loading the project" until Reload. iOS keeps its native headers.
+
+
+### Support list and identity (H63)
+
+Support rows keep the name and highest visible public role together; a sponsor's
+company stays on its own line, followed by technologies. A green dot on the avatar
+marks someone inside the venue; outside has no indicator. The accessible row label
+still describes presence. The schedule appears in the expanded profile. Its highest
+visible role uses the scanner's native toolbar label at the top right. A Company
+section with name and logo precedes Knowledge topics through `ProfileCard`'s
+`beforeKnowledge` slot, preserving CV, bio, projects, links and avatar collapse.
+The owner preview uses `identityAccessory` for its role label.
+
+The layout follows Apple's [Lists and tables](https://developer.apple.com/design/human-interface-guidelines/lists-and-tables)
+and [Color](https://developer.apple.com/design/human-interface-guidelines/color)
+guidance: scan-friendly text hierarchy and an accessible presence description. Role capsules are neutral, using system label colour.
+
+
+Request rows show one status symbol and label. My requests omit the viewer's name
+and location; other inboxes retain that context. A separate Schedule `FilterMenu` contains persistent status choices and Clear filters for My
+requests and My claims narrows the loaded list without changing queue order.
+Claim notifications name the support person and meeting destination; resolving a
+request notifies the other participants once, with a deep link to the request.

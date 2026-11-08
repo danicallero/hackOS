@@ -148,11 +148,11 @@ export async function coverageReport(opts: {
     const sched = h.intervals.some((iv) => iv.s <= now && iv.e > now);
     if (sched) scheduledNow += 1;
     if (h.present) presentNow += 1;
-    if (sched && h.present) availableNow += 1;
+    if (h.present) availableNow += 1;
     for (const t of h.topics) {
-      if (!sched) continue;
+      if (!sched && !h.present) continue;
       const entry = nowTopics.get(t.id) ?? { ...t, scheduled: 0, available: 0 };
-      entry.scheduled += 1;
+      if (sched) entry.scheduled += 1;
       if (h.present) entry.available += 1;
       nowTopics.set(t.id, entry);
     }

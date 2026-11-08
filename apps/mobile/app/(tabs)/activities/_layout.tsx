@@ -2,6 +2,7 @@ import { Stack } from "expo-router/stack";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { useLocale } from "@/lib/i18n";
 import { transparentDetailHeaderOptions, useTabStackScreenOptions } from "@/lib/navigation";
+import { fixedScrollHeaderOptions } from "@/lib/screen-header-options";
 import { colors } from "@/theme/colors";
 
 /** H55: preserve the owning screen underneath a directly opened child. */
@@ -18,10 +19,8 @@ export default function ActivitiesLayout() {
         options={{
           // Match Schedule: the real iOS 26 header owns the search button and
           // the toolbar material; the screen supplies the fallback elsewhere.
+          ...fixedScrollHeaderOptions(t("tabActivities")),
           headerShown: glassAvailable,
-          headerStyle: { backgroundColor: colors.background },
-          headerTransparent: false,
-          title: t("tabActivities"),
         }}
       />
       <Stack.Screen

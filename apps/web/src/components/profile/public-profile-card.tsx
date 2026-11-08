@@ -109,10 +109,13 @@ function previewEntry(
 export function PublicProfileCard({
   onboarding,
   onDirtyChange,
+  onSaved,
 }: {
   onboarding?: { onFinished: () => void; onLater: () => void };
   /** Lets the profile's section list mark a section that holds unsaved edits. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Called after a successful save, so another mounted copy of the editor can reload. */
+  onSaved?: () => void;
 } = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
@@ -131,8 +134,8 @@ export function PublicProfileCard({
     REALTIME_SCOPES.PERSONAL,
     [EVENTS.USER_SESSION_CHANGED],
     {
-      queryKey: [me?.name, me?.surname, me?.image],
-      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image],
+      queryKey: [me?.name, me?.surname, me?.image, helperPublished],
+      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image, helperPublished],
     },
   );
   const [saved, setSaved] = useState<Snapshot | null>(null);
@@ -233,6 +236,7 @@ export function PublicProfileCard({
       idempotencyKey.current = null;
       commit(next);
       setEdits(null);
+      onSaved?.();
       if (onboarding) onboarding.onFinished();
       else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {

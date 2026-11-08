@@ -6,23 +6,25 @@ import { pool, withTransaction } from "../../db/pool.js";
 import { afterCommit } from "../../lib/after-commit.js";
 import { audit } from "../../lib/audit.js";
 import { isUniqueViolation } from "../../lib/db-errors.js";
-import { ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { broadcast } from "../../lib/sse.js";
+import { type DirectoryEntry, visibleDirectoryEntries } from "../directory/service.js";
 import { hasEventAccess } from "../identity/role.js";
 import { type NotifyOptions, notifyMany } from "../notifications/service.js";
+import { challengeSponsorUserIds } from "../queue/reviews.js";
 import {
   CARD_COLUMNS,
   type CardRow,
+  challengeLimit,
   DISPLAY_NAME_SQL,
   type HelperKind,
   type HelpTopic,
   isEligibleHelper,
   LISTED_HELPER_WHERE,
   presentSql,
-  scheduledNowSql,
   toCard,
 } from "./helpers.js";
-import type { ClaimInput, CreateRequestInput } from "./schemas.js";
+import type { ClaimInput, CreateRequestInput, EditRequestInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
 /**
@@ -45,7 +47,7 @@ import { assertTopicsExist } from "./topics.js";
 
 export type HelpRequestStatus = "open" | "claimed" | "resolved" | "cancelled";
 export type MeetingMode = "on_my_way" | "meet_at";
-export type RoutingOutcome = "matched" | "fallback" | "none";
+export type RoutingOutcome = "matched" | "fallback" | "sponsor" | "none";
 
 export const HELPDESK_CATEGORY = "helpdesk";
 const CHANNELS: NotifyOptions["channels"] = ["in_app", "push"];
@@ -57,6 +59,8 @@ export interface HelpRequestView {
   location: string;
   topics: HelpTopic[];
   other: boolean;
+  challenge: { id: number; name: string } | null;
+  preferSponsor: boolean;
   project: { id: number; name: string } | null;
   requester: { userId: number; displayName: string } | null;
   routing: RoutingOutcome;
@@ -67,6 +71,7 @@ export interface HelpRequestView {
       displayName: string;
       photoUrl: string | null;
       kind: HelperKind;
+      visibleRoleName: string | null;
       affiliation: string | null;
     } | null;
     mode: MeetingMode;
@@ -74,10 +79,15 @@ export interface HelpRequestView {
     claimedAt: string;
   };
   createdAt: string;
+  /** Place in the first-come, first-served queue; moves to the end when the request is edited. */
+  queuedAt: string;
+  /** 1-based among all open requests; null once claimed or closed. */
+  queuePosition: number | null;
   resolvedAt: string | null;
   cancelledAt: string | null;
   viewer: {
     canCancel: boolean;
+    canEdit: boolean;
     canClaim: boolean;
     canRelease: boolean;
     canResolve: boolean;
@@ -91,6 +101,9 @@ interface RequestRow {
   description: string;
   location: string;
   other: boolean;
+  challenge_id: number | null;
+  challenge_name: string | null;
+  prefer_sponsor: boolean;
   routing: RoutingOutcome;
   requester_id: number | null;
   requester_name: string | null;
@@ -103,6 +116,8 @@ interface RequestRow {
   resolved_at: Date | null;
   cancelled_at: Date | null;
   created_at: Date;
+  queued_at: Date;
+  queue_position: number | null;
   topics: HelpTopic[];
   notified_count: number;
   viewer_notified: boolean;
@@ -113,11 +128,16 @@ interface RequestRow {
 function requestSelect(where: string, order: string, limit = 100): string {
   return `
   SELECT hr.id, hr.status, hr.description, hr.location, hr.other, hr.routing,
+         hr.challenge_id, ch.title AS challenge_name, hr.prefer_sponsor,
          hr.requester_id,
          CASE WHEN u.id IS NOT NULL THEN ${DISPLAY_NAME_SQL} END AS requester_name,
          hr.repo_id, rp.name AS repo_name,
          hr.claimed_by, hr.claimed_at, hr.meeting_mode, hr.meeting_location,
-         hr.resolved_at, hr.cancelled_at, hr.created_at,
+         hr.resolved_at, hr.cancelled_at, hr.created_at, hr.queued_at,
+         CASE WHEN hr.status = 'open' THEN (
+           SELECT count(*)::int + 1 FROM help_requests q
+            WHERE q.status = 'open' AND (q.queued_at, q.id) < (hr.queued_at, hr.id)
+         ) END AS queue_position,
          COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
                      FROM help_request_topics rt JOIN help_topics t ON t.id = rt.topic_id
                     WHERE rt.request_id = hr.id), '[]'::jsonb) AS topics,
@@ -131,6 +151,7 @@ function requestSelect(where: string, order: string, limit = 100): string {
     LEFT JOIN users u ON u.id = hr.requester_id
     LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
     LEFT JOIN repos rp ON rp.id = hr.repo_id
+    LEFT JOIN challenges ch ON ch.id = hr.challenge_id
    WHERE ${where}
    ORDER BY ${order}
    LIMIT ${limit}`;
@@ -152,6 +173,7 @@ async function toViews(
   rows: RequestRow[],
   viewerIsHelper: boolean,
   viewerId: number,
+  limit: number[] | null = null,
 ): Promise<HelpRequestView[]> {
   const claimerRows = await claimers(db, [
     ...new Set(rows.flatMap((r) => (r.claimed_by != null ? [Number(r.claimed_by)] : []))),
@@ -168,6 +190,11 @@ async function toViews(
       location: r.location,
       topics: r.topics.map((t) => ({ id: Number(t.id), name: t.name })),
       other: r.other,
+      challenge:
+        r.challenge_id != null && r.challenge_name != null
+          ? { id: Number(r.challenge_id), name: r.challenge_name }
+          : null,
+      preferSponsor: r.prefer_sponsor,
       project:
         r.repo_id != null && r.repo_name != null
           ? { id: Number(r.repo_id), name: r.repo_name }
@@ -187,6 +214,7 @@ async function toViews(
                     displayName: card.displayName,
                     photoUrl: card.photoUrl,
                     kind: card.kind,
+                    visibleRoleName: card.visibleRoleName,
                     affiliation: card.affiliation,
                   }
                 : null,
@@ -196,11 +224,18 @@ async function toViews(
             }
           : null,
       createdAt: r.created_at.toISOString(),
+      queuedAt: r.queued_at.toISOString(),
+      queuePosition: r.queue_position == null ? null : Number(r.queue_position),
       resolvedAt: r.resolved_at?.toISOString() ?? null,
       cancelledAt: r.cancelled_at?.toISOString() ?? null,
       viewer: {
         canCancel: active && r.viewer_on_team,
-        canClaim: r.status === "open" && viewerIsHelper && !r.viewer_on_team,
+        canEdit: r.status === "open" && r.viewer_on_team,
+        canClaim:
+          r.status === "open" &&
+          viewerIsHelper &&
+          !r.viewer_on_team &&
+          (limit === null || (r.challenge_id != null && limit.includes(Number(r.challenge_id)))),
         canRelease: r.status === "claimed" && isClaimer,
         canResolve: r.status === "claimed" && (isClaimer || r.viewer_on_team),
         notified: r.viewer_notified,
@@ -224,25 +259,54 @@ async function viewOne(db: Queryable, viewerId: number, id: number): Promise<Hel
     id,
   ]);
   if (!rows[0]) throw new NotFoundError("Help request not found");
-  const [view] = await toViews(db, rows, await isActiveHelper(db, viewerId), viewerId);
+  const [view] = await toViews(
+    db,
+    rows,
+    await isActiveHelper(db, viewerId),
+    viewerId,
+    await challengeLimit(db, viewerId),
+  );
   return view as HelpRequestView;
 }
 
 /**
  * Read one request: the requesting side, eligible helpers and coverage
  * readers. Everyone else gets 404, so ids cannot be probed.
+ *
+ * `requesterProfile` (H64, H66): the requester's public profile in the
+ * directory entry shape, only for a notified recipient, the request's
+ * claimer or `helpdesk:manage`, and only while the requester shares their
+ * public profile (`directory_visible`); otherwise null. No diary or contact
+ * is created.
  */
 export async function getRequest(
   viewerId: number,
   id: number,
-  canSeeAll: boolean,
-): Promise<HelpRequestView> {
+  access: { canSeeAll: boolean; canManage: boolean },
+): Promise<HelpRequestView & { requesterProfile: DirectoryEntry | null }> {
   const view = await viewOne(pool, viewerId, id);
   const onTeam = view.viewer.canCancel || (await onRequestTeam(pool, viewerId, id));
-  if (!onTeam && !canSeeAll && !(await isEligibleHelper(pool, viewerId))) {
-    throw new NotFoundError("Help request not found");
+  if (!onTeam && !access.canSeeAll && !access.canManage) {
+    if (!(await isEligibleHelper(pool, viewerId)))
+      throw new NotFoundError("Help request not found");
+    // H65: a sponsor limited to their challenges only reads those requests
+    // (and any they claimed).
+    const limit = await challengeLimit(pool, viewerId);
+    const own = view.claim?.helper?.userId === viewerId;
+    if (limit && !own && !(view.challenge && limit.includes(view.challenge.id))) {
+      throw new NotFoundError("Help request not found");
+    }
   }
-  return view;
+  const mayOpenRequester =
+    !onTeam &&
+    (access.canManage || view.viewer.notified || view.claim?.helper?.userId === viewerId);
+  const requesterProfile =
+    mayOpenRequester && view.requester
+      ? ((await visibleDirectoryEntries(pool, [view.requester.userId])).get(
+          view.requester.userId,
+        ) ?? null)
+      : null;
+  return { ...view, requesterProfile };
 }
 
 async function onRequestTeam(db: Queryable, userId: number, id: number): Promise<boolean> {
@@ -278,22 +342,41 @@ export async function listInbox(
       code: ERROR_REASONS.HELPER_NOT_ELIGIBLE,
     });
   }
+  const limit = await challengeLimit(pool, userId);
   const { rows } = await pool.query<RequestRow>(
     scope === "open"
       ? requestSelect(
-          "hr.status = 'open'",
-          `EXISTS (SELECT 1 FROM help_request_recipients rr
-                    WHERE rr.request_id = hr.id AND rr.user_id = $1) DESC,
-           hr.created_at, hr.id`,
+          `hr.status = 'open' AND ($2::int[] IS NULL OR hr.challenge_id = ANY($2::int[]))`,
+          "hr.queued_at, hr.id",
         )
       : requestSelect(
           "hr.claimed_by = $1 AND hr.status IN ('claimed', 'resolved')",
           "(hr.status = 'claimed') DESC, hr.claimed_at DESC, hr.id DESC",
           50,
         ),
+    scope === "open" ? [userId, limit] : [userId],
+  );
+  return toViews(pool, rows, await isActiveHelper(pool, userId), userId, limit);
+}
+
+/**
+ * Visible challenges a help request may target (H64). The challenges the
+ * caller's own projects are queued for come first, flagged `mine`.
+ */
+export async function listRequestChallenges(
+  userId: number,
+): Promise<{ id: number; name: string; mine: boolean }[]> {
+  const { rows } = await pool.query<{ id: number; title: string; mine: boolean }>(
+    `SELECT c.id, c.title,
+            EXISTS (SELECT 1 FROM queue_entries qe
+                     JOIN submissions s ON s.repo_id = qe.repo_id
+                    WHERE qe.challenge_id = c.id AND s.user_id = $1 AND s.status = 'active') AS mine
+       FROM challenges c
+      WHERE c.visibility = 'visible' AND c.is_test_account = false
+      ORDER BY mine DESC, lower(c.title), c.id`,
     [userId],
   );
-  return toViews(pool, rows, await isActiveHelper(pool, userId), userId);
+  return rows.map((r) => ({ id: Number(r.id), name: r.title, mine: r.mine }));
 }
 
 /** The caller's active project teams, the targets of a team request. */
@@ -366,30 +449,60 @@ async function recipientIds(db: Queryable, requestId: number): Promise<number[]>
   return rows.map((r) => Number(r.user_id));
 }
 
-/** H65 audience at this moment. */
+/**
+ * H65 audience at this moment, among present
+ * listed helpers:
+ *  1. a sponsor limited to their own challenges is a candidate only for
+ *     requests on one of those challenges;
+ *  2. sponsors of the request's challenge match regardless of topic;
+ *  3. with `preferSponsor` and a sponsor of the chosen challenge, only those sponsors
+ *     are notified (`sponsor`); otherwise the usual matched/fallback/none.
+ */
 async function routeAudience(
   db: Queryable,
   requesterSide: number[],
   topicIds: number[],
   other: boolean,
+  challengeId: number | null,
+  preferSponsor: boolean,
 ): Promise<{ routing: RoutingOutcome; userIds: number[] }> {
-  const { rows } = await db.query<{ user_id: number; matches: boolean }>(
+  const challengeSponsors = new Set(
+    challengeId != null ? await challengeSponsorUserIds(db, challengeId) : [],
+  );
+  const { rows } = await db.query<{
+    user_id: number;
+    matches: boolean;
+    is_sponsor: boolean;
+    own_only: boolean;
+  }>(
     `SELECT u.id AS user_id,
             EXISTS (SELECT 1 FROM helper_topics ht
-                     WHERE ht.user_id = u.id AND ht.topic_id = ANY($2::int[])) AS matches
+                     WHERE ht.user_id = u.id AND ht.topic_id = ANY($2::int[])) AS matches,
+            EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) AS is_sponsor,
+            hp.own_challenges_only AS own_only
        FROM helper_profiles hp
        JOIN users u ON u.id = hp.user_id
       WHERE ${LISTED_HELPER_WHERE}
-        AND ${scheduledNowSql("u.id")}
         AND ${presentSql("u.id")}
         AND NOT (u.id = ANY($1::int[]))
       ORDER BY u.id`,
     [requesterSide, topicIds],
   );
-  const matched = rows.filter((r) => r.matches).map((r) => Number(r.user_id));
-  if (!other && matched.length > 0) return { routing: "matched", userIds: matched };
-  if (rows.length === 0) return { routing: "none", userIds: [] };
-  return { routing: "fallback", userIds: rows.map((r) => Number(r.user_id)) };
+  const candidates = rows.filter(
+    (r) => !(r.own_only && r.is_sponsor) || challengeSponsors.has(Number(r.user_id)),
+  );
+  const matched = candidates.filter((r) => r.matches || challengeSponsors.has(Number(r.user_id)));
+  if (preferSponsor) {
+    const sponsors = matched
+      .filter((r) => challengeSponsors.has(Number(r.user_id)))
+      .map((r) => Number(r.user_id));
+    if (sponsors.length > 0) return { routing: "sponsor", userIds: sponsors };
+  }
+  if (!other && matched.length > 0) {
+    return { routing: "matched", userIds: matched.map((r) => Number(r.user_id)) };
+  }
+  if (candidates.length === 0) return { routing: "none", userIds: [] };
+  return { routing: "fallback", userIds: candidates.map((r) => Number(r.user_id)) };
 }
 
 export async function createRequest(
@@ -415,6 +528,14 @@ export async function createRequest(
       if (!rows[0]) throw new ForbiddenError("You are not a member of this project");
     }
     await assertTopicsExist(client, topicIds);
+    const challengeId = input.challengeId ?? null;
+    if (challengeId != null) {
+      const { rows } = await client.query(
+        "SELECT 1 FROM challenges WHERE id = $1 AND visibility = 'visible' AND is_test_account = false",
+        [challengeId],
+      );
+      if (!rows[0]) throw new BadRequestError("Choose a visible challenge", { challengeId });
+    }
     const active = await client.query<{ id: number }>(
       `SELECT id FROM help_requests
         WHERE status IN ('open', 'claimed')
@@ -428,13 +549,30 @@ export async function createRequest(
       });
     }
     const side = await requestingSide(client, userId, repoId);
-    const { routing, userIds } = await routeAudience(client, side, topicIds, input.other);
+    const { routing, userIds } = await routeAudience(
+      client,
+      side,
+      topicIds,
+      input.other,
+      challengeId,
+      input.preferSponsor,
+    );
     let id: number;
     try {
       const { rows } = await client.query<{ id: number }>(
-        `INSERT INTO help_requests (requester_id, repo_id, description, location, other, routing)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [userId, repoId, input.description, input.location, input.other, routing],
+        `INSERT INTO help_requests
+           (requester_id, repo_id, description, location, other, routing, challenge_id, prefer_sponsor)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [
+          userId,
+          repoId,
+          input.description,
+          input.location,
+          input.other,
+          routing,
+          challengeId,
+          input.preferSponsor,
+        ],
       );
       id = Number((rows[0] as { id: number }).id);
     } catch (err) {
@@ -482,12 +620,155 @@ export async function createRequest(
       entityType: "help_request",
       entityId: id,
       action: "created",
-      after: { repoId, topicIds, other: input.other, routing, notified: userIds.length },
+      after: {
+        repoId,
+        topicIds,
+        other: input.other,
+        challengeId,
+        preferSponsor: input.preferSponsor,
+        routing,
+        notified: userIds.length,
+      },
     });
     return { id, side, userIds };
   });
   await announce(result.id, "open", [...result.side, ...result.userIds]);
   return viewOne(pool, userId, result.id);
+}
+
+/**
+ * H64, H65: the requesting side edits an OPEN request. It takes the same
+ * validation as creation, goes to the end of the queue (`queued_at = now()`)
+ * and is routed again: only helpers who newly match are notified, nobody who
+ * already received it is told twice. Claimed or closed requests answer 409;
+ * the row lock serializes the edit against a simultaneous claim.
+ */
+export async function editRequest(
+  userId: number,
+  id: number,
+  input: EditRequestInput,
+): Promise<HelpRequestView> {
+  const topicIds = [...new Set(input.topicIds)].sort((a, b) => a - b);
+  const result = await withTransaction(async (client) => {
+    await lockActiveUser(client, userId);
+    const req = await lockRequest(client, id);
+    const side = await requestingSide(client, req.requester_id, req.repo_id);
+    if (!side.includes(userId)) throw new NotFoundError("Help request not found");
+    if (req.status === "claimed") {
+      throw new ConflictError("A helper already claimed this request", {
+        code: ERROR_REASONS.HELP_REQUEST_ALREADY_CLAIMED,
+      });
+    }
+    if (req.status !== "open") {
+      throw new ConflictError("This help request is closed", {
+        code: ERROR_REASONS.HELP_REQUEST_CLOSED,
+      });
+    }
+    await assertTopicsExist(client, topicIds);
+    const challengeId = input.challengeId ?? null;
+    if (challengeId != null) {
+      const { rows } = await client.query(
+        "SELECT 1 FROM challenges WHERE id = $1 AND visibility = 'visible' AND is_test_account = false",
+        [challengeId],
+      );
+      if (!rows[0]) throw new BadRequestError("Choose a visible challenge", { challengeId });
+    }
+    const { rows: before } = await client.query<{
+      description: string;
+      location: string;
+      other: boolean;
+      challenge_id: number | null;
+      prefer_sponsor: boolean;
+      routing: RoutingOutcome;
+      topic_ids: number[];
+    }>(
+      `SELECT hr.description, hr.location, hr.other, hr.challenge_id, hr.prefer_sponsor, hr.routing,
+              COALESCE((SELECT array_agg(topic_id ORDER BY topic_id) FROM help_request_topics
+                         WHERE request_id = hr.id), '{}') AS topic_ids
+         FROM help_requests hr WHERE hr.id = $1`,
+      [id],
+    );
+    const old = before[0] as NonNullable<(typeof before)[number]>;
+    const existing = await recipientIds(client, id);
+    const audience = await routeAudience(
+      client,
+      side,
+      topicIds,
+      input.other,
+      challengeId,
+      input.preferSponsor,
+    );
+    const fresh = audience.userIds.filter((helperId) => !existing.includes(helperId));
+    // Keep the original outcome when the edit finds nobody new but people were already told.
+    const routing =
+      audience.routing === "none" && existing.length > 0 ? old.routing : audience.routing;
+    await client.query(
+      `UPDATE help_requests
+          SET description = $2, location = $3, other = $4, challenge_id = $5,
+              prefer_sponsor = $6, routing = $7, queued_at = now()
+        WHERE id = $1`,
+      [
+        id,
+        input.description,
+        input.location,
+        input.other,
+        challengeId,
+        input.preferSponsor,
+        routing,
+      ],
+    );
+    await client.query("DELETE FROM help_request_topics WHERE request_id = $1", [id]);
+    if (topicIds.length > 0) {
+      await client.query(
+        "INSERT INTO help_request_topics (request_id, topic_id) SELECT $1, unnest($2::int[])",
+        [id, topicIds],
+      );
+    }
+    if (fresh.length > 0) {
+      await client.query(
+        `INSERT INTO help_request_recipients (request_id, user_id)
+         SELECT $1, unnest($2::int[]) ON CONFLICT DO NOTHING`,
+        [id, fresh],
+      );
+      const { rows: names } = await client.query<{ name: string }>(
+        `SELECT t.name FROM help_topics t WHERE t.id = ANY($1::int[]) ORDER BY lower(t.name)`,
+        [topicIds],
+      );
+      const topicNames = names.map((n) => n.name);
+      await notifyMany(
+        client,
+        fresh.map((helperId) => ({
+          userId: helperId,
+          category: HELPDESK_CATEGORY,
+          channels: CHANNELS,
+          payload: {
+            template: topicNames.length === 0 ? "helpdesk.requestOther" : "helpdesk.request",
+            vars: { topics: topicNames.join(", "), location: input.location },
+            kind: "request_created",
+            requestId: id,
+          },
+        })),
+      );
+    }
+    const changedFields = [
+      old.description !== input.description && "description",
+      old.location !== input.location && "location",
+      old.other !== input.other && "other",
+      JSON.stringify(old.topic_ids.map(Number)) !== JSON.stringify(topicIds) && "topicIds",
+      (old.challenge_id == null ? null : Number(old.challenge_id)) !== challengeId && "challengeId",
+      old.prefer_sponsor !== input.preferSponsor && "preferSponsor",
+    ].filter((field): field is string => typeof field === "string");
+    await audit(client, {
+      actorId: userId,
+      entityType: "help_request",
+      entityId: id,
+      action: "edited",
+      after: { changedFields, routing, notified: fresh.length },
+    });
+    return { side, everyone: [...existing, ...fresh] };
+  });
+  await announce(id, "open", [...result.side, ...result.everyone]);
+  return viewOne(pool, userId, id);
 }
 
 interface LockedRequest {
@@ -499,11 +780,13 @@ interface LockedRequest {
   meeting_mode: MeetingMode | null;
   meeting_location: string | null;
   location: string;
+  challenge_id: number | null;
 }
 
 async function lockRequest(client: PoolClient, id: number): Promise<LockedRequest> {
   const { rows } = await client.query<LockedRequest>(
-    `SELECT id, status, requester_id, repo_id, claimed_by, meeting_mode, meeting_location, location
+    `SELECT id, status, requester_id, repo_id, claimed_by, meeting_mode, meeting_location, location,
+            challenge_id
        FROM help_requests WHERE id = $1 FOR UPDATE`,
     [id],
   );
@@ -539,6 +822,11 @@ export async function claimRequest(
       });
     }
     const req = await lockRequest(client, id);
+    // H65: a sponsor limited to their challenges cannot see, so cannot claim, others.
+    const limit = await challengeLimit(client, helperId);
+    if (limit && !(req.challenge_id != null && limit.includes(Number(req.challenge_id)))) {
+      throw new NotFoundError("Help request not found");
+    }
     if (req.status === "claimed" && Number(req.claimed_by) === helperId) {
       if (req.meeting_mode === input.mode && req.meeting_location === meetingLocation) {
         return null;
@@ -735,6 +1023,27 @@ export async function resolveRequest(userId: number, id: number): Promise<HelpRe
       "UPDATE help_requests SET status = 'resolved', resolved_at = now() WHERE id = $1",
       [id],
     );
+    // H66: progress is delivered transactionally with the state change.
+    const targets = [...new Set([...side, Number(req.claimed_by)])].filter(
+      (target) => target !== userId,
+    );
+    if (targets.length > 0) {
+      const actorName = await helperName(client, userId);
+      await notifyMany(
+        client,
+        targets.map((target) => ({
+          userId: target,
+          category: HELPDESK_CATEGORY,
+          channels: CHANNELS,
+          payload: {
+            template: "helpdesk.resolved",
+            vars: { actorName },
+            kind: "request_resolved",
+            requestId: id,
+          },
+        })),
+      );
+    }
     await audit(client, {
       actorId: userId,
       entityType: "help_request",

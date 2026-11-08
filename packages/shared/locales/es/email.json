@@ -140,6 +140,10 @@
       "cancelled": {
         "subject": "Solicitud de ayuda cancelada",
         "body": "Quien pidió ayuda ya no la necesita."
+      },
+      "resolved": {
+        "subject": "Solicitud de ayuda resuelta",
+        "body": "{{actorName}} ha marcado esta solicitud como resuelta."
       }
     }
   },
@@ -202,6 +206,10 @@
       "cancelled": {
         "title": "Solicitud de ayuda cancelada",
         "body": "Ya no necesitan ayuda."
+      },
+      "resolved": {
+        "title": "Solicitud de ayuda resuelta",
+        "body": "{{actorName}} ha marcado esta solicitud como resuelta."
       }
     }
   }

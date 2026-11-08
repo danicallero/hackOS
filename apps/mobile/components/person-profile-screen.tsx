@@ -10,7 +10,7 @@ import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
-import { helperNowLabel } from "@/components/help-desk/rows";
+import { HelperCompany, HelperPresence } from "@/components/help-desk/rows";
 import {
   AndroidStatusBarScrim,
   EmptyState,
@@ -18,6 +18,7 @@ import {
   LegacyHeaderIconButton,
   Section,
   Separator,
+  StatusPill,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -42,6 +43,10 @@ import { isPadIdiom } from "@/lib/tabs";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
+const notFound = () => new ApiError("Person not found", 404, "not_found");
+const profileUserId = (value: DirectoryEntry | HelperDetail<DirectoryEntry>) =>
+  "profile" in value ? value.profile.userId : value.userId;
+
 type State =
   | { status: "loading" }
   | { status: "ready"; person: DirectoryEntry; helper: HelperDetail<DirectoryEntry> | null }
@@ -55,7 +60,11 @@ type State =
  * so both show the same unavailable state. The diary entry carries the
  * reader's favourite and note.
  */
-export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "helpDesk" } = {}) {
+export function PersonProfileScreen({
+  source = "diary",
+}: {
+  source?: "diary" | "helpDesk" | "requester";
+} = {}) {
   const avatarSize = isPadIdiom() ? 144 : 112;
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
@@ -94,14 +103,20 @@ export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "
     const [person, diary] = await Promise.allSettled([
       source === "helpDesk"
         ? apiFetch<HelperDetail<DirectoryEntry>>(`/api/helpdesk/helpers/${userId}`)
-        : apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
+        : source === "requester"
+          ? // H64: the route id is the request; the API embeds the requester's public profile.
+            apiFetch<{ requesterProfile: DirectoryEntry | null }>(
+              `/api/helpdesk/requests/${userId}`,
+            ).then((request) => request.requesterProfile ?? Promise.reject(notFound()))
+          : apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
       apiFetch<{ items: DiaryEntry[] }>("/api/me/diary"),
     ]);
     if (request !== requestId.current) return;
     if (diary.status === "fulfilled") {
+      const personId = person.status === "fulfilled" ? profileUserId(person.value) : userId;
       setEntry(
         diary.value.items.find(
-          (item) => item.kind === "person" && item.person?.userId === userId,
+          (item) => item.kind === "person" && item.person?.userId === personId,
         ) ?? null,
       );
     }
@@ -265,6 +280,7 @@ export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "
         ) : (
           <>
             <ProfileCard
+              beforeKnowledge={helper ? <HelperCompany helper={helper} /> : undefined}
               data={person}
               onNameLayout={avatarCollapse.onNameLayout}
               avatar={
@@ -322,7 +338,15 @@ export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "
 
             {helper ? (
               <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
-                <InfoRow label={t("helpNow")} value={helperNowLabel(helper, t)} />
+                {helper.ownChallengesOnly && helper.ownChallenges.length > 0 ? (
+                  <InfoRow
+                    label={t("helpOnlyMyChallenges")}
+                    value={helper.ownChallenges.map((challenge) => challenge.name).join(", ")}
+                  />
+                ) : null}
+                <View style={{ padding: 16 }}>
+                  <HelperPresence helper={helper} />
+                </View>
                 {availabilityDays(helper.availability, language).map((day) => (
                   <View key={day.key}>
                     <Separator inset={16} />
@@ -360,7 +384,7 @@ export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "
               <PressableFeedback
                 feedback="row"
                 accessibilityRole="button"
-                onPress={() => reportContent({ userId }, t)}
+                onPress={() => reportContent({ userId: person.userId }, t)}
                 style={{
                   alignItems: "center",
                   minHeight: 50,
@@ -387,6 +411,22 @@ export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "
           size={avatarSize}
           variant="person"
         />
+      ) : null}
+      {helper?.visibleRoleName ? (
+        process.env.EXPO_OS === "ios" ? (
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.View hidesSharedBackground>
+              <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
+            </Stack.Toolbar.View>
+          </Stack.Toolbar>
+        ) : (
+          <View
+            pointerEvents="none"
+            style={{ position: "absolute", right: 16, top: insets.top + 8 }}
+          >
+            <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
+          </View>
+        )
       ) : null}
     </View>
   );

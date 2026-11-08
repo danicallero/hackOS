@@ -1,7 +1,7 @@
 import type { MessageKey } from "@/lib/i18n";
 import type { Me } from "@/lib/types";
 
-type ProfileTabId = "personal" | "public" | "wallet" | "account";
+type ProfileTabId = "personal" | "public" | "help-desk" | "wallet" | "account";
 
 export type ProfileSectionId =
   | "personal"
@@ -38,7 +38,12 @@ const TABS: TabDef[] = [
   {
     id: "public",
     title: "publicProfileTitle",
-    sections: [{ id: "public" }, { id: "helpDesk", title: "helpDeskTitle" }],
+    sections: [{ id: "public" }],
+  },
+  {
+    id: "help-desk",
+    title: "helpDeskTitle",
+    sections: [{ id: "helpDesk" }],
   },
   {
     id: "wallet",

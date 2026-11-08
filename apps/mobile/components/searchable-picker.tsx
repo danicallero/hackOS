@@ -115,20 +115,23 @@ export function CheckRow({
 /**
  * A sheet that picks from a searchable catalogue (project challenges, help
  * topics): inline title, native header search on iOS, the inset field on
- * Android, and Done as the one trailing action. Choices apply as they are
- * tapped, so the sheet needs no Cancel.
+ * Android. Close (xmark, leading) dismisses and calls `onDiscard` so a picker
+ * that edits a draft can restore it; the checkmark (trailing) confirms.
  */
 export function SearchablePickerSheet({
   title,
   searchPlaceholder,
   query,
   onQuery,
+  onDiscard,
   children,
 }: {
   title: string;
   searchPlaceholder: string;
   query: string;
   onQuery: (text: string) => void;
+  /** Close: undo this visit's edits before the sheet dismisses. */
+  onDiscard?: () => void;
   children: ReactNode;
 }) {
   const { t } = useLocale();
@@ -136,12 +139,18 @@ export function SearchablePickerSheet({
   const navigation = useNavigation();
   const readable = useParticipantLayout("form");
   const glass = isRealLiquidGlassAvailable();
+  const close = () => {
+    onDiscard?.();
+    router.back();
+  };
   useLayoutEffect(() => {
     navigation.setOptions({
       title,
       headerLargeTitle: false,
       headerShadowVisible: false,
-      headerLeft: undefined,
+      headerLeft: glass
+        ? undefined
+        : () => <CircleButton icon="xmark" label={t("cancel")} onPress={close} />,
       // iOS 26 draws the toolbar Done below as a glass circle.
       headerRight: glass
         ? undefined
@@ -168,6 +177,11 @@ export function SearchablePickerSheet({
   });
   return (
     <>
+      {glass ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.Button icon="xmark" accessibilityLabel={t("cancel")} onPress={close} />
+        </Stack.Toolbar>
+      ) : null}
       {glass ? (
         <Stack.Toolbar placement="right">
           <Stack.Toolbar.Button

@@ -17,21 +17,33 @@ export interface HelperCard {
   headline: string | null;
   bio: string | null;
   kind: "mentor" | "sponsor" | "staff";
+  /** H8: highest assigned visible role, as on the badge; null when none is visible. */
+  visibleRoleName: string | null;
   affiliation: string | null;
+  affiliationLogoUrl: string | null;
   topics: HelpTopic[];
   availability: AvailabilityInterval[];
   scheduledNow: boolean;
   present: boolean;
   availableNow: boolean;
 }
-export interface MyHelperProfile {
+export interface MyHelperProfile<P = unknown> {
   eligible: boolean;
   published: boolean;
   publishedAt: string | null;
   bio: string | null;
   topics: HelpTopic[];
   availability: AvailabilityInterval[];
-  preview: HelperCard;
+  suggestedInterval: AvailabilityInterval | null;
+  ownChallengesOnly: boolean;
+  canLimitToChallenges: boolean;
+  ownChallenges: { id: number; name: string }[];
+  preview: HelperDetail<P>;
+}
+export interface HelpChallengeOption {
+  id: number;
+  name: string;
+  mine: boolean;
 }
 export type MeetingMode = "on_my_way" | "meet_at";
 export interface HelpRequest {
@@ -41,21 +53,31 @@ export interface HelpRequest {
   location: string;
   topics: HelpTopic[];
   other: boolean;
+  challenge: { id: number; name: string } | null;
+  preferSponsor: boolean;
   project: { id: number; name: string } | null;
   requester: { userId: number; displayName: string } | null;
-  routing: "matched" | "fallback" | "none";
+  routing: "matched" | "fallback" | "sponsor" | "none";
   notifiedCount: number;
   claim: null | {
-    helper: Pick<HelperCard, "userId" | "displayName" | "photoUrl" | "kind" | "affiliation"> | null;
+    helper: Pick<
+      HelperCard,
+      "userId" | "displayName" | "photoUrl" | "kind" | "affiliation" | "visibleRoleName"
+    > | null;
     mode: MeetingMode;
     meetingLocation: string | null;
     claimedAt: string;
   };
   createdAt: string;
+  /** First-come, first-served ordering key; editing an open request moves it to the end. */
+  queuedAt: string;
+  /** 1-based among all open requests; null once claimed or closed. */
+  queuePosition: number | null;
   resolvedAt: string | null;
   cancelledAt: string | null;
   viewer: {
     canCancel: boolean;
+    canEdit: boolean;
     canClaim: boolean;
     canRelease: boolean;
     canResolve: boolean;
@@ -84,8 +106,15 @@ export interface CoverageReport {
   uncoveredTopics: HelpTopic[];
 }
 
+/** `GET /api/helpdesk/requests/:id`: the request plus the requester's public profile `P` (directory entry) when the viewer may see it, else null. */
+export type HelpRequestDetail<P> = HelpRequest & { requesterProfile: P | null };
+
 /** A published helper as the detail route returns it: the card plus the person's public profile `P`. */
-export type HelperDetail<P> = HelperCard & { profile: P };
+export type HelperDetail<P> = HelperCard & {
+  profile: P;
+  ownChallengesOnly: boolean;
+  ownChallenges: { id: number; name: string }[];
+};
 
 export const MAX_AVAILABILITY_INTERVALS = 30;
 export const MAX_INTERVAL_MS = 86_400_000;
@@ -95,6 +124,7 @@ export function validAvailability(intervals: AvailabilityInterval[]): boolean {
   if (intervals.length > MAX_AVAILABILITY_INTERVALS) return false;
   const sorted = [...intervals].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   return sorted.every((item, index) => {
+    const previous = sorted[index - 1];
     const start = Date.parse(item.startsAt);
     const end = Date.parse(item.endsAt);
     return (
@@ -102,7 +132,7 @@ export function validAvailability(intervals: AvailabilityInterval[]): boolean {
       Number.isFinite(end) &&
       end > start &&
       end - start <= MAX_INTERVAL_MS &&
-      (index === 0 || Date.parse(sorted[index - 1].endsAt) <= start)
+      (!previous || Date.parse(previous.endsAt) <= start)
     );
   });
 }

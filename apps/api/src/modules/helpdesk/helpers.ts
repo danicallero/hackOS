@@ -1,5 +1,12 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import type {
+  AvailabilityInterval,
+  HelperCard,
+  HelpTopic,
+  HelperDetail as SharedHelperDetail,
+  MyHelperProfile as SharedMyHelperProfile,
+} from "@hackos/shared/help-desk";
 import type { FastifyRequest } from "fastify";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
@@ -7,7 +14,9 @@ import { audit } from "../../lib/audit.js";
 import { getRequestAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { photoUrl } from "../../lib/profile-files.js";
-import { type DirectoryEntry, helperProfileEntry } from "../directory/service.js";
+import { type DirectoryEntry, helperProfileEntry, OWN_CV_PATH } from "../directory/service.js";
+import { highestVisibleRoleNameSql } from "../identity/role.js";
+import { sponsorChallengeIds } from "../queue/reviews.js";
 import type { AvailabilityInput, HelperProfileInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
@@ -21,47 +30,10 @@ import { assertTopicsExist } from "./topics.js";
  * to help desk readers.
  */
 
-export type HelperKind = "mentor" | "sponsor" | "staff";
-
-export interface HelpTopic {
-  id: number;
-  name: string;
-}
-
-export interface AvailabilityInterval {
-  startsAt: string;
-  endsAt: string;
-}
-
-export interface HelperCard {
-  userId: number;
-  displayName: string;
-  photoUrl: string | null;
-  headline: string | null;
-  bio: string | null;
-  kind: HelperKind;
-  affiliation: string | null;
-  topics: HelpTopic[];
-  availability: AvailabilityInterval[];
-  scheduledNow: boolean;
-  present: boolean;
-  availableNow: boolean;
-}
-
-/** One helper: the list card plus the public profile people see after a badge scan. */
-export interface HelperDetail extends HelperCard {
-  profile: DirectoryEntry;
-}
-
-export interface MyHelperProfile {
-  eligible: boolean;
-  published: boolean;
-  publishedAt: string | null;
-  bio: string | null;
-  topics: HelpTopic[];
-  availability: AvailabilityInterval[];
-  preview: HelperCard;
-}
+export type { AvailabilityInterval, HelperCard, HelpTopic } from "@hackos/shared/help-desk";
+export type HelperKind = HelperCard["kind"];
+export type HelperDetail = SharedHelperDetail<DirectoryEntry>;
+export type MyHelperProfile = SharedMyHelperProfile<DirectoryEntry>;
 
 /** Capabilities that may browse published helpers (H63). */
 export const HELPDESK_BROWSE = [
@@ -155,8 +127,11 @@ export const CARD_COLUMNS = `
   pp.headline,
   pp.bio,
   ${KIND_SQL} AS kind,
+  ${highestVisibleRoleNameSql("u.id")} AS visible_role_name,
   (SELECT e.name FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
     WHERE s.user_id = u.id ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation,
+  (SELECT e.logo_url FROM sponsors s JOIN enterprises e ON e.id = s.enterprise_id
+    WHERE s.user_id = u.id ORDER BY s.joined_at, s.id LIMIT 1) AS affiliation_logo_url,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
               FROM helper_topics ht JOIN help_topics t ON t.id = ht.topic_id
              WHERE ht.user_id = u.id), '[]'::jsonb) AS topics,
@@ -173,7 +148,9 @@ export interface CardRow {
   headline: string | null;
   bio: string | null;
   kind: HelperKind;
+  visible_role_name: string | null;
   affiliation: string | null;
+  affiliation_logo_url: string | null;
   topics: HelpTopic[];
   availability: { startsAt: string; endsAt: string }[];
   scheduled_now: boolean;
@@ -191,7 +168,9 @@ export function toCard(row: CardRow): HelperCard {
     headline: row.headline,
     bio: row.bio,
     kind: row.kind,
+    visibleRoleName: row.visible_role_name,
     affiliation: row.affiliation,
+    affiliationLogoUrl: row.affiliation_logo_url,
     topics: row.topics.map((t) => ({ id: Number(t.id), name: t.name })),
     availability: row.availability.map((a) => ({
       startsAt: iso(a.startsAt),
@@ -199,7 +178,7 @@ export function toCard(row: CardRow): HelperCard {
     })),
     scheduledNow: row.scheduled_now,
     present: row.present,
-    availableNow: row.scheduled_now && row.present,
+    availableNow: row.present,
   };
 }
 
@@ -234,16 +213,25 @@ export async function getMyHelperProfile(
   userId: number,
   db: Queryable = pool,
 ): Promise<MyHelperProfile> {
-  const [card, profile, eligible] = await Promise.all([
+  const [card, profile, eligible, ownChallenges, suggestedInterval] = await Promise.all([
     readOwnCard(db, userId),
-    db.query<{ published: boolean; published_at: Date | null }>(
-      "SELECT published, published_at FROM helper_profiles WHERE user_id = $1",
+    db.query<{ published: boolean; published_at: Date | null; own_challenges_only: boolean }>(
+      "SELECT published, published_at, own_challenges_only FROM helper_profiles WHERE user_id = $1",
       [userId],
     ),
     isEligibleHelper(db, userId),
+    namedOwnChallenges(db, userId),
+    suggestedAvailability(db),
   ]);
-  const preview = toCard(card);
   const row = profile.rows[0];
+  // H63: exactly what others get from GET /api/helpdesk/helpers/:id, even
+  // unpublished; only the CV route is the owner's own.
+  const preview = {
+    ...toCard(card),
+    ownChallengesOnly: row?.own_challenges_only ?? false,
+    ownChallenges,
+    profile: await helperProfileEntry(db, userId, OWN_CV_PATH),
+  };
   return {
     eligible,
     published: row?.published ?? false,
@@ -251,8 +239,57 @@ export async function getMyHelperProfile(
     bio: preview.bio,
     topics: preview.topics,
     availability: preview.availability,
+    suggestedInterval,
+    ownChallengesOnly: row?.own_challenges_only ?? false,
+    canLimitToChallenges: ownChallenges.length > 0,
+    ownChallenges,
     preview,
   };
+}
+
+/**
+ * H62: the interval clients prefill for a new availability entry: the hacking
+ * window, else the event window, else null.
+ */
+async function suggestedAvailability(db: Queryable): Promise<AvailabilityInterval | null> {
+  const { rows } = await db.query<{ starts_at: Date | null; ends_at: Date | null }>(
+    `SELECT CASE WHEN hacking_starts_at IS NOT NULL AND hacking_ends_at IS NOT NULL
+                 THEN hacking_starts_at ELSE event_starts_at END AS starts_at,
+            CASE WHEN hacking_starts_at IS NOT NULL AND hacking_ends_at IS NOT NULL
+                 THEN hacking_ends_at ELSE event_ends_at END AS ends_at
+       FROM event_config WHERE id = 1`,
+  );
+  const row = rows[0];
+  if (!row?.starts_at || !row.ends_at) return null;
+  return { startsAt: row.starts_at.toISOString(), endsAt: row.ends_at.toISOString() };
+}
+
+/** H65: the sponsor's own challenges with names (empty for non-sponsors). */
+async function namedOwnChallenges(
+  db: Queryable,
+  userId: number,
+): Promise<{ id: number; name: string }[]> {
+  const ids = await sponsorChallengeIds(db, userId);
+  if (ids.length === 0) return [];
+  const { rows } = await db.query<{ id: number; title: string }>(
+    "SELECT id, title FROM challenges WHERE id = ANY($1::int[]) ORDER BY lower(title), id",
+    [ids],
+  );
+  return rows.map((r) => ({ id: Number(r.id), name: r.title }));
+}
+
+/**
+ * H65: challenge ids a helper is limited to (`own_challenges_only` on a
+ * sponsor), or null when they see every request.
+ */
+export async function challengeLimit(db: Queryable, userId: number): Promise<number[] | null> {
+  const { rows } = await db.query(
+    `SELECT 1 FROM helper_profiles hp
+      WHERE hp.user_id = $1 AND hp.own_challenges_only
+        AND EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = $1)`,
+    [userId],
+  );
+  return rows[0] ? sponsorChallengeIds(db, userId) : null;
 }
 
 /** Lock the caller's users row: H54 removal takes the same lock. */
@@ -272,11 +309,11 @@ async function ensureProfileRow(db: Queryable, userId: number) {
     "INSERT INTO helper_profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
     [userId],
   );
-  const { rows } = await db.query<{ published: boolean }>(
-    "SELECT published FROM helper_profiles WHERE user_id = $1 FOR UPDATE",
+  const { rows } = await db.query<{ published: boolean; own_challenges_only: boolean }>(
+    "SELECT published, own_challenges_only FROM helper_profiles WHERE user_id = $1 FOR UPDATE",
     [userId],
   );
-  return rows[0] as { published: boolean };
+  return rows[0] as { published: boolean; own_challenges_only: boolean };
 }
 
 /**
@@ -304,22 +341,41 @@ export async function updateMyHelperProfile(
       });
     }
 
+    const ownOnly = input.ownChallengesOnly ?? current.own_challenges_only;
+    if (
+      input.ownChallengesOnly === true &&
+      (await sponsorChallengeIds(client, userId)).length === 0
+    ) {
+      throw new BadRequestError("Only sponsors with challenges can limit help to their challenges");
+    }
+
     const changedFields: string[] = [];
+    // H61: turning the helper publication on also shares the public profile
+    // (never undone by unpublishing).
+    const shares = input.published && !current.published;
     if (current.published !== input.published) changedFields.push("published");
+    if (shares) changedFields.push("directoryVisible");
+    if (current.own_challenges_only !== ownOnly) changedFields.push("ownChallengesOnly");
     if (beforeTopics.join(",") !== topicIds.join(",")) changedFields.push("topics");
     if (changedFields.length === 0) return false;
 
-    if (changedFields.includes("published")) {
+    await client.query(
+      `UPDATE helper_profiles
+          SET published = $2, published_at = CASE WHEN $2 AND NOT published THEN now() ELSE published_at END,
+              own_challenges_only = $3
+        WHERE user_id = $1`,
+      [userId, input.published, ownOnly],
+    );
+    if (shares) {
       await client.query(
-        `UPDATE helper_profiles
-            SET published = $2, published_at = CASE WHEN $2 THEN now() ELSE published_at END
-          WHERE user_id = $1`,
-        [userId, input.published],
+        `INSERT INTO user_public_profiles (user_id, directory_visible, consented_at)
+         VALUES ($1, true, now())
+         ON CONFLICT (user_id) DO UPDATE SET
+           directory_visible = true,
+           consented_at = CASE WHEN user_public_profiles.directory_visible
+                               THEN user_public_profiles.consented_at ELSE now() END`,
+        [userId],
       );
-    } else {
-      await client.query("UPDATE helper_profiles SET updated_at = now() WHERE user_id = $1", [
-        userId,
-      ]);
     }
     if (changedFields.includes("topics")) {
       await client.query("DELETE FROM helper_topics WHERE user_id = $1", [userId]);
@@ -336,8 +392,12 @@ export async function updateMyHelperProfile(
       entityType: "helper_profile",
       entityId: userId,
       action: "updated",
-      before: { published: current.published, topicIds: beforeTopics },
-      after: { published: input.published, topicIds, changedFields },
+      before: {
+        published: current.published,
+        topicIds: beforeTopics,
+        ownChallengesOnly: current.own_challenges_only,
+      },
+      after: { published: input.published, topicIds, ownChallengesOnly: ownOnly, changedFields },
     });
     return true;
   });
@@ -432,7 +492,7 @@ export async function listHelpers(filter: HelperFilter): Promise<HelperCard[]> {
                   WHERE qt.user_id = u.id AND unaccent(t.name) ILIKE unaccent(${p})))`);
   }
   if (filter.availableNow) {
-    where.push(`${scheduledNowSql("u.id")} AND ${presentSql("u.id")}`);
+    where.push(presentSql("u.id"));
   }
   const { rows } = await pool.query<CardRow>(
     `SELECT ${CARD_COLUMNS}
@@ -500,6 +560,35 @@ export async function mayOpenHelper(
 }
 
 /**
+ * Whether `viewerId` may open `requesterId`'s photo and CV through a help
+ * request: a notified recipient or the claimer of one of their requests
+ * (a sponsor limited to their challenges only through those, or ones they
+ * claimed), or `helpdesk:manage`. The profile's own sharing switches are
+ * applied by the caller.
+ */
+export async function mayOpenRequester(
+  req: FastifyRequest,
+  db: Queryable,
+  requesterId: number,
+): Promise<boolean> {
+  const viewerId = req.userId as number;
+  if (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.HELPDESK_MANAGE))
+    return true;
+  const limit = await challengeLimit(db, viewerId);
+  const { rows } = await db.query(
+    `SELECT 1 FROM help_requests hr
+      WHERE hr.requester_id = $2
+        AND (hr.claimed_by = $1 OR EXISTS (
+              SELECT 1 FROM help_request_recipients rr
+               WHERE rr.request_id = hr.id AND rr.user_id = $1))
+        AND ($3::int[] IS NULL OR hr.claimed_by = $1 OR hr.challenge_id = ANY($3::int[]))
+      LIMIT 1`,
+    [viewerId, requesterId, limit],
+  );
+  return rows.length > 0;
+}
+
+/**
  * H63: the card plus the person's public profile, from the directory's own
  * entry. The caller has already checked `mayOpenHelper`.
  */
@@ -511,7 +600,13 @@ export async function getHelper(userId: number): Promise<HelperDetail> {
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("Helper not found");
-  return { ...toCard(rows[0]), profile: await helperProfileEntry(pool, userId) };
+  const limit = await challengeLimit(pool, userId);
+  return {
+    ...toCard(rows[0]),
+    profile: await helperProfileEntry(pool, userId),
+    ownChallengesOnly: limit !== null,
+    ownChallenges: limit !== null ? await namedOwnChallenges(pool, userId) : [],
+  };
 }
 
 /** Photo route: whether the person's photo switch is on (access is `mayOpenHelper`). */

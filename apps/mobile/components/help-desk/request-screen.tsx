@@ -12,26 +12,15 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { confirmDestructive } from "@/lib/alert";
 import { ApiError } from "@/lib/api";
-import {
-  type HelperCard,
-  type HelpRequest,
-  helpMutation,
-  type MeetingMode,
-  shortMoment,
-} from "@/lib/help-desk";
-import { type MessageKey, useLocale } from "@/lib/i18n";
+import type { DirectoryEntry } from "@/lib/directory";
+import { type HelpRequest, helpMutation, type MeetingMode, shortMoment } from "@/lib/help-desk";
+import { useLocale } from "@/lib/i18n";
 import { useHelpResource } from "@/lib/use-help-resource";
 import { colors, space, type } from "@/theme";
 import { HelpInput, HelpPage } from "./primitives";
 import { HELP_STATUS } from "./rows";
 
 type Action = "claim" | "release" | "resolve" | "cancel";
-
-const KIND_LABEL: Record<HelperCard["kind"], MessageKey> = {
-  mentor: "helpKindMentor",
-  sponsor: "helpKindSponsor",
-  staff: "helpKindStaff",
-};
 
 /** When the request reached its current state: asked, claimed, resolved or cancelled. */
 function statusMoment(request: HelpRequest): string {
@@ -54,7 +43,7 @@ export function HelpRequestScreen() {
   const router = useRouter();
   const glass = isRealLiquidGlassAvailable();
   const path = `/api/helpdesk/requests/${encodeURIComponent(id)}`;
-  const result = useHelpResource<HelpRequest>(path);
+  const result = useHelpResource<HelpRequest & { requesterProfile?: DirectoryEntry | null }>(path);
   const request = result.data;
   // Android has no text prompt: "Meet elsewhere" opens an inline field instead.
   const [meetDraft, setMeetDraft] = useState<string | null>(null);
@@ -173,7 +162,9 @@ export function HelpRequestScreen() {
                   accessible={false}
                 />
                 <Text style={{ ...type.body, color: colors[status.tint], flex: 1 }}>
-                  {t(status.label)}
+                  {request.queuePosition
+                    ? `${t(status.label)} · ${t("helpQueuePosition", { position: String(request.queuePosition) })}`
+                    : t(status.label)}
                 </Text>
                 <Text style={{ ...type.subhead, color: colors.secondaryLabel }}>
                   {shortMoment(statusMoment(request), language)}
@@ -190,10 +181,64 @@ export function HelpRequestScreen() {
                 </>
               ) : null}
               <Separator />
-              <InfoRow
-                label={t("helpRequestedBy")}
-                value={request.requester?.displayName ?? t("helpRequester")}
-              />
+              {request.requesterProfile ? (
+                // A helper can open the requester's public profile (H64, H66).
+                <PressableFeedback
+                  feedback="row"
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t("helpRequestedBy")}, ${request.requesterProfile.displayName}`}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/help-desk/requester/[id]",
+                      params: { id: request.id },
+                    })
+                  }
+                  style={{
+                    alignItems: "center",
+                    flexDirection: "row",
+                    gap: space.md,
+                    minHeight: 50,
+                    paddingHorizontal: space.lg,
+                    paddingVertical: space.row,
+                  }}
+                >
+                  <Text style={{ ...type.body, color: colors.label, flex: 1 }}>
+                    {t("helpRequestedBy")}
+                  </Text>
+                  <Text style={{ ...type.body, color: colors.secondaryLabel }}>
+                    {request.requesterProfile.displayName}
+                  </Text>
+                  <PersonAvatar
+                    size={28}
+                    name={request.requesterProfile.displayName}
+                    uri={request.requesterProfile.photoUrl}
+                  />
+                  <SymbolView
+                    name="chevron.right"
+                    tintColor={colors.tertiaryLabel}
+                    size={12}
+                    weight="semibold"
+                    accessible={false}
+                  />
+                </PressableFeedback>
+              ) : (
+                <InfoRow
+                  label={t("helpRequestedBy")}
+                  value={request.requester?.displayName ?? t("helpRequester")}
+                />
+              )}
+              {request.challenge ? (
+                <>
+                  <Separator />
+                  <InfoRow label={t("helpChallenge")} value={request.challenge.name} />
+                </>
+              ) : null}
+              {request.preferSponsor ? (
+                <>
+                  <Separator />
+                  <InfoRow label={t("helpPreferSponsor")} value={t("yesLabel")} />
+                </>
+              ) : null}
               {request.topics.length || request.other ? (
                 <>
                   <Separator />
@@ -242,7 +287,7 @@ export function HelpRequestScreen() {
                     </Text>
                     {helper ? (
                       <Text style={{ ...type.compact, color: colors.secondaryLabel }}>
-                        {helper.affiliation ?? t(KIND_LABEL[helper.kind])}
+                        {[helper.visibleRoleName, helper.affiliation].filter(Boolean).join(" · ")}
                       </Text>
                     ) : null}
                   </View>
@@ -339,6 +384,22 @@ export function HelpRequestScreen() {
                   chevron={false}
                   disabled={!!busy}
                   onPress={() => void act("release")}
+                />
+              </Section>
+            ) : null}
+            {request.viewer.canEdit ? (
+              <Section>
+                <NavRow
+                  icon="pencil"
+                  title={t("helpEdit")}
+                  chevron={false}
+                  disabled={!!busy}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/(tabs)/help-desk/new-request",
+                      params: { edit: request.id },
+                    })
+                  }
                 />
               </Section>
             ) : null}

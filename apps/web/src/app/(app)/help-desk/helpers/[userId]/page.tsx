@@ -21,10 +21,9 @@ import { HelpdeskError, HelpdeskLoading, HelperPresence, useHelpdesk } from "../
 export default function HelperPage() {
   const { userId } = useParams<{ userId: string }>();
   const { t } = useLocale();
-  const resource = useHelpdesk<HelperDetail<DirectoryEntry>>(
-    ["helper", userId],
-    `/api/helpdesk/helpers/${encodeURIComponent(userId)}`,
-  );
+  const resource = useHelpdesk<
+    HelperDetail<DirectoryEntry> & { ownChallenges?: { id: number; name: string }[] }
+  >(["helper", userId], `/api/helpdesk/helpers/${encodeURIComponent(userId)}`);
   const helper = resource.data;
   const back = <ProfileBackLink href="/help-desk" label={t("helpDeskHelpers")} />;
   if (!helper) {
@@ -40,8 +39,33 @@ export default function HelperPage() {
     );
   }
   return (
-    <PersonProfile entry={helper.profile} context={back}>
+    <PersonProfile
+      entry={{
+        ...helper.profile,
+        helpTopics: helper.profile.helpTopics?.length ? helper.profile.helpTopics : helper.topics,
+      }}
+      context={back}
+    >
       {resource.stale ? <StaleDataNotice onRetry={resource.refetch} /> : null}
+      <dl className="divide-y divide-border/60 border-y border-border/60">
+        {[
+          [
+            t("helpDeskRole"),
+            [helper.visibleRoleName, helper.affiliation].filter(Boolean).join(" · "),
+          ],
+          ...(helper.ownChallenges?.length
+            ? [[t("challenges"), helper.ownChallenges.map((item) => item.name).join(", ")]]
+            : []),
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            className="grid min-w-0 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
+          >
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="min-w-0 wrap-anywhere">{value}</dd>
+          </div>
+        ))}
+      </dl>
       <SectionCard variant="plain" title={t("helpDeskNowTitle")}>
         <HelperPresence helper={helper} />
       </SectionCard>

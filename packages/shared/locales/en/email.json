@@ -135,11 +135,15 @@
       },
       "released": {
         "subject": "Your help request is open again",
-        "body": "The helper who took it can no longer come. Other helpers can still take it."
+        "body": "The person who took it can no longer come. Others can still take it."
       },
       "cancelled": {
         "subject": "Help request cancelled",
         "body": "The person or team who asked for help no longer needs it."
+      },
+      "resolved": {
+        "subject": "Help request resolved",
+        "body": "{{actorName}} marked this help request as resolved."
       }
     }
   },
@@ -197,11 +201,15 @@
       },
       "released": {
         "title": "Help request open again",
-        "body": "The helper who took it can no longer come."
+        "body": "The person who took it can no longer come."
       },
       "cancelled": {
         "title": "Help request cancelled",
         "body": "They no longer need help."
+      },
+      "resolved": {
+        "title": "Help request resolved",
+        "body": "{{actorName}} marked this help request as resolved."
       }
     }
   }

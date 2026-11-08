@@ -340,7 +340,15 @@ scanning, the pre-event schedule, cross-station people search, and Apple/Google
 Wallet pass issuance + the Apple PassKit web-service protocol. Ticket
 eligibility is read from the identity role graph's `event_access` bit, so
 losing one of several event-bearing roles keeps access while losing the last
-one stops live ticket exposure and voids active wallet passes. Scanner
+one stops live ticket exposure and voids active wallet passes. Presence has three
+signal sources: door `in`/`out`, activity scans, and resolved help requests
+(H66, `kind: "help"`, `source: "help"`, category `helpdesk`; cancelled requests
+count for nothing). A resolved request is an in-person checkpoint at
+`resolved_at` for the claimer and the requester: it can secure and renew a
+certainty window that a door entry or activity opened, but with no live window
+it is ignored, it never opens presence by itself, and it does not change the
+door in/out state or the in→in conflict check. Staff cannot edit or delete these
+signals; they follow the help request. Scanner
 mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
 

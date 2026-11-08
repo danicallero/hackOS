@@ -2,6 +2,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { BookOpenIcon } from "@phosphor-icons/react/dist/csr/BookOpen";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { IdentificationBadgeIcon } from "@phosphor-icons/react/dist/csr/IdentificationBadge";
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,7 +20,7 @@ import { useSessionContext } from "@/lib/session";
 import type { HelperCard } from "./model";
 import { scheduleDays } from "./schedule";
 import { useDayLabel, useIntervalLabel } from "./schedule-view";
-import { HelperPresence, useHelpdesk } from "./shared";
+import { HelperPresence, RolePill, useHelpdesk } from "./shared";
 
 const NOW_FILTERS = {
   all: "helpDeskFilterAll",
@@ -42,6 +43,7 @@ export default function HelpdeskPage() {
   );
   const [query, setQuery] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
   const [now, setNow] = useState<string>("all");
   const helpers = useHelpdesk<{ helpers: HelperCard[] }>(
     ["helpers", query],
@@ -55,6 +57,8 @@ export default function HelpdeskPage() {
   ].sort((a, b) => a.name.localeCompare(b.name));
   const rows = all.filter(
     (helper) =>
+      (roles.length === 0 ||
+        (helper.visibleRoleName !== null && roles.includes(helper.visibleRoleName))) &&
       (topics.length === 0 || helper.topics.some((topic) => topics.includes(String(topic.id)))) &&
       (now === "all" ||
         (now === "available" && helper.availableNow) ||
@@ -62,6 +66,21 @@ export default function HelpdeskPage() {
         (now === "present" && helper.present)),
   );
   const filters: FilterDefinition[] = [
+    {
+      id: "role",
+      label: t("helpDeskRole"),
+      icon: IdentificationBadgeIcon,
+      type: "multiple",
+      value: roles,
+      onChange: setRoles,
+      options: [
+        ...new Set(
+          all.map((helper) => helper.visibleRoleName).filter((role): role is string => !!role),
+        ),
+      ]
+        .sort((a, b) => a.localeCompare(b))
+        .map((role) => ({ value: role, label: role })),
+    },
     {
       id: "topics",
       label: t("helpDeskKnowledge"),
@@ -100,11 +119,14 @@ export default function HelpdeskPage() {
         className="size-8 shrink-0"
       />
       <div className="min-w-0">
-        <p className="font-medium wrap-anywhere">{helper.displayName}</p>
-        {helper.affiliation || helper.headline ? (
-          <p className="text-muted-foreground line-clamp-1 text-xs">
-            {[helper.affiliation, helper.headline].filter(Boolean).join(" · ")}
-          </p>
+        <p className="font-medium wrap-anywhere">
+          {helper.displayName}
+          {helper.affiliation ? (
+            <span className="text-muted-foreground font-normal"> · {helper.affiliation}</span>
+          ) : null}
+        </p>
+        {helper.headline ? (
+          <p className="text-muted-foreground line-clamp-1 text-xs">{helper.headline}</p>
         ) : null}
       </div>
     </div>
@@ -136,8 +158,15 @@ export default function HelpdeskPage() {
       cell: (helper) => <HelperPresence helper={helper} />,
       sortValue: (helper) => Number(helper.availableNow) * 2 + Number(helper.scheduledNow),
     },
+    {
+      id: "role",
+      header: t("helpDeskRole"),
+      align: "right",
+      cell: (helper) => <RolePill role={helper.visibleRoleName} />,
+      sortValue: (helper) => helper.kind,
+    },
   ];
-  const filtered = topics.length > 0 || now !== "all";
+  const filtered = roles.length > 0 || topics.length > 0 || now !== "all";
   return (
     <PageLayout>
       <HelpDeskSectionHeader />
@@ -171,6 +200,7 @@ export default function HelpdeskPage() {
           filteredEmpty={{
             active: filtered,
             onClear: () => {
+              setRoles([]);
               setTopics([]);
               setNow("all");
             },
@@ -180,7 +210,10 @@ export default function HelpdeskPage() {
               href={`/help-desk/helpers/${helper.userId}`}
               className="focus-visible:ring-ring block space-y-2 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-inset"
             >
-              {identity(helper)}
+              <div className="flex items-start justify-between gap-3">
+                {identity(helper)}
+                <RolePill role={helper.visibleRoleName} />
+              </div>
               <p className="text-sm">{helper.topics.map((topic) => topic.name).join(" · ")}</p>
               <p className="text-muted-foreground text-xs tabular-nums">
                 {nextAvailability(helper)}

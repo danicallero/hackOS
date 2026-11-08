@@ -167,11 +167,13 @@ export function SwitchRow({
   onChange,
   label,
   hint,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   hint?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -180,6 +182,7 @@ export function SwitchRow({
         id={id}
         className="mt-0.5"
         checked={checked}
+        disabled={disabled}
         onCheckedChange={onChange}
         aria-describedby={hint ? `${id}-hint` : undefined}
       />

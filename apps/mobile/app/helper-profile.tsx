@@ -1,22 +1,26 @@
-import { Redirect } from "expo-router";
+import { withNativeHeaderSheet } from "@/components/adaptive-frame";
 import { HelperProfileSection } from "@/components/help-desk/helper-profile-section";
 import { HelpPage } from "@/components/help-desk/primitives";
 import { ActionButton } from "@/components/native-ui";
+import NetworkingProfileScreen from "@/components/networking-profile-screen";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 
+const HelpDeskSettings = withNativeHeaderSheet(() => <NetworkingProfileScreen mode="helpDesk" />);
+
 /**
- * H61: an accepted mentor can prepare their help desk settings before they
- * have event access. With access, helper settings live in the public profile
- * editor (they extend that same profile), so this route opens it instead.
+ * H61: the help desk settings: the public profile editor (card, in-place
+ * editing, what others see) with the help desk sections below it. An accepted
+ * mentor without event access (not yet confirmed) has no public profile to
+ * edit yet, so they get the sections alone with Sign out.
  */
 export default function HelperProfileRoute() {
   const { t } = useLocale();
   const { me } = useMeContext();
-  if (me?.hasEventAccess) return <Redirect href="/networking-profile" />;
+  if (me?.hasEventAccess) return <HelpDeskSettings />;
   return (
-    <HelpPage title={t("helpMyProfile")} showBack={false}>
+    <HelpPage title={t("helpDesk")} showBack={false}>
       <HelperProfileSection />
       <ActionButton label={t("signOut")} onPress={() => void signOut()} />
     </HelpPage>

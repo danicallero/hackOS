@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -8,6 +9,7 @@ import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { confirmDestructive } from "@/lib/alert";
 import { apiFetch } from "@/lib/api";
+import type { DirectoryEntry } from "@/lib/directory";
 import {
   type AvailabilityInterval,
   availabilityDays,
@@ -17,6 +19,7 @@ import {
   validAvailability,
 } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
+import { useHelpResource } from "@/lib/use-help-resource";
 import { colors, type } from "@/theme";
 import { TopicField } from "./primitives";
 
@@ -31,6 +34,29 @@ interface Editing {
 }
 
 /**
+ * H61: the public profile editor's one Help desk row: On/Off is the published
+ * state, and it opens the help desk settings page (`app/helper-profile.tsx`).
+ * Nothing renders for people who cannot be helpers.
+ */
+export function HelperSettingsLink() {
+  const { t } = useLocale();
+  const router = useRouter();
+  const result = useHelpResource<MyHelperProfile>("/api/me/helper-profile");
+  const profile = result.data;
+  if (!profile?.eligible) return null;
+  return (
+    <Section>
+      <NavRow
+        icon="lifepreserver"
+        title={t("helpDesk")}
+        value={t(profile.published ? "helpOn" : "helpOff")}
+        onPress={() => router.push("/helper-profile")}
+      />
+    </Section>
+  );
+}
+
+/**
  * H61, H62: the help desk part of the public profile editor, shown to eligible
  * helpers below their profile card. It extends the same profile (the bio and
  * identity are the card's) with publication, knowledge and dated availability.
@@ -38,9 +64,13 @@ interface Editing {
  * edited one interval at a time in a sheet (Starts / Ends, as Calendar does)
  * and saved as the complete replacement the API expects.
  */
-export function HelperProfileSection() {
+export function HelperProfileSection({
+  onProfileChange,
+}: {
+  onProfileChange?: (profile: MyHelperProfile<DirectoryEntry>) => void;
+} = {}) {
   const { t, language } = useLocale();
-  const [profile, setProfile] = useState<MyHelperProfile | null>(null);
+  const [profile, setProfile] = useState<MyHelperProfile<DirectoryEntry> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -48,7 +78,7 @@ export function HelperProfileSection() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      setProfile(await apiFetch<MyHelperProfile>("/api/me/helper-profile"));
+      setProfile(await apiFetch<MyHelperProfile<DirectoryEntry>>("/api/me/helper-profile"));
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error(String(cause)));
     }
@@ -57,7 +87,7 @@ export function HelperProfileSection() {
     void load();
   }, [load]);
 
-  async function run(request: () => Promise<MyHelperProfile>): Promise<boolean> {
+  async function run(request: () => Promise<MyHelperProfile<DirectoryEntry>>): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     setError(null);
@@ -74,16 +104,33 @@ export function HelperProfileSection() {
 
   const saveProfile = (published: boolean, topics: HelpTopic[]) =>
     run(() =>
-      helpMutation<MyHelperProfile>(
+      helpMutation<MyHelperProfile<DirectoryEntry>>(
         "/api/me/helper-profile",
         { published, topicIds: topics.map((topic) => topic.id) },
         "PUT",
       ),
     );
 
+  const saveOwnChallengesOnly = (ownChallengesOnly: boolean) =>
+    run(() =>
+      helpMutation<MyHelperProfile<DirectoryEntry>>(
+        "/api/me/helper-profile",
+        {
+          published: profile?.published ?? false,
+          topicIds: (profile?.topics ?? []).map((topic) => topic.id),
+          ownChallengesOnly,
+        },
+        "PUT",
+      ),
+    );
+
   const saveAvailability = (intervals: AvailabilityInterval[]) =>
     run(() =>
-      helpMutation<MyHelperProfile>("/api/me/helper-profile/availability", { intervals }, "PUT"),
+      helpMutation<MyHelperProfile<DirectoryEntry>>(
+        "/api/me/helper-profile/availability",
+        { intervals },
+        "PUT",
+      ),
     );
 
   // TopicField reports the picker's selection from an effect, so the callback
@@ -98,6 +145,10 @@ export function HelperProfileSection() {
     // Removing the last topic also withdraws the profile: a published helper needs knowledge.
     void latest.current.saveProfile(current.published && topics.length > 0, topics);
   }, []);
+
+  useEffect(() => {
+    if (profile) onProfileChange?.(profile);
+  }, [profile, onProfileChange]);
 
   if (!profile?.eligible) {
     return error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null;
@@ -132,14 +183,23 @@ export function HelperProfileSection() {
   }
   function addInterval() {
     const last = intervals[intervals.length - 1];
+    const suggested = intervals.length === 0 ? profile?.suggestedInterval : null;
     const start = last ? Date.parse(last.endsAt) : Math.ceil(Date.now() / HOUR) * HOUR;
     setError(null);
-    setEditing({ index: null, startsAt: new Date(start), endsAt: new Date(start + 2 * HOUR) });
+    setEditing(
+      suggested
+        ? {
+            index: null,
+            startsAt: new Date(suggested.startsAt),
+            endsAt: new Date(suggested.endsAt),
+          }
+        : { index: null, startsAt: new Date(start), endsAt: new Date(start + 2 * HOUR) },
+    );
   }
 
   return (
     <>
-      <Section title={t("helpDesk")} footer={t("helpPublicationNote")}>
+      <Section footer={t("helpPublicationNote")}>
         <ToggleRow
           label={t("helpPublish")}
           value={profile.published}
@@ -151,10 +211,11 @@ export function HelperProfileSection() {
           selected={profile.topics}
           onChange={changeTopics}
           maximum={20}
+          allowAdd
           disabled={busy}
         />
       </Section>
-      <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
+      <Section title={t("helpPlanTitle")} footer={t("helpPlanNote")}>
         {availabilityDays(intervals, language).flatMap((day) =>
           day.ranges.map((range) => (
             <View key={`${day.key}-${range.index}`}>
@@ -183,6 +244,16 @@ export function HelperProfileSection() {
           onPress={addInterval}
         />
       </Section>
+      {profile.canLimitToChallenges ? (
+        <Section footer={profile.ownChallenges.map((challenge) => challenge.name).join(", ")}>
+          <ToggleRow
+            label={t("helpOnlyMyChallenges")}
+            value={profile.ownChallengesOnly}
+            disabled={busy}
+            onChange={(value) => void saveOwnChallengesOnly(value)}
+          />
+        </Section>
+      ) : null}
       {error && !editing ? <RequestFeedback error={error} message={error.message} /> : null}
       <SheetModal
         visible={editing !== null}

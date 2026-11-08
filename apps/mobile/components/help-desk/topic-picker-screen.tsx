@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { NavRow } from "@/components/project-ui";
@@ -7,18 +7,26 @@ import { CheckRow, SearchablePickerSheet } from "@/components/searchable-picker"
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { type HelpTopic, helpMutation } from "@/lib/help-desk";
-import { setTopicSelection, useTopicSelection } from "@/lib/help-topic-selection";
+import {
+  setOtherSelection,
+  setTopicSelection,
+  useTopicSelection,
+} from "@/lib/help-topic-selection";
 import { useLocale } from "@/lib/i18n";
 
 /**
  * H61/H64: the shared knowledge catalogue in the same searchable sheet as the
  * project challenge picker. Tapping a row toggles it in the draft the form
  * that opened the sheet is holding; a name that is not in the catalogue yet
- * can be added (it becomes a real topic everyone can pick).
+ * can be added (it becomes a real topic everyone can pick). On the request
+ * form, "Other" is its own group above the catalogue (like None in the
+ * challenge picker) and excludes the catalogue topics.
  */
 export function HelpTopicPickerScreen() {
   const { t } = useLocale();
-  const { selected, maximum } = useTopicSelection();
+  const { selected, maximum, other, allowOther, allowAdd } = useTopicSelection();
+  // What the form held when the sheet opened: Close restores it.
+  const opening = useRef({ selected, other });
   const [query, setQuery] = useState("");
   const [topics, setTopics] = useState<HelpTopic[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -67,7 +75,7 @@ export function HelpTopicPickerScreen() {
     );
   }
   async function add() {
-    if (!name || known || adding || full) return;
+    if (!allowAdd || !name || known || adding || full) return;
     setAdding(true);
     try {
       const { topic } = await helpMutation<{ topic: HelpTopic; created: boolean }>(
@@ -88,9 +96,13 @@ export function HelpTopicPickerScreen() {
   return (
     <SearchablePickerSheet
       title={t("helpTopics")}
-      searchPlaceholder={t("helpSearchTopics")}
+      searchPlaceholder={t(allowAdd ? "helpSearchAddTopics" : "helpSearchTopics")}
       query={query}
       onQuery={setQuery}
+      onDiscard={() => {
+        setTopicSelection(opening.current.selected);
+        setOtherSelection(opening.current.other);
+      }}
     >
       {error ? (
         <RequestFeedback
@@ -100,7 +112,19 @@ export function HelpTopicPickerScreen() {
         />
       ) : null}
       {topics === null && !error ? <RequestFeedback loading /> : null}
-      {rows.length > 0 || (name && !known) ? (
+      {allowOther && !name ? (
+        <Section>
+          <CheckRow
+            label={t("helpOther")}
+            selected={other}
+            onPress={() => {
+              void haptic("selection");
+              setOtherSelection(!other);
+            }}
+          />
+        </Section>
+      ) : null}
+      {rows.length > 0 || (allowAdd && name && !known) ? (
         <Section>
           {rows.map((topic, index) => {
             const chosen = selected.some((item) => item.id === topic.id);
@@ -116,7 +140,7 @@ export function HelpTopicPickerScreen() {
               </View>
             );
           })}
-          {name && !known ? (
+          {allowAdd && name && !known ? (
             <>
               {rows.length ? <Separator /> : null}
               <NavRow
@@ -129,7 +153,7 @@ export function HelpTopicPickerScreen() {
           ) : null}
         </Section>
       ) : null}
-      {topics !== null && rows.length === 0 && !name && !error ? (
+      {topics !== null && rows.length === 0 && (!name || !allowAdd) && !error ? (
         <EmptyState icon="magnifyingglass" title={t("helpNoTopics")} />
       ) : null}
     </SearchablePickerSheet>

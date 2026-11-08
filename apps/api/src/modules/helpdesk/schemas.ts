@@ -35,6 +35,7 @@ export const mergeBody = z.object({ targetId: id });
 export const helperProfileBody = z.strictObject({
   published: z.boolean(),
   topicIds: z.array(id).max(20),
+  ownChallengesOnly: z.boolean().optional(),
 });
 export type HelperProfileInput = z.infer<typeof helperProfileBody>;
 
@@ -59,12 +60,38 @@ export const createRequestBody = z
     topicIds: z.array(id).max(5),
     other: z.boolean(),
     projectId: id.nullable().optional(),
+    challengeId: id.nullable().optional(),
+    preferSponsor: z.boolean().default(false),
   })
   .refine((v) => v.other || v.topicIds.length > 0, {
     message: "Choose at least one topic or Other",
     path: ["topicIds"],
+  })
+  .refine((v) => !v.preferSponsor || v.challengeId != null, {
+    message: "Choose a challenge before preferring its sponsor",
+    path: ["challengeId"],
   });
 export type CreateRequestInput = z.infer<typeof createRequestBody>;
+
+/** H64: editing an open request replaces its content with the creation rules. */
+export const editRequestBody = z
+  .object({
+    description: multiline(500),
+    location: line(120),
+    topicIds: z.array(id).max(5),
+    other: z.boolean(),
+    challengeId: id.nullable().optional(),
+    preferSponsor: z.boolean().default(false),
+  })
+  .refine((v) => v.other || v.topicIds.length > 0, {
+    message: "Choose at least one topic or Other",
+    path: ["topicIds"],
+  })
+  .refine((v) => !v.preferSponsor || v.challengeId != null, {
+    message: "Choose a challenge before preferring its sponsor",
+    path: ["challengeId"],
+  });
+export type EditRequestInput = z.infer<typeof editRequestBody>;
 
 export const claimBody = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("on_my_way") }),

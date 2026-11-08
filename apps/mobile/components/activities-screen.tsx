@@ -36,7 +36,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
-import { screenTitleElement } from "@/lib/screen-header-options";
+import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
 import { useTabReselect } from "@/lib/tab-reselect";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
@@ -243,17 +243,7 @@ export function ActivitiesScreen({
     }
 
     navigation.setOptions({
-      // The compact title is supplied by the native left toolbar below. An
-      // empty navigation title prevents iOS 26 from inserting its centred
-      // fallback title when this screen has only one trailing action.
-      title: "",
-      headerShown: true,
-      headerLargeTitle: false,
-      headerTransparent: false,
-      headerStyle: { backgroundColor: colors.background },
-      headerShadowVisible: false,
-      headerTitleAlign: "left",
-      headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },
+      ...fixedScrollHeaderOptions(t("tabActivities")),
       headerSearchBarOptions: {
         placeholder: t("scannerActivitiesSearchPlaceholder"),
         autoCapitalize: "none",
@@ -270,10 +260,7 @@ export function ActivitiesScreen({
   // and the integrated search.
   const listOptions = useMemo(
     () => ({
-      headerShadowVisible: false,
-      headerStyle: { backgroundColor: colors.background },
-      headerTransparent: false,
-      title: "",
+      ...fixedScrollHeaderOptions(t("tabActivities")),
       unstable_headerLeftItems: () => [
         {
           type: "custom" as const,
@@ -317,10 +304,10 @@ export function ActivitiesScreen({
   useFocusEffect(
     useCallback(() => {
       if (!returningFromScanner.current) {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        trueTop.scrollToTop(false);
       }
       returningFromScanner.current = false;
-    }, []),
+    }, [trueTop.scrollToTop]),
   );
 
   const onActivityPress = useCallback(
@@ -354,33 +341,7 @@ export function ActivitiesScreen({
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {nativePane ? null : glassAvailable ? (
-        <>
-          {twoPane ? null : (
-            <Stack.Toolbar placement="left">
-              <Stack.Toolbar.View hidesSharedBackground>
-                <Text
-                  accessibilityRole="header"
-                  maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-                  style={{
-                    // A fixed colour, not the dynamic label: iOS 26 flips a bar
-                    // item's light/dark appearance with what scrolls behind it,
-                    // which turned the title white for a moment.
-                    color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                    fontSize: type.title.fontSize,
-                    fontWeight: "700",
-                  }}
-                >
-                  {t("tabActivities")}
-                </Text>
-              </Stack.Toolbar.View>
-            </Stack.Toolbar>
-          )}
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
-          </Stack.Toolbar>
-        </>
-      ) : (
+      {!nativePane && !glassAvailable ? (
         <LegacyScreenHeader
           actions={filterMenu}
           cancelLabel={t("cancel")}
@@ -398,7 +359,8 @@ export function ActivitiesScreen({
           title={twoPane ? "" : t("tabActivities")}
           topInset={legacyTopInset}
         />
-      )}
+      ) : null}
+
       <View style={{ flex: 1, flexDirection: "row" }}>
         <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? pane.listWidth : undefined }}>
           {twoPane && !nativePane ? (
@@ -429,6 +391,7 @@ export function ActivitiesScreen({
               contentContainerStyle={{
                 flexGrow: 1,
                 paddingVertical: 16,
+                paddingTop: 16,
                 ...(twoPane
                   ? { paddingHorizontal: screenGutter(pane.listWidth) }
                   : readable.content),
@@ -524,6 +487,33 @@ export function ActivitiesScreen({
           </View>
         ) : null}
       </View>
+      {nativePane ? null : glassAvailable ? (
+        <>
+          {twoPane ? null : (
+            <Stack.Toolbar placement="left">
+              <Stack.Toolbar.View hidesSharedBackground>
+                <Text
+                  accessibilityRole="header"
+                  maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                  style={{
+                    // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                    // item's light/dark appearance with what scrolls behind it,
+                    // which turned the title white for a moment.
+                    color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                    fontSize: type.title.fontSize,
+                    fontWeight: "700",
+                  }}
+                >
+                  {t("tabActivities")}
+                </Text>
+              </Stack.Toolbar.View>
+            </Stack.Toolbar>
+          )}
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
+          </Stack.Toolbar>
+        </>
+      ) : null}
     </View>
   );
 }

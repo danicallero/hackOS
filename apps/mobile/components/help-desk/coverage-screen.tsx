@@ -8,7 +8,8 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { has } from "@/lib/tabs";
 import { useHelpResource } from "@/lib/use-help-resource";
-import { colors } from "@/theme";
+import { colors, space } from "@/theme";
+import { CoverageDayStrip } from "./coverage-chart";
 import { HelpPage, HelpText } from "./primitives";
 
 /**
@@ -25,6 +26,7 @@ export function HelpCoverageScreen() {
     allowed ? "/api/helpdesk/coverage?stepMinutes=60" : null,
   );
   const report = result.data;
+  const peak = report ? Math.max(0, ...report.slots.map((slot) => slot.scheduled)) : 0;
   const days = report ? coverageDays(report.slots, (iso) => eventDayKey(iso)) : [];
   return (
     <HelpPage title={t("helpCoverage")} refresh={() => result.load()}>
@@ -79,6 +81,10 @@ export function HelpCoverageScreen() {
           ) : null}
           {days.map((day) => (
             <Section key={day.key} title={dayLabel(day.runs[0].startsAt, language)}>
+              <View style={{ padding: space.lg }}>
+                <CoverageDayStrip slots={report.slots} dayKey={day.key} max={peak} />
+              </View>
+              <Separator />
               {day.runs.map((run, index) => (
                 <View key={run.startsAt}>
                   {index > 0 ? <Separator inset={16} /> : null}

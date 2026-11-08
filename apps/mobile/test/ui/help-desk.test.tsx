@@ -18,15 +18,21 @@ const mockLoad = jest.fn();
 const mockSetData = jest.fn();
 let mockRequest: HelpRequest;
 let mockCaps = ["helpdesk:request"];
+let mockEdit: string | undefined;
+const mockBack = jest.fn();
 jest.mock("expo-router", () => ({
-  useRouter: () => ({ replace: mockReplace }),
-  useLocalSearchParams: () => ({ id: "41" }),
+  useRouter: () => ({ replace: mockReplace, back: mockBack, push: jest.fn() }),
+  useLocalSearchParams: () => ({ id: "41", edit: mockEdit }),
 }));
 jest.mock("expo-router/stack", () => ({ __esModule: true, default: {}, Stack: {} }));
 jest.mock("@/components/glass-view", () => ({ isRealLiquidGlassAvailable: () => false }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/components/pressable-feedback", () => ({ PressableFeedback: () => null }));
-jest.mock("@/lib/alert", () => ({ confirmDestructive: jest.fn() }));
+const mockAlert = jest.fn();
+jest.mock("@/lib/alert", () => ({
+  alert: (...args: unknown[]) => mockAlert(...args),
+  confirmDestructive: jest.fn(),
+}));
 jest.mock("@/components/app-menu", () => ({
   MenuView: ({
     actions,
@@ -66,11 +72,13 @@ jest.mock("@/components/searchable-picker", () => ({
   ),
 }));
 jest.mock("@/lib/use-help-resource", () => ({
-  useHelpResource: (path: string) => ({
+  useHelpResource: (path: string | null) => ({
     data:
-      path === "/api/helpdesk/projects"
-        ? { projects: [{ id: 9, name: "Team Nine" }] }
-        : mockRequest,
+      path === null
+        ? null
+        : path === "/api/helpdesk/projects"
+          ? { projects: [{ id: 9, name: "Team Nine" }] }
+          : mockRequest,
     loading: false,
     error: null,
     load: mockLoad,
@@ -225,7 +233,32 @@ jest.mock("@/components/help-desk/primitives", () => ({
     value: string;
     onChange: (value: string) => void;
   }) => <MockTextInput accessibilityLabel={label} value={value} onChangeText={onChange} />,
-  TopicField: () => null,
+  // The real field opens the picker sheet; here Other and the challenge are one tap each.
+  TopicField: ({
+    other,
+    onOtherChange,
+  }: {
+    other?: boolean;
+    onOtherChange?: (value: boolean) => void;
+  }) =>
+    onOtherChange ? (
+      <MockPressable
+        accessibilityRole="button"
+        accessibilityLabel="Other"
+        onPress={() => onOtherChange(!other)}
+      />
+    ) : null,
+  ChallengeField: ({
+    onChange,
+  }: {
+    onChange: (challenge: { id: number; name: string }) => void;
+  }) => (
+    <MockPressable
+      accessibilityRole="button"
+      accessibilityLabel="Challenge"
+      onPress={() => onChange({ id: 5, name: "Best API" })}
+    />
+  ),
 }));
 
 beforeEach(() => {
@@ -238,6 +271,10 @@ beforeEach(() => {
     location: "Desk 5",
     topics: [{ id: 1, name: "Frontend" }],
     other: false,
+    queuedAt: "2027-02-20T09:00:00Z",
+    queuePosition: 1,
+    challenge: null,
+    preferSponsor: false,
     project: { id: 9, name: "Team Nine" },
     requester: { userId: 7, displayName: "Ada" },
     routing: "matched",
@@ -248,6 +285,7 @@ beforeEach(() => {
     cancelledAt: null,
     viewer: {
       canCancel: false,
+      canEdit: false,
       canClaim: true,
       canRelease: false,
       canResolve: false,
@@ -284,7 +322,7 @@ it("refreshes after a competing claim and shows the localized conflict (H66)", a
   );
   await render(<HelpRequestScreen />);
   await fireEvent.press(screen.getByLabelText(mockhelpDeskEn.helpOnWay));
-  await screen.findByText("Another helper has already claimed this request.");
+  await screen.findByText("Someone else has already claimed this request.");
   expect(mockLoad).toHaveBeenCalled();
 });
 it("uses server-provided action permissions and displays team meeting instructions (H64)", async () => {
@@ -311,6 +349,8 @@ it("submits a team request using Other without inventing a topic (H64/H65)", asy
   await fireEvent.changeText(screen.getByLabelText("What do you need?"), "Need hardware help");
   await fireEvent.changeText(screen.getByLabelText("Where are you?"), "Desk 5");
   await fireEvent.press(screen.getByLabelText("Other"));
+  await fireEvent.press(screen.getByLabelText("Challenge"));
+  await fireEvent.press(screen.getByLabelText("Prefer a sponsor"));
   await fireEvent.press(screen.getByLabelText("Send request"));
   await waitFor(() =>
     expect(mockReplace).toHaveBeenCalledWith({
@@ -324,5 +364,36 @@ it("submits a team request using Other without inventing a topic (H64/H65)", asy
     topicIds: [],
     other: true,
     projectId: 9,
+    challengeId: 5,
+    preferSponsor: true,
   });
+});
+
+it("shows the challenge and sponsor preference on the request (H65)", async () => {
+  mockRequest = { ...mockRequest, challenge: { id: 5, name: "Best API" }, preferSponsor: true };
+  await render(<HelpRequestScreen />);
+  expect(screen.getByText("Challenge: Best API")).toBeTruthy();
+  expect(screen.getByText("Prefer a sponsor: Yes")).toBeTruthy();
+});
+
+it("edits an open request after confirming it moves to the end of the queue (H64)", async () => {
+  mockEdit = "41";
+  mockLoad.mockResolvedValue(undefined);
+  mockMutate.mockResolvedValue(mockRequest);
+  mockAlert.mockImplementation(
+    (_title: string, _message: string, buttons: { text: string; onPress?: () => void }[]) =>
+      buttons.find((button) => button.text === "Edit and move to end")?.onPress?.(),
+  );
+  await render(<NewHelpRequestScreen />);
+  await fireEvent.changeText(screen.getByLabelText("What do you need?"), "Build still fails");
+  await fireEvent.press(screen.getByLabelText("Save changes"));
+  await waitFor(() =>
+    expect(mockMutate).toHaveBeenCalledWith(
+      "/api/helpdesk/requests/41",
+      expect.objectContaining({ description: "Build still fails", challengeId: null }),
+      "PATCH",
+    ),
+  );
+  expect(mockBack).toHaveBeenCalled();
+  mockEdit = undefined;
 });

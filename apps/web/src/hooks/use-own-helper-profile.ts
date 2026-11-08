@@ -1,5 +1,5 @@
 "use client";
-import type { MyHelperProfile } from "@hackos/shared/help-desk";
+import type { MyHelperProfile } from "@/app/(app)/help-desk/model";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 

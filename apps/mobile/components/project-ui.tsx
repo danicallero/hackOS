@@ -61,13 +61,24 @@ export function NavRow({
       ) : null}
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ alignItems: "baseline", flexDirection: "row", gap: 12 }}>
+          {/* As Settings: the label keeps its line, a long value truncates beside it. */}
           <Text
-            style={[type.body, { color: destructive ? colors.destructive : colors.label, flex: 1 }]}
+            numberOfLines={value ? 1 : undefined}
+            style={[
+              type.body,
+              { color: destructive ? colors.destructive : colors.label },
+              value ? { flexShrink: 0 } : { flex: 1 },
+            ]}
           >
             {title}
           </Text>
           {value ? (
-            <Text style={[type.subhead, { color: colors.secondaryLabel }]}>{value}</Text>
+            <Text
+              numberOfLines={1}
+              style={[type.subhead, { color: colors.secondaryLabel, flex: 1, textAlign: "right" }]}
+            >
+              {value}
+            </Text>
           ) : null}
         </View>
         {lines.map((line) => (
@@ -225,7 +236,7 @@ export function CircleButton({
   filled = false,
   size = 44,
 }: {
-  icon: "xmark" | "checkmark" | "plus";
+  icon: "xmark" | "checkmark" | "plus" | "hand.raised" | "gearshape";
   label: string;
   onPress: () => void;
   disabled?: boolean;

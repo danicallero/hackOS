@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react-native";
 import { Text } from "react-native";
 
 const mockSetOptions = jest.fn();
-jest.mock("expo-router", () => ({ useFocusEffect: jest.fn(), useRouter: () => ({}) }));
+jest.mock("expo-router", () => ({
+  useFocusEffect: jest.fn(),
+  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useRouter: () => ({}),
+}));
 jest.mock("expo-router/stack", () => {
   const Stack = {
     Screen: (props: { options: unknown }) => {
@@ -20,6 +24,7 @@ jest.mock("@/components/pressable-feedback", () => ({ PressableFeedback: () => n
 jest.mock("@/components/project-ui", () => ({ CircleButton: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
 jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#000" }) }));
 jest.mock("@/lib/bar-title", () => ({ useBarTitleOptions: () => ({}) }));
 jest.mock("@/lib/help-topic-selection", () => ({
   seedTopicSelection: jest.fn(),

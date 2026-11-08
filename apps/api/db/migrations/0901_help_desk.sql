@@ -36,6 +36,7 @@ CREATE TABLE help_topics (
 CREATE TABLE helper_profiles (
   user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   published boolean NOT NULL DEFAULT false,
+  own_challenges_only boolean NOT NULL DEFAULT false,
   published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -74,9 +75,12 @@ CREATE TABLE help_requests (
   description text NOT NULL CHECK (char_length(description) <= 500),
   location text NOT NULL CHECK (char_length(location) <= 120),
   other boolean NOT NULL DEFAULT false,
+  challenge_id integer REFERENCES challenges(id) ON DELETE SET NULL,
+  prefer_sponsor boolean NOT NULL DEFAULT false,
+  queued_at timestamptz NOT NULL DEFAULT now(),
   status text NOT NULL DEFAULT 'open'
     CHECK (status IN ('open', 'claimed', 'resolved', 'cancelled')),
-  routing text NOT NULL CHECK (routing IN ('matched', 'fallback', 'none')),
+  routing text NOT NULL CHECK (routing IN ('matched', 'fallback', 'sponsor', 'none')),
   claimed_by integer REFERENCES users(id) ON DELETE SET NULL,
   claimed_at timestamptz,
   meeting_mode text CHECK (meeting_mode IN ('on_my_way', 'meet_at')),
@@ -114,6 +118,9 @@ CREATE TRIGGER h54_active_user_requester_id
 CREATE TRIGGER h54_active_user_claimed_by
   BEFORE INSERT OR UPDATE ON help_requests
   FOR EACH ROW EXECUTE FUNCTION h54_require_active_user_reference('claimed_by');
+
+CREATE INDEX help_requests_open_queue ON help_requests (queued_at, id) WHERE status = 'open';
+CREATE INDEX help_requests_challenge ON help_requests (challenge_id) WHERE challenge_id IS NOT NULL;
 
 CREATE TABLE help_request_topics (
   request_id integer NOT NULL REFERENCES help_requests(id) ON DELETE CASCADE,

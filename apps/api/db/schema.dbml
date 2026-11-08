@@ -691,6 +691,7 @@ Table help_request_topics {
 
 Table help_requests {
   cancelled_at "timestamp with time zone"
+  challenge_id integer
   claimed_at "timestamp with time zone"
   claimed_by integer
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -700,6 +701,8 @@ Table help_requests {
   meeting_location text
   meeting_mode text
   other boolean [not null, default: `false`]
+  prefer_sponsor boolean [not null, default: `false`]
+  queued_at "timestamp with time zone" [not null, default: `now()`]
   repo_id integer
   requester_id integer
   resolved_at "timestamp with time zone"
@@ -731,6 +734,7 @@ Table helper_availability {
 
 Table helper_profiles {
   created_at "timestamp with time zone" [not null, default: `now()`]
+  own_challenges_only boolean [not null, default: `false`]
   published boolean [not null, default: `false`]
   published_at "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -1664,6 +1668,7 @@ Ref: help_request_recipients.request_id > help_requests.id
 Ref: help_request_recipients.user_id > users.id
 Ref: help_request_topics.request_id > help_requests.id
 Ref: help_request_topics.topic_id > help_topics.id
+Ref: help_requests.challenge_id > challenges.id
 Ref: help_requests.claimed_by > users.id
 Ref: help_requests.repo_id > repos.id
 Ref: help_requests.requester_id > users.id
