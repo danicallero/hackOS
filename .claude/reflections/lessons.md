@@ -1096,8 +1096,8 @@ section title. The accepted composition is a transparent native stack header,
 `scrollEdgeEffects: { top: "soft" }`, with no opaque `headerStyle`. Put the
 visible `screenTitleElement` in a leading `Stack.Toolbar.View` with
 `hidesSharedBackground`; keep the native navigation title populated but
-transparent. On Help desk's crowded toolbar its hidden native title is 1 pt,
-so it does not compete with the visible title and the three controls. Keep
+transparent. The shared helper sizes its hidden native title to 1 pt,
+so it does not compete with the visible title and the controls. Keep
 that detail when reproducing this exact header; do not change the visible
 `SCREEN_TITLE` typography.
 
@@ -1118,6 +1118,20 @@ Do not substitute a permanent or scroll-toggled system material for the soft
 edge effect: it gives a frosted rectangle and changes the appearance at rest.
 Do not keep guessing at shared options while the user reports regressions;
 compare against the accepted screen and capture the actual result.
+
+For a pinned supplementary date row, use UIKit's
+`UIScrollEdgeElementContainerInteraction` rather than a separate frosted blur
+rectangle. Keep ordinary date labels in the list without an interaction. Only
+the header at its pinned boundary may extend the edge effect; registering
+future section headers blurs the whole area above them. Move the pinned native
+`UILabel` outside the source `UIScrollView` into a sibling overlay, otherwise
+the date itself is blurred. Restore it inline when the next section pushes it
+out. `modules/scroll-edge-container` implements this lifecycle, and needs a
+native rebuild, not just Metro refresh. Keep event-time formatting, secondary
+label colour, semibold weight and the user's chosen size. The jump-to-now
+position must account for the native header and the sticky date, not a fixed
+old 80 pt offset. Apple's reference is
+[custom edge containers](https://developer.apple.com/videos/play/wwdc2025/284/).
 
 ### Validation
 On the Liquid Glass simulator, capture each new page and sheet at rest (first

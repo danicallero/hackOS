@@ -1,4 +1,5 @@
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import { HeaderHeightContext } from "expo-router/react-navigation";
 import Stack from "expo-router/stack";
 import {
   createContext,
@@ -49,6 +50,7 @@ import {
   scheduleItemToTranslations,
 } from "@/components/schedule-form-modal";
 import { ScheduleSwipeRow } from "@/components/schedule-swipe-row";
+import { ScrollEdgeContainer } from "@/components/scroll-edge-container";
 import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { SystemBlur } from "@/components/system-blur";
@@ -78,6 +80,7 @@ import {
   updateScheduleItem,
   upsertScheduleItem,
 } from "@/lib/schedule";
+import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
 import { canManageSchedule, canReadFullSchedule } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
@@ -166,6 +169,7 @@ export default function ScheduleScreen() {
   const { me } = useMeContext();
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const nativeHeaderHeight = useContext(HeaderHeightContext) ?? 0;
   const listRef = useRef<SectionList<SectionRow, ScheduleSection>>(null);
   const scrolledOnLoad = useRef(false);
   const scrollRetries = useRef(0);
@@ -238,26 +242,12 @@ export default function ScheduleScreen() {
       return;
     }
     navigation.setOptions({
-      // Two panes: each column draws its own top band (below), so the bar paints nothing.
-      title: twoPane ? "" : t("tabSchedule"),
-      headerShown: true,
-      headerLargeTitle: false,
-      headerTransparent: twoPane,
+      ...fixedScrollHeaderOptions(twoPane ? "" : t("tabSchedule")),
       ...(twoPane
-        ? {
-            headerBlurEffect: "none" as const,
-            scrollEdgeEffects: {
-              bottom: "hidden" as const,
-              left: "hidden" as const,
-              right: "hidden" as const,
-              top: "hidden" as const,
-            },
-          }
+        ? ({
+            scrollEdgeEffects: { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" },
+          } as const)
         : {}),
-      headerShadowVisible: false,
-      headerStyle: { backgroundColor: twoPane ? colors.transparent : colors.background },
-      headerTitleAlign: "left",
-      headerTitleStyle: { color: colors.label, fontSize: type.title.fontSize, fontWeight: "700" },
       headerSearchBarOptions: {
         placeholder: t("scheduleSearchPlaceholder"),
         autoCapitalize: "none",
@@ -378,12 +368,12 @@ export default function ScheduleScreen() {
           // so the row at data index N lives at itemIndex N + 1. Passing the raw
           // data index lands one card above the active one.
           itemIndex: rowIndex + 1,
-          viewOffset: 80,
+          viewOffset: glassAvailable && !twoPane ? nativeHeaderHeight + 8 : 80,
           animated,
         });
       });
     },
-    [sections, todayKey],
+    [sections, todayKey, glassAvailable, twoPane, nativeHeaderHeight],
   );
 
   // scrollToLocation is a silent no-op whenever the target sits past the list's
@@ -540,32 +530,7 @@ export default function ScheduleScreen() {
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {glassAvailable ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button icon={bellIcon} accessibilityLabel={bellLabel} onPress={openAlerts}>
-            {unreadCount > 0 ? (
-              <Stack.Toolbar.Badge>
-                {unreadCount > 99 ? "99+" : String(unreadCount)}
-              </Stack.Toolbar.Badge>
-            ) : null}
-          </Stack.Toolbar.Button>
-          <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
-          {canManage ? (
-            <Stack.Toolbar.Button
-              icon="plus"
-              accessibilityLabel={t("scheduleAdd")}
-              onPress={() => setFormTarget("create")}
-            />
-          ) : null}
-          {canManage && twoPane && selectedId !== null ? (
-            <Stack.Toolbar.Button
-              icon="pencil"
-              accessibilityLabel={t("scheduleEdit")}
-              onPress={() => setEditSignal((count) => count + 1)}
-            />
-          ) : null}
-        </Stack.Toolbar>
-      ) : (
+      {!glassAvailable ? (
         <LegacyScreenHeader
           actions={
             <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
@@ -605,7 +570,7 @@ export default function ScheduleScreen() {
           title={twoPane ? "" : t("tabSchedule")}
           topInset={legacyTopInset}
         />
-      )}
+      ) : null}
       {canManage && !glassAvailable ? (
         <GlassView
           colorScheme="auto"
@@ -665,7 +630,13 @@ export default function ScheduleScreen() {
                 ref={listRef}
                 sections={sections}
                 keyExtractor={(row) => (row.kind === "now" ? row.id : String(row.id))}
-                contentInsetAdjustmentBehavior={twoPane ? "never" : "automatic"}
+                contentInsetAdjustmentBehavior={twoPane || glassAvailable ? "never" : "automatic"}
+                contentInset={
+                  glassAvailable && !twoPane ? { top: nativeHeaderHeight, bottom: 0 } : undefined
+                }
+                contentOffset={
+                  glassAvailable && !twoPane ? { x: 0, y: -nativeHeaderHeight } : undefined
+                }
                 contentContainerStyle={{
                   flexGrow: 1,
                   // Exactly clears the FAB (its own offset + height + a small gap) —
@@ -707,9 +678,12 @@ export default function ScheduleScreen() {
                   )
                 }
                 renderSectionHeader={({ section }) => (
-                  <View
+                  <ScrollEdgeContainer
+                    title={section.title}
+                    horizontalInset={listRowPadding}
                     style={{
-                      backgroundColor: colors.background,
+                      backgroundColor:
+                        glassAvailable && !twoPane ? colors.transparent : colors.background,
                       height: SECTION_HEADER_HEIGHT,
                       justifyContent: "center",
                     }}
@@ -722,12 +696,11 @@ export default function ScheduleScreen() {
                         fontSize: type.footnote.fontSize,
                         fontWeight: "600",
                         paddingHorizontal: listRowPadding,
-                        textTransform: "uppercase",
                       }}
                     >
                       {section.title}
                     </Text>
-                  </View>
+                  </ScrollEdgeContainer>
                 )}
                 renderItem={({ item, index, section }) =>
                   item.kind === "now" ? (
@@ -846,6 +819,39 @@ export default function ScheduleScreen() {
           ) : null}
         </View>
       </ScheduleSelectionContext.Provider>
+      {glassAvailable && !twoPane ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            {screenTitleElement(t("tabSchedule"))}
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
+      {glassAvailable ? (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button icon={bellIcon} accessibilityLabel={bellLabel} onPress={openAlerts}>
+            {unreadCount > 0 ? (
+              <Stack.Toolbar.Badge>
+                {unreadCount > 99 ? "99+" : String(unreadCount)}
+              </Stack.Toolbar.Badge>
+            ) : null}
+          </Stack.Toolbar.Button>
+          <Stack.Toolbar.View hidesSharedBackground>{scheduleFilter}</Stack.Toolbar.View>
+          {canManage ? (
+            <Stack.Toolbar.Button
+              icon="plus"
+              accessibilityLabel={t("scheduleAdd")}
+              onPress={() => setFormTarget("create")}
+            />
+          ) : null}
+          {canManage && twoPane && selectedId !== null ? (
+            <Stack.Toolbar.Button
+              icon="pencil"
+              accessibilityLabel={t("scheduleEdit")}
+              onPress={() => setEditSignal((count) => count + 1)}
+            />
+          ) : null}
+        </Stack.Toolbar>
+      ) : null}
 
       {formTarget === "create" ? (
         <ScheduleFormModal

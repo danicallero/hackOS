@@ -3,7 +3,7 @@ import { Text } from "react-native";
 import { type PaneBarItem, withBarGaps } from "@/lib/pane-header-items";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
-import { SCREEN_TITLE } from "@/theme/screen-title";
+import { NATIVE_HEADER_MEASUREMENT_FONT_SIZE, SCREEN_TITLE } from "@/theme/screen-title";
 
 /**
  * The top-level title of a screen's native bar (Scanner, Activities, Schedule, Contacts): plain
@@ -47,7 +47,11 @@ export function fixedScrollHeaderOptions(title: string, leadingTitle = true) {
     headerShadowVisible: false,
     headerLargeTitleShadowVisible: false,
     headerTitleAlign: "left",
-    headerTitleStyle: { color: leadingTitle ? "transparent" : colors.label, ...SCREEN_TITLE },
+    headerTitleStyle: {
+      ...SCREEN_TITLE,
+      color: leadingTitle ? "transparent" : colors.label,
+      fontSize: leadingTitle ? NATIVE_HEADER_MEASUREMENT_FONT_SIZE : SCREEN_TITLE.fontSize,
+    },
     scrollEdgeEffects: { top: "soft" },
   } as const;
 }

@@ -489,11 +489,13 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 
 **Bar colour.** The navigation theme paints the same page background behind
 floating bars and sidebars, avoiding a visible seam with the navigation library's
-default canvas on iPad and Duo. Help desk and Activities reuse `fixedScrollHeaderOptions`
+default canvas on iPad and Duo. Help desk, Activities, Contacts, My projects and Schedule reuse `fixedScrollHeaderOptions`
 (`lib/screen-header-options.ts`) with a fixed `SCREEN_TITLE` leading title and native soft
 scroll-edge blur: clear at rest, blurred under scrolling content, without a permanent material
-background. Their list stays first in the native descendant chain. My Projects and Contacts paint their native header with the page colour
-(`headerStyle.backgroundColor`), like Schedule: the system blur materials read whiter than the page. The
+background. Their list stays first in the native descendant chain. The hidden native navigation title uses a measurement-only font size so it does not
+compete for toolbar width; the visible leading title keeps `SCREEN_TITLE`. Contacts
+and My projects use automatic list insets, with their scroll view before toolbar
+portals in a full-height page container. The
 two-pane Schedule keeps per-column title bands, with `components/system-blur.tsx` (`expo-blur`, a native
 dependency) behind the detail title.
 
@@ -700,6 +702,21 @@ Native UI fixtures exercise the screen contract and autosave concurrency;
 they are not device screenshots or proof of native toolbar behavior.
 
 
+- **Pinned schedule dates (H45).** On a single-pane iOS Liquid Glass screen,
+  `SectionList` uses an explicit top content inset equal to the native header
+  height, so its sticky section headers stop below the bar. The native local
+  module `scroll-edge-container` renders the date as a UIKit `UILabel`.
+  While it is still in the list it is plain text. Only at the pinned position
+  does the module move that label into a sibling overlay outside the scroll
+  content and attach `UIScrollEdgeElementContainerInteraction` to extend the
+  existing soft edge behind it. Putting the protected label inside the source
+  scroll content blurs the date itself; registering every inline date extends
+  the effect down the entire page. KVO follows native scroll offsets and
+  releases the overlay when the next sticky header pushes it out. No second
+  frosted material is painted. Android and older builds retain the ordinary
+  section header. Rebuild the native client after changing this module.
+  Apple documents custom edge containers in
+  [Build a UIKit app with the new design](https://developer.apple.com/videos/play/wwdc2025/284/).
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
   `others/account.tsx`, and `components/wallet-screen.tsx` (an overlay of
   Account, or `others/wallet` for deep links) — the five participant screens. API-backed screens expose

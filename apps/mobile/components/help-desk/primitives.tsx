@@ -28,7 +28,6 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
 import { colors, space, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
-import { NATIVE_HEADER_MEASUREMENT_FONT_SIZE } from "@/theme/screen-title";
 
 type MenuIcon = ComponentProps<typeof Stack.Toolbar.MenuAction>["icon"] & string;
 
@@ -103,9 +102,6 @@ export function HelpPage({
     if (!fixedTitle || !glass) return;
     navigation.setOptions({
       ...fixedScrollHeaderOptions(title, glass),
-      // The visible title is the leading toolbar view. Keep the native title
-      // narrow so UIKit retains its scroll-edge region with three actions.
-      headerTitleStyle: { color: "transparent", fontSize: NATIVE_HEADER_MEASUREMENT_FONT_SIZE },
       headerBackVisible: false,
     });
   }, [navigation, fixedTitle, title, glass]);

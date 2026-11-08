@@ -571,7 +571,12 @@ describe("People", () => {
     await screen.findByText("José P.");
     // The title is a leading bar item on the bar row, not a large title below it.
     expect(mockSetOptions).toHaveBeenLastCalledWith(
-      expect.objectContaining({ headerLargeTitle: false, title: "" }),
+      expect.objectContaining({
+        headerLargeTitle: false,
+        title: "tabDiary",
+        headerTransparent: true,
+        scrollEdgeEffects: { top: "soft" },
+      }),
     );
     expect(screen.getByRole("header", { name: "tabDiary" })).toBeTruthy();
     expect(screen.queryByLabelText("scheduleSearch")).toBeNull();

@@ -33,7 +33,7 @@ import {
   settleProjectDrafts,
 } from "@/lib/projects";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
-import { useSideRegion } from "@/lib/side-region";
+import { fixedScrollHeaderOptions } from "@/lib/screen-header-options";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useCachedApi } from "@/lib/use-cached-api";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -111,7 +111,6 @@ export function MyProjectsScreen() {
   );
   const glassAvailable = isRealLiquidGlassAvailable();
   const barTitle = useBarTitleOptions(t("projects"));
-  const sideRegion = useSideRegion();
   const openInvites = useCallback(() => router.push("/queue/invites"), [router]);
   const openGallery = useCallback(() => router.push("/projects/gallery"), [router]);
   const [queueOpen, setQueueOpen] = useState(false);
@@ -129,18 +128,9 @@ export function MyProjectsScreen() {
       return;
     }
     navigation.setOptions({
-      // Beside a side column the title is a left toolbar item on the bar row, exactly like
-      // Contacts, so the bar blurs the same way; elsewhere the native large title stays.
-      ...(queueOpen || glassAvailable ? { title: "", headerLargeTitle: false } : barTitle),
+      ...(glassAvailable ? fixedScrollHeaderOptions(queueOpen ? "" : t("projects")) : barTitle),
       headerShown: true,
       gestureEnabled: !queueOpen,
-      // Beside a side column the bar is just the page colour; elsewhere the screen keeps the
-      // system bar it always had.
-      ...(sideRegion.edge
-        ? { headerTransparent: true, headerStyle: { backgroundColor: "transparent" } }
-        : { headerTransparent: false, headerStyle: { backgroundColor: colors.background } }),
-      headerLargeTitleShadowVisible: false,
-      headerShadowVisible: false,
       // iOS 26 gets native glass toolbar circles below; elsewhere the same
       // actions are 44 pt circles in the header.
       headerRight: glassAvailable
@@ -167,7 +157,6 @@ export function MyProjectsScreen() {
     openNew,
     openQueue,
     barTitle,
-    sideRegion.edge,
     queueOpen,
   ]);
 
@@ -186,7 +175,7 @@ export function MyProjectsScreen() {
       });
   }
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {androidHeader ? (
         <LegacyScreenHeader
           actions={
@@ -231,33 +220,6 @@ export function MyProjectsScreen() {
           title={queueOpen ? "" : t("projects")}
           topInset={androidTopInset}
         />
-      ) : null}
-      {glassAvailable ? (
-        <Stack.Toolbar placement="left">
-          <Stack.Toolbar.View hidesSharedBackground>
-            <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
-              {queueOpen ? "" : t("projects")}
-            </Text>
-          </Stack.Toolbar.View>
-        </Stack.Toolbar>
-      ) : null}
-      {glassAvailable ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button
-            separateBackground
-            icon={queueOpen ? "xmark" : "list.number"}
-            accessibilityLabel={queueOpen ? t("close") : t("projectQueue")}
-            onPress={openQueue}
-          />
-          {canCreate ? (
-            <Stack.Toolbar.Button
-              separateBackground
-              icon="plus"
-              accessibilityLabel={t("createProject")}
-              onPress={openNew}
-            />
-          ) : null}
-        </Stack.Toolbar>
       ) : null}
       <ScrollView
         ref={scrollRef}
@@ -332,6 +294,34 @@ export function MyProjectsScreen() {
           </Section>
         ) : null}
       </ScrollView>
+      {glassAvailable ? (
+        <Stack.Toolbar placement="left">
+          <Stack.Toolbar.View hidesSharedBackground>
+            <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
+              {queueOpen ? "" : t("projects")}
+            </Text>
+          </Stack.Toolbar.View>
+        </Stack.Toolbar>
+      ) : null}
+      {glassAvailable ? (
+        <Stack.Toolbar placement="right">
+          <Stack.Toolbar.Button
+            separateBackground
+            icon={queueOpen ? "xmark" : "list.number"}
+            accessibilityLabel={queueOpen ? t("close") : t("projectQueue")}
+            onPress={openQueue}
+          />
+          {canCreate ? (
+            <Stack.Toolbar.Button
+              separateBackground
+              icon="plus"
+              accessibilityLabel={t("createProject")}
+              onPress={openNew}
+            />
+          ) : null}
+        </Stack.Toolbar>
+      ) : null}
+
       {queueOpen ? (
         <Animated.View
           entering={reduceMotion ? undefined : SlideInRight.duration(220)}
@@ -348,7 +338,7 @@ export function MyProjectsScreen() {
           <MyQueueScreen embedded />
         </Animated.View>
       ) : null}
-    </>
+    </View>
   );
 }
 
