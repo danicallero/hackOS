@@ -229,6 +229,17 @@ function OverflowAccountAvatar({
  * the Liquid Glass/opaque geometry; this adapter owns hackOS capabilities,
  * copy, icons and the Others pseudo-tab menu.
  */
+/**
+ * H61-H67: pressing the selected Help desk tab pops its stack to the root in
+ * one step, so repeated taps settle there instead of stepping between pages.
+ */
+export function reselectHelpDesk(
+  router: { canDismiss: () => boolean; dismissAll: () => void },
+  wasSelected: boolean,
+): void {
+  if (wasSelected && router.canDismiss()) router.dismissAll();
+}
+
 export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const systemColorScheme = useColorScheme();
@@ -316,8 +327,10 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
           if (tab.name === TAB_DEFINITIONS.account.triggerName) {
             router.navigate(OVERFLOW_TAB_ROUTE.account);
           } else if (tab.name === TAB_DEFINITIONS["help-desk"].triggerName) {
-            // H61-H67: like Account, the tab owns pushed pages; pressing it returns to the request list.
-            router.navigate(TAB_DEFINITIONS["help-desk"].href);
+            // H61-H67: the tab owns pushed pages. Selecting it is handled by
+            // onTabSelect; pressing it again pops straight to its root, so
+            // repeated taps settle there instead of stepping between pages.
+            reselectHelpDesk(router, wasSelected);
           } else if (wasSelected) emitTabReselect(tab.name);
         }}
         onTabSelect={(index) => {
