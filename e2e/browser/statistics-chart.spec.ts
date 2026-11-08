@@ -117,3 +117,72 @@ test("statistics legends show counts and follow the active theme", async ({ page
   await expect(legend).toHaveCSS("font-weight", "700");
   await page.screenshot({ path: testInfo.outputPath("statistics-chart-hover.png") });
 });
+
+// H27: cumulative curves retain zero-growth days and expose the daily delta.
+test("application time series show accumulated totals and daily increments", async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/me/public-profile") return route.fallback();
+    const panels = ["applications-over-time", "confirmations-over-time"];
+    const json =
+      path === "/api/me"
+        ? { ...shellUser, capabilities: [CAPABILITIES.LOGISTICS_STATS] }
+        : path === "/api/statistics/scopes"
+          ? {
+              scopes: [
+                {
+                  key: "application:1",
+                  kind: "application",
+                  id: 1,
+                  name: "Participants",
+                  panelKeys: panels,
+                },
+              ],
+            }
+          : path === "/api/statistics/query"
+            ? {
+                panel_keys: panels,
+                time_series: {
+                  submissions_by_day: [
+                    { bucket: "2026-11-01", n: 100 },
+                    { bucket: "2026-11-03", n: 45 },
+                    { bucket: "2026-11-04", n: 25 },
+                  ],
+                  confirmations_by_day: [
+                    { bucket: "2026-11-01", n: 50 },
+                    { bucket: "2026-11-03", n: 20 },
+                  ],
+                },
+              }
+            : {};
+    await route.fulfill({ json });
+  });
+  await page.goto("/logistics/stats?tab=before");
+  const chart = page.getByRole("img", { name: "Applications over time", exact: true });
+  await expect(chart.locator("svg")).toBeVisible();
+  const details = chart.locator("../..").locator("details");
+  await details.locator("summary").click();
+  await expect(details.getByRole("list")).toContainText("2 Nov: 100+0");
+  await expect(details.getByRole("list")).toContainText("4 Nov: 170+25");
+  await details.locator("summary").click();
+  const box = await chart.boundingBox();
+  if (!box) throw new Error("Missing chart bounds");
+  await page.mouse.move(box.x + box.width * 0.66, box.y + 100);
+  await expect(
+    chart
+      .locator("div")
+      .filter({ has: page.locator("strong", { hasText: "145" }) })
+      .last(),
+  ).toBeVisible();
+  await expect(chart.locator("small", { hasText: "+45" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("cumulative-desktop.png") });
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await page.screenshot({ path: testInfo.outputPath("cumulative-dark.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.mouse.move(0, 0);
+  await page.screenshot({ path: testInfo.outputPath("cumulative-mobile.png") });
+});
