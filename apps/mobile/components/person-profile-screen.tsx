@@ -10,11 +10,14 @@ import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
+import { helperNowLabel } from "@/components/help-desk/rows";
 import {
   AndroidStatusBarScrim,
   EmptyState,
+  InfoRow,
   LegacyHeaderIconButton,
   Section,
+  Separator,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -31,6 +34,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
+import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
@@ -40,7 +44,7 @@ import { useParticipantLayout } from "@/theme/layout-participant";
 
 type State =
   | { status: "loading" }
-  | { status: "ready"; person: DirectoryEntry }
+  | { status: "ready"; person: DirectoryEntry; helper: HelperDetail<DirectoryEntry> | null }
   | { status: "missing" }
   | { status: "error"; error: Error };
 
@@ -51,12 +55,12 @@ type State =
  * so both show the same unavailable state. The diary entry carries the
  * reader's favourite and note.
  */
-export function PersonProfileScreen() {
+export function PersonProfileScreen({ source = "diary" }: { source?: "diary" | "helpDesk" } = {}) {
   const avatarSize = isPadIdiom() ? 144 : 112;
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const router = useRouter();
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const readable = useParticipantLayout("list");
   const insets = useSafeAreaInsets();
   // iOS shows the transparent native header, whose height the automatic
@@ -85,8 +89,12 @@ export function PersonProfileScreen() {
       setState({ status: "missing" });
       return;
     }
+    // H63: a published helper opens the same profile, read through the help
+    // desk (publication is the consent), plus their schedule and presence.
     const [person, diary] = await Promise.allSettled([
-      apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
+      source === "helpDesk"
+        ? apiFetch<HelperDetail<DirectoryEntry>>(`/api/helpdesk/helpers/${userId}`)
+        : apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
       apiFetch<{ items: DiaryEntry[] }>("/api/me/diary"),
     ]);
     if (request !== requestId.current) return;
@@ -97,8 +105,14 @@ export function PersonProfileScreen() {
         ) ?? null,
       );
     }
-    if (person.status === "fulfilled") setState({ status: "ready", person: person.value });
-    else if (person.reason instanceof ApiError && person.reason.status === 404) {
+    if (person.status === "fulfilled") {
+      const value = person.value;
+      setState(
+        "profile" in value
+          ? { status: "ready", person: value.profile, helper: value }
+          : { status: "ready", person: value, helper: null },
+      );
+    } else if (person.reason instanceof ApiError && person.reason.status === 404) {
       setState({ status: "missing" });
     } else {
       setState({
@@ -106,7 +120,7 @@ export function PersonProfileScreen() {
         error: person.reason instanceof Error ? person.reason : new Error(String(person.reason)),
       });
     }
-  }, [userId]);
+  }, [userId, source]);
 
   useEffect(() => {
     void load();
@@ -170,6 +184,7 @@ export function PersonProfileScreen() {
 
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
+  const helper = state.status === "ready" ? state.helper : null;
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
@@ -304,6 +319,21 @@ export function PersonProfileScreen() {
                 ) : null
               }
             />
+
+            {helper ? (
+              <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
+                <InfoRow label={t("helpNow")} value={helperNowLabel(helper, t)} />
+                {availabilityDays(helper.availability, language).map((day) => (
+                  <View key={day.key}>
+                    <Separator inset={16} />
+                    <InfoRow
+                      label={day.label}
+                      value={day.ranges.map((range) => range.label).join(", ")}
+                    />
+                  </View>
+                ))}
+              </Section>
+            ) : null}
 
             {entry ? (
               <Section>

@@ -19,6 +19,8 @@ export function NavRow({
   onPress,
   accessibilityLabel,
   chevron = true,
+  disabled = false,
+  destructive = false,
 }: {
   title: string;
   lines?: string[];
@@ -27,28 +29,43 @@ export function NavRow({
   onPress: () => void;
   accessibilityLabel?: string;
   chevron?: boolean;
+  disabled?: boolean;
+  /** A destructive command row (Delete Event in Calendar): red title, no chevron. */
+  destructive?: boolean;
 }) {
   return (
     <PressableFeedback
       feedback="row"
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? [title, ...lines, value].filter(Boolean).join(", ")}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={{
         alignItems: "center",
         flexDirection: "row",
         gap: space.md,
         minHeight: 56,
+        opacity: disabled ? 0.5 : 1,
         paddingHorizontal: space.lg,
         paddingVertical: space.row,
       }}
     >
       {icon ? (
-        <SymbolView name={icon} tintColor={colors.accent} size={22} accessible={false} />
+        <SymbolView
+          name={icon}
+          tintColor={destructive ? colors.destructive : colors.accent}
+          size={22}
+          accessible={false}
+        />
       ) : null}
       <View style={{ flex: 1, gap: 2 }}>
         <View style={{ alignItems: "baseline", flexDirection: "row", gap: 12 }}>
-          <Text style={[type.body, { color: colors.label, flex: 1 }]}>{title}</Text>
+          <Text
+            style={[type.body, { color: destructive ? colors.destructive : colors.label, flex: 1 }]}
+          >
+            {title}
+          </Text>
           {value ? (
             <Text style={[type.subhead, { color: colors.secondaryLabel }]}>{value}</Text>
           ) : null}
@@ -59,7 +76,7 @@ export function NavRow({
           </Text>
         ))}
       </View>
-      {chevron ? (
+      {chevron && !destructive ? (
         <SymbolView
           name="chevron.right"
           tintColor={colors.tertiaryLabel}

@@ -8,14 +8,15 @@ import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
-import { HelperProfileLink } from "../../help-desk/profile/profile-link";
 import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
+import { HelperSection } from "./helper-section";
 import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
 import { PersonalDetails } from "./personal-details";
@@ -43,7 +44,8 @@ export default function ProfileSettingsPage() {
  */
 function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boolean }) {
   const { t } = useLocale();
-  const tabs = visibleProfileTabs(me, isPureApplicant);
+  const helper = useOwnHelperProfile();
+  const tabs = visibleProfileTabs(me, isPureApplicant, helper.data?.eligible === true);
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
@@ -55,10 +57,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   const [dirty, setDirty] = useState<Record<EditableSection, boolean>>({
     personal: false,
     public: false,
+    helpDesk: false,
     meals: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
+  const onHelperDirty = useDirtySetter(setDirty, "helpDesk");
   const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
@@ -67,6 +71,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
         return <PublicProfileCard onDirtyChange={onPublicDirty} />;
+      case "helpDesk":
+        return <HelperSection onDirtyChange={onHelperDirty} />;
       case "meals":
         return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
       case "passes":
@@ -90,7 +96,7 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
 
   return (
     <PageLayout width="reading">
-      <PageHeader title={t("myProfile")} secondaryActions={<HelperProfileLink />} />
+      <PageHeader title={t("myProfile")} />
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar width="content">
           {tabs.map((item) => (

@@ -17,6 +17,7 @@ import {
   uploadOperation,
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
+import { mayOpenHelper } from "../helpdesk/helpers.js";
 import {
   moderationBody,
   moderationParams,
@@ -27,6 +28,7 @@ import {
 import {
   getDirectoryCv,
   getDirectoryEntry,
+  getHelperCv,
   getMyCv,
   getMyPublicProfile,
   getStaffPublicProfile,
@@ -290,11 +292,15 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Only for attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
+          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Readable by attendees who saved this person (the access check runs on every request and the reader must also have event access, #935), and by help desk readers (`helpdesk:request`, `helpdesk:offer` or `helpdesk:coverage`) when the person has a published helper profile and shares their CV, without a badge scan (H61, H63), and by the requester and team members of a request that helper claimed (H64, H66).",
       },
     },
     async (req, reply) => {
-      const cv = await getDirectoryCv(req.userId as number, req.params.userId);
+      const { userId } = req.params;
+      // H61, H63: help desk readers may open a published helper's shared CV.
+      const cv = (await mayOpenHelper(req, pool, userId))
+        ? await getHelperCv(userId)
+        : await getDirectoryCv(req.userId as number, userId);
       return sendProfileObject(reply, cv.key, {
         contentType: "application/pdf",
         cacheControl: PDF_CACHE,

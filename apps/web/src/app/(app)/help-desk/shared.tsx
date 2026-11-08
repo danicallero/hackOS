@@ -9,9 +9,8 @@ import { useLiveQuery } from "@/hooks/use-live-query";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatEventDate } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import type { AvailabilityInterval, HelperCard, HelpTopic } from "./model";
+import type { HelperCard, HelpTopic } from "./model";
 
 export function useHelpdesk<T>(key: readonly (string | number)[], path: string, enabled = true) {
   const resource = useLiveQuery(
@@ -115,10 +114,18 @@ export function TopicsPicker({
     </div>
   );
 }
-export function HelperPresence({ helper }: { helper: HelperCard }) {
+/**
+ * H62/H63: stated schedule and venue presence are separate facts; each keeps
+ * its own labelled marker so "scheduled" never reads as "inside".
+ */
+export function HelperPresence({
+  helper,
+}: {
+  helper: Pick<HelperCard, "scheduledNow" | "present">;
+}) {
   const { t } = useLocale();
   return (
-    <div className="flex flex-wrap gap-x-5 gap-y-2">
+    <div className="flex flex-wrap gap-x-5 gap-y-1">
       <StatusBadge tone={helper.scheduledNow ? "info" : "neutral"}>
         {t(helper.scheduledNow ? "helpDeskScheduledNow" : "helpDeskNotScheduled")}
       </StatusBadge>
@@ -126,25 +133,5 @@ export function HelperPresence({ helper }: { helper: HelperCard }) {
         {t(helper.present ? "helpDeskPresent" : "helpDeskOutside")}
       </StatusBadge>
     </div>
-  );
-}
-export function Availability({ intervals }: { intervals: AvailabilityInterval[] }) {
-  const { t, language } = useLocale();
-  return intervals.length ? (
-    <ul className="space-y-2 text-sm tabular-nums">
-      {intervals.map((interval) => (
-        <li key={`${interval.startsAt}/${interval.endsAt}`}>
-          <time dateTime={interval.startsAt}>
-            {formatEventDate(interval.startsAt, language, "dateTime")}
-          </time>{" "}
-          –{" "}
-          <time dateTime={interval.endsAt}>
-            {formatEventDate(interval.endsAt, language, "dateTime")}
-          </time>
-        </li>
-      ))}
-    </ul>
-  ) : (
-    <p className="text-muted-foreground text-sm">{t("helpDeskNoSchedule")}</p>
   );
 }

@@ -10,15 +10,18 @@ import {
   requireCapability,
   userHasCapability,
 } from "../../lib/capabilities.js";
-import { ForbiddenError } from "../../lib/errors.js";
+import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { coverageReport } from "./coverage.js";
 import {
   getHelper,
   getMyHelperProfile,
+  HELPDESK_BROWSE,
   isEligibleHelper,
   listHelpers,
+  mayBrowseHelpers,
+  mayOpenHelper,
   replaceMyAvailability,
   updateMyHelperProfile,
 } from "./helpers.js";
@@ -49,11 +52,7 @@ import {
 } from "./schemas.js";
 import { createTopic, mergeTopic, renameTopic, searchTopics } from "./topics.js";
 
-const BROWSE = [
-  CAPABILITIES.HELPDESK_REQUEST,
-  CAPABILITIES.HELPDESK_OFFER,
-  CAPABILITIES.HELPDESK_COVERAGE,
-] as const;
+const BROWSE = HELPDESK_BROWSE;
 
 const cap = (capability: (typeof CAPABILITIES)[keyof typeof CAPABILITIES]) => ({
   routeAccessPolicy: { kind: "capability" as const, capability },
@@ -75,15 +74,9 @@ const requestParty = {
   },
 };
 
-async function hasAny(req: FastifyRequest, caps: readonly (typeof BROWSE)[number][]) {
-  const context = getRequestAuthorizationContext(req);
-  for (const c of caps) if (await userHasCapability(context, c)) return true;
-  return false;
-}
-
 async function requireCatalogueAccess(req: FastifyRequest): Promise<void> {
   await assertActiveAuthenticatedUser(req);
-  if (await hasAny(req, BROWSE)) return;
+  if (await mayBrowseHelpers(req)) return;
   if (await isEligibleHelper(pool, req.userId as number)) return;
   throw new ForbiddenError(`Missing one of capabilities: ${BROWSE.join(", ")}`, {
     capabilities: BROWSE,
@@ -186,7 +179,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: helperProfileBody,
         summary: "Update my helper profile",
         description:
-          "Publishes or hides the caller's help desk card and replaces its topics (up to 20). `bio` is the same field as the public profile bio (≤500 characters, line breaks kept) and is written there; omitted keeps it. Publishing is independent of public-profile sharing and needs at least one topic (409 `helper_profile_incomplete`). 403 `helper_not_eligible` for non-helpers. Audited with field names and topic ids only; repeating the stored values writes nothing (H61).",
+          "Publishes or hides the caller's help desk card and replaces its topics (up to 20); any other field, `bio` included, answers 400: the bio and everything else people see are edited only in the public profile (PUT /api/me/public-profile). Publishing is the consent that shows that public profile to help desk readers, independent of badge-scan sharing, and needs at least one topic (409 `helper_profile_incomplete`). 403 `helper_not_eligible` for non-helpers. Audited with field names and topic ids only; repeating the stored values writes nothing (H61).",
       },
     },
     async (req) => {
@@ -238,10 +231,15 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Read a helper",
         description:
-          "One published helper card, as in the list (H63). Unpublished, ineligible and unknown people all answer 404.",
+          "One published helper (H63): the list card plus `profile`, the person's public profile in exactly the shape of GET /api/directory/:userId (name, photo route, headline, bio, location note, social links, CV route, projects, challenges, help topics), honouring their own public-profile switches (surname, photo, project, CV). Publishing the helper profile is the consent for help desk readers: it needs neither a badge scan nor a visible public profile, and reading it creates no diary contact. `profile.cvUrl` is served to help desk readers too. The requester and team members of a request this helper claimed or resolved can also open them (H64, H66), even if they were unpublished since; knowing an id grants nothing else. Unpublished, ineligible and unknown people all answer 404.",
       },
     },
-    async (req) => getHelper(req.params.userId),
+    async (req) => {
+      if (!(await mayOpenHelper(req, pool, req.params.userId))) {
+        throw new NotFoundError("Helper not found");
+      }
+      return getHelper(req.params.userId);
+    },
   );
 
   // ── H64 requests (participant side) ────────────────────────────────────
@@ -391,7 +389,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         querystring: coverageQuery,
         summary: "Read help desk coverage",
         description:
-          "Published helpers' stated availability across the event (H67): per slot of `stepMinutes` (15-240, default 60) between `from` and `to` (default the event window, else the span of all intervals; at most 500 slots), how many are scheduled, by kind, and per topic. `now` separates scheduled helpers from those actually inside the venue (H24 presence) and those both (`available`); `uncoveredTopics` lists topics of open requests with no available helper now. Mentors, sponsors and staff all count.",
+          "Published helpers' stated availability across the event (H67): per slot of `stepMinutes` (15-240, default 60) between `from` and `to` (default the event window, else the span of all intervals, with a default `from` floored and `to` ceiled to step boundaries in UTC so slots read 17:00–18:00; explicit values are kept as given; at most 500 slots), how many are scheduled, by kind, and per topic. `now` separates scheduled helpers from those actually inside the venue (H24 presence) and those both (`available`); `uncoveredTopics` lists topics of open requests with no available helper now. Mentors, sponsors and staff all count.",
       },
     },
     async (req) => coverageReport(req.query),

@@ -1,87 +1,20 @@
+import type { AvailabilityInterval } from "@hackos/shared/help-desk";
 import { apiFetch } from "./api";
+import { eventDayKey, formatEventTime } from "./event-time";
 import { canUseHelpDesk } from "./tabs";
 
-export interface HelpTopic {
-  id: number;
-  name: string;
-}
-export interface AvailabilityInterval {
-  startsAt: string;
-  endsAt: string;
-}
-export interface HelperCard {
-  userId: number;
-  displayName: string;
-  photoUrl: string | null;
-  headline: string | null;
-  bio: string | null;
-  kind: "mentor" | "sponsor" | "staff";
-  affiliation: string | null;
-  topics: HelpTopic[];
-  availability: AvailabilityInterval[];
-  scheduledNow: boolean;
-  present: boolean;
-  availableNow: boolean;
-}
-export interface MyHelperProfile {
-  eligible: boolean;
-  published: boolean;
-  publishedAt: string | null;
-  bio: string | null;
-  topics: HelpTopic[];
-  availability: AvailabilityInterval[];
-  preview: HelperCard;
-}
-export type MeetingMode = "on_my_way" | "meet_at";
-export interface HelpRequest {
-  id: number;
-  status: "open" | "claimed" | "resolved" | "cancelled";
-  description: string;
-  location: string;
-  topics: HelpTopic[];
-  other: boolean;
-  project: { id: number; name: string } | null;
-  requester: { userId: number; displayName: string } | null;
-  routing: "matched" | "fallback" | "none";
-  notifiedCount: number;
-  claim: null | {
-    helper: Pick<HelperCard, "userId" | "displayName" | "photoUrl" | "kind" | "affiliation"> | null;
-    mode: MeetingMode;
-    meetingLocation: string | null;
-    claimedAt: string;
-  };
-  createdAt: string;
-  resolvedAt: string | null;
-  cancelledAt: string | null;
-  viewer: {
-    canCancel: boolean;
-    canClaim: boolean;
-    canRelease: boolean;
-    canResolve: boolean;
-    notified: boolean;
-  };
-}
-export interface CoverageReport {
-  from: string;
-  to: string;
-  stepMinutes: number;
-  totals: { publishedHelpers: number; byKind: Record<HelperCard["kind"], number> };
-  slots: {
-    startsAt: string;
-    endsAt: string;
-    scheduled: number;
-    byKind: Record<HelperCard["kind"], number>;
-    topics: { id: number; name: string; scheduled: number }[];
-  }[];
-  now: {
-    at: string;
-    scheduled: number;
-    present: number;
-    available: number;
-    topics: { id: number; name: string; scheduled: number; available: number }[];
-  };
-  uncoveredTopics: HelpTopic[];
-}
+export type {
+  AvailabilityInterval,
+  CoverageReport,
+  HelperCard,
+  HelperDetail,
+  HelpRequest,
+  HelpTopic,
+  MeetingMode,
+  MyHelperProfile,
+} from "@hackos/shared/help-desk";
+export { coverageDays, validAvailability, validHelpRequest } from "@hackos/shared/help-desk";
+
 export const canBrowseHelpDesk = canUseHelpDesk;
 export function helpMutation<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
   return apiFetch<T>(path, {
@@ -90,34 +23,54 @@ export function helpMutation<T>(path: string, body?: unknown, method = "POST"): 
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 }
-/** H62: validate before replacing the schedule, preserving the editor on errors. */
-export function validAvailability(intervals: AvailabilityInterval[]): boolean {
-  if (intervals.length > 30) return false;
-  const sorted = [...intervals].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
-  return sorted.every((item, index) => {
-    const start = Date.parse(item.startsAt);
-    const end = Date.parse(item.endsAt);
-    return (
-      Number.isFinite(start) &&
-      Number.isFinite(end) &&
-      end > start &&
-      end - start <= 86_400_000 &&
-      (index === 0 || Date.parse(sorted[index - 1].endsAt) <= start)
-    );
-  });
+
+const DAY = { weekday: "short", day: "numeric", month: "short" } as const;
+const CLOCK = { hour: "2-digit", minute: "2-digit" } as const;
+
+/** "10:00–13:00" in the event's time zone. */
+export function clockRange(interval: AvailabilityInterval, language: string): string {
+  return `${formatEventTime(interval.startsAt, language, CLOCK)}–${formatEventTime(interval.endsAt, language, CLOCK)}`;
 }
-export function validHelpRequest(
-  description: string,
-  location: string,
-  topics: HelpTopic[],
-  other: boolean,
-) {
-  return (
-    description.trim().length > 0 &&
-    description.trim().length <= 500 &&
-    location.trim().length > 0 &&
-    location.trim().length <= 120 &&
-    topics.length <= 5 &&
-    (topics.length > 0 || other)
-  );
+
+/** An event-zone day heading ("Sat 27 Nov"). */
+export function dayLabel(value: string, language: string): string {
+  return formatEventTime(value, language, DAY);
+}
+
+/** An instant as the event-zone clock, with the day when it is not today ("Sat 27 Nov, 10:42"). */
+export function shortMoment(value: string, language: string, now = Date.now()): string {
+  return eventDayKey(value) === eventDayKey(now)
+    ? formatEventTime(value, language, CLOCK)
+    : formatEventTime(value, language, { ...DAY, ...CLOCK });
+}
+
+export interface AvailabilityDay {
+  key: string;
+  label: string;
+  ranges: { index: number; interval: AvailabilityInterval; label: string }[];
+}
+
+/**
+ * H62: intervals grouped by event-zone day, earliest first, as Calendar lists
+ * them ("Sat 27 Nov" · "10:00–13:00"). `index` is the position in the input.
+ */
+export function availabilityDays(
+  intervals: AvailabilityInterval[],
+  language: string,
+): AvailabilityDay[] {
+  const days = new Map<string, AvailabilityDay>();
+  const ordered = intervals
+    .map((interval, index) => ({ interval, index }))
+    .sort((a, b) => Date.parse(a.interval.startsAt) - Date.parse(b.interval.startsAt));
+  for (const { interval, index } of ordered) {
+    const key = eventDayKey(interval.startsAt);
+    const day = days.get(key) ?? {
+      key,
+      label: dayLabel(interval.startsAt, language),
+      ranges: [],
+    };
+    day.ranges.push({ index, interval, label: clockRange(interval, language) });
+    days.set(key, day);
+  }
+  return [...days.values()];
 }

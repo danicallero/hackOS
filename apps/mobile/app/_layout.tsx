@@ -28,7 +28,11 @@ import { useLiveActivities } from "@/lib/live-activities/use-live-activities";
 import { useMaintenancePhase } from "@/lib/maintenance";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
-import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
+import {
+  helpSheetOptions,
+  nativeStackScreenOptions,
+  transparentDetailHeaderOptions,
+} from "@/lib/navigation";
 import { setNfcShield } from "@/lib/nfc-reader";
 import {
   NOTIFICATION_ONBOARDING_PATH,
@@ -673,16 +677,7 @@ function RootLayoutNav({
         </Stack.Protected>
         <Stack.Protected guard={authenticated && (canEnterApp || helperAccess.eligible)}>
           <Stack.Screen name="helper-profile" options={{ headerShown: true }} />
-          <Stack.Screen
-            name="help-topics"
-            options={{
-              headerBlurEffect: "none",
-              headerShadowVisible: false,
-              headerShown: true,
-              headerStyle: { backgroundColor: colors.background },
-              presentation: "modal",
-            }}
-          />
+          <Stack.Screen name="help-topics" options={helpSheetOptions} />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
         <Stack.Screen name="s/[code]" options={{ headerShown: false }} />

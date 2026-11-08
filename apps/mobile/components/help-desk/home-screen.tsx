@@ -9,7 +9,8 @@ import type { MyHelperProfile } from "@/lib/help-desk";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { canUseHelpDesk, has } from "@/lib/tabs";
-import { HelpPage, HelpText, useHelpResource } from "./primitives";
+import { useHelpResource } from "@/lib/use-help-resource";
+import { HelpPage, HelpText } from "./primitives";
 import { HelpRequestList } from "./requests-screen";
 
 type View = "mine" | "open" | "claims";
@@ -79,7 +80,7 @@ export function HelpDeskScreen() {
                 <NavRow
                   icon="person.crop.circle"
                   title={t("helpMyProfile")}
-                  onPress={() => router.push("/helper-profile")}
+                  onPress={() => router.push("/networking-profile")}
                 />
               </>
             ) : null}

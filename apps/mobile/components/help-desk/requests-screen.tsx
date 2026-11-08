@@ -2,24 +2,17 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
-import { EmptyState, Section, Separator } from "@/components/native-ui";
+import { EmptyState, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { CheckRow } from "@/components/searchable-picker";
 import { type HelpRequest, type HelpTopic, helpMutation, validHelpRequest } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { has } from "@/lib/tabs";
 import { useHelpDraftGuard } from "@/lib/use-help-draft-guard";
-import {
-  ChoiceRow,
-  HelpInput,
-  HelpPage,
-  HelpText,
-  TopicField,
-  useHelpResource,
-} from "./primitives";
+import { useHelpResource } from "@/lib/use-help-resource";
+import { HelpInput, HelpPage, HelpText, TopicField } from "./primitives";
 import { RequestRow } from "./rows";
-
-export { HELP_STATUS_KEYS } from "./rows";
 
 /** Server-backed request list: the caller's own/team requests, the helper inbox or their claims. */
 export function HelpRequestList({ path }: { path: string }) {
@@ -40,7 +33,7 @@ export function HelpRequestList({ path }: { path: string }) {
         <Section>
           {result.data.requests.map((request, index) => (
             <View key={request.id}>
-              {index > 0 ? <Separator inset={16} /> : null}
+              {index > 0 ? <Separator inset={50} /> : null}
               <RequestRow
                 request={request}
                 onPress={() =>
@@ -123,8 +116,7 @@ export function NewHelpRequestScreen() {
         <>
           {projects.length > 0 ? (
             <Section>
-              <ChoiceRow
-                icon="person"
+              <CheckRow
                 label={t("helpForMe")}
                 selected={projectId === null}
                 disabled={busy}
@@ -133,8 +125,7 @@ export function NewHelpRequestScreen() {
               {projects.map((project) => (
                 <View key={project.id}>
                   <Separator inset={16} />
-                  <ChoiceRow
-                    icon="person.2"
+                  <CheckRow
                     label={project.name}
                     detail={t("helpForTeam")}
                     selected={projectId === project.id}
@@ -167,12 +158,7 @@ export function NewHelpRequestScreen() {
           <Section>
             <TopicField selected={topics} onChange={changeTopics} maximum={5} disabled={busy} />
             <Separator inset={16} />
-            <ChoiceRow
-              label={t("helpOther")}
-              selected={other}
-              disabled={busy}
-              onPress={() => setOther((value) => !value)}
-            />
+            <ToggleRow label={t("helpOther")} value={other} disabled={busy} onChange={setOther} />
           </Section>
           <RequestFeedback error={error} message={error?.message ?? t("helpSaveError")} />
         </>

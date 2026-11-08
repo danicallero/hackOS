@@ -274,18 +274,18 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
 }
 
 /**
- * The shared CV of an opted-in person (#935). Hidden profiles, a CV that is
- * not shared and a missing CV all answer the same 404.
+ * The CV a person shares (#935): their application CV when there is one,
+ * otherwise their upload. `scope` is the visibility predicate over `p`/`u`;
+ * a hidden profile, an unshared CV and a missing CV all answer the same 404.
  */
-export async function getDirectoryCv(
-  readerId: number,
+async function readSharedCv(
   userId: number,
+  scope: string,
 ): Promise<{ key: string; filename: string }> {
-  await assertMayReadPerson(readerId, userId);
   const { rows } = await pool.query<{ cv_key: string | null; cv_filename: string | null }>(
     `SELECT p.cv_key, p.cv_filename
        FROM user_public_profiles p JOIN users u ON u.id = p.user_id
-      WHERE ${VISIBLE_WHERE} AND p.share_cv AND u.id = $1`,
+      WHERE ${scope} AND p.share_cv AND u.id = $1`,
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("Person not found");
@@ -293,6 +293,35 @@ export async function getDirectoryCv(
   if (cv) return { key: cv.key, filename: cv.filename };
   if (!rows[0].cv_key || !rows[0].cv_filename) throw new NotFoundError("Person not found");
   return { key: rows[0].cv_key, filename: rows[0].cv_filename };
+}
+
+/** The shared CV of an opted-in person the reader saved (#935). */
+export async function getDirectoryCv(
+  readerId: number,
+  userId: number,
+): Promise<{ key: string; filename: string }> {
+  await assertMayReadPerson(readerId, userId);
+  return readSharedCv(userId, VISIBLE_WHERE);
+}
+
+/**
+ * H61, H63: a published helper's CV for help desk readers, while the person's
+ * own `share_cv` switch is on. Publishing the helper profile is the consent;
+ * badge-scan sharing (`directory_visible`) is not required. The caller has
+ * already checked the helper is listed and the reader may browse helpers.
+ */
+export async function getHelperCv(userId: number): Promise<{ key: string; filename: string }> {
+  return readSharedCv(userId, "u.is_test_account = false");
+}
+
+/**
+ * H61, H63: a published helper's public profile exactly as people see it after
+ * scanning their badge, honouring the per-field switches but independent of
+ * `directory_visible` and diary saves. Creates nothing. The caller has
+ * already checked the helper is listed.
+ */
+export async function helperProfileEntry(db: Queryable, userId: number): Promise<DirectoryEntry> {
+  return preview(db, userId, await readProfile(db, userId), `/api/directory/${userId}/cv`);
 }
 
 /**

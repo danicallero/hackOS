@@ -1,156 +1,107 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { useMemo, useState } from "react";
-import { Text, View } from "react-native";
-import { DateTimeField } from "@/components/date-time-field";
-import { Section, Separator } from "@/components/native-ui";
+import { View } from "react-native";
+import { InfoRow, Section, Separator } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { SymbolView } from "@/components/symbol";
-import type { CoverageReport } from "@/lib/help-desk";
+import { eventDayKey } from "@/lib/event-time";
+import { type CoverageReport, clockRange, coverageDays, dayLabel } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { has } from "@/lib/tabs";
-import { colors, space, type } from "@/theme";
-import { intervalLabel } from "./helper-screen";
-import { DetailRow, HelpPage, HelpText, useHelpResource } from "./primitives";
+import { useHelpResource } from "@/lib/use-help-resource";
+import { colors } from "@/theme";
+import { HelpPage, HelpText } from "./primitives";
 
-const MAX_RANGE_MS = 500 * 3_600_000;
-
-/** H67: scheduled helpers versus helpers who are also inside the venue, by topic and by hour. */
+/**
+ * H67: coverage across the event, read like a Calendar day list. "Now" keeps
+ * scheduled helpers apart from those also inside the venue (H24); each day
+ * then lists ranges of equal coverage, so a gap with nobody scheduled is one
+ * highlighted row rather than a run of hourly zeros.
+ */
 export function HelpCoverageScreen() {
   const { t, language } = useLocale();
   const { me } = useMeContext();
   const allowed = has(me?.capabilities ?? [], CAPABILITIES.HELPDESK_COVERAGE);
-  const [from, setFrom] = useState(() => new Date());
-  const [to, setTo] = useState(() => new Date(Date.now() + 86_400_000));
-  const rangeValid = to > from && to.getTime() - from.getTime() <= MAX_RANGE_MS;
-  // The range applies as soon as it is valid; nothing is fetched for an invalid one.
-  const query = useMemo(
-    () =>
-      rangeValid
-        ? `?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&stepMinutes=60`
-        : null,
-    [from, to, rangeValid],
-  );
   const result = useHelpResource<CoverageReport>(
-    allowed && query !== null ? `/api/helpdesk/coverage${query}` : null,
+    allowed ? "/api/helpdesk/coverage?stepMinutes=60" : null,
   );
   const report = result.data;
-  const dateField = (label: string, value: Date, onChange: (date: Date) => void) => (
-    <View
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: space.md,
-        justifyContent: "space-between",
-        minHeight: 56,
-        paddingHorizontal: space.lg,
-        paddingVertical: space.row,
-      }}
-    >
-      <Text style={{ ...type.body, color: colors.label }}>{label}</Text>
-      <DateTimeField
-        value={value}
-        onChange={onChange}
-        dateAccessibilityLabel={label}
-        timeAccessibilityLabel={label}
-      />
-    </View>
-  );
+  const days = report ? coverageDays(report.slots, (iso) => eventDayKey(iso)) : [];
   return (
     <HelpPage title={t("helpCoverage")} refresh={() => result.load()}>
-      {!allowed ? (
-        <HelpText>{t("helpNoAccess")}</HelpText>
-      ) : (
+      {allowed ? null : <HelpText>{t("helpNoAccess")}</HelpText>}
+      <RequestFeedback
+        loading={result.loading && !report}
+        error={result.error}
+        onRetry={() => void result.load()}
+      />
+      {report ? (
         <>
-          <Section>
-            {dateField(t("helpStart"), from, setFrom)}
-            <Separator inset={16} />
-            {dateField(t("helpEnd"), to, setTo)}
+          <Section title={t("helpNow")}>
+            <InfoRow
+              icon="calendar"
+              label={t("helpScheduledNowLabel")}
+              value={String(report.now.scheduled)}
+            />
+            <Separator inset={48} />
+            <InfoRow
+              icon="person.crop.circle.badge.checkmark"
+              label={t("helpInsideNowLabel")}
+              value={String(report.now.available)}
+            />
           </Section>
-          <RequestFeedback
-            loading={result.loading && !report}
-            error={result.error}
-            onRetry={() => void result.load()}
-          />
-          {report ? (
-            <>
-              <Section>
-                <DetailRow icon="calendar">
-                  <Text style={{ ...type.body, color: colors.label }}>
-                    {t("helpScheduledCount", { count: String(report.now.scheduled) })}
-                  </Text>
-                </DetailRow>
-                <Separator inset={16} />
-                <DetailRow icon="person.crop.circle.badge.checkmark">
-                  <Text style={{ ...type.body, color: colors.label }}>
-                    {t("helpPresentCount", { count: String(report.now.available) })}
-                  </Text>
-                </DetailRow>
-              </Section>
-              {report.uncoveredTopics.length ? (
-                <Section title={t("helpGaps")}>
-                  {report.uncoveredTopics.map((topic, index) => (
-                    <View key={topic.id}>
-                      {index > 0 ? <Separator inset={16} /> : null}
-                      <View
-                        style={{
-                          alignItems: "center",
-                          flexDirection: "row",
-                          gap: space.md,
-                          minHeight: 50,
-                          paddingHorizontal: space.lg,
-                        }}
-                      >
-                        <SymbolView
-                          name="exclamationmark.triangle.fill"
-                          tintColor={colors.warning}
-                          size={20}
-                          accessible={false}
-                        />
-                        <Text style={{ ...type.body, color: colors.label }}>{topic.name}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
-              {report.now.topics.length ? (
-                <Section title={t("helpCoverageTopics")}>
-                  {report.now.topics.map((topic, index) => (
-                    <View key={topic.id}>
-                      {index > 0 ? <Separator inset={16} /> : null}
-                      <View style={{ gap: 2, minHeight: 56, padding: space.lg }}>
-                        <Text style={{ ...type.body, color: colors.label }}>{topic.name}</Text>
-                        <Text style={{ ...type.compact, color: colors.secondaryLabel }}>
-                          {t("helpScheduledCount", { count: String(topic.scheduled) })} ·{" "}
-                          {t("helpPresentCount", { count: String(topic.available) })}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </Section>
-              ) : null}
-              <Section title={t("helpSchedule")}>
-                {report.slots.map((slot, index) => (
-                  <View key={slot.startsAt}>
-                    {index > 0 ? <Separator inset={16} /> : null}
-                    <View style={{ gap: 2, minHeight: 56, padding: space.lg }}>
-                      <Text style={{ ...type.body, color: colors.label }}>
-                        {intervalLabel(slot, language)}
-                      </Text>
-                      <Text style={{ ...type.compact, color: colors.secondaryLabel }}>
-                        {[
-                          t("helpScheduledCount", { count: String(slot.scheduled) }),
-                          ...slot.topics.map((topic) => `${topic.name} (${topic.scheduled})`),
-                        ].join(" · ")}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
-              </Section>
-            </>
+          {report.uncoveredTopics.length ? (
+            <Section title={t("helpGaps")}>
+              {report.uncoveredTopics.map((topic, index) => (
+                <View key={topic.id}>
+                  {index > 0 ? <Separator inset={48} /> : null}
+                  <InfoRow
+                    icon="exclamationmark.triangle"
+                    label={topic.name}
+                    value={t("helpNobodyAvailable")}
+                    valueStyle={{ color: colors.warning }}
+                  />
+                </View>
+              ))}
+            </Section>
           ) : null}
+          {report.now.topics.length ? (
+            <Section title={t("helpCoverageTopics")}>
+              {report.now.topics.map((topic, index) => (
+                <View key={topic.id}>
+                  {index > 0 ? <Separator inset={16} /> : null}
+                  <InfoRow
+                    label={topic.name}
+                    value={`${t("helpScheduledCount", { count: String(topic.scheduled) })} · ${t("helpInsideCount", { count: String(topic.available) })}`}
+                  />
+                </View>
+              ))}
+            </Section>
+          ) : null}
+          {days.map((day) => (
+            <Section key={day.key} title={dayLabel(day.runs[0].startsAt, language)}>
+              {day.runs.map((run, index) => (
+                <View key={run.startsAt}>
+                  {index > 0 ? <Separator inset={16} /> : null}
+                  <InfoRow
+                    label={clockRange(run, language)}
+                    value={
+                      run.scheduled === 0
+                        ? t("helpNobody")
+                        : [
+                            run.scheduled === 1
+                              ? t("helpHelperCountOne")
+                              : t("helpHelperCount", { count: String(run.scheduled) }),
+                            ...run.topics.map((topic) => topic.name),
+                          ].join(" · ")
+                    }
+                    valueStyle={run.scheduled === 0 ? { color: colors.warning } : undefined}
+                  />
+                </View>
+              ))}
+            </Section>
+          ))}
         </>
-      )}
+      ) : null}
     </HelpPage>
   );
 }

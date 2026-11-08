@@ -14,7 +14,8 @@ const { setEventTimeZone, getEventTimeZone, subscribe } = createEventTimeZoneSto
 
 export { getEventTimeZone, setEventTimeZone };
 
-function useEventTimeZone(): string {
+/** The event zone as React state; it settles once the session publishes it. */
+export function useEventTimeZone(): string {
   return useSyncExternalStore(subscribe, getEventTimeZone, getEventTimeZone);
 }
 

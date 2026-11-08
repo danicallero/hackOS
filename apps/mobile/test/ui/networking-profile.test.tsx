@@ -7,6 +7,16 @@ const mockBack = jest.fn();
 const mockPickDocument = jest.fn();
 const mockHeaderOptions = jest.fn();
 jest.mock("@/components/adaptive-frame", () => ({
+  // Same branch as the real HOC: unwrapped on iOS with Liquid Glass, framed otherwise.
+  withNativeHeaderSheet: (Screen: unknown) => (props: object) => {
+    const ReactLib = require("react");
+    const { View } = require("react-native");
+    const { isRealLiquidGlassAvailable } = require("@/components/glass-view");
+    const screen = ReactLib.createElement(Screen as never, props);
+    return process.env.EXPO_OS === "ios" && isRealLiquidGlassAvailable()
+      ? screen
+      : ReactLib.createElement(View, { testID: "networking-sheet-frame" }, screen);
+  },
   withSheetFrame: (Screen: unknown) => (props: object) => {
     const ReactLib = require("react");
     const { View } = require("react-native");
@@ -48,6 +58,10 @@ jest.mock("expo-file-system", () => ({
   },
 }));
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush, back: mockBack }) }));
+// The help desk section (H61) has its own requests and tests; here it stays out of the call counts.
+jest.mock("@/components/help-desk/helper-profile-section", () => ({
+  HelperProfileSection: () => null,
+}));
 jest.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),
   getCurrentSessionCookie: () => "",

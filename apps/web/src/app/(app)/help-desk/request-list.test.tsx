@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError, api } from "@/lib/api";
 import type { HelpRequest } from "./model";
-import { RequestRow } from "./request-list";
+import { RequestDetail } from "./request-list";
 
 vi.mock("@/lib/i18n", () => ({
   useLocale: () => ({
@@ -50,6 +50,14 @@ const request: HelpRequest = {
   },
 };
 let root: Root, container: HTMLDivElement;
+/** Opens the claim dialog and returns its submit button. */
+async function openClaim() {
+  const trigger = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "helpDeskClaim",
+  )!;
+  await act(async () => userEvent.click(trigger));
+  return document.querySelector<HTMLButtonElement>("[role=dialog] button[type=submit]")!;
+}
 beforeEach(() => {
   vi.clearAllMocks();
   container = document.createElement("div");
@@ -71,10 +79,10 @@ describe("claiming help (H66)", () => {
     const reload = vi.fn();
     const onClaimed = vi.fn();
     await act(async () =>
-      root.render(<RequestRow request={request} reload={reload} onClaimed={onClaimed} />),
+      root.render(<RequestDetail request={request} reload={reload} onClaimed={onClaimed} />),
     );
-    const button = container.querySelector<HTMLButtonElement>("button[type=submit]")!;
-    await act(async () => userEvent.click(button));
+    const button = await openClaim();
+    await act(async () => button.click());
     expect(button.disabled).toBe(true);
     expect(api.post).toHaveBeenCalledWith("/api/helpdesk/requests/9/claim", { mode: "on_my_way" });
     await act(async () => {
@@ -88,15 +96,16 @@ describe("claiming help (H66)", () => {
       new ApiError(409, "conflict", "Already claimed", { code: "help_request_already_claimed" }),
     );
     const reload = vi.fn();
-    await act(async () => root.render(<RequestRow request={request} reload={reload} />));
-    await act(async () => userEvent.click(container.querySelector("button[type=submit]")!));
-    expect(container.querySelector("[role=alert]")?.textContent).toContain("helpDeskClaimConflict");
+    await act(async () => root.render(<RequestDetail request={request} reload={reload} />));
+    const submit = await openClaim();
+    await act(async () => submit.click());
+    expect(document.body.textContent).toContain("helpDeskClaimConflict");
     expect(reload).toHaveBeenCalledOnce();
   });
   it("renders removed identities safely and retains destination instructions", async () => {
     await act(async () =>
       root.render(
-        <RequestRow
+        <RequestDetail
           request={{
             ...request,
             status: "claimed",
@@ -115,6 +124,36 @@ describe("claiming help (H66)", () => {
     );
     expect(container.textContent).toContain("helpDeskRemovedAccount");
     expect(container.textContent).toContain("Sponsor stand");
-    expect(container.querySelector("button[type=submit]")).toBeNull();
+    expect([...container.querySelectorAll("button")].map((b) => b.textContent)).not.toContain(
+      "helpDeskClaim",
+    );
+  });
+  it("links the claiming helper's name to their profile", async () => {
+    await act(async () =>
+      root.render(
+        <RequestDetail
+          request={{
+            ...request,
+            status: "claimed",
+            claim: {
+              helper: {
+                userId: 7,
+                displayName: "Bea",
+                photoUrl: null,
+                kind: "mentor",
+                affiliation: null,
+              },
+              mode: "on_my_way",
+              meetingLocation: null,
+              claimedAt: request.createdAt,
+            },
+            viewer: { ...request.viewer, canClaim: false },
+          }}
+          reload={vi.fn()}
+        />,
+      ),
+    );
+    const link = container.querySelector('a[href="/help-desk/helpers/7"]');
+    expect(link?.textContent).toBe("Bea");
   });
 });

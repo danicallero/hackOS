@@ -1598,9 +1598,13 @@ behind Others. Routes: the tab owns a Stack at `app/(tabs)/help-desk/`
 `coverage`); `app/(tabs)/others/help-desk.tsx` is the Others-menu pseudo-tab
 rendering the same root. Pressing the tab (also via the rail, scrub and
 keyboard shortcut paths) navigates to the root, like Account.
-`app/helper-profile.tsx` and `app/help-topics.tsx` are root routes so an accepted mentor without event
-access (`GET /api/me/helper-profile` → `eligible`) can prepare a profile; the
-mobile access gate lets only that route through (`use-helper-preparation-access`).
+Helper settings live in the public profile editor (`app/networking-profile.tsx`),
+because a helper profile extends that same profile. `app/helper-profile.tsx`
+is kept as a root route only so an accepted mentor without event access
+(`GET /api/me/helper-profile` → `eligible`) can prepare them before
+confirmation; with access it redirects to the networking profile. The mobile
+access gate lets only that route and `app/help-topics.tsx` through
+(`use-helper-preparation-access`).
 
 **Root (`components/help-desk/home-screen.tsx`).** Participants default to
 their own and team requests (`/api/helpdesk/requests/mine`); eligible helpers
@@ -1611,49 +1615,69 @@ Request help, Helpers, My helper profile and Helper coverage follow as one
 grouped list, each gated by capability; coverage-only accounts see no request or
 helper actions.
 
-**Building blocks (`components/help-desk/primitives.tsx`, `rows.tsx`).** Screens
-reuse the app's own patterns rather than bespoke layouts: inset-grouped
-`Section`s, `NavRow`/`InfoRow`, `PersonAvatar` rows, `StatusPill`, `EmptyState`
-and native large titles. Forms use borderless fields with the label as the
-placeholder in 56 pt rows (as New project). A choice from a list is a
-`ChoiceRow` with a trailing checkmark, never a switch. Catalogue selection
-(`TopicField`) is one row that opens `app/help-topics.tsx`, a modal sheet with
-native search, checkmark rows and "Add" for a missing topic (the same pattern as
-the project challenge picker); the form and the sheet share one draft through
-`lib/help-topic-selection.ts`. Request creation is a modal form (Close / Send in
-the toolbar). Data refreshes revalidate in place: the last response stays on
-screen, identical responses do not re-render, and only a user pull spins the
-refresh control, so a push or SSE refresh never blanks a page or loses a draft.
+**Native chrome.** Every help desk page and sheet uses one header
+configuration, the People/Account one: a transparent native header with the
+soft scroll-edge effect, no `headerStyle` colour and no custom blur, with the
+`ScrollView` as the screen's direct child. Sheets (`new-request`,
+`help-topics`) share `helpSheetOptions` (`lib/navigation.ts`) and the
+`withNativeHeaderSheet` route wrapper (`components/adaptive-frame.tsx`, also
+used by the networking profile); because UIKit does not inset content under a
+transparent *sheet* bar, `HelpPage` pads sheets by `HeaderHeightContext`.
 
-**Helper profile (H61, H62).** `profile-screen.tsx` publishes explicitly
-(separate from networking consent), edits the shared public bio, picks topics
-from the shared catalogue (search, and add a missing topic with the real
-`POST /api/helpdesk/topics`) and edits a multi-day schedule of dated intervals
-saved with one Save (profile first, then schedule). A schedule is stated availability; presence
-(H24) is shown separately ("Inside the venue"). Back with unsaved changes asks
-before discarding.
+**Building blocks (`components/help-desk/primitives.tsx`, `rows.tsx`,
+`components/searchable-picker.tsx`).** Inset-grouped `Section`s, `NavRow` /
+`InfoRow`, `PersonAvatar` rows and `EmptyState`. Request and helper rows are
+Contacts-style rows (avatar or status symbol, title, secondary line, chevron);
+status is a symbol plus label, not a pill. Catalogue selection (`TopicField`)
+is one row that opens `app/help-topics.tsx`, built on the same
+`SearchablePickerSheet` / `CheckRow` as the project challenge picker; the form
+and the sheet share one draft through `lib/help-topic-selection.ts`. Loading
+and live refresh live in `lib/use-help-resource.ts`: the last response stays on
+screen and only a user pull spins the refresh control.
+
+**Helper profile = public profile (H61–H63).** A helper's page
+(`helper/[id]`) is `PersonProfileScreen` — the scanned-person profile with the
+avatar that collapses into the Dynamic Island — fed by
+`GET /api/helpdesk/helpers/:id` (`profile` has the directory entry's shape), plus
+one "Stated availability" section: a Now row (scheduled vs inside the venue,
+H24) and one row per event day. Editing happens in the same public profile
+editor: `components/help-desk/helper-profile-section.tsx` sits under the card
+for eligible helpers with the publish switch (its own consent, separate from
+badge networking), knowledge topics and availability. Each change saves at once,
+like the profile's share switch; the bio stays one of the card's own fields.
+Availability rows open a sheet with Start / End date-and-time rows (Calendar's
+event editor), Save, and a confirmed Remove; the full list is sent as the
+replacement the API expects.
 
 **Directory (H63).** Published helpers as photo rows with topics and a
-scheduled / inside-the-venue line; search is a field in the page (a native
-bottom search bar would sit under the custom tab bar). Detail shows the
-avatar, headline, status pills, bio, topic chips and the dated schedule.
+scheduled / inside-the-venue line, with the same native header search as
+People.
 
-**Requests (H64–H66).** New request: details, location, up to 5 topics or
-Other, for me or one of my teams (`/api/helpdesk/projects`; the choice appears
-only when the person has teams). Detail shows the
-server's `viewer` permissions only: claim (on my way / meet at a location),
-release, resolve, cancel (confirmed). A competing claim shows the localized
-conflict and refetches. Meeting instructions cannot be edited in place: release
-and reclaim. Push taps and inbox rows (category `helpdesk`) open the request.
+**Requests (H64–H66).** New request (sheet, Close / Send): details and location
+in one group, topics plus an Other switch in another, for me or one of my teams
+(checkmark rows, only when the person has teams). Detail reads like a Calendar
+event: the ask as the title with a status row and time, then location,
+requester, team and topics, then a Helper section whose row opens the claiming
+helper's profile (the API lets the requester and team read it) followed by the
+meeting row ("On the way to Table 20" / "Meet at …"). Actions follow the
+server's `viewer` permissions: Claim is the prominent toolbar item with a menu
+(On my way / Meet elsewhere…, the latter asking for the place), Resolve likewise;
+Release and Cancel are rows in their own group, Cancel confirmed by an action
+sheet. A ref guard drops a second tap in the same frame; a competing claim
+shows the localized conflict and refetches.
 
-**Coverage (H67).** `coverage-screen.tsx`: date range, scheduled vs available
-now (scheduled and inside), per-topic coverage and slots from
-`GET /api/helpdesk/coverage`.
+**Coverage (H67).** `coverage-screen.tsx` over the event window the API
+returns by default: Now (scheduled vs inside the venue), requested topics
+nobody available covers, topics covered now, then one section per event day in
+which consecutive hours with the same helpers merge into one range
+(`coverageDays`, `@hackos/shared/help-desk`), so a gap reads as one
+"Nobody scheduled" row.
 
 **Realtime.** Screens refetch on focus, `helpdesk.request.changed`,
 `domain:helpdesk` changes and notification events.
 
-Tests: `lib/help-desk.test.ts`, `lib/tabs.test.ts`, `test/ui/help-desk*.test.tsx`.
+Tests: `lib/help-desk.test.ts`, `lib/tabs.test.ts`, `test/ui/help-*.test.tsx`,
+`packages/shared/src/help-desk.test.ts` (validation and coverage ranges).
 
 ## Operator screens
 

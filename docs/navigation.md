@@ -455,11 +455,14 @@ The web personal sidebar adds **Help desk** (`/help-desk`) for any of
 navigation exposes Helpers to that same audience, My requests
 (`/help-desk/requests`) with `HELPDESK_REQUEST`, Help inbox
 (`/help-desk/inbox`) with `HELPDESK_OFFER`, and Coverage
-(`/help-desk/coverage`) with `HELPDESK_COVERAGE`. Helper profile preparation
-(`/help-desk/profile`) uses server eligibility; My profile links to it for
-eligible accepted mentors even before confirmation assigns their role.
-Published helper records use `/help-desk/helpers/:userId`, independently of
-the scan-only networking reader. Help desk notifications link to
+(`/help-desk/coverage`) with `HELPDESK_COVERAGE`. Sibling navigation is the
+`HelpDeskSectionHeader` each page renders. Helpers prepare their profile in My
+profile → Public profile (`/settings/profile?tab=public`), shown by server
+eligibility so accepted mentors can use it before confirmation assigns their role;
+`/help-desk/profile` redirects there.
+Published helper records use `/help-desk/helpers/:userId` (the shared person
+profile plus schedule), independently of the scan-only networking reader. A
+request's claiming helper links to that record. Help desk notifications link to
 `/help-desk/requests/:id`; the API enforces request visibility.
 
 Mobile exposes **Help desk** as a direct tab during the event for

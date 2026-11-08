@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { bioText } from "../directory/schemas.js";
 
 // H61-H67 help desk request schemas. Free text is trimmed; control
 // characters are refused (descriptions keep line breaks).
@@ -33,11 +32,9 @@ export const topicQuery = z.object({
 export const topicBody = z.object({ name: line(60) });
 export const mergeBody = z.object({ targetId: id });
 
-export const helperProfileBody = z.object({
+export const helperProfileBody = z.strictObject({
   published: z.boolean(),
   topicIds: z.array(id).max(20),
-  // Same validation as the public profile bio; omitted keeps it (H61).
-  bio: bioText.optional(),
 });
 export type HelperProfileInput = z.infer<typeof helperProfileBody>;
 

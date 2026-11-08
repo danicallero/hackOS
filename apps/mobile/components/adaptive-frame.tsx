@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { bookCrease, useDivisionRegion } from "@/lib/fold-region";
 import { SideRegionProvider, sideRegionForInsets } from "@/lib/side-region";
 import { useSideInsets, useTabletRail } from "@/lib/vertical-bar-edge";
@@ -122,4 +123,22 @@ export function withSheetFrame<Props extends object>(Screen: ComponentType<Props
   }
   Framed.displayName = `SheetFrame(${Screen.displayName ?? Screen.name ?? "Screen"})`;
   return Framed;
+}
+
+/**
+ * Route wrapper for a sheet with a native header (H55): on Liquid Glass iOS the
+ * scroll view stays the screen's direct child, so the header's automatic inset
+ * and scroll edge track it; elsewhere the sheet is framed as `withSheetFrame`.
+ */
+export function withNativeHeaderSheet<Props extends object>(Screen: ComponentType<Props>) {
+  const Framed = withSheetFrame(Screen);
+  function Route(props: Props) {
+    return process.env.EXPO_OS === "ios" && isRealLiquidGlassAvailable() ? (
+      <Screen {...props} />
+    ) : (
+      <Framed {...props} />
+    );
+  }
+  Route.displayName = `NativeHeaderSheet(${Screen.displayName ?? Screen.name ?? "Screen"})`;
+  return Route;
 }

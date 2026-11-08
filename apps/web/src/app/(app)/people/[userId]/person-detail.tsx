@@ -38,7 +38,6 @@ export function PersonDetail({ userId }: { userId: number }) {
 
 function PersonReader({ userId }: { userId: number }) {
   const { t } = useLocale();
-  const { nameOf } = useChallengeNames();
   const validId = Number.isSafeInteger(userId) && userId > 0;
   const {
     data: entry,
@@ -53,15 +52,7 @@ function PersonReader({ userId }: { userId: number }) {
   // Hidden and missing profiles share the 404, so both read as "not found".
   const missing = !validId || isNotFoundError(error);
 
-  const back = (
-    <Link
-      href="/people"
-      className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-      {t("backToPeople")}
-    </Link>
-  );
+  const back = <ProfileBackLink href="/people" label={t("backToPeople")} />;
 
   if (!entry || missing) {
     return (
@@ -92,6 +83,38 @@ function PersonReader({ userId }: { userId: number }) {
     );
   }
 
+  return <PersonProfile entry={entry} context={back} />;
+}
+
+/** The labelled return link above a profile's name. */
+export function ProfileBackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+      {label}
+    </Link>
+  );
+}
+
+/**
+ * A person's public profile as the people allowed to read it see it: the
+ * scanned-person page and the help desk's helper page (H63) render the same
+ * component, with their own context link and any extra sections as children.
+ */
+export function PersonProfile({
+  entry,
+  context,
+  children,
+}: {
+  entry: DirectoryEntry;
+  context: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const { nameOf } = useChallengeNames();
   const rows: { id: string; label: string; value: React.ReactNode }[] = [];
   if (entry.helpTopics?.length)
     rows.push({
@@ -149,7 +172,7 @@ function PersonReader({ userId }: { userId: number }) {
   return (
     <PageLayout width="reading">
       <PageHeader
-        context={back}
+        context={context}
         leading={
           <Avatar className="size-16">
             {entry.photoUrl && (
@@ -195,6 +218,7 @@ function PersonReader({ userId }: { userId: number }) {
           ))}
         </dl>
       )}
+      {children}
     </PageLayout>
   );
 }

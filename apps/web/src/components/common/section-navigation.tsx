@@ -3,16 +3,21 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { HandIcon } from "@phosphor-icons/react/dist/csr/Hand";
 import { ImagesIcon } from "@phosphor-icons/react/dist/csr/Images";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { TrayIcon } from "@phosphor-icons/react/dist/csr/Tray";
+import { UserCircleIcon } from "@phosphor-icons/react/dist/csr/UserCircle";
+import { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ActionGroup } from "@/components/common/action-group";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -167,6 +172,86 @@ export function ProjectsSectionHeader({
         }
       />
       <ProjectsNavigation />
+    </div>
+  );
+}
+
+function HelpDeskNavigation() {
+  const { t } = useLocale();
+  const { can, canAny } = useSessionContext();
+  const pathname = usePathname();
+  const own = useOwnHelperProfile();
+  const items = [
+    {
+      href: "/help-desk",
+      label: t("helpDeskHelpers"),
+      icon: UsersThreeIcon,
+      visible: canAny(
+        CAPABILITIES.HELPDESK_REQUEST,
+        CAPABILITIES.HELPDESK_OFFER,
+        CAPABILITIES.HELPDESK_COVERAGE,
+      ),
+      active: pathname === "/help-desk" || pathname.startsWith("/help-desk/helpers/"),
+    },
+    {
+      href: "/help-desk/requests",
+      label: t("helpDeskRequests"),
+      icon: HandIcon,
+      visible: can(CAPABILITIES.HELPDESK_REQUEST),
+      active: pathname.startsWith("/help-desk/requests"),
+    },
+    {
+      href: "/help-desk/inbox",
+      label: t("helpDeskInbox"),
+      icon: TrayIcon,
+      visible: can(CAPABILITIES.HELPDESK_OFFER),
+      active: pathname.startsWith("/help-desk/inbox"),
+    },
+    {
+      href: "/help-desk/coverage",
+      label: t("helpDeskCoverage"),
+      icon: ChartBarIcon,
+      visible: can(CAPABILITIES.HELPDESK_COVERAGE),
+      active: pathname.startsWith("/help-desk/coverage"),
+    },
+    {
+      // H61: edited with the public profile; eligibility covers accepted mentors.
+      href: "/settings/profile?tab=public",
+      label: t("helpDeskProfile"),
+      icon: UserCircleIcon,
+      visible: own.data?.eligible === true,
+      active: false,
+    },
+  ];
+  return (
+    <ActionGroup role="navigation" aria-label={t("helpDeskTitle")}>
+      {items
+        .filter((item) => item.visible)
+        .map(({ href, label, icon: Icon, active }) => (
+          <Button key={href} asChild variant={active ? "secondary" : "ghost"} size="sm">
+            <Link href={href} aria-current={active ? "page" : undefined}>
+              <Icon aria-hidden="true" />
+              {label}
+            </Link>
+          </Button>
+        ))}
+    </ActionGroup>
+  );
+}
+
+/** H61-H67: the help desk's title and sibling routes, the same on each of its lists. */
+export function HelpDeskSectionHeader({
+  meta,
+  primaryAction,
+}: {
+  meta?: React.ReactNode;
+  primaryAction?: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  return (
+    <div className="space-y-(--page-section-gap)">
+      <PageHeader title={t("helpDeskTitle")} meta={meta} primaryAction={primaryAction} />
+      <HelpDeskNavigation />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { HelperProfileSection } from "@/components/help-desk/helper-profile-section";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -463,6 +464,8 @@ export default function NetworkingProfileScreen() {
             <View style={{ gap: 24, opacity: shared ? 1 : 0.5 }}>
               {renderCard(profile, editing ? draft : stored)}
             </View>
+            {/* H61: helpers extend this same profile; their help desk settings follow it. */}
+            <HelperProfileSection />
           </>
         ) : failure?.message === "networkingLoadError" ? null : (
           <RequestFeedback loading />

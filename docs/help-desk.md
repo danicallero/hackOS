@@ -34,9 +34,13 @@ granting, the seeded Mentor role, else `staff`.
 
 `helper_profiles` stores only the explicit publication (`published`,
 `published_at`). Name, photo, headline and bio are projected from `users` and
-`user_public_profiles`, never copied: editing the bio on the helper profile
-writes `user_public_profiles.bio` (creating a hidden row if needed), so both
-profiles always show the same text. Publishing does not change
+`user_public_profiles`, never copied. The helper profile is the public profile:
+the bio and every other field are edited only in the public profile editor, and
+`PUT /api/me/helper-profile` takes just `published` and `topicIds`. The helper
+detail (`GET /api/helpdesk/helpers/:userId`) returns the directory's own entry
+as `profile`, honouring the person's per-field switches; publication is the
+consent for help desk readers, who also get the CV (while `share_cv` is on)
+and photo routes for that helper. Publishing does not change
 public-profile sharing consent (`directory_visible`), and sharing a public
 profile does not publish a helper card. The card follows the public profile's
 surname and photo switches; the photo route serves a published helper's photo

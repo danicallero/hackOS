@@ -1,6 +1,7 @@
 import mockhelpDeskEn from "@hackos/shared/locales/en/mobile.json";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import {
+  Alert,
   Pressable as MockPressable,
   Text as MockText,
   TextInput as MockTextInput,
@@ -21,14 +22,71 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ replace: mockReplace }),
   useLocalSearchParams: () => ({ id: "41" }),
 }));
+jest.mock("expo-router/stack", () => ({ __esModule: true, default: {}, Stack: {} }));
+jest.mock("@/components/glass-view", () => ({ isRealLiquidGlassAvailable: () => false }));
+jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
+jest.mock("@/components/pressable-feedback", () => ({ PressableFeedback: () => null }));
+jest.mock("@/lib/alert", () => ({ confirmDestructive: jest.fn() }));
+jest.mock("@/components/app-menu", () => ({
+  MenuView: ({
+    actions,
+    onPressAction,
+  }: {
+    actions: { id: string; title: string }[];
+    onPressAction: (event: { nativeEvent: { event: string } }) => void;
+  }) => (
+    <MockView>
+      {actions.map((action) => (
+        <MockPressable
+          key={action.id}
+          accessibilityRole="menuitem"
+          accessibilityLabel={action.title}
+          onPress={() => onPressAction({ nativeEvent: { event: action.id } })}
+        />
+      ))}
+    </MockView>
+  ),
+}));
+jest.mock("@/components/searchable-picker", () => ({
+  CheckRow: ({
+    label,
+    selected,
+    onPress,
+  }: {
+    label: string;
+    selected: boolean;
+    onPress: () => void;
+  }) => (
+    <MockPressable
+      accessibilityRole="checkbox"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: selected }}
+      onPress={onPress}
+    />
+  ),
+}));
+jest.mock("@/lib/use-help-resource", () => ({
+  useHelpResource: (path: string) => ({
+    data:
+      path === "/api/helpdesk/projects"
+        ? { projects: [{ id: 9, name: "Team Nine" }] }
+        : mockRequest,
+    loading: false,
+    error: null,
+    load: mockLoad,
+    setData: mockSetData,
+  }),
+}));
 jest.mock("@/lib/use-help-draft-guard", () => ({ useHelpDraftGuard: jest.fn() }));
 jest.mock("@/lib/me-context", () => ({
   useMeContext: () => ({ me: { id: 7, capabilities: mockCaps } }),
 }));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({
-    t: (key: string) =>
-      ({ ...mockhelpDeskEn, cancel: "Cancel" })[key as keyof typeof mockhelpDeskEn] ?? key,
+    t: (key: string, params: Record<string, string> = {}) =>
+      (
+        ({ ...mockhelpDeskEn, cancel: "Cancel" })[key as keyof typeof mockhelpDeskEn] ?? key
+      ).replace(/\{(\w+)\}/g, (_: string, name: string) => params[name] ?? ""),
   }),
 }));
 jest.mock("@/lib/help-desk", () => ({
@@ -60,18 +118,7 @@ jest.mock("@/theme", () => ({
 }));
 jest.mock("@/components/person-avatar", () => ({ PersonAvatar: () => null }));
 jest.mock("@/components/help-desk/rows", () => ({
-  HELP_STATUS_KEYS: {
-    open: "helpOpen",
-    claimed: "helpClaimed",
-    resolved: "helpResolved",
-    cancelled: "helpCancelled",
-  },
-  HELP_STATUS_TONE: {
-    open: "accent",
-    claimed: "success",
-    resolved: "neutral",
-    cancelled: "warning",
-  },
+  HELP_STATUS: new Proxy({}, { get: () => ({ label: "helpOpen", symbol: "circle" }) }),
   RequestRow: () => null,
   HelperRow: () => null,
 }));
@@ -178,42 +225,7 @@ jest.mock("@/components/help-desk/primitives", () => ({
     value: string;
     onChange: (value: string) => void;
   }) => <MockTextInput accessibilityLabel={label} value={value} onChangeText={onChange} />,
-  ChoiceRow: ({
-    label,
-    selected,
-    onPress,
-    disabled,
-  }: {
-    label: string;
-    selected: boolean;
-    onPress: () => void;
-    disabled?: boolean;
-  }) => (
-    <MockPressable
-      accessibilityRole="checkbox"
-      accessibilityLabel={label}
-      accessibilityState={{ checked: selected }}
-      disabled={disabled}
-      onPress={onPress}
-    >
-      <MockText>{label}</MockText>
-    </MockPressable>
-  ),
-  DetailRow: ({ children }: { children: React.ReactNode }) => <MockView>{children}</MockView>,
-  TopicChips: ({ topics }: { topics: { name: string }[] }) => (
-    <MockText>{topics.map((topic) => topic.name).join(", ")}</MockText>
-  ),
   TopicField: () => null,
-  useHelpResource: (path: string) => ({
-    data:
-      path === "/api/helpdesk/projects"
-        ? { projects: [{ id: 9, name: "Team Nine" }] }
-        : mockRequest,
-    loading: false,
-    error: null,
-    load: mockLoad,
-    setData: mockSetData,
-  }),
 }));
 
 beforeEach(() => {
@@ -250,11 +262,14 @@ it("claims with the selected meeting location and blocks duplicate taps while pe
       finish = resolve;
     }),
   );
+  const prompt = jest.spyOn(Alert, "prompt").mockImplementation(() => {});
   await render(<HelpRequestScreen />);
-  await fireEvent.press(screen.getByLabelText("Come to this location"));
-  await fireEvent.changeText(screen.getByLabelText("Meeting location"), "Sponsor stand");
-  await fireEvent.press(screen.getByLabelText("Claim request"));
-  await fireEvent.press(screen.getByLabelText("Claim request"));
+  await fireEvent.press(screen.getByLabelText(mockhelpDeskEn.helpMeetElsewhere));
+  const buttons = prompt.mock.calls[0][2] as { onPress?: (value?: string) => void }[];
+  await act(async () => {
+    buttons[1].onPress?.("Sponsor stand");
+    buttons[1].onPress?.("Sponsor stand");
+  });
   expect(mockMutate).toHaveBeenCalledTimes(1);
   expect(mockMutate).toHaveBeenCalledWith("/api/helpdesk/requests/41/claim", {
     mode: "meet_at",
@@ -268,7 +283,7 @@ it("refreshes after a competing claim and shows the localized conflict (H66)", a
     new ApiError("Conflict", 409, "conflict", { code: "help_request_already_claimed" }),
   );
   await render(<HelpRequestScreen />);
-  await fireEvent.press(screen.getByLabelText("Claim request"));
+  await fireEvent.press(screen.getByLabelText(mockhelpDeskEn.helpOnWay));
   await screen.findByText("Another helper has already claimed this request.");
   expect(mockLoad).toHaveBeenCalled();
 });
@@ -285,8 +300,8 @@ it("uses server-provided action permissions and displays team meeting instructio
     viewer: { ...mockRequest.viewer, canClaim: false, canResolve: true },
   };
   await render(<HelpRequestScreen />);
-  expect(screen.queryByLabelText("Claim request")).toBeNull();
-  expect(screen.getByText("Come to this location: Mentor corner")).toBeTruthy();
+  expect(screen.queryByLabelText(mockhelpDeskEn.helpOnWay)).toBeNull();
+  expect(screen.getByText(/Meet at Mentor corner/)).toBeTruthy();
   expect(screen.getByLabelText("Mark resolved")).toBeTruthy();
 });
 it("submits a team request using Other without inventing a topic (H64/H65)", async () => {

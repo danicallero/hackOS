@@ -1,10 +1,13 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import type { FastifyRequest } from "fastify";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
+import { getRequestAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { photoUrl } from "../../lib/profile-files.js";
+import { type DirectoryEntry, helperProfileEntry } from "../directory/service.js";
 import type { AvailabilityInput, HelperProfileInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
@@ -13,7 +16,9 @@ import { assertTopicsExist } from "./topics.js";
  * identity (users) and public profile (user_public_profiles: headline, bio,
  * surname and photo switches) — nothing is copied, so the bio is the same on
  * both profiles. Publication here is independent of public-profile sharing
- * (#934): it only makes the help desk card browsable.
+ * (#934): it makes the card browsable and is the consent that shows the
+ * person's public profile (`HelperDetail.profile`, the directory's own entry)
+ * to help desk readers.
  */
 
 export type HelperKind = "mentor" | "sponsor" | "staff";
@@ -43,6 +48,11 @@ export interface HelperCard {
   availableNow: boolean;
 }
 
+/** One helper: the list card plus the public profile people see after a badge scan. */
+export interface HelperDetail extends HelperCard {
+  profile: DirectoryEntry;
+}
+
 export interface MyHelperProfile {
   eligible: boolean;
   published: boolean;
@@ -51,6 +61,21 @@ export interface MyHelperProfile {
   topics: HelpTopic[];
   availability: AvailabilityInterval[];
   preview: HelperCard;
+}
+
+/** Capabilities that may browse published helpers (H63). */
+export const HELPDESK_BROWSE = [
+  CAPABILITIES.HELPDESK_REQUEST,
+  CAPABILITIES.HELPDESK_OFFER,
+  CAPABILITIES.HELPDESK_COVERAGE,
+] as const;
+
+export async function mayBrowseHelpers(req: FastifyRequest): Promise<boolean> {
+  const context = getRequestAuthorizationContext(req);
+  for (const capability of HELPDESK_BROWSE) {
+    if (await userHasCapability(context, capability)) return true;
+  }
+  return false;
 }
 
 const OFFER_CAPABILITIES = `ARRAY['${CAPABILITIES.HELPDESK_OFFER}', '${CAPABILITIES.ADMIN_ALL}']`;
@@ -255,9 +280,8 @@ async function ensureProfileRow(db: Queryable, userId: number) {
 }
 
 /**
- * H61: publish/unpublish, choose topics and edit the shared bio. The bio is
- * written to user_public_profiles (creating a hidden profile row when the
- * person has none, without touching its sharing consent).
+ * H61: publish/unpublish and choose topics. The bio is edited only in the
+ * public profile editor.
  */
 export async function updateMyHelperProfile(
   userId: number,
@@ -274,12 +298,6 @@ export async function updateMyHelperProfile(
       [userId],
     );
     const beforeTopics = topicRows.map((r) => Number(r.topic_id));
-    const { rows: bioRows } = await client.query<{ bio: string | null }>(
-      "SELECT bio FROM user_public_profiles WHERE user_id = $1 FOR UPDATE",
-      [userId],
-    );
-    const beforeBio = bioRows[0]?.bio ?? null;
-    const nextBio = input.bio === undefined ? beforeBio : input.bio;
     if (input.published && topicIds.length === 0) {
       throw new ConflictError("Choose at least one topic before publishing", {
         code: ERROR_REASONS.HELPER_PROFILE_INCOMPLETE,
@@ -289,7 +307,6 @@ export async function updateMyHelperProfile(
     const changedFields: string[] = [];
     if (current.published !== input.published) changedFields.push("published");
     if (beforeTopics.join(",") !== topicIds.join(",")) changedFields.push("topics");
-    if (beforeBio !== nextBio) changedFields.push("bio");
     if (changedFields.length === 0) return false;
 
     if (changedFields.includes("published")) {
@@ -313,14 +330,7 @@ export async function updateMyHelperProfile(
         );
       }
     }
-    if (changedFields.includes("bio")) {
-      await client.query(
-        `INSERT INTO user_public_profiles (user_id, bio) VALUES ($1, $2)
-         ON CONFLICT (user_id) DO UPDATE SET bio = EXCLUDED.bio`,
-        [userId, nextBio],
-      );
-    }
-    // H53: field names and topic ids only, never the bio text.
+    // H53: field names and topic ids only.
     await audit(client, {
       actorId: userId,
       entityType: "helper_profile",
@@ -442,26 +452,72 @@ export async function listHelpers(filter: HelperFilter): Promise<HelperCard[]> {
     );
 }
 
-export async function getHelper(userId: number): Promise<HelperCard> {
+const LISTED_HELPER_SQL = `
+  FROM helper_profiles hp
+  JOIN users u ON u.id = hp.user_id
+  LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
+ WHERE ${LISTED_HELPER_WHERE}`;
+
+/** Whether `userId` is a helper browsers can see (published, eligible, active). */
+export async function isListedHelper(db: Queryable, userId: number): Promise<boolean> {
+  const { rows } = await db.query(`SELECT 1 ${LISTED_HELPER_SQL} AND u.id = $1`, [userId]);
+  return rows.length > 0;
+}
+
+/**
+ * H64, H66: the requester and active team members of a request a helper
+ * claimed (or resolved) may open that helper's profile even if the helper was
+ * unpublished since. Knowing an id grants nothing: it needs the claim.
+ */
+export async function claimedForViewer(
+  db: Queryable,
+  viewerId: number,
+  helperId: number,
+): Promise<boolean> {
+  const { rows } = await db.query(
+    `SELECT 1 FROM help_requests hr
+      WHERE hr.claimed_by = $2 AND hr.status IN ('claimed', 'resolved')
+        AND (hr.requester_id = $1 OR (hr.repo_id IS NOT NULL AND EXISTS (
+          SELECT 1 FROM submissions s WHERE s.repo_id = hr.repo_id AND s.user_id = $1
+             AND s.status = 'active')))
+      LIMIT 1`,
+    [viewerId, helperId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Whether the caller may open `helperId`'s profile, photo and CV: a browser
+ * of a listed helper, or a viewer of a request that helper claimed.
+ */
+export async function mayOpenHelper(
+  req: FastifyRequest,
+  db: Queryable,
+  helperId: number,
+): Promise<boolean> {
+  if ((await mayBrowseHelpers(req)) && (await isListedHelper(db, helperId))) return true;
+  return claimedForViewer(db, req.userId as number, helperId);
+}
+
+/**
+ * H63: the card plus the person's public profile, from the directory's own
+ * entry. The caller has already checked `mayOpenHelper`.
+ */
+export async function getHelper(userId: number): Promise<HelperDetail> {
   const { rows } = await pool.query<CardRow>(
     `SELECT ${CARD_COLUMNS}
-       FROM helper_profiles hp
-       JOIN users u ON u.id = hp.user_id
-       LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
-      WHERE ${LISTED_HELPER_WHERE} AND u.id = $1`,
+       FROM users u LEFT JOIN user_public_profiles pp ON pp.user_id = u.id
+      WHERE u.id = $1 AND u.anonymized_at IS NULL`,
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("Helper not found");
-  return toCard(rows[0]);
+  return { ...toCard(rows[0]), profile: await helperProfileEntry(pool, userId) };
 }
 
-/** Photo route: a listed helper's photo, while their photo switch is on. */
-export async function photoPublishedInHelpDesk(db: Queryable, userId: number): Promise<boolean> {
+/** Photo route: whether the person's photo switch is on (access is `mayOpenHelper`). */
+export async function helperPhotoShown(db: Queryable, userId: number): Promise<boolean> {
   const { rows } = await db.query(
-    `SELECT 1 FROM helper_profiles hp
-       JOIN users u ON u.id = hp.user_id
-       JOIN user_public_profiles pp ON pp.user_id = u.id
-      WHERE ${LISTED_HELPER_WHERE} AND pp.show_photo AND u.id = $1`,
+    "SELECT 1 FROM user_public_profiles WHERE user_id = $1 AND show_photo",
     [userId],
   );
   return rows.length > 0;

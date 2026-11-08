@@ -6,7 +6,8 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { canBrowseHelpDesk, type HelperCard } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
-import { HelpPage, HelpText, useHelpResource } from "./primitives";
+import { useHelpResource } from "@/lib/use-help-resource";
+import { HelpPage, HelpText } from "./primitives";
 import { HelperRow } from "./rows";
 
 /** H63: published helpers, searchable by name or knowledge, available ones first (server order). */

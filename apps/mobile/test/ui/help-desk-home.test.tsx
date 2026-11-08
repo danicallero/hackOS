@@ -45,6 +45,8 @@ jest.mock("@/components/help-desk/requests-screen", () => ({
 jest.mock("@/components/help-desk/primitives", () => ({
   HelpPage: ({ children }: { children: React.ReactNode }) => <MockView>{children}</MockView>,
   HelpText: ({ children }: { children: React.ReactNode }) => <MockText>{children}</MockText>,
+}));
+jest.mock("@/lib/use-help-resource", () => ({
   useHelpResource: () => ({
     data: { eligible: mockEligible },
     loading: false,
@@ -75,7 +77,7 @@ describe("Help desk tab root (H64-H67)", () => {
     expect(screen.getByText("helpMyClaims")).toBeTruthy();
     expect(screen.queryByText("helpRequest")).toBeNull();
     await fireEvent.press(screen.getByText("helpMyProfile"));
-    expect(mockPush).toHaveBeenCalledWith("/helper-profile");
+    expect(mockPush).toHaveBeenCalledWith("/networking-profile");
   });
   it("lets a person with both capabilities switch between every list", async () => {
     mockCaps = ["helpdesk:request", "helpdesk:offer"];

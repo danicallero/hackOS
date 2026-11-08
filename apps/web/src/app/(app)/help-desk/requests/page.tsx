@@ -3,14 +3,14 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { Modal } from "@/components/common/modal";
-import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { HelpDeskSectionHeader } from "@/components/common/section-navigation";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { HelpRequest } from "../model";
-import { RequestList } from "../request-list";
+import { RequestTable } from "../request-list";
 import { HelpdeskError, HelpdeskLoading, useHelpdesk } from "../shared";
 import { RequestForm } from "./request-form";
 export default function RequestsPage() {
@@ -25,9 +25,7 @@ export default function RequestsPage() {
   if (!allowed) return <AccessDenied ask={t("noAccessTitle")} />;
   return (
     <PageLayout>
-      <PageHeader
-        reserveNavigation={false}
-        title={t("helpDeskRequests")}
+      <HelpDeskSectionHeader
         primaryAction={<Button onClick={() => setOpen(true)}>{t("helpDeskRequestHelp")}</Button>}
       />
       {resource.stale ? <StaleDataNotice onRetry={resource.refetch} /> : null}
@@ -35,7 +33,11 @@ export default function RequestsPage() {
       {resource.loading ? (
         <HelpdeskLoading />
       ) : resource.data ? (
-        <RequestList requests={resource.data.requests} reload={resource.refetch} />
+        <RequestTable
+          audience="requester"
+          requests={resource.data.requests}
+          reload={resource.refetch}
+        />
       ) : null}
       <Modal open={open} onOpenChange={setOpen} title={t("helpDeskRequestHelp")}>
         <RequestForm

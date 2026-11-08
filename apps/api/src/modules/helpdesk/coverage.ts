@@ -84,18 +84,22 @@ export async function coverageReport(opts: {
     intervals: h.intervals.map((i) => ({ s: Date.parse(i.s), e: Date.parse(i.e) })),
   }));
 
-  // Default window: the event, else the span of every stated interval, else today.
+  // Default window: the event, else the span of every stated interval, else
+  // today. Defaults snap outward to step boundaries (UTC), so slots read
+  // 17:00-18:00 rather than starting at an arbitrary instant; an explicit
+  // `from`/`to` is kept as given.
   const allStarts = parsed.flatMap((h) => h.intervals.map((i) => i.s));
   const allEnds = parsed.flatMap((h) => h.intervals.map((i) => i.e));
-  const from =
-    (opts.from ? Date.parse(opts.from) : undefined) ??
-    meta[0]?.event_starts_at?.getTime() ??
-    (allStarts.length ? Math.min(...allStarts) : now - (now % 3_600_000));
-  const to =
-    (opts.to ? Date.parse(opts.to) : undefined) ??
+  const stepMs = opts.stepMinutes * 60_000;
+  const floorStep = (t: number) => t - (((t % stepMs) + stepMs) % stepMs);
+  const ceilStep = (t: number) => floorStep(t + stepMs - 1);
+  const defaultFrom =
+    meta[0]?.event_starts_at?.getTime() ?? (allStarts.length ? Math.min(...allStarts) : now);
+  const from = opts.from ? Date.parse(opts.from) : floorStep(defaultFrom);
+  const defaultTo =
     meta[0]?.event_ends_at?.getTime() ??
     (allEnds.length ? Math.max(...allEnds) : from + 24 * 3_600_000);
-  const stepMs = opts.stepMinutes * 60_000;
+  const to = opts.to ? Date.parse(opts.to) : ceilStep(defaultTo);
   if (!(to > from)) throw new BadRequestError("`to` must be after `from`");
   const slotCount = Math.ceil((to - from) / stepMs);
   if (slotCount > MAX_SLOTS) {

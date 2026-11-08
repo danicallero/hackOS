@@ -1,4 +1,4 @@
-import { withSheetFrame } from "@/components/adaptive-frame";
+import { withNativeHeaderSheet } from "@/components/adaptive-frame";
 import { NewHelpRequestScreen } from "@/components/help-desk/requests-screen";
 
-export default withSheetFrame(NewHelpRequestScreen);
+export default withNativeHeaderSheet(NewHelpRequestScreen);

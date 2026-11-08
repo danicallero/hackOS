@@ -70,6 +70,14 @@ type HelperCard = {
   availableNow: boolean;        // scheduledNow && present (what H65 routing uses)
 };
 
+// GET /api/helpdesk/helpers/:userId only (the list returns bare HelperCard).
+// Shared client type: HelperDetail<P> in @hackos/shared/help-desk.
+type HelperDetail = HelperCard & {
+  profile: DirectoryEntry;      // exactly GET /api/directory/:userId: displayName, photoUrl, headline,
+                                // bio, locationNote, socials, cvUrl, projects, project, challenges,
+                                // helpTopics; honours the person's own public-profile switches
+};
+
 type MyHelperProfile = {
   eligible: boolean;
   published: boolean;
@@ -151,7 +159,7 @@ type CoverageReport = {
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
 | `GET /api/me/helper-profile` | authenticated | — | `MyHelperProfile` (works before event access; `eligible:false` when not a helper) |
-| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing), bio?: string \| null (≤500, same rules as public profile) }` | `MyHelperProfile`. `bio` writes `user_public_profiles.bio` (omitted keeps it). Publishing needs ≥1 topic (409 `helper_profile_incomplete`); the bio is optional. Does not touch public-profile sharing. |
+| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs ≥1 topic (409 `helper_profile_incomplete`). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Does not touch public-profile sharing. |
 | `PUT /api/me/helper-profile/availability` | eligible | `{ intervals: AvailabilityInterval[] }` (0-30, each ≤24 h, no overlaps; replaces the set) | `MyHelperProfile`; 400 `availability_overlap` / `availability_invalid` |
 
 ### Browse helpers (H63)
@@ -159,7 +167,7 @@ type CoverageReport = {
 | Method & path | Guard | Query | Response |
 | --- | --- | --- | --- |
 | `GET /api/helpdesk/helpers` | browse | `?topicId=<id>&q=<name/topic text>&availableNow=true` | `{ helpers: HelperCard[] }`, available now first, then name |
-| `GET /api/helpdesk/helpers/:userId` | browse | — | `HelperCard`; 404 when not published/eligible |
+| `GET /api/helpdesk/helpers/:userId` | browse | — | `HelperDetail` (card + `profile`); 404 when not published/eligible. Publication is the consent: no badge scan, `directory_visible` or diary row involved, and none is created. `profile.cvUrl` and `profile.photoUrl` resolve for help desk readers while the person's `share_cv` / `show_photo` switches are on. |
 
 Browsing creates no diary contact. `photoUrl` from a helper card is
 readable by browsers through the existing photo route.
@@ -187,7 +195,7 @@ readable by browsers through the existing photo route.
 
 | Method & path | Guard | Query | Response |
 | --- | --- | --- | --- |
-| `GET /api/helpdesk/coverage` | `helpdesk:coverage` | `?from&to&stepMinutes=15..240` (default: event window, else span of all intervals; 60 min; ≤500 slots) | `CoverageReport` |
+| `GET /api/helpdesk/coverage` | `helpdesk:coverage` | `?from&to&stepMinutes=15..240` (default: event window, else span of all intervals; a default `from` is floored and `to` ceiled to `stepMinutes` boundaries in UTC, e.g. whole hours, so slots read 17:00–18:00; explicit values are kept as given; 60 min; ≤500 slots) | `CoverageReport` |
 
 ## Public profile additions
 

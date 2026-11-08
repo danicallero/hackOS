@@ -46,6 +46,19 @@ export function useTabStackScreenOptions() {
 }
 
 /**
+ * H61-H67: the help desk's modal sheets (request form, knowledge picker) share
+ * the help desk pages' header: transparent, inline title, soft scroll edge.
+ */
+export const helpSheetOptions = {
+  headerLargeTitle: false,
+  headerShadowVisible: false,
+  headerShown: true,
+  headerTransparent: true,
+  presentation: "modal",
+  scrollEdgeEffects: { top: "soft" },
+} as const;
+
+/**
  * Keep the native stack back action while removing the app-bar surface and
  * dynamic route title from detail screens.
  */

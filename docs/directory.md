@@ -211,7 +211,7 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
-| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv` |
+| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
@@ -372,6 +372,8 @@ account removal have their own sections.
 ## Help desk knowledge (H61)
 
 Public profile previews and scanned-person readers show `helpTopics` for published
-helpers. Helper bio edits write the same bio as this profile. Publishing a helper
-profile does not change networking opt-in or unlock CV, links, projects or other
-scan-profile data for a help desk browser.
+helpers. The helper profile is this profile: the bio is edited only here. Publishing a
+helper profile does not change networking opt-in, but it is the consent that
+shows the person's entry (`helperProfileEntry`, same fields and per-field
+switches) in `GET /api/helpdesk/helpers/:userId`, and lets help desk readers
+open that helper's shared CV and photo without a scan.

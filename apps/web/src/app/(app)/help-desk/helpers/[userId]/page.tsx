@@ -1,61 +1,53 @@
 "use client";
-import Link from "next/link";
 import { useParams } from "next/navigation";
-import { PageHeader } from "@/components/common/page-header";
+import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
-import { UserAvatar } from "@/components/common/user-avatar";
-import { Button } from "@/components/ui/button";
+import { isNotFoundError } from "@/lib/api";
+import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
-import type { HelperCard } from "../../model";
-import {
-  Availability,
-  HelpdeskError,
-  HelpdeskLoading,
-  HelperPresence,
-  useHelpdesk,
-} from "../../shared";
+import { PersonProfile, ProfileBackLink } from "../../../people/[userId]/person-detail";
+import type { HelperDetail } from "../../model";
+import { ScheduleDays } from "../../schedule-view";
+import { HelpdeskError, HelpdeskLoading, HelperPresence, useHelpdesk } from "../../shared";
+
+/**
+ * H63: a published helper is the same public profile people see after a
+ * badge scan, plus the help desk's own facts: when they said they would be
+ * around and whether they are scheduled and inside the venue right now.
+ * Browsing creates no contact.
+ */
 export default function HelperPage() {
   const { userId } = useParams<{ userId: string }>();
   const { t } = useLocale();
-  const resource = useHelpdesk<HelperCard>(
+  const resource = useHelpdesk<HelperDetail<DirectoryEntry>>(
     ["helper", userId],
     `/api/helpdesk/helpers/${encodeURIComponent(userId)}`,
   );
   const helper = resource.data;
+  const back = <ProfileBackLink href="/help-desk" label={t("helpDeskHelpers")} />;
+  if (!helper) {
+    return (
+      <PageLayout width="reading">
+        {resource.loading ? <HelpdeskLoading /> : null}
+        {isNotFoundError(resource.error) ? (
+          <EmptyState title={t("personNotFound")} />
+        ) : resource.error ? (
+          <HelpdeskError error={resource.error} retry={resource.refetch} />
+        ) : null}
+      </PageLayout>
+    );
+  }
   return (
-    <PageLayout width="reading">
-      {helper ? (
-        <>
-          <PageHeader
-            reserveNavigation={false}
-            context={<Link href="/help-desk">{t("helpDeskHelpers")}</Link>}
-            title={helper.displayName}
-            leading={
-              helper.photoUrl ? (
-                <UserAvatar name={helper.displayName} image={helper.photoUrl} decorative />
-              ) : undefined
-            }
-            meta={helper.affiliation || helper.headline}
-          />
-          <HelperPresence helper={helper} />
-          <p className="text-sm whitespace-pre-line wrap-anywhere">{helper.bio}</p>
-          <SectionCard variant="plain" title={t("helpDeskKnowledge")}>
-            <p className="text-sm">{helper.topics.map((topic) => topic.name).join(" · ")}</p>
-          </SectionCard>
-          <SectionCard variant="plain" title={t("helpDeskSchedule")}>
-            <Availability intervals={helper.availability} />
-          </SectionCard>
-        </>
-      ) : resource.loading ? (
-        <HelpdeskLoading />
-      ) : null}
+    <PersonProfile entry={helper.profile} context={back}>
       {resource.stale ? <StaleDataNotice onRetry={resource.refetch} /> : null}
-      {resource.error ? <HelpdeskError error={resource.error} retry={resource.refetch} /> : null}
-      <Button asChild variant="outline">
-        <Link href="/help-desk">{t("back")}</Link>
-      </Button>
-    </PageLayout>
+      <SectionCard variant="plain" title={t("helpDeskNowTitle")}>
+        <HelperPresence helper={helper} />
+      </SectionCard>
+      <SectionCard variant="plain" title={t("helpDeskSchedule")}>
+        <ScheduleDays intervals={helper.availability} />
+      </SectionCard>
+    </PersonProfile>
   );
 }

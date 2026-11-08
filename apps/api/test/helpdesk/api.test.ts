@@ -71,7 +71,6 @@ async function helper(topicIds: number[], opts: { scheduled?: boolean; present?:
   const res = await call("PUT", "/api/me/helper-profile", id, {
     published: true,
     topicIds,
-    bio: "I help",
   });
   expect(res.statusCode).toBe(200);
   if (opts.scheduled ?? true) {
@@ -151,7 +150,7 @@ describe("H61 knowledge catalogue", () => {
 });
 
 describe("H61 helper profile", () => {
-  it("shares the public-profile bio, stays separate from sharing consent and shows knowledge on the public card", async () => {
+  it("leaves the bio to the public profile, stays separate from sharing consent and shows knowledge on the public card", async () => {
     const h = await createUserWithCapabilities(helperCaps);
     const t = await topic("Angular", h);
     const incomplete = await call("PUT", "/api/me/helper-profile", h, {
@@ -160,13 +159,26 @@ describe("H61 helper profile", () => {
     });
     expect(incomplete.statusCode).toBe(409);
     expect(incomplete.json().error.details.code).toBe("helper_profile_incomplete");
-    const res = await call("PUT", "/api/me/helper-profile", h, {
+    const withBio = await call("PUT", "/api/me/helper-profile", h, {
       published: true,
       topicIds: [t],
       bio: "Frontend\nlead",
     });
+    expect(withBio.statusCode).toBe(400);
+    const res = await call("PUT", "/api/me/helper-profile", h, { published: true, topicIds: [t] });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ eligible: true, published: true, bio: "Frontend\nlead" });
+    expect(res.json()).toMatchObject({ eligible: true, published: true, bio: null });
+    const own = await call("PUT", "/api/me/public-profile", h, {
+      directoryVisible: false,
+      showSurname: false,
+      showPhoto: false,
+      showProject: true,
+      headline: null,
+      locationNote: null,
+      bio: "Frontend\nlead",
+    });
+    expect(own.statusCode).toBe(200);
+    expect((await call("GET", "/api/me/helper-profile", h)).json().bio).toBe("Frontend\nlead");
     const pub = await call("GET", "/api/me/public-profile", h);
     expect(pub.json()).toMatchObject({ directoryVisible: false, bio: "Frontend\nlead" });
     expect(pub.json().preview.helpTopics).toEqual([{ id: t, name: "Angular" }]);
@@ -273,6 +285,55 @@ describe("H63 browse helpers", () => {
     expect((await call("GET", `/api/helpdesk/helpers/${hidden}`, p)).statusCode).toBe(404);
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM diary_entries`);
     expect(rows[0].n).toBe(0);
+  });
+});
+
+describe("H63 helper profile detail", () => {
+  it("returns the public-profile entry honouring switches, without scan consent or diary rows", async () => {
+    const p = await createUserWithCapabilities(participantCaps);
+    const t = await topic("Swift", p);
+    const h = await helper([t]);
+    await pool.query(`UPDATE users SET surname = 'Garcia' WHERE id = $1`, [h]);
+    await pool.query(
+      `INSERT INTO user_public_profiles (user_id, headline, bio, location_note, socials, show_surname, show_photo)
+       VALUES ($1, 'iOS lead', 'Loves Swift', 'Hall B', '[{"kind":"github","url":"https://github.com/h"}]'::jsonb, false, false)
+       ON CONFLICT (user_id) DO UPDATE SET headline = EXCLUDED.headline, bio = EXCLUDED.bio,
+         location_note = EXCLUDED.location_note, socials = EXCLUDED.socials`,
+      [h],
+    );
+    const res = await call("GET", `/api/helpdesk/helpers/${h}`, p);
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ userId: h, kind: "staff", availableNow: true });
+    expect(body.profile).toMatchObject({
+      userId: h,
+      headline: "iOS lead",
+      bio: "Loves Swift",
+      locationNote: "Hall B",
+      socials: [{ kind: "github", url: "https://github.com/h" }],
+      photoUrl: null,
+      cvUrl: null,
+      helpTopics: [{ id: t, name: "Swift" }],
+    });
+    expect(body.profile.displayName.endsWith("G.")).toBe(true);
+    expect(Object.keys(body.profile).sort()).toEqual(
+      Object.keys((await call("GET", "/api/me/public-profile", h)).json().preview).sort(),
+    );
+    const { rows } = await pool.query(`SELECT count(*)::int AS n FROM diary_entries`);
+    expect(rows[0].n).toBe(0);
+    await pool.query(`UPDATE user_public_profiles SET show_surname = true WHERE user_id = $1`, [h]);
+    const shown = (await call("GET", `/api/helpdesk/helpers/${h}`, p)).json();
+    expect(shown.profile.displayName).toContain("Garcia");
+  });
+
+  it("answers 404 for unpublished helpers and 403 without a help desk capability", async () => {
+    const p = await createUserWithCapabilities(participantCaps);
+    const t = await topic("Zig", p);
+    const h = await helper([t]);
+    await call("PUT", "/api/me/helper-profile", h, { published: false, topicIds: [t] });
+    expect((await call("GET", `/api/helpdesk/helpers/${h}`, p)).statusCode).toBe(404);
+    const stranger = await createUser();
+    expect((await call("GET", `/api/helpdesk/helpers/${h}`, stranger)).statusCode).toBe(403);
   });
 });
 
@@ -399,6 +460,33 @@ describe("H66 claiming", () => {
     return { p, mate, helpers, id: res.json().id as number };
   }
 
+  it("lets the requester and team open the claiming helper's profile, even unpublished, and nobody else", async () => {
+    const { p, mate, helpers, id } = await openRequest();
+    const [h, other] = helpers as [number, number];
+    const unrelated = await createUserWithCapabilities(participantCaps);
+    const claim = await call("POST", `/api/helpdesk/requests/${id}/claim`, h, {
+      mode: "on_my_way",
+    });
+    expect(claim.statusCode).toBe(200);
+    // Unpublish: the list and ordinary readers lose the helper, the claim keeps them.
+    const topics = (await call("GET", "/api/me/helper-profile", h))
+      .json()
+      .topics.map((x: { id: number }) => x.id);
+    await call("PUT", "/api/me/helper-profile", h, { published: false, topicIds: topics });
+    for (const viewer of [p, mate]) {
+      const res = await call("GET", `/api/helpdesk/helpers/${h}`, viewer);
+      expect(res.statusCode).toBe(200);
+      expect(res.json().profile.userId).toBe(h);
+    }
+    expect((await call("GET", `/api/helpdesk/helpers/${h}`, unrelated)).statusCode).toBe(404);
+    // A different, unclaimed and unpublished helper stays hidden from the requester.
+    await call("PUT", "/api/me/helper-profile", other, { published: false, topicIds: topics });
+    expect((await call("GET", `/api/helpdesk/helpers/${other}`, p)).statusCode).toBe(404);
+    // Released: the claim no longer grants access.
+    await call("POST", `/api/helpdesk/requests/${id}/release`, h);
+    expect((await call("GET", `/api/helpdesk/helpers/${h}`, p)).statusCode).toBe(404);
+  });
+
   it("lets exactly one of several simultaneous claims win", async () => {
     const { p, mate, helpers, id } = await openRequest();
     const results = await Promise.all(
@@ -507,6 +595,21 @@ describe("H66 claiming", () => {
 });
 
 describe("H67 coverage", () => {
+  it("aligns default slot boundaries to the step", async () => {
+    const h = await helper([
+      await topic("Align", await createUserWithCapabilities(participantCaps)),
+    ]);
+    expect(h).toBeGreaterThan(0);
+    const cov = await createUserWithCapabilities([CAPABILITIES.HELPDESK_COVERAGE]);
+    for (const step of [60, 30]) {
+      const body = (await call("GET", `/api/helpdesk/coverage?stepMinutes=${step}`, cov)).json();
+      const ms = step * 60_000;
+      expect(Date.parse(body.from) % ms).toBe(0);
+      expect(Date.parse(body.to) % ms).toBe(0);
+      expect(body.slots[0].startsAt).toBe(body.from);
+    }
+  });
+
   it("counts scheduled helpers per slot and separates presence now", async () => {
     const organizer = await createUserWithCapabilities([
       CAPABILITIES.HELPDESK_COVERAGE,
