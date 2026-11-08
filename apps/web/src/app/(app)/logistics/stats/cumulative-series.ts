@@ -8,7 +8,7 @@ export function cumulativeDailyRows(
   if (rows.length === 0) return [];
   const counts = new Map<string, number>();
   for (const row of rows) counts.set(row.bucket, (counts.get(row.bucket) ?? 0) + row.n);
-  const days = [...counts.keys()].sort();
+  const days = [...counts.keys()].sort((left, right) => left.localeCompare(right));
   const end = Date.parse(`${days[days.length - 1]}T00:00:00Z`);
   const result: StatsChartDatum[] = [];
   let total = 0;
