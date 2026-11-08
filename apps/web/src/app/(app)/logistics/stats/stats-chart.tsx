@@ -29,6 +29,7 @@ export type StatsChartType = "bar" | "pie" | "line";
 export interface StatsChartDatum {
   label: string;
   n: number;
+  daily?: number;
   /** Optional series name for a shared tooltip/data key. */
   series?: string;
 }
@@ -204,6 +205,9 @@ export function StatsChart({
           {data.map((row) => (
             <li key={`${row.series ?? ""}:${row.label}`} className="break-words">
               {row.series ? `${row.series}: ${row.label}` : row.label}: {row.n}
+              {row.daily !== undefined && (
+                <small className="text-muted-foreground ml-2">+{row.daily}</small>
+              )}
             </li>
           ))}
         </ul>
@@ -226,10 +230,16 @@ function createStatsChartOption(
   title: string,
   palette: ChartPalette,
 ): StatsChartOption {
+  const cumulative = data.some((row) => row.daily !== undefined);
   const legendCounts = new Map<string, number>();
   for (const row of data) {
     const name = chartLegendName(row, type, title);
-    legendCounts.set(name, (legendCounts.get(name) ?? 0) + row.n);
+    legendCounts.set(
+      name,
+      cumulative
+        ? Math.max(legendCounts.get(name) ?? 0, row.n)
+        : (legendCounts.get(name) ?? 0) + row.n,
+    );
   }
   const common: StatsChartOption = {
     animation: false,
@@ -239,7 +249,7 @@ function createStatsChartOption(
       enabled: true,
       description: title,
       decal: {
-        show: true,
+        show: !cumulative,
         decals: {
           symbol: "rect",
           symbolSize: 1,
@@ -293,6 +303,25 @@ function createStatsChartOption(
       padding: [8, 10],
       textStyle: { color: palette.foreground, fontFamily: palette.fontFamily, fontSize: 13 },
       extraCssText: "box-shadow: 0 4px 14px rgb(15 23 42 / 18%);",
+      ...(cumulative && type === "line"
+        ? {
+            formatter: (params: unknown) => {
+              const point = (params as Array<{ dataIndex: number }>)[0];
+              const row = point && data[point.dataIndex];
+              if (!row) return "";
+              const wrapper = document.createElement("div");
+              const date = document.createElement("div");
+              date.textContent = row.label;
+              const total = document.createElement("strong");
+              total.textContent = String(row.n);
+              const delta = document.createElement("small");
+              delta.textContent = `+${row.daily}`;
+              delta.style.cssText = "display:block;opacity:0.7";
+              wrapper.append(date, total, delta);
+              return wrapper;
+            },
+          }
+        : {}),
       axisPointer: {
         type: "line",
         axis: type === "bar" ? "y" : "x",
@@ -450,7 +479,8 @@ function createStatsChartOption(
       name,
       type: "line",
       data: categories.map((category) => grouped.get(name)?.get(category) ?? null),
-      showSymbol: categories.length <= 28,
+      showSymbol: cumulative ? false : categories.length <= 28,
+      ...(cumulative ? { areaStyle: { opacity: 0.18 } } : {}),
       symbol: "circle",
       symbolSize: 7,
       connectNulls: false,
