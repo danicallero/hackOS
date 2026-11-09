@@ -1,4 +1,5 @@
 import MaskedView from "@react-native-masked-view/masked-view";
+import * as Device from "expo-device";
 import { Image } from "expo-image";
 import {
   type ReactNode,
@@ -460,6 +461,7 @@ function useProfileCameraTarget(
         cameraCutoutFrame: cameraCutoutFrame ?? islandFrame,
         displayCutoutRects,
         height: screenHeight,
+        modelId: Device.modelId,
         platform: Platform.OS,
         safeAreaTop,
         screenWidth,

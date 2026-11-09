@@ -513,6 +513,34 @@ describe("profile camera target", () => {
     insideIsland(target, 402, 62);
   });
 
+  it("uses the narrower island of the iPhone 18 generation, and the old size for unknown models", () => {
+    const wide = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    const narrow = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      modelId: "iPhone18,1",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    expect(narrow.width).toBeCloseTo(94 - 2);
+    expect(narrow.width).toBeLessThan(wide.width);
+    // Centred, so it still sits inside the hardware island.
+    expect(narrow.left + narrow.width / 2).toBeCloseTo(201);
+    const old = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      modelId: "iPhone17,1",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    expect(old.width).toBe(wide.width);
+  });
+
   it("targets Plus/Max widths (430, 440) inside the island", () => {
     insideIsland(
       resolveProfileCameraTarget({ ...base, height: 932, safeAreaTop: 59, screenWidth: 430 }),
