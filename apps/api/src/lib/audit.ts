@@ -1,6 +1,6 @@
 import type { Queryable } from "../db/pool.js";
 import { type AuditActorKind, resolveAuditActor } from "./audit-actor.js";
-import { changedAuditFields, privateAuditSnapshot } from "./audit-payload.js";
+import { changedAuditFields, minimizeAuditSnapshot } from "./audit-payload.js";
 import { getRequestContext } from "./request-context.js";
 
 export interface AuditEntry {
@@ -52,7 +52,9 @@ export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
         String(entry.entityId),
         actor.actorId,
         entry.action,
-        entry.after === undefined ? null : JSON.stringify(privateAuditSnapshot(entry.after)),
+        entry.after === undefined
+          ? null
+          : JSON.stringify(minimizeAuditSnapshot(entry.after, entry.entityType)),
         entry.changedFields ?? changedAuditFields(entry.before, entry.after),
         actor.source,
       ],
@@ -68,8 +70,12 @@ export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
       String(entry.entityId),
       entry.action,
       actor.source,
-      entry.before === undefined ? null : JSON.stringify(privateAuditSnapshot(entry.before)),
-      entry.after === undefined ? null : JSON.stringify(privateAuditSnapshot(entry.after)),
+      entry.before === undefined
+        ? null
+        : JSON.stringify(minimizeAuditSnapshot(entry.before, entry.entityType)),
+      entry.after === undefined
+        ? null
+        : JSON.stringify(minimizeAuditSnapshot(entry.after, entry.entityType)),
       entry.reason ?? null,
       entry.ip !== undefined ? entry.ip : (requestContext?.ip ?? null),
       entry.userAgent !== undefined ? entry.userAgent : (requestContext?.userAgent ?? null),
@@ -103,10 +109,12 @@ export async function auditMany(db: Queryable, entries: readonly AuditEntry[]): 
       entries.map((e) => e.action),
       actors.map((actor) => actor.source),
       entries.map((e) =>
-        e.before === undefined ? null : JSON.stringify(privateAuditSnapshot(e.before)),
+        e.before === undefined
+          ? null
+          : JSON.stringify(minimizeAuditSnapshot(e.before, e.entityType)),
       ),
       entries.map((e) =>
-        e.after === undefined ? null : JSON.stringify(privateAuditSnapshot(e.after)),
+        e.after === undefined ? null : JSON.stringify(minimizeAuditSnapshot(e.after, e.entityType)),
       ),
       entries.map((e) => e.reason ?? null),
       entries.map((e) => (e.ip !== undefined ? e.ip : (requestContext?.ip ?? null))),

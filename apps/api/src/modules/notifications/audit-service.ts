@@ -82,7 +82,43 @@ export async function queryAuditLog(
     `SELECT count(*)::int AS count ${from} ${where}`,
     params,
   );
-  return { items: rows.map(presentAuditRow), total: countRows[0].count };
+  return {
+    items: (await restoreWalletBroadcasts(db, rows)).map(presentAuditRow),
+    total: countRows[0].count,
+  };
+}
+
+/** H53: Wallet broadcast payloads are immutable and can recover a previously minimized copy. */
+async function restoreWalletBroadcasts(db: Queryable, rows: Record<string, unknown>[]) {
+  const ids = rows
+    .filter(
+      (row) =>
+        row.entity_type === "wallet_operation" &&
+        row.after !== null &&
+        typeof row.after === "object" &&
+        (row.after as Record<string, unknown>).translations === "[private]",
+    )
+    .map((row) => String(row.entity_id));
+  if (ids.length === 0) return rows;
+  const { rows: operations } = await db.query<{ id: string; translations: unknown }>(
+    `SELECT id::text, translations FROM wallet_operations
+     WHERE id::text = ANY($1::text[]) AND kind = 'alert' AND translations IS NOT NULL`,
+    [ids],
+  );
+  const translations = new Map(
+    operations.map((operation) => [operation.id, operation.translations]),
+  );
+  return rows.map((row) =>
+    translations.has(String(row.entity_id)) && row.entity_type === "wallet_operation"
+      ? {
+          ...row,
+          after: {
+            ...(row.after as Record<string, unknown>),
+            translations: translations.get(String(row.entity_id)),
+          },
+        }
+      : row,
+  );
 }
 
 /** Single audit_log row by id, same shape as the list query, for the detail route. */
@@ -97,7 +133,8 @@ export async function queryAuditLogById(db: Queryable, id: number): Promise<unkn
      WHERE al.id = $1`,
     [id],
   );
-  return rows[0] ? presentAuditRow(rows[0]) : null;
+  const [row] = await restoreWalletBroadcasts(db, rows);
+  return row ? presentAuditRow(row) : null;
 }
 
 /**

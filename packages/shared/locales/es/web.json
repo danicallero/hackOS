@@ -2027,6 +2027,7 @@
   "auditEventAccessRemoved": "Acceso eliminado",
   "auditEventAccountRemovalCancelled": "Eliminación de cuenta cancelada",
   "auditEventAddChallenge": "Reto añadido",
+  "auditEventAlertQueued": "Aviso en cola",
   "auditEventAlertSend": "Aviso enviado",
   "auditEventAnonymized": "Cuenta anonimizada",
   "auditEventArtworkReset": "Imagen restablecida",

@@ -189,6 +189,8 @@ export default function AuditPage() {
   const columns: Column<AuditRow>[] = [
     {
       id: "when",
+      width: "w-[15%]",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colWhen"),
       cell: (r) => (
         <span className="text-sm">{formatEventDate(r.created_at, language, "dateTime")}</span>
@@ -196,23 +198,28 @@ export default function AuditPage() {
     },
     {
       id: "action",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colAction"),
-      cell: (r) => (
-        <div className="space-y-1">
-          <span className="text-sm font-medium">{getActionLabel(r.action, t)}</span>
-          {[...new Set([...(r.changed_fields ?? []), ...auditChangedFields(r.after)])].length >
-            0 && (
-            <p className="text-muted-foreground text-xs">
-              {[...new Set([...(r.changed_fields ?? []), ...auditChangedFields(r.after)])]
-                .map((field) => getAuditFieldLabel(field, t))
-                .join(", ")}
-            </p>
-          )}
-        </div>
-      ),
+      cell: (r) => {
+        const fields = [...new Set([...(r.changed_fields ?? []), ...auditChangedFields(r.after)])]
+          .map((field) => getAuditFieldLabel(field, t))
+          .join(", ");
+        return (
+          <div className="min-w-0 space-y-1">
+            <span className="text-sm font-medium">{getActionLabel(r.action, t)}</span>
+            {fields && (
+              <p className="text-muted-foreground truncate text-xs" title={fields}>
+                {fields}
+              </p>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "entity",
+      width: "w-[20%]",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colEntity"),
       cell: (r) => {
         const href = getAuditEntityHref(r.entity_type, r.entity_id);
@@ -231,6 +238,8 @@ export default function AuditPage() {
     },
     {
       id: "actor",
+      width: "w-[20%]",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colActor"),
       cell: (r) => (
         <div className="space-y-1">
@@ -256,6 +265,8 @@ export default function AuditPage() {
     },
     {
       id: "source",
+      width: "w-28",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colSource"),
       cell: (r) =>
         r.source ? (

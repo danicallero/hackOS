@@ -37,3 +37,12 @@ it("compares permission arrays by identity and exposes only changed states (H8/H
     { key: "capabilities.users:write", status: "changed", before: "deny", after: "allow" },
   ]);
 });
+
+it("expands newly recorded broadcast translations into readable field values (H53)", () => {
+  expect(
+    diffAuditSnapshot(null, { translations: { en: { title: "Welcome", body: "Doors open" } } }),
+  ).toEqual([
+    { key: "translations.en.body", status: "added", before: undefined, after: "Doors open" },
+    { key: "translations.en.title", status: "added", before: undefined, after: "Welcome" },
+  ]);
+});
