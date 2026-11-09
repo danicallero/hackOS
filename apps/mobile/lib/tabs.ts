@@ -42,6 +42,15 @@ export function canManageStands(capabilities: string[]): boolean {
   return has(capabilities, CAPABILITIES.SPONSORS_MANAGE);
 }
 
+/** H61-H67: any help desk capability opens the Help desk tab; routes and actions are gated per screen. */
+export function canUseHelpDesk(capabilities: string[]): boolean {
+  return [
+    CAPABILITIES.HELPDESK_REQUEST,
+    CAPABILITIES.HELPDESK_OFFER,
+    CAPABILITIES.HELPDESK_COVERAGE,
+  ].some((capability) => has(capabilities, capability));
+}
+
 /** H48/H59: schedule:manage implies read of the full run-of-show. */
 export function canReadFullSchedule(capabilities: string[]): boolean {
   return (
@@ -114,8 +123,12 @@ export function overflowTabs(
 ): OverflowTabKey[] {
   // #935: every signed-in attendee keeps an event diary (the tab shell
   // already requires event access).
-  if (!isOperator(capabilities) && !canOperateQueues(capabilities)) return ["diary", "account"];
+  // H61-H67: Help desk is promoted into a direct cell ahead of Contacts, which moves behind Others first.
+  const helpDesk = canUseHelpDesk(capabilities) ? (["help-desk"] as const) : [];
+  if (!isOperator(capabilities) && !canOperateQueues(capabilities))
+    return [...helpDesk, "diary", "account"];
   return [
+    ...helpDesk,
     ...(canSeeMyQueue(capabilities, context) ? (["queue"] as const) : []),
     "diary",
     ...(isOperator(capabilities) && canOperateQueues(capabilities)

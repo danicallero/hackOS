@@ -67,6 +67,10 @@ Architecture & modules:
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and
   account-removal coverage.
+- [Help desk (H61-H67)](./help-desk.md) — helper profiles sharing the public
+  bio, knowledge catalogue, stated availability versus presence, request
+  routing, atomic claims and coverage; client contract in
+  [`help-desk-contract.md`](./help-desk-contract.md).
 - [Content reports (H18)](./content-reports.md) — attendee reports of projects and
   public profiles, and the organiser inbox that closes them.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
@@ -127,6 +131,8 @@ Architecture & modules:
   and transformations, layout persistence, and granular statistics ACLs.
 
 Frontend (web & mobile):
+
+- [Web help desk](./help-desk-web.md) — published helpers, shared bio and knowledge, dated availability, team requests, helper inbox and coverage (H61–H67).
 
 - [Design system, UI & UX](./DESIGN.md) — the consolidated design rulebook,
   indexed and summarized per section: principles, tokens (with intent and

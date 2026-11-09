@@ -1,6 +1,6 @@
 # Mobile surface states
 
-Coverage of the mobile surfaces outside Schedule and the Activities
+Coverage of the mobile surfaces outside Help desk, Schedule and the Activities
 list (H4, H7, H18–H28, H29–H40, H50–H55). Routes below are paths relative to
 `apps/mobile/app`; implementations are relative to `apps/mobile/components`.
 Route groups are written explicitly because several stacks reuse one screen.
@@ -34,6 +34,8 @@ and hardware-free tests, not a claim that every state was driven on a device.
 | `projects/challenge.tsx`; company challenge sheet | `ChallengeDetailScreen`, `ChallengeSheet` | Loading vs missing challenge; same body in nested sheet | Quiet refresh failures now visible; loaded challenge stays on screen; Retry clears errors | Updated |
 | `(tabs)/diary/index.tsx`, `(tabs)/others/diary.tsx` | `DiaryScreen`, people tab | Real empty diary, no favourites, no search matches have distinct states | Data retained; error Retry; no empty message beside failed read; refresh; pending offline scan queue and scan alerts retained | Updated |
 | Diary Companies tab | `CompanyAlbum`, `CompanySheet` | Loading/failed initial collection; successful empty album | Collection refresh error now visible with album retained; star/note/remove use existing busy keys, alerts and rollback | Updated |
+| `people/[id].tsx`; `(tabs)/help-desk/helper/[id].tsx`, `(tabs)/help-desk/requester/[id].tsx` | `PersonProfileScreen` | Initial loading, invalid/missing profile, independent diary read | Profile survives failed refetch with Retry; changing identity resets previous profile; note/star/remove retain existing pending/error paths | Updated |
+| `networking-profile.tsx`, `helper-profile.tsx` | `NetworkingProfileScreen` editor/preview | Initial loader; failed read is distinct; no synthetic empty profile | Focus refetch now reports failure through same retryable loader; drafts stay when editing; save/share/CV upload failure and retry retained; shared helper section owned by Help desk worker | Updated |
 | `profile-tasks.tsx` | `ProfileTasksScreen` sheet | Missing identity now uses loading/error recovery and initializes draft when identity arrives; meal plan loading/error | Dietary/meal save errors retained; supporting intolerance errors + Retry; partial save retry does not resend already saved dietary answer | Updated |
 | `notification-onboarding.tsx` | `NotificationOnboardingScreen` | Preference loader/error + retry; draft retained | Save failure Retry; visible pending feedback; switches and dismiss disabled during save | Updated |
 | `(tabs)/others/account.tsx` | `AccountScreen` | Identity loader/error, offline cached profile | Existing profile refresh/language/sign-out/meal errors retained; dietary dictionary failure now visible and retryable | Updated |

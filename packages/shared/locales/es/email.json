@@ -116,6 +116,36 @@
         "subject": "Recordatorio: {{title}}",
         "body": "Hola,\n\n{{title}} empieza a las {{startsAtLabel}}.{{locationLine}}\n\n¡Nos vemos allí!"
       }
+    },
+    "helpdesk": {
+      "request": {
+        "subject": "Piden ayuda: {{topics}}",
+        "body": "Alguien necesita ayuda con {{topics}} en {{location}}. Abre el punto de ayuda para atenderla."
+      },
+      "requestOther": {
+        "subject": "Piden ayuda",
+        "body": "Alguien necesita ayuda en {{location}}. Abre el punto de ayuda para atenderla."
+      },
+      "onMyWay": {
+        "subject": "{{helperName}} va de camino",
+        "body": "{{helperName}} ha atendido tu solicitud de ayuda y va hacia {{location}}."
+      },
+      "meetAt": {
+        "subject": "Reúnete con {{helperName}} en {{meetingLocation}}",
+        "body": "{{helperName}} ha atendido tu solicitud de ayuda y te espera en {{meetingLocation}}."
+      },
+      "released": {
+        "subject": "Tu solicitud de ayuda vuelve a estar abierta",
+        "body": "La persona que la atendió ya no puede ir. Otras personas aún pueden atenderla."
+      },
+      "cancelled": {
+        "subject": "Solicitud de ayuda cancelada",
+        "body": "Quien pidió ayuda ya no la necesita."
+      },
+      "resolved": {
+        "subject": "Solicitud de ayuda resuelta",
+        "body": "{{actorName}} ha marcado esta solicitud como resuelta."
+      }
     }
   },
   "push": {
@@ -151,6 +181,36 @@
       "reminder": {
         "title": "{{title}}",
         "body": "Empieza a las {{startsAtLabel}}{{locationSuffix}}"
+      }
+    },
+    "helpdesk": {
+      "request": {
+        "title": "Piden ayuda: {{topics}}",
+        "body": "En {{location}}. Abre el punto de ayuda para atenderla."
+      },
+      "requestOther": {
+        "title": "Piden ayuda",
+        "body": "En {{location}}. Abre el punto de ayuda para atenderla."
+      },
+      "onMyWay": {
+        "title": "{{helperName}} va de camino",
+        "body": "Va hacia {{location}}."
+      },
+      "meetAt": {
+        "title": "Reúnete con {{helperName}} en {{meetingLocation}}",
+        "body": "Ha atendido tu solicitud de ayuda."
+      },
+      "released": {
+        "title": "Solicitud de ayuda abierta de nuevo",
+        "body": "La persona que la atendió ya no puede ir."
+      },
+      "cancelled": {
+        "title": "Solicitud de ayuda cancelada",
+        "body": "Ya no necesitan ayuda."
+      },
+      "resolved": {
+        "title": "Solicitud de ayuda resuelta",
+        "body": "{{actorName}} ha marcado esta solicitud como resuelta."
       }
     }
   }

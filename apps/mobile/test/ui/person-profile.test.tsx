@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { Alert, Linking } from "react-native";
 import { PersonProfileScreen } from "@/components/person-profile-screen";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -299,4 +299,21 @@ it("shows one unavailable state for a hidden or unreadable profile", async () =>
   personResult = new ApiError("Person not found", 404);
   await renderMobile(<PersonProfileScreen />);
   expect(await screen.findByText("directoryPersonNotFound")).toBeTruthy();
+});
+
+it("preserves the rendered profile after refresh fails, then retries without losing it", async () => {
+  await renderMobile(<PersonProfileScreen />);
+  expect(await screen.findByText("Ana Souto")).toBeTruthy();
+  personResult = new Error("offline");
+  const scroll = screen.getByTestId("person-profile");
+  await act(async () => {
+    await scroll.props.refreshControl.props.onRefresh();
+  });
+  expect(await screen.findByText("requestError")).toBeTruthy();
+  expect(screen.getByText("Ana Souto")).toBeTruthy();
+  expect(screen.getByText("I build rovers.")).toBeTruthy();
+  personResult = profile;
+  await fireEvent.press(screen.getByRole("button", { name: "retry" }));
+  await waitFor(() => expect(screen.queryByText("requestError")).toBeNull());
+  expect(screen.getByText("Ana Souto")).toBeTruthy();
 });

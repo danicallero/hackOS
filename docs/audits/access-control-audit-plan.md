@@ -3,6 +3,12 @@
 > Historical audit: project-import capability references below describe the retired
 > integration. Current native projects use only `projects:read` and `projects:edit`
 > (#1005); see [native projects](../projects.md).
+>
+> Historical audit: statements below that the seeded `Sponsor`, `Mentor` or
+> `Participant` roles carry no (or only `queue:status`) capabilities predate the
+> help desk. Migration `0901_help_desk.sql` (H61-H67) seeds `helpdesk:offer` on
+> Sponsor, Mentor, Organizer and Day Staff, `helpdesk:request` on Participant and
+> `helpdesk:coverage` on Organizer; see [help desk](../help-desk.md).
 
 Status: **implemented and independently release-gate verified (2026-07-31);
 superseded by the H8 role-hierarchy rewrite below (2026-08-31)**.

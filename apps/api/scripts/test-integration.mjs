@@ -12,7 +12,7 @@ const baseDatabaseUrl = new URL(
 // receives independent Postgres, Valkey and storage namespaces below.
 const shardDirectories = [
   ["identity", "certificates", "notifications", "directory", "event"],
-  ["queue", "live-activities", "exports", "diary"],
+  ["queue", "live-activities", "exports", "diary", "helpdesk"],
   ["logistics", "projects", "github", "reports", "sponsors"],
   ["applications", "challenges", "statistics"],
 ];

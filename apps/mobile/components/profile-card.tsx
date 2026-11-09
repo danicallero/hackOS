@@ -16,7 +16,14 @@ const PROJECT_KINDS: { kind: "project"; one: MessageKey; many: MessageKey }[] = 
 
 export type ProfileCardData = Pick<
   DirectoryEntry,
-  "displayName" | "headline" | "bio" | "locationNote" | "socials" | "projects" | "challenges"
+  | "displayName"
+  | "headline"
+  | "bio"
+  | "locationNote"
+  | "socials"
+  | "projects"
+  | "challenges"
+  | "helpTopics"
 >;
 
 /**
@@ -55,6 +62,8 @@ export function ProfileCard({
   avatar,
   actions,
   afterBio,
+  beforeKnowledge,
+  identityAccessory,
   onNameLayout,
   edit,
 }: {
@@ -62,6 +71,9 @@ export function ProfileCard({
   avatar: ReactNode;
   actions?: ReactNode;
   afterBio?: ReactNode;
+  /** Optional feature metadata above knowledge, within the same public profile. */
+  beforeKnowledge?: ReactNode;
+  identityAccessory?: ReactNode;
   onNameLayout?: (event: LayoutChangeEvent) => void;
   edit?: ProfileCardEdit;
 }) {
@@ -192,6 +204,9 @@ export function ProfileCard({
   return (
     <>
       <View style={{ alignItems: "center", gap: 14 }}>
+        {identityAccessory ? (
+          <View style={{ position: "absolute", right: 0, top: 0 }}>{identityAccessory}</View>
+        ) : null}
         {avatar}
         <View
           onLayout={onNameLayout}
@@ -290,6 +305,14 @@ export function ProfileCard({
         </Section>
       ) : null}
 
+      {beforeKnowledge}
+      {data.helpTopics?.length ? (
+        <Section title={t("helpTopics")}>
+          <Text selectable style={{ ...type.body, color: colors.label, padding: 16 }}>
+            {data.helpTopics.map((topic) => topic.name).join(", ")}
+          </Text>
+        </Section>
+      ) : null}
       {afterBio}
 
       {data.socials.length > 0 ? (

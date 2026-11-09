@@ -2,7 +2,13 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
+import {
+  asUser,
+  createRole,
+  createUser,
+  createUserWithCapabilities,
+  useTestApp,
+} from "../helpers.js";
 import { admitParticipant } from "../projects/fixtures.js";
 
 /**
@@ -868,5 +874,65 @@ describe("user-management moderation (#935)", () => {
       payload: { reason: "Moderation" },
     });
     expect(legacy.statusCode).toBe(404);
+  });
+});
+
+describe("helper profile files for help desk readers (H61, H63)", () => {
+  async function publishedHelper(shareCv: boolean) {
+    const me = await person("Hana", "Helper");
+    await pool.query(`UPDATE users SET account_state = 'active' WHERE id = $1`, [me]);
+    const role = await createRole([CAPABILITIES.HELPDESK_OFFER]);
+    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [me, role]);
+    expect(
+      (await upload("/api/me/public-profile/cv", me, PDF, "cv.pdf", "application/pdf")).statusCode,
+    ).toBe(200);
+    expect((await upload("/api/me/photo", me, PNG, "me.png", "image/png")).statusCode).toBe(200);
+    // Hidden from badge scans: helper publication alone is the consent.
+    const saved = await putProfile(me, {
+      ...VISIBLE,
+      directoryVisible: false,
+      showPhoto: true,
+      shareCv,
+    });
+    expect(saved.statusCode).toBe(200);
+    const t = await pool.query(
+      `INSERT INTO help_topics (name, name_key) VALUES ('Go', 'go') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO helper_profiles (user_id, published, published_at) VALUES ($1, true, now())`,
+      [me],
+    );
+    await pool.query(`INSERT INTO helper_topics (user_id, topic_id) VALUES ($1, $2)`, [
+      me,
+      t.rows[0].id,
+    ]);
+    return me;
+  }
+
+  it("serves a published helper's shared CV and photo to help desk readers without a scan", async () => {
+    const me = await publishedHelper(true);
+    const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    const cv = await get(`/api/directory/${me}/cv`, desk);
+    expect(cv.statusCode).toBe(200);
+    expect(cv.rawPayload.equals(PDF)).toBe(true);
+    expect((await get(`/api/users/${me}/photo`, desk)).statusCode).toBe(200);
+  });
+
+  it("keeps everything else scan-gated", async () => {
+    const me = await publishedHelper(true);
+    const noCap = await createUserWithCapabilities([]);
+    expect((await get(`/api/directory/${me}/cv`, noCap)).statusCode).toBe(404);
+    expect((await get(`/api/users/${me}/photo`, noCap)).statusCode).toBe(404);
+
+    const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    await pool.query(`UPDATE helper_profiles SET published = false WHERE user_id = $1`, [me]);
+    expect((await get(`/api/directory/${me}/cv`, desk)).statusCode).toBe(404);
+    expect((await get(`/api/users/${me}/photo`, desk)).statusCode).toBe(404);
+  });
+
+  it("honours the helper's own CV switch", async () => {
+    const me = await publishedHelper(false);
+    const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    expect((await get(`/api/directory/${me}/cv`, desk)).statusCode).toBe(404);
   });
 });

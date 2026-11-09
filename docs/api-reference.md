@@ -263,6 +263,14 @@ moderation. The account photo (`/api/me/photo`, staff edits through
 lives in identity but follows the profile's photo switch. Full detail:
 [`directory.md`](./directory.md).
 
+### helpdesk (H61–H67)
+Help desk: helper profiles (`/api/me/helper-profile`, projected from the
+public profile so the bio is shared), the self-service knowledge catalogue,
+stated availability, browsing helpers, help requests with H65 routing to
+available present helpers (with admin-set opening hours for new requests), single-winner claims and organizer coverage under
+`/api/helpdesk`. Full detail: [`help-desk.md`](./help-desk.md); client
+contract: [`help-desk-contract.md`](./help-desk-contract.md).
+
 ### challenges (H44)
 Sponsor-owned challenge templates bound to an enterprise: draft/published
 status, hidden/visible visibility, a scheduled `available_from` reveal,
@@ -332,7 +340,15 @@ scanning, the pre-event schedule, cross-station people search, and Apple/Google
 Wallet pass issuance + the Apple PassKit web-service protocol. Ticket
 eligibility is read from the identity role graph's `event_access` bit, so
 losing one of several event-bearing roles keeps access while losing the last
-one stops live ticket exposure and voids active wallet passes. Scanner
+one stops live ticket exposure and voids active wallet passes. Presence has three
+signal sources: door `in`/`out`, activity scans, and resolved help requests
+(H66, `kind: "help"`, `source: "help"`, category `helpdesk`; cancelled requests
+count for nothing). A resolved request is an in-person checkpoint at
+`resolved_at` for the claimer and the requester: it can secure and renew a
+certainty window that a door entry or activity opened, but with no live window
+it is ignored, it never opens presence by itself, and it does not change the
+door in/out state or the in→in conflict check. Staff cannot edit or delete these
+signals; they follow the help request. Scanner
 mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
 
@@ -591,6 +607,7 @@ code when there is no reason.
 | `schedule_ends_before_starts` | 400 | Schedule item ends at or before it starts |
 | `schedule_scan_needs_participants` | 400 | A scan-required item must be participant-visible |
 | `schedule_item_not_found` | 404 | Schedule item does not exist |
+| `helper_not_eligible`, `helpdesk_closed`, `help_request_*`, `topic_*`, `availability_*` | 400/403/409 | Help desk reasons (H61-H66); full table in [`help-desk-contract.md`](./help-desk-contract.md) |
 
 Application response validation (`400`, "Response fails template validation")
 returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such as

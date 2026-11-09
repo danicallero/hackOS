@@ -6,6 +6,7 @@ type ProfileTabId = "personal" | "public" | "wallet" | "account";
 export type ProfileSectionId =
   | "personal"
   | "public"
+  | "helpDesk"
   | "meals"
   | "passes"
   | "certificates"
@@ -14,7 +15,7 @@ export type ProfileSectionId =
   | "danger";
 
 /** Sections with their own Save; their tab is marked while one holds unsaved edits. */
-export type EditableSection = "personal" | "public" | "meals";
+export type EditableSection = "personal" | "public" | "helpDesk" | "meals";
 
 export interface SectionDef {
   id: ProfileSectionId;
@@ -34,7 +35,11 @@ const TABS: TabDef[] = [
     title: "personalDetails",
     sections: [{ id: "personal" }, { id: "meals", title: "meals" }],
   },
-  { id: "public", title: "publicProfileTitle", sections: [{ id: "public" }] },
+  {
+    id: "public",
+    title: "publicProfileTitle",
+    sections: [{ id: "public" }, { id: "helpDesk", title: "helpDeskTitle" }],
+  },
   {
     id: "wallet",
     title: "wallet",
@@ -55,9 +60,15 @@ const TABS: TabDef[] = [
  * The tabs and sections this account has. Passes follow the personal nav's
  * rule (hidden for pure applicants); certificates and the public profile need
  * current event access, as their APIs do (#934, #1083). A tab with no
- * section left is dropped.
+ * section left is dropped. The help desk section follows the API's helper
+ * eligibility, so an accepted mentor can prepare it before confirmation,
+ * without event access (H61).
  */
-export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
+export function visibleProfileTabs(
+  me: Me,
+  isPureApplicant: boolean,
+  helperEligible = false,
+): TabDef[] {
   const visible = (id: ProfileSectionId) => {
     switch (id) {
       case "passes":
@@ -65,6 +76,8 @@ export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
       case "certificates":
       case "public":
         return me.hasEventAccess;
+      case "helpDesk":
+        return helperEligible;
       case "meals":
         return me.isSponsorRep;
       case "roles":

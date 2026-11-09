@@ -99,5 +99,19 @@
   "apiErrorRateLimited": "Demasiados intentos. Agarda un momento e téntao de novo.",
   "apiErrorServer": "Algo fallou da nosa parte. Téntao de novo ou avisa ao staff se persiste.",
   "apiError_review_field_lease_required": "O teu bloqueo de edición caducou ou pertence a outro xurado.",
-  "apiError_certificate_review_required": "Pendente de revisión de asistencia"
+  "apiError_certificate_review_required": "Pendente de revisión de asistencia",
+  "apiError_helper_not_eligible": "Só mentores, representantes de patrocinadores e staff poden ofrecer axuda.",
+  "apiError_helpdesk_closed": "O posto de axuda está pechado agora mesmo.",
+  "apiError_help_request_active": "Xa hai unha solicitude de axuda activa.",
+  "apiError_help_request_already_claimed": "Outra persoa xa atendeu esta solicitude.",
+  "apiError_help_request_closed": "Esta solicitude de axuda está pechada.",
+  "apiError_help_request_not_claimable": "Non podes atender a túa propia solicitude.",
+  "apiError_help_request_not_claimer": "Só quen atendeu esta solicitude pode liberala.",
+  "apiError_help_request_not_claimed": "Só se pode marcar como resolta unha solicitude xa atendida.",
+  "apiError_topic_name_taken": "Xa existe un tema con este nome. Combínaos.",
+  "apiError_topic_reserved": "Outro xa está dispoñible en todas as solicitudes.",
+  "apiError_topic_unknown": "Un dos temas xa non existe. Recarga e téntao de novo.",
+  "apiError_availability_overlap": "Os intervalos de dispoñibilidade non poden solaparse.",
+  "apiError_availability_invalid": "Cada intervalo debe rematar despois de comezar e durar como máximo 24 horas.",
+  "apiError_availability_before_window": "A dispoñibilidade non pode comezar antes do tempo de hacking."
 }

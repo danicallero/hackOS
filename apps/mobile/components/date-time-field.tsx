@@ -22,6 +22,8 @@ export interface DateTimeFieldProps {
   maximumDate?: Date;
   dateAccessibilityLabel: string;
   timeAccessibilityLabel: string;
+  /** Only the clock: the date stays the value's own (a range edited within its day). */
+  timeOnly?: boolean;
 }
 
 // Props are real instants. The native pickers only speak the phone's zone, so
@@ -57,6 +59,7 @@ export function DateTimeField({
   maximumDate,
   dateAccessibilityLabel,
   timeAccessibilityLabel,
+  timeOnly = false,
 }: DateTimeFieldProps) {
   const timeZone = useEventTimeZone();
   const { language } = useLocale();
@@ -79,6 +82,7 @@ export function DateTimeField({
         }
         pickerValue={pickerValue}
         timeAccessibilityLabel={timeAccessibilityLabel}
+        timeOnly={timeOnly}
         timeZone={timeZone}
         value={value}
       />
@@ -88,7 +92,7 @@ export function DateTimeField({
   return (
     <DateTimePicker
       value={pickerValue}
-      mode="datetime"
+      mode={timeOnly ? "time" : "datetime"}
       minimumDate={pickerMin}
       maximumDate={pickerMax}
       onValueChange={(_, date) => date && onChange(fromPickerDate(date, timeZone))}
@@ -156,6 +160,7 @@ function AndroidDateTimeField({
   onPickerChange,
   dateAccessibilityLabel,
   timeAccessibilityLabel,
+  timeOnly,
   timeZone,
   language,
 }: {
@@ -166,6 +171,7 @@ function AndroidDateTimeField({
   onPickerChange: (date: Date, mode: "date" | "time") => void;
   dateAccessibilityLabel: string;
   timeAccessibilityLabel: string;
+  timeOnly: boolean;
   timeZone: string;
   language: string;
 }) {
@@ -173,12 +179,14 @@ function AndroidDateTimeField({
   return (
     <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.sm }}>
-        <DateTimeChip
-          accessibilityLabel={dateAccessibilityLabel}
-          icon="calendar.badge.clock"
-          label={formatEventTime(value, language, { dateStyle: "short" }, timeZone)}
-          onPress={() => setMode("date")}
-        />
+        {timeOnly ? null : (
+          <DateTimeChip
+            accessibilityLabel={dateAccessibilityLabel}
+            icon="calendar.badge.clock"
+            label={formatEventTime(value, language, { dateStyle: "short" }, timeZone)}
+            onPress={() => setMode("date")}
+          />
+        )}
         <DateTimeChip
           accessibilityLabel={timeAccessibilityLabel}
           icon="clock"

@@ -1,6 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { firstNumericQuestionKey, type Question } from "@hackos/shared/questions";
-import { pool, withTransaction } from "../../db/pool.js";
+import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { type AuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { toCsv } from "../../lib/csv.js";
@@ -49,6 +49,42 @@ export function resolveReviewScope(context: AuthorizationContext): Promise<Revie
   return scope;
 }
 
+/**
+ * Challenges authored by any sponsor of the same enterprise as `userId`
+ * (a sponsor's "own" challenges). Shared with the help desk (H65).
+ */
+export async function sponsorChallengeIds(
+  db: Queryable,
+  userId: number,
+  fixtureMarker = false,
+): Promise<number[]> {
+  const { rows } = await db.query<{ id: number }>(
+    `SELECT DISTINCT c.id
+       FROM challenges c
+       JOIN sponsors author ON author.id = c.author
+       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+      WHERE mine.user_id = $1 AND c.is_test_account = $2`,
+    [userId, fixtureMarker],
+  );
+  return rows.map((r) => Number(r.id));
+}
+
+/** User ids of every sponsor entitled to `challengeId` (same enterprise as its author). */
+export async function challengeSponsorUserIds(
+  db: Queryable,
+  challengeId: number,
+): Promise<number[]> {
+  const { rows } = await db.query<{ user_id: number }>(
+    `SELECT DISTINCT mine.user_id
+       FROM challenges c
+       JOIN sponsors author ON author.id = c.author
+       JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
+      WHERE c.id = $1 AND c.is_test_account = false`,
+    [challengeId],
+  );
+  return rows.map((r) => Number(r.user_id));
+}
+
 async function loadReviewScope(context: AuthorizationContext): Promise<ReviewScope> {
   const userId = context.userId;
   if (userId == null) throw new UnauthorizedError();
@@ -62,20 +98,13 @@ async function loadReviewScope(context: AuthorizationContext): Promise<ReviewSco
 
   const [sponsor, challenges] = await Promise.all([
     pool.query(`SELECT 1 FROM sponsors WHERE user_id = $1 LIMIT 1`, [userId]),
-    pool.query(
-      `SELECT DISTINCT c.id
-         FROM challenges c
-        JOIN sponsors author ON author.id = c.author
-        JOIN sponsors mine ON mine.enterprise_id = author.enterprise_id
-        WHERE mine.user_id = $1 AND c.is_test_account = $2`,
-      [userId, fixtureMarker],
-    ),
+    sponsorChallengeIds(pool, userId, fixtureMarker),
   ]);
   if ((sponsor.rowCount ?? 0) === 0) throw new ForbiddenError("Not allowed to view reviews");
   return {
     actorId: userId,
     isAdmin: false,
-    ownChallengeIds: challenges.rows.map((r: { id: number }) => r.id),
+    ownChallengeIds: challenges,
     fixtureMarker,
   };
 }

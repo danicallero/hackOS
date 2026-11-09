@@ -8,6 +8,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
@@ -15,6 +16,7 @@ import { useUrlTab } from "@/lib/url-tab";
 import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
+import { HelperSection } from "./helper-section";
 import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
 import { PersonalDetails } from "./personal-details";
@@ -42,10 +44,13 @@ export default function ProfileSettingsPage() {
  */
 function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boolean }) {
   const { t } = useLocale();
-  const tabs = visibleProfileTabs(me, isPureApplicant);
+  const helper = useOwnHelperProfile();
+  const tabs = visibleProfileTabs(me, isPureApplicant, helper.data?.eligible === true);
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
+    // The help desk settings now live under the public profile (H61).
+    aliases: { "help-desk": "public" },
   });
   // A tab mounts when first opened and then stays mounted so a draft survives
   // switching; tabs never opened do not fetch their data (#1227).
@@ -54,10 +59,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   const [dirty, setDirty] = useState<Record<EditableSection, boolean>>({
     personal: false,
     public: false,
+    helpDesk: false,
     meals: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
+  const setHelpDeskDirty = useDirtySetter(setDirty, "helpDesk");
   const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
@@ -65,7 +72,9 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
       case "personal":
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
-        return <PublicProfileCard onDirtyChange={onPublicDirty} />;
+        return me.hasEventAccess ? <PublicProfileCard onDirtyChange={onPublicDirty} /> : null;
+      case "helpDesk":
+        return <HelperSection onDirtyChange={setHelpDeskDirty} />;
       case "meals":
         return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
       case "passes":

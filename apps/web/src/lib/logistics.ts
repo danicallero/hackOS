@@ -133,7 +133,7 @@ export interface TimeLogEntry {
 export interface PresenceTimelineSignal {
   id: number;
   source: "door" | "activity";
-  kind: "in" | "out" | "activity";
+  kind: "in" | "out" | "activity" | "help";
   occurredAt: string;
   activityId: number | null;
   activityName: string | null;

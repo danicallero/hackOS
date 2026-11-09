@@ -119,7 +119,9 @@ Two background workers do the actual work:
 
 `STATIC_CATEGORIES` (`service.ts`) lists the categories every user sees in
 their preferences matrix even with zero override rows; `queue` is the one
-mandatory (non-optional) category (H51).
+mandatory (non-optional) category (H51). `helpdesk` (H64-H66 request,
+claim, release and cancel notices; in-app and push only) is operational like
+`queue.staff` and is not listed there, so it follows the defaults.
 
 ### Email is opt-in for queue, reminders and challenges (H51, H52)
 

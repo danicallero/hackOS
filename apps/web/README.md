@@ -944,3 +944,19 @@ to the first page;
 200 is the API batch size, not a roster limit. Joined displays date and time
 in the event zone and sorts by the full creation instant. Directory failures remain
 visible and retryable rather than silently leaving role members unresolved.
+
+## Help desk (H61–H67)
+
+`/help-desk` shows one capability- and eligibility-based selector for My requests, Open and My assignments, matching mobile; the published requests/inbox URLs render the same workflow and retain `?tab=` deep links; the
+support directory lives at `/help-desk/helpers`. The section provides helper browsing,
+individual/team requests and coverage. Lists use `ListToolbar`/`FilterMenu`/`DataTable`, like Users. The
+page header and sibling navigation come from `HelpDeskSectionHeader`
+(`components/common/section-navigation.tsx`), rendered by each page, not by a
+layout. A helper record renders the same `PersonProfile` as the people reader,
+fed by the API's `profile`. Helpers edit it in My profile → Help desk
+(`settings/profile/helper-section.tsx`: Available to mentor, then the Mentor
+profile: sponsor challenge limit, knowledge, day-by-day availability); Request help is the header action of every help desk
+page (`RequestHelpAction`); the
+old `/help-desk/profile` route redirects there and stays reachable for accepted
+mentors before confirmation. See [web help desk](../../docs/help-desk-web.md)
+for routes, authorization, save ownership and validation.
