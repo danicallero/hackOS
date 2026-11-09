@@ -160,6 +160,28 @@ describe("profile avatar collapse geometry", () => {
     expect(Math.max(...xs)).toBeLessThanOrEqual(centerX + straight + 0.01);
   });
 
+  it("narrows the blob into the lip's width instead of jumping when it hands over (#935)", () => {
+    const narrowIsland = resolveProfileCameraTarget({
+      height: 874,
+      modelId: "iPhone19,2",
+      platform: "ios",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    const from = { left: 153, top: 100, width: 96, height: 96 };
+    const widths = [];
+    for (let step = 0; step <= 27; step += 1) {
+      const blob = profileAvatarBlobBounds(96, from, narrowIsland, step / 100);
+      if (blob) widths.push(blob.width);
+    }
+    // Monotonic narrowing, ending at the lip's width (the island's straight run).
+    for (let i = 1; i < widths.length; i += 1)
+      expect(widths[i]).toBeLessThanOrEqual(widths[i - 1] + 0.01);
+    const lip = narrowIsland.width - narrowIsland.height;
+    expect(widths[widths.length - 1]).toBeLessThan(lip * 1.15);
+    expect(widths[widths.length - 1]).toBeGreaterThan(lip * 0.85);
+  });
+
   it("keeps the image covering the mask blob while it rises (#935)", () => {
     for (let step = 0; step <= 28; step += 1) {
       const progress = step / 100;

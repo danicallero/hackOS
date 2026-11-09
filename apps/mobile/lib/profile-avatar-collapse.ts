@@ -446,6 +446,24 @@ function lipHalfWidth(target: ProfileAvatarFrame, scale: number) {
   return Math.max(straight, chord);
 }
 
+/** Half-width of the blob's widest point as it hands over to the lip, in mask units. */
+const BLOB_END_HALF_EXTENT = 122;
+
+/**
+ * Horizontal squeeze of the blob so it reaches the lip's width as it hands
+ * over to it (#935). A lip is held inside the island's straight run (57 pt on
+ * the narrow island); a blob still ~78 pt wide would drop to that in one
+ * frame, a visible jump in size. Easing the squeeze in over the blob's life
+ * makes the photo narrow steadily into the island instead. 1 when the lip is
+ * at least as wide as the blob (the 126 pt island), and at rest.
+ */
+function blobSqueeze(target: ProfileAvatarFrame, scale: number, p: number) {
+  "worklet";
+  const end = Math.min(1, lipHalfWidth(target, scale) / (BLOB_END_HALF_EXTENT * scale));
+  const t = Math.max(0, Math.min(1, p / BLOB_END_PROGRESS));
+  return 1 + (end - 1) * t * t * (3 - 2 * t);
+}
+
 /** The Swift mask canvas origin and scale at `progress`. */
 function maskCanvas(
   size: number,
@@ -507,13 +525,18 @@ export function profileAvatarBlobBounds(
   const n = first.path.v.length;
   const at = (key: "v" | "i" | "o", i: number, axis: number) =>
     first.path[key][i][axis] + (next.path[key][i][axis] - first.path[key][i][axis]) * fraction;
+  const squeeze = blobSqueeze(target, scale, p);
+  let centre = 0;
+  for (let i = 0; i < n; i++) centre += at("v", i, 0) / n;
+  const squeezed = (value: number) => centre + (value - centre) * squeeze;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     for (let axis = 0; axis < 2; axis++) {
-      const p0 = at("v", i, axis);
-      const p1 = p0 + at("o", i, axis);
-      const p3 = at("v", j, axis);
-      const p2 = p3 + at("i", j, axis);
+      const fit = axis === 0 ? squeezed : (value: number) => value;
+      const p0 = fit(at("v", i, axis));
+      const p1 = fit(at("v", i, axis) + at("o", i, axis));
+      const p3 = fit(at("v", j, axis));
+      const p2 = fit(at("v", j, axis) + at("i", j, axis));
       for (let k = 0; k <= 8; k++) {
         const u = k / 8;
         const w = 1 - u;
@@ -646,7 +669,10 @@ export function profileAvatarMorphPath(
       point[1] + (next.path.o[i][1] - point[1]) * fraction,
     ]);
     const xScale = track.end === LIP_TRACK_END ? lipScale : scale;
-    const x = (value: number) => canvasX + track.offset[0] * scale + value * xScale;
+    const squeeze = track.end === BLOB_TRACK_END ? blobSqueeze(target, scale, p) : 1;
+    const centre = vertices.reduce((sum, point) => sum + point[0], 0) / vertices.length;
+    const x = (value: number) =>
+      canvasX + track.offset[0] * scale + (centre + (value - centre) * squeeze) * xScale;
     const y = (value: number) => canvasY + (track.offset[1] + value) * scale;
     result += `M ${x(vertices[0][0])} ${y(vertices[0][1])} `;
     for (let i = 0; i < vertices.length; i++) {
