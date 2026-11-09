@@ -23,6 +23,7 @@ import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
@@ -47,7 +48,7 @@ import {
 } from "@/lib/scanner-db";
 import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
-import { screenTitleElement } from "@/lib/screen-header-options";
+import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
@@ -149,12 +150,12 @@ export function ActivityScannerScreen({
   }, [stopNfc]);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!error) return;
-    const timeout = setTimeout(() => setError(null), 6000);
-    return () => clearTimeout(timeout);
-  }, [error]);
 
+  const [insideError, setInsideError] = useState<Error | null>(null);
+  const [statsError, setStatsError] = useState<Error | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  const [activityError, setActivityError] = useState<Error | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const handledManualScan = useRef<string | null>(null);
   const activity = useMemo(
@@ -197,10 +198,11 @@ export function ActivityScannerScreen({
     serverInside ?? roster?.filter((person) => person.lastPresenceKind === "in").length;
   const loadInside = useCallback(() => {
     void apiFetch<{ byRole: { inside: number }[] }>("/api/scanner/role-stats")
-      .then((response) =>
-        setServerInside(response.byRole.reduce((sum, row) => sum + row.inside, 0)),
-      )
-      .catch(() => setServerInside(null));
+      .then((response) => {
+        setServerInside(response.byRole.reduce((sum, row) => sum + row.inside, 0));
+        setInsideError(null);
+      })
+      .catch((cause) => setInsideError(cause instanceof Error ? cause : new Error(String(cause))));
   }, []);
   useEffect(() => {
     if (focused) loadInside();
@@ -232,20 +234,23 @@ export function ActivityScannerScreen({
   }, [nfcRunning, focused, result, registering, nfcVisible]);
 
   const loadStats = useCallback(async () => {
+    setStatsLoading(true);
     try {
       const response = await apiFetch<{ items: ActivityStats[] }>("/api/activities/scannable");
       setStats(response.items.find((item) => item.activityId === activityId) ?? null);
-    } catch {
-      // The scanner and its offline queue remain usable without live statistics.
+      setStatsError(null);
+    } catch (cause) {
+      setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
+    } finally {
+      setStatsLoading(false);
     }
   }, [activityId]);
 
   useEffect(() => {
     void listScannerActivities()
       .then((items) => setLocalActivity(items.find((item) => item.id === activityId) ?? null))
-      .catch(() => {
-        // The online snapshot below remains authoritative when SQLite is down.
-      });
+      .catch((cause) => setActivityError(cause instanceof Error ? cause : new Error(String(cause))))
+      .finally(() => setActivityLoaded(true));
   }, [activityId]);
 
   useEffect(() => {
@@ -475,7 +480,13 @@ export function ActivityScannerScreen({
       }}
     >
       {embedded ? null : (
-        <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
+        <Stack.Screen
+          options={
+            glassAvailable
+              ? { ...fixedScrollHeaderOptions(activityName), headerBackVisible: false }
+              : { headerShown: false }
+          }
+        />
       )}
       <Modal
         visible={cameraVisible}
@@ -620,6 +631,26 @@ export function ActivityScannerScreen({
         <NfcScannerSurface
           header={(layout) => (
             <>
+              {!activity && !activityLoaded ? <RequestFeedback loading compact /> : null}
+              {!activity && activityLoaded ? (
+                <RequestFeedback
+                  error={activityError ?? new Error(t("requestUnavailable"))}
+                  message={t("requestUnavailable")}
+                  onRetry={() => void runSync()}
+                  retrying={syncState.syncing}
+                />
+              ) : null}
+              {insideError ? (
+                <RequestFeedback error={insideError} onRetry={loadInside} compact />
+              ) : null}
+              {statsError ? (
+                <RequestFeedback
+                  error={statsError}
+                  onRetry={() => void loadStats()}
+                  retrying={statsLoading}
+                  compact
+                />
+              ) : null}
               <ActivityStatistics
                 activity={activity}
                 stats={stats}

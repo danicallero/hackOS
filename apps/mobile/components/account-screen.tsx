@@ -121,7 +121,12 @@ export default function AccountScreen() {
   useFocusEffect(avatarCollapse.settleAtRest);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
-  const { intolerances, reload: loadSupportingData } = useFoodIntolerances(Boolean(me));
+  const {
+    intolerances,
+    reload: loadSupportingData,
+    error: intolerancesError,
+    loading: intolerancesLoading,
+  } = useFoodIntolerances(Boolean(me));
   const isSponsorRep = Boolean(me?.isSponsorRep);
   const mealPlanKey = me ? mealPlanCacheKey(me.id) : "meal-plan:none";
   const mealPlan = useCachedApi<MealPlan>(mealPlanKey, fetchMealPlan, { enabled: isSponsorRep });
@@ -344,6 +349,13 @@ export default function AccountScreen() {
       >
         {/* H28: scrolls away with the content instead of staying pinned. */}
         <AccountWalletButton wallet={wallet} />
+        {intolerancesError ? (
+          <RequestFeedback
+            error={intolerancesError}
+            onRetry={() => void loadSupportingData()}
+            retrying={intolerancesLoading}
+          />
+        ) : null}
         {languageError ? (
           <RequestFeedback
             error={languageError}

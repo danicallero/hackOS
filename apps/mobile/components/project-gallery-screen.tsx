@@ -249,9 +249,9 @@ export function ProjectGalleryScreen() {
         setTotal(latestTotal);
       } catch (cause) {
         if (request !== generation.current) return;
-        // A failed quiet refresh keeps what is on screen, except a policy change.
-        if (!quiet || (cause instanceof ApiError && cause.status === 403)) {
-          setError(cause as Error);
+        setError(cause as Error);
+        // A policy change withdraws data; transport failures keep the rendered pages.
+        if (cause instanceof ApiError && cause.status === 403) {
           setProjects([]);
           snapshots.delete(key);
         }
@@ -375,7 +375,14 @@ export function ProjectGalleryScreen() {
               />
             ) : null}
             {!loading && !error && projects.length === 0 ? (
-              <EmptyState icon="hammer" title={t("projectNoGallery")} />
+              <EmptyState
+                icon="hammer"
+                title={t(
+                  search.trim() || challengeIds.length > 0
+                    ? "scannerNoResults"
+                    : "projectNoGallery",
+                )}
+              />
             ) : null}
             {projects.length > 0 ? (
               <Section>

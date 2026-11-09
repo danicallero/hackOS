@@ -118,7 +118,7 @@ export default function NotificationOnboardingScreen() {
                 <ToggleRow
                   label={`${labels[category]} · ${t("emailLabel")}`}
                   value={draft[category] === true}
-                  disabled={onboardingEmailLocked(prefs, category)}
+                  disabled={saving || onboardingEmailLocked(prefs, category)}
                   onChange={(on) =>
                     setDraft((current) => current && { ...current, [category]: on })
                   }
@@ -128,6 +128,7 @@ export default function NotificationOnboardingScreen() {
           </Section>
         )}
 
+        {saving ? <RequestFeedback loading compact /> : null}
         {saveError ? (
           <RequestFeedback error={saveError} onRetry={() => void save()} retrying={saving} />
         ) : null}

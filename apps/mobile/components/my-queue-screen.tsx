@@ -204,6 +204,9 @@ export default function QueueScreen({ embedded = false }: { embedded?: boolean }
         ListHeaderComponent={
           <View style={{ gap: 12 }}>
             <StaleDataBanner updatedAt={staleSince} />
+            {error && data && data.length > 0 ? (
+              <RequestFeedback error={error} onRetry={() => void load()} retrying={refreshing} />
+            ) : null}
             <QueueTutorialTrigger onPress={() => setQueueTutorialVisible(true)} />
           </View>
         }

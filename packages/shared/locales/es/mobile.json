@@ -990,5 +990,7 @@
   "notificationsMandatoryHint": "Los avisos de turno siempre llegan a la app. El correo es opcional mientras este móvil tenga la sesión iniciada; sin ella, te llegan por correo.",
   "maintenanceTitle": "Restaurando una copia",
   "maintenanceBody": "hackOS volverá en unos minutos. La app continúa sola.",
-  "maintenanceFailedBody": "La restauración necesita a un administrador. La app continúa cuando se resuelva."
+  "maintenanceFailedBody": "La restauración necesita a un administrador. La app continúa cuando se resuelva.",
+  "mobileStatesScheduleTranslationsError": "Guardado, pero no las traducciones. Edita la entrada para reintentarlo.",
+  "mobileSurfaceOpenSettings": "Abrir ajustes"
 }

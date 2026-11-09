@@ -990,5 +990,7 @@
   "notificationsMandatoryHint": "Os avisos de quenda sempre chegan á app. O correo é opcional mentres este móbil teña a sesión iniciada; sen ela, chégante por correo.",
   "maintenanceTitle": "Restaurando unha copia",
   "maintenanceBody": "hackOS volverá en uns minutos. A app continúa soa.",
-  "maintenanceFailedBody": "A restauración precisa dun administrador. A app continúa cando se resolva."
+  "maintenanceFailedBody": "A restauración precisa dun administrador. A app continúa cando se resolva.",
+  "mobileStatesScheduleTranslationsError": "Gardado, pero non as traducións. Edita a entrada para tentalo de novo.",
+  "mobileSurfaceOpenSettings": "Abrir axustes"
 }

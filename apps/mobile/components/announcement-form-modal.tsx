@@ -14,6 +14,7 @@ import {
 } from "@/components/form-modal-sections";
 import { Section, ToggleRow } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import {
   ANNOUNCEMENT_CHANNELS,
@@ -112,6 +113,9 @@ export function AnnouncementFormModal({
     gl: null,
     en: null,
   });
+  const [targetingError, setTargetingError] = useState<Error | null>(null);
+  const [targetingLoading, setTargetingLoading] = useState(false);
+  const [targetingAttempt, setTargetingAttempt] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Hidden by default: only shown once the availability check confirms a
@@ -151,21 +155,28 @@ export function AnnouncementFormModal({
   }, [visible]);
 
   useEffect(() => {
+    void targetingAttempt;
     if (!visible) return;
     let cancelled = false;
+    setTargetingLoading(true);
     void Promise.all([fetchAnnouncementTargetingOptions(), fetchFoodIntolerances()])
       .then(([options, dictionary]) => {
         if (cancelled) return;
         setRoles(options.roles);
         setIntolerances(dictionary);
+        setTargetingError(null);
       })
-      .catch(() => {
-        if (!cancelled) setError(t("couldNotLoadAnnouncementTargeting"));
+      .catch((cause) => {
+        if (!cancelled)
+          setTargetingError(cause instanceof Error ? cause : new Error(String(cause)));
+      })
+      .finally(() => {
+        if (!cancelled) setTargetingLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [t, visible]);
+  }, [targetingAttempt, visible]);
 
   /**
    * Staff can write the primary content in whichever of the three languages
@@ -282,6 +293,15 @@ export function AnnouncementFormModal({
       pending={pending}
       title={announcementId ? t("announcementEdit") : t("announcementAdd")}
     >
+      {targetingLoading ? <RequestFeedback loading compact /> : null}
+      {targetingError ? (
+        <RequestFeedback
+          error={targetingError}
+          message={t("couldNotLoadAnnouncementTargeting")}
+          onRetry={() => setTargetingAttempt((current) => current + 1)}
+          retrying={targetingLoading}
+        />
+      ) : null}
       <Section title={`${t("announcementTitleLabel")} · ${t("spanishTag")}`}>
         <TextInput
           accessibilityLabel={t("announcementTitleLabel")}
@@ -679,6 +699,8 @@ export function AnnouncementFormModal({
 
       {error ? (
         <Text
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
           selectable
           style={{
             color: colors.destructive,

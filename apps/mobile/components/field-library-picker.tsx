@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { SheetModal } from "@/components/app-sheet";
-import { FloatingGlassButton, Separator } from "@/components/native-ui";
+import { EmptyState, FloatingGlassButton, Separator } from "@/components/native-ui";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
@@ -33,10 +34,12 @@ export function FieldLibraryPicker({
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(Boolean(libraryId));
   const [retry, setRetry] = useState(0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry explicitly repeats the catalogue request.
   useEffect(() => {
     if (!libraryId) return;
+    setLoading(true);
     const controller = new AbortController();
     apiFetch<{ items: { id: number; name: string }[] }>(`/api/form-libraries/${libraryId}`, {
       signal: controller.signal,
@@ -48,6 +51,9 @@ export function FieldLibraryPicker({
       })
       .catch(() => {
         if (!controller.signal.aborted) setError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
   }, [libraryId, retry]);
@@ -55,7 +61,7 @@ export function FieldLibraryPicker({
     name.toLocaleLowerCase().includes(query.toLocaleLowerCase()),
   );
   async function propose() {
-    if (!libraryId || !query.trim()) return;
+    if (!libraryId || !query.trim() || busy) return;
     setBusy(true);
     setError(false);
     try {
@@ -149,6 +155,13 @@ export function FieldLibraryPicker({
                 paddingHorizontal: 16,
               }}
             />
+            {loading ? <RequestFeedback loading compact /> : null}
+            {!loading && !error && names.length === 0 ? (
+              <EmptyState icon="magnifyingglass" title={t("scannerNoResults")} />
+            ) : null}
+            {error ? (
+              <RequestFeedback error={new Error(t("requestError"))} message={t("requestError")} />
+            ) : null}
             {names.length > 0 ? (
               <View
                 style={{

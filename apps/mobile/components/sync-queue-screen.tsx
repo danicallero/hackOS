@@ -58,6 +58,7 @@ export default function SyncQueueScreen() {
   const [filters, setFilters] = useState<Exclude<QueueFilter, "all">[]>([]);
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
+  const [labelsError, setLabelsError] = useState<Error | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const trueTop = useTrueTopScroll(scrollRef);
@@ -76,12 +77,13 @@ export default function SyncQueueScreen() {
     // labels beside queued activity scans in step with that snapshot.
     void sync.lastSync;
     void sync.queue.length;
-    void Promise.all([listScannerPeople(), listScannerActivities()]).then(
-      ([nextPeople, nextActivities]) => {
+    void Promise.all([listScannerPeople(), listScannerActivities()])
+      .then(([nextPeople, nextActivities]) => {
         setPeople(nextPeople);
         setActivities(nextActivities);
-      },
-    );
+        setLabelsError(null);
+      })
+      .catch((cause) => setLabelsError(cause instanceof Error ? cause : new Error(String(cause))));
   }, [sync.lastSync, sync.queue.length]);
 
   const canViewStats = canViewStaffStatistics(me?.capabilities ?? []);
@@ -181,7 +183,14 @@ export default function SyncQueueScreen() {
         {t("scannerSyncQueueDescription")}
       </Text>
 
-      {syncError?.conflict ? (
+      {labelsError ? (
+        <RequestFeedback
+          error={labelsError}
+          onRetry={() => void onRefresh()}
+          retrying={refreshing}
+        />
+      ) : null}
+      {syncError ? (
         <RequestFeedback
           error={new Error(syncError.message)}
           message={t("scannerSyncRejected")}
@@ -295,7 +304,7 @@ export default function SyncQueueScreen() {
         />
       </View>
 
-      {queue.length === 0 ? (
+      {queue.length === 0 && !syncError && !labelsError ? (
         <Section>
           <EmptyState
             icon={onlyErrors ? "checkmark.circle" : "arrow.triangle.2.circlepath"}

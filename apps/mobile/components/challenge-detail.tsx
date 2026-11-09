@@ -41,12 +41,13 @@ function useChallenge(id: number) {
       if (!quiet) setError(null);
       try {
         const next = await fetchChallengeDetail(language, id);
+        setError(null);
         // A quiet refresh keeps the rendered object when nothing changed.
         setChallenge((current) =>
           quiet && JSON.stringify(current) === JSON.stringify(next) ? current : next,
         );
       } catch (cause) {
-        if (!quiet) setError(cause as Error);
+        setError(cause as Error);
       }
     },
     [id, language],
@@ -197,26 +198,28 @@ export function ChallengeDetailScreen() {
     () => router.push({ pathname: "/projects/gallery", params: { challengeId: String(id) } }),
     [router, id],
   );
-  const body = error ? (
-    <RequestFeedback error={error} onRetry={() => void load()} />
-  ) : challenge === undefined ? (
-    <RequestFeedback loading />
-  ) : challenge === null ? (
-    <EmptyState icon="trophy" title={t("challengeNotFound")} />
-  ) : (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={{
-        gap: 24,
-        paddingVertical: 16,
-        ...readable.content,
-        paddingBottom: 32,
-      }}
-      style={{ backgroundColor: colors.background }}
-    >
-      <ChallengeDetailBody challenge={challenge} onOpenProjects={openProjects} />
-    </ScrollView>
-  );
+  const body =
+    error && !challenge ? (
+      <RequestFeedback error={error} onRetry={() => void load()} />
+    ) : challenge === undefined ? (
+      <RequestFeedback loading />
+    ) : challenge === null ? (
+      <EmptyState icon="trophy" title={t("challengeNotFound")} />
+    ) : (
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{
+          gap: 24,
+          paddingVertical: 16,
+          ...readable.content,
+          paddingBottom: 32,
+        }}
+        style={{ backgroundColor: colors.background }}
+      >
+        {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
+        <ChallengeDetailBody challenge={challenge} onOpenProjects={openProjects} />
+      </ScrollView>
+    );
   return (
     <>
       <EntryBackToolbar fallback="/(tabs)/queue" />
@@ -239,7 +242,7 @@ export function ChallengeSheet({
   return (
     <SheetModal visible animationType="slide" onRequestClose={onClose}>
       <AdaptiveFrame>
-        {error ? (
+        {error && !challenge ? (
           <View style={{ paddingTop: 76 }}>
             <RequestFeedback error={error} onRetry={() => void load()} />
           </View>
@@ -258,6 +261,7 @@ export function ChallengeSheet({
               paddingTop: 76,
             }}
           >
+            {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
             <ChallengeDetailBody challenge={challenge} showTitle />
           </ScrollView>
         )}

@@ -193,7 +193,21 @@ export function NotificationSettingsScreen() {
         <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
       }
     >
+      {liveActivities.error ? (
+        <RequestFeedback
+          error={liveActivities.error}
+          onRetry={liveActivities.retry}
+          retrying={liveActivities.loading || liveActivities.busy}
+        />
+      ) : null}
       <StaleDataBanner updatedAt={preferences.staleSince} />
+      {preferences.prefs && preferences.error ? (
+        <RequestFeedback
+          error={preferences.error}
+          onRetry={() => void preferences.load()}
+          retrying={preferences.loading}
+        />
+      ) : null}
       {!preferences.prefs ? (
         <RequestFeedback
           loading={preferences.loading}
@@ -221,6 +235,13 @@ export function NotificationSettingsScreen() {
             ))}
           </Section>
 
+          {liveActivityKinds.error ? (
+            <RequestFeedback
+              error={liveActivityKinds.error}
+              onRetry={() => void liveActivityKinds.load()}
+              retrying={liveActivityKinds.loading}
+            />
+          ) : null}
           {liveActivities.available ? (
             <Section>
               <ToggleRow
@@ -297,6 +318,13 @@ export function NotificationCategoryScreen({ category }: { category: Notificatio
       }
     >
       <StaleDataBanner updatedAt={preferences.staleSince} />
+      {preferences.prefs && preferences.error ? (
+        <RequestFeedback
+          error={preferences.error}
+          onRetry={() => void preferences.load()}
+          retrying={preferences.loading}
+        />
+      ) : null}
       {preferences.actionError ? (
         <RequestFeedback
           error={preferences.actionError}

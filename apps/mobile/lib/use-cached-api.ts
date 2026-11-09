@@ -133,6 +133,10 @@ export function useCachedApi<T>(
           setStaleSince(cached.updatedAt);
         } else if (dataCacheKey.current !== cacheKey || dataRef.current === null) {
           setError(cause instanceof Error ? cause : new Error("Failed to load data"));
+        } else {
+          // Rendered data whose persisted copy is gone (a failed cache write) is
+          // still stale after a failed revalidation: say so instead of failing silently.
+          setStaleSince(updatedAtRef.current ?? new Date().toISOString());
         }
       } finally {
         if (currentRequest === requestId.current) setLoading(false);

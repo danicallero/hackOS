@@ -56,7 +56,10 @@ jest.mock("@/components/nfc-reader", () => ({
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupportStatus: () => mockNfcSupport }));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
-jest.mock("@/lib/api", () => ({ apiFetch: jest.fn().mockResolvedValue({ items: [] }) }));
+jest.mock("@/lib/api", () => ({
+  apiFetch: jest.fn().mockResolvedValue({ items: [], byRole: [] }),
+  ApiError: class ApiError extends Error {},
+}));
 jest.mock("@/lib/live-activities/sync", () => ({ bumpActivityScanned: jest.fn() }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({
@@ -175,7 +178,7 @@ afterEach(() => {
   mockRunSync.mockResolvedValue(undefined);
 });
 
-it("uses server occupancy across roles and falls back to the roster after a failed refresh (H24)", async () => {
+it("preserves server occupancy across roles after a failed refresh (H24)", async () => {
   const originalParams = mockParams;
   mockParams = { id: "7" };
   let offline = false;
@@ -191,8 +194,7 @@ it("uses server occupancy across roles and falls back to the roster after a fail
     expect(await screen.findByText("19")).toBeTruthy();
     offline = true;
     await act(() => mockRefreshOccupancy());
-    await waitFor(() => expect(screen.queryByText("19")).toBeNull());
-    expect(screen.getByText("1")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("19")).toBeTruthy());
   } finally {
     mockParams = originalParams;
     jest.mocked(apiFetch).mockResolvedValue({ items: [] });
@@ -274,13 +276,15 @@ it("gives an unrecognised badge the error haptic", async () => {
   expect(haptic).toHaveBeenCalledWith("error");
 });
 
-it("automatically dismisses lookup errors after six seconds", async () => {
+it("keeps lookup errors until explicitly dismissed", async () => {
   jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
   jest.useFakeTimers();
   try {
     await renderMobile(<ActivityScannerScreen />);
     await screen.findByRole("button", { name: "scannerBadgeUnknown" });
     await act(() => jest.advanceTimersByTime(6000));
+    expect(screen.getByRole("button", { name: "scannerBadgeUnknown" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "scannerBadgeUnknown" }));
     expect(screen.queryByRole("button", { name: "scannerBadgeUnknown" })).toBeNull();
   } finally {
     jest.useRealTimers();

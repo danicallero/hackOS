@@ -192,6 +192,7 @@ export function StandDetailScreen() {
       }}
     >
       <StandNfcModal stand={active} onCancel={cancel} />
+      {error && stand ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {error && !stand ? (
         <RequestFeedback error={error} onRetry={() => void load()} />
       ) : missing ? (

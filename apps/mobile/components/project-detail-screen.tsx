@@ -103,7 +103,6 @@ export function ProjectDetailScreen({
     setEpoch((current) => current + 1);
   }, [id, gallery]);
   const load = useCallback(async () => {
-    setProject(null);
     setError(null);
     try {
       await refresh();
@@ -112,37 +111,47 @@ export function ProjectDetailScreen({
     }
   }, [refresh]);
   useEffect(() => {
+    setProject(null);
     void load();
   }, [load]);
   useFocusEffect(
     useCallback(() => {
       if (!gallery) return;
       const timer = setInterval(() => {
-        void load();
+        void refresh()
+          .then(() => setError(null))
+          .catch((cause) => setError(cause as Error));
       }, 15000);
       return () => clearInterval(timer);
-    }, [gallery, load]),
+    }, [gallery, refresh]),
   );
   // 403/404 are final for this audience; retrying cannot change the answer.
   const final = error instanceof ApiError && (error.status === 403 || error.status === 404);
-  const body = error ? (
-    // Inside a ScrollView so the native header's inset keeps it below the bar.
-    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16 }}>
-      <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />
-    </ScrollView>
-  ) : !project ? (
-    <RequestFeedback loading />
-  ) : gallery ? (
-    <ProjectReadView project={project} onRefresh={refresh} titleHeader={embedded} />
-  ) : (
-    <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} />
-  );
+  const body =
+    error && (!project || final) ? (
+      // Inside a ScrollView so the native header's inset keeps it below the bar.
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={{ padding: 16 }}
+      >
+        <RequestFeedback error={error} onRetry={final ? undefined : () => void load()} />
+      </ScrollView>
+    ) : !project ? (
+      <RequestFeedback loading />
+    ) : gallery ? (
+      <ProjectReadView project={project} onRefresh={refresh} titleHeader={embedded} />
+    ) : (
+      <ProjectEditor key={`${id}:${epoch}`} project={project} reload={refresh} />
+    );
   if (!androidHeader)
     return (
       <>
         {embedded ? null : (
           <EntryBackToolbar fallback={gallery ? "/projects/gallery" : "/(tabs)/queue"} />
         )}
+        {error && project && !final ? (
+          <RequestFeedback error={error} onRetry={() => void load()} />
+        ) : null}
         {body}
       </>
     );
@@ -197,6 +206,7 @@ export function ProjectReadView({
   const router = useRouter();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<Error | null>(null);
   return (
     <ScrollEdgeMarker hideEdges={titleHeader}>
       <ScrollView
@@ -207,7 +217,10 @@ export function ProjectReadView({
               onRefresh={() => {
                 setRefreshing(true);
                 void onRefresh()
-                  .catch(() => {})
+                  .then(() => setRefreshError(null))
+                  .catch((cause) =>
+                    setRefreshError(cause instanceof Error ? cause : new Error(String(cause))),
+                  )
                   .finally(() => setRefreshing(false));
               }}
             />
@@ -223,6 +236,20 @@ export function ProjectReadView({
         }}
         style={{ backgroundColor: colors.background }}
       >
+        {refreshError ? (
+          <RequestFeedback
+            error={refreshError}
+            onRetry={() => {
+              if (!onRefresh || refreshing) return;
+              setRefreshing(true);
+              void onRefresh()
+                .then(() => setRefreshError(null))
+                .catch((cause) => setRefreshError(cause as Error))
+                .finally(() => setRefreshing(false));
+            }}
+            retrying={refreshing}
+          />
+        ) : null}
         {titleHeader ? (
           <Text accessibilityRole="header" style={{ color: colors.label, ...SCREEN_TITLE }}>
             {project.name}

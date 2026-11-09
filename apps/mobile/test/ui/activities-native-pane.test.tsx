@@ -116,7 +116,7 @@ describe("activities list pane as a native stack (H22, H55)", () => {
       }>;
       headerSearchBarOptions: { placement: string };
     };
-    expect(options.headerTransparent).toBe(false);
+    expect(options.headerTransparent).toBe(true);
     expect(options.unstable_headerLeftItems()).toEqual([
       expect.objectContaining({ type: "custom", hidesSharedBackground: true }),
     ]);

@@ -428,7 +428,7 @@ export function PeopleDirectoryScreen({
                 retrying={loading || refreshing || sync.syncing}
               />
             ) : null}
-            {syncError && isSyncConflict(syncError) ? (
+            {syncError ? (
               <RequestFeedback
                 error={new Error(syncError.message)}
                 message={t("scannerSyncRejected")}
@@ -443,11 +443,11 @@ export function PeopleDirectoryScreen({
         ) : null
       }
       ListEmptyComponent={
-        loading ? (
+        loading || (directory.length === 0 && sync.syncing) ? (
           <RequestFeedback loading />
-        ) : loadError && directory.length === 0 ? (
+        ) : (loadError || syncError) && directory.length === 0 ? (
           <RequestFeedback
-            error={loadError}
+            error={loadError ?? new Error(syncError?.message)}
             message={t("requestError")}
             onRetry={() => void onRefresh()}
             retrying={loading || refreshing || sync.syncing}

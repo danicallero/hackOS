@@ -16,7 +16,7 @@ import { ActivityScannerScreen } from "@/components/activity-scanner-screen";
 import { AppRefreshControl } from "@/components/app-refresh-control";
 import { FilterMenu } from "@/components/filter-menu";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
+import { ActionButton, EmptyState, LegacyScreenHeader, StatusPill } from "@/components/native-ui";
 import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
 import { PanePlaceholder } from "@/components/pane-placeholder";
 import { RequestFeedback } from "@/components/RequestFeedback";
@@ -29,6 +29,7 @@ import {
   sameActivities,
 } from "@/lib/activity-list";
 import { isActivitySelected } from "@/lib/activity-pane";
+import { ApiError } from "@/lib/api";
 import { formatEventTime, useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { filterMenuBarItem, withBarGaps } from "@/lib/pane-header-items";
@@ -36,7 +37,7 @@ import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { listScannerActivities } from "@/lib/scanner-db";
 import { resolveActivityText, type ScannerActivity } from "@/lib/scanner-types";
 import { activityKindSymbol, scheduleTypeLabel } from "@/lib/schedule";
-import { screenTitleElement } from "@/lib/screen-header-options";
+import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
 import { useTabReselect } from "@/lib/tab-reselect";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
@@ -91,6 +92,8 @@ export function ActivitiesScreen({
   const [selectedKinds, setSelectedKinds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // A pull-to-refresh that failed: the list on screen is older than the user just asked for.
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<Error | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -130,7 +133,8 @@ export function ActivitiesScreen({
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await sync.sync();
+      // `sync` reports a failure as no snapshot, never by throwing.
+      setRefreshFailed(!(await sync.sync()));
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error());
     } finally {
@@ -160,6 +164,18 @@ export function ActivitiesScreen({
   // on the next tick) — see useScannerSync's autoRetryPaused.
   const loadError = sync.serverSnapshot ? null : error;
   const syncError = sync.autoRetryPaused ? sync.error : null;
+  // Offline from the start: the local backup is all there is, and it must say so
+  // rather than wait for three failed background ticks.
+  const usingBackup = !sync.serverSnapshot && sync.error !== null && !isSyncConflict(sync.error);
+  const showStale =
+    (syncError && !isSyncConflict(syncError)) ||
+    (((refreshFailed && sync.error !== null) || usingBackup) &&
+      !(sync.error && isSyncConflict(sync.error)));
+  // Nothing cached and the server unreachable is a failure, not an empty roster.
+  const unreachable =
+    !sync.serverSnapshot && sync.error && scannableDirectory.length === 0 && !loading
+      ? new ApiError(sync.error.message, sync.error.status ?? 0)
+      : null;
   // A server snapshot is already usable while the disposable local backup is
   // still opening (or is stuck behind a native SQLite lock). Do not leave an
   // authoritative empty response looking like an endless loading spinner.
@@ -243,17 +259,7 @@ export function ActivitiesScreen({
     }
 
     navigation.setOptions({
-      // The compact title is supplied by the native left toolbar below. An
-      // empty navigation title prevents iOS 26 from inserting its centred
-      // fallback title when this screen has only one trailing action.
-      title: "",
-      headerShown: true,
-      headerLargeTitle: false,
-      headerTransparent: false,
-      headerStyle: { backgroundColor: colors.background },
-      headerShadowVisible: false,
-      headerTitleAlign: "left",
-      headerTitleStyle: { color: colors.label, ...SCREEN_TITLE },
+      ...fixedScrollHeaderOptions(t("tabActivities")),
       headerSearchBarOptions: {
         placeholder: t("scannerActivitiesSearchPlaceholder"),
         autoCapitalize: "none",
@@ -270,10 +276,7 @@ export function ActivitiesScreen({
   // and the integrated search.
   const listOptions = useMemo(
     () => ({
-      headerShadowVisible: false,
-      headerStyle: { backgroundColor: colors.background },
-      headerTransparent: false,
-      title: "",
+      ...fixedScrollHeaderOptions(t("tabActivities")),
       unstable_headerLeftItems: () => [
         {
           type: "custom" as const,
@@ -317,10 +320,10 @@ export function ActivitiesScreen({
   useFocusEffect(
     useCallback(() => {
       if (!returningFromScanner.current) {
-        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+        trueTop.scrollToTop(false);
       }
       returningFromScanner.current = false;
-    }, []),
+    }, [trueTop.scrollToTop]),
   );
 
   const onActivityPress = useCallback(
@@ -354,33 +357,7 @@ export function ActivitiesScreen({
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
-      {nativePane ? null : glassAvailable ? (
-        <>
-          {twoPane ? null : (
-            <Stack.Toolbar placement="left">
-              <Stack.Toolbar.View hidesSharedBackground>
-                <Text
-                  accessibilityRole="header"
-                  maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
-                  style={{
-                    // A fixed colour, not the dynamic label: iOS 26 flips a bar
-                    // item's light/dark appearance with what scrolls behind it,
-                    // which turned the title white for a moment.
-                    color: colorScheme === "dark" ? "#ffffff" : "#000000",
-                    fontSize: type.title.fontSize,
-                    fontWeight: "700",
-                  }}
-                >
-                  {t("tabActivities")}
-                </Text>
-              </Stack.Toolbar.View>
-            </Stack.Toolbar>
-          )}
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
-          </Stack.Toolbar>
-        </>
-      ) : (
+      {!nativePane && !glassAvailable ? (
         <LegacyScreenHeader
           actions={filterMenu}
           cancelLabel={t("cancel")}
@@ -398,7 +375,8 @@ export function ActivitiesScreen({
           title={twoPane ? "" : t("tabActivities")}
           topInset={legacyTopInset}
         />
-      )}
+      ) : null}
+
       <View style={{ flex: 1, flexDirection: "row" }}>
         <View style={{ flex: twoPane ? 0 : 1, width: twoPane ? pane.listWidth : undefined }}>
           {twoPane && !nativePane ? (
@@ -429,6 +407,7 @@ export function ActivitiesScreen({
               contentContainerStyle={{
                 flexGrow: 1,
                 paddingVertical: 16,
+                paddingTop: 16,
                 ...(twoPane
                   ? { paddingHorizontal: screenGutter(pane.listWidth) }
                   : readable.content),
@@ -445,7 +424,7 @@ export function ActivitiesScreen({
               }
               ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
               ListHeaderComponent={
-                (loadError && scannableDirectory.length > 0) || syncError ? (
+                (loadError && scannableDirectory.length > 0) || syncError || showStale ? (
                   <View style={{ gap: 8, paddingBottom: 12 }}>
                     {loadError && scannableDirectory.length > 0 ? (
                       <RequestFeedback
@@ -463,18 +442,16 @@ export function ActivitiesScreen({
                         retrying={sync.syncing}
                       />
                     ) : null}
-                    {syncError && !isSyncConflict(syncError) ? (
-                      <StaleDataBanner updatedAt={sync.lastSync} />
-                    ) : null}
+                    {showStale ? <StaleDataBanner updatedAt={sync.lastSync} /> : null}
                   </View>
                 ) : null
               }
               ListEmptyComponent={
                 listLoading ? (
                   <RequestFeedback loading />
-                ) : loadError ? (
+                ) : loadError || unreachable ? (
                   <RequestFeedback
-                    error={loadError}
+                    error={loadError ?? unreachable}
                     message={t("requestError")}
                     onRetry={() => void refresh()}
                     retrying={loading || refreshing}
@@ -484,6 +461,15 @@ export function ActivitiesScreen({
                     icon="magnifyingglass"
                     title={t("scannerActivitiesNoMatches")}
                     description={t("scannerActivitiesNoMatchesBody")}
+                    action={
+                      <ActionButton
+                        label={t("scheduleFilterClear")}
+                        onPress={() => {
+                          setQuery("");
+                          setSelectedKinds([]);
+                        }}
+                      />
+                    }
                   />
                 ) : (
                   <EmptyState
@@ -524,6 +510,33 @@ export function ActivitiesScreen({
           </View>
         ) : null}
       </View>
+      {nativePane ? null : glassAvailable ? (
+        <>
+          {twoPane ? null : (
+            <Stack.Toolbar placement="left">
+              <Stack.Toolbar.View hidesSharedBackground>
+                <Text
+                  accessibilityRole="header"
+                  maxFontSizeMultiplier={CHROME_MAX_FONT_SIZE_MULTIPLIER}
+                  style={{
+                    // A fixed colour, not the dynamic label: iOS 26 flips a bar
+                    // item's light/dark appearance with what scrolls behind it,
+                    // which turned the title white for a moment.
+                    color: colorScheme === "dark" ? "#ffffff" : "#000000",
+                    fontSize: type.title.fontSize,
+                    fontWeight: "700",
+                  }}
+                >
+                  {t("tabActivities")}
+                </Text>
+              </Stack.Toolbar.View>
+            </Stack.Toolbar>
+          )}
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.View hidesSharedBackground>{filterMenu}</Stack.Toolbar.View>
+          </Stack.Toolbar>
+        </>
+      ) : null}
     </View>
   );
 }
