@@ -1,4 +1,5 @@
 import type { Queryable } from "../../db/pool.js";
+import { presentAuditRow } from "../../lib/audit-payload.js";
 import { likeContains } from "../../lib/like.js";
 
 /**
@@ -11,6 +12,7 @@ import { likeContains } from "../../lib/like.js";
  */
 
 export interface AuditFilters {
+  requestId?: string;
   entityType?: string;
   entityId?: string;
   actorId?: number;
@@ -44,14 +46,18 @@ export async function queryAuditLog(
     conditions.push(sqlFragment.replace("?", `$${params.length}`));
   }
 
+  if (filters.requestId) addCondition("al.request_id = ?::uuid", filters.requestId);
   if (filters.entityType) addCondition("LOWER(al.entity_type) = LOWER(?)", filters.entityType);
   if (filters.entityId) addCondition("al.entity_id = ?", filters.entityId);
-  if (filters.actorId !== undefined) addCondition("al.actor_id = ?", filters.actorId);
+  if (filters.actorId !== undefined) {
+    params.push(filters.actorId);
+    conditions.push(`(al.actor_id = $${params.length} OR al.initiated_by = $${params.length})`);
+  }
   if (filters.actorQuery) {
     const needle = likeContains(filters.actorQuery);
     params.push(needle, needle);
     conditions.push(
-      `(u.name || ' ' || u.surname ILIKE $${params.length - 1} OR u.email ILIKE $${params.length})`,
+      `(u.name || ' ' || u.surname ILIKE $${params.length - 1} OR u.email ILIKE $${params.length} OR i.name || ' ' || i.surname ILIKE $${params.length - 1} OR i.email ILIKE $${params.length})`,
     );
   }
   if (filters.action) addCondition("LOWER(al.action) = LOWER(?)", filters.action);
@@ -60,12 +66,12 @@ export async function queryAuditLog(
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const from =
-    "FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id AND u.account_state = 'active' AND u.anonymized_at IS NULL";
+    "FROM audit_log al LEFT JOIN users u ON u.id = al.actor_id AND u.account_state = 'active' AND u.anonymized_at IS NULL LEFT JOIN users i ON i.id = al.initiated_by AND i.account_state = 'active' AND i.anonymized_at IS NULL";
 
   const limitParamIdx = params.length + 1;
   const offsetParamIdx = params.length + 2;
   const { rows } = await db.query(
-    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email
+    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email, NULLIF(concat_ws(' ', i.name, i.surname), '') AS initiator_name
      ${from}
      ${where}
      ORDER BY al.id DESC
@@ -76,20 +82,59 @@ export async function queryAuditLog(
     `SELECT count(*)::int AS count ${from} ${where}`,
     params,
   );
-  return { items: rows, total: countRows[0].count };
+  return {
+    items: (await restoreWalletBroadcasts(db, rows)).map(presentAuditRow),
+    total: countRows[0].count,
+  };
+}
+
+/** H53: Wallet broadcast payloads are immutable and can recover a previously minimized copy. */
+async function restoreWalletBroadcasts(db: Queryable, rows: Record<string, unknown>[]) {
+  const ids = rows
+    .filter(
+      (row) =>
+        row.entity_type === "wallet_operation" &&
+        row.after !== null &&
+        typeof row.after === "object" &&
+        (row.after as Record<string, unknown>).translations === "[private]",
+    )
+    .map((row) => String(row.entity_id));
+  if (ids.length === 0) return rows;
+  const { rows: operations } = await db.query<{ id: string; translations: unknown }>(
+    `SELECT id::text, translations FROM wallet_operations
+     WHERE id::text = ANY($1::text[]) AND kind = 'alert' AND translations IS NOT NULL`,
+    [ids],
+  );
+  const translations = new Map(
+    operations.map((operation) => [operation.id, operation.translations]),
+  );
+  return rows.map((row) =>
+    translations.has(String(row.entity_id)) && row.entity_type === "wallet_operation"
+      ? {
+          ...row,
+          after: {
+            ...(row.after as Record<string, unknown>),
+            translations: translations.get(String(row.entity_id)),
+          },
+        }
+      : row,
+  );
 }
 
 /** Single audit_log row by id, same shape as the list query, for the detail route. */
 export async function queryAuditLogById(db: Queryable, id: number): Promise<unknown | null> {
   const { rows } = await db.query(
-    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email
+    `SELECT al.*, u.name AS actor_name, u.surname AS actor_surname, u.email AS actor_email, NULLIF(concat_ws(' ', i.name, i.surname), '') AS initiator_name
      FROM audit_log al
      LEFT JOIN users u ON u.id = al.actor_id
        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+     LEFT JOIN users i ON i.id = al.initiated_by
+       AND i.account_state = 'active' AND i.anonymized_at IS NULL
      WHERE al.id = $1`,
     [id],
   );
-  return rows[0] ?? null;
+  const [row] = await restoreWalletBroadcasts(db, rows);
+  return row ? presentAuditRow(row) : null;
 }
 
 /**

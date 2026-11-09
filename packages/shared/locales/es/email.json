@@ -92,8 +92,9 @@
         },
         "rejected": {
           "subject": "Sobre tu solicitud de {{applicationName}} para {{eventName}}",
-          "body": "Hola {{name}},\n\nLamentablemente, tu solicitud de {{applicationName}} para {{eventName}} no ha sido seleccionada en esta ocasión. Sabemos que no es la noticia que esperabas.\n\nGracias por tu interés y por el tiempo que has dedicado a tu solicitud. Esperamos verte en próximas ediciones.\n\nUn saludo,\nEl equipo de organización"
+          "body": "Hola {{name}},\n\nLamentablemente, tu solicitud de {{applicationName}} para {{eventName}} no ha sido seleccionada en esta ocasión. Sabemos que no es la noticia que esperabas.{{rejectionDetails}}\n\nGracias por tu interés y por el tiempo que has dedicado a tu solicitud. Esperamos verte en próximas ediciones.\n\nUn saludo,\nEl equipo de organización"
         },
+        "rejectionDetails": "\n\nMotivo: {{reason}}",
         "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar mi plaza]({{confirmUrl}})\n\nSi al final no puedes venir, avísanos para que otra persona pueda aprovechar tu plaza:\n\n[Renunciar a mi plaza]({{declineUrl}})\n\nSi pasa el plazo sin que confirmes, la plaza se liberará automáticamente.",
         "confirmationDeadline": "Confirma tu plaza antes del {{deadline}}."
       },

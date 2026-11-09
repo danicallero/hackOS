@@ -278,6 +278,28 @@ async function getAnnouncementRecipientIds(
   return rows.map((r) => Number((r as { user_id: number }).user_id));
 }
 
+/** H50/H53: capture the audience at mutation time without copying recipient identities. */
+export async function announcementAuditSnapshot(db: Queryable, announcement: Announcement) {
+  // H53: read content and targeting under the same row lock; a stale caller
+  // snapshot must never inherit another version's broader audience.
+  const { rows } = await db.query<Announcement>(
+    "SELECT * FROM announcements WHERE id = $1 FOR UPDATE",
+    [announcement.id],
+  );
+  const current = rows[0];
+  if (!current) throw new NotFoundError("Announcement not found");
+  const recipients = await getAnnouncementRecipientIds(db, current.id);
+  return {
+    ...current,
+    audit_audience:
+      current.role_ids.length === 0 &&
+      current.intolerance_ids.length === 0 &&
+      recipients.length === 0
+        ? "broadcast"
+        : "restricted",
+  };
+}
+
 export interface AnnouncementRecipient {
   id: number;
   name: string | null;

@@ -589,11 +589,13 @@ export async function registerAppleDevice(input: {
     );
     const inserted = Boolean(r.rows[0]?.inserted);
     await audit(client, {
-      actorId: pass.user_id,
+      actorId: null,
+      actorKind: "device",
+      source: "device",
       entityType: "wallet_pass_device",
-      entityId: `${pass.id}:${input.deviceLibraryIdentifier}`,
+      entityId: pass.id,
       action: inserted ? "registered" : "updated",
-      after: { passId: pass.id, deviceLibraryIdentifier: input.deviceLibraryIdentifier },
+      after: { userId: pass.user_id, passId: pass.id },
     });
     return inserted;
   });
@@ -614,11 +616,13 @@ export async function unregisterAppleDevice(input: {
     );
     if ((r.rowCount ?? 0) > 0) {
       await audit(client, {
-        actorId: pass.user_id,
+        actorId: null,
+        actorKind: "device",
+        source: "device",
         entityType: "wallet_pass_device",
-        entityId: `${pass.id}:${input.deviceLibraryIdentifier}`,
+        entityId: pass.id,
         action: "unregistered",
-        before: { passId: pass.id, deviceLibraryIdentifier: input.deviceLibraryIdentifier },
+        before: { userId: pass.user_id, passId: pass.id },
       });
     }
   });

@@ -103,6 +103,7 @@ export const submitSchema = z.object({
 });
 
 export const reviewUpsertSchema = z.object({
+  edit_session_id: z.string().uuid().optional(),
   score: z.number().int().min(0).max(5).nullish(),
   notes: z.string().nullish(),
 });
@@ -111,6 +112,11 @@ export const staffNotesSchema = z.object({ staff_notes: z.string().nullish() });
 
 export const decideSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
+});
+
+/** H14: optional reason for an unsent internal rejection; null/blank clears it. */
+export const rejectionReasonSchema = z.object({
+  reason: z.string().trim().max(1000).nullish(),
 });
 
 export const sendDecisionsSchema = z.object({

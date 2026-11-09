@@ -15,8 +15,17 @@ import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
-import { diffAuditSnapshot, formatDiffValue } from "@/lib/audit-diff";
-import { auditActorLabel, getActionLabel, getAuditSummary } from "@/lib/audit-labels";
+import { auditChangedFields, auditLastEditedAt, diffAuditSnapshot } from "@/lib/audit-diff";
+import {
+  entityRef,
+  getActionLabel,
+  getAuditActorLabel,
+  getAuditEntityHref,
+  getAuditFieldLabel,
+  getAuditSourceLabel,
+  getAuditSummary,
+  getAuditValueLabel,
+} from "@/lib/audit-labels";
 import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { notificationsApi } from "@/lib/notifications";
@@ -60,9 +69,14 @@ export default function AuditEntryPage() {
     );
   }
 
-  const actor = row.actor_id ? (auditActorLabel(row) ?? `#${row.actor_id}`) : t("systemActor");
+  const actor = getAuditActorLabel(row, t);
+  const entityHref = getAuditEntityHref(row.entity_type, row.entity_id);
   const summary = getAuditSummary(row, actor, t);
   const diff = diffAuditSnapshot(row.before, row.after);
+  const changedFields = [
+    ...new Set([...(row.changed_fields ?? []), ...auditChangedFields(row.after)]),
+  ];
+  const lastEditedAt = row.last_edited_at ?? auditLastEditedAt(row.after);
   const hasContext = Boolean(row.reason || row.ip || row.user_agent);
 
   return (
@@ -71,12 +85,14 @@ export default function AuditEntryPage() {
         title={getActionLabel(row.action, t)}
         meta={
           <span className="text-muted-foreground text-xs">
-            {formatEventDate(row.created_at, language, "dateTime")}
+            #{row.id} · {formatEventDate(row.created_at, language, "dateTime")}
           </span>
         }
         state={
           row.source ? (
-            <span className="text-muted-foreground text-xs capitalize">{row.source}</span>
+            <span className="text-muted-foreground text-xs capitalize">
+              {getAuditSourceLabel(row.source, t)}
+            </span>
           ) : undefined
         }
         description={summary}
@@ -87,12 +103,12 @@ export default function AuditEntryPage() {
           <div>
             <dt className="text-muted-foreground text-xs">{t("colEntity")}</dt>
             <dd className="wrap-break-word">
-              {row.entity_type === "user" ? (
-                <Link href={`/users/${row.entity_id}`} className="hover:underline">
-                  {t("userInline", { id: row.entity_id })}
+              {entityHref ? (
+                <Link href={entityHref} className="hover:underline">
+                  {entityRef(row.entity_type, row.entity_id, t)}
                 </Link>
               ) : (
-                `${row.entity_type} #${row.entity_id}`
+                entityRef(row.entity_type, row.entity_id, t)
               )}
             </dd>
           </div>
@@ -108,6 +124,26 @@ export default function AuditEntryPage() {
               )}
             </dd>
           </div>
+          {row.initiated_by && (
+            <div>
+              <dt className="text-muted-foreground text-xs">{t("auditInitiatedBy")}</dt>
+              <dd>
+                <Link href={`/users/${row.initiated_by}`} className="hover:underline">
+                  {row.initiator_name || `#${row.initiated_by}`}
+                </Link>
+              </dd>
+            </div>
+          )}
+          {row.request_id && (
+            <div className="sm:col-span-2">
+              <dt className="text-muted-foreground text-xs">{t("auditRelatedActions")}</dt>
+              <dd>
+                <Link href={`/audit?request=${row.request_id}`} className="hover:underline">
+                  {t("auditViewRelatedActions")}
+                </Link>
+              </dd>
+            </div>
+          )}
         </dl>
       </SectionCard>
 
@@ -136,29 +172,53 @@ export default function AuditEntryPage() {
         </SectionCard>
       )}
 
-      {diff && diff.length > 0 && (
+      {(changedFields.length > 0 || (diff && diff.length > 0)) && (
         <SectionCard title={t("auditChangedFieldsTitle")}>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted-foreground text-xs">
-                  <th className="p-2 text-left font-medium">{t("auditFieldLabel")}</th>
-                  <th className="p-2 text-left font-medium">{t("beforeLabel")}</th>
-                  <th className="p-2 text-left font-medium">{t("afterLabel")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {diff.map((d) => (
-                  <tr key={d.key} className="border-border border-t">
-                    <td className="p-2 font-mono text-xs">{d.key}</td>
-                    <td className="p-2 wrap-break-word">{formatDiffValue(d.before)}</td>
-                    <td className="p-2 wrap-break-word">{formatDiffValue(d.after)}</td>
-                  </tr>
+          {changedFields.length > 0 && (
+            <>
+              <ul className="list-inside list-disc text-sm">
+                {changedFields.map((field) => (
+                  <li key={field}>{getAuditFieldLabel(field, t)}</li>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </ul>
+              <p className="text-muted-foreground text-xs">{t("auditPrivateContentOmitted")}</p>
+            </>
+          )}
+          {lastEditedAt && (
+            <p className="text-muted-foreground text-xs">
+              {t("auditLastEdited", { time: formatEventDate(lastEditedAt, language, "dateTime") })}
+            </p>
+          )}
+          {diff && diff.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted-foreground text-xs">
+                    <th className="p-2 text-left font-medium">{t("auditFieldLabel")}</th>
+                    <th className="p-2 text-left font-medium">{t("beforeLabel")}</th>
+                    <th className="p-2 text-left font-medium">{t("afterLabel")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diff.map((d) => (
+                    <tr key={d.key} className="border-border border-t">
+                      <td className="p-2 font-mono text-xs">{getAuditFieldLabel(d.key, t)}</td>
+                      <td className="p-2 wrap-break-word">
+                        {getAuditValueLabel(d.before, d.key, row.entity_type, t)}
+                      </td>
+                      <td className="p-2 wrap-break-word">
+                        {getAuditValueLabel(d.after, d.key, row.entity_type, t)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </SectionCard>
+      )}
+      {diff?.length === 0 && changedFields.length === 0 && (
+        <p className="text-muted-foreground text-sm">{t("auditNoChangeDetails")}</p>
       )}
 
       {!diff && (row.before != null || row.after != null) && (

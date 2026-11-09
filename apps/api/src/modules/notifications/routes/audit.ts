@@ -20,7 +20,7 @@ export function registerAuditRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Query audit log",
         description:
-          "Filtered, paginated read view over H53 audit events for sensitive mutations (announcements, preferences, etc). Each row includes the acting user's name/surname/email (actor_name/actor_surname/actor_email) alongside actor_id, resolved via a left join so system-originated rows (actor_id null) still return.",
+          "Filtered H53 audit trail. Includes executor type, verified actor, initiating user for automatic work, changed field names, safe operational snapshots and server-generated request correlation. Badge IDs and email/reference identifiers remain visible as operational evidence; private notes, answers and authentication secrets are minimized. Known automatic actions use System for executor and source, including legacy entries. actorId/actorQuery match actors and initiators; requestId groups related actions.",
         querystring: auditQuerySchema,
       },
     },
@@ -55,7 +55,7 @@ export function registerAuditRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get one audit log entry",
         description:
-          "Single audit_log row by id, same shape as the list query's items, backing the audit log's detail route.",
+          "Single privacy-minimized H53 audit entry, including changed_fields, actor_kind, initiated_by, initiator_name, request_id and last_edited_at when known. Historical missing context remains unknown.",
         params: auditIdParamsSchema,
       },
     },

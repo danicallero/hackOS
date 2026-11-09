@@ -619,7 +619,7 @@ visible; an accessible overflow menu contains only those that cannot fit. Test
 smaller permission sets and resizing, and check that export remains reachable. Review metadata must use the parent surface; do not add a
 contrasting sticky strip that covers the content being read.
 Check table geometry, useful field hierarchy, action order, pending feedback
-and panel widths. Recheck each route after a shared pattern changes.
+and panel widths. Populate table screenshots with long metadata and unbroken identifiers, then verify the final column remains inside the viewport at intermediate desktop widths; short fixtures can hide intrinsic-width overflow. Recheck each route after a shared pattern changes.
 
 ### Exceptions
 Fixed operational workspaces and intentionally compact forms keep their
@@ -1144,7 +1144,43 @@ a single successful capture does not establish that the effect is stable.
 A screen that intentionally has no header (full-bleed camera, Account root)
 follows its own established configuration.
 
-## [R033] A person shown in a new feature uses the existing profile surface
+## [R033] Keep private content out of change logs
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-09
+
+### Trigger
+Adding traceability for reviews, notes, or participant answers.
+
+### Mistake
+Proposed retaining previous and final review text in the audit log.
+
+### Lesson
+Traceability does not require duplicating private content into a second history.
+Classify content by domain and audience: a public event broadcast or catalogue
+label is not private review text just because both are strings.
+
+### Action
+Record actor, subject, changed field names and timing. Limit before/after values
+to explicitly safe operational fields. Group autosaves within an editing session;
+do not persist private note text, answers, or content hashes in audit payloads.
+Keep explicitly public content readable, and retain safe operational flags while
+continuing to suppress private answers and authentication secrets. Retain the
+operational identifiers needed to reconstruct actions (badge IDs, email
+addresses and subject/reference IDs); do not mistake those for passwords or
+access tokens. Keep their histories covered by the account-erasure workflow.
+
+### Validation
+Assert that private sentinel text never appears in serialized audit rows and
+that repeated autosaves do not create one event per pause in typing.
+
+### Exceptions
+A separately authorized content-versioning feature must define its own privacy
+and retention contract before storing private historical content.
+
+## [R034] A person shown in a new feature uses the existing profile surface
 
 Status: active
 Scope: repository

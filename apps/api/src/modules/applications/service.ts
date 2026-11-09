@@ -59,6 +59,7 @@ export interface ResponseRow {
   confirmed_at: Date | null;
   declined_at: Date | null;
   decision_sent_at: Date | null;
+  rejection_reason: string | null;
   submitted_at: Date | null;
   allow_resubmit_after_close: boolean;
   auto_accept_on_resubmit: boolean;
@@ -671,7 +672,7 @@ export async function returnToDraft(
       `UPDATE application_responses
           SET status = 'draft', decision_sent_at = NULL, confirmation_token_id = NULL,
               confirmed_at = NULL, declined_at = NULL, submitted_at = NULL,
-              draft_reminders_sent = 0, draft_reminded_at = NULL,
+              rejection_reason = NULL, draft_reminders_sent = 0, draft_reminded_at = NULL,
               allow_resubmit_after_close = $2, auto_accept_on_resubmit = $3
         WHERE id = $1 RETURNING *`,
       [responseId, input.allow_resubmit_after_close, input.auto_accept_on_resubmit],
@@ -710,9 +711,17 @@ export async function upsertReview(
   responseId: number,
   score: number | null | undefined,
   notes: string | null | undefined,
+  editSessionId?: string,
 ): Promise<void> {
   await withTransaction(async (client) => {
     await lockResponse(client, responseId, authorId); // ensures the response exists and is in scope
+    const { rows: previous } = await client.query<{ score: number | null; notes: string | null }>(
+      `SELECT score, notes FROM applicant_reviews WHERE response_id = $1 AND author_id = $2`,
+      [responseId, authorId],
+    );
+    const before = previous[0] ?? { score: null, notes: null };
+    const next = { score: score ?? null, notes: notes ?? null };
+    if (before.score === next.score && before.notes === next.notes) return;
     await client.query(
       `INSERT INTO applicant_reviews (response_id, author_id, score, notes)
        VALUES ($1, $2, $3, $4)
@@ -720,12 +729,43 @@ export async function upsertReview(
        DO UPDATE SET score = EXCLUDED.score, notes = EXCLUDED.notes`,
       [responseId, authorId, score ?? null, notes ?? null],
     );
+    // H53: one bounded editing session, without retaining private review text.
+    // The response lock serializes saves, including the first audit insertion.
+    const changedFields = [
+      ...(before.score !== next.score ? ["score"] : []),
+      ...(before.notes !== next.notes ? ["notes"] : []),
+    ];
+    if (editSessionId) {
+      const merged = await client.query(
+        `UPDATE audit_log
+            SET last_edited_at = clock_timestamp(),
+              changed_fields = ARRAY(SELECT DISTINCT unnest(changed_fields || ARRAY(SELECT jsonb_array_elements_text($5::jsonb)))),
+              after = after || jsonb_build_object(
+              'score', $4::int, 'last_edited_at', clock_timestamp(),
+              'changed_fields', (SELECT jsonb_agg(DISTINCT field)
+                FROM jsonb_array_elements_text((after->'changed_fields') || $5::jsonb) AS fields(field)))
+          WHERE id = (SELECT id FROM audit_log
+            WHERE actor_id = $1 AND entity_type = 'application_response' AND entity_id = $2
+              AND action = 'review_scored' AND after->>'edit_session_id' = $3
+              AND created_at > now() - interval '30 minutes'
+            ORDER BY id DESC LIMIT 1)
+          RETURNING id`,
+        [authorId, String(responseId), editSessionId, next.score, JSON.stringify(changedFields)],
+      );
+      if (merged.rowCount) return;
+    }
     await audit(client, {
       actorId: authorId,
       entityType: "application_response",
       entityId: responseId,
       action: "review_scored",
-      after: { score: score ?? null },
+      before: { score: before.score },
+      after: {
+        score: next.score,
+        changed_fields: changedFields,
+        ...(editSessionId ? { edit_session_id: editSessionId } : {}),
+        last_edited_at: new Date().toISOString(),
+      },
     });
   });
 }
@@ -737,12 +777,18 @@ export async function setStaffNotes(
 ): Promise<void> {
   await withTransaction(async (client) => {
     const response = await lockResponse(client, responseId, actorId);
+    const { rows: users } = await client.query<{ notes: string | null }>(
+      `SELECT notes FROM users WHERE id = $1 FOR UPDATE`,
+      [response.user_id],
+    );
+    if (users[0]?.notes === staffNotes) return;
     await client.query(`UPDATE users SET notes = $2 WHERE id = $1`, [response.user_id, staffNotes]);
     await audit(client, {
       actorId,
       entityType: "user",
       entityId: response.user_id,
       action: "staff_notes_updated",
+      after: { changed_fields: ["notes"] },
     });
   });
 }
@@ -897,6 +943,36 @@ export async function decide(
   });
 }
 
+/** Add, change or clear the reason of an unsent internal rejection (H14). */
+export async function setRejectionReason(
+  actorId: number,
+  responseId: number,
+  reason: string | null,
+): Promise<ResponseRow> {
+  const next = reason?.trim() || null;
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId, actorId);
+    if (resp.status !== "rejected_internal") {
+      throw new ConflictError("Only an unsent internal rejection can have its reason edited", {
+        status: resp.status,
+      });
+    }
+    const updated = await client.query(
+      `UPDATE application_responses SET rejection_reason = $2 WHERE id = $1 RETURNING *`,
+      [responseId, next],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: "rejection_reason_updated",
+      before: { rejection_reason: resp.rejection_reason },
+      after: { rejection_reason: next },
+    });
+    return updated.rows[0];
+  });
+}
+
 /**
  * Revert a decision — flip between accepted_internal and
  * rejected_internal, or send it back to review for re-review.
@@ -928,7 +1004,7 @@ export async function revertDecision(
       const updated = await client.query(
         `UPDATE application_responses
          SET status = 'review', decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
          WHERE id = $1 RETURNING *`,
         [responseId],
       );
@@ -980,7 +1056,7 @@ export async function revertDecision(
     const updated = await client.query(
       `UPDATE application_responses
          SET status = $2, decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
        WHERE id = $1 RETURNING *`,
       [responseId, newInternalStatus],
     );
@@ -1021,6 +1097,7 @@ async function sendOne(
     app,
     sentStatus as "accepted" | "rejected",
     token,
+    resp.rejection_reason,
   );
   await audit(client, {
     actorId,
@@ -1121,7 +1198,15 @@ export async function resendDecision(
         `UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`,
         [resp.id],
       );
-      await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
+      await enqueueDecisionEmailRow(
+        client,
+        resp.user_id,
+        user,
+        app,
+        "rejected",
+        null,
+        resp.rejection_reason,
+      );
       await audit(client, {
         actorId,
         entityType: "application_response",
@@ -1190,7 +1275,8 @@ export async function reAccept(
 
     await client.query(
       `UPDATE application_responses
-       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL
+       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL,
+           rejection_reason = NULL
        WHERE id = $1`,
       [resp.id],
     );
@@ -1544,8 +1630,16 @@ async function enqueueDecisionEmailRow(
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
+  rejectionReason: string | null = null,
 ): Promise<void> {
-  const payload = await decisionNotificationPayload(client, user, app, decision, confirmToken);
+  const payload = await decisionNotificationPayload(
+    client,
+    user,
+    app,
+    decision,
+    confirmToken,
+    rejectionReason,
+  );
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
      VALUES ($1, 'application', 'email', $2::jsonb)`,
@@ -1581,6 +1675,7 @@ async function decisionNotificationPayload(
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
+  rejectionReason: string | null = null,
 ): Promise<EmailPayload> {
   const language = normalizeLanguage(user.language);
   const eventName = await getEventName(client);
@@ -1613,6 +1708,12 @@ async function decisionNotificationPayload(
       }),
     });
   }
+  const rejectionDetails =
+    decision === "rejected" && rejectionReason
+      ? translateEmail("mail.application.decision.rejectionDetails", language, {
+          reason: rejectionReason,
+        })
+      : "";
   return {
     template: "application.decision",
     recipient: user.email,
@@ -1623,6 +1724,7 @@ async function decisionNotificationPayload(
       eventName,
       decision,
       decisionDetails,
+      rejectionDetails,
       confirmationExpiresAt,
       confirmationTimeZone,
     },
@@ -1634,6 +1736,8 @@ interface ResponseDetail {
   user: {
     name: string | null;
     email: string;
+    /** Applicant language: the rejection reason should be written in it. */
+    language: string | null;
     shirt_size: string | null;
     food_intolerances: number[];
     food_intolerance_notes: string | null;
@@ -1698,7 +1802,7 @@ export async function getResponseDetail(
   canViewAllReviews: boolean,
 ): Promise<ResponseDetail> {
   const { rows } = await pool.query(
-    `SELECT r.*, u.notes AS staff_notes,
+    `SELECT r.*, u.notes AS staff_notes, u.language AS user_language,
             NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
             u.name AS first_name, u.surname AS last_name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
@@ -1718,6 +1822,7 @@ export async function getResponseDetail(
   const {
     name,
     email,
+    user_language,
     shirt_size,
     food_intolerances,
     food_intolerance_notes,
@@ -1763,6 +1868,7 @@ export async function getResponseDetail(
     user: {
       name,
       email,
+      language: user_language ?? null,
       shirt_size,
       food_intolerances,
       food_intolerance_notes,
@@ -1817,6 +1923,13 @@ export async function editResponse(
       entityId: responseId,
       action: "edited",
       source: "web",
+      after: {
+        changed_fields: [
+          ...new Set([...Object.keys(response.responses), ...Object.keys(storedResponses)]),
+        ].filter(
+          (key) => JSON.stringify(response.responses[key]) !== JSON.stringify(storedResponses[key]),
+        ),
+      },
     });
 
     return updated.rows[0];
@@ -2145,6 +2258,20 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
 export function maskStatus(status: string): string {
   if (status === "accepted_internal" || status === "rejected_internal") return "review";
   return status;
+}
+
+/**
+ * Applicant-facing copy of a response row: masked status, and the rejection
+ * reason only once the rejection has been sent (H14).
+ */
+export function maskResponse<T extends { status: string; rejection_reason?: string | null }>(
+  row: T,
+): T {
+  return {
+    ...row,
+    status: maskStatus(row.status),
+    rejection_reason: row.status === "rejected" ? (row.rejection_reason ?? null) : null,
+  };
 }
 
 /**

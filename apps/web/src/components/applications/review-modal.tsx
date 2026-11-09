@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { exportAnswers } from "@/components/applications/answers-export";
 import {
   AnswersSection,
+  RejectionReasonCard,
   ReviewsPage,
   StaffNotesCard,
 } from "@/components/applications/answers-section";
@@ -255,6 +256,8 @@ export function ReviewModal({
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState(response.rejection_reason ?? null);
+  const [savingReason, setSavingReason] = useState(false);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
   const [modalStatus, setModalStatus] = useState(response.status);
@@ -357,6 +360,7 @@ export function ReviewModal({
     reviewDraft.seed(response.id, { score: mine?.score ?? null, notes: mine?.notes ?? "" });
     setModalStatus(response.status);
     setStaffNotes(response.staff_notes ?? "");
+    setRejectionReason(response.rejection_reason ?? null);
     setEditValues({ ...response.responses });
     setEditErrors({});
     setEditing(false);
@@ -511,6 +515,21 @@ export function ReviewModal({
       toast.error(apiErrorText(err, t, t("couldNotSaveNotes")), t("saveNotes"));
     } finally {
       setSavingNotes(false);
+    }
+  }
+
+  async function saveRejectionReason(value: string) {
+    setSavingReason(true);
+    try {
+      const reason = value.trim() || null;
+      await api.patch(`/api/responses/${response.id}/rejection-reason`, { reason });
+      setRejectionReason(reason);
+      await onChanged();
+      toast.success(t("rejectionReasonSaved"), { compactTitle: t("toastDecisions") });
+    } catch (err) {
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastDecisions"));
+    } finally {
+      setSavingReason(false);
     }
   }
 
@@ -951,6 +970,17 @@ export function ReviewModal({
                   onExternalLinkClick={handleAnswerLinkClick}
                 />
               )}
+
+              {(st === "rejected_internal" || st === "rejected") &&
+                (rejectionReason || (canDecide && st === "rejected_internal")) && (
+                  <RejectionReasonCard
+                    reason={rejectionReason ?? ""}
+                    editable={canDecide && st === "rejected_internal"}
+                    language={response.user_language}
+                    saving={savingReason}
+                    onSave={saveRejectionReason}
+                  />
+                )}
 
               {canReview && (
                 <StaffNotesCard

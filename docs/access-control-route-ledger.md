@@ -428,6 +428,7 @@ Public/token snapshot: public rows are health, telemetry, public content/announc
 | POST | `/api/responses/:responseId/decline` | capability:applications:confirm-override + email-verification:caller |
 | PUT | `/api/responses/:responseId/my-review` | capability:applications:review + email-verification:caller |
 | POST | `/api/responses/:responseId/re-accept` | capability:applications:decide + email-verification:caller |
+| PATCH | `/api/responses/:responseId/rejection-reason` | capability:applications:decide + email-verification:caller |
 | POST | `/api/responses/:responseId/resend-decision` | capability:applications:decide + email-verification:caller |
 | POST | `/api/responses/:responseId/return-to-draft` | capability:applications:decide + email-verification:caller |
 | POST | `/api/responses/:responseId/revert-decision` | capability:applications:decide + email-verification:caller |

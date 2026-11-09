@@ -21,6 +21,7 @@ export async function runScheduleVisibilityPublisherOnce(): Promise<{ published:
     for (const id of ids) {
       await audit(client, {
         actorId: null,
+        source: "system",
         entityType: "schedule",
         entityId: id,
         action: "scheduled_reveal",

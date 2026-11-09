@@ -448,6 +448,11 @@ team avatars and the project action share the footer. My projects loads its priv
 the browser: the session cookie belongs to the API origin, so a Next server render cannot
 authenticate it and would bounce signed-in people through `/login` in a loop.
 
+Audit response links (H53) resolve into Review for reviewers, or the matching
+Outbox/Sent decision workspace for decision-only staff. They preserve the
+response query parameter through client navigation and reload, including when
+the viewer can also manage the form builder.
+
 ## Help desk (H61–H67)
 
 The web personal sidebar adds **Help desk** (`/help-desk`) for any of

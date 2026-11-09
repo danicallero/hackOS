@@ -234,6 +234,7 @@ async function finishRequest(
       entityType: "data_subject_request",
       entityId: updated.id,
       action: `${updated.type}_${status}`,
+      initiatedBy: updated.requested_by,
       source: "system",
       after: { status },
       reason: extra.error,

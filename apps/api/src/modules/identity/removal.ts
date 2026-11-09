@@ -1715,8 +1715,8 @@ async function scrubRelationships(
     .filter((value): value is string => Boolean(value))
     .map((value) => `%${value}%`);
   await client.query(
-    `DELETE FROM audit_log
-      WHERE actor_id = $1
+    `WITH removed AS (DELETE FROM audit_log
+      WHERE actor_id = $1 OR initiated_by = $1
          OR (
            entity_type = 'application_response'
            AND entity_id = ANY($7::text[])
@@ -1742,7 +1742,11 @@ async function scrubRelationships(
          OR coalesce(before::text, '') ILIKE ANY($4::text[])
          OR coalesce(after::text, '') ILIKE ANY($4::text[])
          OR coalesce(reason, '') ILIKE ANY($4::text[])
-         OR entity_id ILIKE ANY($4::text[])`,
+         OR entity_id ILIKE ANY($4::text[])
+       RETURNING id, request_id)
+     UPDATE audit_log SET request_id = NULL
+       WHERE request_id IN (SELECT request_id FROM removed WHERE request_id IS NOT NULL)
+         AND id NOT IN (SELECT id FROM removed)`,
     [
       userId,
       userId,

@@ -39,6 +39,7 @@ interface ResponseDetailPayload {
   user: {
     name: string | null;
     email: string;
+    language: string | null;
     shirt_size: string | null;
     food_intolerances: number[];
     food_intolerance_notes: string | null;
@@ -100,6 +101,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
           ...detail.response,
           name: detail.user.name,
           email: detail.user.email,
+          user_language: detail.user.language,
           shirt_size: detail.user.shirt_size,
           food_intolerances: detail.user.food_intolerances,
           food_intolerance_notes: detail.user.food_intolerance_notes,

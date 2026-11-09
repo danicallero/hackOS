@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import fp from "fastify-plugin";
 import { runWithRequestContext } from "../lib/request-context.js";
@@ -12,6 +13,8 @@ export const requestContextPlugin = fp(async (app: FastifyInstance) => {
   app.addHook("onRequest", (req, _reply, done) => {
     runWithRequestContext(
       {
+        requestId: randomUUID(),
+        getActorId: () => req.userId,
         ip: req.ip,
         userAgent:
           typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : undefined,

@@ -228,6 +228,7 @@ Table application_responses {
   id integer [pk, increment, not null]
   referrer_application_id integer
   referrer_user_id integer
+  rejection_reason text
   responses jsonb [not null, default: `'{}'::jsonb`]
   status app_response_status [not null, default: `'draft'::app_response_status`]
   submitted_at "timestamp with time zone"
@@ -305,14 +306,19 @@ Table attendance_certificates {
 Table audit_log {
   action text [not null]
   actor_id integer
+  actor_kind text [not null, default: `'unknown'::text`]
   after jsonb
   before jsonb
+  changed_fields "text[]" [not null, default: `'{}'::text[]`, note: 'Changed field names; never private values or content hashes.']
   created_at "timestamp with time zone" [not null, default: `now()`]
   entity_id text [not null]
   entity_type text [not null]
   id integer [pk, increment, not null]
+  initiated_by integer
   ip text
+  last_edited_at "timestamp with time zone"
   reason text
+  request_id uuid [note: 'Server-generated request correlation; absent for intentionally identity-free events.']
   source text
   user_agent text
 }
@@ -1625,6 +1631,7 @@ Ref: attendance_certificates.revoked_by > users.id
 Ref: attendance_certificates.type_id > certificate_types.id
 Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
+Ref: audit_log.initiated_by > users.id
 Ref: certificate_approvals.approved_by > users.id
 Ref: certificate_approvals.user_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
