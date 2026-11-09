@@ -162,6 +162,18 @@ type ProfileAvatarFrame = ProfileCameraCutoutFrame;
  */
 const DYNAMIC_ISLAND_WIDTH = 126;
 const DYNAMIC_ISLAND_HEIGHT = 37.33;
+/** iPhone 18 generation: a narrower island (measured on the simulator, ~94 x 36.5 pt). */
+const NARROW_ISLAND_WIDTH = 94;
+const NARROW_ISLAND_HEIGHT = 36.5;
+const NARROW_ISLAND_FIRST_GENERATION = 18;
+
+/** Island size by hardware identifier ("iPhone18,1"); unknown or older models use the 14 Pro-17 size. */
+function dynamicIslandSize(modelId: string | null | undefined): { width: number; height: number } {
+  const generation = Number(/^iPhone(\d+),/.exec(modelId ?? "")?.[1]);
+  return generation >= NARROW_ISLAND_FIRST_GENERATION
+    ? { width: NARROW_ISLAND_WIDTH, height: NARROW_ISLAND_HEIGHT }
+    : { width: DYNAMIC_ISLAND_WIDTH, height: DYNAMIC_ISLAND_HEIGHT };
+}
 const DYNAMIC_ISLAND_TOP_OFFSET = 48;
 const DYNAMIC_ISLAND_INSET = 1;
 
@@ -265,11 +277,14 @@ export function resolveProfileCameraTarget({
   cameraCutoutFrame,
   displayCutoutRects,
   height,
+  modelId,
   platform,
   safeAreaTop,
   screenWidth,
 }: {
   cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
+  /** Hardware identifier, to size the fallback island (the OS reports none before iOS 27.1). */
+  modelId?: string | null;
   displayCutoutRects?: ProfileCameraCutoutFrame[] | null;
   height: number;
   platform: string;
@@ -288,12 +303,13 @@ export function resolveProfileCameraTarget({
   if (!isLandscape && platform === "ios" && safeAreaTop >= 55) {
     // iOS does not expose a public Dynamic Island frame. Use its published
     // geometry (points, relative to the app window), inset so it stays inside.
-    const width = Math.min(DYNAMIC_ISLAND_WIDTH, screenWidth - 32) - 2 * DYNAMIC_ISLAND_INSET;
+    const island = dynamicIslandSize(modelId);
+    const width = Math.min(island.width, screenWidth - 32) - 2 * DYNAMIC_ISLAND_INSET;
     return {
       left: (screenWidth - width) / 2,
       top: safeAreaTop - DYNAMIC_ISLAND_TOP_OFFSET + DYNAMIC_ISLAND_INSET,
       width,
-      height: DYNAMIC_ISLAND_HEIGHT - 2 * DYNAMIC_ISLAND_INSET,
+      height: island.height - 2 * DYNAMIC_ISLAND_INSET,
       hasCutout: true,
     };
   }
