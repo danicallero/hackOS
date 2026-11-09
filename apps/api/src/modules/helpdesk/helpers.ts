@@ -240,7 +240,8 @@ export async function getMyHelperProfile(
     topics: preview.topics,
     availability: preview.availability,
     suggestedInterval,
-    challengeIds: challenges.map((c) => c.id),
+    // Ids ascending (as stored); `challenges` follows the title order.
+    challengeIds: challenges.map((c) => c.id).sort((x, y) => x - y),
     challenges,
     challengeOptions: eligible ? challengeOptions : [],
     preview,

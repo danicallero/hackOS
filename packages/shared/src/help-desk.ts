@@ -37,7 +37,7 @@ export interface MyHelperProfile<P = unknown> {
   suggestedInterval: AvailabilityInterval | null;
   /** Challenges whose requests this helper is alerted to; empty means every request. */
   challengeIds: number[];
-  /** The selected challenges, named (same order as `challengeIds`). */
+  /** The selected challenges, named, in title order (`challengeIds` is ascending). */
   challenges: { id: number; name: string }[];
   /** Every challenge of the event the helper may choose from. */
   challengeOptions: { id: number; name: string }[];
