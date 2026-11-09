@@ -150,6 +150,8 @@ Frontend (web & mobile):
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
   Expo integration, capability-driven tabs, offline scanners, and participant
   screens, with the per-story status registry.
+- [Mobile surface states](./mobile-surface-states.md) — route/component matrix for
+  loading, empty, stale, error, refresh and mutation recovery across mobile screens and sheets.
 - [Mobile builds and release](./mobile-release.md) — index into three
   focused runbooks: [local dev/builds](./mobile-dev-setup.md) (EAS profiles,
   prebuild, local/cloud compilation), [credentials](./mobile-credentials.md)

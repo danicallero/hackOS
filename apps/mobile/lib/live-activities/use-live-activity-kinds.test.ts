@@ -133,3 +133,44 @@ describe("useLiveActivityKinds", () => {
     expect(result.current.customOrder).toBe(false);
   });
 });
+
+it("exposes initial read failure, retries, and retains rows after a later read failure", async () => {
+  mockApiFetch.mockRejectedValueOnce(new Error("offline"));
+  const { result } = await renderHook(() => useLiveActivityKinds(true));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.ready).toBe(false);
+  expect(result.current.error?.message).toBe("offline");
+  mockApiFetch.mockResolvedValueOnce(LIST);
+  await act(async () => {
+    await result.current.load();
+  });
+  expect(result.current.ready).toBe(true);
+  expect(result.current.error).toBeNull();
+  mockApiFetch.mockRejectedValueOnce(new Error("unavailable"));
+  await act(async () => {
+    await result.current.load();
+  });
+  expect(result.current.kinds).toEqual(LIST.kinds);
+  expect(result.current.error?.message).toBe("unavailable");
+});
+
+it("exposes failed mutation and retries that exact choice", async () => {
+  mockApiFetch.mockResolvedValueOnce(LIST);
+  const { result } = await renderHook(() => useLiveActivityKinds(true));
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  mockApiFetch.mockRejectedValueOnce(new Error("offline"));
+  await act(async () => {
+    await result.current.toggle("queue", false);
+  });
+  expect(result.current.actionError?.message).toBe("offline");
+  expect(result.current.kinds[1].enabled).toBe(true);
+  mockApiFetch.mockResolvedValueOnce({
+    ...LIST,
+    kinds: [LIST.kinds[0], { kind: "queue", enabled: false }],
+  });
+  await act(async () => {
+    result.current.retry();
+  });
+  await waitFor(() => expect(result.current.actionError).toBeNull());
+  expect(result.current.kinds[1].enabled).toBe(false);
+});

@@ -1,3 +1,5 @@
+jest.mock("@/lib/api", () => ({ ApiError: class ApiError extends Error {} }));
+
 import { fireEvent, screen } from "@testing-library/react-native";
 import { renderMobile } from "./render";
 

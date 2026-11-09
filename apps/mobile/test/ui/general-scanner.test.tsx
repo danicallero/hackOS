@@ -40,7 +40,10 @@ jest.mock("@/components/QrCamera", () => ({
 jest.mock("@/components/person-operations-screen", () => ({ PersonOperationsScreen: () => null }));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
-jest.mock("@/lib/api", () => ({ apiFetch: (...args: unknown[]) => mockApiFetch(...args) }));
+jest.mock("@/lib/api", () => ({
+  apiFetch: (...args: unknown[]) => mockApiFetch(...args),
+  ApiError: class ApiError extends Error {},
+}));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 jest.mock("@/lib/me-context", () => ({ useMeContext: () => ({ me: { id: 1 } }) }));
@@ -73,7 +76,7 @@ describe("scanner role counters (H8, H27)", () => {
     expect(mockCameraProps.mock.calls.at(-1)?.[0].autoStartNfc).toBeUndefined();
   });
 
-  it("discards stale server totals after a failed refresh and uses the roster", async () => {
+  it("preserves server totals after a failed refresh", async () => {
     mockApiFetch.mockResolvedValueOnce({
       byRole: [
         { role: "Day Staff", hasCapabilities: true, eligible: 30, accredited: 20, inside: 10 },
@@ -85,9 +88,7 @@ describe("scanner role counters (H8, H27)", () => {
     await act(async () => {
       mockRefresh();
     });
-    await waitFor(() => expect(screen.queryByText("30")).toBeNull());
-    expect(screen.getByText("2")).toBeTruthy();
-    expect(screen.getAllByText("1")).toHaveLength(2);
+    await waitFor(() => expect(screen.getByText("30")).toBeTruthy());
   });
 
   it("offers actual roster roles and sums only selected role buckets", async () => {

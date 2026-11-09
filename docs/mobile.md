@@ -39,6 +39,9 @@ there. Device coverage drives accreditation, meals, and recordable activities
 through stable IDs from `@hackos/shared/ui-test-ids`; ordinary CI remains on
 the hardware-free native screen suite.
 
+Read/loading/error/refresh coverage by route and embedded sheet is recorded in
+[Mobile surface states](./mobile-surface-states.md).
+
 ## Contents
 
 - [Story index](#story-index)
@@ -487,8 +490,13 @@ or a fold posture, only on the window the app has right now (`lib/window-size.ts
 
 **Bar colour.** The navigation theme paints the same page background behind
 floating bars and sidebars, avoiding a visible seam with the navigation library's
-default canvas on iPad and Duo. Activities, My Projects and Contacts paint their native header with the page colour
-(`headerStyle.backgroundColor`), like Schedule: the system blur materials read whiter than the page. The
+default canvas on iPad and Duo. Activities, Contacts, My projects and Schedule reuse `fixedScrollHeaderOptions`
+(`lib/screen-header-options.ts`) with a fixed `SCREEN_TITLE` leading title and native soft
+scroll-edge blur: clear at rest, blurred under scrolling content, without a permanent material
+background. Their list stays first in the native descendant chain. The hidden native navigation title uses a measurement-only font size so it does not
+compete for toolbar width; the visible leading title keeps `SCREEN_TITLE`. Contacts
+and My projects use automatic list insets, with their scroll view before toolbar
+portals in a full-height page container. The
 two-pane Schedule keeps per-column title bands, with `components/system-blur.tsx` (`expo-blur`, a native
 dependency) behind the detail title.
 
@@ -695,6 +703,21 @@ Native UI fixtures exercise the screen contract and autosave concurrency;
 they are not device screenshots or proof of native toolbar behavior.
 
 
+- **Pinned schedule dates (H45).** On a single-pane iOS Liquid Glass screen,
+  `SectionList` uses an explicit top content inset equal to the native header
+  height, so its sticky section headers stop below the bar. The native local
+  module `scroll-edge-container` renders the date as a UIKit `UILabel`.
+  While it is still in the list it is plain text. Only at the pinned position
+  does the module move that label into a sibling overlay outside the scroll
+  content and attach `UIScrollEdgeElementContainerInteraction` to extend the
+  existing soft edge behind it. Putting the protected label inside the source
+  scroll content blurs the date itself; registering every inline date extends
+  the effect down the entire page. KVO follows native scroll offsets and
+  releases the overlay when the next sticky header pushes it out. No second
+  frosted material is painted. Android and older builds retain the ordinary
+  section header. Rebuild the native client after changing this module.
+  Apple documents custom edge containers in
+  [Build a UIKit app with the new design](https://developer.apple.com/videos/play/wwdc2025/284/).
 - `app/(tabs)/schedule.tsx`, `queue.tsx`, `schedule/alerts.tsx` (inbox sheet),
   `others/account.tsx`, and `components/wallet-screen.tsx` (an overlay of
   Account, or `others/wallet` for deep links) — the five participant screens. API-backed screens expose
@@ -842,7 +865,19 @@ they are not device screenshots or proof of native toolbar behavior.
   (`RefreshControl`) to the same reload, and `lib/format-date.ts` renders its
   "last update" timestamp as a bare time for today, "Yesterday, <time>" for
   yesterday, a weekday name for the rest of the week, and a short date beyond
-  that. Accepted
+  that.
+  Load failures render through one component (`components/status-notice.tsx`): a full-width
+  capsule with a short message and a trailing action. No connection is `OfflineNotice` (grey,
+  "Offline mode", Reconnect), shown once per visible screen however many requests failed and
+  also used by the scanners; a real server error is `ErrorNotice` (red, Retry). The action
+  swaps in place between its label, a spinner (at least 500 ms) and a red cross, and survives
+  the notice remounting on a repeated failure. `RequestFeedback` and `StaleDataBanner` are
+  thin wrappers over it.
+  Failure states follow one rule across Schedule and Activities: a failed
+  fetch never reads as an empty list (`useCachedApi` marks rendered data stale even
+  without a persisted copy; Activities shows offline instead of "no activities" when nothing
+  is cached), and search/filter results that hide every record use `NoResultsState`
+  (`components/no-results-state.tsx`, with Clear filters) instead of the empty-dataset state. Accepted
   spots also expose the existing authenticated decline endpoint after a final,
   destructive confirmation; success refreshes both ticket and profile state
   (H15). When an existing Apple pass is opened, the app
@@ -877,7 +912,7 @@ they are not device screenshots or proof of native toolbar behavior.
   fallback. Participant ranks exclude waiting sibling entries of teams already
   called, in a room, presenting or completed in the same shared queue. My queue
   refreshes when the tab regains focus and keeps its last response on the device
-  (`cacheFirst`), shown under the "Offline data" banner when the server does
+  (`cacheFirst`), shown under the quiet "Offline mode" line when the server does
   not answer; My Projects shares that cache entry. On a phone its header is the
   compact translucent title used by Open-source licenses. On the first visit to My queue for each
   account, the app shows a
@@ -2666,6 +2701,16 @@ build/drive/capture recipe and the local-port and
 `hasEventAccess` traps that eat time on the first attempt.
 
 ## Scanner state transitions
+
+**Badges accredited offline (H22, H25, H54).** A badge assigned on this device
+but not yet synced is real for the operator: the activity scanner resolves it
+from the queued accreditation or rotation (`pendingBadgeClaim`,
+`lib/scanner-model.ts`) and records the scan with `expectedUserId`. The
+accreditation replays first with its own `assignedAt` (the API bounds it: not in
+the future, not before the previous assignment, at most 72 h old) so the scan's
+timestamp is not "before the assignment". If the badge went to someone else the
+accreditation is refused (409) and the dependent scan is rejected too
+(`badge_owner_mismatch`) instead of crediting the real owner.
 
 A scan is inserted in SQLite before any network
 request: `pending -> acknowledged` only after a 2xx response (including an

@@ -169,14 +169,16 @@ export function ProjectGalleryScreen() {
       return;
     }
     navigation.setOptions({
+      // The same large title as the other pushed pages (Statistics, Storage); the soft scroll
+      // edge lets the list pass under the bar with UIKit's blur instead of a hard cut.
       title: t("gallery"),
       headerShown: true,
       headerLargeTitle: Platform.OS === "ios",
       headerBlurEffect: "none",
       // Android has no large-title bar or content inset: a transparent header there floats over the list.
       headerTransparent: Platform.OS === "ios",
-      headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : colors.background },
-      scrollEdgeEffects: { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" },
+      headerStyle: Platform.OS === "ios" ? undefined : { backgroundColor: colors.background },
+      scrollEdgeEffects: { top: "soft" },
       headerLargeTitleShadowVisible: false,
       headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
@@ -249,9 +251,9 @@ export function ProjectGalleryScreen() {
         setTotal(latestTotal);
       } catch (cause) {
         if (request !== generation.current) return;
-        // A failed quiet refresh keeps what is on screen, except a policy change.
-        if (!quiet || (cause instanceof ApiError && cause.status === 403)) {
-          setError(cause as Error);
+        setError(cause as Error);
+        // A policy change withdraws data; transport failures keep the rendered pages.
+        if (cause instanceof ApiError && cause.status === 403) {
           setProjects([]);
           snapshots.delete(key);
         }
@@ -361,7 +363,8 @@ export function ProjectGalleryScreen() {
               gap: 20,
               paddingBottom: empty ? 96 : 32,
               flexGrow: 1,
-              justifyContent: empty ? "center" : undefined,
+              // Centre an empty state; a status notice stays at the top under the title.
+              justifyContent: empty && !error ? "center" : undefined,
             }}
           >
             {closed ? (
@@ -375,7 +378,14 @@ export function ProjectGalleryScreen() {
               />
             ) : null}
             {!loading && !error && projects.length === 0 ? (
-              <EmptyState icon="hammer" title={t("projectNoGallery")} />
+              <EmptyState
+                icon="hammer"
+                title={t(
+                  search.trim() || challengeIds.length > 0
+                    ? "scannerNoResults"
+                    : "projectNoGallery",
+                )}
+              />
             ) : null}
             {projects.length > 0 ? (
               <Section>

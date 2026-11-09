@@ -25,6 +25,7 @@ export default function StatisticsScreen() {
   const { me, loading, error, refetch } = useMeContext();
   const [myStats, setMyStats] = useState<MyScanStats | null>(null);
   const [statsError, setStatsError] = useState<Error | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const trueTop = useTrueTopScroll(scrollRef);
@@ -37,11 +38,14 @@ export default function StatisticsScreen() {
       setStatsError(null);
       return;
     }
+    setStatsLoading(true);
     setStatsError(null);
     try {
       setMyStats(await fetchMyScanStats());
     } catch (cause) {
       setStatsError(cause instanceof Error ? cause : new Error());
+    } finally {
+      setStatsLoading(false);
     }
   }, [canViewStats]);
 
@@ -119,10 +123,16 @@ export default function StatisticsScreen() {
       </Text>
 
       {statsError ? (
-        <RequestFeedback error={statsError} message={t("statisticsCouldNotLoad")} />
+        <RequestFeedback
+          error={statsError}
+          message={t("statisticsCouldNotLoad")}
+          onRetry={() => void loadStats()}
+          retrying={statsLoading}
+        />
       ) : null}
 
-      {statsError ? null : (
+      {statsLoading && !myStats ? <RequestFeedback loading /> : null}
+      {myStats ? (
         <>
           <Section title={t("statisticsActivityTitle")} footer={t("statisticsActivityFooter")}>
             <InfoRow
@@ -169,7 +179,7 @@ export default function StatisticsScreen() {
             />
           </Section>
         </>
-      )}
+      ) : null}
 
       <Section title={t("statisticsHistoryTitle")}>
         <ActionButton

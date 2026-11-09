@@ -1,3 +1,4 @@
+jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
 jest.mock("@/components/scanner-code-entry", () => ({
   ScannerCodeEntry: jest.requireActual("@/components/scanner-code-card").ScannerCodeCard,
 }));
@@ -15,7 +16,7 @@ jest.mock("@/lib/use-nfc-supported", () => ({
 }));
 
 import { act, fireEvent, render, waitFor } from "@testing-library/react-native";
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
 import { QrCamera } from "@/components/QrCamera";
 
 let mockCameraProps: { onBarcodeScanned?: unknown };
@@ -300,4 +301,15 @@ it("hides NFC controls and never auto-starts on unsupported hardware", async () 
   mockPermission = { status: "denied", granted: false, canAskAgain: false };
   await view.rerender(<QrCamera onValue={jest.fn()} autoStartNfc />);
   expect(view.queryByRole("button", { name: "scannerNfcScan" })).toBeNull();
+});
+
+it("offers Settings instead of repeatedly requesting a permanently denied camera", async () => {
+  mockPermission = { status: "denied", granted: false, canAskAgain: false };
+  const openSettings = jest.spyOn(Linking, "openSettings").mockResolvedValue();
+  const view = await render(<QrCamera onValue={jest.fn()} />);
+  expect(mockRequestCameraPermission).not.toHaveBeenCalled();
+  expect(view.queryByRole("button", { name: "scannerRetryCamera" })).toBeNull();
+  await fireEvent.press(view.getByRole("button", { name: "mobileSurfaceOpenSettings" }));
+  expect(openSettings).toHaveBeenCalledTimes(1);
+  openSettings.mockRestore();
 });

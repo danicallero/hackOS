@@ -1,9 +1,10 @@
 import { Stack, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { findLicense, LICENSES, type LicenseEntry } from "@/lib/licenses";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -29,21 +30,33 @@ function useLegalScroll() {
 }
 
 function SourceLink({ url }: { url: string }) {
+  const [error, setError] = useState<Error | null>(null);
+  async function open() {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error(String(cause)));
+    }
+  }
   return (
-    <PressableFeedback
-      feedback="opacity"
-      accessibilityRole="link"
-      hitSlop={8}
-      onPress={() => void WebBrowser.openBrowserAsync(url)}
-      style={{ alignSelf: "flex-start" }}
-    >
-      <Text
-        numberOfLines={1}
-        style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
+    <>
+      {error ? <RequestFeedback error={error} onRetry={() => void open()} /> : null}
+      <PressableFeedback
+        feedback="opacity"
+        accessibilityRole="link"
+        hitSlop={8}
+        onPress={() => void open()}
+        style={{ alignSelf: "flex-start" }}
       >
-        {url.replace(/^https:\/\//, "")}
-      </Text>
-    </PressableFeedback>
+        <Text
+          numberOfLines={1}
+          style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
+        >
+          {url.replace(/^https:\/\//, "")}
+        </Text>
+      </PressableFeedback>
+    </>
   );
 }
 

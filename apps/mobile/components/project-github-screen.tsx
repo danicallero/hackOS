@@ -33,13 +33,16 @@ export function ProjectGithubScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
+  const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       setRepos((await apiFetch<{ repos: GithubRepoCandidate[] }>(`${base}/repos`)).repos);
       setError(null);
     } catch (cause) {
-      setRepos((current) => current ?? []);
       setError(cause as Error);
+    } finally {
+      setLoading(false);
     }
   }, [base]);
   useEffect(() => {
@@ -73,6 +76,7 @@ export function ProjectGithubScreen() {
   });
 
   async function run(action: () => Promise<unknown>) {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -139,8 +143,11 @@ export function ProjectGithubScreen() {
             }}
           />
         ) : null}
-        {error ? <RequestFeedback error={error} /> : null}
-        {repos === null ? <RequestFeedback loading /> : null}
+        {busy ? <RequestFeedback loading compact /> : null}
+        {error ? (
+          <RequestFeedback error={error} onRetry={() => void load()} retrying={loading || busy} />
+        ) : null}
+        {repos === null && loading && !error ? <RequestFeedback loading /> : null}
         {shown.length > 0 ? (
           <Section>
             {shown.map((repo, index) => (
@@ -168,7 +175,10 @@ export function ProjectGithubScreen() {
             ))}
           </Section>
         ) : null}
-        {repos && repos.length === 0 && !error ? (
+        {repos && shown.length === 0 && needle && !error ? (
+          <EmptyState icon="magnifyingglass" title={t("scanLogNoMatches")} />
+        ) : null}
+        {repos && repos.length === 0 && !needle && !error ? (
           <EmptyState icon="tray" title={t("githubNoRepos")} />
         ) : null}
         {repos && !needle ? (

@@ -1,4 +1,3 @@
-import { ApiError } from "./api";
 import { readCachedValue, writeCachedValue } from "./offline-cache";
 
 /** A badge code scanned without a connection, waiting to become a contact. */
@@ -10,10 +9,9 @@ export interface PendingDiaryScan {
 /** Under the account's `user:<id>:` prefix, so sign-out clears it with the other caches. */
 const key = (userId: number) => `user:${userId}:diary-pending-scans`;
 
-/** True when the request never reached the server (no status), not when it was refused. */
-export function isOfflineError(error: unknown): boolean {
-  return error instanceof ApiError ? !error.status : error instanceof TypeError;
-}
+import { isOfflineError } from "@/lib/offline-error";
+
+export { isOfflineError };
 
 export async function readPendingScans(userId: number): Promise<PendingDiaryScan[]> {
   return (await readCachedValue<PendingDiaryScan[]>(key(userId)))?.data ?? [];

@@ -23,9 +23,11 @@ import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { QrCamera } from "@/components/QrCamera";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
+import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
 import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
@@ -40,14 +42,16 @@ import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
+  findPersonById,
   findPersonByTicket,
   getActivityState,
   listScannerActivities,
   listScannerPeople,
 } from "@/lib/scanner-db";
+import { pendingBadgeClaim } from "@/lib/scanner-model";
 import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
-import { screenTitleElement } from "@/lib/screen-header-options";
+import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
 import { startLogisticsEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { useNfcSupportStatus } from "@/lib/use-nfc-supported";
 import { useScannerSync } from "@/lib/use-scanner";
@@ -83,6 +87,9 @@ interface ActivityScanResult {
  * the two-pane Activities window) takes the activity from `activityId`, draws its own title band
  * of height `topInset` and keeps the result overlay inside the pane, like the Schedule detail.
  */
+/** Window width kept free for Back, the queue button and the bar's gutters beside the title. */
+const TOOLBAR_TITLE_RESERVE = 180;
+
 export function ActivityScannerScreen({
   activityId: embeddedActivityId,
   embedded = false,
@@ -109,7 +116,7 @@ export function ActivityScannerScreen({
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const { gutter } = useOperatorLayout(null);
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width: windowWidth } = useWindowDimensions();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -149,12 +156,11 @@ export function ActivityScannerScreen({
   }, [stopNfc]);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!error) return;
-    const timeout = setTimeout(() => setError(null), 6000);
-    return () => clearTimeout(timeout);
-  }, [error]);
 
+  const [insideError, setInsideError] = useState<Error | null>(null);
+  const [statsError, setStatsError] = useState<Error | null>(null);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  const [activityError, setActivityError] = useState<Error | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
   const handledManualScan = useRef<string | null>(null);
   const activity = useMemo(
@@ -195,13 +201,20 @@ export function ActivityScannerScreen({
   const roster = syncState.serverSnapshot?.people ?? people;
   const inside =
     serverInside ?? roster?.filter((person) => person.lastPresenceKind === "in").length;
-  const loadInside = useCallback(() => {
-    void apiFetch<{ byRole: { inside: number }[] }>("/api/scanner/role-stats")
-      .then((response) =>
-        setServerInside(response.byRole.reduce((sum, row) => sum + row.inside, 0)),
-      )
-      .catch(() => setServerInside(null));
-  }, []);
+  const loadInside = useCallback(
+    () =>
+      apiFetch<{ byRole: { inside: number }[] }>("/api/scanner/role-stats")
+        .then((response) => {
+          setServerInside(response.byRole.reduce((sum, row) => sum + row.inside, 0));
+          setInsideError(null);
+          return true;
+        })
+        .catch((cause) => {
+          setInsideError(cause instanceof Error ? cause : new Error(String(cause)));
+          return false;
+        }),
+    [],
+  );
   useEffect(() => {
     if (focused) loadInside();
   }, [focused, loadInside]);
@@ -235,17 +248,19 @@ export function ActivityScannerScreen({
     try {
       const response = await apiFetch<{ items: ActivityStats[] }>("/api/activities/scannable");
       setStats(response.items.find((item) => item.activityId === activityId) ?? null);
-    } catch {
-      // The scanner and its offline queue remain usable without live statistics.
+      setStatsError(null);
+      return true;
+    } catch (cause) {
+      setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
+      return false;
     }
   }, [activityId]);
 
   useEffect(() => {
     void listScannerActivities()
       .then((items) => setLocalActivity(items.find((item) => item.id === activityId) ?? null))
-      .catch(() => {
-        // The online snapshot below remains authoritative when SQLite is down.
-      });
+      .catch((cause) => setActivityError(cause instanceof Error ? cause : new Error(String(cause))))
+      .finally(() => setActivityLoaded(true));
   }, [activityId]);
 
   useEffect(() => {
@@ -264,6 +279,7 @@ export function ActivityScannerScreen({
       allowRepeat: boolean,
       count: number,
       ticketToken?: string,
+      expectedUserId?: number,
     ) => {
       if (ownerUserId === undefined) return;
       setRegistering(true);
@@ -274,6 +290,7 @@ export function ActivityScannerScreen({
             kind: "activity",
             activityId,
             ...(ticketToken ? { ticketToken } : { badgeId }),
+            ...(expectedUserId ? { expectedUserId } : {}),
             allowRepeat,
             scannedAt: new Date().toISOString(),
           },
@@ -343,6 +360,22 @@ export function ActivityScannerScreen({
           : ticketPerson
             ? { person: ticketPerson, revoked: false }
             : await findPersonByBadge(badgeId);
+        // A badge given on this device whose accreditation has not synced yet is real for
+        // the operator; the API reconciles it on replay and rejects the scan if it was not.
+        let queuedOwner: ScannerPerson | null = null;
+        if (!found.person) {
+          const claim = pendingBadgeClaim(syncState.queue, badgeId);
+          if (claim) {
+            queuedOwner =
+              "userId" in claim
+                ? (syncState.serverSnapshot?.people.find((p) => p.userId === claim.userId) ??
+                  (await findPersonById(claim.userId)))
+                : (syncState.serverSnapshot?.people.find(
+                    (p) => p.ticketToken === claim.ticketToken,
+                  ) ?? (await findPersonByTicket(claim.ticketToken)));
+          }
+        }
+        if (queuedOwner) found.person = queuedOwner;
         if (!found.person) {
           setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
           setResult(null);
@@ -378,12 +411,12 @@ export function ActivityScannerScreen({
           });
           return;
         }
-        await store(found.person, badgeId, false, count, ticketToken);
+        await store(found.person, badgeId, false, count, ticketToken, queuedOwner?.userId);
       } finally {
         setRegistering(false);
       }
     },
-    [activityId, store, syncState.serverSnapshot, t],
+    [activityId, store, syncState.queue, syncState.serverSnapshot, t],
   );
 
   useEffect(() => {
@@ -475,7 +508,13 @@ export function ActivityScannerScreen({
       }}
     >
       {embedded ? null : (
-        <Stack.Screen options={{ headerShown: glassAvailable, headerTitle: "" }} />
+        <Stack.Screen
+          options={
+            glassAvailable
+              ? { ...fixedScrollHeaderOptions(activityName), headerBackVisible: false }
+              : { headerShown: false }
+          }
+        />
       )}
       <Modal
         visible={cameraVisible}
@@ -582,7 +621,13 @@ export function ActivityScannerScreen({
               adjustsFontSizeToFit
               minimumFontScale={CHROME_MIN_FONT_SCALE}
               testID={UI_TEST_IDS.scanner.result}
-              style={{ color: colors.label, ...SCREEN_TITLE }}
+              // A long name must truncate: an over-wide title makes UIKit move Back and the
+              // queue button into the bar's overflow menu.
+              style={{
+                color: colors.label,
+                maxWidth: Math.max(96, windowWidth - TOOLBAR_TITLE_RESERVE),
+                ...SCREEN_TITLE,
+              }}
             >
               {activityName}
             </Text>
@@ -620,10 +665,28 @@ export function ActivityScannerScreen({
         <NfcScannerSurface
           header={(layout) => (
             <>
+              {!activity && !activityLoaded ? <RequestFeedback loading compact /> : null}
+              {!activity && activityLoaded ? (
+                <RequestFeedback
+                  error={activityError ?? new Error(t("requestUnavailable"))}
+                  message={t("requestUnavailable")}
+                  onRetry={() => void runSync()}
+                  retrying={syncState.syncing}
+                />
+              ) : null}
+              {/* Offline is not a failure: scans are queued, only the live figures are missing. */}
+              {insideError || statsError ? (
+                <OfflineNotice
+                  onReconnect={async () =>
+                    (await Promise.all([loadInside(), loadStats()])).every(Boolean)
+                  }
+                />
+              ) : null}
               <ActivityStatistics
                 activity={activity}
                 stats={stats}
                 inside={inside}
+                offline={Boolean(insideError || statsError)}
                 layout={layout.stats}
               />
               {error ? (
@@ -1102,30 +1165,33 @@ function ActivityStatistics({
   activity,
   stats,
   inside,
+  offline,
   layout,
 }: {
   activity: ScannerActivity | null;
   stats: ActivityStats | null;
   inside: number | undefined;
+  offline: boolean;
   layout: StatBlockLayout;
 }) {
   const { t } = useLocale();
   const meal = isMealActivityKind(activity?.category);
+  const pending = offline ? "–" : "…";
   return (
     <ScannerStatBlock
       capped={false}
       layout={layout}
       primary={{
         label: meal ? t("scannerServingsTotal") : t("scannerScansTotal"),
-        value: stats?.count ?? "…",
+        value: stats?.count ?? pending,
       }}
       secondary={[
-        { label: t("scannerDistinctPeople"), value: stats?.distinctPeople ?? "…" },
+        { label: t("scannerDistinctPeople"), value: stats?.distinctPeople ?? pending },
         {
           label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
-          value: stats?.repeats ?? "…",
+          value: stats?.repeats ?? pending,
         },
-        { label: t("scannerInsideBuilding"), value: inside ?? "…", divider: true },
+        { label: t("scannerInsideBuilding"), value: inside ?? pending, divider: true },
       ]}
     />
   );
