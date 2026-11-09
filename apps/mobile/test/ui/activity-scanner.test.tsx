@@ -201,13 +201,13 @@ it("preserves server occupancy across roles after a failed refresh (H24)", async
   }
 });
 
-it("treats failed live figures as offline scanning, not an error", async () => {
+it("treats failed live figures as offline mode, not an error", async () => {
   const originalParams = mockParams;
   mockParams = { id: "7" };
   jest.mocked(apiFetch).mockRejectedValue(new Error("offline"));
   try {
     await renderMobile(<ActivityScannerScreen />);
-    expect(await screen.findByText("scannerOfflineScanning")).toBeTruthy();
+    expect(await screen.findByText("scannerOfflineMode")).toBeTruthy();
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
   } finally {
     mockParams = originalParams;

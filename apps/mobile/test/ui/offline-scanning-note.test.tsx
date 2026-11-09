@@ -14,17 +14,17 @@ describe("OfflineScanningNote", () => {
   it("shows Reconnect beside the note and returns to it after a failed attempt", async () => {
     const onReconnect = jest.fn().mockResolvedValue(false);
     await renderMobile(<OfflineScanningNote onReconnect={onReconnect} />);
-    expect(screen.getByText("scannerOfflineScanning")).toBeTruthy();
+    expect(screen.getByText("scannerOfflineMode")).toBeTruthy();
 
     await act(async () => fireEvent.press(screen.getByRole("button")));
     expect(onReconnect).toHaveBeenCalledTimes(1);
-    // Failed: the label gives way to the red cross, and the control is inert meanwhile.
-    expect(screen.queryByText("scannerReconnect")).toBeNull();
+    // Failed: the red cross shows and the control is inert meanwhile.
     await act(async () => fireEvent.press(screen.getByRole("button")));
     expect(onReconnect).toHaveBeenCalledTimes(1);
 
     await act(async () => jest.advanceTimersByTime(3100));
-    expect(screen.getByText("scannerReconnect")).toBeTruthy();
+    await act(async () => fireEvent.press(screen.getByRole("button")));
+    expect(onReconnect).toHaveBeenCalledTimes(2);
   });
 
   it("is busy while reconnecting", async () => {
