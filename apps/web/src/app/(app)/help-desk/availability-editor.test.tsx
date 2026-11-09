@@ -123,4 +123,22 @@ describe("availability replacement (H62)", () => {
     );
     expect(api.put).not.toHaveBeenCalled();
   });
+  it("lists every hacking day and prefills the add dialog on the chosen day", async () => {
+    const window = { startsAt: "2027-02-26T09:00:00.000Z", endsAt: "2027-02-28T15:00:00.000Z" };
+    await act(async () => {
+      root.render(
+        <Editor
+          initial={{ availability: [first], suggestedInterval: window } as MyHelperProfile}
+        />,
+      );
+    });
+    const add = Array.from(container.querySelectorAll("button")).filter((button) =>
+      button.getAttribute("aria-label")?.startsWith("helpDeskAddIntervalOn"),
+    );
+    expect(add).toHaveLength(3);
+    await act(async () => add[2].click());
+    expect((getByLabelText(dialog(), "helpDeskFrom") as HTMLInputElement).value).toBe(
+      "2027-02-28T09:00",
+    );
+  });
 });

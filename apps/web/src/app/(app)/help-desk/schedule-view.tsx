@@ -33,18 +33,29 @@ export function ScheduleDays({
   intervals,
   onRemove,
   onEdit,
+  onAddDay,
+  plannedDays,
   disabled,
 }: {
   intervals: AvailabilityInterval[];
   onRemove?: (interval: AvailabilityInterval) => void;
   onEdit?: (interval: AvailabilityInterval) => void;
+  /** Event days (`yyyy-MM-dd`) shown even without ranges, each with an Add action. */
+  plannedDays?: string[];
+  onAddDay?: (day: string) => void;
   disabled?: boolean;
 }) {
   const { t } = useLocale();
   const zone = useEventTimeZone();
   const dayLabel = useDayLabel();
   const intervalLabel = useIntervalLabel();
-  const days = scheduleDays(intervals, zone);
+  const withRanges = scheduleDays(intervals, zone);
+  const days = [
+    ...withRanges,
+    ...(plannedDays ?? [])
+      .filter((day) => !withRanges.some((entry) => entry.day === day))
+      .map((day) => ({ day, intervals: [] as DayInterval[] })),
+  ].sort((a, b) => a.day.localeCompare(b.day));
   if (!days.length)
     return <p className="text-muted-foreground text-sm">{t("helpDeskNoSchedule")}</p>;
   return (
@@ -97,6 +108,18 @@ export function ScheduleDays({
                 </li>
               ))}
             </ul>
+            {onAddDay ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={disabled}
+                aria-label={t("helpDeskAddIntervalOn", { day: dayLabel(day) })}
+                onClick={() => onAddDay(day)}
+              >
+                {t("helpDeskAddInterval")}
+              </Button>
+            ) : null}
             <DayTrack intervals={list} labels={index === days.length - 1} />
           </div>
         </section>

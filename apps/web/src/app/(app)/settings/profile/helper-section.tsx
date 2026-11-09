@@ -109,7 +109,15 @@ function HelperForm({
           label={t("helpDeskPublish")}
           hint={t("helpDeskPublishingNote")}
         />
-        <AvailabilityEditor profile={profile} onSaved={onSaved} />
+        <h3 className="type-label pt-2">{t("helpDeskMentorProfile")}</h3>
+        {profile.canLimitToChallenges ? (
+          <SwitchRow
+            checked={ownOnly}
+            onChange={setOwnOnly}
+            label={t("helpDeskOwnChallengesOnly")}
+            hint={profile.ownChallenges?.map((challenge) => challenge.name).join(" · ")}
+          />
+        ) : null}
         <div className="space-y-2">
           <Label htmlFor={id}>{t("helpDeskKnowledge")}</Label>
           <TopicsPicker id={id} value={topics} onChange={setTopics} disabled={pending} allowAdd />
@@ -119,14 +127,7 @@ function HelperForm({
             </p>
           ) : null}
         </div>
-        {profile.canLimitToChallenges ? (
-          <SwitchRow
-            checked={ownOnly}
-            onChange={setOwnOnly}
-            label={t("helpDeskOwnChallengesOnly")}
-            hint={profile.ownChallenges?.map((challenge) => challenge.name).join(" · ")}
-          />
-        ) : null}
+        <AvailabilityEditor profile={profile} onSaved={onSaved} />
       </fieldset>
       {error ? <HelpdeskError error={error} fallback="helpDeskSaveError" /> : null}
       <FormActions

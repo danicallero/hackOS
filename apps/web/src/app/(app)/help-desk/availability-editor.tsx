@@ -14,7 +14,7 @@ import { formatDurationMinutes } from "@/lib/datetime";
 import { useEventTimeZone, useEventZoneHint } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import type { AvailabilityInterval, MyHelperProfile } from "./model";
-import { durationMinutes, intervalProblem } from "./schedule";
+import { durationMinutes, eventDay, intervalProblem, nextDayOf } from "./schedule";
 import { ScheduleDays } from "./schedule-view";
 
 /**
@@ -30,7 +30,9 @@ export function AvailabilityEditor({
   onSaved: (profile: MyHelperProfile) => void;
 }) {
   const { t } = useLocale();
+  const zone = useEventTimeZone();
   const [adding, setAdding] = useState(false);
+  const [dayPrefill, setDayPrefill] = useState<AvailabilityInterval | null>(null);
   const [editing, setEditing] = useState<AvailabilityInterval | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -49,6 +51,21 @@ export function AvailabilityEditor({
     }
   }
 
+  const window = profile.suggestedInterval;
+  const plannedDays = window ? hackingDays(window, zone) : [];
+  function prefillFor(day: string): AvailabilityInterval | null {
+    if (!window) return null;
+    const clock = instantToWallClock(window.startsAt, zone).slice(10, 16);
+    const startsAt = wallClockToInstant(`${day}${clock}`, zone);
+    if (!startsAt) return null;
+    const start = Date.parse(startsAt);
+    const end = Math.max(
+      start + 3_600_000,
+      Math.min(start + 2 * 3_600_000, Date.parse(window.endsAt)),
+    );
+    return { startsAt, endsAt: new Date(end).toISOString() };
+  }
+
   return (
     <div className="space-y-3">
       <div className="flex min-h-(--control-height-compact) items-center justify-between gap-3">
@@ -61,6 +78,7 @@ export function AvailabilityEditor({
           onClick={() => {
             setError(null);
             setEditing(null);
+            setDayPrefill(null);
             setAdding(true);
           }}
         >
@@ -71,6 +89,13 @@ export function AvailabilityEditor({
       <ScheduleDays
         intervals={profile.availability}
         disabled={pending}
+        plannedDays={plannedDays}
+        onAddDay={(day) => {
+          setError(null);
+          setEditing(null);
+          setDayPrefill(prefillFor(day));
+          setAdding(true);
+        }}
         onEdit={(interval) => {
           setError(null);
           setEditing(interval);
@@ -87,7 +112,7 @@ export function AvailabilityEditor({
       {adding ? (
         <AddIntervalDialog
           existing={profile.availability.filter((item) => item.startsAt !== editing?.startsAt)}
-          suggested={editing ?? profile.suggestedInterval}
+          suggested={editing ?? dayPrefill ?? profile.suggestedInterval}
           editing={!!editing}
           pending={pending}
           error={error}
@@ -108,6 +133,17 @@ export function AvailabilityEditor({
       ) : null}
     </div>
   );
+}
+
+/** Every event day of the hacking (else event) window, at most two weeks. */
+function hackingDays(window: AvailabilityInterval, zone: string): string[] {
+  const last = eventDay(window.endsAt, zone);
+  const days: string[] = [];
+  for (let day = eventDay(window.startsAt, zone); day && day <= last && days.length < 14; ) {
+    days.push(day);
+    day = nextDayOf(day);
+  }
+  return days;
 }
 
 function AddIntervalDialog({
