@@ -992,5 +992,6 @@
   "maintenanceBody": "hackOS will be back shortly. The app resumes on its own.",
   "maintenanceFailedBody": "The restore needs an administrator. The app resumes once it is resolved.",
   "mobileStatesScheduleTranslationsError": "Saved, but the translations weren't. Edit the entry to try again.",
-  "mobileSurfaceOpenSettings": "Open Settings"
+  "mobileSurfaceOpenSettings": "Open Settings",
+  "scannerOfflineScanning": "Offline scanning"
 }

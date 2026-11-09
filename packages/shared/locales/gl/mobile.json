@@ -992,5 +992,6 @@
   "maintenanceBody": "hackOS volverá en uns minutos. A app continúa soa.",
   "maintenanceFailedBody": "A restauración precisa dun administrador. A app continúa cando se resolva.",
   "mobileStatesScheduleTranslationsError": "Gardado, pero non as traducións. Edita a entrada para tentalo de novo.",
-  "mobileSurfaceOpenSettings": "Abrir axustes"
+  "mobileSurfaceOpenSettings": "Abrir axustes",
+  "scannerOfflineScanning": "Escaneo sen conexión"
 }

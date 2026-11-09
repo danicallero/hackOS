@@ -640,21 +640,23 @@ export function ActivityScannerScreen({
                   retrying={syncState.syncing}
                 />
               ) : null}
-              {insideError ? (
-                <RequestFeedback error={insideError} onRetry={loadInside} compact />
-              ) : null}
-              {statsError ? (
-                <RequestFeedback
-                  error={statsError}
-                  onRetry={() => void loadStats()}
-                  retrying={statsLoading}
-                  compact
-                />
+              {/* Offline is not a failure: scans are queued, only the live figures are missing. */}
+              {insideError || statsError ? (
+                <View
+                  accessibilityRole="text"
+                  style={{ alignItems: "center", flexDirection: "row", gap: 6 }}
+                >
+                  <SymbolView name="wifi.slash" size={14} tintColor={colors.secondaryLabel} />
+                  <Text style={[type.footnote, { color: colors.secondaryLabel }]}>
+                    {t("scannerOfflineScanning")}
+                  </Text>
+                </View>
               ) : null}
               <ActivityStatistics
                 activity={activity}
                 stats={stats}
                 inside={inside}
+                offline={Boolean(insideError || statsError)}
                 layout={layout.stats}
               />
               {error ? (
@@ -1133,30 +1135,33 @@ function ActivityStatistics({
   activity,
   stats,
   inside,
+  offline,
   layout,
 }: {
   activity: ScannerActivity | null;
   stats: ActivityStats | null;
   inside: number | undefined;
+  offline: boolean;
   layout: StatBlockLayout;
 }) {
   const { t } = useLocale();
   const meal = isMealActivityKind(activity?.category);
+  const pending = offline ? "–" : "…";
   return (
     <ScannerStatBlock
       capped={false}
       layout={layout}
       primary={{
         label: meal ? t("scannerServingsTotal") : t("scannerScansTotal"),
-        value: stats?.count ?? "…",
+        value: stats?.count ?? pending,
       }}
       secondary={[
-        { label: t("scannerDistinctPeople"), value: stats?.distinctPeople ?? "…" },
+        { label: t("scannerDistinctPeople"), value: stats?.distinctPeople ?? pending },
         {
           label: meal ? t("scannerExtraServings") : t("scannerExtraScans"),
-          value: stats?.repeats ?? "…",
+          value: stats?.repeats ?? pending,
         },
-        { label: t("scannerInsideBuilding"), value: inside ?? "…", divider: true },
+        { label: t("scannerInsideBuilding"), value: inside ?? pending, divider: true },
       ]}
     />
   );
