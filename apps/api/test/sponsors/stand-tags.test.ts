@@ -218,10 +218,10 @@ describe("stand tags", () => {
     );
     expect(audits.rows).toEqual([
       {
-        before: { tagId: tag.id, label: "Lanyard Ana" },
-        after: { tagId: tag.id, label: "Table 3" },
+        before: { tagId: tag.id, label: "[private]" },
+        after: { tagId: tag.id, label: "[private]" },
       },
-      { before: { tagId: tag.id, label: "Table 3" }, after: { tagId: tag.id, label: null } },
+      { before: { tagId: tag.id, label: "[private]" }, after: { tagId: tag.id, label: null } },
     ]);
   });
 

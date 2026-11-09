@@ -220,7 +220,7 @@ describe("event config (H45/H47)", () => {
       `SELECT after FROM audit_log WHERE entity_type = 'event_config' ORDER BY id DESC LIMIT 1`,
     );
     expect(rows[0].after.wifiSsid).toBe("hackos-guest");
-    expect(rows[0].after.wifiPassword).toBe("***");
+    expect(rows[0].after.wifiPassword).toBe("[private]");
   });
 
   it("upserts Wallet pass field-label overrides", async () => {

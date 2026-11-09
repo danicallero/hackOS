@@ -2406,7 +2406,7 @@ describe("staff user routes (H7)", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].actor_id).toBe(editor);
-    expect(rows[0].after.dni).toBe("00000000T");
+    expect(rows[0].after.dni).toBe("[private]");
     expect(rows[0].before.dni).toBeNull();
   });
 
@@ -2478,8 +2478,8 @@ describe("staff user routes (H7)", () => {
       [String(target)],
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].before.email).toBe("old@example.test");
-    expect(rows[0].after.email).toBe("new@example.test");
+    expect(rows[0].before.email).toBe("[private]");
+    expect(rows[0].after.email).toBe("[private]");
     const oldSubmission = await pool.query(
       `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
       [oldRepo.rows[0].id, target],

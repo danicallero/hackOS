@@ -87,6 +87,7 @@ export async function enqueueRepoOnChallenge(
       [position, entry.id],
     );
     await writeQueueHistory(client, {
+      audit: false,
       entryId: entry.id,
       actorId,
       previousStatus: entry.status,

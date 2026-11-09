@@ -1143,3 +1143,32 @@ a single successful capture does not establish that the effect is stable.
 ### Exceptions
 A screen that intentionally has no header (full-bleed camera, Account root)
 follows its own established configuration.
+
+## [R033] Keep private content out of change logs
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-09
+
+### Trigger
+Adding traceability for reviews, notes, or participant answers.
+
+### Mistake
+Proposed retaining previous and final review text in the audit log.
+
+### Lesson
+Traceability does not require duplicating private content into a second history.
+
+### Action
+Record actor, subject, changed field names and timing. Limit before/after values
+to explicitly safe operational fields. Group autosaves within an editing session;
+do not persist note text, answers, or content hashes in audit payloads.
+
+### Validation
+Assert that private sentinel text never appears in serialized audit rows and
+that repeated autosaves do not create one event per pause in typing.
+
+### Exceptions
+A separately authorized content-versioning feature must define its own privacy
+and retention contract before storing private historical content.

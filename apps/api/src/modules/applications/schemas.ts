@@ -103,6 +103,7 @@ export const submitSchema = z.object({
 });
 
 export const reviewUpsertSchema = z.object({
+  edit_session_id: z.string().uuid().optional(),
   score: z.number().int().min(0).max(5).nullish(),
   notes: z.string().nullish(),
 });

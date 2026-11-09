@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface RequestContext {
+  requestId?: string;
+  getActorId?: () => number | null;
   ip?: string;
   userAgent?: string;
 }
