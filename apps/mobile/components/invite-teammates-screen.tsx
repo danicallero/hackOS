@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { Section, Separator } from "@/components/native-ui";
@@ -44,13 +44,17 @@ export function InviteTeammatesScreen() {
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [busy, setBusy] = useState(false);
   const [contacts, setContacts] = useState<DiaryPerson[]>([]);
-  useEffect(() => {
+  const [contactsLoading, setContactsLoading] = useState(true);
+  const [contactsError, setContactsError] = useState<Error | null>(null);
+  const loadContacts = useCallback(async () => {
+    setContactsLoading(true);
     // Suggestions are optional: a failed read leaves the email field as is.
-    void Promise.all([
+    await Promise.all([
       apiFetch<{ items: DiaryEntry[] }>("/api/me/diary"),
       apiFetch<NativeProject>(`/api/me/projects/${id}`).catch(() => null),
     ])
       .then(([diary, project]) => {
+        setContactsError(null);
         const members = new Set(
           (project?.members ?? [])
             .filter((member) => member.status !== "declined")
@@ -62,8 +66,12 @@ export function InviteTeammatesScreen() {
           ),
         );
       })
-      .catch(() => {});
+      .catch((cause) => setContactsError(cause instanceof Error ? cause : new Error(String(cause))))
+      .finally(() => setContactsLoading(false));
   }, [id]);
+  useEffect(() => {
+    void loadContacts();
+  }, [loadContacts]);
   const draftValid = EMAIL.test(draft.trim());
   const needle = draft.trim().toLowerCase();
   const suggestions = contacts.filter(
@@ -219,6 +227,15 @@ export function InviteTeammatesScreen() {
             size={34}
           />
         </View>
+        {busy ? <RequestFeedback loading compact /> : null}
+        {contactsLoading && contacts.length === 0 ? <RequestFeedback loading compact /> : null}
+        {contactsError ? (
+          <RequestFeedback
+            error={contactsError}
+            onRetry={() => void loadContacts()}
+            retrying={contactsLoading}
+          />
+        ) : null}
         {recipients.length > 0 ? (
           <View style={{ padding: 16 }}>
             <Section>
@@ -241,6 +258,7 @@ export function InviteTeammatesScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={`${t("remove")} ${recipientLabel(recipient)}`}
                         hitSlop={10}
+                        disabled={busy}
                         onPress={() =>
                           setRecipients((current) =>
                             current.filter(

@@ -48,6 +48,7 @@ import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { scannerFetch } from "@/lib/scanner-request";
+import { fixedScrollHeaderOptions } from "@/lib/screen-header-options";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useRetryOnReconnect } from "@/lib/use-retry-on-reconnect";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
@@ -514,18 +515,8 @@ export function DiaryScreen() {
       return;
     }
     navigation.setOptions({
-      // As Activities: the title is a native leading item on the bar row,
-      // beside the trailing items, so no empty row sits above a large title.
-      // An empty navigation title stops iOS 26 adding its centred one.
-      title: "",
-      headerShown: true,
+      ...fixedScrollHeaderOptions(wallet.open ? "" : t("tabDiary")),
       gestureEnabled: !wallet.open,
-      headerLargeTitle: false,
-      // As Activities: the bar is the page colour, so the list starts below the title
-      // instead of scrolling behind it.
-      headerTransparent: false,
-      headerStyle: { backgroundColor: colors.background },
-      headerShadowVisible: false,
       // Removed on Companies: the native bar has no inert state.
       headerSearchBarOptions: searchable
         ? {
@@ -578,10 +569,10 @@ export function DiaryScreen() {
       testID="diary-scroll"
       accessibilityElementsHidden={inputOpen}
       importantForAccessibility={inputOpen ? "no-hide-descendants" : "auto"}
-      contentInsetAdjustmentBehavior={glassAvailable ? "never" : "automatic"}
+      contentInsetAdjustmentBehavior="automatic"
       keyboardDismissMode="on-drag"
       keyboardShouldPersistTaps="handled"
-      style={{ backgroundColor: colors.background }}
+      style={{ flex: 1, backgroundColor: colors.background }}
       contentContainerStyle={{
         gap: 16,
         paddingVertical: 16,
@@ -611,6 +602,13 @@ export function DiaryScreen() {
         selectedIndex={Math.max(0, SECTIONS.indexOf(section))}
         onChange={(index) => selectSection(SECTIONS[index] ?? "people")}
       />
+      {section === "companies" && collection && collectionError ? (
+        <RequestFeedback
+          error={collectionError}
+          onRetry={() => void loadCollection()}
+          retrying={refreshing}
+        />
+      ) : null}
       {section === "companies" ? (
         collection ? (
           <CompanyAlbum
@@ -632,9 +630,9 @@ export function DiaryScreen() {
             loadError ? null : (
               <RequestFeedback loading={loading} error={null} onRetry={() => void load()} />
             )
-          ) : entries.length === 0 ? (
+          ) : entries.length === 0 && !loadError ? (
             <EmptyState icon="person.2.crop.square.stack" title={t("diaryEmptyTitle")} />
-          ) : visible.length === 0 ? (
+          ) : visible.length === 0 && !loadError ? (
             activeFavourites && !activeQuery.trim() ? (
               <EmptyState icon="star" title={t("diaryNoFavourites")} />
             ) : (
@@ -729,7 +727,7 @@ export function DiaryScreen() {
   // iOS 26: the scroll view is the screen's first child, below the native bar.
   if (glassAvailable) {
     return (
-      <>
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
         {list}
         <Stack.Toolbar placement="left">
           <Stack.Toolbar.View hidesSharedBackground>
@@ -768,7 +766,7 @@ export function DiaryScreen() {
           ) : null}
         </Stack.Toolbar>
         {overlays}
-      </>
+      </View>
     );
   }
   return (

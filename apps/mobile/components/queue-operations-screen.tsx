@@ -361,6 +361,9 @@ export function QueueOperationsScreen() {
         <View style={{ gap: 12 }}>
           {usesListTitle ? <QueueOperationsListTitle /> : null}
           <StaleDataBanner updatedAt={staleSince} />
+          {error && data ? (
+            <RequestFeedback error={error} onRetry={() => void load()} retrying={refreshing} />
+          ) : null}
           {actionErrorBanner}
         </View>
       }

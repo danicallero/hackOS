@@ -26,17 +26,30 @@ export function useLiveActivityKinds(active: boolean) {
     setStateValue(next);
   }, []);
   const [busyKind, setBusyKind] = useState<LiveActivityConfigKind | null>(null);
+  const [loading, setLoading] = useState(active);
+  const [error, setError] = useState<Error | null>(null);
+  const [actionError, setActionError] = useState<Error | null>(null);
+  const retryAction = useRef<(() => Promise<void>) | null>(null);
+  const saving = useRef(false);
   const [ordering, setOrdering] = useState(false);
   /** Only the latest change's response may replace the list. */
   const latest = useRef(0);
 
   const load = useCallback(async () => {
+    if (saving.current) return;
+    setLoading(true);
     const seq = latest.current;
     try {
       const response = await apiFetch<MyLiveActivityPreferences>(PATH);
-      if (seq === latest.current) setState(response);
-    } catch {
-      // Without the list the per-kind rows stay hidden; pull to refresh retries.
+      if (seq === latest.current) {
+        setState(response);
+        setError(null);
+      }
+    } catch (cause) {
+      if (seq === latest.current)
+        setError(cause instanceof Error ? cause : new Error(String(cause)));
+    } finally {
+      setLoading(false);
     }
   }, [setState]);
 
@@ -53,6 +66,9 @@ export function useLiveActivityKinds(active: boolean) {
       body: { kinds: KindPreference[] } | { order: LiveActivityConfigKind[] | null },
       optimistic: (prefs: MyLiveActivityPreferences) => MyLiveActivityPreferences,
     ) => {
+      if (saving.current) return;
+      saving.current = true;
+      setActionError(null);
       const seq = ++latest.current;
       const previous = snapshot.current;
       if (previous) setState(optimistic(previous));
@@ -64,9 +80,13 @@ export function useLiveActivityKinds(active: boolean) {
         });
         if (seq === latest.current) setState(response);
         await reconcileLiveActivities().catch(() => undefined);
-      } catch {
-        if (seq === latest.current) setState(previous);
+      } catch (cause) {
+        if (seq === latest.current) {
+          setState(previous);
+          setActionError(cause instanceof Error ? cause : new Error(String(cause)));
+        }
       } finally {
+        saving.current = false;
         if (seq === latest.current) {
           setBusyKind(null);
           setOrdering(false);
@@ -78,6 +98,8 @@ export function useLiveActivityKinds(active: boolean) {
 
   const toggle = useCallback(
     async (kind: LiveActivityConfigKind, enabled: boolean) => {
+      if (saving.current) return;
+      retryAction.current = () => toggle(kind, enabled);
       setBusyKind(kind);
       await save({ kinds: [{ kind, enabled }] }, (prefs) => ({
         ...prefs,
@@ -90,6 +112,8 @@ export function useLiveActivityKinds(active: boolean) {
   /** Saves `order` (every listed kind, highest priority first). */
   const reorder = useCallback(
     async (order: LiveActivityConfigKind[]) => {
+      if (saving.current) return;
+      retryAction.current = () => reorder(order);
       setOrdering(true);
       await save({ order }, (prefs) => ({
         customOrder: true,
@@ -103,11 +127,20 @@ export function useLiveActivityKinds(active: boolean) {
 
   /** Back to the organizer order; the response carries it. */
   const resetOrder = useCallback(async () => {
+    if (saving.current) return;
+    retryAction.current = resetOrder;
     setOrdering(true);
     await save({ order: null }, (prefs) => prefs);
   }, [save]);
 
   return {
+    loading,
+    error,
+    actionError,
+    ready: state !== null,
+    retry: () => {
+      if (retryAction.current) void retryAction.current();
+    },
     kinds: active ? (state?.kinds ?? []) : [],
     customOrder: active && state?.customOrder === true,
     busyKind,

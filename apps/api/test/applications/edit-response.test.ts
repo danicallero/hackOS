@@ -50,6 +50,11 @@ describe("staff edit response", () => {
     const res = await editAnswers(responseId, { field_1: "new", birthday: "2000-05-05" });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).responses.field_1).toBe("new");
+    const audit = await pool.query(
+      "SELECT before, after FROM audit_log WHERE action = 'edited' AND entity_id = $1",
+      [String(responseId)],
+    );
+    expect(audit.rows).toEqual([{ before: null, after: { changed_fields: ["field_1"] } }]);
   });
 
   it("accepts a university id sent as a numeric string", async () => {

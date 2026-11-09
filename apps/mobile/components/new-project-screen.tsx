@@ -1,5 +1,5 @@
 import { Stack, useNavigation, useRouter } from "expo-router";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ScrollView, TextInput, View } from "react-native";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { Section } from "@/components/native-ui";
@@ -21,16 +21,28 @@ export function NewProjectScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [name, setName] = useState("");
-  const [canCreate, setCanCreate] = useState(true);
+  const [canCreate, setCanCreate] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  useEffect(() => {
-    void apiFetch<{ canCreate: boolean }>("/api/me/projects")
-      .then((result) => setCanCreate(result.canCreate))
-      .catch(() => {});
+  const load = useCallback(async () => {
+    setChecking(true);
+    try {
+      const result = await apiFetch<{ canCreate: boolean }>("/api/me/projects");
+      setCanCreate(result.canCreate);
+      setLoadError(null);
+    } catch (cause) {
+      setLoadError(cause instanceof Error ? cause : new Error(String(cause)));
+    } finally {
+      setChecking(false);
+    }
   }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
   const glass = isRealLiquidGlassAvailable();
-  const valid = name.trim().length > 0 && canCreate && !busy;
+  const valid = name.trim().length > 0 && canCreate && !busy && !checking && !loadError;
   async function create() {
     if (!valid) return;
     setBusy(true);
@@ -93,7 +105,12 @@ export function NewProjectScreen() {
         contentContainerStyle={{ gap: 16, paddingVertical: 16, ...readable.content }}
         style={{ backgroundColor: colors.background }}
       >
-        <Section footer={!canCreate ? t("projectLocked") : undefined}>
+        {checking ? <RequestFeedback loading compact /> : null}
+        {loadError ? (
+          <RequestFeedback error={loadError} onRetry={() => void load()} retrying={checking} />
+        ) : null}
+        {busy ? <RequestFeedback loading compact /> : null}
+        <Section footer={!canCreate && !checking && !loadError ? t("projectLocked") : undefined}>
           <View style={{ minHeight: 56, justifyContent: "center", paddingHorizontal: 16 }}>
             <TextInput
               accessibilityLabel={t("projectName")}
@@ -115,7 +132,9 @@ export function NewProjectScreen() {
             />
           </View>
         </Section>
-        {error ? <RequestFeedback error={error} /> : null}
+        {error ? (
+          <RequestFeedback error={error} onRetry={() => void create()} retrying={busy} />
+        ) : null}
       </ScrollView>
     </>
   );

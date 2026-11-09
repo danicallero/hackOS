@@ -138,6 +138,7 @@ export const announcementTranslateBodySchema = z.object({
 });
 
 export const auditQuerySchema = z.object({
+  requestId: z.string().uuid().optional(),
   entityType: z.string().optional(),
   entityId: z.string().optional(),
   actorId: z.coerce.number().int().optional(),

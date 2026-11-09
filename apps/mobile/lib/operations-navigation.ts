@@ -61,6 +61,11 @@ export function operationsSectionFromPathname(pathname: string): OperationsSecti
   // Delete account, scan log, sync queue, person details...) is pushed from
   // Account, so the user is still inside it.
   if (isWithin(normalized, OTHERS_ROOT)) return "account";
+  // The same destinations as direct tab routes (`/queue`): when the bar folds them into Others
+  // they are still the selected pseudo-tab, so the circle keeps their icon.
+  for (const section of ["queue", "diary", "operations"] as const) {
+    if (isWithin(normalized, `/${section}`)) return section;
+  }
   return "external";
 }
 

@@ -202,6 +202,7 @@ export function StandsScreen() {
         />
       ) : null}
 
+      {error && stands ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
       {error && !stands ? (
         <RequestFeedback error={error} onRetry={() => void load()} />
       ) : stands === null ? (

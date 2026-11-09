@@ -160,6 +160,28 @@ describe("profile avatar collapse geometry", () => {
     expect(Math.max(...xs)).toBeLessThanOrEqual(centerX + straight + 0.01);
   });
 
+  it("narrows the blob into the lip's width instead of jumping when it hands over (#935)", () => {
+    const narrowIsland = resolveProfileCameraTarget({
+      height: 874,
+      modelId: "iPhone19,2",
+      platform: "ios",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    const from = { left: 153, top: 100, width: 96, height: 96 };
+    const widths = [];
+    for (let step = 0; step <= 27; step += 1) {
+      const blob = profileAvatarBlobBounds(96, from, narrowIsland, step / 100);
+      if (blob) widths.push(blob.width);
+    }
+    // Monotonic narrowing, ending at the lip's width (the island's straight run).
+    for (let i = 1; i < widths.length; i += 1)
+      expect(widths[i]).toBeLessThanOrEqual(widths[i - 1] + 0.01);
+    const lip = narrowIsland.width - narrowIsland.height;
+    expect(widths[widths.length - 1]).toBeLessThan(lip * 1.15);
+    expect(widths[widths.length - 1]).toBeGreaterThan(lip * 0.85);
+  });
+
   it("keeps the image covering the mask blob while it rises (#935)", () => {
     for (let step = 0; step <= 28; step += 1) {
       const progress = step / 100;
@@ -511,6 +533,55 @@ describe("profile camera target", () => {
     expect(target.top).toBeCloseTo(15);
     expect(target.hasCutout).toBe(true);
     insideIsland(target, 402, 62);
+  });
+
+  it("uses the narrower island of the iPhone 18 generation, and the old size for unknown models", () => {
+    const wide = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    const narrow = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      modelId: "iPhone19,2",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    expect(narrow.width).toBeCloseTo(94 - 2);
+    expect(narrow.width).toBeLessThan(wide.width);
+    // Centred, so it still sits inside the hardware island.
+    expect(narrow.left + narrow.width / 2).toBeCloseTo(201);
+    const old = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      modelId: "iPhone17,1",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    expect(old.width).toBe(wide.width);
+    // iPhone 17 Pro is "iPhone18,1": still the 126 pt island.
+    const iPhone17 = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      modelId: "iPhone18,1",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    expect(iPhone17.width).toBe(wide.width);
+    // The simulator reports "arm64"; its name is the only hint.
+    const sim = (deviceName: string) =>
+      resolveProfileCameraTarget({
+        ...base,
+        deviceName,
+        height: 874,
+        modelId: "arm64",
+        safeAreaTop: 62,
+        screenWidth: 402,
+      });
+    expect(sim("QA iPhone 18 Pro").width).toBe(narrow.width);
+    expect(sim("QA iPhone 17 Pro").width).toBe(wide.width);
   });
 
   it("targets Plus/Max widths (430, 440) inside the island", () => {

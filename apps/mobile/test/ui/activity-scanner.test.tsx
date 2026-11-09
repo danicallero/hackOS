@@ -56,7 +56,10 @@ jest.mock("@/components/nfc-reader", () => ({
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupportStatus: () => mockNfcSupport }));
 jest.mock("@/components/scanner-transaction-status", () => ({ ScannerQueueStatus: () => null }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
-jest.mock("@/lib/api", () => ({ apiFetch: jest.fn().mockResolvedValue({ items: [] }) }));
+jest.mock("@/lib/api", () => ({
+  apiFetch: jest.fn().mockResolvedValue({ items: [], byRole: [] }),
+  ApiError: class ApiError extends Error {},
+}));
 jest.mock("@/lib/live-activities/sync", () => ({ bumpActivityScanned: jest.fn() }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({
@@ -86,6 +89,7 @@ jest.mock("@/lib/router-tabs-inset", () => ({ useRouterTabBarBottomInset: () => 
 jest.mock("@/lib/scanner-db", () => ({
   enqueueLocalScan: jest.fn().mockResolvedValue("scan-1"),
   findPersonByTicket: jest.fn().mockResolvedValue(null),
+  findPersonById: jest.fn().mockResolvedValue(null),
   findPersonByBadge: jest.fn().mockResolvedValue({
     person: {
       userId: 21,
@@ -160,6 +164,7 @@ import { haptic } from "@/lib/haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
+  findPersonById,
   findPersonByTicket,
   getActivityState,
   listScannerActivities,
@@ -175,7 +180,7 @@ afterEach(() => {
   mockRunSync.mockResolvedValue(undefined);
 });
 
-it("uses server occupancy across roles and falls back to the roster after a failed refresh (H24)", async () => {
+it("preserves server occupancy across roles after a failed refresh (H24)", async () => {
   const originalParams = mockParams;
   mockParams = { id: "7" };
   let offline = false;
@@ -191,8 +196,21 @@ it("uses server occupancy across roles and falls back to the roster after a fail
     expect(await screen.findByText("19")).toBeTruthy();
     offline = true;
     await act(() => mockRefreshOccupancy());
-    await waitFor(() => expect(screen.queryByText("19")).toBeNull());
-    expect(screen.getByText("1")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("19")).toBeTruthy());
+  } finally {
+    mockParams = originalParams;
+    jest.mocked(apiFetch).mockResolvedValue({ items: [] });
+  }
+});
+
+it("treats failed live figures as offline mode, not an error", async () => {
+  const originalParams = mockParams;
+  mockParams = { id: "7" };
+  jest.mocked(apiFetch).mockRejectedValue(new Error("offline"));
+  try {
+    await renderMobile(<ActivityScannerScreen />);
+    expect(await screen.findByText("offlineMode")).toBeTruthy();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
   } finally {
     mockParams = originalParams;
     jest.mocked(apiFetch).mockResolvedValue({ items: [] });
@@ -266,6 +284,29 @@ it("accepts a ticket QR and preserves it in the offline activity payload", async
   );
 });
 
+it("accepts a badge accredited offline on this device and ties the scan to that person", async () => {
+  const known = (await findPersonByBadge("BADGE-1")).person!;
+  jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
+  jest.mocked(findPersonById).mockResolvedValueOnce({ ...known, userId: 42, badgeId: null });
+  mockQueue = [
+    {
+      id: "acc-1",
+      status: "pending",
+      payload: { kind: "accreditation_user", userId: 42, badgeId: "BADGE-1", method: "manual" },
+    },
+  ] as never;
+  jest.mocked(enqueueLocalScan).mockClear();
+  await renderMobile(<ActivityScannerScreen />);
+  await waitFor(() =>
+    expect(enqueueLocalScan).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "activity", badgeId: "BADGE-1", expectedUserId: 42 }),
+      11,
+    ),
+  );
+  expect(screen.queryByRole("button", { name: "scannerBadgeUnknown" })).toBeNull();
+  mockQueue = [{ id: "scan-1", status: "acknowledged" }];
+});
+
 it("gives an unrecognised badge the error haptic", async () => {
   jest.mocked(haptic).mockClear();
   jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
@@ -274,13 +315,15 @@ it("gives an unrecognised badge the error haptic", async () => {
   expect(haptic).toHaveBeenCalledWith("error");
 });
 
-it("automatically dismisses lookup errors after six seconds", async () => {
+it("keeps lookup errors until explicitly dismissed", async () => {
   jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
   jest.useFakeTimers();
   try {
     await renderMobile(<ActivityScannerScreen />);
     await screen.findByRole("button", { name: "scannerBadgeUnknown" });
     await act(() => jest.advanceTimersByTime(6000));
+    expect(screen.getByRole("button", { name: "scannerBadgeUnknown" })).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "scannerBadgeUnknown" }));
     expect(screen.queryByRole("button", { name: "scannerBadgeUnknown" })).toBeNull();
   } finally {
     jest.useRealTimers();

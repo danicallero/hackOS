@@ -41,11 +41,16 @@ export default function ProfileTasksScreen() {
   const tasks = parseProfileTasks(params.tasks);
   // Opened from Account to edit one answer rather than as the next-entry prompt.
   const editing = params.edit === "1";
-  const { me, refetch } = useMeContext();
+  const { me, refetch, loading, error } = useMeContext();
   // H7: locked dietary data is not self-editable; skip the step.
   const showDietary = tasks.includes("dietary") && !me?.dietaryLocked;
   const wantsMeals = tasks.includes("meal_plan");
-  const { intolerances } = useFoodIntolerances(showDietary);
+  const {
+    intolerances,
+    error: intolerancesError,
+    loading: intolerancesLoading,
+    reload: reloadIntolerances,
+  } = useFoodIntolerances(showDietary);
   const mealPlan = useCachedApi<MealPlan>(
     me ? mealPlanCacheKey(me.id) : "meal-plan:none",
     fetchMealPlan,
@@ -71,7 +76,12 @@ export default function ProfileTasksScreen() {
     if (wantsMeals && meId !== undefined) void loadMealPlan();
   }, [loadMealPlan, meId, wantsMeals]);
 
-  if (!me || !dietary) return null;
+  useEffect(() => {
+    if (me && !dietary) setDietary(dietaryDraftFromMe(me));
+  }, [me, dietary]);
+
+  if (!me || !dietary)
+    return <RequestFeedback loading={loading} error={error} onRetry={() => void refetch()} />;
 
   const plan = mealPlan.data;
   const dietaryReady = !showDietary || isDietaryAnswered(dietary);
@@ -117,6 +127,13 @@ export default function ProfileTasksScreen() {
 
   return (
     <View style={{ backgroundColor: colors.background, flex: 1 }}>
+      {intolerancesError ? (
+        <RequestFeedback
+          error={intolerancesError}
+          onRetry={() => void reloadIntolerances()}
+          retrying={intolerancesLoading}
+        />
+      ) : null}
       <ScrollView
         alwaysBounceVertical
         automaticallyAdjustKeyboardInsets

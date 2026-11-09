@@ -10,6 +10,7 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -25,7 +26,16 @@ import { useLiveQuery } from "@/hooks/use-live-query";
 import { usePersistedState } from "@/hooks/use-persisted-state";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
-import { auditActorLabel, getActionLabel } from "@/lib/audit-labels";
+import { auditChangedFields } from "@/lib/audit-diff";
+import {
+  entityRef,
+  getActionLabel,
+  getAuditActorLabel,
+  getAuditEntityHref,
+  getAuditEntityLabel,
+  getAuditFieldLabel,
+  getAuditSourceLabel,
+} from "@/lib/audit-labels";
 import { formatEventDate, fromDatetimeLocal } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { type AuditRow, type AuditVocabularyEntry, notificationsApi } from "@/lib/notifications";
@@ -36,8 +46,8 @@ const FILTER_DEBOUNCE_MS = 300;
 
 function AuditMobileRow({ row }: { row: AuditRow }) {
   const { t, language } = useLocale();
-  const entityLabel = `${row.entity_type} #${row.entity_id}`;
-  const actorLabel = row.actor_id ? (auditActorLabel(row) ?? `#${row.actor_id}`) : t("systemActor");
+  const entityLabel = entityRef(row.entity_type, row.entity_id, t);
+  const actorLabel = getAuditActorLabel(row, t);
   return (
     <Link
       href={`/audit/${row.id}`}
@@ -62,13 +72,20 @@ function AuditMobileRow({ row }: { row: AuditRow }) {
         </div>
         <div className="min-w-0">
           <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
-          <dd className="mt-0.5 break-words">{actorLabel}</dd>
+          <dd className="mt-0.5 break-words">
+            {actorLabel}
+            {row.initiated_by && (
+              <p className="text-muted-foreground text-xs">
+                {t("auditInitiatedBy")}: {row.initiator_name || `#${row.initiated_by}`}
+              </p>
+            )}
+          </dd>
         </div>
         <div className="min-w-0">
           <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
           <dd className="mt-0.5">
             {row.source ? (
-              <span className="capitalize">{row.source}</span>
+              <span className="capitalize">{getAuditSourceLabel(row.source, t)}</span>
             ) : (
               <span className="text-muted-foreground">—</span>
             )}
@@ -99,10 +116,17 @@ const EMPTY_FILTERS: FilterState = {
 
 export default function AuditPage() {
   const { t, language } = useLocale();
+  const requestId = useSearchParams().get("request");
   const canRead = useCan(CAPABILITIES.AUDIT_READ);
   const [filters, setFilters] = usePersistedState("audit-list:filters", EMPTY_FILTERS);
   const debounced = useDebouncedValue(filters, FILTER_DEBOUNCE_MS);
+  const [trackedRequest, setTrackedRequest] = useState<string | null>(null);
   const [offset, setOffset] = usePersistedState("audit-list:offset", 0);
+
+  if (requestId !== trackedRequest) {
+    setTrackedRequest(requestId);
+    setOffset(0);
+  }
 
   // Back to page 1 when the debounced filters change, but not on mount, where
   // `filters` may be a restored value and `offset` was restored alongside it.
@@ -125,12 +149,13 @@ export default function AuditPage() {
   // Audit entries come from every sensitive mutation (H53), so this stays on
   // the audit-scoped stream.
   const query = {
-    entityType: debounced.entityType.trim() || undefined,
-    entityId: debounced.entityId.trim() || undefined,
-    actorQuery: debounced.actorQuery.trim() || undefined,
-    action: debounced.action.trim() || undefined,
-    dateFrom: fromDatetimeLocal(debounced.dateFrom) ?? undefined,
-    dateTo: fromDatetimeLocal(debounced.dateTo) ?? undefined,
+    requestId: requestId ?? undefined,
+    entityType: requestId ? undefined : debounced.entityType.trim() || undefined,
+    entityId: requestId ? undefined : debounced.entityId.trim() || undefined,
+    actorQuery: requestId ? undefined : debounced.actorQuery.trim() || undefined,
+    action: requestId ? undefined : debounced.action.trim() || undefined,
+    dateFrom: requestId ? undefined : (fromDatetimeLocal(debounced.dateFrom) ?? undefined),
+    dateTo: requestId ? undefined : (fromDatetimeLocal(debounced.dateTo) ?? undefined),
     limit: LIMIT,
     offset,
   };
@@ -159,11 +184,13 @@ export default function AuditPage() {
     .sort((a, b) => a.label.localeCompare(b.label, language));
   const entityTypeOptions = Array.from(new Set(vocabulary.map((v) => v.entity_type)))
     .sort((a, b) => a.localeCompare(b, language))
-    .map((entityType) => ({ entityType }));
+    .map((entityType) => ({ entityType, label: getAuditEntityLabel(entityType, t) }));
 
   const columns: Column<AuditRow>[] = [
     {
       id: "when",
+      width: "w-[15%]",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colWhen"),
       cell: (r) => (
         <span className="text-sm">{formatEventDate(r.created_at, language, "dateTime")}</span>
@@ -171,58 +198,79 @@ export default function AuditPage() {
     },
     {
       id: "action",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colAction"),
-      cell: (r) => <span className="text-sm font-medium">{getActionLabel(r.action, t)}</span>,
+      cell: (r) => {
+        const fields = [...new Set([...(r.changed_fields ?? []), ...auditChangedFields(r.after)])]
+          .map((field) => getAuditFieldLabel(field, t))
+          .join(", ");
+        return (
+          <div className="min-w-0 space-y-1">
+            <span className="text-sm font-medium">{getActionLabel(r.action, t)}</span>
+            {fields && (
+              <p className="text-muted-foreground truncate text-xs" title={fields}>
+                {fields}
+              </p>
+            )}
+          </div>
+        );
+      },
     },
     {
       id: "entity",
+      width: "w-[20%]",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colEntity"),
-      cell: (r) =>
-        r.entity_type === "user" ? (
+      cell: (r) => {
+        const href = getAuditEntityHref(r.entity_type, r.entity_id);
+        return href ? (
           <Link
-            href={`/users/${r.entity_id}`}
+            href={href}
             className="text-sm hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            {t("userInline", { id: r.entity_id })}
-          </Link>
-        ) : r.entity_type === "application_response" ? (
-          <Link
-            href={`/applications/response/${r.entity_id}`}
-            className="text-sm hover:underline"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {r.entity_type} #{r.entity_id}
+            {entityRef(r.entity_type, r.entity_id, t)}
           </Link>
         ) : (
-          <span className="text-sm">
-            {r.entity_type} #{r.entity_id}
-          </span>
-        ),
+          <span className="text-sm">{entityRef(r.entity_type, r.entity_id, t)}</span>
+        );
+      },
     },
     {
       id: "actor",
+      width: "w-[20%]",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colActor"),
-      cell: (r) =>
-        r.actor_id ? (
-          <Link
-            href={`/users/${r.actor_id}`}
-            className="text-sm hover:underline"
-            onClick={(e) => e.stopPropagation()}
-            title={`#${r.actor_id}`}
-          >
-            {auditActorLabel(r) ?? `#${r.actor_id}`}
-          </Link>
-        ) : (
-          <span className="text-muted-foreground text-sm">{t("systemActor")}</span>
-        ),
+      cell: (r) => (
+        <div className="space-y-1">
+          {r.actor_id ? (
+            <Link
+              href={`/users/${r.actor_id}`}
+              className="text-sm hover:underline"
+              onClick={(e) => e.stopPropagation()}
+              title={`#${r.actor_id}`}
+            >
+              {getAuditActorLabel(r, t)}
+            </Link>
+          ) : (
+            <span className="text-muted-foreground text-sm">{getAuditActorLabel(r, t)}</span>
+          )}
+          {r.initiated_by && (
+            <p className="text-muted-foreground text-xs">
+              {t("auditInitiatedBy")}: {r.initiator_name || `#${r.initiated_by}`}
+            </p>
+          )}
+        </div>
+      ),
     },
     {
       id: "source",
+      width: "w-28",
+      className: "whitespace-normal wrap-anywhere",
       header: t("colSource"),
       cell: (r) =>
         r.source ? (
-          <span className="capitalize">{r.source}</span>
+          <span className="capitalize">{getAuditSourceLabel(r.source, t)}</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),
@@ -236,88 +284,97 @@ export default function AuditPage() {
     <PageLayout>
       <PageHeader title={t("auditLog")} />
 
-      <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end">
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="audit-action" className="text-muted-foreground text-xs">
-            {t("colAction")}
-          </Label>
-          <EntityCombobox
-            id="audit-action"
-            options={actionOptions}
-            value={filters.action}
-            onChange={(v) => setFilters((f) => ({ ...f, action: v }))}
-            getId={(o) => o.action}
-            getLabel={(o) => o.label}
-            placeholder={t("allActionsPlaceholder")}
-            className="w-full sm:w-48"
-          />
+      {requestId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm">{t("auditRelatedActions")}</p>
+          <Link href="/audit" className="text-sm hover:underline">
+            {t("auditAllActions")}
+          </Link>
         </div>
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="audit-entity-type" className="text-muted-foreground text-xs">
-            {t("entityTypeLabel")}
-          </Label>
-          <EntityCombobox
-            id="audit-entity-type"
-            options={entityTypeOptions}
-            value={filters.entityType}
-            onChange={(v) => setFilters((f) => ({ ...f, entityType: v }))}
-            getId={(o) => o.entityType}
-            getLabel={(o) => o.entityType}
-            placeholder={t("allEntityTypesPlaceholder")}
-            className="w-full sm:w-48"
-          />
+      ) : (
+        <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-end">
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="audit-action" className="text-muted-foreground text-xs">
+              {t("colAction")}
+            </Label>
+            <EntityCombobox
+              id="audit-action"
+              options={actionOptions}
+              value={filters.action}
+              onChange={(v) => setFilters((f) => ({ ...f, action: v }))}
+              getId={(o) => o.action}
+              getLabel={(o) => o.label}
+              placeholder={t("allActionsPlaceholder")}
+              className="w-full sm:w-48"
+            />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="audit-entity-type" className="text-muted-foreground text-xs">
+              {t("entityTypeLabel")}
+            </Label>
+            <EntityCombobox
+              id="audit-entity-type"
+              options={entityTypeOptions}
+              value={filters.entityType}
+              onChange={(v) => setFilters((f) => ({ ...f, entityType: v }))}
+              getId={(o) => o.entityType}
+              getLabel={(o) => o.label}
+              placeholder={t("allEntityTypesPlaceholder")}
+              className="w-full sm:w-48"
+            />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="audit-entity-id" className="text-muted-foreground text-xs">
+              {t("entityIdLabel")}
+            </Label>
+            <Input
+              id="audit-entity-id"
+              value={filters.entityId}
+              onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
+              className="w-full sm:w-28"
+            />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="audit-actor" className="text-muted-foreground text-xs">
+              {t("actorUserIdLabel")}
+            </Label>
+            <Input
+              id="audit-actor"
+              value={filters.actorQuery}
+              onChange={(e) => setFilters((f) => ({ ...f, actorQuery: e.target.value }))}
+              placeholder={`${t("egPrefix")} Daniel, daniel@...`}
+              className="w-full sm:w-44"
+            />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="audit-from" className="text-muted-foreground text-xs">
+              {t("fromLabel")}
+            </Label>
+            <DateTimeInput
+              id="audit-from"
+              value={filters.dateFrom}
+              onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
+              className="w-full sm:w-auto"
+            />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="audit-to" className="text-muted-foreground text-xs">
+              {t("toLabel")}
+            </Label>
+            <DateTimeInput
+              id="audit-to"
+              value={filters.dateTo}
+              onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
+              className="w-full sm:w-auto"
+            />
+          </div>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
+              {t("clearFilters")}
+            </Button>
+          )}
         </div>
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="audit-entity-id" className="text-muted-foreground text-xs">
-            {t("entityIdLabel")}
-          </Label>
-          <Input
-            id="audit-entity-id"
-            value={filters.entityId}
-            onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
-            className="w-full sm:w-28"
-          />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="audit-actor" className="text-muted-foreground text-xs">
-            {t("actorUserIdLabel")}
-          </Label>
-          <Input
-            id="audit-actor"
-            value={filters.actorQuery}
-            onChange={(e) => setFilters((f) => ({ ...f, actorQuery: e.target.value }))}
-            placeholder={`${t("egPrefix")} Daniel, daniel@...`}
-            className="w-full sm:w-44"
-          />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="audit-from" className="text-muted-foreground text-xs">
-            {t("fromLabel")}
-          </Label>
-          <DateTimeInput
-            id="audit-from"
-            value={filters.dateFrom}
-            onChange={(v) => setFilters((f) => ({ ...f, dateFrom: v }))}
-            className="w-full sm:w-auto"
-          />
-        </div>
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="audit-to" className="text-muted-foreground text-xs">
-            {t("toLabel")}
-          </Label>
-          <DateTimeInput
-            id="audit-to"
-            value={filters.dateTo}
-            onChange={(v) => setFilters((f) => ({ ...f, dateTo: v }))}
-            className="w-full sm:w-auto"
-          />
-        </div>
-        {hasFilters && (
-          <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
-            {t("clearFilters")}
-          </Button>
-        )}
-      </div>
+      )}
 
       <DataTable
         columns={columns}
@@ -331,7 +388,9 @@ export default function AuditPage() {
             : undefined
         }
         getRowHref={(r) => `/audit/${r.id}`}
-        getRowLabel={(r) => `${getActionLabel(r.action, t)} ${r.entity_type} ${r.entity_id}`}
+        getRowLabel={(r) =>
+          `${getActionLabel(r.action, t)} ${entityRef(r.entity_type, r.entity_id, t)}`
+        }
         renderMobileRow={(r) => <AuditMobileRow row={r} />}
         empty={{
           icon: LogIcon,

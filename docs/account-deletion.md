@@ -767,3 +767,5 @@ response.
 Certificate review awards (#1083) are deleted during the removal scrub; issued
 documents are revoked and their snapshots cleared. No certified-hours approval
 remains linked to the anonymized person.
+
+H53 traceability also removes audit rows naming a departing user as `initiated_by`. Request correlation is detached from surviving rows related to deleted audit entries. Device actions retain internal subject pointers for erasure, never raw device identifiers in the audit entity ID. See [Audit trail](./audit-trail.md).

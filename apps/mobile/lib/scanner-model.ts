@@ -32,7 +32,12 @@ export function requestForScanPayload(
       path: "/api/accreditation/check-in",
       method: "POST",
       headers,
-      body: { ticketToken: payload.ticketToken, badgeId: payload.badgeId, method: payload.method },
+      body: {
+        ticketToken: payload.ticketToken,
+        badgeId: payload.badgeId,
+        method: payload.method,
+        assignedAt: payload.assignedAt,
+      },
     };
   }
   if (payload.kind === "accreditation_user") {
@@ -45,6 +50,7 @@ export function requestForScanPayload(
         badgeId: payload.badgeId,
         method: payload.method,
         attendeeRole: payload.attendeeRole,
+        assignedAt: payload.assignedAt,
       },
     };
   }
@@ -58,6 +64,7 @@ export function requestForScanPayload(
         currentBadgeId: payload.currentBadgeId,
         newBadgeId: payload.newBadgeId,
         reason: payload.reason,
+        assignedAt: payload.assignedAt,
       },
     };
   }
@@ -136,6 +143,7 @@ export function requestForScanPayload(
     body: {
       badgeId: payload.badgeId,
       ticketToken: payload.ticketToken,
+      expectedUserId: payload.expectedUserId,
       allowRepeat: payload.allowRepeat,
       scannedAt: payload.scannedAt,
     },
@@ -149,4 +157,32 @@ export function requestForPendingScan(scan: PendingScan): {
   headers: Record<string, string>;
 } {
   return requestForScanPayload(scan.payload, scan.id);
+}
+
+/**
+ * H22/H25: a badge assigned on this device but not yet synced is still real for the
+ * operator. Returns who the queued accreditation (or rotation) gave the badge to, so a
+ * later scan can be accepted now and reconciled on replay (the API rejects it if the
+ * badge went to someone else).
+ */
+export function pendingBadgeClaim(
+  queue: readonly PendingScan[],
+  badgeId: string,
+): { userId: number } | { ticketToken: string } | null {
+  for (let index = queue.length - 1; index >= 0; index -= 1) {
+    const scan = queue[index];
+    if (scan.status !== "pending") continue;
+    const { payload } = scan;
+    if (!payload) continue;
+    if (payload.kind === "accreditation_user" && payload.badgeId === badgeId) {
+      return { userId: payload.userId };
+    }
+    if (payload.kind === "badge_rotation" && payload.newBadgeId === badgeId) {
+      return { userId: payload.userId };
+    }
+    if (payload.kind === "accreditation" && payload.badgeId === badgeId) {
+      return { ticketToken: payload.ticketToken };
+    }
+  }
+  return null;
 }

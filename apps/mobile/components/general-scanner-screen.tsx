@@ -20,6 +20,7 @@ import { PersonOperationsScreen } from "@/components/person-operations-screen";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
+import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useBookCrease } from "@/lib/fold-region";
@@ -142,16 +143,12 @@ export function GeneralScannerScreen() {
     setPeopleOpen(false);
   }, []);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (!error) return;
-    const timeout = setTimeout(() => setError(null), 6000);
-    return () => clearTimeout(timeout);
-  }, [error]);
 
   const sync = useScannerSync();
   const { me } = useMeContext();
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [groups, setGroups] = useState<string[]>([]);
+  const [statsError, setStatsError] = useState<Error | null>(null);
   const [roleStats, setRoleStats] = useState<ScannerRoleStat[] | null>(null);
   // SQLite is only the offline roster. Once the server has answered, use its
   // people for both the counters and QR resolution.
@@ -162,11 +159,15 @@ export function GeneralScannerScreen() {
   );
 
   useEffect(() => {
-    void loadScannerRoleFilter().then(setGroups);
+    void loadScannerRoleFilter()
+      .then(setGroups)
+      .catch(() => setGroups([]));
   }, []);
 
   const loadPeople = useCallback(() => {
-    void listScannerPeople().then(setPeople);
+    void listScannerPeople()
+      .then(setPeople)
+      .catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
   }, []);
 
   useEffect(() => loadPeople(), [loadPeople]);
@@ -177,15 +178,23 @@ export function GeneralScannerScreen() {
   // Server-side per-role counts are refreshed by scoped logistics events,
   // rather than a global cache version. Falls back to the local roster below
   // when offline.
-  const loadRoleStats = useCallback(() => {
-    void apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
-      .then((res) => setRoleStats(res.byRole))
-      .catch(() => {
-        setRoleStats(null);
-        // Offline or request failed — the local-roster fallback in `stats`
-        // below keeps the tiles usable, just without cross-device accuracy.
-      });
-  }, []);
+  const loadRoleStats = useCallback(
+    () =>
+      apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
+        .then((res) => {
+          setRoleStats(res.byRole);
+          setStatsError(null);
+          return true;
+        })
+        .catch((cause) => {
+          setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
+          return false;
+          // Preserve the latest server counts; retry keeps the scanner usable.
+          // Offline or request failed — the local-roster fallback in `stats`
+          // below keeps the tiles usable, just without cross-device accuracy.
+        }),
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -393,6 +402,7 @@ export function GeneralScannerScreen() {
               <QrCamera
                 surfaceHeader={(layout) => (
                   <>
+                    {statsError ? <OfflineNotice onReconnect={loadRoleStats} /> : null}
                     <ScannerGroupStatistics stats={stats} layout={layout.stats} />
                     {error ? (
                       <GlassView

@@ -447,3 +447,8 @@ reserve two summary lines and group challenge previews with their disclosure cou
 team avatars and the project action share the footer. My projects loads its private list in
 the browser: the session cookie belongs to the API origin, so a Next server render cannot
 authenticate it and would bounce signed-in people through `/login` in a loop.
+
+Audit response links (H53) resolve into Review for reviewers, or the matching
+Outbox/Sent decision workspace for decision-only staff. They preserve the
+response query parameter through client navigation and reload, including when
+the viewer can also manage the form builder.

@@ -7,6 +7,8 @@
 import { type } from "./tokens";
 
 export const SCREEN_TITLE = type.title;
+/** Invisible native navigation title measurement; never use for visible text. */
+export const NATIVE_HEADER_MEASUREMENT_FONT_SIZE = 1;
 export const SCREEN_TITLE_CENTER = 47.5;
 
 /** Height of each column's own top band in a two-pane layout (Schedule, Gallery). */

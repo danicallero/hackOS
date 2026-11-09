@@ -19,7 +19,6 @@ import { SCAN_LOG_ROUTES } from "@/lib/scan-log-navigation";
 import { listScannerActivities, listScannerPeople } from "@/lib/scanner-db";
 import { scannerQueueHealth, scannerTransactionState } from "@/lib/scanner-state";
 import type { PendingScan, ScannerActivity, ScannerPerson } from "@/lib/scanner-types";
-import { useSideRegion } from "@/lib/side-region";
 import { radius, type } from "@/theme";
 import { colors } from "@/theme/colors";
 import { isAccessibilityTextSize } from "@/theme/dynamic-type";
@@ -649,19 +648,33 @@ export function ScannerQueueStatus({
   const { t } = useLocale();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const sideRegion = useSideRegion();
   const [localOpen, setLocalOpen] = useState(false);
   const open = controlledOpen ?? localOpen;
   const setOpen = onOpenChange ?? setLocalOpen;
   const [people, setPeople] = useState<ScannerPerson[]>([]);
   const [activities, setActivities] = useState<ScannerActivity[]>([]);
+  const [labelsError, setLabelsError] = useState(false);
+  const [labelsAttempt, setLabelsAttempt] = useState(0);
   const health = scannerQueueHealth(queue);
 
   useEffect(() => {
+    void labelsAttempt;
     if (!open) return;
-    void listScannerPeople().then(setPeople);
-    void listScannerActivities().then(setActivities);
-  }, [open]);
+    let active = true;
+    void Promise.all([listScannerPeople(), listScannerActivities()])
+      .then(([nextPeople, nextActivities]) => {
+        if (!active) return;
+        setPeople(nextPeople);
+        setActivities(nextActivities);
+        setLabelsError(false);
+      })
+      .catch(() => {
+        if (active) setLabelsError(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, labelsAttempt]);
   const hasAttention = health.attention > 0;
   const label = hasAttention ? t("scannerStateAttention") : t("scannerStateReady");
   const statusSymbol = queueStatusPresentation(hasAttention);
@@ -697,17 +710,12 @@ export function ScannerQueueStatus({
             <Stack.Toolbar.View hidesSharedBackground>{toolbarAccessory}</Stack.Toolbar.View>
           ) : null}
           {toolbarAccessory ? <Stack.Toolbar.Spacer width={8} /> : null}
-          {sideRegion.edge ? (
-            // A symbol-only item can join the system's vertical bar; the labelled pill cannot.
-            <Stack.Toolbar.Button
-              accessibilityLabel={label}
-              icon={statusSymbol.icon}
-              onPress={() => setOpen(true)}
-              tintColor={statusSymbol.tint}
-            />
-          ) : (
-            <Stack.Toolbar.View>{trigger}</Stack.Toolbar.View>
-          )}
+          <Stack.Toolbar.Button
+            accessibilityLabel={label}
+            icon={statusSymbol.icon}
+            onPress={() => setOpen(true)}
+            tintColor={statusSymbol.tint}
+          />
         </Stack.Toolbar>
       ) : (
         <GlassView
@@ -781,6 +789,17 @@ export function ScannerQueueStatus({
               {t("scannerQueue")}
             </Text>
 
+            {labelsError ? (
+              <Section>
+                <Text accessibilityRole="alert" style={{ color: colors.destructive, padding: 16 }}>
+                  {t("requestError")}
+                </Text>
+                <ActionButton
+                  label={t("retry")}
+                  onPress={() => setLabelsAttempt((current) => current + 1)}
+                />
+              </Section>
+            ) : null}
             {queue.length === 0 ? (
               <ScannerTransactionStatus />
             ) : (

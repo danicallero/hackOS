@@ -1,4 +1,5 @@
 import type { Queryable } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 
 /**
  * Every queue action writes exactly ONE queue_history row (plan/07
@@ -16,6 +17,8 @@ export async function writeQueueHistory(
     action: string;
     reason?: string | null;
     metadata?: Record<string, unknown> | null;
+    /** H53: false only when the caller writes a richer audit for this same action. */
+    audit?: false;
   },
 ): Promise<void> {
   await client.query(
@@ -32,4 +35,15 @@ export async function writeQueueHistory(
       params.metadata ? JSON.stringify(params.metadata) : null,
     ],
   );
+  if (params.audit !== false) {
+    await audit(client, {
+      actorId: params.actorId,
+      entityType: "queue_entry",
+      entityId: params.entryId,
+      action: params.action,
+      before: { status: params.previousStatus },
+      after: { ...params.metadata, status: params.newStatus },
+      reason: params.reason ?? undefined,
+    });
+  }
 }

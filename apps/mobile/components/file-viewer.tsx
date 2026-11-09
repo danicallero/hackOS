@@ -61,6 +61,8 @@ export function FileViewer({
 }) {
   const { t } = useLocale();
   const [state, setState] = useState<ViewerState>({ status: "loading" });
+  const [shareError, setShareError] = useState<Error | null>(null);
+  const [sharing, setSharing] = useState(false);
   const [Pdf, setPdf] = useState<PdfComponent | null>(null);
   const [pdfReaderUnavailable, setPdfReaderUnavailable] = useState(false);
   const request = useRef(0);
@@ -112,12 +114,21 @@ export function FileViewer({
   }, [visible, isPdf]);
 
   async function share() {
-    if (state.status !== "ready" || !(await Sharing.isAvailableAsync())) return;
-    await Sharing.shareAsync(state.uri, {
-      mimeType,
-      ...(isPdf ? { UTI: "com.adobe.pdf" } : {}),
-      dialogTitle: title,
-    });
+    if (sharing || state.status !== "ready") return;
+    setSharing(true);
+    setShareError(null);
+    try {
+      if (!(await Sharing.isAvailableAsync())) throw new Error(errorMessage);
+      await Sharing.shareAsync(state.uri, {
+        mimeType,
+        ...(isPdf ? { UTI: "com.adobe.pdf" } : {}),
+        dialogTitle: title,
+      });
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause : new Error(String(cause)));
+    } finally {
+      setSharing(false);
+    }
   }
 
   const failure = (
@@ -152,6 +163,9 @@ export function FileViewer({
             {title}
           </Text>
         </View>
+        {shareError ? (
+          <RequestFeedback error={shareError} onRetry={() => void share()} retrying={sharing} />
+        ) : null}
         <View style={{ flex: 1 }}>
           {isPdf && pdfReaderUnavailable ? (
             failure

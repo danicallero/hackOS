@@ -17,13 +17,18 @@ export function ProjectInvitesScreen() {
   const readable = useParticipantLayout("list");
   const [invites, setInvites] = useState<ProjectInvite[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [answering, setAnswering] = useState<number | null>(null);
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const result = await apiFetch<{ invites: ProjectInvite[] }>("/api/me/projects/invites");
       setInvites(result.invites);
+      setError(null);
     } catch (cause) {
       setError(cause as Error);
-      setInvites((current) => current ?? []);
+    } finally {
+      setLoading(false);
     }
   }, []);
   useFocusEffect(
@@ -32,7 +37,10 @@ export function ProjectInvitesScreen() {
     }, [load]),
   );
   async function answer(invite: ProjectInvite, action: "accept" | "decline") {
+    if (answering !== null) return;
+    setAnswering(invite.id);
     setError(null);
+    const before = invites;
     setInvites((current) => current?.filter((item) => item.id !== invite.id) ?? current);
     try {
       await projectMutation(`/api/me/projects/${invite.projectId}/invites/${action}`, "POST");
@@ -40,7 +48,9 @@ export function ProjectInvitesScreen() {
     } catch (cause) {
       setError(cause as Error);
       // Team full, phase closed or already a member: the server list is the truth.
-      await load();
+      setInvites(before);
+    } finally {
+      setAnswering(null);
     }
   }
   return (
@@ -49,9 +59,14 @@ export function ProjectInvitesScreen() {
       contentContainerStyle={{ flexGrow: 1, gap: 16, paddingVertical: 16, ...readable.content }}
       style={{ backgroundColor: colors.background }}
     >
-      {error ? <RequestFeedback error={error} /> : null}
-      {invites === null ? <RequestFeedback loading /> : null}
-      {invites?.length === 0 ? <EmptyState icon="envelope" title={t("projectNoInvites")} /> : null}
+      {answering !== null ? <RequestFeedback loading compact /> : null}
+      {error ? (
+        <RequestFeedback error={error} onRetry={() => void load()} retrying={loading} />
+      ) : null}
+      {invites === null && loading && !error ? <RequestFeedback loading /> : null}
+      {invites?.length === 0 && !error && answering === null ? (
+        <EmptyState icon="envelope" title={t("projectNoInvites")} />
+      ) : null}
       {invites && invites.length > 0 ? (
         <Section>
           {invites.map((invite, index) => (
@@ -72,11 +87,15 @@ export function ProjectInvitesScreen() {
                 </View>
                 <View style={{ flexDirection: "row", gap: 12 }}>
                   <GlassButton
+                    disabled={answering !== null}
+                    busy={answering === invite.id}
                     style={{ flex: 1 }}
                     label={t("projectDeclineShort")}
                     onPress={() => void answer(invite, "decline")}
                   />
                   <GlassButton
+                    disabled={answering !== null}
+                    busy={answering === invite.id}
                     style={{ flex: 1 }}
                     prominent
                     label={t("projectAcceptShort")}

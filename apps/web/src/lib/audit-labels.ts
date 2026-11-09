@@ -1,14 +1,16 @@
-// Human-readable presentation for raw audit_log `action`/`entity_type`
-// strings (H53). ~100 distinct actions exist across the codebase — most get
-// a generic humanized label; a curated subset (the highest-traffic/least
-// obvious ones) gets real copy via i18n keys instead.
+// H53: localized audit actions, subjects, sources and executor attribution.
 
 import type { Translate } from "@/lib/i18n";
 import type { AuditRow } from "@/lib/notifications";
+import { applicationStatusLabel } from "./application-workflow";
+import { AUDIT_ACTIONS, AUDIT_ENTITIES, AUDIT_SOURCES } from "./audit-catalog";
+import { formatDiffValue } from "./audit-diff";
+import { capabilityDescription } from "./capability-presentation";
 
 /** "queue_regenerate" -> "Queue regenerate", "queue_group.clear" -> "Queue group · Clear" */
 function humanizeAction(action: string): string {
   return action
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .split(".")
     .map((segment) =>
       segment
@@ -22,6 +24,8 @@ function humanizeAction(action: string): string {
 
 /** Raw action -> i18n key in web.json, for the actions worth hand-written copy. */
 const ACTION_LABEL_KEYS: Record<string, string> = {
+  review_scored: "auditActionReviewEdited",
+  staff_notes_updated: "auditActionStaffNotesEdited",
   queue_regenerate: "auditActionQueueRegenerate",
   "queue_group.clear": "auditActionQueueGroupClear",
   accept: "auditActionAccept",
@@ -32,12 +36,39 @@ const ACTION_LABEL_KEYS: Record<string, string> = {
 };
 
 export function getActionLabel(action: string, t: Translate): string {
-  const key = ACTION_LABEL_KEYS[action];
+  const key = (AUDIT_ACTIONS as Record<string, string>)[action] ?? ACTION_LABEL_KEYS[action];
   return key ? t(key as Parameters<Translate>[0]) : humanizeAction(action);
 }
 
-function entityRef(entityType: string, entityId: string, t: Translate) {
-  return entityType === "user" ? t("userInline", { id: entityId }) : `${entityType} #${entityId}`;
+export function getAuditEntityLabel(entityType: string, t: Translate): string {
+  const key = (AUDIT_ENTITIES as Record<string, string>)[entityType];
+  return key ? t(key as Parameters<Translate>[0]) : humanizeAction(entityType);
+}
+
+export function entityRef(entityType: string, entityId: string, t: Translate) {
+  return `${getAuditEntityLabel(entityType, t)} #${entityId}`;
+}
+
+export function getAuditEntityHref(entityType: string, id: string): string | null {
+  const routes: Record<string, string> = {
+    user: "/users",
+    application: "/applications",
+    application_response: "/applications/response",
+    project: "/projects",
+    project_github_link: "/projects",
+    enterprise: "/enterprises",
+    challenge: "/challenges",
+  };
+  return routes[entityType] ? `${routes[entityType]}/${encodeURIComponent(id)}` : null;
+}
+
+export function getAuditActorLabel(row: AuditRow, t: Translate): string {
+  if (row.actor_id) return auditActorLabel(row) ?? `#${row.actor_id}`;
+  if (row.actor_kind === "token") return t("auditActorToken");
+  if (row.actor_kind === "device") return t("auditActorDevice");
+  if (row.actor_kind === "anonymous") return t("auditActorAnonymous");
+  if (row.actor_kind === "system" || row.source === "system") return t("systemActor");
+  return t("auditActorUnknown");
 }
 
 /**
@@ -52,6 +83,8 @@ export function getAuditSummary(
 ): string {
   const entity = entityRef(row.entity_type, row.entity_id, t);
   switch (row.action) {
+    case "review_scored":
+      return t("auditSummaryReviewEdited", { actor: actorLabel, entity });
     case "queue_regenerate":
       return t("auditSummaryQueueRegenerate", { actor: actorLabel, entity });
     case "queue_group.clear":
@@ -69,7 +102,7 @@ export function getAuditSummary(
     default:
       return t("auditSummaryGeneric", {
         actor: actorLabel,
-        action: humanizeAction(row.action).toLowerCase(),
+        action: getActionLabel(row.action, t).toLowerCase(),
         entity,
       });
   }
@@ -80,4 +113,43 @@ export function auditActorLabel(
 ) {
   const fullName = [row.actor_name, row.actor_surname].filter(Boolean).join(" ").trim();
   return fullName || row.actor_email || null;
+}
+
+/** H53: known operational fields use the same copy as the review UI. */
+export function getAuditFieldLabel(field: string, t: Translate): string {
+  if (field.startsWith("capabilities."))
+    return capabilityDescription(field.slice("capabilities.".length), t) || humanizeAction(field);
+  if (field === "capabilities") return t("permissions");
+  if (field === "status") return t("colStatus");
+  if (["userId", "user_id", "subjectUserId", "subject_user_id"].includes(field))
+    return getAuditEntityLabel("user", t);
+  if (field === "notes") return t("notesLabel");
+  if (field === "score") return t("scoreColumn");
+  return humanizeAction(field);
+}
+
+export function getAuditSourceLabel(source: string, t: Translate): string {
+  const key = (AUDIT_SOURCES as Record<string, string>)[source];
+  return key ? t(key as Parameters<Translate>[0]) : humanizeAction(source);
+}
+
+export function getAuditValueLabel(
+  value: unknown,
+  field: string,
+  entityType: string,
+  t: Translate,
+): string {
+  if (value === "[private]") return t("auditValuePrivate");
+  if (value === null) return t("notSet");
+  if (field.startsWith("capabilities.") && typeof value === "string") {
+    const labels: Record<string, Parameters<Translate>[0]> = {
+      allow: "panelAccessAllow",
+      deny: "panelAccessDeny",
+      inherit: "panelAccessInherit",
+    };
+    if (labels[value.toLowerCase()]) return t(labels[value.toLowerCase()]);
+  }
+  if (entityType === "application_response" && field === "status" && typeof value === "string")
+    return applicationStatusLabel(value, t);
+  return formatDiffValue(value);
 }

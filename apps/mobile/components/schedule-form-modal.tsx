@@ -18,6 +18,7 @@ import {
 import { Section, ToggleRow } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { SymbolView } from "@/components/symbol";
+import { alert } from "@/lib/alert";
 import { useLocale } from "@/lib/i18n";
 import {
   type AdminScheduleItem,
@@ -232,8 +233,17 @@ export function ScheduleFormModal({
             : { freeTextName: owner.freeTextName as string },
         ),
       );
+      const saved = result;
       if (Object.keys(prepared.translations).length > 0) {
-        result = await saveScheduleTranslations(result.id, prepared.translations);
+        try {
+          result = await saveScheduleTranslations(result.id, prepared.translations);
+        } catch {
+          // The entry exists now: retrying from this form would create it again.
+          // Close it on the saved entry and say what is missing.
+          await onSaved?.(saved);
+          alert(t("mobileStatesScheduleTranslationsError"));
+          return;
+        }
       }
       await onSaved?.(result);
     } catch (cause) {

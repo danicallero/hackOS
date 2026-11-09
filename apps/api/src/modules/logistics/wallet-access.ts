@@ -62,7 +62,8 @@ export async function issueWalletAccessToken(
   // H53: issuing a credential is auditable on its own, separate from the
   // confirm that triggered it.
   await audit(client, {
-    actorId: userId,
+    actorId: null,
+    actorKind: "token",
     entityType: "wallet_access_token",
     entityId: token.slice(0, 8),
     action: "issued",
