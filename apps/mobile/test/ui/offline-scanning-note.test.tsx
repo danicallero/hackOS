@@ -20,7 +20,7 @@ describe("OfflineScanningNote", () => {
     expect(onReconnect).toHaveBeenCalledTimes(1);
     // An instant failure still shows the spinner for a moment before the cross.
     expect(screen.getByRole("button").props.accessibilityState).toMatchObject({ busy: true });
-    await act(async () => jest.advanceTimersByTime(1000));
+    await act(async () => jest.advanceTimersByTime(600));
     expect(screen.getByRole("button").props.accessibilityState).toMatchObject({ busy: false });
     // Failed: the red cross shows and the control is inert meanwhile.
     await act(async () => fireEvent.press(screen.getByRole("button")));
@@ -38,7 +38,7 @@ describe("OfflineScanningNote", () => {
     await act(async () => fireEvent.press(screen.getByRole("button")));
     expect(screen.getByRole("button").props.accessibilityState).toMatchObject({ busy: true });
     await act(async () => finish(true));
-    await act(async () => jest.advanceTimersByTime(1000));
+    await act(async () => jest.advanceTimersByTime(600));
     expect(screen.getByText("scannerReconnect")).toBeTruthy();
   });
 });
