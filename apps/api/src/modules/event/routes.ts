@@ -627,6 +627,8 @@ export function registerEventRoutes(app: FastifyInstance): void {
           entityType: "event_config",
           entityId: 1,
           action: "updated",
+          changedFields: Object.keys(b),
+          before: toAdmin(current, judging, reminder),
           // The Wi-Fi password is a credential: audit that it changed, never
           // what it changed to.
           after: {

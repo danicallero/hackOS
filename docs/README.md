@@ -28,6 +28,7 @@ folder goes deeper on one system, module, or client at a time.
 
 Architecture & modules:
 
+- [Audit trail](./audit-trail.md) — private change metadata, actor/initiator selection, request correlation and autosave grouping (H53).
 - [API reference — module and convention overview](./api-reference.md) — what
   each `apps/api` module owns, and the conventions that hold across all of
   them: capability-based authorization, route-access-policy kinds, the

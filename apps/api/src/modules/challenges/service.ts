@@ -595,11 +595,9 @@ export async function updateChallenge(
       entityType: "challenge",
       entityId: challengeId,
       action: "updated",
-      before: {
-        title: before.title,
-        judging_panel_criteria: before.judging_panel_criteria,
-      },
-      after: { title: after.title, fields: Object.keys(patch) },
+      changedFields: Object.keys(patch),
+      before,
+      after,
     });
 
     const repoIds =

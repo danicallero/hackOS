@@ -613,6 +613,7 @@ export async function startPresentation(entryId: number, actorId: number): Promi
       [entryId, totalSeconds],
     );
     await writeQueueHistory(client, {
+      audit: false,
       entryId,
       actorId,
       previousStatus: "in_room",
@@ -661,6 +662,7 @@ export async function setPresentationPaused(
     );
     const action = paused ? "pause_timer" : "resume_timer";
     await writeQueueHistory(client, {
+      audit: false,
       entryId,
       actorId,
       previousStatus: "presenting",
@@ -807,6 +809,7 @@ export async function reEnter(
     );
     const updated = res.rows[0];
     await writeQueueHistory(client, {
+      audit: false,
       entryId,
       actorId,
       previousStatus: entry.status,
@@ -1041,6 +1044,7 @@ export async function disqualify(
       [entryId],
     );
     await writeQueueHistory(client, {
+      audit: false,
       entryId,
       actorId,
       previousStatus: entry.status,
@@ -1076,6 +1080,7 @@ export async function cancelEntry(
       [entryId],
     );
     await writeQueueHistory(client, {
+      audit: false,
       entryId,
       actorId,
       previousStatus: entry.status,
@@ -1219,6 +1224,7 @@ export async function manualCall(
     await clearWaitingSiblingPrecall(client, entry);
 
     await writeQueueHistory(client, {
+      audit: false,
       entryId,
       actorId,
       previousStatus: entry.status,
@@ -1366,6 +1372,7 @@ async function enqueueQueueRepo(
     const position = await placeEntry(client, challengeId, entry.id, "bottom");
     const positioned = await client.query(`SELECT * FROM queue_entries WHERE id = $1`, [entry.id]);
     await writeQueueHistory(client, {
+      audit: false,
       entryId: entry.id,
       actorId,
       previousStatus: entry.status,
@@ -1395,6 +1402,7 @@ async function enqueueQueueRepo(
   const position = await placeEntry(client, challengeId, entry.id, "bottom");
   const positioned = await client.query(`SELECT * FROM queue_entries WHERE id = $1`, [entry.id]);
   await writeQueueHistory(client, {
+    audit: false,
     entryId: entry.id,
     actorId,
     previousStatus: "none",

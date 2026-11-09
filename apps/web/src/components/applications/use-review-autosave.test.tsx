@@ -40,9 +40,50 @@ describe("useReviewAutosave", () => {
 
     await act(() => vi.advanceTimersByTimeAsync(700));
     expect(put).toHaveBeenCalledTimes(1);
-    expect(put).toHaveBeenCalledWith("/api/responses/7/my-review", { score: 4, notes: null });
+    expect(put).toHaveBeenCalledWith("/api/responses/7/my-review", {
+      score: 4,
+      notes: null,
+      edit_session_id: expect.any(String),
+    });
     expect(current.saveState).toBe("saved");
     expect(onSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the editing session across autosaves and starts another after navigation", async () => {
+    act(() => root.render(<Harness responseId={7} />));
+    act(() => current.setNotes("first"));
+    await act(() => vi.advanceTimersByTimeAsync(700));
+    const session = put.mock.calls[0][1].edit_session_id;
+    act(() => current.setNotes("final"));
+    await act(() => vi.advanceTimersByTimeAsync(700));
+    expect(put.mock.calls[1][1].edit_session_id).toBe(session);
+    act(() => root.render(<Harness responseId={8} />));
+    act(() => current.seed(8, { score: null, notes: "" }));
+    act(() => current.setNotes("another"));
+    await act(() => vi.advanceTimersByTimeAsync(700));
+    expect(put.mock.calls[2][1].edit_session_id).not.toBe(session);
+  });
+
+  it("keeps newer notes dirty when an earlier autosave finishes", async () => {
+    let finish!: () => void;
+    put.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => root.render(<Harness responseId={7} />));
+    act(() => current.setNotes("first"));
+    await act(() => vi.advanceTimersByTimeAsync(700));
+    act(() => current.setNotes("final"));
+    await act(async () => finish());
+    expect(current.isDirty()).toBe(true);
+    await act(() => vi.advanceTimersByTimeAsync(700));
+    expect(put).toHaveBeenLastCalledWith(
+      "/api/responses/7/my-review",
+      expect.objectContaining({ notes: "final" }),
+    );
+    expect(current.saveState).toBe("saved");
   });
 
   it("does not save a reseeded or remotely applied value", async () => {
@@ -74,7 +115,11 @@ describe("useReviewAutosave", () => {
     act(() => current.setScore(2));
     act(() => root.render(<Harness responseId={8} />));
     act(() => current.seed(8, { score: null, notes: "" }));
-    expect(put).toHaveBeenCalledWith("/api/responses/7/my-review", { score: 2, notes: null });
+    expect(put).toHaveBeenCalledWith("/api/responses/7/my-review", {
+      score: 2,
+      notes: null,
+      edit_session_id: expect.any(String),
+    });
     expect(current.score).toBeNull();
   });
 

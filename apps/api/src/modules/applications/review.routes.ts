@@ -150,7 +150,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       config: capability(CAPABILITIES.APPLICATIONS_REVIEW),
       schema: {
         summary: "Score a response",
-        description: "Upserts the caller's own review (score + notes) for one response (H13).",
+        description:
+          "Upserts the caller's own review (H13). Audit records score changes and changed field names, never note text. An optional edit_session_id groups autosaves by this caller and response for up to 30 minutes; unchanged saves produce no event (H53).",
         params: responseIdParamSchema,
         body: reviewUpsertSchema,
       },
@@ -161,6 +162,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         req.params.responseId,
         req.body.score,
         req.body.notes,
+        req.body.edit_session_id,
       );
       return { status: true };
     },

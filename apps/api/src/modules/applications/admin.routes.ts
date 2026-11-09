@@ -512,6 +512,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
           entityType: "application",
           entityId: req.params.id,
           action: "updated",
+          changedFields: Object.keys(b),
           before: schemaChanged
             ? {
                 formVersion: Number(current.current_form_version ?? 1),

@@ -795,3 +795,28 @@ endpoints remain available for installed clients. Physical connection budgets
 and gauges count the shared response once; logical attachments and access-check
 load remain separate. See [realtime transport](./realtime-transport.md) for the
 scope/authorization table, lifecycle, revocation, metrics and 600-client results.
+
+### Private edit traceability (H13/H53)
+
+Application answer corrections record the changed question keys, never the answer
+values. Shared staff-note changes record only that notes changed. Review edits
+record changed field names and before/final scores; note text and content hashes
+are never copied to `audit_log`. Identical review and staff-note saves do not
+create audit events.
+
+The web review composer sends a random `edit_session_id` with each autosave. For
+the same actor, response and session, saves update one audit entry for at most
+30 minutes from its creation. Its original score and start timestamp remain,
+while its final score, changed-field union and last-edit timestamp advance in
+the same transaction as the review. A different actor/session or a later window
+creates a new entry. Clients omitting the session ID retain one entry per actual
+change. This grouping applies only to review editing, never decisions or other
+sensitive state transitions. Existing entries are not backfilled with private
+content or inferred changes.
+
+Audit detail shows changed fields separately from safe before/after values and
+labels entries with no captured details explicitly. Response links resolve the
+form into a permitted review/decision workspace and retain the selected response
+in the URL, independent of table filters.
+
+The global writer/read policy, actor selection, request correlation, action catalogue and autosave boundaries are defined in [Audit trail](./audit-trail.md).

@@ -73,6 +73,12 @@ export const STATIC_CATEGORIES = ["announcements", "application", "challenge", "
 export interface AuditRow {
   id: number;
   actor_id: number | null;
+  actor_kind?: string;
+  initiated_by?: number | null;
+  initiator_name?: string | null;
+  changed_fields?: string[];
+  request_id?: string | null;
+  last_edited_at?: string | null;
   actor_name: string | null;
   actor_surname: string | null;
   actor_email: string | null;
@@ -89,6 +95,7 @@ export interface AuditRow {
 }
 
 interface AuditFilters {
+  requestId?: string;
   entityType?: string;
   entityId?: string;
   actorId?: number;

@@ -4,6 +4,7 @@ import { config } from "../../config.js";
 import { pool, type Queryable, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { getRequestContext } from "../../lib/request-context.js";
 import { hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 
@@ -133,7 +134,12 @@ async function createPassRecord(
     ],
   );
   await audit(client, {
-    actorId: userId,
+    actorId: getRequestContext()?.getActorId?.() ?? null,
+    actorKind: getRequestContext()
+      ? getRequestContext()?.getActorId?.()
+        ? "user"
+        : "token"
+      : "system",
     entityType: "wallet_pass",
     entityId: created.rows[0].id,
     action: "issued",
