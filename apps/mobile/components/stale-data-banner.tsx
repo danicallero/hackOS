@@ -24,16 +24,22 @@ export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
 
   const formatted = formatLastUpdate(updatedAt, language, t);
 
-  // Quiet, like the scanner's offline note: one grey line, no card, no warning colour.
+  // Neutral and quiet, but a visible capsule: no warning colour, one line.
   return (
     <View
       accessibilityLiveRegion="polite"
       style={{
         alignItems: "center",
+        alignSelf: "stretch",
+        backgroundColor: colors.hover,
+        borderCurve: "continuous",
+        borderRadius: 999,
         flexDirection: "row",
-        gap: 6,
+        gap: 8,
         marginBottom: 14,
-        paddingRight: hasOperationsMenu ? 72 : 0,
+        marginRight: hasOperationsMenu ? 72 : 0,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
       }}
     >
       <SymbolView
