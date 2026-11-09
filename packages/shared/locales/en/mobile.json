@@ -1052,7 +1052,6 @@
   "helpRefresh": "Refresh",
   "helpChooseTeam": "Choose a team",
   "helpRemoveInterval": "Remove availability",
-  "helpPublicationNote": "Your support profile is browsable in the help desk. Badge networking consent stays separate.",
   "helpInvalidInterval": "Each availability interval must end after it starts; intervals cannot overlap.",
   "helpKindMentor": "Mentor",
   "helpKindSponsor": "Sponsor",

@@ -103,7 +103,7 @@ export function HelperProfileSection({
   }
   return (
     <>
-      <Section footer={t("helpPublicationNote")}>
+      <Section>
         <ToggleRow
           label={t("helpMentorAvailable")}
           value={profile.published}

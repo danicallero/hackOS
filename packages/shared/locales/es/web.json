@@ -4080,7 +4080,6 @@
   "helpDeskPublish": "Disponible para mentorizar",
   "helpDeskMentorProfile": "Perfil de mentor",
   "helpDeskAddIntervalOn": "Añadir disponibilidad el {day}",
-  "helpDeskPublishingNote": "Tu perfil público, conocimientos y disponibilidad serán visibles para quienes usan el punto de ayuda y para quienes escanean tu acreditación. Dejar de ofrecer ayuda no oculta tu perfil público.",
   "helpDeskAddInterval": "Añadir disponibilidad",
   "helpDeskRemoveInterval": "Quitar {interval}",
   "helpDeskTopicsRequired": "Selecciona al menos un tema u Otro.",

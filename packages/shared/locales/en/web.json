@@ -4080,7 +4080,6 @@
   "helpDeskPublish": "Available to mentor",
   "helpDeskMentorProfile": "Mentor profile",
   "helpDeskAddIntervalOn": "Add availability on {day}",
-  "helpDeskPublishingNote": "Your public profile, knowledge and availability will be visible to everyone using the help desk and to people who scan your badge. Unpublishing support does not unshare your public profile.",
   "helpDeskAddInterval": "Add availability",
   "helpDeskRemoveInterval": "Remove {interval}",
   "helpDeskTopicsRequired": "Select at least one topic or Other.",
