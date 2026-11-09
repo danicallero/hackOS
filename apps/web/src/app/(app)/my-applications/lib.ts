@@ -52,6 +52,8 @@ export interface MyResponseDetail {
   status: string;
   responses: Record<string, unknown>;
   decision_sent_at: string | null;
+  /** Only present once a rejection has been sent. */
+  rejection_reason?: string | null;
   confirmation_expires_at: string | null;
   confirmed_at: string | null;
   declined_at: string | null;

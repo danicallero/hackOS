@@ -323,6 +323,8 @@ export function renderEmailTemplate(payload: EmailPayload, language: Language): 
     body: payload.body ?? "",
     fromAddress: config.MAIL_FROM_ADDRESS,
     eventName: config.APPLE_PASS_ORGANIZATION,
+    // Decisions queued before the optional rejection reason existed omit it.
+    rejectionDetails: "",
     ...payload.vars,
   };
   if (templateName === "auth.invite") {

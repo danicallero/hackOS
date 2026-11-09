@@ -92,8 +92,9 @@
         },
         "rejected": {
           "subject": "About your application for {{applicationName}} at {{eventName}}",
-          "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
+          "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.{{rejectionDetails}}\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
         },
+        "rejectionDetails": "\n\nReason: {{reason}}",
         "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf it turns out you can’t make it, please let us know so someone else can take your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
         "confirmationDeadline": "Confirm your spot before {{deadline}}."
       },

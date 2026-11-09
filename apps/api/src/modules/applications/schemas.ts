@@ -114,6 +114,11 @@ export const decideSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
 });
 
+/** H14: optional reason for an unsent internal rejection; null/blank clears it. */
+export const rejectionReasonSchema = z.object({
+  reason: z.string().trim().max(1000).nullish(),
+});
+
 export const sendDecisionsSchema = z.object({
   include_rejected: z.boolean().default(false),
 });

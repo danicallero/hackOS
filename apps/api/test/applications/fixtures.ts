@@ -122,9 +122,11 @@ export async function getResponse(id: number): Promise<{
   declined_at: Date | null;
   decision_sent_at: Date | null;
   confirmation_token_id: number | null;
+  rejection_reason: string | null;
 }> {
   const { rows } = await pool.query(
-    `SELECT user_id, status, confirmed_at, declined_at, decision_sent_at, confirmation_token_id
+    `SELECT user_id, status, confirmed_at, declined_at, decision_sent_at, confirmation_token_id,
+            rejection_reason
      FROM application_responses WHERE id = $1`,
     [id],
   );
