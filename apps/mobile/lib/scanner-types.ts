@@ -82,13 +82,21 @@ export interface ScannerSnapshot {
 }
 
 export type ScanPayload =
-  | { kind: "accreditation"; ticketToken: string; badgeId: string; method: "qr" | "manual" }
+  | {
+      kind: "accreditation";
+      ticketToken: string;
+      badgeId: string;
+      method: "qr" | "manual";
+      /** When the operator assigned the badge (offline replays keep this, H54). */
+      assignedAt?: string;
+    }
   | {
       kind: "accreditation_user";
       userId: number;
       badgeId: string;
       method: "qr" | "manual";
       attendeeRole?: "participant" | "mentor";
+      assignedAt?: string;
     }
   | {
       kind: "badge_rotation";
@@ -96,6 +104,7 @@ export type ScanPayload =
       currentBadgeId: string;
       newBadgeId: string;
       reason: string;
+      assignedAt?: string;
     }
   | { kind: "badge_removal"; userId: number; currentBadgeId: string; reason: string }
   | { kind: "presence"; badgeId: string; direction: "in" | "out"; scannedAt: string }
@@ -104,6 +113,8 @@ export type ScanPayload =
       activityId: number;
       badgeId?: string;
       ticketToken?: string;
+      /** Set when the badge was only known through a queued accreditation: the API rejects the scan if the badge ends up with someone else. */
+      expectedUserId?: number;
       allowRepeat: boolean;
       scannedAt: string;
     }

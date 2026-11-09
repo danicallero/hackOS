@@ -1,4 +1,8 @@
-import { requestForPendingScan, revokedBadgesFromSnapshot } from "./scanner-model";
+import {
+  pendingBadgeClaim,
+  requestForPendingScan,
+  revokedBadgesFromSnapshot,
+} from "./scanner-model";
 import type { PendingScan } from "./scanner-types";
 
 function pending(payload: PendingScan["payload"]): PendingScan {
@@ -188,4 +192,56 @@ it("preserves a ticket credential and idempotency key for activity replay", () =
     scannedAt: "2026-10-03T10:00:00Z",
   });
   expect(request.headers["idempotency-key"]).toBe("stable-device-id");
+});
+
+describe("queued badge claims (H22, H25, H54)", () => {
+  it("finds who a not-yet-synced accreditation or rotation gave a badge to", () => {
+    const queue = [
+      pending({ kind: "accreditation_user", userId: 5, badgeId: "B-1", method: "manual" }),
+      pending({
+        kind: "badge_rotation",
+        userId: 6,
+        currentBadgeId: "B-OLD",
+        newBadgeId: "B-2",
+        reason: "lost",
+      }),
+      pending({ kind: "accreditation", ticketToken: "tkt", badgeId: "B-3", method: "qr" }),
+    ];
+    expect(pendingBadgeClaim(queue, "B-1")).toEqual({ userId: 5 });
+    expect(pendingBadgeClaim(queue, "B-2")).toEqual({ userId: 6 });
+    expect(pendingBadgeClaim(queue, "B-3")).toEqual({ ticketToken: "tkt" });
+    expect(pendingBadgeClaim(queue, "B-9")).toBeNull();
+  });
+
+  it("ignores accreditations the server already refused", () => {
+    const failed = {
+      ...pending({ kind: "accreditation_user", userId: 5, badgeId: "B-1", method: "manual" }),
+      status: "failed" as const,
+    };
+    expect(pendingBadgeClaim([failed], "B-1")).toBeNull();
+  });
+
+  it("replays the client assignment time and the expected owner", () => {
+    const accreditation = requestForPendingScan(
+      pending({
+        kind: "accreditation_user",
+        userId: 5,
+        badgeId: "B-1",
+        method: "manual",
+        assignedAt: "2026-01-01T10:00:00.000Z",
+      }),
+    );
+    expect(accreditation.body.assignedAt).toBe("2026-01-01T10:00:00.000Z");
+    const scan = requestForPendingScan(
+      pending({
+        kind: "activity",
+        activityId: 7,
+        badgeId: "B-1",
+        expectedUserId: 5,
+        allowRepeat: false,
+        scannedAt: "2026-01-01T10:05:00.000Z",
+      }),
+    );
+    expect(scan.body.expectedUserId).toBe(5);
+  });
 });

@@ -427,7 +427,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: checkInUserBody,
         description:
-          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment. 403 if the person still has no event access after that (H43). Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Same as /api/accreditation/check-in but keyed by user id instead of ticket token (H22). For an unassigned person, attendeeRole atomically creates the participant/mentor relationship and ticket before badge assignment. 403 if the person still has no event access after that (H43). Rate limited per staff user (#538, docs/rate-limiting.md). Offline replays send assignedAt (when the operator assigned the badge; never in the future, never before the previous assignment, at most 72 h old, else 400): it becomes the badge assignment boundary so scans taken with the badge meanwhile are not rejected as predating it (H54).",
       },
     },
     async (req) =>
@@ -450,7 +450,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         body: rotateBody,
         description:
-          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token or a sponsor stand tag (#935). Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Replace someone's badge (H23): identify the person by userId (preferred) or by their current badge id. The old badge is revoked everywhere, wallet badge passes are voided, and the change is audited with the given reason. 409 if the new badge is already assigned or is actually a ticket token or a sponsor stand tag (#935). Rate limited per staff user (#538, docs/rate-limiting.md). Accepts the same bounded assignedAt as check-in for offline replays (H54).",
       },
     },
     async (req) =>
@@ -702,7 +702,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         params: activityIdParam,
         body: activityScanBody,
         description:
-          "Records one meal or activity-attendance event using either a current badge or an entry ticket, including participants without an assigned badge. Every distinct idempotent scan is recorded, including repeats; door presence remains the separate state-transition flow.",
+          "Records one meal or activity-attendance event using either a current badge or an entry ticket, including participants without an assigned badge. Every distinct idempotent scan is recorded, including repeats; door presence remains the separate state-transition flow. An offline scan of a badge accredited offline carries expectedUserId: if the badge ended up with another person (409 badge_owner_mismatch) or was never assigned, the scan is rejected instead of crediting its real owner.",
       },
     },
     async (req, reply) => {
