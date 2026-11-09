@@ -8,6 +8,8 @@ import { type } from "@/theme";
 import { colors } from "@/theme/colors";
 
 const FAILED_VISIBLE_MS = 3000;
+// An instant failure must still look like an attempt.
+const MIN_ATTEMPT_MS = 900;
 
 /**
  * Scanning keeps working offline: a quiet note, never an error banner. Reconnect
@@ -45,7 +47,10 @@ export function OfflineScanningNote({ onReconnect }: { onReconnect: () => Promis
   async function reconnect() {
     if (state !== "idle") return;
     setState("loading");
-    const ok = await onReconnect().catch(() => false);
+    const [ok] = await Promise.all([
+      onReconnect().catch(() => false),
+      new Promise((resolve) => setTimeout(resolve, MIN_ATTEMPT_MS)),
+    ]);
     if (ok) {
       setState("idle");
       return;
