@@ -1681,9 +1681,11 @@ one "Stated availability" section: a Now row (scheduled vs inside the venue,
 H24) and one row per event day. Editing happens in the same public profile
 editor: `components/help-desk/helper-profile-section.tsx` sits under the card
 for eligible helpers, in the order a helper decides. The editor opens as the
-person's own card, never dimmed, with an "Edit profile" row that opens the
-public profile editor (the help desk page has no edit toggle of its own, so
-what is live is always the help desk settings below). Then: an "Available to
+person's own card, never dimmed, under a "Networking profile" section header
+whose trailing Edit profile / Save / Cancel text actions edit that card in place
+(the bar has no pencil here, so editing is visibly scoped to the networking
+profile; the help desk settings below are always live). The role renders as an
+accent pill. Then: an "Available to
 mentor" switch (the published state; it stays off, with a one-line reason, until
 a knowledge area exists; publishing also turns the public profile's share
 switch on, and the screen mirrors it; unpublishing leaves sharing as is); for
