@@ -165,15 +165,29 @@ const DYNAMIC_ISLAND_HEIGHT = 37.33;
 /** iPhone 18 generation: a narrower island (measured on the simulator, ~94 x 36.5 pt). */
 const NARROW_ISLAND_WIDTH = 94;
 const NARROW_ISLAND_HEIGHT = 36.5;
-const NARROW_ISLAND_FIRST_GENERATION = 18;
+/** Hardware identifiers run one ahead of the marketing name: iPhone 17 is "iPhone18,x", iPhone 18 "iPhone19,x". */
+const NARROW_ISLAND_FIRST_HARDWARE_GENERATION = 19;
+const NARROW_ISLAND_FIRST_MARKETING_GENERATION = 18;
 
-/** Island size by hardware identifier ("iPhone18,1"); unknown or older models use the 14 Pro-17 size. */
-function dynamicIslandSize(modelId: string | null | undefined): { width: number; height: number } {
-  const generation = Number(/^iPhone(\d+),/.exec(modelId ?? "")?.[1]);
-  return generation >= NARROW_ISLAND_FIRST_GENERATION
+/**
+ * Island size. A device reports "iPhone19,2" and the like; the simulator
+ * reports only "arm64", so there the simulator's name ("iPhone 18 Pro", as
+ * created) is the one hint to the model. Unknown models use the 14 Pro-17 size.
+ */
+function dynamicIslandSize(
+  modelId: string | null | undefined,
+  deviceName?: string | null,
+): { width: number; height: number } {
+  const hardware = Number(/^iPhone(\d+),/.exec(modelId ?? "")?.[1]);
+  const marketing = Number(/\biPhone\s*(\d+)/.exec(deviceName ?? "")?.[1]);
+  const narrow = Number.isFinite(hardware)
+    ? hardware >= NARROW_ISLAND_FIRST_HARDWARE_GENERATION
+    : marketing >= NARROW_ISLAND_FIRST_MARKETING_GENERATION;
+  return narrow
     ? { width: NARROW_ISLAND_WIDTH, height: NARROW_ISLAND_HEIGHT }
     : { width: DYNAMIC_ISLAND_WIDTH, height: DYNAMIC_ISLAND_HEIGHT };
 }
+
 const DYNAMIC_ISLAND_TOP_OFFSET = 48;
 const DYNAMIC_ISLAND_INSET = 1;
 
@@ -277,6 +291,7 @@ export function resolveProfileCameraTarget({
   cameraCutoutFrame,
   displayCutoutRects,
   height,
+  deviceName,
   modelId,
   platform,
   safeAreaTop,
@@ -285,6 +300,8 @@ export function resolveProfileCameraTarget({
   cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
   /** Hardware identifier, to size the fallback island (the OS reports none before iOS 27.1). */
   modelId?: string | null;
+  /** Device name: the simulator's only hint to its model, since its identifier is "arm64". */
+  deviceName?: string | null;
   displayCutoutRects?: ProfileCameraCutoutFrame[] | null;
   height: number;
   platform: string;
@@ -303,7 +320,7 @@ export function resolveProfileCameraTarget({
   if (!isLandscape && platform === "ios" && safeAreaTop >= 55) {
     // iOS does not expose a public Dynamic Island frame. Use its published
     // geometry (points, relative to the app window), inset so it stays inside.
-    const island = dynamicIslandSize(modelId);
+    const island = dynamicIslandSize(modelId, deviceName);
     const width = Math.min(island.width, screenWidth - 32) - 2 * DYNAMIC_ISLAND_INSET;
     return {
       left: (screenWidth - width) / 2,

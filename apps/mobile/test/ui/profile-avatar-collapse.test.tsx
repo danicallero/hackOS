@@ -523,7 +523,7 @@ describe("profile camera target", () => {
     const narrow = resolveProfileCameraTarget({
       ...base,
       height: 874,
-      modelId: "iPhone18,1",
+      modelId: "iPhone19,2",
       safeAreaTop: 62,
       screenWidth: 402,
     });
@@ -539,6 +539,27 @@ describe("profile camera target", () => {
       screenWidth: 402,
     });
     expect(old.width).toBe(wide.width);
+    // iPhone 17 Pro is "iPhone18,1": still the 126 pt island.
+    const iPhone17 = resolveProfileCameraTarget({
+      ...base,
+      height: 874,
+      modelId: "iPhone18,1",
+      safeAreaTop: 62,
+      screenWidth: 402,
+    });
+    expect(iPhone17.width).toBe(wide.width);
+    // The simulator reports "arm64"; its name is the only hint.
+    const sim = (deviceName: string) =>
+      resolveProfileCameraTarget({
+        ...base,
+        deviceName,
+        height: 874,
+        modelId: "arm64",
+        safeAreaTop: 62,
+        screenWidth: 402,
+      });
+    expect(sim("QA iPhone 18 Pro").width).toBe(narrow.width);
+    expect(sim("QA iPhone 17 Pro").width).toBe(wide.width);
   });
 
   it("targets Plus/Max widths (430, 440) inside the island", () => {
