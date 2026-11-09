@@ -89,6 +89,7 @@ jest.mock("@/lib/router-tabs-inset", () => ({ useRouterTabBarBottomInset: () => 
 jest.mock("@/lib/scanner-db", () => ({
   enqueueLocalScan: jest.fn().mockResolvedValue("scan-1"),
   findPersonByTicket: jest.fn().mockResolvedValue(null),
+  findPersonById: jest.fn().mockResolvedValue(null),
   findPersonByBadge: jest.fn().mockResolvedValue({
     person: {
       userId: 21,
@@ -163,6 +164,7 @@ import { haptic } from "@/lib/haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
+  findPersonById,
   findPersonByTicket,
   getActivityState,
   listScannerActivities,
@@ -280,6 +282,29 @@ it("accepts a ticket QR and preserves it in the offline activity payload", async
     expect.objectContaining({ ticketToken: "BADGE-1", kind: "activity" }),
     11,
   );
+});
+
+it("accepts a badge accredited offline on this device and ties the scan to that person", async () => {
+  const known = (await findPersonByBadge("BADGE-1")).person!;
+  jest.mocked(findPersonByBadge).mockResolvedValueOnce({ person: null, revoked: false });
+  jest.mocked(findPersonById).mockResolvedValueOnce({ ...known, userId: 42, badgeId: null });
+  mockQueue = [
+    {
+      id: "acc-1",
+      status: "pending",
+      payload: { kind: "accreditation_user", userId: 42, badgeId: "BADGE-1", method: "manual" },
+    },
+  ] as never;
+  jest.mocked(enqueueLocalScan).mockClear();
+  await renderMobile(<ActivityScannerScreen />);
+  await waitFor(() =>
+    expect(enqueueLocalScan).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "activity", badgeId: "BADGE-1", expectedUserId: 42 }),
+      11,
+    ),
+  );
+  expect(screen.queryByRole("button", { name: "scannerBadgeUnknown" })).toBeNull();
+  mockQueue = [{ id: "scan-1", status: "acknowledged" }];
 });
 
 it("gives an unrecognised badge the error haptic", async () => {

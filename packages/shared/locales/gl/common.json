@@ -63,6 +63,7 @@
   "apiError_idempotency_payload_mismatch": "Esta solicitude entra en conflito cunha anterior. Recarga e téntao de novo.",
   "apiError_scan_timestamp_in_future": "A hora do escaneo vai por diante do reloxo do servidor. Revisa a data e a hora do dispositivo.",
   "apiError_badge_revoked": "Esta acreditación foi revogada.",
+  "apiError_badge_owner_mismatch": "Esta acreditación pertence a outra persoa.",
   "apiError_ticket_revoked": "Esta entrada foi revogada.",
   "apiError_badge_unknown": "Acreditación non recoñecida.",
   "apiError_badge_scan_before_assignment": "Este escaneo é anterior á asignación actual da acreditación.",
