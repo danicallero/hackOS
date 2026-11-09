@@ -1,4 +1,3 @@
-import { workingHoursIntervals } from "@hackos/shared/help-desk";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
@@ -12,7 +11,6 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
-import { useEventTimeZone } from "@/lib/event-time";
 import {
   type AvailabilityInterval,
   type HelpTopic,
@@ -78,11 +76,19 @@ export function HelperProfileSection({
   onProfileChange?: (profile: MyHelperProfile<DirectoryEntry>) => void;
 } = {}) {
   const { t, language } = useLocale();
-  const zone = useEventTimeZone();
   const [profile, setProfile] = useState<MyHelperProfile<DirectoryEntry> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [draft, setDraft] = useState<DayDraft | null>(null);
+  const [picking, setPicking] = useState(false);
+  const latest = useRef<{
+    profile: MyHelperProfile<DirectoryEntry> | null;
+    saveProfile: (
+      published: boolean,
+      topics: HelpTopic[],
+      challengeIds?: number[],
+    ) => Promise<boolean>;
+  }>({ profile: null, saveProfile: async () => false });
 
   const load = useCallback(async () => {
     setError(null);
@@ -99,34 +105,55 @@ export function HelperProfileSection({
     if (profile) onProfileChange?.(profile);
   }, [profile, onProfileChange]);
 
-  async function run(request: () => Promise<MyHelperProfile<DirectoryEntry>>): Promise<boolean> {
-    if (busy) return false;
-    setBusy(true);
+  // Saves are optimistic (no disabled or faded controls while one is in flight, so
+  // toggling never flickers); the server's answer replaces the guess, and only
+  // the latest answer counts when several are in flight.
+  const sequence = useRef(0);
+  async function save(
+    optimistic: Partial<MyHelperProfile<DirectoryEntry>>,
+    request: () => Promise<MyHelperProfile<DirectoryEntry>>,
+  ): Promise<boolean> {
+    const previous = latest.current.profile;
+    const ticket = ++sequence.current;
     setError(null);
+    if (previous) setProfile({ ...previous, ...optimistic });
     try {
-      setProfile(await request());
+      const saved = await request();
+      if (ticket === sequence.current) setProfile(saved);
       return true;
     } catch (cause) {
+      if (ticket === sequence.current && previous) setProfile(previous);
       setError(cause instanceof Error ? cause : new Error(String(cause)));
       return false;
-    } finally {
-      setBusy(false);
     }
   }
-  const saveProfile = (published: boolean, topics: HelpTopic[], ownChallengesOnly?: boolean) =>
-    run(() =>
-      helpMutation<MyHelperProfile<DirectoryEntry>>(
-        "/api/me/helper-profile",
-        {
-          published,
-          topicIds: topics.map((topic) => topic.id),
-          ...(ownChallengesOnly === undefined ? {} : { ownChallengesOnly }),
-        },
-        "PUT",
-      ),
+  const saveProfile = (published: boolean, topics: HelpTopic[], challengeIds?: number[]) =>
+    save(
+      {
+        published,
+        topics,
+        ...(challengeIds === undefined
+          ? {}
+          : {
+              challengeIds,
+              challenges: (latest.current.profile?.challengeOptions ?? []).filter((option) =>
+                challengeIds.includes(option.id),
+              ),
+            }),
+      },
+      () =>
+        helpMutation<MyHelperProfile<DirectoryEntry>>(
+          "/api/me/helper-profile",
+          {
+            published,
+            topicIds: topics.map((topic) => topic.id),
+            ...(challengeIds === undefined ? {} : { challengeIds }),
+          },
+          "PUT",
+        ),
     );
   const saveAvailability = (intervals: AvailabilityInterval[]) =>
-    run(() =>
+    save({ availability: intervals }, () =>
       helpMutation<MyHelperProfile<DirectoryEntry>>(
         "/api/me/helper-profile/availability",
         { intervals },
@@ -136,7 +163,6 @@ export function HelperProfileSection({
 
   // TopicField reports the picker's selection from an effect, so the callback
   // stays stable and ignores a selection equal to the saved one (no save loop).
-  const latest = useRef({ profile, saveProfile });
   latest.current = { profile, saveProfile };
   const changeTopics = useCallback((topics: HelpTopic[]) => {
     const current = latest.current.profile;
@@ -147,7 +173,7 @@ export function HelperProfileSection({
     void latest.current.saveProfile(
       current.published && topics.length > 0,
       topics,
-      current.ownChallengesOnly,
+      current.challengeIds,
     );
   }, []);
 
@@ -195,7 +221,19 @@ export function HelperProfileSection({
       setError(new Error(t("helpInvalidInterval")));
       return;
     }
-    void saveAvailability(replaced).then((saved) => saved && setDraft(null));
+    // Nobody is available before the hacking time (H62).
+    if (
+      window &&
+      replaced.some((item) => Date.parse(item.startsAt) < Date.parse(window.startsAt))
+    ) {
+      setError(new Error(t("helpBeforeHacking")));
+      return;
+    }
+    setBusy(true);
+    void saveAvailability(replaced).then((saved) => {
+      setBusy(false);
+      if (saved) setDraft(null);
+    });
   }
   function addRange() {
     if (!draft) return;
@@ -220,61 +258,37 @@ export function HelperProfileSection({
   const needsTopic = profile.topics.length === 0;
   return (
     <>
-      <Section
-        footer={
-          needsTopic
-            ? t("helpMentorNeedsTopic")
-            : profile.canLimitToChallenges
-              ? profile.ownChallenges.map((challenge) => challenge.name).join(", ")
-              : undefined
-        }
-      >
+      <Section footer={needsTopic ? t("helpMentorNeedsTopic") : undefined}>
         <ToggleRow
           label={t("helpMentorAvailable")}
           value={profile.published}
-          disabled={busy || (!profile.published && needsTopic)}
+          disabled={!profile.published && needsTopic}
           onChange={(published) => void saveProfile(published, profile.topics)}
         />
-        {profile.canLimitToChallenges ? (
+        {profile.challengeOptions.length > 0 ? (
           <>
             <Separator inset={16} />
-            <ToggleRow
-              label={t("helpOnlyMyChallenges")}
-              value={profile.ownChallengesOnly}
-              disabled={busy}
-              onChange={(value) => void saveProfile(profile.published, profile.topics, value)}
+            <NavRow
+              title={t("helpChallengeAlerts")}
+              value={
+                profile.challenges.length === 0
+                  ? t("helpAllRequests")
+                  : profile.challenges.map((challenge) => challenge.name).join(", ")
+              }
+              onPress={() => setPicking(true)}
             />
           </>
         ) : null}
       </Section>
       <Section>
-        <TopicField
-          selected={profile.topics}
-          onChange={changeTopics}
-          maximum={20}
-          allowAdd
-          disabled={busy}
-        />
+        <TopicField selected={profile.topics} onChange={changeTopics} maximum={20} allowAdd />
       </Section>
       <Section title={t("helpHoursTitle")}>
-        {intervals.length === 0 && window ? (
-          <>
-            <NavRow
-              icon="clock"
-              chevron={false}
-              title={t("helpWorkingHours")}
-              disabled={busy}
-              onPress={() => void saveAvailability(workingHoursIntervals(window, zone))}
-            />
-            <Separator inset={16} />
-          </>
-        ) : null}
         {days.map((day, index) => (
           <View key={day.key}>
             <NavRow
               title={day.label}
               value={day.ranges.map((range) => range.label).join(", ") || undefined}
-              disabled={busy}
               onPress={() => openDay(day)}
             />
             {index < days.length - 1 ? <Separator inset={16} /> : null}
@@ -340,6 +354,53 @@ export function HelperProfileSection({
             accessibilityState={{ busy }}
             disabled={busy}
             onPress={commitDay}
+          />
+        </AdaptiveFrame>
+      </SheetModal>
+      <SheetModal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
+        <AdaptiveFrame>
+          <View style={{ alignItems: "center", height: 76, justifyContent: "center" }}>
+            <Text
+              accessibilityRole="header"
+              style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
+            >
+              {t("helpChallengeAlerts")}
+            </Text>
+          </View>
+          <View style={{ gap: 24, paddingHorizontal: 16 }}>
+            <Section footer={t("helpChallengeAlertsNote")}>
+              {profile.challengeOptions.map((option, index) => {
+                const selected = profile.challengeIds.includes(option.id);
+                return (
+                  <View key={option.id}>
+                    <NavRow
+                      title={option.name}
+                      chevron={false}
+                      icon={selected ? "checkmark.circle.fill" : "circle"}
+                      accessibilityLabel={option.name}
+                      onPress={() =>
+                        void saveProfile(
+                          profile.published,
+                          profile.topics,
+                          selected
+                            ? profile.challengeIds.filter((id) => id !== option.id)
+                            : [...profile.challengeIds, option.id],
+                        )
+                      }
+                    />
+                    {index < profile.challengeOptions.length - 1 ? <Separator inset={16} /> : null}
+                  </View>
+                );
+              })}
+            </Section>
+          </View>
+          <FloatingGlassButton
+            top={16}
+            side="right"
+            icon="checkmark"
+            tintColor={colors.accent}
+            accessibilityLabel={t("save")}
+            onPress={() => setPicking(false)}
           />
         </AdaptiveFrame>
       </SheetModal>

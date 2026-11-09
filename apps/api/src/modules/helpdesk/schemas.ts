@@ -35,7 +35,7 @@ export const mergeBody = z.object({ targetId: id });
 export const helperProfileBody = z.strictObject({
   published: z.boolean(),
   topicIds: z.array(id).max(20),
-  ownChallengesOnly: z.boolean().optional(),
+  challengeIds: z.array(id).max(50).optional(),
 });
 export type HelperProfileInput = z.infer<typeof helperProfileBody>;
 

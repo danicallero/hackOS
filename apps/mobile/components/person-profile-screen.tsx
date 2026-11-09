@@ -349,10 +349,10 @@ export function PersonProfileScreen({
 
             {helper ? (
               <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
-                {helper.ownChallengesOnly && helper.ownChallenges.length > 0 ? (
+                {helper.challenges.length > 0 ? (
                   <InfoRow
-                    label={t("helpOnlyMyChallenges")}
-                    value={helper.ownChallenges.map((challenge) => challenge.name).join(", ")}
+                    label={t("helpChallengeAlerts")}
+                    value={helper.challenges.map((challenge) => challenge.name).join(", ")}
                   />
                 ) : null}
                 <View style={{ padding: 16 }}>

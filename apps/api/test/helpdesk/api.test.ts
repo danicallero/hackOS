@@ -683,18 +683,18 @@ describe("H64-H65 challenge help and sponsor preference", () => {
   async function sponsorHelper(
     enterpriseId: number,
     topicIds: number[],
-    opts: { ownOnly?: boolean } = {},
+    opts: { limitTo?: number[] } = {},
   ) {
     const id = await helper(topicIds);
     await pool.query(`INSERT INTO sponsors (enterprise_id, user_id) VALUES ($1, $2)`, [
       enterpriseId,
       id,
     ]);
-    if (opts.ownOnly) {
+    if (opts.limitTo) {
       const res = await call("PUT", "/api/me/helper-profile", id, {
         published: true,
         topicIds,
-        ownChallengesOnly: true,
+        challengeIds: opts.limitTo,
       });
       expect(res.statusCode).toBe(200);
     }
@@ -794,7 +794,7 @@ describe("H64-H65 challenge help and sponsor preference", () => {
     expect(await outbox(unrelated)).toHaveLength(0);
   });
 
-  it("limits own-challenges-only sponsors to their challenges in routing, inbox and claims", async () => {
+  it("limits helpers who chose challenges to those in routing, inbox and claims", async () => {
     const mine = await enterprise();
     const theirs = await enterprise();
     const myChallenge = await challenge(mine);
@@ -803,7 +803,8 @@ describe("H64-H65 challenge help and sponsor preference", () => {
     const p2 = await createUserWithCapabilities(participantCaps);
     const p3 = await createUserWithCapabilities(participantCaps);
     const t = await topic("Infra", p1);
-    const limited = await sponsorHelper(mine, [t], { ownOnly: true });
+    const myChallenge2 = await challenge(mine);
+    const limited = await sponsorHelper(mine, [t], { limitTo: [myChallenge, myChallenge2] });
 
     const foreign = await ask(p1, { other: false, topicIds: [t], challengeId: otherChallenge });
     const noChallenge = await ask(p2, { other: false, topicIds: [t] });
@@ -834,9 +835,9 @@ describe("H64-H65 challenge help and sponsor preference", () => {
     const off = await call("PUT", "/api/me/helper-profile", limited, {
       published: true,
       topicIds: [t],
-      ownChallengesOnly: false,
+      challengeIds: [],
     });
-    expect(off.json().ownChallengesOnly).toBe(false);
+    expect(off.json().challengeIds).toEqual([]);
     const all = await call("GET", "/api/helpdesk/inbox?scope=open", limited);
     expect(all.json().requests).toHaveLength(2);
   });
@@ -891,41 +892,96 @@ describe("H64-H65 challenge help and sponsor preference", () => {
     expect(away.json().routing).toBe("matched");
   });
 
-  it("validates the own-challenges limit on the helper profile", async () => {
+  it("lets any eligible helper choose challenges and validates them", async () => {
     const e = await enterprise();
-    await challenge(e);
+    const c1 = await challenge(e);
+    const c2 = await challenge(e);
+    const hidden = await challenge(e, { visibility: "hidden" });
     const t = await topic("Cloud", await createUserWithCapabilities(participantCaps));
-    const plain = await helper([t]);
-    const profile = (await call("GET", "/api/me/helper-profile", plain)).json();
-    expect(profile).toMatchObject({
-      ownChallengesOnly: false,
-      canLimitToChallenges: false,
-      ownChallenges: [],
-    });
-    const refused = await call("PUT", "/api/me/helper-profile", plain, {
-      published: true,
-      topicIds: [t],
-      ownChallengesOnly: true,
-    });
-    expect(refused.statusCode).toBe(400);
+    const mentor = await helper([t]);
+    const profile = (await call("GET", "/api/me/helper-profile", mentor)).json();
+    expect(profile.challengeIds).toEqual([]);
+    expect(profile.challenges).toEqual([]);
+    expect(profile.challengeOptions.map((o: { id: number }) => o.id).sort()).toEqual(
+      [c1, c2].sort(),
+    );
+    expect(profile).not.toHaveProperty("ownChallengesOnly");
 
-    const sponsor = await sponsorHelper(e, [t]);
-    const sp = (await call("GET", "/api/me/helper-profile", sponsor)).json();
-    expect(sp.canLimitToChallenges).toBe(true);
-    expect(sp.ownChallenges).toHaveLength(1);
-    const ok = await call("PUT", "/api/me/helper-profile", sponsor, {
+    const foreign = await call("PUT", "/api/me/helper-profile", mentor, {
       published: true,
       topicIds: [t],
-      ownChallengesOnly: true,
+      challengeIds: [c1, hidden, 999999],
+    });
+    expect(foreign.statusCode).toBe(400);
+
+    const ok = await call("PUT", "/api/me/helper-profile", mentor, {
+      published: true,
+      topicIds: [t],
+      challengeIds: [c2, c1, c2],
     });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json().ownChallengesOnly).toBe(true);
-    // Omitting the field keeps the stored value.
-    const keep = await call("PUT", "/api/me/helper-profile", sponsor, {
+    expect(ok.json().challengeIds).toEqual([c1, c2].sort((a, b) => a - b));
+    expect(ok.json().challenges).toHaveLength(2);
+    expect(ok.json().preview.challenges).toHaveLength(2);
+    const detail = await call("GET", `/api/helpdesk/helpers/${mentor}`, mentor);
+    expect(detail.json().challenges).toHaveLength(2);
+    const { rows } = await pool.query(
+      `SELECT after FROM audit_log WHERE entity_type = 'helper_profile' AND entity_id = $1
+        ORDER BY id DESC LIMIT 1`,
+      [mentor],
+    );
+    expect(rows[0].after.changedFields).toContain("challengeIds");
+
+    // Omitting the field keeps the stored set; [] clears it.
+    const keep = await call("PUT", "/api/me/helper-profile", mentor, {
       published: true,
       topicIds: [t],
     });
-    expect(keep.json().ownChallengesOnly).toBe(true);
+    expect(keep.json().challengeIds).toHaveLength(2);
+    const clear = await call("PUT", "/api/me/helper-profile", mentor, {
+      published: true,
+      topicIds: [t],
+      challengeIds: [],
+    });
+    expect(clear.json().challengeIds).toEqual([]);
+  });
+
+  it("routes only requests about the chosen challenges to a limited mentor", async () => {
+    const e = await enterprise();
+    const chosen = await challenge(e);
+    const other = await challenge(e);
+    const p1 = await createUserWithCapabilities(participantCaps);
+    const p2 = await createUserWithCapabilities(participantCaps);
+    const p3 = await createUserWithCapabilities(participantCaps);
+    const t = await topic("Rust", p1);
+    const mentor = await helper([t]);
+    const set = await call("PUT", "/api/me/helper-profile", mentor, {
+      published: true,
+      topicIds: [t],
+      challengeIds: [chosen],
+    });
+    expect(set.statusCode).toBe(200);
+    const off = await ask(p1, { other: false, topicIds: [t], challengeId: other });
+    const none = await ask(p2, { other: false, topicIds: [t] });
+    const on = await ask(p3, { other: false, topicIds: [t], challengeId: chosen });
+    expect(off.json().routing).toBe("none");
+    expect(none.json().routing).toBe("none");
+    expect(on.json()).toMatchObject({ routing: "matched", notifiedCount: 1 });
+    const inbox = await call("GET", "/api/helpdesk/inbox?scope=open", mentor);
+    expect(inbox.json().requests.map((r: { id: number }) => r.id)).toEqual([on.json().id]);
+  });
+
+  it("does not alert a sponsor who limited to other challenges, regardless of topic", async () => {
+    const mine = await enterprise();
+    const theirs = await enterprise();
+    const myChallenge = await challenge(mine);
+    const otherChallenge = await challenge(theirs);
+    const p = await createUserWithCapabilities(participantCaps);
+    const t = await topic("Go", p);
+    const sponsor = await sponsorHelper(mine, [t], { limitTo: [otherChallenge] });
+    const res = await ask(p, { other: false, topicIds: [t], challengeId: myChallenge });
+    expect(res.json().routing).toBe("none");
+    expect(await outbox(sponsor)).toHaveLength(0);
   });
 
   it("keeps team visibility of challenge requests unchanged", async () => {
@@ -972,6 +1028,34 @@ describe("H61-H62 publishing shares the profile and suggests an interval", () =>
     );
     await call("PUT", "/api/me/helper-profile", id, { published: true, topicIds: [t] });
     expect(await visible()).toBe(false);
+  });
+
+  it("rejects availability starting before the hacking window (H62)", async () => {
+    const id = await createUserWithCapabilities(helperCaps);
+    await pool.query(`INSERT INTO event_config (id) VALUES (1) ON CONFLICT DO NOTHING`);
+    await pool.query(
+      `UPDATE event_config SET event_starts_at = '2030-01-01T08:00:00Z',
+              event_ends_at = '2030-01-03T08:00:00Z',
+              hacking_starts_at = '2030-01-01T12:00:00Z',
+              hacking_ends_at = '2030-01-02T12:00:00Z' WHERE id = 1`,
+    );
+    const put = (startsAt: string, endsAt: string) =>
+      call("PUT", "/api/me/helper-profile/availability", id, { intervals: [{ startsAt, endsAt }] });
+    const early = await put("2030-01-01T11:00:00Z", "2030-01-01T13:00:00Z");
+    expect(early.statusCode).toBe(400);
+    expect(early.json().error.details.code).toBe("availability_before_window");
+    expect((await put("2030-01-01T12:00:00Z", "2030-01-01T14:00:00Z")).statusCode).toBe(200);
+    // Without hacking bounds the event start is the limit.
+    await pool.query(
+      `UPDATE event_config SET hacking_starts_at = NULL, hacking_ends_at = NULL WHERE id = 1`,
+    );
+    expect((await put("2030-01-01T07:00:00Z", "2030-01-01T09:00:00Z")).statusCode).toBe(400);
+    expect((await put("2030-01-01T08:00:00Z", "2030-01-01T09:00:00Z")).statusCode).toBe(200);
+    // No window, no restriction.
+    await pool.query(
+      `UPDATE event_config SET event_starts_at = NULL, event_ends_at = NULL WHERE id = 1`,
+    );
+    expect((await put("2020-01-01T07:00:00Z", "2020-01-01T09:00:00Z")).statusCode).toBe(200);
   });
 
   it("suggests the hacking window, else the event window, else null", async () => {
@@ -1155,16 +1239,15 @@ describe("H64-H66 requester profile for helpers", () => {
       ent[0].id,
       sponsor,
     ]);
-    // The sponsor has a challenge of their own, so the limit can be switched on.
     const { rows: sp } = await pool.query(`SELECT id FROM sponsors WHERE user_id = $1`, [sponsor]);
-    await pool.query(
-      `INSERT INTO challenges (author, title, visibility) VALUES ($1, 'Mine', 'visible')`,
+    const { rows: ch } = await pool.query(
+      `INSERT INTO challenges (author, title, visibility) VALUES ($1, 'Mine', 'visible') RETURNING id`,
       [sp[0].id],
     );
     const limited = await call("PUT", "/api/me/helper-profile", sponsor, {
       published: true,
       topicIds: [t],
-      ownChallengesOnly: true,
+      challengeIds: [ch[0].id],
     });
     expect(limited.statusCode).toBe(200);
     await share(p);

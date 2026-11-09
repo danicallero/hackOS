@@ -1680,21 +1680,23 @@ avatar that collapses into the Dynamic Island — fed by
 one "Stated availability" section: a Now row (scheduled vs inside the venue,
 H24) and one row per event day. Editing happens in the same public profile
 editor: `components/help-desk/helper-profile-section.tsx` sits under the card
-for eligible helpers, in the order a helper decides: an "Available to mentor"
-switch (the published state; it stays off, with a one-line reason, until a
-knowledge area exists; publishing also turns the public profile's share switch
-on, and the screen mirrors it; unpublishing leaves sharing as is) and, for
-sponsors with challenges (`canLimitToChallenges`), "I only want to be notified
-about my challenge's requests" (challenge names as the footer); the knowledge
-topics; then "When you plan to be here": one row per hacking day (`planDays`
-from `suggestedInterval`: hacking window, else event window) whose value lists
-that day's ranges. While no hours are stated, a "Typical working hours" row
-fills every day in one tap (`workingHoursIntervals` in `@hackos/shared/help-desk`:
-10:00–14:00 and 16:00–20:00 on the event clock, clipped to the window). A day row
-opens a sheet with that day's ranges edited by clock only (`DateTimeField
-timeOnly`), Add and remove, and Save; the full list is sent as the replacement
-the API expects. Each other change saves at once; the bio stays one of the
-card's own fields.
+for eligible helpers, in the order a helper decides. The editor opens as the
+person's own card, never dimmed, with an "Edit profile" row that opens the
+public profile editor (the help desk page has no edit toggle of its own, so
+what is live is always the help desk settings below). Then: an "Available to
+mentor" switch (the published state; it stays off, with a one-line reason, until
+a knowledge area exists; publishing also turns the public profile's share
+switch on, and the screen mirrors it; unpublishing leaves sharing as is); for
+any eligible helper with challenges in the event, a "Challenge alerts" row
+(All requests, or the chosen challenge names) that opens a multi-select sheet
+(`challengeIds`; none selected = every request); the knowledge topics; then
+"When you plan to be here": one row per hacking day (`planDays` from
+`suggestedInterval`: hacking window, else event window) whose value lists that
+day's ranges. A day row opens a sheet with that day's ranges edited by clock
+only (`DateTimeField timeOnly`), Add and remove, and Save; nobody can be
+available before the hacking time (checked on the client and by the API). Saves
+are optimistic (controls never disable or fade while one is in flight, so toggles
+do not flicker); the server's last answer replaces the guess.
 
 **Directory (H63).** The Support team: photo rows with the role (a sponsor's
 company), topics and a scheduled / inside-the-venue line, the same native header

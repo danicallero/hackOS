@@ -228,7 +228,6 @@ Table application_responses {
   id integer [pk, increment, not null]
   referrer_application_id integer
   referrer_user_id integer
-  rejection_reason text
   responses jsonb [not null, default: `'{}'::jsonb`]
   status app_response_status [not null, default: `'draft'::app_response_status`]
   submitted_at "timestamp with time zone"
@@ -306,19 +305,14 @@ Table attendance_certificates {
 Table audit_log {
   action text [not null]
   actor_id integer
-  actor_kind text [not null, default: `'unknown'::text`]
   after jsonb
   before jsonb
-  changed_fields "text[]" [not null, default: `'{}'::text[]`, note: 'Changed field names; never private values or content hashes.']
   created_at "timestamp with time zone" [not null, default: `now()`]
   entity_id text [not null]
   entity_type text [not null]
   id integer [pk, increment, not null]
-  initiated_by integer
   ip text
-  last_edited_at "timestamp with time zone"
   reason text
-  request_id uuid [note: 'Server-generated request correlation; absent for intentionally identity-free events.']
   source text
   user_agent text
 }
@@ -738,9 +732,19 @@ Table helper_availability {
   Note: 'H62 stated availability intervals; venue presence stays in time_logs (H24).'
 }
 
+Table helper_profile_challenges {
+  challenge_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, challenge_id) [pk]
+  }
+
+  Note: 'DELTA(H65) challenges a helper is alerted about and sees; no rows means every request. Open to any eligible helper.'
+}
+
 Table helper_profiles {
   created_at "timestamp with time zone" [not null, default: `now()`]
-  own_challenges_only boolean [not null, default: `false`]
   published boolean [not null, default: `false`]
   published_at "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
@@ -1631,7 +1635,6 @@ Ref: attendance_certificates.revoked_by > users.id
 Ref: attendance_certificates.type_id > certificate_types.id
 Ref: attendance_certificates.user_id > users.id
 Ref: audit_log.actor_id > users.id
-Ref: audit_log.initiated_by > users.id
 Ref: certificate_approvals.approved_by > users.id
 Ref: certificate_approvals.user_id > users.id
 Ref: challenge_versions.challenge_id > challenges.id
@@ -1681,6 +1684,8 @@ Ref: help_requests.repo_id > repos.id
 Ref: help_requests.requester_id > users.id
 Ref: help_topics.proposed_by > users.id
 Ref: helper_availability.user_id > helper_profiles.user_id
+Ref: helper_profile_challenges.challenge_id > challenges.id
+Ref: helper_profile_challenges.user_id > helper_profiles.user_id
 Ref: helper_profiles.user_id > users.id
 Ref: helper_topics.topic_id > help_topics.id
 Ref: helper_topics.user_id > helper_profiles.user_id

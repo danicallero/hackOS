@@ -16,7 +16,6 @@ import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from ".
 import { photoUrl } from "../../lib/profile-files.js";
 import { type DirectoryEntry, helperProfileEntry, OWN_CV_PATH } from "../directory/service.js";
 import { highestVisibleRoleNameSql } from "../identity/role.js";
-import { sponsorChallengeIds } from "../queue/reviews.js";
 import type { AvailabilityInput, HelperProfileInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
@@ -213,23 +212,24 @@ export async function getMyHelperProfile(
   userId: number,
   db: Queryable = pool,
 ): Promise<MyHelperProfile> {
-  const [card, profile, eligible, ownChallenges, suggestedInterval] = await Promise.all([
-    readOwnCard(db, userId),
-    db.query<{ published: boolean; published_at: Date | null; own_challenges_only: boolean }>(
-      "SELECT published, published_at, own_challenges_only FROM helper_profiles WHERE user_id = $1",
-      [userId],
-    ),
-    isEligibleHelper(db, userId),
-    namedOwnChallenges(db, userId),
-    suggestedAvailability(db),
-  ]);
+  const [card, profile, eligible, challenges, challengeOptions, suggestedInterval] =
+    await Promise.all([
+      readOwnCard(db, userId),
+      db.query<{ published: boolean; published_at: Date | null }>(
+        "SELECT published, published_at FROM helper_profiles WHERE user_id = $1",
+        [userId],
+      ),
+      isEligibleHelper(db, userId),
+      namedHelperChallenges(db, userId),
+      eventChallengeOptions(db),
+      suggestedAvailability(db),
+    ]);
   const row = profile.rows[0];
   // H63: exactly what others get from GET /api/helpdesk/helpers/:id, even
   // unpublished; only the CV route is the owner's own.
   const preview = {
     ...toCard(card),
-    ownChallengesOnly: row?.own_challenges_only ?? false,
-    ownChallenges,
+    challenges,
     profile: await helperProfileEntry(db, userId, OWN_CV_PATH),
   };
   return {
@@ -240,9 +240,9 @@ export async function getMyHelperProfile(
     topics: preview.topics,
     availability: preview.availability,
     suggestedInterval,
-    ownChallengesOnly: row?.own_challenges_only ?? false,
-    canLimitToChallenges: ownChallenges.length > 0,
-    ownChallenges,
+    challengeIds: challenges.map((c) => c.id),
+    challenges,
+    challengeOptions: eligible ? challengeOptions : [],
     preview,
   };
 }
@@ -264,32 +264,43 @@ async function suggestedAvailability(db: Queryable): Promise<AvailabilityInterva
   return { startsAt: row.starts_at.toISOString(), endsAt: row.ends_at.toISOString() };
 }
 
-/** H65: the sponsor's own challenges with names (empty for non-sponsors). */
-async function namedOwnChallenges(
+/** H65: the challenges a helper chose to be alerted about, named, by name. */
+async function namedHelperChallenges(
   db: Queryable,
   userId: number,
 ): Promise<{ id: number; name: string }[]> {
-  const ids = await sponsorChallengeIds(db, userId);
-  if (ids.length === 0) return [];
   const { rows } = await db.query<{ id: number; title: string }>(
-    "SELECT id, title FROM challenges WHERE id = ANY($1::int[]) ORDER BY lower(title), id",
-    [ids],
+    `SELECT c.id, c.title FROM helper_profile_challenges hc
+       JOIN challenges c ON c.id = hc.challenge_id
+      WHERE hc.user_id = $1 ORDER BY lower(c.title), c.id`,
+    [userId],
   );
   return rows.map((r) => ({ id: Number(r.id), name: r.title }));
 }
 
 /**
- * H65: challenge ids a helper is limited to (`own_challenges_only` on a
- * sponsor), or null when they see every request.
+ * H65: the challenges a helper may choose from, the same set a help request
+ * may be about (visible, non-test).
+ */
+async function eventChallengeOptions(db: Queryable): Promise<{ id: number; name: string }[]> {
+  const { rows } = await db.query<{ id: number; title: string }>(
+    `SELECT id, title FROM challenges
+      WHERE visibility = 'visible' AND is_test_account = false
+      ORDER BY lower(title), id`,
+  );
+  return rows.map((r) => ({ id: Number(r.id), name: r.title }));
+}
+
+/**
+ * H65: challenge ids a helper limited their alerts and inbox to, or null when
+ * they see every request (no challenges chosen).
  */
 export async function challengeLimit(db: Queryable, userId: number): Promise<number[] | null> {
-  const { rows } = await db.query(
-    `SELECT 1 FROM helper_profiles hp
-      WHERE hp.user_id = $1 AND hp.own_challenges_only
-        AND EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = $1)`,
+  const { rows } = await db.query<{ challenge_id: number }>(
+    "SELECT challenge_id FROM helper_profile_challenges WHERE user_id = $1 ORDER BY challenge_id",
     [userId],
   );
-  return rows[0] ? sponsorChallengeIds(db, userId) : null;
+  return rows.length > 0 ? rows.map((r) => Number(r.challenge_id)) : null;
 }
 
 /** Lock the caller's users row: H54 removal takes the same lock. */
@@ -309,11 +320,11 @@ async function ensureProfileRow(db: Queryable, userId: number) {
     "INSERT INTO helper_profiles (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING",
     [userId],
   );
-  const { rows } = await db.query<{ published: boolean; own_challenges_only: boolean }>(
-    "SELECT published, own_challenges_only FROM helper_profiles WHERE user_id = $1 FOR UPDATE",
+  const { rows } = await db.query<{ published: boolean }>(
+    "SELECT published FROM helper_profiles WHERE user_id = $1 FOR UPDATE",
     [userId],
   );
-  return rows[0] as { published: boolean; own_challenges_only: boolean };
+  return rows[0] as { published: boolean };
 }
 
 /**
@@ -341,12 +352,24 @@ export async function updateMyHelperProfile(
       });
     }
 
-    const ownOnly = input.ownChallengesOnly ?? current.own_challenges_only;
-    if (
-      input.ownChallengesOnly === true &&
-      (await sponsorChallengeIds(client, userId)).length === 0
-    ) {
-      throw new BadRequestError("Only sponsors with challenges can limit help to their challenges");
+    const beforeChallenges = (await challengeLimit(client, userId)) ?? [];
+    let challengeIds = beforeChallenges;
+    if (input.challengeIds !== undefined) {
+      challengeIds = [...new Set(input.challengeIds)].sort((a, b) => a - b);
+      if (challengeIds.length > 0) {
+        const { rows } = await client.query<{ id: number }>(
+          `SELECT id FROM challenges
+            WHERE id = ANY($1::int[]) AND visibility = 'visible' AND is_test_account = false`,
+          [challengeIds],
+        );
+        const known = new Set(rows.map((r) => Number(r.id)));
+        const unknown = challengeIds.filter((c) => !known.has(c));
+        if (unknown.length > 0) {
+          throw new BadRequestError("Choose challenges of the event", {
+            challengeIds: unknown,
+          });
+        }
+      }
     }
 
     const changedFields: string[] = [];
@@ -355,16 +378,15 @@ export async function updateMyHelperProfile(
     const shares = input.published && !current.published;
     if (current.published !== input.published) changedFields.push("published");
     if (shares) changedFields.push("directoryVisible");
-    if (current.own_challenges_only !== ownOnly) changedFields.push("ownChallengesOnly");
+    if (beforeChallenges.join(",") !== challengeIds.join(",")) changedFields.push("challengeIds");
     if (beforeTopics.join(",") !== topicIds.join(",")) changedFields.push("topics");
     if (changedFields.length === 0) return false;
 
     await client.query(
       `UPDATE helper_profiles
-          SET published = $2, published_at = CASE WHEN $2 AND NOT published THEN now() ELSE published_at END,
-              own_challenges_only = $3
+          SET published = $2, published_at = CASE WHEN $2 AND NOT published THEN now() ELSE published_at END
         WHERE user_id = $1`,
-      [userId, input.published, ownOnly],
+      [userId, input.published],
     );
     if (shares) {
       await client.query(
@@ -386,7 +408,16 @@ export async function updateMyHelperProfile(
         );
       }
     }
-    // H53: field names and topic ids only.
+    if (changedFields.includes("challengeIds")) {
+      await client.query("DELETE FROM helper_profile_challenges WHERE user_id = $1", [userId]);
+      if (challengeIds.length > 0) {
+        await client.query(
+          "INSERT INTO helper_profile_challenges (user_id, challenge_id) SELECT $1, unnest($2::int[])",
+          [userId, challengeIds],
+        );
+      }
+    }
+    // H53: field names, topic ids and challenge ids only.
     await audit(client, {
       actorId: userId,
       entityType: "helper_profile",
@@ -395,9 +426,9 @@ export async function updateMyHelperProfile(
       before: {
         published: current.published,
         topicIds: beforeTopics,
-        ownChallengesOnly: current.own_challenges_only,
+        challengeIds: beforeChallenges,
       },
-      after: { published: input.published, topicIds, ownChallengesOnly: ownOnly, changedFields },
+      after: { published: input.published, topicIds, challengeIds, changedFields },
     });
     return true;
   });
@@ -434,6 +465,16 @@ export async function replaceMyAvailability(
   const changed = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
     await assertEligible(client, userId);
+    // H62: nobody can state availability before the window clients prefill
+    // (the hacking time, else the event); no window, no restriction.
+    const window = await suggestedAvailability(client);
+    const first = intervals[0];
+    if (window && first && first.startsAt < new Date(window.startsAt)) {
+      throw new BadRequestError("Availability cannot start before the hacking time", {
+        code: ERROR_REASONS.AVAILABILITY_BEFORE_WINDOW,
+        windowStartsAt: window.startsAt,
+      });
+    }
     await ensureProfileRow(client, userId);
     const { rows } = await client.query<{ starts_at: Date; ends_at: Date }>(
       "SELECT starts_at, ends_at FROM helper_availability WHERE user_id = $1 ORDER BY starts_at, id",
@@ -562,7 +603,7 @@ export async function mayOpenHelper(
 /**
  * Whether `viewerId` may open `requesterId`'s photo and CV through a help
  * request: a notified recipient or the claimer of one of their requests
- * (a sponsor limited to their challenges only through those, or ones they
+ * (a helper limited to some challenges only through those, or ones they
  * claimed), or `helpdesk:manage`. The profile's own sharing switches are
  * applied by the caller.
  */
@@ -600,12 +641,10 @@ export async function getHelper(userId: number): Promise<HelperDetail> {
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("Helper not found");
-  const limit = await challengeLimit(pool, userId);
   return {
     ...toCard(rows[0]),
     profile: await helperProfileEntry(pool, userId),
-    ownChallengesOnly: limit !== null,
-    ownChallenges: limit !== null ? await namedOwnChallenges(pool, userId) : [],
+    challenges: await namedHelperChallenges(pool, userId),
   };
 }
 

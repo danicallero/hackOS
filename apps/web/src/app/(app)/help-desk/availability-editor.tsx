@@ -1,10 +1,6 @@
 "use client";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
-import {
-  MAX_AVAILABILITY_INTERVALS,
-  MAX_INTERVAL_MS,
-  workingHoursIntervals,
-} from "@hackos/shared/help-desk";
+import { MAX_AVAILABILITY_INTERVALS, MAX_INTERVAL_MS } from "@hackos/shared/help-desk";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useId, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -90,17 +86,6 @@ export function AvailabilityEditor({
           {t("helpDeskAddInterval")}
         </Button>
       </div>
-      {profile.availability.length === 0 && window ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={pending}
-          onClick={() => void replace(workingHoursIntervals(window, zone))}
-        >
-          {t("helpDeskWorkingHours")}
-        </Button>
-      ) : null}
       <ScheduleDays
         intervals={profile.availability}
         disabled={pending}
@@ -129,6 +114,7 @@ export function AvailabilityEditor({
           existing={profile.availability.filter((item) => item.startsAt !== editing?.startsAt)}
           suggested={editing ?? dayPrefill ?? profile.suggestedInterval}
           editing={!!editing}
+          notBefore={window?.startsAt}
           pending={pending}
           error={error}
           onClose={() => setAdding(false)}
@@ -165,11 +151,14 @@ function AddIntervalDialog({
   existing,
   suggested,
   editing,
+  notBefore,
   pending,
   error,
   onClose,
   onAdd,
 }: {
+  /** Nobody is available before the hacking time (H62). */
+  notBefore?: string;
   existing: AvailabilityInterval[];
   editing: boolean;
   suggested: AvailabilityInterval | null | undefined;
@@ -212,11 +201,13 @@ function AddIntervalDialog({
         : null
       : !ordered
         ? t("helpDeskIntervalOrder")
-        : problem === "overlap"
-          ? t("helpDeskIntervalOverlap")
-          : problem === "tooLong"
-            ? t("helpDeskIntervalTooLong")
-            : null;
+        : notBefore && Date.parse(startsAt) < Date.parse(notBefore)
+          ? t("helpDeskIntervalBeforeHacking")
+          : problem === "overlap"
+            ? t("helpDeskIntervalOverlap")
+            : problem === "tooLong"
+              ? t("helpDeskIntervalTooLong")
+              : null;
   const summary = interval && !problem ? formatDurationMinutes(durationMinutes(interval), t) : null;
   return (
     <Modal
@@ -274,7 +265,14 @@ function AddIntervalDialog({
           <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
             {t("cancel")}
           </Button>
-          <Button type="submit" loading={pending} disabled={Boolean(problem)}>
+          <Button
+            type="submit"
+            loading={pending}
+            disabled={
+              Boolean(problem) ||
+              Boolean(notBefore && startsAt && Date.parse(startsAt) < Date.parse(notBefore))
+            }
+          >
             {t(editing ? "saveChanges" : "helpDeskAddInterval")}
           </Button>
         </div>

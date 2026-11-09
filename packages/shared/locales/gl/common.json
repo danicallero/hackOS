@@ -112,5 +112,6 @@
   "apiError_topic_reserved": "Outro xa está dispoñible en todas as solicitudes.",
   "apiError_topic_unknown": "Un dos temas xa non existe. Recarga e téntao de novo.",
   "apiError_availability_overlap": "Os intervalos de dispoñibilidade non poden solaparse.",
-  "apiError_availability_invalid": "Cada intervalo debe rematar despois de comezar e durar como máximo 24 horas."
+  "apiError_availability_invalid": "Cada intervalo debe rematar despois de comezar e durar como máximo 24 horas.",
+  "apiError_availability_before_window": "A dispoñibilidade non pode comezar antes do tempo de hacking."
 }

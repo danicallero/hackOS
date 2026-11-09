@@ -17,6 +17,8 @@ export const ERROR_REASONS = {
   BADGE_REVOKED: "badge_revoked",
   /** 409: an offline scan expected one person but the badge belongs to another. */
   BADGE_OWNER_MISMATCH: "badge_owner_mismatch",
+  /** 400: an availability interval starts before the hacking time (H62). */
+  AVAILABILITY_BEFORE_WINDOW: "availability_before_window",
   /** 409: the scanned ticket was revoked. */
   TICKET_REVOKED: "ticket_revoked",
   /** 409: a team member is busy in another judging room. */

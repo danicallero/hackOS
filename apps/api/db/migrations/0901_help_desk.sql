@@ -36,7 +36,6 @@ CREATE TABLE help_topics (
 CREATE TABLE helper_profiles (
   user_id integer PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   published boolean NOT NULL DEFAULT false,
-  own_challenges_only boolean NOT NULL DEFAULT false,
   published_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -57,6 +56,15 @@ CREATE TABLE helper_topics (
   PRIMARY KEY (user_id, topic_id)
 );
 CREATE INDEX helper_topics_topic ON helper_topics (topic_id);
+
+-- DELTA(H65): the challenges a helper is alerted about (and sees); no rows
+-- means every request. Any eligible helper may choose them.
+CREATE TABLE helper_profile_challenges (
+  user_id integer NOT NULL REFERENCES helper_profiles(user_id) ON DELETE CASCADE,
+  challenge_id integer NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, challenge_id)
+);
+CREATE INDEX helper_profile_challenges_challenge ON helper_profile_challenges (challenge_id);
 
 CREATE TABLE helper_availability (
   id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -139,6 +147,7 @@ CREATE INDEX help_request_recipients_user ON help_request_recipients (user_id);
 
 COMMENT ON TABLE help_topics IS 'H61 shared knowledge catalogue for helper profiles and help requests; Other is help_requests.other, not a row.';
 COMMENT ON TABLE helper_profiles IS 'H61 explicit help desk publication. Identity and bio are projected from users/user_public_profiles, never copied.';
+COMMENT ON TABLE helper_profile_challenges IS 'DELTA(H65) challenges a helper is alerted about and sees; no rows means every request. Open to any eligible helper.';
 COMMENT ON TABLE helper_availability IS 'H62 stated availability intervals; venue presence stays in time_logs (H24).';
 COMMENT ON TABLE help_requests IS 'H64-H66 help requests (individual or team via repo_id) and their single claim.';
 COMMENT ON TABLE help_request_recipients IS 'H65 routed audience: one row per notified helper, so retries never deliver twice.';

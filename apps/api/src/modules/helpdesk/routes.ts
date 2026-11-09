@@ -180,7 +180,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my helper profile",
         description:
-          "The caller's help desk profile (H61, H62): `eligible` (holds `helpdesk:offer`, or has an accepted or confirmed application whose granted role carries it, so accepted mentors can prepare before event access), `published`, the shared public-profile `bio`, `topics`, stated `availability`, `suggestedInterval` (hacking window, else event window, else null: what clients prefill for a new interval), `ownChallengesOnly`, `canLimitToChallenges` (sponsor with at least one own challenge) with `ownChallenges`, and `preview`: exactly what others get from GET /api/helpdesk/helpers/:userId (the card plus `profile`, the public-profile entry honouring the person's switches), even while unpublished; only `profile.cvUrl` is the owner's own route. Answers any signed-in person; non-helpers get `eligible: false` with empty data.",
+          "The caller's help desk profile (H61, H62): `eligible` (holds `helpdesk:offer`, or has an accepted or confirmed application whose granted role carries it, so accepted mentors can prepare before event access), `published`, the shared public-profile `bio`, `topics`, stated `availability`, `suggestedInterval` (hacking window, else event window, else null: what clients prefill for a new interval), `challengeIds` and `challenges` (the challenges the helper limited their alerts and inbox to, named; empty means every request) with `challengeOptions` (every visible challenge they may pick), and `preview`: exactly what others get from GET /api/helpdesk/helpers/:userId (the card plus `profile`, the public-profile entry honouring the person's switches), even while unpublished; only `profile.cvUrl` is the owner's own route. Answers any signed-in person; non-helpers get `eligible: false` with empty data.",
       },
     },
     async (req) => getMyHelperProfile(req.userId as number),
@@ -194,7 +194,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: helperProfileBody,
         summary: "Update my helper profile",
         description:
-          "Publishes or hides the caller's help desk card and replaces its topics (up to 20); optional `ownChallengesOnly` limits a sponsor to requests about their own challenges (400 unless `canLimitToChallenges`); any other field, `bio` included, answers 400: the bio and everything else people see are edited only in the public profile (PUT /api/me/public-profile). Publishing is the consent that shows that public profile to help desk readers; turning it on (unpublished to published) also sets the public profile's `directoryVisible` in the same transaction, and unpublishing does not unshare. It needs at least one topic (409 `helper_profile_incomplete`). 403 `helper_not_eligible` for non-helpers. Audited with field names and topic ids only; repeating the stored values writes nothing (H61).",
+          "Publishes or hides the caller's help desk card and replaces its topics (up to 20); optional `challengeIds` (up to 50 visible challenges, else 400; omitted keeps the stored set, `[]` clears it) limits any helper to requests about those challenges; any other field, `bio` included, answers 400: the bio and everything else people see are edited only in the public profile (PUT /api/me/public-profile). Publishing is the consent that shows that public profile to help desk readers; turning it on (unpublished to published) also sets the public profile's `directoryVisible` in the same transaction, and unpublishing does not unshare. It needs at least one topic (409 `helper_profile_incomplete`). 403 `helper_not_eligible` for non-helpers. Audited with field names and topic ids only; repeating the stored values writes nothing (H61).",
       },
     },
     async (req) => {
@@ -212,7 +212,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: availabilityBody,
         summary: "Set my help availability",
         description:
-          "Replaces the caller's stated availability (H62) with up to 30 dated intervals, each ending after it starts and lasting at most 24 hours, without overlaps (400 `availability_invalid` / `availability_overlap`). Being scheduled never marks the person as present: venue presence comes only from door scans (H24). 403 `helper_not_eligible` for non-helpers. Audited with interval counts.",
+          "Replaces the caller's stated availability (H62) with up to 30 dated intervals, each ending after it starts and lasting at most 24 hours, without overlaps, none starting before `suggestedInterval.startsAt` (the hacking time, else the event start; no window, no limit) (400 `availability_invalid` / `availability_overlap` / `availability_before_window`). Being scheduled never marks the person as present: venue presence comes only from door scans (H24). 403 `helper_not_eligible` for non-helpers. Audited with interval counts.",
       },
     },
     async (req) => {
@@ -293,7 +293,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: createRequestBody,
         summary: "Request help",
         description:
-          "Opens a help request for the caller or, with `projectId`, for their project team (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a sponsor who limited themselves to their own challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per team, or per person for individual requests (409 `help_request_active`); 403 without event access or project membership. Audited.",
+          "Opens a help request for the caller or, with `projectId`, for their project team (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per team, or per person for individual requests (409 `help_request_active`); 403 without event access or project membership. Audited.",
       },
     },
     async (req, reply) => reply.code(201).send(await createRequest(req.userId as number, req.body)),
@@ -320,7 +320,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         params: idParams,
         summary: "Read a help request",
         description:
-          "One help request with its claim and the caller's allowed actions (`viewer`). Readable by the requester, their team, eligible helpers and coverage readers; everyone else gets 404 (H64-H66). `requesterProfile` is the requester's public profile in exactly the shape of GET /api/directory/:userId (photo and CV routes included), returned only to a helper the request was routed to, the helper who claimed it, or `helpdesk:manage`, and only while the requester shares their public profile (`directoryVisible`); otherwise null and the display name stays as in `requester`. Reading it creates no diary contact and exposes no diary or contact data. Sponsors limited to their own challenges do not see requests about other challenges at all (404).",
+          "One help request with its claim and the caller's allowed actions (`viewer`). Readable by the requester, their team, eligible helpers and coverage readers; everyone else gets 404 (H64-H66). `requesterProfile` is the requester's public profile in exactly the shape of GET /api/directory/:userId (photo and CV routes included), returned only to a helper the request was routed to, the helper who claimed it, or `helpdesk:manage`, and only while the requester shares their public profile (`directoryVisible`); otherwise null and the display name stays as in `requester`. Reading it creates no diary contact and exposes no diary or contact data. Helpers limited to some challenges do not see requests about other challenges at all (404).",
       },
     },
     async (req) =>
@@ -375,7 +375,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         querystring: inboxQuery,
         summary: "List help requests for helpers",
         description:
-          "`scope=open`: every open request (only those about their own challenges for a sponsor who limited themselves) in first-come, first-served order (`queuedAt`, then id; editing a request sends it to the end), with `viewer.notified` marking the ones routed to the caller; `scope=mine`: requests the caller claimed (claimed, then resolved). 403 `helper_not_eligible` for non-helpers (H65, H66).",
+          "`scope=open`: every open request (only those about their chosen challenges for a helper who limited themselves) in first-come, first-served order (`queuedAt`, then id; editing a request sends it to the end), with `viewer.notified` marking the ones routed to the caller; `scope=mine`: requests the caller claimed (claimed, then resolved). 403 `helper_not_eligible` for non-helpers (H65, H66).",
       },
     },
     async (req) => ({ requests: await listInbox(req.userId as number, req.query.scope) }),

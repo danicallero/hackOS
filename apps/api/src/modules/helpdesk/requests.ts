@@ -289,7 +289,7 @@ export async function getRequest(
   if (!onTeam && !access.canSeeAll && !access.canManage) {
     if (!(await isEligibleHelper(pool, viewerId)))
       throw new NotFoundError("Help request not found");
-    // H65: a sponsor limited to their challenges only reads those requests
+    // H65: a helper limited to some challenges only reads those requests
     // (and any they claimed).
     const limit = await challengeLimit(pool, viewerId);
     const own = view.claim?.helper?.userId === viewerId;
@@ -452,8 +452,8 @@ async function recipientIds(db: Queryable, requestId: number): Promise<number[]>
 /**
  * H65 audience at this moment, among present
  * listed helpers:
- *  1. a sponsor limited to their own challenges is a candidate only for
- *     requests on one of those challenges;
+ *  1. a helper who limited their alerts to some challenges is a candidate
+ *     only for requests on one of those challenges;
  *  2. sponsors of the request's challenge match regardless of topic;
  *  3. with `preferSponsor` and a sponsor of the chosen challenge, only those sponsors
  *     are notified (`sponsor`); otherwise the usual matched/fallback/none.
@@ -472,25 +472,23 @@ async function routeAudience(
   const { rows } = await db.query<{
     user_id: number;
     matches: boolean;
-    is_sponsor: boolean;
-    own_only: boolean;
+    challenge_ok: boolean;
   }>(
     `SELECT u.id AS user_id,
             EXISTS (SELECT 1 FROM helper_topics ht
                      WHERE ht.user_id = u.id AND ht.topic_id = ANY($2::int[])) AS matches,
-            EXISTS (SELECT 1 FROM sponsors s WHERE s.user_id = u.id) AS is_sponsor,
-            hp.own_challenges_only AS own_only
+            NOT EXISTS (SELECT 1 FROM helper_profile_challenges hc WHERE hc.user_id = u.id)
+              OR EXISTS (SELECT 1 FROM helper_profile_challenges hc
+                          WHERE hc.user_id = u.id AND hc.challenge_id = $3::int) AS challenge_ok
        FROM helper_profiles hp
        JOIN users u ON u.id = hp.user_id
       WHERE ${LISTED_HELPER_WHERE}
         AND ${presentSql("u.id")}
         AND NOT (u.id = ANY($1::int[]))
       ORDER BY u.id`,
-    [requesterSide, topicIds],
+    [requesterSide, topicIds, challengeId],
   );
-  const candidates = rows.filter(
-    (r) => !(r.own_only && r.is_sponsor) || challengeSponsors.has(Number(r.user_id)),
-  );
+  const candidates = rows.filter((r) => r.challenge_ok);
   const matched = candidates.filter((r) => r.matches || challengeSponsors.has(Number(r.user_id)));
   if (preferSponsor) {
     const sponsors = matched
@@ -822,7 +820,7 @@ export async function claimRequest(
       });
     }
     const req = await lockRequest(client, id);
-    // H65: a sponsor limited to their challenges cannot see, so cannot claim, others.
+    // H65: a helper limited to some challenges cannot see, so cannot claim, others.
     const limit = await challengeLimit(client, helperId);
     if (limit && !(req.challenge_id != null && limit.includes(Number(req.challenge_id)))) {
       throw new NotFoundError("Help request not found");

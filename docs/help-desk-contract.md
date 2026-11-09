@@ -76,8 +76,7 @@ type HelperCard = {
 // GET /api/helpdesk/helpers/:userId only (the list returns bare HelperCard).
 // Shared client type: HelperDetail<P> in @hackos/shared/help-desk.
 type HelperDetail = HelperCard & {
-  ownChallengesOnly: boolean;   // sponsor restricts their support to own challenges
-  ownChallenges: { id: number; name: string }[]; // restriction details, [] otherwise
+  challenges: { id: number; name: string }[]; // challenges the helper limited alerts to, [] = every request
   profile: DirectoryEntry;      // exactly GET /api/directory/:userId: displayName, photoUrl, headline,
                                 // bio, locationNote, socials, cvUrl, projects, project, challenges,
                                 // helpTopics; honours the person's own public-profile switches
@@ -168,9 +167,9 @@ type CoverageReport = {
 
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
-| `GET /api/me/helper-profile` | authenticated | — | `MyHelperProfile` (works before event access; `eligible:false` when not a helper). Also `ownChallengesOnly`, `canLimitToChallenges` (sponsor with ≥1 own challenge) and `ownChallenges: {id, name}[]`, and `suggestedInterval: {startsAt, endsAt} \| null` (event_config hacking window, else event window, else null; clients prefill new availability with it). |
-| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing), ownChallengesOnly?: boolean (400 unless `canLimitToChallenges`; omitted keeps the stored value) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs ≥1 topic (409 `helper_profile_incomplete`). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Turning publication on (unpublished → published) also sets the public profile's `directory_visible` (and `consented_at`) in the same transaction, audited as changed field `directoryVisible`; unpublishing never unshares. Help desk readers get `profile.cvUrl` when the helper shares their CV and download it from `GET /api/directory/:userId/cv`, as a badge scanner would. |
-| `PUT /api/me/helper-profile/availability` | eligible | `{ intervals: AvailabilityInterval[] }` (0-30, each ≤24 h, no overlaps; replaces the set) | `MyHelperProfile`; 400 `availability_overlap` / `availability_invalid` |
+| `GET /api/me/helper-profile` | authenticated | — | `MyHelperProfile` (works before event access; `eligible:false` when not a helper). Also `challengeIds: number[]` (empty = every request), `challenges: {id, name}[]` (selected) and `challengeOptions: {id, name}[]` (visible challenges to pick from), and `suggestedInterval: {startsAt, endsAt} \| null` (event_config hacking window, else event window, else null; clients prefill new availability with it). |
+| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing), challengeIds?: number[] (≤50 visible challenges, else 400; omitted keeps the stored set, [] clears it) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs ≥1 topic (409 `helper_profile_incomplete`). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Turning publication on (unpublished → published) also sets the public profile's `directory_visible` (and `consented_at`) in the same transaction, audited as changed field `directoryVisible`; unpublishing never unshares. Help desk readers get `profile.cvUrl` when the helper shares their CV and download it from `GET /api/directory/:userId/cv`, as a badge scanner would. |
+| `PUT /api/me/helper-profile/availability` | eligible | `{ intervals: AvailabilityInterval[] }` (0-30, each ≤24 h, no overlaps, none starting before `suggestedInterval.startsAt`; replaces the set) | `MyHelperProfile`; 400 `availability_overlap` / `availability_invalid` / `availability_before_window` |
 
 ### Browse helpers (H63)
 

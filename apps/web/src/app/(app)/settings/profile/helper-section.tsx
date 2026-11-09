@@ -5,6 +5,7 @@ import { useEffect, useId, useState } from "react";
 import { FormActions } from "@/components/common/form-actions";
 import { SwitchRow } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -32,7 +33,7 @@ export function HelperSection({ onDirtyChange }: { onDirtyChange?: (dirty: boole
   return (
     <div className="space-y-8">
       <HelperForm
-        key={`${profile.published}-${profile.ownChallengesOnly}-${profile.topics.map((topic) => topic.id).join(",")}`}
+        key={`${profile.published}-${profile.challengeIds.join(",")}-${profile.topics.map((topic) => topic.id).join(",")}`}
         profile={profile}
         onSaved={own.mutate}
         onDirtyChange={onDirtyChange}
@@ -55,13 +56,13 @@ function HelperForm({
   const id = useId();
   const [published, setPublished] = useState(profile.published);
   const [topics, setTopics] = useState(profile.topics);
-  const [ownOnly, setOwnOnly] = useState(profile.ownChallengesOnly ?? false);
+  const [challengeIds, setChallengeIds] = useState(profile.challengeIds);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [missingTopics, setMissingTopics] = useState(false);
   const dirty =
     published !== profile.published ||
-    ownOnly !== (profile.ownChallengesOnly ?? false) ||
+    challengeIds.join(",") !== profile.challengeIds.join(",") ||
     topics.map((x) => x.id).join(",") !== profile.topics.map((x) => x.id).join(",");
   useUnsavedChangesGuard(dirty);
   useEffect(() => {
@@ -91,7 +92,7 @@ function HelperForm({
             await api.put<MyHelperProfile>("/api/me/helper-profile", {
               published,
               topicIds: topics.map((topic) => topic.id),
-              ...(profile.canLimitToChallenges ? { ownChallengesOnly: ownOnly } : {}),
+              challengeIds,
             }),
           );
           toast.success(t("helpDeskSaved"), { compactTitle: t("helpDeskProfile") });
@@ -105,13 +106,31 @@ function HelperForm({
       <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
         <SwitchRow checked={published} onChange={setPublished} label={t("helpDeskPublish")} />
         <h3 className="type-label pt-2">{t("helpDeskMentorProfile")}</h3>
-        {profile.canLimitToChallenges ? (
-          <SwitchRow
-            checked={ownOnly}
-            onChange={setOwnOnly}
-            label={t("helpDeskOwnChallengesOnly")}
-            hint={profile.ownChallenges?.map((challenge) => challenge.name).join(" · ")}
-          />
+        {profile.challengeOptions.length > 0 ? (
+          <fieldset className="space-y-2">
+            <legend className="type-label">{t("helpDeskChallengeAlerts")}</legend>
+            <p className="text-muted-foreground text-sm text-pretty">
+              {t("helpDeskChallengeAlertsNote")}
+            </p>
+            <ul className="space-y-1">
+              {profile.challengeOptions.map((option) => (
+                <li key={option.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`${id}-challenge-${option.id}`}
+                    checked={challengeIds.includes(option.id)}
+                    onCheckedChange={(checked) =>
+                      setChallengeIds(
+                        checked
+                          ? [...challengeIds, option.id]
+                          : challengeIds.filter((value) => value !== option.id),
+                      )
+                    }
+                  />
+                  <Label htmlFor={`${id}-challenge-${option.id}`}>{option.name}</Label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
         ) : null}
         <div className="space-y-2">
           <Label htmlFor={id}>{t("helpDeskKnowledge")}</Label>

@@ -16,6 +16,7 @@ import { PressableFeedback } from "@/components/pressable-feedback";
 import { ProfileCard, type ProfileCardData } from "@/components/profile-card";
 import { QuickAction, VisibilityToggle } from "@/components/profile-parts";
 import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
+import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { alert } from "@/lib/alert";
 import type { DirectoryEntry } from "@/lib/directory";
@@ -467,14 +468,23 @@ export default function NetworkingProfileScreen({
             <View
               style={{
                 gap: 24,
-                opacity: (mode === "helpDesk" ? helperProfile?.published : shared) ? 1 : 0.5,
+                opacity: mode === "helpDesk" || shared ? 1 : 0.5,
               }}
             >
               {renderCard(profile, editing ? draft : stored)}
             </View>
             {/* H61: helpers extend this same profile; their help desk settings follow it. */}
             {mode === "helpDesk" ? (
-              <HelperProfileSection onProfileChange={setHelperProfile} />
+              <>
+                <Section>
+                  <NavRow
+                    icon="person.crop.circle"
+                    title={t("networkingEdit")}
+                    onPress={() => router.push("/networking-profile")}
+                  />
+                </Section>
+                <HelperProfileSection onProfileChange={setHelperProfile} />
+              </>
             ) : (
               <HelperSettingsLink />
             )}
@@ -513,14 +523,16 @@ export default function NetworkingProfileScreen({
               onPress={() => (editing ? stopEditing() : router.back())}
             />
           </Stack.Toolbar>
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button
-              icon={editing ? "checkmark" : "pencil"}
-              accessibilityLabel={editing ? t("save") : t("networkingEdit")}
-              disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
-              onPress={() => (editing ? void save() : startEditing())}
-            />
-          </Stack.Toolbar>
+          {mode === "helpDesk" ? null : (
+            <Stack.Toolbar placement="right">
+              <Stack.Toolbar.Button
+                icon={editing ? "checkmark" : "pencil"}
+                accessibilityLabel={editing ? t("save") : t("networkingEdit")}
+                disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
+                onPress={() => (editing ? void save() : startEditing())}
+              />
+            </Stack.Toolbar>
+          )}
         </>
       ) : null}
       {profile?.cv && cvOpen ? (
@@ -542,7 +554,7 @@ export default function NetworkingProfileScreen({
             disabled={saving}
             onPress={() => (editing ? stopEditing() : router.back())}
           />
-          {editing ? (
+          {mode === "helpDesk" ? null : editing ? (
             <FloatingGlassButton
               top={16 + topInset}
               side="right"

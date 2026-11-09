@@ -39,7 +39,7 @@ granting, the seeded Mentor role, else `staff`.
 `published_at`). Name, photo, headline and bio are projected from `users` and
 `user_public_profiles`, never copied. The helper profile is the public profile:
 the bio and every other field are edited only in the public profile editor, and
-`PUT /api/me/helper-profile` takes `published`, `topicIds` and, for sponsors with challenges, `ownChallengesOnly`. Turning publication on also sets the public profile's `directory_visible` in the same transaction (audited as `directoryVisible`); unpublishing never unshares. `GET` adds `suggestedInterval` (hacking window, else event window) for prefilling availability. The helper
+`PUT /api/me/helper-profile` takes `published`, `topicIds` and, optionally, `challengeIds` (any eligible helper: the visible challenges they want alerts and inbox limited to, stored in `helper_profile_challenges`; omitted keeps the set, `[]` clears it, unknown or hidden ids are 400). Turning publication on also sets the public profile's `directory_visible` in the same transaction (audited as `directoryVisible`); unpublishing never unshares. `GET` adds `suggestedInterval` (hacking window, else event window) for prefilling availability, plus `challengeIds`, `challenges` and `challengeOptions`. `PUT /api/me/helper-profile/availability` rejects (400 `availability_before_window`) an interval starting before `suggestedInterval.startsAt`; with no window there is no limit. The helper
 detail (`GET /api/helpdesk/helpers/:userId`) returns the directory's own entry
 as `profile`, honouring the person's per-field switches; publication is the
 consent for help desk readers, who also get the CV (while `share_cv` is on)
@@ -92,10 +92,9 @@ locked check), so double submits cannot open two.
    (`routing: matched`).
 3. With Other, or when no audience member matches, the whole audience is
    notified (`fallback`).
-   A sponsor who limited themselves to their own challenges
-   (`own_challenges_only`) is a candidate only for requests about one of
-   those challenges (a sponsor's challenges are those authored by any sponsor
-   of the same enterprise, `sponsorChallengeIds` in `queue/reviews.ts`).
+   A helper who chose challenges (`helper_profile_challenges`, any eligible
+   helper; none means every request) is a candidate only for requests about one
+   of those challenges, and their inbox and claims follow the same set.
    Sponsors of the request's `challenge` match regardless of topic, in
    addition to topic matches.
 3b. `preferSponsor` requires a selected challenge. With at least one available

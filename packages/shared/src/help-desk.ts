@@ -2,8 +2,6 @@
  * Help desk client model (H61-H67), shared by web and mobile so both read the
  * same API shapes and apply the same pre-submit checks the API enforces.
  */
-import { instantToWallClock, wallClockToInstant } from "./event-time";
-
 export interface HelpTopic {
   id: number;
   name: string;
@@ -37,9 +35,12 @@ export interface MyHelperProfile<P = unknown> {
   topics: HelpTopic[];
   availability: AvailabilityInterval[];
   suggestedInterval: AvailabilityInterval | null;
-  ownChallengesOnly: boolean;
-  canLimitToChallenges: boolean;
-  ownChallenges: { id: number; name: string }[];
+  /** Challenges whose requests this helper is alerted to; empty means every request. */
+  challengeIds: number[];
+  /** The selected challenges, named (same order as `challengeIds`). */
+  challenges: { id: number; name: string }[];
+  /** Every challenge of the event the helper may choose from. */
+  challengeOptions: { id: number; name: string }[];
   preview: HelperDetail<P>;
 }
 export interface HelpChallengeOption {
@@ -114,8 +115,8 @@ export type HelpRequestDetail<P> = HelpRequest & { requesterProfile: P | null };
 /** A published helper as the detail route returns it: the card plus the person's public profile `P`. */
 export type HelperDetail<P> = HelperCard & {
   profile: P;
-  ownChallengesOnly: boolean;
-  ownChallenges: { id: number; name: string }[];
+  /** Challenges this helper limited their alerts to; empty means every request. */
+  challenges: { id: number; name: string }[];
 };
 
 export const MAX_AVAILABILITY_INTERVALS = 30;
@@ -208,45 +209,4 @@ export function coverageDays(
     }
   }
   return days;
-}
-
-/** H62: the blocks "Typical working hours" proposes each day, in event wall-clock time. */
-export const WORKING_HOURS = [
-  { from: "10:00", to: "14:00" },
-  { from: "16:00", to: "20:00" },
-] as const;
-
-/**
- * H62: reasonable working hours on every event day of `window` (the hacking
- * window, else the event window), clipped to it. A starting suggestion only:
- * the helper edits the result, and it is a plan, not presence (H24, H65).
- */
-export function workingHoursIntervals(
-  window: AvailabilityInterval,
-  timeZone: string,
-): AvailabilityInterval[] {
-  const first = instantToWallClock(window.startsAt, timeZone).slice(0, 10);
-  const last = instantToWallClock(window.endsAt, timeZone).slice(0, 10);
-  const from = Date.parse(window.startsAt);
-  const to = Date.parse(window.endsAt);
-  const result: AvailabilityInterval[] = [];
-  for (let day = first; day && day <= last && result.length < MAX_AVAILABILITY_INTERVALS; ) {
-    for (const block of WORKING_HOURS) {
-      const start = wallClockToInstant(`${day}T${block.from}`, timeZone);
-      const end = wallClockToInstant(`${day}T${block.to}`, timeZone);
-      if (!start || !end) continue;
-      const clippedStart = Math.max(Date.parse(start), from);
-      const clippedEnd = Math.min(Date.parse(end), to);
-      if (clippedEnd - clippedStart >= 30 * 60_000 && result.length < MAX_AVAILABILITY_INTERVALS) {
-        result.push({
-          startsAt: new Date(clippedStart).toISOString(),
-          endsAt: new Date(clippedEnd).toISOString(),
-        });
-      }
-    }
-    const next = new Date(`${day}T00:00:00Z`);
-    next.setUTCDate(next.getUTCDate() + 1);
-    day = next.toISOString().slice(0, 10);
-  }
-  return result;
 }

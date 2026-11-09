@@ -32,9 +32,10 @@ export default function HelperPage() {
       : null;
   const suffix =
     selected && ["mine", "open", "claims"].includes(selected) ? `?tab=${selected}` : "";
-  const resource = useHelpdesk<
-    HelperDetail<DirectoryEntry> & { ownChallenges?: { id: number; name: string }[] }
-  >(["helper", userId], `/api/helpdesk/helpers/${encodeURIComponent(userId)}`);
+  const resource = useHelpdesk<HelperDetail<DirectoryEntry>>(
+    ["helper", userId],
+    `/api/helpdesk/helpers/${encodeURIComponent(userId)}`,
+  );
   const helper = resource.data;
   const back = (
     <ProfileBackLink
@@ -70,9 +71,9 @@ export default function HelperPage() {
       }
     >
       {resource.stale ? <StaleDataNotice onRetry={resource.refetch} /> : null}
-      {helper.ownChallenges?.length ? (
+      {helper.challenges.length ? (
         <SectionCard variant="plain" title={t("challenges")}>
-          <p className="text-sm">{helper.ownChallenges.map((item) => item.name).join(", ")}</p>
+          <p className="text-sm">{helper.challenges.map((item) => item.name).join(", ")}</p>
         </SectionCard>
       ) : null}
       <SectionCard variant="plain" title={t("helpDeskSchedule")}>
