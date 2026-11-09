@@ -461,6 +461,7 @@ function useProfileCameraTarget(
         cameraCutoutFrame: cameraCutoutFrame ?? islandFrame,
         displayCutoutRects,
         height: screenHeight,
+        deviceName: Device.deviceName,
         modelId: Device.modelId,
         platform: Platform.OS,
         safeAreaTop,
