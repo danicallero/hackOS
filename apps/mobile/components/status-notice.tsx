@@ -1,6 +1,6 @@
 import { useIsFocused } from "expo-router";
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { Pressable, StyleSheet, useColorScheme, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { AppText as Text } from "@/components/app-text";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
@@ -83,6 +83,8 @@ function StatusNotice({
   /** Resolve `false` (or reject) when the attempt failed; anything else counts as done. */
   onAction?: Action;
 }) {
+  // The theme tokens are module-level: subscribe so a live light/dark switch repaints the notice.
+  useColorScheme();
   const key = `${tone}:${text}`;
   const state = useSyncExternalStore(
     subscribeAttempts,
@@ -105,10 +107,10 @@ function StatusNotice({
         borderRadius: radius.sheet,
         flexDirection: "row",
         gap: 8,
-        marginBottom: 14,
-        minHeight: 40,
+        marginBottom: 4,
+        minHeight: 36,
         paddingHorizontal: 14,
-        paddingVertical: 10,
+        paddingVertical: 8,
       }}
     >
       <SymbolView name={icon} size={14} tintColor={color} accessible={false} />
@@ -156,17 +158,29 @@ const styles = StyleSheet.create({
   },
 });
 
-// One offline notice per visible screen, however many requests on it failed.
-const owners: number[] = [];
-const listeners = new Set<() => void>();
+// One notice per visible screen, however many requests failed. Every mounted notice
+// registers here; a single one renders, and when the device is offline it speaks for
+// the failed loads too (no connection is their cause), its action retrying them all.
+interface Slot {
+  id: number;
+  tone: Tone;
+  icon: SymbolViewProps["name"];
+  text: string;
+  actionLabel: string;
+  action: { current?: Action };
+}
+const slots: Slot[] = [];
+const slotListeners = new Set<() => void>();
+let slotVersion = 0;
 let nextId = 0;
-const emit = () => {
-  for (const listener of listeners) listener();
+const emitSlots = () => {
+  slotVersion += 1;
+  for (const listener of slotListeners) listener();
 };
-const subscribe = (listener: () => void) => {
-  listeners.add(listener);
+const subscribeSlots = (listener: () => void) => {
+  slotListeners.add(listener);
   return () => {
-    listeners.delete(listener);
+    slotListeners.delete(listener);
   };
 };
 
@@ -180,23 +194,57 @@ function useScreenFocused(): boolean {
   }
 }
 
-function useIsOfflineNoticeOwner(): boolean {
+/** Registers a notice and returns what (if anything) this instance should render. */
+function useNoticeSlot(slot: Omit<Slot, "id" | "action"> & { action?: Action }): {
+  tone: Tone;
+  icon: SymbolViewProps["name"];
+  text: string;
+  actionLabel: string;
+  action?: Action;
+} | null {
   const id = useRef(++nextId).current;
   const focused = useScreenFocused();
-  useEffect(() => {
+  const action = useRef<Action | undefined>(slot.action);
+  action.current = slot.action;
+  const { tone, icon, text, actionLabel } = slot;
+  // Layout effect: registered and re-rendered before paint, so returning to a screen never
+  // shows a frame without its notice (that frame was the jump).
+  useLayoutEffect(() => {
     if (!focused) return;
-    owners.push(id);
-    emit();
+    const entry: Slot = { id, tone, icon, text, actionLabel, action };
+    slots.push(entry);
+    emitSlots();
     return () => {
-      owners.splice(owners.indexOf(id), 1);
-      emit();
+      slots.splice(slots.indexOf(entry), 1);
+      emitSlots();
     };
-  }, [focused, id]);
-  return useSyncExternalStore(
-    subscribe,
-    () => owners[0] === id,
-    () => true,
+  }, [focused, id, tone, icon, text, actionLabel]);
+  useSyncExternalStore(
+    subscribeSlots,
+    () => slotVersion,
+    () => 0,
   );
+  const owner = slots.find((entry) => entry.tone === "offline") ?? slots[0];
+  if (!owner) return null;
+  // The representative's own element renders it; the rest stay silent.
+  const representative = slots.find((entry) => entry.tone === owner.tone) ?? owner;
+  if (representative.id !== id) return null;
+  const actions = slots.map((entry) => entry.action);
+  const anyAction = actions.some((ref) => ref.current);
+  return {
+    tone: representative.tone,
+    icon: representative.icon,
+    text: representative.text,
+    actionLabel: representative.actionLabel,
+    action: anyAction
+      ? async () => {
+          const results = await Promise.all(
+            actions.map((ref) => Promise.resolve().then(() => ref.current?.())),
+          );
+          return results.every((result) => result !== false);
+        }
+      : undefined,
+  };
 }
 
 /** Offline: scanning and cached data keep working. Not an error, so never red. */
@@ -205,42 +253,30 @@ export function OfflineNotice({
   onReconnect,
 }: {
   updatedAt?: string | null;
-  onReconnect?: () => Promise<boolean | undefined> | boolean | undefined | void;
+  onReconnect?: Action;
 }) {
   const { language, t } = useLocale();
-  const owner = useIsOfflineNoticeOwner();
-  if (!owner) return null;
-  return (
-    <StatusNotice
-      tone="offline"
-      icon="wifi.slash"
-      text={
-        updatedAt
-          ? t("offlineModeUpdated", { updatedAt: formatLastUpdate(updatedAt, language, t) })
-          : t("offlineMode")
-      }
-      actionLabel={t("offlineReconnect")}
-      onAction={onReconnect}
-    />
-  );
+  const view = useNoticeSlot({
+    tone: "offline",
+    icon: "wifi.slash",
+    text: updatedAt
+      ? t("offlineModeUpdated", { updatedAt: formatLastUpdate(updatedAt, language, t) })
+      : t("offlineMode"),
+    actionLabel: t("offlineReconnect"),
+    action: onReconnect,
+  });
+  return view ? <StatusNotice {...view} onAction={view.action} /> : null;
 }
 
 /** A real failure (the server answered, or the request could not be served). */
-export function ErrorNotice({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry?: () => Promise<boolean | undefined> | boolean | undefined | void;
-}) {
+export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: Action }) {
   const { t } = useLocale();
-  return (
-    <StatusNotice
-      tone="error"
-      icon="exclamationmark.circle.fill"
-      text={message}
-      actionLabel={t("retry")}
-      onAction={onRetry}
-    />
-  );
+  const view = useNoticeSlot({
+    tone: "error",
+    icon: "exclamationmark.circle.fill",
+    text: message,
+    actionLabel: t("retry"),
+    action: onRetry,
+  });
+  return view ? <StatusNotice {...view} onAction={view.action} /> : null;
 }
