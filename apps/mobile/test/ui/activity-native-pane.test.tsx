@@ -12,6 +12,9 @@ let mockPane: {
 } | null = null;
 let mockStatusProps: { open?: boolean; triggerless?: boolean } = {};
 let mockSyncing = false;
+const mockBack = jest.fn();
+const mockReplace = jest.fn();
+const mockScreenOptions = jest.fn();
 
 jest.mock("@/components/scanner-action-button", () =>
   jest.requireActual("@/components/scanner-action-button.tsx"),
@@ -21,11 +24,43 @@ jest.mock("@/lib/server-events", () => ({
   subscribeToServerEvent: () => () => {},
 }));
 jest.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => ({ id: "7" }),
   useIsFocused: () => true,
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({
+    back: mockBack,
+    push: jest.fn(),
+    canGoBack: () => false,
+    replace: mockReplace,
+  }),
 }));
-jest.mock("expo-router/stack", () => ({ Stack: { Screen: () => null } }));
+jest.mock("expo-router/stack", () => {
+  const React = require("react");
+  const { Pressable, View } = require("react-native");
+  return {
+    Stack: {
+      Screen: ({ options }: { options: unknown }) => {
+        mockScreenOptions(options);
+        return null;
+      },
+      Toolbar: Object.assign(View, {
+        View,
+        Spacer: () => null,
+        Button: ({
+          accessibilityLabel,
+          onPress,
+        }: {
+          accessibilityLabel: string;
+          onPress: () => void;
+        }) =>
+          React.createElement(Pressable, {
+            accessibilityRole: "button",
+            accessibilityLabel,
+            onPress,
+          }),
+      }),
+    },
+  };
+});
 jest.mock("@/components/glass-view", () => ({
   GlassView: ({ children }: { children: unknown }) => children,
   isRealLiquidGlassAvailable: () => true,
@@ -39,7 +74,10 @@ jest.mock("@/components/scanner-code-entry", () => ({ ScannerCodeEntry: () => nu
 jest.mock("@/components/nfc-reader", () => ({ NfcReader: () => null }));
 jest.mock("@/lib/use-nfc-supported", () => ({ useNfcSupportStatus: () => "unsupported" }));
 jest.mock("@/components/symbol", () => ({ SymbolView: () => null }));
-jest.mock("@/lib/api", () => ({ apiFetch: jest.fn().mockResolvedValue({ items: [] }) }));
+jest.mock("@/lib/api", () => ({
+  apiFetch: jest.fn().mockResolvedValue({ items: [], byRole: [] }),
+  ApiError: class ApiError extends Error {},
+}));
 jest.mock("@/lib/live-activities/sync", () => ({ bumpActivityScanned: jest.fn() }));
 jest.mock("@/lib/haptics", () => ({ haptic: jest.fn() }));
 jest.mock("@/lib/i18n", () => ({
@@ -197,4 +235,19 @@ describe("embedded activity scanner as a native stack (H22, H26, H55)", () => {
     expect(mockPane?.pushed.open).toBe(false);
     await waitFor(() => expect(enqueueLocalScan).toHaveBeenCalled());
   });
+});
+
+it("keeps the standalone native title and gives a cold deep link a working Activities fallback", async () => {
+  await renderMobile(<ActivityScannerScreen />);
+  expect(mockScreenOptions).toHaveBeenCalledWith(
+    expect.objectContaining({
+      headerTransparent: true,
+      headerLargeTitle: false,
+      headerBackVisible: false,
+    }),
+  );
+  expect(await screen.findByRole("button", { name: "back" })).toBeTruthy();
+  await fireEvent.press(screen.getByRole("button", { name: "back" }));
+  expect(mockReplace).toHaveBeenCalledWith("/(tabs)/activities");
+  expect(mockBack).not.toHaveBeenCalled();
 });

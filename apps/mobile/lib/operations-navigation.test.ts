@@ -15,6 +15,14 @@ describe("operations navigation", () => {
     expect(operationsSectionFromPathname("/wallet")).toBe("external");
   });
 
+  it("keeps the overflow icon when a destination is reached through its direct tab route", () => {
+    expect(operationsSectionFromPathname("/queue")).toBe("queue");
+    expect(operationsSectionFromPathname("/(tabs)/queue/invites")).toBe("queue");
+    expect(operationsSectionFromPathname("/diary")).toBe("diary");
+    expect(operationsSectionFromPathname("/operations")).toBe("operations");
+    expect(operationsSectionFromPathname("/queueish")).toBe("external");
+  });
+
   it("keeps every Account subpage in the account section", () => {
     const subpages = [
       "/(tabs)/others",

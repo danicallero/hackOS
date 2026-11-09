@@ -19,7 +19,7 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (object(value))
     return `{${Object.keys(value)
-      .sort()
+      .sort((left, right) => left.localeCompare(right))
       .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
       .join(",")}}`;
   return JSON.stringify(value);
@@ -46,7 +46,7 @@ export function changedAuditFields(before: unknown, after: unknown): string[] {
         !metadata.has(key) &&
         (declared.includes(key) || canonical(left[key]) !== canonical(right[key])),
     )
-    .sort();
+    .sort((left, right) => left.localeCompare(right));
 }
 
 export function privateAuditSnapshot(value: unknown, key = ""): unknown {

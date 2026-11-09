@@ -1,18 +1,13 @@
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import Stack from "expo-router/stack";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { Platform, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { View } from "react-native";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
-import { CircleButton } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { SymbolView } from "@/components/symbol";
+import { CheckRow, SearchablePickerSheet } from "@/components/searchable-picker";
 import { apiFetch } from "@/lib/api";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { fetchChallengeCatalogue, type NativeProject, projectMutation } from "@/lib/projects";
-import { colors, radius, type } from "@/theme";
-import { useParticipantLayout } from "@/theme/layout-participant";
 
 type Chosen = NativeProject["challenges"];
 
@@ -24,16 +19,15 @@ type Chosen = NativeProject["challenges"];
 export function ProjectChallengesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { t, language } = useLocale();
-  const readable = useParticipantLayout("form");
-  const navigation = useNavigation();
-  const router = useRouter();
-  const glass = isRealLiquidGlassAvailable();
   const [all, setAll] = useState<{ id: number; title: string }[] | null>(null);
   const [chosen, setChosen] = useState<Chosen>([]);
   const [editable, setEditable] = useState(false);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const [challenges, project] = await Promise.all([
         fetchChallengeCatalogue(language),
@@ -44,44 +38,17 @@ export function ProjectChallengesScreen() {
       setEditable(project.canEdit === true);
       setError(null);
     } catch (cause) {
-      setAll((current) => current ?? []);
       setError(cause as Error);
+    } finally {
+      setLoading(false);
     }
   }, [id, language]);
   useEffect(() => {
     void load();
   }, [load]);
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: t("projectChallenges"),
-      headerLargeTitle: false,
-      headerShadowVisible: false,
-      // iOS 26 draws the native toolbar button below as a glass circle.
-      headerLeft: undefined,
-      headerRight: glass
-        ? undefined
-        : () => (
-            <CircleButton
-              icon="checkmark"
-              label={t("close")}
-              prominent
-              onPress={() => router.back()}
-            />
-          ),
-      ...(Platform.OS === "ios"
-        ? {
-            headerSearchBarOptions: {
-              placeholder: t("projectSearchChallenges"),
-              autoCapitalize: "none",
-              hideWhenScrolling: false,
-              onChangeText: (event: { nativeEvent: { text: string } }) =>
-                setQuery(event.nativeEvent.text),
-            },
-          }
-        : {}),
-    });
-  });
   async function toggle(challenge: { id: number; title: string }, selected: boolean) {
+    if (saving || !editable) return;
+    setSaving(true);
     const before = chosen;
     setError(null);
     setChosen(
@@ -103,6 +70,8 @@ export function ProjectChallengesScreen() {
       // The server list is the truth (phase closed, already chosen); keep the reason visible.
       await load();
       setError(cause as Error);
+    } finally {
+      setSaving(false);
     }
   }
   const needle = query.trim().toLowerCase();
@@ -119,114 +88,54 @@ export function ProjectChallengesScreen() {
     [all, chosen, matches],
   );
   const row = (title: string, selected: boolean, locked: boolean, onPress?: () => void) => (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityState={{ selected, disabled: locked || !editable }}
-      disabled={locked || !editable}
+    <CheckRow
+      label={title}
+      selected={selected}
+      locked={locked}
+      disabled={!editable || saving}
       onPress={onPress}
-      style={{
-        alignItems: "center",
-        flexDirection: "row",
-        gap: 12,
-        minHeight: 50,
-        opacity: !editable && !selected ? 0.5 : 1,
-        paddingHorizontal: 16,
-        paddingVertical: 10,
-      }}
-    >
-      <Text style={{ color: colors.label, flex: 1, fontSize: type.body.fontSize }}>{title}</Text>
-      {locked ? (
-        <SymbolView
-          name="lock.fill"
-          tintColor={colors.tertiaryLabel}
-          size={15}
-          accessible={false}
-        />
-      ) : selected ? (
-        <SymbolView
-          name="checkmark"
-          tintColor={colors.accent}
-          size={17}
-          weight="semibold"
-          accessible={false}
-        />
-      ) : null}
-    </Pressable>
+    />
   );
   return (
-    <>
-      {glass ? (
-        <Stack.Toolbar placement="right">
-          <Stack.Toolbar.Button
-            separateBackground
-            variant="prominent"
-            icon="checkmark"
-            accessibilityLabel={t("close")}
-            onPress={() => router.back()}
-          />
-        </Stack.Toolbar>
+    <SearchablePickerSheet
+      title={t("projectChallenges")}
+      searchPlaceholder={t("projectSearchChallenges")}
+      query={query}
+      onQuery={setQuery}
+    >
+      {saving ? <RequestFeedback loading compact /> : null}
+      {error ? (
+        <RequestFeedback error={error} onRetry={() => void load()} retrying={loading || saving} />
       ) : null}
-      <ScrollView
-        alwaysBounceVertical
-        contentInsetAdjustmentBehavior="automatic"
-        keyboardDismissMode="on-drag"
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          gap: 24,
-          paddingVertical: 16,
-          ...readable.content,
-          paddingBottom: 32,
-        }}
-      >
-        {Platform.OS !== "ios" ? (
-          <TextInput
-            accessibilityLabel={t("projectSearchChallenges")}
-            value={query}
-            onChangeText={setQuery}
-            placeholder={t("projectSearchChallenges")}
-            placeholderTextColor={colors.tertiaryLabel}
-            style={{
-              backgroundColor: colors.surface,
-              borderRadius: radius.container,
-              color: colors.label,
-              fontSize: type.body.fontSize,
-              minHeight: 44,
-              paddingHorizontal: 16,
-            }}
-          />
-        ) : null}
-        {error ? <RequestFeedback error={error} /> : null}
-        {all === null ? <RequestFeedback loading /> : null}
-        {required.length > 0 ? (
-          <Section title={t("projectRequired")}>
-            {required.map((item, index) => (
-              <View key={item.id}>
-                {index > 0 ? <Separator /> : null}
-                {row(item.title, true, true)}
-              </View>
-            ))}
-          </Section>
-        ) : null}
-        {rest.length > 0 ? (
-          <Section title={required.length > 0 ? t("projectChallenges") : undefined}>
-            {rest.map((item, index) => (
-              <View key={item.id}>
-                {index > 0 ? <Separator /> : null}
-                {row(
-                  item.title,
-                  chosenIds.has(item.id),
-                  false,
-                  () => void toggle(item, chosenIds.has(item.id)),
-                )}
-              </View>
-            ))}
-          </Section>
-        ) : null}
-        {all && required.length === 0 && rest.length === 0 && !error ? (
-          <EmptyState icon="magnifyingglass" title={t("projectNoGallery")} />
-        ) : null}
-      </ScrollView>
-    </>
+      {all === null && loading && !error ? <RequestFeedback loading /> : null}
+      {required.length > 0 ? (
+        <Section title={t("projectRequired")}>
+          {required.map((item, index) => (
+            <View key={item.id}>
+              {index > 0 ? <Separator /> : null}
+              {row(item.title, true, true)}
+            </View>
+          ))}
+        </Section>
+      ) : null}
+      {rest.length > 0 ? (
+        <Section title={required.length > 0 ? t("projectChallenges") : undefined}>
+          {rest.map((item, index) => (
+            <View key={item.id}>
+              {index > 0 ? <Separator /> : null}
+              {row(
+                item.title,
+                chosenIds.has(item.id),
+                false,
+                () => void toggle(item, chosenIds.has(item.id)),
+              )}
+            </View>
+          ))}
+        </Section>
+      ) : null}
+      {all && required.length === 0 && rest.length === 0 && !error ? (
+        <EmptyState icon="magnifyingglass" title={t("projectNoGallery")} />
+      ) : null}
+    </SearchablePickerSheet>
   );
 }

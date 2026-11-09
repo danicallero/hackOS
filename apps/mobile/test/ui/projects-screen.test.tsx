@@ -112,6 +112,7 @@ import {
 } from "@/components/project-detail-screen";
 import { clearGallerySnapshots, ProjectGalleryScreen } from "@/components/project-gallery-screen";
 import { ProjectInvitesScreen } from "@/components/project-invites-screen";
+import { resetStatusNoticeAttempts } from "@/components/status-notice";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { NativeProject } from "@/lib/projects";
 import { renderMobile } from "./render";
@@ -130,6 +131,7 @@ const project: NativeProject = {
   presentations: [],
 };
 beforeEach(() => {
+  resetStatusNoticeAttempts();
   clearGallerySnapshots();
   mockParams = { id: "5" };
   mockApi.mockReset();
@@ -578,6 +580,21 @@ it("shows gallery winners only from the projection and no retry when denied (H18
   expect(screen.getAllByText(/projectWinner/)).toHaveLength(1);
 });
 
+it("gives the gallery the common large title with a soft scroll edge, not a hard cut (H18)", async () => {
+  settle({
+    "/api/public/projects?page=1&pageSize=20&search=": {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    },
+  });
+  await renderMobile(<ProjectGalleryScreen />);
+  const options = mockSetOptions.mock.calls.at(-1)?.[0];
+  expect(options.headerLargeTitle).toBe(true);
+  expect(options.scrollEdgeEffects).toEqual({ top: "soft" });
+});
+
 it("hides gallery retry when the audience is denied (H18)", async () => {
   settle({ "/api/public/projects?page=1&pageSize=20&search=": new ApiError("no", 403) });
   await renderMobile(<ProjectGalleryScreen />);
@@ -981,4 +998,33 @@ it("leaves embedded project navigation with its owning pane (H18, H55)", async (
   await renderMobile(<ProjectDetailScreen embedded id="5" gallery="1" />);
   expect(await screen.findByText("projectTeam")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "back" })).toBeNull();
+});
+
+it("keeps a failed invitation fetch distinct from empty and recovers with Retry", async () => {
+  mockApi.mockRejectedValueOnce(new Error("offline"));
+  await renderMobile(<ProjectInvitesScreen />);
+  expect(await screen.findByText("requestError")).toBeTruthy();
+  expect(screen.queryByText("projectNoInvites")).toBeNull();
+  expect(screen.queryByRole("progressbar")).toBeNull();
+  mockApi.mockResolvedValueOnce({ invites: [] });
+  await fireEvent.press(screen.getByRole("button", { name: "retry" }));
+  expect(await screen.findByText("projectNoInvites")).toBeTruthy();
+  expect(screen.queryByText("requestError")).toBeNull();
+});
+
+it("shows retry instead of endless loading when challenge selection cannot load", async () => {
+  mockApi.mockRejectedValue(new Error("offline"));
+  await renderMobile(<ProjectChallengesScreen />);
+  expect(await screen.findByRole("button", { name: "retry" })).toBeTruthy();
+  expect(screen.queryByRole("progressbar")).toBeNull();
+  expect(screen.queryByText("projectNoGallery")).toBeNull();
+});
+
+it("distinguishes challenge fetch failure from a missing challenge", async () => {
+  // The same quiet loader serves stream updates and retry; an initial failure remains recoverable.
+  mockParams = { challengeId: "2" };
+  mockApi.mockRejectedValue(new Error("offline"));
+  await renderMobile(<ChallengeDetailScreen />);
+  expect(await screen.findByRole("button", { name: "retry" })).toBeTruthy();
+  expect(screen.queryByText("challengeNotFound")).toBeNull();
 });

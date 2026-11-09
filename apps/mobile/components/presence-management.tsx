@@ -25,6 +25,7 @@ import {
   StatusPill,
 } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { alert } from "@/lib/alert";
@@ -222,7 +223,7 @@ export function PresenceManagement({
               }
               await load();
             })().catch(() => alert(t("presenceCouldNotDelete")));
-          })(),
+          })().catch(() => alert(t("presenceCouldNotDelete"))),
       },
     ]);
   }
@@ -259,6 +260,14 @@ export function PresenceManagement({
       ) : null}
 
       <View style={{ gap: 16 }}>
+        {error && timeline ? (
+          <RequestFeedback
+            error={new Error(error)}
+            message={error}
+            onRetry={() => void load()}
+            retrying={loading}
+          />
+        ) : null}
         <Section title={t("presenceTimeline")}>
           {canEdit ? (
             <ActionButton
@@ -973,6 +982,7 @@ function SignalEditor({
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
+    if (saving) return;
     if (draft.kind === "activity" && draft.activityId == null) {
       setError(t("presenceActivityRequired"));
       return;
@@ -991,7 +1001,9 @@ function SignalEditor({
           alert(t("presenceCouldNotSave"), stored.lastError ?? undefined);
         }
       })().catch(() => alert(t("presenceCouldNotSave")));
-      void onSaved();
+      await onSaved();
+    } catch {
+      setError(t("presenceCouldNotSave"));
     } finally {
       setSaving(false);
     }

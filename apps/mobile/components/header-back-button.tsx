@@ -7,7 +7,7 @@ import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
-import type { safeBack } from "@/lib/navigation";
+import { safeBack } from "@/lib/navigation";
 import { colors } from "@/theme/colors";
 
 /**
@@ -76,8 +76,10 @@ export function EntryBackToolbar({
       <Stack.Toolbar.Button
         accessibilityLabel={t("back")}
         icon="chevron.left"
-        // H55: parent tab history may exist even though this stack has no screen below.
-        onPress={() => router.replace(fallback)}
+        // H55: this stack has no screen below, but the root stack does: pop to whoever pushed us
+        // (replacing with a tab route re-enters it and loses the Others selection). Only a
+        // cold deep link with nothing to pop falls back to the owner.
+        onPress={() => safeBack(router, fallback)}
       />
       {children}
     </Stack.Toolbar>

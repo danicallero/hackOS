@@ -53,8 +53,6 @@
   "goHome": "Ir a la pantalla principal",
   "retry": "Reintentar",
   "requestError": "No se pudo cargar esta información. Vuelve a intentarlo.",
-  "requestOfflineTitle": "Sin conexión",
-  "requestOfflineBody": "Conéctate a internet para cargar esto.",
   "requestServerError": "El servidor no está disponible temporalmente. Prueba de nuevo en un momento.",
   "requestUnavailable": "Esta información todavía no está disponible para esta cuenta.",
   "requestSessionExpired": "Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.",
@@ -63,8 +61,6 @@
   "sessionRecoveryTitle": "No se pudo recuperar tu sesión",
   "sessionRecoveryDescription": "Comprueba tu conexión e inténtalo de nuevo. Si continúa, vuelve a iniciar sesión.",
   "continueOffline": "Continuar sin conexión",
-  "offlineDataTitle": "Datos sin conexión",
-  "offlineDataBody": "El servidor no respondió. Última actualización: {updatedAt}.",
   "yesterday": "Ayer",
   "clockSkewTitle": "El reloj del dispositivo parece incorrecto",
   "clockSkewBody": "El reloj de este dispositivo no coincide con el del servidor. Las horas de los escaneos en cola se están corrigiendo automáticamente, pero deberías arreglar el reloj del dispositivo (fecha y hora automáticas) cuanto antes.",
@@ -990,5 +986,10 @@
   "notificationsMandatoryHint": "Los avisos de turno siempre llegan a la app. El correo es opcional mientras este móvil tenga la sesión iniciada; sin ella, te llegan por correo.",
   "maintenanceTitle": "Restaurando una copia",
   "maintenanceBody": "hackOS volverá en unos minutos. La app continúa sola.",
-  "maintenanceFailedBody": "La restauración necesita a un administrador. La app continúa cuando se resuelva."
+  "maintenanceFailedBody": "La restauración necesita a un administrador. La app continúa cuando se resuelva.",
+  "mobileStatesScheduleTranslationsError": "Guardado, pero no las traducciones. Edita la entrada para reintentarlo.",
+  "mobileSurfaceOpenSettings": "Abrir ajustes",
+  "offlineMode": "Modo sin conexión",
+  "offlineModeUpdated": "Modo sin conexión · Actualizado {updatedAt}",
+  "offlineReconnect": "Reconectar"
 }

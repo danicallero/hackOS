@@ -32,6 +32,101 @@ afterAll(async () => {
   await pool.end();
 });
 
+describe("offline accreditation replay (H22, H25, H54)", () => {
+  async function accredit(userId: number, badgeId: string, assignedAt?: Date) {
+    await issueTicket(userId).catch(() => undefined); // gives event access; a second call is a no-op for the test
+    const staff = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    return app.inject({
+      method: "POST",
+      url: "/api/accreditation/check-in-user",
+      headers: asUser(staff),
+      payload: { userId, badgeId, method: "manual", assignedAt: assignedAt?.toISOString() },
+    });
+  }
+
+  it("accepts a scan taken after an offline accreditation but before it synced", async () => {
+    const meal = await createMeal();
+    const uid = await createUser();
+    const assignedAt = new Date(Date.now() - 60 * 60_000);
+    expect((await accredit(uid, "OFF-ACC-1", assignedAt)).statusCode).toBe(200);
+
+    const scan = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/scan`,
+      headers: asUser(scanner),
+      payload: {
+        badgeId: "OFF-ACC-1",
+        expectedUserId: uid,
+        scannedAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+      },
+    });
+    expect(scan.statusCode).toBe(200);
+
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query<{ badge_assigned_at: Date }>(
+      `SELECT badge_assigned_at FROM users WHERE id = $1`,
+      [uid],
+    );
+    expect(
+      Math.abs((rows[0]?.badge_assigned_at.getTime() ?? 0) - assignedAt.getTime()),
+    ).toBeLessThan(1000);
+  });
+
+  it("still rejects a scan that predates the recorded assignment", async () => {
+    const meal = await createMeal();
+    const uid = await createUser();
+    expect((await accredit(uid, "OFF-ACC-2", new Date(Date.now() - 10 * 60_000))).statusCode).toBe(
+      200,
+    );
+    const scan = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/scan`,
+      headers: asUser(scanner),
+      payload: {
+        badgeId: "OFF-ACC-2",
+        scannedAt: new Date(Date.now() - 20 * 60_000).toISOString(),
+      },
+    });
+    expect(scan.statusCode).toBe(409);
+    expect(scan.json().error.code).toBe("badge_scan_before_assignment");
+  });
+
+  it("rejects an implausible assignment time", async () => {
+    const uid = await createUser();
+    const future = await accredit(uid, "OFF-ACC-3", new Date(Date.now() + 60 * 60_000));
+    expect(future.statusCode).toBe(400);
+    const ancient = await accredit(uid, "OFF-ACC-3", new Date(Date.now() - 5 * 24 * 60 * 60_000));
+    expect(ancient.statusCode).toBe(400);
+    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT 1 FROM users WHERE id = $1 AND badge_id IS NOT NULL`, [uid]))
+        .rowCount,
+    ).toBe(0);
+  });
+
+  it("rejects a scan whose badge ended up with someone else", async () => {
+    const meal = await createMeal();
+    const intended = await createUser({ name: "Intended" });
+    const owner = await createUser({ name: "Real owner" });
+    await assignBadge(owner, "OFF-ACC-4");
+    // The offline accreditation of the intended person was refused (409), so the
+    // scan taken against it must not credit the real owner.
+    expect((await accredit(intended, "OFF-ACC-4")).statusCode).toBe(409);
+    const scan = await app.inject({
+      method: "POST",
+      url: `/api/activities/${meal}/scan`,
+      headers: asUser(scanner),
+      payload: { badgeId: "OFF-ACC-4", expectedUserId: intended },
+    });
+    expect(scan.statusCode).toBe(409);
+    expect(scan.json().error.code).toBe("badge_owner_mismatch");
+    const { pool } = await import("../../src/db/pool.js");
+    expect(
+      (await pool.query(`SELECT 1 FROM activity_logs WHERE user_id = $1`, [owner])).rowCount,
+    ).toBe(0);
+  });
+});
+
 describe("H25 meals", () => {
   it("accepts an entry ticket without an assigned badge and confirms repeats", async () => {
     const meal = await createMeal();

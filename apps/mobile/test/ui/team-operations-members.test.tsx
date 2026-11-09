@@ -33,7 +33,7 @@ jest.mock("expo-router", () => ({
   useRouter: () => ({ back: mockBack }),
 }));
 
-jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/lib/api", () => ({ apiFetch: jest.fn(), ApiError: class ApiError extends Error {} }));
 jest.mock("@/lib/me-context", () => ({
   useMeContext: () => ({ me: { capabilities: mockCapabilities } }),
 }));
@@ -94,6 +94,7 @@ function roomView(members = [manualMember]) {
 
 function arrange(members = [manualMember]) {
   mockApiFetch.mockImplementation((path: string) => {
+    if (path === "/api/queue/repos/44/challenges") return Promise.resolve([]);
     if (path === "/api/queue/rooms/4/view") return Promise.resolve(roomView(members));
     if (path === "/api/queue/entries/900/history") return Promise.resolve([]);
     if (path.startsWith("/api/projects/member-candidates")) {

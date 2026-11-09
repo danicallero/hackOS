@@ -7,6 +7,7 @@ import {
 } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { AppRefreshControl } from "@/components/app-refresh-control";
 import { HeaderBackButton } from "@/components/header-back-button";
 import { ActionButton, Section, Separator } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -58,6 +59,7 @@ export function ScanLogScreen() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [failedOffset, setFailedOffset] = useState(0);
   const [error, setError] = useState<Error | null>(null);
   const tabBarBottomInset = useRouterTabBarScrollBottomInset();
   const scrollRef = useRef<ScrollView>(null);
@@ -110,6 +112,7 @@ export function ScanLogScreen() {
     try {
       await load(0);
     } catch (cause) {
+      setFailedOffset(0);
       setError(cause instanceof Error ? cause : new Error("Failed to load scan history"));
     } finally {
       setLoading(false);
@@ -123,9 +126,11 @@ export function ScanLogScreen() {
   async function loadMore() {
     if (loadingMore || items.length >= total) return;
     setLoadingMore(true);
+    setError(null);
     try {
       await load(items.length);
     } catch (cause) {
+      setFailedOffset(items.length);
       setError(cause instanceof Error ? cause : new Error("Failed to load scan history"));
     } finally {
       setLoadingMore(false);
@@ -160,7 +165,7 @@ export function ScanLogScreen() {
     }
   }
 
-  if (loading) {
+  if (loading && items.length === 0) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
         <RequestFeedback loading />
@@ -168,7 +173,7 @@ export function ScanLogScreen() {
     );
   }
 
-  if (error) {
+  if (error && items.length === 0) {
     return (
       <View style={{ flex: 1, justifyContent: "center", padding: 16 }}>
         <RequestFeedback error={error} onRetry={() => void reload()} />
@@ -204,6 +209,7 @@ export function ScanLogScreen() {
 
   return (
     <ScrollView
+      refreshControl={<AppRefreshControl refreshing={loading} onRefresh={() => void reload()} />}
       ref={scrollRef}
       {...trueTop.scrollProps}
       contentInsetAdjustmentBehavior="automatic"
@@ -224,7 +230,14 @@ export function ScanLogScreen() {
       >
         {t("scanLogDescription")}
       </Text>
-      {filteredItems.length === 0 ? (
+      {error ? (
+        <RequestFeedback
+          error={error}
+          onRetry={() => void (failedOffset === 0 ? reload() : loadMore())}
+          retrying={loadingMore}
+        />
+      ) : null}
+      {filteredItems.length === 0 && !error ? (
         <View style={{ alignItems: "center", gap: 8, paddingHorizontal: 24, paddingVertical: 36 }}>
           <SymbolView
             accessible={false}

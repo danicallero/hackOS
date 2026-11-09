@@ -26,7 +26,7 @@ import {
 } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { StaleDataBanner } from "@/components/stale-data-banner";
+import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
@@ -437,17 +437,17 @@ export function PeopleDirectoryScreen({
               />
             ) : null}
             {syncError && !isSyncConflict(syncError) ? (
-              <StaleDataBanner updatedAt={sync.lastSync} />
+              <OfflineNotice onReconnect={async () => Boolean(await sync.sync())} />
             ) : null}
           </View>
         ) : null
       }
       ListEmptyComponent={
-        loading ? (
+        loading || (directory.length === 0 && sync.syncing) ? (
           <RequestFeedback loading />
-        ) : loadError && directory.length === 0 ? (
+        ) : (loadError || (syncError && isSyncConflict(syncError))) && directory.length === 0 ? (
           <RequestFeedback
-            error={loadError}
+            error={loadError ?? new Error(syncError?.message)}
             message={t("requestError")}
             onRetry={() => void onRefresh()}
             retrying={loading || refreshing || sync.syncing}

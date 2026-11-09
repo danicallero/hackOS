@@ -129,26 +129,32 @@ export function ScheduleDetailScreen({
 
   // `data` changes on every refresh and after a save, so the staff copy
   // (owners, drafts, translations) is re-read along with it.
+  const [adminError, setAdminError] = useState<Error | null>(null);
+  const loadAdmin = useCallback(async () => {
+    try {
+      const items = await fetchAdminSchedule();
+      setAdminItem(items.find((candidate) => String(candidate.id) === id) ?? null);
+      setAdminError(null);
+    } catch (cause) {
+      // Keep the last staff copy, but say so: editing needs a current one.
+      setAdminError(cause instanceof Error ? cause : new Error(String(cause)));
+    }
+  }, [id]);
   useEffect(() => {
     void data;
     if (!canReadFull) {
       setAdminItem(null);
+      setAdminError(null);
       return;
     }
-    let cancelled = false;
-    fetchAdminSchedule()
-      .then((items) => {
-        if (cancelled) return;
-        const match = items.find((candidate) => String(candidate.id) === id);
-        setAdminItem(match ?? null);
-      })
-      .catch(() => {
-        // Keep the last staff copy; the public read above reports load errors.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [canReadFull, id, data]);
+    void loadAdmin();
+  }, [canReadFull, loadAdmin, data]);
+
+  // Editing waits for the staff copy; without it the tap would do nothing.
+  const waitingForStaffCopy = editing && !adminItem;
+  useEffect(() => {
+    if (waitingForStaffCopy && canReadFull) void loadAdmin();
+  }, [waitingForStaffCopy, canReadFull, loadAdmin]);
 
   const rawItem = data?.find((candidate) => String(candidate.id) === id) ?? null;
   // H50 extension: resolve into the viewer's language here so the rest of
@@ -315,6 +321,9 @@ export function ScheduleDetailScreen({
       >
         <View style={{ gap: 8 }}>
           <StaleDataBanner updatedAt={staleSince} />
+          {adminError && (editing || !adminItem) && canReadFull ? (
+            <RequestFeedback error={adminError} onRetry={() => void loadAdmin()} />
+          ) : null}
           {notifications.error ? (
             <RequestFeedback
               error={notifications.error}

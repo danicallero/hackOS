@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { liveActivityHost } from "./host";
 import { liveActivitiesEnabled, setLiveActivitiesEnabled } from "./sync";
 
@@ -8,23 +8,36 @@ export function useLiveActivitiesSetting() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const [error, setError] = useState<Error | null>(null);
+  const [loading, setLoading] = useState(available);
+  const retryAction = useRef<(() => Promise<void>) | null>(null);
+  const load = useCallback(async () => {
     if (!available) return;
-    let active = true;
-    void liveActivitiesEnabled().then((value) => {
-      if (active) setEnabled(value);
-    });
-    return () => {
-      active = false;
-    };
+    setLoading(true);
+    retryAction.current = load;
+    try {
+      setEnabled(await liveActivitiesEnabled());
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error(String(cause)));
+    } finally {
+      setLoading(false);
+    }
   }, [available]);
 
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   const toggle = useCallback(async (next: boolean) => {
+    retryAction.current = () => toggle(next);
+    setError(null);
     setEnabled(next);
     setBusy(true);
     try {
       await setLiveActivitiesEnabled(next);
-    } catch {
+    } catch (cause) {
+      setError(cause instanceof Error ? cause : new Error(String(cause)));
       // The local choice is saved and local surfaces already follow it; the
       // device registration is re-sent on the next sign-in or foreground.
     } finally {
@@ -33,6 +46,11 @@ export function useLiveActivitiesSetting() {
   }, []);
 
   return {
+    loading,
+    error,
+    retry: () => {
+      if (retryAction.current) void retryAction.current();
+    },
     available: available && enabled !== null,
     platform: liveActivityHost.platform,
     enabled: enabled ?? true,

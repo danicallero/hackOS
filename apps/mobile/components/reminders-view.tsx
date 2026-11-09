@@ -104,15 +104,17 @@ export function ScheduleReminderSections({
   const { t } = useLocale();
   const router = useRouter();
   const timeColumnWidth = useTimeColumnWidth();
-  const { items, kinds, notifications, loading, error, reload } = reminders;
+  const { items, kinds, notifications, loading, error, staleSince, reload } = reminders;
 
   const ready = notifications.ready && items.length > 0;
   const searching = query.trim().length > 0;
 
   if (!ready) {
+    if (notifications.error)
+      return <RequestFeedback error={notifications.error} onRetry={notifications.retry} />;
     if (error && !loading) return <RequestFeedback error={error} onRetry={() => void reload()} />;
     if (loading || !notifications.ready) return <RequestFeedback loading />;
-    return null;
+    return <EmptyState icon="calendar" title={t("scheduleEmpty")} />;
   }
 
   const matches = searching
@@ -128,6 +130,10 @@ export function ScheduleReminderSections({
 
   return (
     <>
+      <StaleDataBanner updatedAt={staleSince} />
+      {error ? (
+        <RequestFeedback error={error} onRetry={() => void reload()} retrying={loading} />
+      ) : null}
       {notifications.error ? (
         <RequestFeedback
           error={notifications.error}
@@ -230,6 +236,9 @@ export function ReminderPickerScreen({ kind }: { kind: string }) {
       }}
     >
       <StaleDataBanner updatedAt={staleSince} />
+      {error && items.length > 0 ? (
+        <RequestFeedback error={error} onRetry={() => void reload()} retrying={loading} />
+      ) : null}
       {notifications.error ? (
         <RequestFeedback
           error={notifications.error}
@@ -238,7 +247,8 @@ export function ReminderPickerScreen({ kind }: { kind: string }) {
           retrying={notifications.savingKey !== null}
         />
       ) : null}
-      {!notifications.ready || (items.length === 0 && (loading || error)) ? (
+      {!notifications.ready && notifications.error ? null : !notifications.ready ||
+        (items.length === 0 && (loading || error)) ? (
         <RequestFeedback
           loading={loading || !notifications.ready}
           error={error}

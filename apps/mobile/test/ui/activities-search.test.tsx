@@ -258,4 +258,33 @@ describe("activities list search, filter and now marker (H25, H26)", () => {
     expect(screen.getByText(SCANNER_SYNC_REJECTED)).toBeTruthy();
     expect(screen.queryByText("offline-data-banner")).toBeNull();
   });
+
+  it("flags the on-device backup as offline on the first failed sync, before auto-retry gives up", async () => {
+    mockSyncError = { message: "Network request failed", conflict: false, status: null };
+
+    await renderMobile(<ActivitiesScreen />);
+    await waitFor(() => expect(screen.getByText("Charla Grafana")).toBeTruthy());
+
+    expect(screen.getByText("offline-data-banner")).toBeTruthy();
+  });
+
+  it("does not present an unreachable server with nothing cached as an empty roster", async () => {
+    mockListActivities.mockResolvedValue([]);
+    mockSyncError = { message: "Network request failed", conflict: false, status: null };
+
+    await renderMobile(<ActivitiesScreen />);
+
+    await waitFor(() => expect(screen.getByLabelText("offlineReconnect")).toBeTruthy());
+    expect(screen.queryByText("scannerActivitiesEmpty")).toBeNull();
+  });
+
+  it("shows no offline banner while a server snapshot is current and sync is healthy-looking", async () => {
+    mockServerSnapshot = { activities: ACTIVITIES } as never;
+    mockSync.mockResolvedValueOnce(undefined);
+    mockSyncError = { message: "Network request failed", conflict: false, status: null };
+
+    await renderMobile(<ActivitiesScreen />);
+    await waitFor(() => expect(screen.getByText("Charla Grafana")).toBeTruthy());
+    expect(screen.queryByText("offline-data-banner")).toBeNull();
+  });
 });

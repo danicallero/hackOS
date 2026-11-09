@@ -19,7 +19,7 @@ function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
   if (isPlainObject(value))
     return `{${Object.keys(value)
-      .sort()
+      .sort((left, right) => left.localeCompare(right))
       .map((key) => `${JSON.stringify(key)}:${stable(value[key])}`)
       .join(",")}}`;
   return JSON.stringify(value);
@@ -49,7 +49,7 @@ export function diffAuditSnapshot(before: unknown, after: unknown): AuditDiffRow
   const metadata = new Set(["changed_fields", "edit_session_id", "last_edited_at"]);
   const keys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]))
     .filter((key) => !metadata.has(key))
-    .sort();
+    .sort((left, right) => left.localeCompare(right));
 
   const rows: AuditDiffRow[] = [];
   for (const key of keys) {

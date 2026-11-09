@@ -32,8 +32,18 @@ export default function StorageScreen() {
 
   const operator = isOperator(me?.capabilities ?? []);
 
+  const [usageError, setUsageError] = useState<Error | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
   const loadStorageUsage = useCallback(async () => {
-    setStorageUsage(await getStorageUsage());
+    setUsageLoading(true);
+    try {
+      setStorageUsage(await getStorageUsage());
+      setUsageError(null);
+    } catch (cause) {
+      setUsageError(cause instanceof Error ? cause : new Error(String(cause)));
+    } finally {
+      setUsageLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -88,6 +98,14 @@ export default function StorageScreen() {
         paddingBottom: Math.max(32, tabBarBottomInset + 16),
       }}
     >
+      {usageLoading && !storageUsage ? <RequestFeedback loading /> : null}
+      {usageError ? (
+        <RequestFeedback
+          error={usageError}
+          onRetry={() => void loadStorageUsage()}
+          retrying={usageLoading}
+        />
+      ) : null}
       {storageError ? (
         <RequestFeedback
           error={storageError}

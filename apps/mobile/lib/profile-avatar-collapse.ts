@@ -162,6 +162,32 @@ type ProfileAvatarFrame = ProfileCameraCutoutFrame;
  */
 const DYNAMIC_ISLAND_WIDTH = 126;
 const DYNAMIC_ISLAND_HEIGHT = 37.33;
+/** iPhone 18 generation: a narrower island (measured on the simulator, ~94 x 36.5 pt). */
+const NARROW_ISLAND_WIDTH = 94;
+const NARROW_ISLAND_HEIGHT = 36.5;
+/** Hardware identifiers run one ahead of the marketing name: iPhone 17 is "iPhone18,x", iPhone 18 "iPhone19,x". */
+const NARROW_ISLAND_FIRST_HARDWARE_GENERATION = 19;
+const NARROW_ISLAND_FIRST_MARKETING_GENERATION = 18;
+
+/**
+ * Island size. A device reports "iPhone19,2" and the like; the simulator
+ * reports only "arm64", so there the simulator's name ("iPhone 18 Pro", as
+ * created) is the one hint to the model. Unknown models use the 14 Pro-17 size.
+ */
+function dynamicIslandSize(
+  modelId: string | null | undefined,
+  deviceName?: string | null,
+): { width: number; height: number } {
+  const hardware = Number(/^iPhone(\d+),/.exec(modelId ?? "")?.[1]);
+  const marketing = Number(/\biPhone\s*(\d+)/.exec(deviceName ?? "")?.[1]);
+  const narrow = Number.isFinite(hardware)
+    ? hardware >= NARROW_ISLAND_FIRST_HARDWARE_GENERATION
+    : marketing >= NARROW_ISLAND_FIRST_MARKETING_GENERATION;
+  return narrow
+    ? { width: NARROW_ISLAND_WIDTH, height: NARROW_ISLAND_HEIGHT }
+    : { width: DYNAMIC_ISLAND_WIDTH, height: DYNAMIC_ISLAND_HEIGHT };
+}
+
 const DYNAMIC_ISLAND_TOP_OFFSET = 48;
 const DYNAMIC_ISLAND_INSET = 1;
 
@@ -265,11 +291,17 @@ export function resolveProfileCameraTarget({
   cameraCutoutFrame,
   displayCutoutRects,
   height,
+  deviceName,
+  modelId,
   platform,
   safeAreaTop,
   screenWidth,
 }: {
   cameraCutoutFrame?: ProfileCameraCutoutFrame | null;
+  /** Hardware identifier, to size the fallback island (the OS reports none before iOS 27.1). */
+  modelId?: string | null;
+  /** Device name: the simulator's only hint to its model, since its identifier is "arm64". */
+  deviceName?: string | null;
   displayCutoutRects?: ProfileCameraCutoutFrame[] | null;
   height: number;
   platform: string;
@@ -288,12 +320,13 @@ export function resolveProfileCameraTarget({
   if (!isLandscape && platform === "ios" && safeAreaTop >= 55) {
     // iOS does not expose a public Dynamic Island frame. Use its published
     // geometry (points, relative to the app window), inset so it stays inside.
-    const width = Math.min(DYNAMIC_ISLAND_WIDTH, screenWidth - 32) - 2 * DYNAMIC_ISLAND_INSET;
+    const island = dynamicIslandSize(modelId, deviceName);
+    const width = Math.min(island.width, screenWidth - 32) - 2 * DYNAMIC_ISLAND_INSET;
     return {
       left: (screenWidth - width) / 2,
       top: safeAreaTop - DYNAMIC_ISLAND_TOP_OFFSET + DYNAMIC_ISLAND_INSET,
       width,
-      height: DYNAMIC_ISLAND_HEIGHT - 2 * DYNAMIC_ISLAND_INSET,
+      height: island.height - 2 * DYNAMIC_ISLAND_INSET,
       hasCutout: true,
     };
   }
@@ -413,6 +446,24 @@ function lipHalfWidth(target: ProfileAvatarFrame, scale: number) {
   return Math.max(straight, chord);
 }
 
+/** Half-width of the blob's widest point as it hands over to the lip, in mask units. */
+const BLOB_END_HALF_EXTENT = 122;
+
+/**
+ * Horizontal squeeze of the blob so it reaches the lip's width as it hands
+ * over to it (#935). A lip is held inside the island's straight run (57 pt on
+ * the narrow island); a blob still ~78 pt wide would drop to that in one
+ * frame, a visible jump in size. Easing the squeeze in over the blob's life
+ * makes the photo narrow steadily into the island instead. 1 when the lip is
+ * at least as wide as the blob (the 126 pt island), and at rest.
+ */
+function blobSqueeze(target: ProfileAvatarFrame, scale: number, p: number) {
+  "worklet";
+  const end = Math.min(1, lipHalfWidth(target, scale) / (BLOB_END_HALF_EXTENT * scale));
+  const t = Math.max(0, Math.min(1, p / BLOB_END_PROGRESS));
+  return 1 + (end - 1) * t * t * (3 - 2 * t);
+}
+
 /** The Swift mask canvas origin and scale at `progress`. */
 function maskCanvas(
   size: number,
@@ -474,13 +525,18 @@ export function profileAvatarBlobBounds(
   const n = first.path.v.length;
   const at = (key: "v" | "i" | "o", i: number, axis: number) =>
     first.path[key][i][axis] + (next.path[key][i][axis] - first.path[key][i][axis]) * fraction;
+  const squeeze = blobSqueeze(target, scale, p);
+  let centre = 0;
+  for (let i = 0; i < n; i++) centre += at("v", i, 0) / n;
+  const squeezed = (value: number) => centre + (value - centre) * squeeze;
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     for (let axis = 0; axis < 2; axis++) {
-      const p0 = at("v", i, axis);
-      const p1 = p0 + at("o", i, axis);
-      const p3 = at("v", j, axis);
-      const p2 = p3 + at("i", j, axis);
+      const fit = axis === 0 ? squeezed : (value: number) => value;
+      const p0 = fit(at("v", i, axis));
+      const p1 = fit(at("v", i, axis) + at("o", i, axis));
+      const p3 = fit(at("v", j, axis));
+      const p2 = fit(at("v", j, axis) + at("i", j, axis));
       for (let k = 0; k <= 8; k++) {
         const u = k / 8;
         const w = 1 - u;
@@ -613,7 +669,10 @@ export function profileAvatarMorphPath(
       point[1] + (next.path.o[i][1] - point[1]) * fraction,
     ]);
     const xScale = track.end === LIP_TRACK_END ? lipScale : scale;
-    const x = (value: number) => canvasX + track.offset[0] * scale + value * xScale;
+    const squeeze = track.end === BLOB_TRACK_END ? blobSqueeze(target, scale, p) : 1;
+    const centre = vertices.reduce((sum, point) => sum + point[0], 0) / vertices.length;
+    const x = (value: number) =>
+      canvasX + track.offset[0] * scale + (centre + (value - centre) * squeeze) * xScale;
     const y = (value: number) => canvasY + (track.offset[1] + value) * scale;
     result += `M ${x(vertices[0][0])} ${y(vertices[0][1])} `;
     for (let i = 0; i < vertices.length; i++) {

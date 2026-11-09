@@ -1066,7 +1066,85 @@ form cap can leave the profile narrow and pinned to one side.
 ### Exceptions
 An intentionally independent sheet retains its own horizontal toolbar.
 
-## [R032] Keep private content out of change logs
+## [R032] Give every new native screen the app's working header, then check it scrolled
+
+Status: active
+Scope: module:mobile
+Source: user-correction
+Date: 2026-11-08
+
+### Trigger
+Adding a new family of native pages or sheets with a shared page wrapper.
+
+### Mistake
+A new family of pages shared a wrapper that set `headerTransparent: false` with an opaque
+`headerStyle` colour (and sheets `headerBlurEffect: "none"`), so every new page
+and modal painted a grey band and clipped content instead of scrolling under
+the native scroll-edge blur. The first fix made sheets transparent but left
+their first field under the bar, because UIKit does not inset content under a
+transparent sheet header.
+
+### Lesson
+One shared wrapper multiplies a header mistake across every screen. Copy the
+header options of a screen already accepted as native (People, Account) instead
+of inventing them, and treat "at rest" and "scrolled" as separate checks.
+
+### Action
+Reuse `fixedScrollHeaderOptions` in `lib/screen-header-options.ts` for a fixed
+section title. The accepted composition is a transparent native stack header,
+`headerLargeTitle: false`, `headerBlurEffect: "none"` and
+`scrollEdgeEffects: { top: "soft" }`, with no opaque `headerStyle`. Put the
+visible `screenTitleElement` in a leading `Stack.Toolbar.View` with
+`hidesSharedBackground`; keep the native navigation title populated but
+transparent. The shared helper sizes its hidden native title to 1 pt,
+so it does not compete with the visible title and the controls. Keep
+that detail when reproducing this exact header; do not change the visible
+`SCREEN_TITLE` typography.
+
+Use the same options in the route layout and screen; a static opaque layout
+can contradict the screen. Apply the root options via `navigation.setOptions`
+in `useLayoutEffect`, as Activities does. Keep the scrolling content first in
+a full-height page container, use automatic content inset adjustment for lists,
+and allow the content to pass underneath the native bar. Transparent sheets
+need the measured header height added to content padding explicitly.
+
+For multiselect filters use Schedule's actual `FilterMenu` (persistent SwiftUI
+toggles), including a Clear filters item when active. Keep it in its own native
+toolbar view with the shared background hidden and a fixed spacer before the
+other actions. Do not squeeze it beside a segmented control or replace it
+with a menu that closes or resets focus after each selection.
+
+Do not substitute a permanent or scroll-toggled system material for the soft
+edge effect: it gives a frosted rectangle and changes the appearance at rest.
+Do not keep guessing at shared options while the user reports regressions;
+compare against the accepted screen and capture the actual result.
+
+For a pinned supplementary date row, use UIKit's
+`UIScrollEdgeElementContainerInteraction` rather than a separate frosted blur
+rectangle. Keep ordinary date labels in the list without an interaction. Only
+the header at its pinned boundary may extend the edge effect; registering
+future section headers blurs the whole area above them. Move the pinned native
+`UILabel` outside the source `UIScrollView` into a sibling overlay, otherwise
+the date itself is blurred. Restore it inline when the next section pushes it
+out. `modules/scroll-edge-container` implements this lifecycle, and needs a
+native rebuild, not just Metro refresh. Keep event-time formatting, secondary
+label colour, semibold weight and the user's chosen size. The jump-to-now
+position must account for the native header and the sticky date, not a fixed
+old 80 pt offset. Apple's reference is
+[custom edge containers](https://developer.apple.com/videos/play/wwdc2025/284/).
+
+### Validation
+On the Liquid Glass simulator, capture each new page and sheet at rest (first
+row fully below the bar) and scrolled (content visibly under the blur), with no
+LogBox errors on screen. Include all toolbar actions (especially the filter),
+change tabs and return, open/close a sheet, and test several scroll positions;
+a single successful capture does not establish that the effect is stable.
+
+### Exceptions
+A screen that intentionally has no header (full-bleed camera, Account root)
+follows its own established configuration.
+
+## [R033] Keep private content out of change logs
 
 Status: active
 Scope: repository

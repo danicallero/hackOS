@@ -46,6 +46,7 @@ export function ProjectGithubLink({
   const load = useCallback(async () => {
     try {
       setStatus(await apiFetch<GithubStatus>(base));
+      setError(null);
     } catch (cause) {
       setError(cause as Error);
     }
@@ -58,6 +59,7 @@ export function ProjectGithubLink({
   );
 
   async function unlink() {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -70,7 +72,10 @@ export function ProjectGithubLink({
     }
   }
 
-  if (!status?.configured) return error ? <RequestFeedback error={error} /> : null;
+  if (!status?.configured)
+    return error ? (
+      <RequestFeedback error={error} onRetry={() => void load()} retrying={busy} />
+    ) : null;
   const { link } = status;
   if (locked && !link) return repoUrl ? <ProjectRepoRow url={repoUrl} /> : null;
   return (
@@ -89,6 +94,7 @@ export function ProjectGithubLink({
                 label={t("githubUnlinkRepo")}
                 destructive
                 disabled={busy}
+                busy={busy}
                 onPress={() => void unlink()}
               />
             </>
@@ -111,7 +117,7 @@ export function ProjectGithubLink({
           />
         </>
       )}
-      {error ? <RequestFeedback error={error} /> : null}
+      {error ? <RequestFeedback error={error} onRetry={() => void load()} retrying={busy} /> : null}
     </Section>
   );
 }

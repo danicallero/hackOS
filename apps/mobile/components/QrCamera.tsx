@@ -2,11 +2,12 @@ import { UI_TEST_IDS } from "@hackos/shared/ui-test-ids";
 import { type BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 import { useIsFocused } from "expo-router";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Modal, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { GlassView } from "@/components/glass-view";
 import { NfcReader } from "@/components/nfc-reader";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { ScannerCodeEntry } from "@/components/scanner-code-entry";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { SymbolView } from "@/components/symbol";
@@ -183,9 +184,14 @@ function CameraPreview({
     }
   });
   const [manualEntryVisible, setManualEntryVisible] = useState(false);
+  const [permissionError, setPermissionError] = useState<Error | null>(null);
   const requestCamera = useCallback(() => {
     permissionRequestStarted.current = true;
-    void requestPermission();
+    setPermissionError(null);
+    void Promise.resolve(requestPermission()).catch((cause) => {
+      permissionRequestStarted.current = false;
+      setPermissionError(cause instanceof Error ? cause : new Error(String(cause)));
+    });
   }, [requestPermission]);
   const frameSize = scanFrameSize(width, height);
   const frameLeft = (width - frameSize) / 2;
@@ -282,7 +288,8 @@ function CameraPreview({
 
   if (!permission || nfcSessionPending) return <View style={styles.black} />;
   if (permission.status === "undetermined") {
-    if (!scanningEnabled || requestCameraOnFocus) return <View style={styles.black} />;
+    if (!scanningEnabled || (requestCameraOnFocus && !permissionError))
+      return <View style={styles.black} />;
     return (
       <View
         style={[
@@ -290,6 +297,9 @@ function CameraPreview({
           { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
         ]}
       >
+        {permissionError ? (
+          <RequestFeedback error={permissionError} onRetry={requestCamera} />
+        ) : null}
         <Pressable accessibilityRole="button" onPress={requestCamera} style={styles.primaryButton}>
           <Text style={styles.primaryButtonText}>{t("scannerCamera")}</Text>
         </Pressable>
@@ -324,6 +334,20 @@ function CameraPreview({
           {t("scannerCameraPermissionBody")}
         </Text>
         {nfcPermissionButton()}
+        {permissionError ? (
+          <RequestFeedback error={permissionError} onRetry={requestCamera} />
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            void Linking.openSettings().catch((cause) =>
+              setPermissionError(cause instanceof Error ? cause : new Error(String(cause))),
+            )
+          }
+          style={styles.secondaryButton}
+        >
+          <Text style={styles.secondaryButtonText}>{t("mobileSurfaceOpenSettings")}</Text>
+        </Pressable>
         {permission.canAskAgain && Platform.OS !== "ios" ? (
           <Pressable
             accessibilityRole="button"

@@ -35,6 +35,11 @@ export function formatLastUpdate(
     const weekday = formatInZone(date, timeZone, language, { weekday: "long" });
     return `${weekday}, ${time}`;
   }
-  const shortDate = formatInZone(date, timeZone, language, { dateStyle: "short" });
+  // dd/mm/yyyy in every language (en-GB order), never the US month-first reading.
+  const shortDate = formatInZone(date, timeZone, "en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
   return `${shortDate}, ${time}`;
 }

@@ -204,3 +204,20 @@ describe("useCachedApi cache-first reads (H28)", () => {
     expect(result.current.loading).toBe(true);
   });
 });
+
+describe("useCachedApi failed revalidation without a persisted copy", () => {
+  it("marks rendered data stale instead of failing silently", async () => {
+    mockReadCachedValue.mockResolvedValue(null);
+    const fetcher = jest
+      .fn()
+      .mockResolvedValueOnce({ version: 1 })
+      .mockRejectedValueOnce(new Error("offline"));
+    const { result } = await renderHook(() => useCachedApi("silent-failure", fetcher));
+    await act(async () => result.current.load());
+    expect(result.current.staleSince).toBeNull();
+    await act(async () => result.current.load());
+    expect(result.current.data).toEqual({ version: 1 });
+    expect(result.current.error).toBeNull();
+    expect(result.current.staleSince).not.toBeNull();
+  });
+});

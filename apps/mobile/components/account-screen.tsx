@@ -86,6 +86,9 @@ const TRANSITION_SETTLE_MS = 450;
 const SCROLL_SETTLE_MS = 450;
 
 /** Account overview with the same participant-owned profile fields exposed on web. */
+/** Height of the floating wallet circle plus a gap, for content that starts at the top. */
+const WALLET_BUTTON_CLEARANCE = 52;
+
 export default function AccountScreen() {
   useColorScheme();
   const router = useRouter();
@@ -121,7 +124,12 @@ export default function AccountScreen() {
   useFocusEffect(avatarCollapse.settleAtRest);
   const { me, loading, error, offline, staleSince, refetch } = useMeContext();
   const { mode, setMode } = useApiMode();
-  const { intolerances, reload: loadSupportingData } = useFoodIntolerances(Boolean(me));
+  const {
+    intolerances,
+    reload: loadSupportingData,
+    error: intolerancesError,
+    loading: intolerancesLoading,
+  } = useFoodIntolerances(Boolean(me));
   const isSponsorRep = Boolean(me?.isSponsorRep);
   const mealPlanKey = me ? mealPlanCacheKey(me.id) : "meal-plan:none";
   const mealPlan = useCachedApi<MealPlan>(mealPlanKey, fetchMealPlan, { enabled: isSponsorRep });
@@ -344,13 +352,25 @@ export default function AccountScreen() {
       >
         {/* H28: scrolls away with the content instead of staying pinned. */}
         <AccountWalletButton wallet={wallet} />
-        {languageError ? (
-          <RequestFeedback
-            error={languageError}
-            message={t("accountLanguageError")}
-            onRetry={languageRetry ? () => void changeLanguage(languageRetry) : undefined}
-            retrying={savingLanguage}
-          />
+        {intolerancesError || languageError ? (
+          // The wallet circle floats over the top-left corner: keep notices clear of it.
+          <View style={{ gap: 20, paddingTop: WALLET_BUTTON_CLEARANCE }}>
+            {intolerancesError ? (
+              <RequestFeedback
+                error={intolerancesError}
+                onRetry={() => void loadSupportingData()}
+                retrying={intolerancesLoading}
+              />
+            ) : null}
+            {languageError ? (
+              <RequestFeedback
+                error={languageError}
+                message={t("accountLanguageError")}
+                onRetry={languageRetry ? () => void changeLanguage(languageRetry) : undefined}
+                retrying={savingLanguage}
+              />
+            ) : null}
+          </View>
         ) : null}
 
         <View style={{ alignItems: "center", gap: 12, paddingVertical: 10 }}>

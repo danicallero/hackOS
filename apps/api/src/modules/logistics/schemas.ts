@@ -18,6 +18,7 @@ export const checkInBody = z.object({
   ticketToken: z.string().min(1),
   badgeId: z.string().min(1),
   method: z.enum(["qr", "manual", "nfc"]).default("qr"),
+  assignedAt: z.coerce.date().optional(),
 });
 
 export const checkInUserBody = z.object({
@@ -25,6 +26,7 @@ export const checkInUserBody = z.object({
   badgeId: z.string().min(1),
   method: z.enum(["qr", "manual", "nfc"]).default("manual"),
   attendeeRole: z.enum(["participant", "mentor"]).optional(),
+  assignedAt: z.coerce.date().optional(),
 });
 
 export const rotateBody = z
@@ -33,6 +35,7 @@ export const rotateBody = z
     currentBadgeId: z.string().min(1).optional(),
     newBadgeId: z.string().min(1),
     reason: z.string().min(1),
+    assignedAt: z.coerce.date().optional(),
   })
   .refine((b) => b.userId != null || b.currentBadgeId != null, {
     message: "Provide userId or currentBadgeId",
@@ -232,6 +235,8 @@ export const activityScanBody = z
   .object({
     badgeId: z.string().min(1).optional(),
     ticketToken: z.string().min(1).optional(),
+    /** Offline scan of a badge accredited offline: the person the operator saw (H54). */
+    expectedUserId: z.number().int().positive().optional(),
     allowRepeat: z.boolean().default(false),
     scannedAt: z.coerce.date().optional(),
   })

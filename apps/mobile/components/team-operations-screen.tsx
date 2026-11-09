@@ -223,6 +223,10 @@ export function TeamOperationsScreen() {
   const [repoChallenges, setRepoChallenges] = useState<RepoChallenge[]>([]);
   const [selectedQueueIndex, setSelectedQueueIndex] = useState(0);
   const [selectedEntryHistory, setSelectedEntryHistory] = useState<HistoryRow[] | null>(null);
+  const [historyError, setHistoryError] = useState<Error | null>(null);
+  const [challengeError, setChallengeError] = useState<Error | null>(null);
+  const historyRequest = useRef(0);
+  const historyEntry = useRef<number | null>(null);
   const [tabLoading, setTabLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [loadState, setLoadState] = useState<TeamLoadState>("loading");
@@ -269,13 +273,12 @@ export function TeamOperationsScreen() {
         const targetChallengeId = Number(found.challenge_id);
         const idx = shared.findIndex((qc) => Number(qc.id) === targetChallengeId);
         setSelectedQueueIndex(idx >= 0 ? idx : 0);
-      } catch {
-        setRepoChallenges([]);
-        setSelectedQueueIndex(0);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause : new Error(String(cause)));
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause : new Error(t("queueOpsNotifyError")));
-      setLoadState("error");
+      setLoadState((current) => (current === "ready" ? current : "error"));
     }
   }, [entryId, roomId, t]);
 
@@ -357,16 +360,19 @@ export function TeamOperationsScreen() {
 
   // The tab's own queue entry carries rank, wait and call count, wherever it is queued.
   const fetchTabData = useCallback(async (qc: RepoChallenge) => {
-    setSelectedEntryHistory(null);
+    const request = ++historyRequest.current;
+    if (historyEntry.current !== qc.entry_id) setSelectedEntryHistory(null);
+    historyEntry.current = qc.entry_id;
+    setHistoryError(null);
     setTabLoading(true);
     try {
-      setSelectedEntryHistory(
-        await apiFetch<HistoryRow[]>(`/api/queue/entries/${qc.entry_id}/history`),
-      );
-    } catch {
-      setSelectedEntryHistory([]);
+      const rows = await apiFetch<HistoryRow[]>(`/api/queue/entries/${qc.entry_id}/history`);
+      if (request === historyRequest.current) setSelectedEntryHistory(rows);
+    } catch (cause) {
+      if (request === historyRequest.current)
+        setHistoryError(cause instanceof Error ? cause : new Error(String(cause)));
     } finally {
-      setTabLoading(false);
+      if (request === historyRequest.current) setTabLoading(false);
     }
   }, []);
 
@@ -379,6 +385,7 @@ export function TeamOperationsScreen() {
   const openAddChallenge = useCallback(async () => {
     setShowAddChallenge(true);
     setAvailableChallengesLoading(true);
+    setChallengeError(null);
     try {
       const result = await apiFetch<{
         challenges: Array<{ id: number; title: string | Record<string, string> }>;
@@ -393,8 +400,8 @@ export function TeamOperationsScreen() {
               typeof ch.title === "string" ? ch.title : (ch.title[language] ?? ch.title.en ?? ""),
           })),
       );
-    } catch {
-      setAvailableChallenges([]);
+    } catch (cause) {
+      setChallengeError(cause instanceof Error ? cause : new Error(String(cause)));
     } finally {
       setAvailableChallengesLoading(false);
     }
@@ -407,7 +414,8 @@ export function TeamOperationsScreen() {
 
   const enrollChallenge = useCallback(
     async (challengeId: number) => {
-      if (!entry) return;
+      if (!entry || enrolling !== null) return;
+      setChallengeError(null);
       setEnrolling(challengeId);
       try {
         await apiFetch(`/api/repos/${entry.repo_id}/challenges`, {
@@ -419,12 +427,13 @@ export function TeamOperationsScreen() {
         });
         await load();
         closeAddChallenge();
-      } catch {
+      } catch (cause) {
+        setChallengeError(cause instanceof Error ? cause : new Error(String(cause)));
       } finally {
         setEnrolling(null);
       }
     },
-    [entry, load, closeAddChallenge],
+    [entry, load, closeAddChallenge, enrolling],
   );
 
   const removeFromQueue = useCallback(
@@ -446,7 +455,8 @@ export function TeamOperationsScreen() {
                   method: "DELETE",
                 });
                 await load();
-              } catch {
+              } catch (cause) {
+                setError(cause instanceof Error ? cause : new Error(String(cause)));
               } finally {
                 setRemoving(null);
               }
@@ -482,7 +492,7 @@ export function TeamOperationsScreen() {
     );
   }
 
-  if (loadState === "error" && error) {
+  if (loadState === "error" && error && !entry) {
     return (
       <View style={{ backgroundColor: colors.background, flex: 1 }}>
         <RequestFeedback error={error} onRetry={() => void load()} />
@@ -559,6 +569,7 @@ export function TeamOperationsScreen() {
           </View>
         ) : null}
 
+        {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}
         <Section title={t("teamDetailMembers")}>
           {members.map((member, index) => (
             <View key={member.userId ?? member.email}>
@@ -795,10 +806,18 @@ export function TeamOperationsScreen() {
               t={t}
               scrollRef={tabScrollRef}
             />
+            {tabLoading ? <RequestFeedback loading compact /> : null}
+            {historyError && selectedQueue ? (
+              <RequestFeedback
+                error={historyError}
+                onRetry={() => void fetchTabData(selectedQueue)}
+                retrying={tabLoading}
+              />
+            ) : null}
             {selectedQueue ? (
               <QueueDetailView
                 queue={selectedQueue}
-                history={tabLoading ? null : selectedEntryHistory}
+                history={selectedEntryHistory}
                 canEdit={canEditProject}
                 onRemove={removeFromQueue}
                 removing={removing}
@@ -806,7 +825,7 @@ export function TeamOperationsScreen() {
               />
             ) : null}
           </View>
-        ) : (
+        ) : !error ? (
           <Section>
             <EmptyState
               icon="tray"
@@ -814,7 +833,7 @@ export function TeamOperationsScreen() {
               description={t("teamDetailQueueEmpty")}
             />
           </Section>
-        )}
+        ) : null}
 
         {showAddChallenge ? (
           <SheetModal animationType="slide" onRequestClose={closeAddChallenge}>
@@ -853,6 +872,13 @@ export function TeamOperationsScreen() {
                   </View>
                 </Section>
 
+                {challengeError ? (
+                  <RequestFeedback
+                    error={challengeError}
+                    onRetry={() => void openAddChallenge()}
+                    retrying={availableChallengesLoading || enrolling !== null}
+                  />
+                ) : null}
                 {availableChallengesLoading ? (
                   <View style={{ paddingVertical: 24 }}>
                     <AppActivityIndicator size="small" color={colors.accent} />
@@ -904,7 +930,7 @@ export function TeamOperationsScreen() {
                       </View>
                     ))}
                   </Section>
-                ) : (
+                ) : !challengeError ? (
                   <Text
                     selectable
                     style={{
@@ -917,7 +943,7 @@ export function TeamOperationsScreen() {
                   >
                     {t("teamDetailAlreadyEnqueued")}
                   </Text>
-                )}
+                ) : null}
               </ScrollView>
 
               <FloatingGlassButton

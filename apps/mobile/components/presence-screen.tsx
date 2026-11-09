@@ -50,11 +50,15 @@ export function PresenceScreen() {
 
   useEffect(() => {
     let active = true;
-    void findPersonById(userId).then((person) => {
-      if (!active || !person) return;
-      setPersonName([person.name, person.surname].filter(Boolean).join(" ") || person.email);
-      setPersonBadgeId(person.badgeId);
-    });
+    void findPersonById(userId)
+      .then((person) => {
+        if (!active || !person) return;
+        setPersonName([person.name, person.surname].filter(Boolean).join(" ") || person.email);
+        setPersonBadgeId(person.badgeId);
+      })
+      .catch(() => {
+        // The timeline is independently fetched; missing local labels must not block it.
+      });
     return () => {
       active = false;
     };

@@ -80,6 +80,8 @@ export function ManageAnnouncementsView({
   const { me } = useMeContext();
   const [refreshing, setRefreshing] = useState(false);
   const [editTarget, setEditTarget] = useState<AdminAnnouncement | null>(null);
+  const [editError, setEditError] = useState<Error | null>(null);
+  const [editAttempt, setEditAttempt] = useState(0);
   const [editLoading, setEditLoading] = useState(false);
 
   const { data, loading, error, staleSince, load } = useCachedApi(
@@ -94,15 +96,20 @@ export function ManageAnnouncementsView({
   }, [load]);
 
   useEffect(() => {
+    void editAttempt;
     if (typeof formOpen !== "number") {
       setEditTarget(null);
       return;
     }
     let cancelled = false;
     setEditLoading(true);
+    setEditError(null);
     void fetchAnnouncement(formOpen)
       .then((full) => {
         if (!cancelled) setEditTarget(full);
+      })
+      .catch((cause) => {
+        if (!cancelled) setEditError(cause instanceof Error ? cause : new Error(String(cause)));
       })
       .finally(() => {
         if (!cancelled) setEditLoading(false);
@@ -110,7 +117,7 @@ export function ManageAnnouncementsView({
     return () => {
       cancelled = true;
     };
-  }, [formOpen]);
+  }, [formOpen, editAttempt]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -165,6 +172,14 @@ export function ManageAnnouncementsView({
         }
       >
         {tabSwitcher}
+        {editLoading ? <RequestFeedback loading compact /> : null}
+        {editError ? (
+          <RequestFeedback
+            error={editError}
+            onRetry={() => setEditAttempt((current) => current + 1)}
+            retrying={editLoading}
+          />
+        ) : null}
         <StaleDataBanner updatedAt={staleSince} />
 
         {error ? <RequestFeedback error={error} onRetry={() => void load()} /> : null}

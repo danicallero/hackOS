@@ -21,7 +21,14 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { AppRefreshControl } from "@/components/app-refresh-control";
-import { ActionButton, AppSwitch, Section, SWITCH_IN_ROW_STYLE } from "@/components/native-ui";
+import {
+  ActionButton,
+  AppSwitch,
+  EmptyState,
+  Section,
+  SWITCH_IN_ROW_STYLE,
+} from "@/components/native-ui";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { SymbolView } from "@/components/symbol";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
@@ -98,6 +105,24 @@ export function LiveActivityKindsScreen() {
         <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
       }
     >
+      {kinds.loading && !kinds.ready ? <RequestFeedback loading /> : null}
+      {kinds.error ? (
+        <RequestFeedback
+          error={kinds.error}
+          onRetry={() => void kinds.load()}
+          retrying={kinds.loading}
+        />
+      ) : null}
+      {kinds.actionError ? (
+        <RequestFeedback
+          error={kinds.actionError}
+          onRetry={kinds.retry}
+          retrying={kinds.ordering || kinds.busyKind !== null}
+        />
+      ) : null}
+      {kinds.ready && !kinds.error && kinds.kinds.length === 0 ? (
+        <EmptyState icon="bell" title={t("scannerNoResults")} />
+      ) : null}
       {kinds.kinds.length > 0 ? (
         <Section footer={kinds.kinds.length > 1 ? t("liveActivityOrderFooter") : undefined}>
           <KindOrderList

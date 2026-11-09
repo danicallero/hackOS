@@ -3,7 +3,7 @@ import { Text } from "react-native";
 import { type PaneBarItem, withBarGaps } from "@/lib/pane-header-items";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
-import { SCREEN_TITLE } from "@/theme/screen-title";
+import { NATIVE_HEADER_MEASUREMENT_FONT_SIZE, SCREEN_TITLE } from "@/theme/screen-title";
 
 /**
  * The top-level title of a screen's native bar (Scanner, Activities, Schedule, Contacts): plain
@@ -25,6 +25,35 @@ export function screenTitleElement(
     },
     title,
   );
+}
+
+/**
+ * H55: a fixed section title with UIKit's scroll-edge blur, clear at rest.
+ * Keep the native title populated: UIKit uses the navigation item to extend
+ * its edge effect under the bar. A leading toolbar title supplies the visible
+ * SCREEN_TITLE text; the centred copy is transparent instead of duplicated.
+ * The screen's first native child must remain its ScrollView or FlatList.
+ */
+export function fixedScrollHeaderOptions(title: string, leadingTitle = true) {
+  return {
+    title,
+    headerTitle: title,
+    headerShown: true,
+    headerLargeTitle: false,
+    headerTransparent: true,
+    // Let the native transparent bar own its scroll-edge appearance.
+    headerStyle: undefined,
+    headerBlurEffect: "none",
+    headerShadowVisible: false,
+    headerLargeTitleShadowVisible: false,
+    headerTitleAlign: "left",
+    headerTitleStyle: {
+      ...SCREEN_TITLE,
+      color: leadingTitle ? "transparent" : colors.label,
+      fontSize: leadingTitle ? NATIVE_HEADER_MEASUREMENT_FONT_SIZE : SCREEN_TITLE.fontSize,
+    },
+    scrollEdgeEffects: { top: "soft" },
+  } as const;
 }
 
 /**
