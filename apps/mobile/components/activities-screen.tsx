@@ -559,6 +559,8 @@ const ActivityRow = memo(function ActivityRow({
   t: ReturnType<typeof useLocale>["t"];
 }) {
   const accessibilityText = isAccessibilityTextSize(useWindowDimensions().fontScale);
+  // The theme tokens are module-level: subscribe so a live light/dark switch repaints this memo'd row.
+  useColorScheme();
   useEventTimeZone();
   const startsAt = item.startsAt ? new Date(item.startsAt) : null;
   return (
