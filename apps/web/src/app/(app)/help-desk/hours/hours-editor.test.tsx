@@ -2,10 +2,10 @@ import type { HelpdeskSchedule } from "@hackos/shared/help-desk";
 import { getByLabelText, getByRole } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { act, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Root } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
-import { setEventTimeZone } from "@/lib/event-time";
+import { dialog, setupMountedRoot, typeInto } from "../dialog-test-utils";
 import { HoursEditor } from "./hours-editor";
 
 vi.mock("@/lib/api", () => ({ api: { put: vi.fn() }, ApiError: class extends Error {} }));
@@ -35,26 +35,10 @@ function Editor({ initial = base }: { initial?: HelpdeskSchedule }) {
   const [current, setCurrent] = useState(initial);
   return <HoursEditor schedule={current} onSaved={setCurrent} />;
 }
-beforeEach(() => {
-  vi.clearAllMocks();
-  setEventTimeZone("UTC");
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
+setupMountedRoot((mountedRoot, mountedContainer) => {
+  root = mountedRoot;
+  container = mountedContainer;
 });
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-});
-const dialog = () => getByRole(document.body, "dialog");
-async function type(label: string, value: string) {
-  const input = getByLabelText(dialog(), label) as HTMLInputElement;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-}
 describe("help desk hours (H64)", () => {
   it("shows the status with the next change and explains an empty schedule", async () => {
     await act(async () => root.render(<Editor />));
@@ -84,7 +68,7 @@ describe("help desk hours (H64)", () => {
     expect((getByLabelText(dialog(), "helpDeskFrom") as HTMLInputElement).value).toBe(
       "2027-02-27T16:00",
     );
-    await type("helpDeskTo", "2027-02-27T18:00");
+    await typeInto("helpDeskTo", "2027-02-27T18:00");
     await act(async () =>
       userEvent.click(getByRole(dialog(), "button", { name: "helpDeskHoursAdd" })),
     );
@@ -102,13 +86,13 @@ describe("help desk hours (H64)", () => {
     await act(async () =>
       userEvent.click(getByRole(container, "button", { name: "helpDeskHoursAdd" })),
     );
-    await type("helpDeskFrom", "2027-02-27T11:00");
-    await type("helpDeskTo", "2027-02-27T13:00");
+    await typeInto("helpDeskFrom", "2027-02-27T11:00");
+    await typeInto("helpDeskTo", "2027-02-27T13:00");
     expect(dialog().textContent).toContain("helpDeskHoursOverlap");
     expect(
       getByRole(dialog(), "button", { name: "helpDeskHoursAdd" }).hasAttribute("disabled"),
     ).toBe(true);
-    await type("helpDeskTo", "2027-02-27T10:30");
+    await typeInto("helpDeskTo", "2027-02-27T10:30");
     expect(dialog().textContent).toContain("helpDeskIntervalOrder");
     expect(api.put).not.toHaveBeenCalled();
   });
@@ -130,7 +114,7 @@ describe("help desk hours (H64)", () => {
         container.querySelector<HTMLButtonElement>('button[aria-label^="helpDeskHoursEdit"]')!,
       ),
     );
-    await type("helpDeskTo", "2027-02-27T13:00");
+    await typeInto("helpDeskTo", "2027-02-27T13:00");
     await act(async () => userEvent.click(getByRole(dialog(), "button", { name: "saveChanges" })));
     expect(dialog().textContent).toContain("helpDeskSaveError");
   });

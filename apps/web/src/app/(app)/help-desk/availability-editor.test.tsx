@@ -1,11 +1,11 @@
 import { getByLabelText, getByRole } from "@testing-library/dom";
 import userEvent from "@testing-library/user-event";
 import { act, useState } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Root } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
-import { setEventTimeZone } from "@/lib/event-time";
 import { AvailabilityEditor } from "./availability-editor";
+import { dialog, setupMountedRoot, typeInto } from "./dialog-test-utils";
 import type { MyHelperProfile } from "./model";
 
 vi.mock("@/lib/api", () => ({ api: { put: vi.fn() }, ApiError: class extends Error {} }));
@@ -38,26 +38,10 @@ function Editor({ initial = profile }: { initial?: MyHelperProfile }) {
     />
   );
 }
-beforeEach(() => {
-  vi.clearAllMocks();
-  setEventTimeZone("UTC");
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
+setupMountedRoot((mountedRoot, mountedContainer) => {
+  root = mountedRoot;
+  container = mountedContainer;
 });
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-});
-const dialog = () => getByRole(document.body, "dialog");
-async function changeEnd(value: string) {
-  const input = getByLabelText(dialog(), "helpDeskTo") as HTMLInputElement;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-}
 describe("availability replacement (H62)", () => {
   it("edits in one replacement, retains the old schedule on failure, then retries the same draft", async () => {
     vi.mocked(api.put).mockRejectedValueOnce(new Error("Offline"));
@@ -69,7 +53,7 @@ describe("availability replacement (H62)", () => {
         )[0],
       ),
     );
-    await changeEnd("2027-02-27T13:00");
+    await typeInto("helpDeskTo", "2027-02-27T13:00");
     await act(async () => userEvent.click(getByRole(dialog(), "button", { name: "saveChanges" })));
     expect(saved).not.toHaveBeenCalled();
     expect(container.textContent).toContain("10:00 AM–12:00 PM");
@@ -116,7 +100,7 @@ describe("availability replacement (H62)", () => {
     expect(getByRole(dialog(), "button", { name: "saveChanges" }).hasAttribute("disabled")).toBe(
       false,
     );
-    await changeEnd("2027-02-27T15:00");
+    await typeInto("helpDeskTo", "2027-02-27T15:00");
     expect(dialog().textContent).toContain("helpDeskIntervalOverlap");
     expect(getByRole(dialog(), "button", { name: "saveChanges" }).hasAttribute("disabled")).toBe(
       true,

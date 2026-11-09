@@ -1,22 +1,18 @@
 "use client";
-import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import {
   type AvailabilityInterval,
   type HelpdeskSchedule,
   MAX_AVAILABILITY_INTERVALS,
 } from "@hackos/shared/help-desk";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
-import { DateTimeInput } from "@/components/common/datetime-input";
-import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
-import { useEventTimeZone, useEventZoneHint } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
+import { IntervalDialog } from "../interval-dialog";
 
 const overlaps = (a: AvailabilityInterval, b: AvailabilityInterval) =>
   Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
@@ -169,92 +165,21 @@ function WindowDialog({
   onClose: () => void;
   onSave: (window: AvailabilityInterval) => void;
 }) {
-  const { t, language } = useLocale();
-  const id = useId();
-  const zone = useEventTimeZone();
-  const zoneHint = useEventZoneHint(language);
-  // Prefilled from the hacking window; every field stays editable.
-  const [from, setFrom] = useState(() =>
-    instantToWallClock(suggested?.startsAt ?? "", zone).slice(0, 16),
-  );
-  const [to, setTo] = useState(() =>
-    instantToWallClock(suggested?.endsAt ?? "", zone).slice(0, 16),
-  );
-  const [submitted, setSubmitted] = useState(false);
-  const startsAt = from ? wallClockToInstant(from, zone) : null;
-  const endsAt = to ? wallClockToInstant(to, zone) : null;
-  const ordered = !!startsAt && !!endsAt && Date.parse(endsAt) > Date.parse(startsAt);
-  const window = startsAt && endsAt && ordered ? { startsAt, endsAt } : null;
-  const message =
-    !startsAt || !endsAt
-      ? submitted
-        ? t("helpDeskHoursIncomplete")
-        : null
-      : !ordered
-        ? t("helpDeskIntervalOrder")
-        : window && others.some((other) => overlaps(window, other))
-          ? t("helpDeskHoursOverlap")
-          : null;
+  const { t } = useLocale();
   return (
-    <Modal
-      open
-      size="sm"
-      onOpenChange={(open) => {
-        if (!open && !pending) onClose();
-      }}
+    <IntervalDialog
       title={t(editing ? "helpDeskHoursEditTitle" : "helpDeskHoursAdd")}
-    >
-      <form
-        className="space-y-4"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          setSubmitted(true);
-          if (window && !message) onSave(window);
-        }}
-      >
-        <fieldset disabled={pending} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-from`}>{t("helpDeskFrom")}</Label>
-            <DateTimeInput
-              id={`${id}-from`}
-              type="datetime-local"
-              value={from}
-              onChange={setFrom}
-              aria-describedby={`${id}-status`}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-to`}>{t("helpDeskTo")}</Label>
-            <DateTimeInput
-              id={`${id}-to`}
-              type="datetime-local"
-              value={to}
-              onChange={setTo}
-              aria-describedby={`${id}-status`}
-            />
-          </div>
-          <p
-            id={`${id}-status`}
-            role={message ? "alert" : undefined}
-            className={message ? "text-destructive text-sm" : "text-muted-foreground text-sm"}
-          >
-            {message ?? zoneHint}
-          </p>
-        </fieldset>
-        {error ? (
-          <ContextualError message={apiErrorText(error, t, t("helpDeskSaveError"))} />
-        ) : null}
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
-            {t("cancel")}
-          </Button>
-          <Button type="submit" loading={pending} disabled={!!message && !!startsAt && !!endsAt}>
-            {t(editing ? "saveChanges" : "helpDeskHoursAdd")}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+      submitLabel={t(editing ? "saveChanges" : "helpDeskHoursAdd")}
+      initial={suggested}
+      incompleteMessage={t("helpDeskHoursIncomplete")}
+      validate={(window) =>
+        others.some((other) => overlaps(window, other)) ? t("helpDeskHoursOverlap") : null
+      }
+      pending={pending}
+      error={error}
+      onClose={onClose}
+      onSave={onSave}
+    />
   );
 }
 
