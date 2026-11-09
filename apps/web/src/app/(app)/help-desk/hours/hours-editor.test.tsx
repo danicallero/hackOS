@@ -71,7 +71,7 @@ describe("help desk hours (H64)", () => {
     expect(container.textContent).toContain("helpDeskHoursOpenNow");
     expect(container.textContent).toContain("helpDeskHoursEmpty");
   });
-  it("adds a window prefilled from the hacking window as one complete sorted replacement", async () => {
+  it("adds a window prefilled after the last one as one complete sorted replacement", async () => {
     vi.mocked(api.put).mockImplementation(async (_path, body) => ({
       ...base,
       windows: (body as { windows: HelpdeskSchedule["windows"] }).windows,
@@ -80,18 +80,19 @@ describe("help desk hours (H64)", () => {
     await act(async () =>
       userEvent.click(getByRole(container, "button", { name: "helpDeskHoursAdd" })),
     );
+    // The prefill starts after the last window so it never opens overlapping.
     expect((getByLabelText(dialog(), "helpDeskFrom") as HTMLInputElement).value).toBe(
-      "2027-02-26T09:00",
+      "2027-02-27T16:00",
     );
-    await type("helpDeskTo", "2027-02-26T18:00");
+    await type("helpDeskTo", "2027-02-27T18:00");
     await act(async () =>
       userEvent.click(getByRole(dialog(), "button", { name: "helpDeskHoursAdd" })),
     );
     expect(api.put).toHaveBeenCalledWith("/api/helpdesk/schedule", {
       windows: [
-        { startsAt: "2027-02-26T09:00:00.000Z", endsAt: "2027-02-26T18:00:00.000Z" },
         first,
         second,
+        { startsAt: "2027-02-27T16:00:00.000Z", endsAt: "2027-02-27T18:00:00.000Z" },
       ],
     });
     expect(document.querySelector("[role=dialog]")).toBeNull();

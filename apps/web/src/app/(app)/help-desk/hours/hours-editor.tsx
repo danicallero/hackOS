@@ -133,7 +133,7 @@ export function HoursEditor({
         <WindowDialog
           editing={dialog.editing}
           others={schedule.windows.filter((item) => item.startsAt !== dialog.editing?.startsAt)}
-          suggested={dialog.editing ?? schedule.suggestedInterval}
+          suggested={dialog.editing ?? nextFreeWindow(schedule)}
           pending={pending}
           error={error}
           onClose={() => setDialog(null)}
@@ -256,4 +256,22 @@ function WindowDialog({
       </form>
     </Modal>
   );
+}
+
+/**
+ * The prefill of a new window: the hacking window when nothing is set, else the
+ * stretch after the last window (until the hacking window's end when that is
+ * later, else eight hours), so it never opens already overlapping.
+ */
+function nextFreeWindow(schedule: {
+  windows: AvailabilityInterval[];
+  suggestedInterval: AvailabilityInterval | null;
+}): AvailabilityInterval | null {
+  if (schedule.windows.length === 0) return schedule.suggestedInterval;
+  const lastEnd = Math.max(...schedule.windows.map((window) => Date.parse(window.endsAt)));
+  const hackingEnd = schedule.suggestedInterval
+    ? Date.parse(schedule.suggestedInterval.endsAt)
+    : Number.NEGATIVE_INFINITY;
+  const end = hackingEnd > lastEnd ? hackingEnd : lastEnd + 8 * 3_600_000;
+  return { startsAt: new Date(lastEnd).toISOString(), endsAt: new Date(end).toISOString() };
 }

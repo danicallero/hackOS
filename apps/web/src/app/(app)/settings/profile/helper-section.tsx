@@ -98,7 +98,6 @@ function HelperForm({
     >
       <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
         <SwitchRow checked={published} onChange={setPublished} label={t("helpDeskPublish")} />
-        <h3 className="type-label pt-2">{t("helpDeskMentorProfile")}</h3>
         {profile.challengeOptions.length > 0 ? (
           <fieldset className="space-y-2">
             <legend className="type-label">{t("helpDeskChallengeAlerts")}</legend>

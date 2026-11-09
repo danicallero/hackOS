@@ -4078,7 +4078,6 @@
   "helpDeskComing": "{name} va de camino a {location}",
   "helpDeskGoTo": "Reúnete con {name} en {location}",
   "helpDeskPublish": "Disponible para mentorizar",
-  "helpDeskMentorProfile": "Perfil de mentor",
   "helpDeskAddIntervalOn": "Añadir disponibilidad el {day}",
   "helpDeskAddInterval": "Añadir disponibilidad",
   "helpDeskRemoveInterval": "Quitar {interval}",
