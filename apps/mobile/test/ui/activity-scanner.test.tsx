@@ -207,7 +207,7 @@ it("treats failed live figures as offline mode, not an error", async () => {
   jest.mocked(apiFetch).mockRejectedValue(new Error("offline"));
   try {
     await renderMobile(<ActivityScannerScreen />);
-    expect(await screen.findByText("scannerOfflineMode")).toBeTruthy();
+    expect(await screen.findByText("offlineMode")).toBeTruthy();
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
   } finally {
     mockParams = originalParams;

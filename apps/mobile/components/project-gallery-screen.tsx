@@ -361,7 +361,8 @@ export function ProjectGalleryScreen() {
               gap: 20,
               paddingBottom: empty ? 96 : 32,
               flexGrow: 1,
-              justifyContent: empty ? "center" : undefined,
+              // Centre an empty state; a status notice stays at the top under the title.
+              justifyContent: empty && !error ? "center" : undefined,
             }}
           >
             {closed ? (

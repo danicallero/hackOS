@@ -866,6 +866,13 @@ they are not device screenshots or proof of native toolbar behavior.
   "last update" timestamp as a bare time for today, "Yesterday, <time>" for
   yesterday, a weekday name for the rest of the week, and a short date beyond
   that.
+  Load failures render through one component (`components/status-notice.tsx`): a full-width
+  capsule with a short message and a trailing action. No connection is `OfflineNotice` (grey,
+  "Offline mode", Reconnect), shown once per visible screen however many requests failed and
+  also used by the scanners; a real server error is `ErrorNotice` (red, Retry). The action
+  swaps in place between its label, a spinner (at least 500 ms) and a red cross, and survives
+  the notice remounting on a repeated failure. `RequestFeedback` and `StaleDataBanner` are
+  thin wrappers over it.
   Failure states follow one rule across Schedule and Activities: a failed
   fetch never reads as an empty list (`useCachedApi` marks rendered data stale even
   without a persisted copy; Activities shows offline instead of "no activities" when nothing

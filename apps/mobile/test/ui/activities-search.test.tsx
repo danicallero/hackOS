@@ -274,7 +274,7 @@ describe("activities list search, filter and now marker (H25, H26)", () => {
 
     await renderMobile(<ActivitiesScreen />);
 
-    await waitFor(() => expect(screen.getByLabelText("retry")).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText("offlineReconnect")).toBeTruthy());
     expect(screen.queryByText("scannerActivitiesEmpty")).toBeNull();
   });
 
