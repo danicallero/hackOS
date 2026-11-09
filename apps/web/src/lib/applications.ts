@@ -197,6 +197,8 @@ export interface ResponseRow {
   status: string;
   responses: Record<string, unknown>;
   staff_notes: string | null;
+  /** Reason recorded with a rejection (H14); visible to reviewers. */
+  rejection_reason?: string | null;
   submitted_at: string | null;
   decision_sent_at: string | null;
   confirmation_expires_at: string | null;

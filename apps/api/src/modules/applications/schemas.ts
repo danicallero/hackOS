@@ -111,6 +111,8 @@ export const staffNotesSchema = z.object({ staff_notes: z.string().nullish() });
 
 export const decideSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
+  /** Optional rejection reason; shown to the applicant only once the decision is sent. */
+  reason: z.string().trim().max(1000).nullish(),
 });
 
 export const sendDecisionsSchema = z.object({
@@ -150,6 +152,7 @@ export const batchIdsSchema = z.object({
 
 export const batchDecideSchema = batchIdsSchema.extend({
   decision: z.enum(["accepted", "rejected"]),
+  reason: z.string().trim().max(1000).nullish(),
 });
 
 export const batchSendDecisionsSchema = batchIdsSchema;

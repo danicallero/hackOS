@@ -59,6 +59,7 @@ export interface ResponseRow {
   confirmed_at: Date | null;
   declined_at: Date | null;
   decision_sent_at: Date | null;
+  rejection_reason: string | null;
   submitted_at: Date | null;
   allow_resubmit_after_close: boolean;
   auto_accept_on_resubmit: boolean;
@@ -671,7 +672,7 @@ export async function returnToDraft(
       `UPDATE application_responses
           SET status = 'draft', decision_sent_at = NULL, confirmation_token_id = NULL,
               confirmed_at = NULL, declined_at = NULL, submitted_at = NULL,
-              draft_reminders_sent = 0, draft_reminded_at = NULL,
+              rejection_reason = NULL, draft_reminders_sent = 0, draft_reminded_at = NULL,
               allow_resubmit_after_close = $2, auto_accept_on_resubmit = $3
         WHERE id = $1 RETURNING *`,
       [responseId, input.allow_resubmit_after_close, input.auto_accept_on_resubmit],
@@ -861,7 +862,9 @@ export async function decide(
   actorId: number,
   responseId: number,
   decision: "accepted" | "rejected",
+  reason?: string | null,
 ): Promise<ResponseRow> {
+  const rejectionReason = decision === "rejected" ? reason?.trim() || null : null;
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId, actorId);
     // Serialize capacity checks across parallel accepts on the same form.
@@ -881,8 +884,9 @@ export async function decide(
 
     const internalStatus = decision === "accepted" ? "accepted_internal" : "rejected_internal";
     const updated = await client.query(
-      `UPDATE application_responses SET status = $2 WHERE id = $1 RETURNING *`,
-      [responseId, internalStatus],
+      `UPDATE application_responses SET status = $2, rejection_reason = $3
+        WHERE id = $1 RETURNING *`,
+      [responseId, internalStatus, rejectionReason],
     );
     await audit(client, {
       actorId,
@@ -890,7 +894,7 @@ export async function decide(
       entityId: responseId,
       action: `decided_${decision}`,
       before: { status: "review" },
-      after: { status: internalStatus, decision_sent_at: null },
+      after: { status: internalStatus, decision_sent_at: null, rejection_reason: rejectionReason },
       reason: "internal decision (unsent)",
     });
     return updated.rows[0];
@@ -928,7 +932,7 @@ export async function revertDecision(
       const updated = await client.query(
         `UPDATE application_responses
          SET status = 'review', decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
          WHERE id = $1 RETURNING *`,
         [responseId],
       );
@@ -980,7 +984,7 @@ export async function revertDecision(
     const updated = await client.query(
       `UPDATE application_responses
          SET status = $2, decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
        WHERE id = $1 RETURNING *`,
       [responseId, newInternalStatus],
     );
@@ -1021,6 +1025,7 @@ async function sendOne(
     app,
     sentStatus as "accepted" | "rejected",
     token,
+    resp.rejection_reason,
   );
   await audit(client, {
     actorId,
@@ -1121,7 +1126,15 @@ export async function resendDecision(
         `UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`,
         [resp.id],
       );
-      await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
+      await enqueueDecisionEmailRow(
+        client,
+        resp.user_id,
+        user,
+        app,
+        "rejected",
+        null,
+        resp.rejection_reason,
+      );
       await audit(client, {
         actorId,
         entityType: "application_response",
@@ -1190,7 +1203,8 @@ export async function reAccept(
 
     await client.query(
       `UPDATE application_responses
-       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL
+       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL,
+           rejection_reason = NULL
        WHERE id = $1`,
       [resp.id],
     );
@@ -1437,8 +1451,9 @@ export async function batchDecide(
   actorId: number,
   responseIds: number[],
   decision: "accepted" | "rejected",
+  reason?: string | null,
 ): Promise<BatchResult> {
-  return runBatch(responseIds, (id) => decide(actorId, id, decision));
+  return runBatch(responseIds, (id) => decide(actorId, id, decision, reason));
 }
 
 /** Batch re-accept declined/rejected/expired responses (M2). */
@@ -1544,8 +1559,16 @@ async function enqueueDecisionEmailRow(
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
+  rejectionReason: string | null = null,
 ): Promise<void> {
-  const payload = await decisionNotificationPayload(client, user, app, decision, confirmToken);
+  const payload = await decisionNotificationPayload(
+    client,
+    user,
+    app,
+    decision,
+    confirmToken,
+    rejectionReason,
+  );
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
      VALUES ($1, 'application', 'email', $2::jsonb)`,
@@ -1581,6 +1604,7 @@ async function decisionNotificationPayload(
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
+  rejectionReason: string | null = null,
 ): Promise<EmailPayload> {
   const language = normalizeLanguage(user.language);
   const eventName = await getEventName(client);
@@ -1613,6 +1637,12 @@ async function decisionNotificationPayload(
       }),
     });
   }
+  const rejectionDetails =
+    decision === "rejected" && rejectionReason
+      ? translateEmail("mail.application.decision.rejectionDetails", language, {
+          reason: rejectionReason,
+        })
+      : "";
   return {
     template: "application.decision",
     recipient: user.email,
@@ -1623,6 +1653,7 @@ async function decisionNotificationPayload(
       eventName,
       decision,
       decisionDetails,
+      rejectionDetails,
       confirmationExpiresAt,
       confirmationTimeZone,
     },
@@ -2145,6 +2176,20 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
 export function maskStatus(status: string): string {
   if (status === "accepted_internal" || status === "rejected_internal") return "review";
   return status;
+}
+
+/**
+ * Applicant-facing copy of a response row: masked status, and the rejection
+ * reason only once the rejection has been sent (H14).
+ */
+export function maskResponse<T extends { status: string; rejection_reason?: string | null }>(
+  row: T,
+): T {
+  return {
+    ...row,
+    status: maskStatus(row.status),
+    rejection_reason: row.status === "rejected" ? (row.rejection_reason ?? null) : null,
+  };
 }
 
 /**

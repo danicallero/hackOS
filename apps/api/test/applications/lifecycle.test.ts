@@ -553,6 +553,57 @@ describe("review + decide (H13, H14)", () => {
     expect(reverted.confirmation_token_id).toBeNull();
   });
 
+  it("rejection reason: hidden from the applicant until sent, then in the email (H14)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await submittedApplicant(appId);
+
+    const decide = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected", reason: "  Incomplete answers  " },
+    });
+    expect(decide.statusCode).toBe(200);
+    expect((await getResponse(responseId)).rejection_reason).toBe("Incomplete answers");
+
+    const mine = async () =>
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/applications/${appId}/response`,
+          headers: asUser(userId),
+        })
+      ).json();
+    const before = await mine();
+    expect(before.status).toBe("review");
+    expect(before.rejection_reason).toBeNull();
+
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    const after = await mine();
+    expect(after.status).toBe("rejected");
+    expect(after.rejection_reason).toBe("Incomplete answers");
+
+    const { rows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].payload.vars.rejectionDetails).toContain("Incomplete answers");
+
+    // Going back to review drops the reason.
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "review" },
+    });
+    expect((await getResponse(responseId)).rejection_reason).toBeNull();
+  });
+
   it("capacity guard: accepting past capacity is a 409", async () => {
     const a = await getApp();
     const appId = await createApplication({ capacity: 1 });

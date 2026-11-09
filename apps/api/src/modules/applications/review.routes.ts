@@ -199,12 +199,13 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Record an internal decision",
         description:
-          "Sets a response's internal accept/reject decision (H14). Not yet visible to the applicant — see send-decision.",
+          "Sets a response's internal accept/reject decision (H14). An optional `reason` is stored with a rejection: reviewers see it immediately, the applicant only once the decision is sent (it is included in the rejection email). Not yet visible to the applicant — see send-decision.",
         params: responseIdParamSchema,
         body: decideSchema,
       },
     },
-    async (req) => decide(req.userId as number, req.params.responseId, req.body.decision),
+    async (req) =>
+      decide(req.userId as number, req.params.responseId, req.body.decision, req.body.reason),
   );
 
   // ── H14: send an individual decision ────────────────────────────────────────
@@ -429,7 +430,8 @@ export function registerReviewRoutes(app: FastifyInstance): void {
         body: batchDecideSchema,
       },
     },
-    async (req) => batchDecide(req.userId as number, req.body.response_ids, req.body.decision),
+    async (req) =>
+      batchDecide(req.userId as number, req.body.response_ids, req.body.decision, req.body.reason),
   );
 
   r.post(

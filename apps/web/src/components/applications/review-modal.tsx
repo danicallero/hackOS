@@ -48,6 +48,8 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, templateFieldId } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -255,6 +257,9 @@ export function ReviewModal({
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [rejectionReason, setRejectionReason] = useState(response.rejection_reason ?? null);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
   const [modalStatus, setModalStatus] = useState(response.status);
@@ -357,6 +362,7 @@ export function ReviewModal({
     reviewDraft.seed(response.id, { score: mine?.score ?? null, notes: mine?.notes ?? "" });
     setModalStatus(response.status);
     setStaffNotes(response.staff_notes ?? "");
+    setRejectionReason(response.rejection_reason ?? null);
     setEditValues({ ...response.responses });
     setEditErrors({});
     setEditing(false);
@@ -571,6 +577,10 @@ export function ReviewModal({
       responseId={response.id}
       canOverride={canOverride}
       onRequestRevoke={() => setConfirmRevoke(true)}
+      onRequestReject={() => {
+        setRejectReason("");
+        setConfirmReject(true);
+      }}
       onAccepted={showApplicantAcceptedToast}
     />
   ) : undefined;
@@ -952,6 +962,15 @@ export function ReviewModal({
                 />
               )}
 
+              {rejectionReason && (st === "rejected_internal" || st === "rejected") && (
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">{t("rejectionReason")}</p>
+                  <p className="whitespace-pre-line text-sm text-muted-foreground">
+                    {rejectionReason}
+                  </p>
+                </div>
+              )}
+
               {canReview && (
                 <StaffNotesCard
                   staffNotes={staffNotes}
@@ -968,6 +987,44 @@ export function ReviewModal({
               )}
             </>
           )}
+
+          <AlertModal
+            open={confirmReject}
+            onOpenChange={setConfirmReject}
+            title={t("reject")}
+            description={t("rejectionReasonHint")}
+            cancelLabel={t("cancel")}
+            confirmLabel={t("reject")}
+            destructive
+            pending={busy}
+            onConfirm={() => {
+              const reason = rejectReason.trim() || null;
+              void run(
+                t("rejectedUnsentToast"),
+                () =>
+                  api.post(`/api/responses/${response.id}/decide`, {
+                    decision: "rejected",
+                    reason,
+                  }),
+                { refresh: false, nextStatus: "rejected_internal" },
+              )
+                .then(() => setRejectionReason(reason))
+                .finally(() => setConfirmReject(false));
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="rejection-reason" className="text-sm font-medium">
+                {t("rejectionReason")}
+              </Label>
+              <Textarea
+                id="rejection-reason"
+                rows={3}
+                maxLength={1000}
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+              />
+            </div>
+          </AlertModal>
 
           <AlertModal
             open={confirmRevoke}

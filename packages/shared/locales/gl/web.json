@@ -2261,6 +2261,8 @@
   "reject": "Rexeitar",
   "rejectedUnsentStatus": "rexeitada (sen enviar)",
   "rejectedUnsentToast": "Rexeitada (sen enviar).",
+  "rejectionReason": "Motivo do rexeitamento",
+  "rejectionReasonHint": "A persoa participante verao no correo cando se envíe a decisión.",
   "removeOption": "Quitar opción",
   "responsesLabel": "Respostas",
   "revert": "Reverter",

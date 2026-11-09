@@ -102,6 +102,15 @@ export function ApplicationStatusActions({
       {actionError && (actionError.action === "confirm" || actionError.action === "decline") && (
         <ContextualError message={actionError.message} onRetry={onRetry} />
       )}
+      {status === "rejected" && response?.rejection_reason && (
+        <Alert role="status">
+          <XCircleIcon aria-hidden="true" />
+          <AlertTitle>{t("rejectionReason")}</AlertTitle>
+          <AlertDescription className="whitespace-pre-line">
+            {response.rejection_reason}
+          </AlertDescription>
+        </Alert>
+      )}
       {status === "declined" && (
         <Alert role="status">
           <XCircleIcon aria-hidden="true" />
