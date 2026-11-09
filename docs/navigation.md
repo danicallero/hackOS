@@ -52,8 +52,9 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 
 ### Stable personal area (`PERSONAL_NAV`)
 
-The personal sidebar exposes **Home**, **My applications**, **Projects**,
-**Contacts**, **Help desk** (with a help desk capability) and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+The personal sidebar exposes, in this order, **Home**, **Help desk** (with a help desk
+capability), **Projects**, **Contacts**, **My applications** and **My profile**.
+The **Workspaces** group (label and divider) only renders when at least one workspace has a visible item. Home opens Event (`/event`) and groups Schedule (`/timetable`)
 and Inbox (`/inbox`) in a shared internal navigation row.
 Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
 keeps the parent selected on every grouped route, including records, and Home
@@ -463,7 +464,7 @@ one labelled sibling link with the live count of available people. Opening hours
 (`/help-desk/hours`, `HELPDESK_MANAGE`), Coverage
 (`HELPDESK_COVERAGE`) and My support profile (server eligibility, including
 accepted mentors before confirmation) stay in the header menu. The latter
-opens `/settings/profile?tab=help-desk`; `/help-desk/profile` still redirects.
+opens `/settings/profile?tab=public` (the help desk settings sit under the public profile editor; `?tab=help-desk` still resolves there); `/help-desk/profile` still redirects.
 
 Published `/help-desk/requests` and `/help-desk/inbox` entries render the same
 selector. `?tab=mine|open|claims` restores selection; request-row links preserve

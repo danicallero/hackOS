@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { CertificatesPanel } from "@/components/certificates/certificates-panel";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
@@ -49,6 +49,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
+    // The help desk settings now live under the public profile (H61).
+    aliases: { "help-desk": "public" },
   });
   // A tab mounts when first opened and then stays mounted so a draft survives
   // switching; tabs never opened do not fetch their data (#1227).
@@ -62,12 +64,7 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
-  // The Help desk tab holds only its own settings; the public profile editor lives in its tab.
-  const [helperDirty, setHelperDirty] = useState(false);
   const setHelpDeskDirty = useDirtySetter(setDirty, "helpDesk");
-  useEffect(() => {
-    setHelpDeskDirty(helperDirty);
-  }, [helperDirty, setHelpDeskDirty]);
   const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
@@ -75,8 +72,9 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
       case "personal":
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
+        return me.hasEventAccess ? <PublicProfileCard onDirtyChange={onPublicDirty} /> : null;
       case "helpDesk":
-        return null; // The tab content below keeps the public profile and help desk editors mounted (H61).
+        return <HelperSection onDirtyChange={setHelpDeskDirty} />;
       case "meals":
         return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
       case "passes":
@@ -114,46 +112,22 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
             </TabsTrigger>
           ))}
         </TabBar>
-        {visited.has("public") || visited.has("help-desk") ? (
+        {tabs.map((item) => (
           <TabsContent
-            value={tab === "help-desk" ? "help-desk" : "public"}
+            key={item.id}
+            value={item.id}
             forceMount
-            hidden={tab !== "public" && tab !== "help-desk"}
-            className="pt-2"
+            hidden={item.id !== tab}
+            className="divide-y divide-border/60 pt-2"
           >
-            <ProfileSection
-              section={{ id: "public" }}
-              tabTitle={tab === "help-desk" ? "helpDeskTitle" : "publicProfileTitle"}
-            >
-              {me.hasEventAccess ? (
-                <div hidden={tab === "help-desk"}>
-                  <PublicProfileCard onDirtyChange={onPublicDirty} />
-                </div>
-              ) : null}
-              <div hidden={tab !== "help-desk"}>
-                <HelperSection onDirtyChange={setHelperDirty} />
-              </div>
-            </ProfileSection>
+            {visited.has(item.id) &&
+              item.sections.map((section) => (
+                <ProfileSection key={section.id} section={section} tabTitle={item.title}>
+                  {body(section.id)}
+                </ProfileSection>
+              ))}
           </TabsContent>
-        ) : null}
-        {tabs
-          .filter((item) => item.id !== "public" && item.id !== "help-desk")
-          .map((item) => (
-            <TabsContent
-              key={item.id}
-              value={item.id}
-              forceMount
-              hidden={item.id !== tab}
-              className="divide-y divide-border/60 pt-2"
-            >
-              {visited.has(item.id) &&
-                item.sections.map((section) => (
-                  <ProfileSection key={section.id} section={section} tabTitle={item.title}>
-                    {body(section.id)}
-                  </ProfileSection>
-                ))}
-            </TabsContent>
-          ))}
+        ))}
       </Tabs>
       <nav
         aria-label={t("legalLinksLabel")}

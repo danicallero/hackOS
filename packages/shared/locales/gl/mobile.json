@@ -1084,7 +1084,7 @@
   "helpPreferSponsorNote": "Escolle un reto para avisar primeiro aos patrocinadores da súa empresa que estean dispoñibles. Se non hai ningún, avísase ao resto do equipo de apoio.",
   "helpPrefersSponsor": "Prefire un patrocinador",
   "helpChallengeAlerts": "Alertas por reto",
-  "helpAllRequests": "Todas as peticións",
+  "helpAlertsAll": "Todas as peticións",
   "helpChallengeAlertsNote": "Só che avisan as peticións dos retos escollidos. Sen ningún, avísanche todas.",
   "helpBeforeHacking": "Non podes estar dispoñible antes do hacking.",
   "helpMentorAvailable": "Dispoñible para mentorizar",

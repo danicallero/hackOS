@@ -1084,7 +1084,7 @@
   "helpPreferSponsorNote": "Choose a challenge to ask its company’s available sponsors first. If none is available, other support people are asked.",
   "helpPrefersSponsor": "Prefers a sponsor",
   "helpChallengeAlerts": "Challenge alerts",
-  "helpAllRequests": "All requests",
+  "helpAlertsAll": "All requests",
   "helpChallengeAlertsNote": "Only requests about the selected challenges alert you. Select none to get every request.",
   "helpBeforeHacking": "You can't be available before the hacking time.",
   "helpMentorAvailable": "Available to mentor",

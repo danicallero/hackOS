@@ -5,10 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
-import {
-  HelperProfileSection,
-  HelperSettingsLink,
-} from "@/components/help-desk/helper-profile-section";
+import { HelperProfileSection } from "@/components/help-desk/helper-profile-section";
 import { HelperCompany, RoleBadge } from "@/components/help-desk/rows";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
@@ -62,12 +59,7 @@ function asError(cause: unknown): Error {
  * the pending change. Links and the CV file stay on web, except that a phone
  * can upload a CV when the application did not provide one.
  */
-export default function NetworkingProfileScreen({
-  mode = "networking",
-}: {
-  /** "helpDesk" is the same editor with the help desk sections below the card (H61). */
-  mode?: "networking" | "helpDesk";
-}) {
+export default function NetworkingProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const sideInsets = useSideInsets();
@@ -119,7 +111,7 @@ export default function NetworkingProfileScreen({
       const next = await fetchNetworkingProfile();
       apply(next);
       // Nothing shared yet: the useful first step is filling it in.
-      if (!next.directoryVisible && mode === "networking") setEditing(true);
+      if (!next.directoryVisible) setEditing(true);
     } catch (cause) {
       setFailure({
         message: "networkingLoadError",
@@ -127,7 +119,7 @@ export default function NetworkingProfileScreen({
         retry: () => void load(),
       });
     }
-  }, [apply, mode]);
+  }, [apply]);
 
   useEffect(() => {
     void load();
@@ -332,22 +324,17 @@ export default function NetworkingProfileScreen({
     );
 
     if (!editing) {
-      const preview =
-        mode === "helpDesk" && helperProfile
-          ? { ...current.preview, helpTopics: helperProfile.topics }
-          : current.preview;
+      const preview = helperProfile
+        ? { ...current.preview, helpTopics: helperProfile.topics }
+        : current.preview;
       return (
         <ProfileCard
           data={preview}
           identityAccessory={
-            mode === "helpDesk" && helperProfile ? (
-              <RoleBadge role={helperProfile.preview.visibleRoleName} />
-            ) : undefined
+            helperProfile ? <RoleBadge role={helperProfile.preview.visibleRoleName} /> : undefined
           }
           beforeKnowledge={
-            mode === "helpDesk" && helperProfile ? (
-              <HelperCompany helper={helperProfile.preview} />
-            ) : undefined
+            helperProfile ? <HelperCompany helper={helperProfile.preview} /> : undefined
           }
           avatar={
             <PersonAvatar size={AVATAR_SIZE} name={preview.displayName} uri={preview.photoUrl} />
@@ -444,40 +431,34 @@ export default function NetworkingProfileScreen({
                 textAlign: "center",
               }}
             >
-              {t(mode === "helpDesk" ? "helpDesk" : "networkingTitle")}
+              {t("networkingTitle")}
             </Text>
           </View>
         )}
 
         {profile && draft && stored ? (
           <>
-            {mode === "networking" ? (
-              <Section footer={t("networkingAudience")}>
-                <ToggleRow
-                  label={t("networkingShare")}
-                  value={Boolean(shared)}
-                  disabled={saving || togglingShare}
-                  onChange={(directoryVisible) =>
-                    editing ? update({ directoryVisible }) : void toggleShare(directoryVisible)
-                  }
-                />
-              </Section>
-            ) : null}
+            <Section footer={t("networkingAudience")}>
+              <ToggleRow
+                label={t("networkingShare")}
+                value={Boolean(shared)}
+                disabled={saving || togglingShare}
+                onChange={(directoryVisible) =>
+                  editing ? update({ directoryVisible }) : void toggleShare(directoryVisible)
+                }
+              />
+            </Section>
             {/* Not shared yet: the card is a preview of what scanners will get. */}
             <View
               style={{
                 gap: 24,
-                opacity: mode === "helpDesk" || shared ? 1 : 0.5,
+                opacity: shared ? 1 : 0.5,
               }}
             >
               {renderCard(profile, editing ? draft : stored)}
             </View>
             {/* H61: helpers extend this same profile; their help desk settings follow it. */}
-            {mode === "helpDesk" ? (
-              <HelperProfileSection onProfileChange={setHelperProfile} />
-            ) : (
-              <HelperSettingsLink />
-            )}
+            <HelperProfileSection onProfileChange={setHelperProfile} />
           </>
         ) : failure?.message === "networkingLoadError" ? null : (
           <RequestFeedback loading />
@@ -502,7 +483,7 @@ export default function NetworkingProfileScreen({
               headerBlurEffect: "none",
               scrollEdgeEffects: { top: "soft" },
               headerShadowVisible: false,
-              title: t(mode === "helpDesk" ? "helpDesk" : "networkingTitle"),
+              title: t("networkingTitle"),
             }}
           />
           <Stack.Toolbar placement="left">

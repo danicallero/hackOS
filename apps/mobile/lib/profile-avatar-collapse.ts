@@ -532,11 +532,11 @@ export function profileAvatarBlobBounds(
   for (let i = 0; i < n; i++) {
     const j = (i + 1) % n;
     for (let axis = 0; axis < 2; axis++) {
-      const fit = axis === 0 ? squeezed : (value: number) => value;
-      const p0 = fit(at("v", i, axis));
-      const p1 = fit(at("v", i, axis) + at("o", i, axis));
-      const p3 = fit(at("v", j, axis));
-      const p2 = fit(at("v", j, axis) + at("i", j, axis));
+      const project = axis === 0 ? squeezed : (value: number) => value;
+      const p0 = project(at("v", i, axis));
+      const p1 = project(at("v", i, axis) + at("o", i, axis));
+      const p3 = project(at("v", j, axis));
+      const p2 = project(at("v", j, axis) + at("i", j, axis));
       for (let k = 0; k <= 8; k++) {
         const u = k / 8;
         const w = 1 - u;

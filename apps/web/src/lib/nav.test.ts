@@ -101,7 +101,7 @@ describe("accounts without current role-derived event access", () => {
     const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
       (item) => item.href,
     );
-    expect(visible).toEqual(["/event", "/my-applications", "/my-project", "/settings/profile"]);
+    expect(visible).toEqual(["/event", "/my-project", "/my-applications", "/settings/profile"]);
   });
 
   it("a room judge or sponsor rep still keeps operational workspaces, but not event-only personal nav", () => {
@@ -111,7 +111,7 @@ describe("accounts without current role-derived event access", () => {
       const visible = PERSONAL_NAV.filter((item) => isNavItemVisible(item, ctx)).map(
         (item) => item.href,
       );
-      expect(visible).toEqual(["/event", "/my-applications", "/my-project", "/settings/profile"]);
+      expect(visible).toEqual(["/event", "/my-project", "/my-applications", "/settings/profile"]);
     }
     expect(visibleWorkspaceIds(judge)).toContain("liveJudging");
     expect(visibleWorkspaceIds(sponsor)).toContain("sponsors");

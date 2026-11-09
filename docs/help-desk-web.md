@@ -15,7 +15,7 @@ of help desk writes.
 | `/help-desk` | Unified request selector: My requests for requesters, Open and My assignments for eligible helpers; directory available to every browser | Any browse capability |
 | `/help-desk/helpers` | Support team: search by name, company or knowledge; Role, Knowledge and current-state filters; role at the right edge, company below the name, green presence dot on the avatar only when inside | Any browse capability |
 | `/help-desk/helpers/:userId` | The helper's public profile (same `PersonProfile` as people), schedule and presence | Any browse capability |
-| `/settings/profile?tab=help-desk` | Help desk tab: publish, knowledge, availability, challenge limit (`/help-desk/profile` redirects here) | API eligibility, including accepted mentors before their role is assigned |
+| `/settings/profile?tab=public` | Public profile tab, Help desk section below the editor: publish, challenge alerts, knowledge, availability (`/help-desk/profile` redirects here) | API eligibility, including accepted mentors before their role is assigned |
 | `/help-desk/requests` | Create and follow individual and team requests | `HELPDESK_REQUEST` |
 | `/help-desk/requests/:id/requester` | The requester's public profile (same `PersonProfile`), when the API's `requesterProfile` is non-null | Helpers who can read the request |
 | `/help-desk/requests/:id` | Follow a request, including notification links | API-authorized requester, team member, helper or coverage reader |
@@ -34,8 +34,7 @@ never an outside placeholder. Knowledge falls back to the card's topics. Publish
 also enables public-profile sharing; unpublishing support leaves that choice on.
 
 Helpers edit in My profile: the Public profile tab owns the bio, headline and
-CV (the same fields a badge scan shows), and its own **Help desk** tab
-(`?tab=help-desk`) holds only the help desk settings (the public profile editor stays in its own tab, so the two are never shown together), in `settings/profile/helper-section.tsx`: the
+CV (the same fields a badge scan shows), and there is no separate tab: below the public profile editor the same Public profile tab has a **Help desk** section (`?tab=help-desk` is an alias of `?tab=public`), in `settings/profile/helper-section.tsx`: the
 "Available to mentor" switch (publication), then, in the same order as mobile, "Challenge alerts" (checkboxes of the event's challenges, for any eligible helper;
 none = every request); knowledge; and the
 availability plan day by day (every day of the hacking window, else the event

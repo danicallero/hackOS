@@ -311,6 +311,10 @@ export function AppSidebar() {
   }, [activeWorkspaceId]);
 
   const personalItems = PERSONAL_NAV.filter(isVisible);
+  const visibleWorkspaces = WORKSPACES.map((workspace) => ({
+    items: workspace.items.filter(isVisible),
+    workspace,
+  })).filter(({ items }) => items.length > 0);
 
   return (
     <Sidebar variant="floating" collapsible="icon">
@@ -362,68 +366,70 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
 
-          <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
+          {visibleWorkspaces.length > 0 ? (
+            <>
+              <div className="mx-2 h-px shrink-0 bg-sidebar-border/80 group-data-[collapsible=icon]:mx-1" />
 
-          <SidebarGroup className="shrink-0 gap-1 p-0">
-            <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
-              {t("navigationWorkspaces")}
-            </SidebarGroupLabel>
+              <SidebarGroup className="shrink-0 gap-1 p-0">
+                <SidebarGroupLabel className="px-2 group-data-[collapsible=icon]:sr-only">
+                  {t("navigationWorkspaces")}
+                </SidebarGroupLabel>
 
-            {(() => {
-              const visibleWorkspaces = WORKSPACES.map((workspace) => ({
-                items: workspace.items.filter(isVisible),
-                workspace,
-              })).filter(({ items }) => items.length > 0);
-              const isActiveItem = (item: NavItem) =>
-                pathname === item.href || pathname.startsWith(`${item.href}/`);
-              const anyWorkspaceMatchesRoute = visibleWorkspaces.some(({ items }) =>
-                items.some(isActiveItem),
-              );
-
-              return visibleWorkspaces.map(({ workspace, items }) => {
-                if (items.length === 1) {
-                  // A single visible item has nothing to collapse: an accordion
-                  // with one row is just a link wearing an extra click.
-                  return (
-                    <SidebarGroup key={workspace.id} className="p-0">
-                      <SidebarMenu>
-                        <NavLink item={items[0]} showUnreadDot={false} />
-                      </SidebarMenu>
-                    </SidebarGroup>
+                {(() => {
+                  const isActiveItem = (item: NavItem) =>
+                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  const anyWorkspaceMatchesRoute = visibleWorkspaces.some(({ items }) =>
+                    items.some(isActiveItem),
                   );
-                }
-                const containsActiveRoute = items.some(isActiveItem);
-                const shouldOpenInitially =
-                  containsActiveRoute ||
-                  (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
-                return (
-                  <WorkspaceGroup
-                    key={workspace.id}
-                    workspace={workspace}
-                    items={items}
-                    active={containsActiveRoute}
-                    open={
-                      workspace.id !== closedWorkspaceId &&
-                      (workspace.id === activeWorkspaceId ||
-                        workspace.id === recentWorkspaceId ||
-                        (!activeWorkspaceId && recentWorkspaceId === null && shouldOpenInitially))
+
+                  return visibleWorkspaces.map(({ workspace, items }) => {
+                    if (items.length === 1) {
+                      // A single visible item has nothing to collapse: an accordion
+                      // with one row is just a link wearing an extra click.
+                      return (
+                        <SidebarGroup key={workspace.id} className="p-0">
+                          <SidebarMenu>
+                            <NavLink item={items[0]} showUnreadDot={false} />
+                          </SidebarMenu>
+                        </SidebarGroup>
+                      );
                     }
-                    onOpen={(id, nextOpen) => {
-                      if (nextOpen) {
-                        setClosedWorkspaceId(null);
-                        setRecentWorkspaceId(id);
-                        setLastWorkspace(id);
-                        writeLastWorkspace(id);
-                      } else {
-                        setClosedWorkspaceId(id);
-                        setRecentWorkspaceId((current) => (current === id ? null : current));
-                      }
-                    }}
-                  />
-                );
-              });
-            })()}
-          </SidebarGroup>
+                    const containsActiveRoute = items.some(isActiveItem);
+                    const shouldOpenInitially =
+                      containsActiveRoute ||
+                      (!anyWorkspaceMatchesRoute && lastWorkspace === workspace.id);
+                    return (
+                      <WorkspaceGroup
+                        key={workspace.id}
+                        workspace={workspace}
+                        items={items}
+                        active={containsActiveRoute}
+                        open={
+                          workspace.id !== closedWorkspaceId &&
+                          (workspace.id === activeWorkspaceId ||
+                            workspace.id === recentWorkspaceId ||
+                            (!activeWorkspaceId &&
+                              recentWorkspaceId === null &&
+                              shouldOpenInitially))
+                        }
+                        onOpen={(id, nextOpen) => {
+                          if (nextOpen) {
+                            setClosedWorkspaceId(null);
+                            setRecentWorkspaceId(id);
+                            setLastWorkspace(id);
+                            writeLastWorkspace(id);
+                          } else {
+                            setClosedWorkspaceId(id);
+                            setRecentWorkspaceId((current) => (current === id ? null : current));
+                          }
+                        }}
+                      />
+                    );
+                  });
+                })()}
+              </SidebarGroup>
+            </>
+          ) : null}
         </SidebarContent>
 
         <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-2">

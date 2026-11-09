@@ -280,7 +280,7 @@ function HelpDeskOptions() {
     },
     {
       // Eligibility covers accepted mentors before their role is assigned.
-      href: "/settings/profile?tab=help-desk",
+      href: "/settings/profile?tab=public",
       label: t("helpDeskMySupportProfile"),
       icon: UserCircleIcon,
       visible: own.data?.eligible === true,

@@ -63,7 +63,7 @@ jest.mock("expo-router", () => ({
 }));
 // The help desk section (H61) has its own requests and tests; here it stays out of the call counts.
 jest.mock("@/components/help-desk/helper-profile-section", () => ({
-  HelperSettingsLink: () => null,
+  HelperProfileSection: () => null,
 }));
 jest.mock("@/lib/api", () => ({
   apiFetch: (...args: unknown[]) => mockApiFetch(...args),

@@ -328,10 +328,16 @@ const PROFILE_SUBITEMS: NavItem[] = [
 
 /**
  * Stable personal area (audit §3.1): always available to authenticated
- * accounts, independent of any work capability. Order is time-critical work
- * first, configuration-ish personal items last.
+ * accounts, independent of any work capability. Order: Home, Help desk,
+ * Projects, Contacts, My applications, then Profile and account.
  */
 export const PERSONAL_NAV: NavItem[] = [
+  {
+    title: "home",
+    href: "/event",
+    icon: HouseIcon,
+    activePaths: ["/timetable", "/inbox", "/challenge"],
+  },
   {
     title: "helpDeskTitle",
     href: "/help-desk",
@@ -342,14 +348,6 @@ export const PERSONAL_NAV: NavItem[] = [
       CAPABILITIES.HELPDESK_COVERAGE,
     ],
   },
-  {
-    title: "home",
-    href: "/event",
-    icon: HouseIcon,
-    activePaths: ["/timetable", "/inbox", "/challenge"],
-  },
-  // Participant-facing: everyone can apply (H12-H15). No capability gate.
-  { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   // H19: admitted participants create and manage their own project drafts.
   {
     title: "projects",
@@ -360,6 +358,8 @@ export const PERSONAL_NAV: NavItem[] = [
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
+  // Participant-facing: everyone can apply (H12-H15). No capability gate.
+  { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   {
     title: "myProfile",
     href: "/settings/profile",

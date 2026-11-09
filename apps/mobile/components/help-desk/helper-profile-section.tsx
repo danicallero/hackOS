@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -20,35 +19,8 @@ import {
   validAvailability,
 } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
-import { useHelpResource } from "@/lib/use-help-resource";
 import { colors, type } from "@/theme";
 import { TopicField } from "./primitives";
-
-/**
- * H61: the public profile editor's one Help desk row: On/Off is the published
- * state, and it opens the help desk settings page (`app/helper-profile.tsx`).
- * Nothing renders for people who cannot be helpers.
- */
-export function HelperSettingsLink() {
-  const { t } = useLocale();
-  const router = useRouter();
-  const result = useHelpResource<MyHelperProfile>("/api/me/helper-profile");
-  const profile = result.data;
-  if (!profile && result.error) {
-    return <RequestFeedback error={result.error} onRetry={() => void result.load()} />;
-  }
-  if (!profile?.eligible) return null;
-  return (
-    <Section>
-      <NavRow
-        icon="lifepreserver"
-        title={t("helpDesk")}
-        value={t(profile.published ? "helpOn" : "helpOff")}
-        onPress={() => router.push("/helper-profile")}
-      />
-    </Section>
-  );
-}
 
 const HOUR = 3_600_000;
 let nextRangeId = 0;
@@ -252,7 +224,7 @@ export function HelperProfileSection({
 
   return (
     <>
-      <Section>
+      <Section title={t("helpDesk")}>
         <ToggleRow
           label={t("helpMentorAvailable")}
           value={profile.published}
@@ -265,7 +237,7 @@ export function HelperProfileSection({
               title={t("helpChallengeAlerts")}
               value={
                 profile.challenges.length === 0
-                  ? t("helpAllRequests")
+                  ? t("helpAlertsAll")
                   : profile.challenges.map((challenge) => challenge.name).join(", ")
               }
               onPress={() => setPicking(true)}

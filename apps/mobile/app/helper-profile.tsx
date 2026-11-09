@@ -7,18 +7,18 @@ import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 
-const HelpDeskSettings = withNativeHeaderSheet(() => <NetworkingProfileScreen mode="helpDesk" />);
+const PublicProfile = withNativeHeaderSheet(NetworkingProfileScreen);
 
 /**
- * H61: the help desk settings: the public profile editor (card, in-place
- * editing, what others see) with the help desk sections below it. An accepted
- * mentor without event access (not yet confirmed) has no public profile to
- * edit yet, so they get the sections alone with Sign out.
+ * H61: the help desk settings live under the public profile, so this route is
+ * that screen. An accepted mentor without event access (not yet confirmed) has
+ * no public profile to edit yet, so they get the help desk section alone with
+ * Sign out.
  */
 export default function HelperProfileRoute() {
   const { t } = useLocale();
   const { me } = useMeContext();
-  if (me?.hasEventAccess) return <HelpDeskSettings />;
+  if (me?.hasEventAccess) return <PublicProfile />;
   return (
     <HelpPage title={t("helpDesk")} showBack={false}>
       <HelperProfileSection />

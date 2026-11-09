@@ -97,7 +97,7 @@ it("puts coverage and the eligible profile in the menu and respects combinations
   ).toBe("/help-desk/coverage");
   expect(
     getByRole(document.body, "menuitem", { name: "helpDeskMySupportProfile" }).getAttribute("href"),
-  ).toBe("/settings/profile?tab=help-desk");
+  ).toBe("/settings/profile?tab=public");
   await act(async () => userEvent.keyboard("{Escape}"));
   env.caps = [CAPABILITIES.HELPDESK_REQUEST];
   env.eligible = false;

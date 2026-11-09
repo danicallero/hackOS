@@ -145,25 +145,29 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(container.textContent).not.toContain("roles-body");
   });
 
-  it("gives an eligible helper a Help desk tab next to the public profile (H61)", async () => {
+  it("puts an eligible helper's help desk settings inside the Public profile tab (H61)", async () => {
+    helper.eligible = true;
+    nav.search = "tab=public";
+    await render();
+    expect(tabs()).not.toContain("helpDeskTitle");
+    expect(openPanel()[0].textContent).toContain("public-body");
+    expect(openPanel()[0].textContent).toContain("helper-body");
+  });
+
+  it("opens the Public profile tab for the old ?tab=help-desk link (H61)", async () => {
     helper.eligible = true;
     nav.search = "tab=help-desk";
     await render();
     expect(openPanel()[0].textContent).toContain("helper-body");
-    // The public profile editor stays mounted (drafts survive) but hidden: the tabs never show both.
-    const publicBody = Array.from(openPanel()[0].querySelectorAll("p")).find(
-      (node) => node.textContent === "public-body",
-    );
-    expect(publicBody?.closest("[hidden]")).not.toBeNull();
   });
 
   it("lets an accepted mentor without event access prepare the help desk section (H61)", async () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     helper.eligible = true;
-    nav.search = "tab=help-desk";
+    nav.search = "tab=public";
     await render();
-    expect(tabs()).toEqual(["personalDetails", "helpDeskTitle", "accountTitle"]);
+    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "accountTitle"]);
     expect(openPanel()[0].textContent).toContain("helper-body");
     expect(openPanel()[0].textContent).not.toContain("public-body");
   });
