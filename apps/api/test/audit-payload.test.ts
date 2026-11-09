@@ -11,14 +11,14 @@ it("keeps operational values and field names without private text or credentials
   const before = {
     status: "review",
     score: 2,
-    email: "PRIVATE old",
+    email: "old@example.test",
     notes: "PRIVATE first",
     settings: { password: "PRIVATE secret", enabled: false },
   };
   const after = {
     status: "accepted",
     score: 4,
-    email: "PRIVATE new",
+    email: "new@example.test",
     notes: "PRIVATE final",
     settings: { password: "PRIVATE next", enabled: true },
   };
@@ -28,6 +28,7 @@ it("keeps operational values and field names without private text or credentials
   expect(shown.after).toMatchObject({
     status: "accepted",
     score: 4,
+    email: "new@example.test",
     notes: "[private]",
     settings: { enabled: true, password: "[private]" },
   });
@@ -136,4 +137,67 @@ it("retains operational presence/configuration flags without private values (H53
   expect(
     minimizeAuditSnapshot({ hasPhoto: true, email_verified: true, notes: "PRIVATE" }, "user"),
   ).toEqual({ hasPhoto: true, email_verified: true, notes: "[private]" });
+});
+
+it("retains operational identifiers while keeping private text and authentication secrets out (H53)", () => {
+  const payload = {
+    badgeId: "NFC-001",
+    badge_id: "NFC-002",
+    email: "person@example.test",
+    primaryEmail: "primary@example.test",
+    oldEmail: "old@example.test",
+    userId: "42",
+    notes: "PRIVATE",
+    responses: { email: "PRIVATE answer" },
+    token: "SECRET",
+    password: "SECRET",
+    badgeAuthenticationToken: "SECRET",
+  };
+  const result = privateAuditSnapshot(payload);
+  expect(result).toMatchObject({
+    badgeId: "NFC-001",
+    badge_id: "NFC-002",
+    email: "person@example.test",
+    primaryEmail: "primary@example.test",
+    oldEmail: "old@example.test",
+    userId: "42",
+    notes: "[private]",
+    responses: "[private]",
+    token: "[private]",
+    password: "[private]",
+    badgeAuthenticationToken: "[private]",
+  });
+  expect(JSON.stringify(result)).not.toContain("PRIVATE");
+  expect(JSON.stringify(result)).not.toContain("SECRET");
+});
+
+it("corrects only unambiguous legacy automatic executors and sources (H53)", () => {
+  for (const [entity_type, action] of [
+    ["presence", "event_end_auto_exit"],
+    ["schedule", "scheduled_reveal"],
+    ["challenge", "scheduled_reveal"],
+    ["enterprise", "scheduled_reveal"],
+    ["application_response", "expired"],
+    ["event_email_reminder", "queued"],
+  ]) {
+    expect(
+      presentAuditRow({
+        entity_type,
+        action,
+        actor_id: null,
+        actor_kind: "unknown",
+        source: "web",
+        before: null,
+        after: {},
+      }),
+    ).toMatchObject({ actor_id: null, actor_kind: "system", source: "system" });
+  }
+  expect(
+    presentAuditRow({
+      entity_type: "presence",
+      action: "manual_time_log",
+      actor_id: null,
+      source: "web",
+    }),
+  ).toMatchObject({ actor_id: null, source: "web" });
 });

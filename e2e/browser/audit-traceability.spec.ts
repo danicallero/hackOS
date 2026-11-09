@@ -183,3 +183,68 @@ test("shows the text of a public Wallet broadcast", async ({ page }, info) => {
   await expect(page.getByText("Private value omitted", { exact: true })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath("audit-public-broadcast.png"), fullPage: true });
 });
+
+// H53: operational identifiers remain evidence; automatic exits are system-originated.
+test("shows identifier evidence and system attribution", async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
+  await installApplicationReviewFixture(page.context());
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ json: { ...shellUser, capabilities: [CAPABILITIES.AUDIT_READ] } }),
+  );
+  const row = {
+    id: 6,
+    actor_id: null,
+    actor_kind: "system",
+    actor_name: null,
+    actor_surname: null,
+    actor_email: null,
+    entity_type: "presence",
+    entity_id: "42",
+    action: "event_end_auto_exit",
+    source: "system",
+    before: null,
+    after: { kind: "out", scannedAt: "2026-11-09T12:00:00Z" },
+    changed_fields: ["kind", "scannedAt"],
+    reason: null,
+    ip: null,
+    user_agent: null,
+    created_at: "2026-11-09T12:00:00Z",
+  };
+  await page.route("**/api/audit**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/audit/7")
+      return route.fulfill({
+        json: {
+          ...row,
+          id: 7,
+          actor_id: 7,
+          actor_kind: "user",
+          actor_name: "Shell",
+          actor_surname: "Operator",
+          entity_type: "badge",
+          action: "rotate",
+          source: "admin",
+          before: { badgeId: "BADGE-OLD", email: "old@example.test" },
+          after: { badgeId: "BADGE-NEW", email: "new@example.test" },
+          changed_fields: ["badgeId", "email"],
+        },
+      });
+    if (path === "/api/audit/actions")
+      return route.fulfill({
+        json: { items: [{ entity_type: "presence", action: "event_end_auto_exit" }] },
+      });
+    return route.fulfill({ json: { items: [row], total: 1 } });
+  });
+  await page.goto("/audit");
+  await expect(
+    page.getByText("Automatic exit at event end", { exact: true }).filter({ visible: true }),
+  ).toBeVisible();
+  await expect(page.getByText("System", { exact: true }).filter({ visible: true })).toHaveCount(2);
+  await expect(page.getByText("Actor not recorded", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("audit-system-exit.png"), fullPage: true });
+  await page.goto("/audit/7");
+  for (const value of ["BADGE-OLD", "BADGE-NEW", "old@example.test", "new@example.test"])
+    await expect(page.getByRole("cell", { name: value, exact: true })).toBeVisible();
+  await expect(page.getByText("Private value omitted", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath("audit-identifier-evidence.png"), fullPage: true });
+});

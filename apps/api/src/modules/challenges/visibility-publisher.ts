@@ -25,6 +25,7 @@ export async function runScheduledVisibilityPublisherOnce(): Promise<{
     await auditMany(client, [
       ...challenges.map((id) => ({
         actorId: null,
+        source: "system",
         entityType: "challenge",
         entityId: id,
         action: "scheduled_reveal",
@@ -32,6 +33,7 @@ export async function runScheduledVisibilityPublisherOnce(): Promise<{
       })),
       ...enterprises.map((id) => ({
         actorId: null,
+        source: "system",
         entityType: "enterprise",
         entityId: id,
         action: "scheduled_reveal",

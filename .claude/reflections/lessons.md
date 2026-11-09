@@ -1167,7 +1167,10 @@ Record actor, subject, changed field names and timing. Limit before/after values
 to explicitly safe operational fields. Group autosaves within an editing session;
 do not persist private note text, answers, or content hashes in audit payloads.
 Keep explicitly public content readable, and retain safe operational flags while
-continuing to suppress their underlying personal values and credentials.
+continuing to suppress private answers and authentication secrets. Retain the
+operational identifiers needed to reconstruct actions (badge IDs, email
+addresses and subject/reference IDs); do not mistake those for passwords or
+access tokens. Keep their histories covered by the account-erasure workflow.
 
 ### Validation
 Assert that private sentinel text never appears in serialized audit rows and

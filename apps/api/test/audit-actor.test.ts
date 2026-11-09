@@ -39,3 +39,25 @@ it("does not attach request correlation or an initiator to identity-free work", 
     ),
   ).toMatchObject({ actorId: null, initiatedBy: null, requestId: null });
 });
+
+it("keeps a scheduled action on the system even when invoked from a request context (H53)", () => {
+  expect(
+    runWithRequestContext({ getActorId: () => 7 }, () =>
+      resolveAuditActor({
+        actorId: null,
+        entityType: "presence",
+        entityId: 42,
+        action: "event_end_auto_exit",
+        source: "web",
+      }),
+    ),
+  ).toMatchObject({ actorId: null, kind: "system", source: "system", initiatedBy: 7 });
+  expect(
+    resolveAuditActor({
+      actorId: null,
+      entityType: "schedule",
+      entityId: 1,
+      action: "scheduled_reveal",
+    }),
+  ).toMatchObject({ actorId: null, kind: "system", source: "system", initiatedBy: null });
+});

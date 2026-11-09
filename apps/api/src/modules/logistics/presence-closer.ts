@@ -135,6 +135,7 @@ export async function runPresenceEventEndCloserOnce(): Promise<{
         }
         await audit(client, {
           actorId: null,
+          source: "system",
           entityType: "presence",
           entityId: candidate.user_id,
           action: "event_end_auto_exit",
