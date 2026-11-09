@@ -358,14 +358,14 @@ export function ProjectGalleryScreen() {
               gap: 20,
               paddingBottom: empty ? 96 : 32,
               flexGrow: 1,
-              // Centre an empty state; a status notice stays at the top under the title.
-              justifyContent: empty && !error ? "center" : undefined,
+              justifyContent: empty ? "center" : undefined,
             }}
           >
             {closed ? (
               <EmptyState icon="clock" title={closed} />
             ) : error ? (
               <RequestFeedback
+                blank={projects.length === 0}
                 error={error}
                 onRetry={
                   error instanceof ApiError && error.status === 403 ? undefined : () => void load()

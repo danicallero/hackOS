@@ -501,7 +501,7 @@ export default function DeleteAccountScreen() {
   }
 
   if (loading && !me) return <RequestFeedback loading />;
-  if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
+  if (!me) return <RequestFeedback blank error={error} onRetry={() => void refetch()} />;
 
   // Deliberately `undefined` (not `false`) when eligibility hasn't been
   // confirmed by the server, so the outcome panel below stays hidden instead

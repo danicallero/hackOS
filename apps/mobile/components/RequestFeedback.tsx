@@ -1,6 +1,6 @@
 import { StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
-import { ErrorNotice, OfflineNotice } from "@/components/status-notice";
+import { BlankFailure, ErrorNotice, OfflineNotice } from "@/components/status-notice";
 import { ApiError } from "@/lib/api";
 import { apiErrorCopy } from "@/lib/api-error-reason";
 import { useLocale } from "@/lib/i18n";
@@ -21,12 +21,15 @@ export function RequestFeedback({
   error,
   loading = false,
   compact = false,
+  blank = false,
   onRetry,
   message,
   retrying = false,
 }: {
   error?: Error | null;
   loading?: boolean;
+  /** Nothing is on screen behind the failure: show a centred empty state, not a notice. */
+  blank?: boolean;
   /** Inline spinner beside content that is already on screen (no centred block). */
   compact?: boolean;
   onRetry?: () => void;
@@ -58,15 +61,13 @@ export function RequestFeedback({
 
   if (!error) return null;
 
+  const offline = isOfflineError(error);
+  const text = (error instanceof ApiError ? apiErrorCopy(error, t) : message) ?? t(errorKey(error));
+  if (blank) return <BlankFailure offline={offline} message={text} onRetry={onRetry} />;
   // Offline (no status): the device, not the server, is the problem.
-  if (isOfflineError(error)) return <OfflineNotice onReconnect={onRetry} />;
+  if (offline) return <OfflineNotice onReconnect={onRetry} />;
 
-  return (
-    <ErrorNotice
-      message={(error instanceof ApiError ? apiErrorCopy(error, t) : message) ?? t(errorKey(error))}
-      onRetry={onRetry}
-    />
-  );
+  return <ErrorNotice message={text} onRetry={onRetry} />;
 }
 
 const styles = StyleSheet.create({

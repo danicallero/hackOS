@@ -290,7 +290,7 @@ export default function AccountScreen() {
   }
 
   if (loading && !me) return <RequestFeedback loading />;
-  if (!me) return <RequestFeedback error={error} onRetry={() => void refetch()} />;
+  if (!me) return <RequestFeedback blank error={error} onRetry={() => void refetch()} />;
 
   const fullName = [me.name, me.surname].filter(Boolean).join(" ") || me.email;
   const canEditDietary = !offline && !me.dietaryLocked;
