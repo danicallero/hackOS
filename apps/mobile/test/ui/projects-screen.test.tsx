@@ -580,6 +580,21 @@ it("shows gallery winners only from the projection and no retry when denied (H18
   expect(screen.getAllByText(/projectWinner/)).toHaveLength(1);
 });
 
+it("gives the gallery a compact title with the soft scroll edge, not a collapsing large title (H18)", async () => {
+  settle({
+    "/api/public/projects?page=1&pageSize=20&search=": {
+      items: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    },
+  });
+  await renderMobile(<ProjectGalleryScreen />);
+  const options = mockSetOptions.mock.calls.at(-1)?.[0];
+  expect(options.headerLargeTitle).toBe(false);
+  expect(options.scrollEdgeEffects).toEqual({ top: "soft" });
+});
+
 it("hides gallery retry when the audience is denied (H18)", async () => {
   settle({ "/api/public/projects?page=1&pageSize=20&search=": new ApiError("no", 403) });
   await renderMobile(<ProjectGalleryScreen />);
