@@ -233,3 +233,69 @@ it("does not combine stale private content with a newer public audience (H50/H53
   });
   expect(JSON.stringify(snapshot)).not.toContain("PRIVATE");
 });
+
+it("stores and returns badge/email evidence without exposing notes or secrets (H53)", async () => {
+  const app = await getApp();
+  const actor = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+  await audit(pool, {
+    actorId: actor,
+    entityType: "user",
+    entityId: actor,
+    action: "primary_email_changed",
+    before: { email: "old@example.test", badgeId: "BADGE-OLD" },
+    after: { email: "new@example.test", badgeId: "BADGE-NEW", notes: "PRIVATE", token: "SECRET" },
+  });
+  const stored = await pool.query("SELECT * FROM audit_log ORDER BY id DESC LIMIT 1");
+  expect(stored.rows[0].before).toEqual({ email: "old@example.test", badgeId: "BADGE-OLD" });
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/audit/${stored.rows[0].id}`,
+    headers: asUser(actor),
+  });
+  expect(detail.statusCode).toBe(200);
+  expect(detail.json().after).toEqual({
+    email: "new@example.test",
+    badgeId: "BADGE-NEW",
+    notes: "[private]",
+    token: "[private]",
+  });
+  expect(JSON.stringify(stored.rows)).not.toContain("PRIVATE");
+  expect(JSON.stringify(stored.rows)).not.toContain("SECRET");
+});
+
+it("presents legacy automatic exits as System in list and detail without guessing manual actions (H53)", async () => {
+  const app = await getApp();
+  const actor = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+  const legacy = await pool.query(
+    "INSERT INTO audit_log(entity_type,entity_id,action,source) VALUES ('presence','42','event_end_auto_exit','web') RETURNING id",
+  );
+  const list = await app.inject({ method: "GET", url: "/api/audit", headers: asUser(actor) });
+  expect(list.json().items[0]).toMatchObject({
+    actor_id: null,
+    actor_kind: "system",
+    source: "system",
+  });
+  const detail = await app.inject({
+    method: "GET",
+    url: `/api/audit/${legacy.rows[0].id}`,
+    headers: asUser(actor),
+  });
+  expect(detail.json()).toMatchObject({ actor_id: null, actor_kind: "system", source: "system" });
+  await runWithRequestContext({ getActorId: () => actor }, () =>
+    auditMany(pool, [
+      {
+        actorId: null,
+        entityType: "presence",
+        entityId: 43,
+        action: "event_end_auto_exit",
+        source: "web",
+      },
+    ]),
+  );
+  const written = await pool.query(
+    "SELECT actor_id,actor_kind,source,initiated_by FROM audit_log WHERE entity_id='43'",
+  );
+  expect(written.rows).toEqual([
+    { actor_id: null, actor_kind: "system", source: "system", initiated_by: actor },
+  ]);
+});

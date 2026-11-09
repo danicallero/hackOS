@@ -568,8 +568,8 @@ describe("H23 badge rotation", () => {
       `SELECT before, after FROM audit_log WHERE entity_type = 'badge' AND entity_id = $1`,
       [String(uid)],
     );
-    expect(audits.rows[0].before).toEqual({ badge_id: "[private]" });
-    expect(audits.rows[0].after).toEqual({ badge_id: "[private]" });
+    expect(audits.rows[0].before).toEqual({ badge_id: "OLD-1" });
+    expect(audits.rows[0].after).toEqual({ badge_id: "NEW-1" });
   });
 
   it("a scan of the rotated-away badge is rejected as revoked (via presence)", async () => {

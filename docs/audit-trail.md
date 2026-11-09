@@ -11,8 +11,9 @@ source of truth; this document describes the unified administrative trail.
 An entry identifies its action, affected entity, creation time, source and
 executor. `changed_fields` records the affected field names before minimization.
 Safe operational values (states, scores, flags, counts, timestamps and internal
-relationship IDs) can show before/after differences. Private subject text, personal
-identifiers, credentials and attachments are replaced by a
+relationship IDs) can show before/after differences. Badge IDs, email addresses and internal subject/reference IDs are retained as
+operational evidence, including their previous and new values. Private subject
+text, authentication secrets and attachments are replaced by a
 private-value marker. No content hashes are retained. The same policy applies
 to single/batched writes and API reads of historical rows.
 
@@ -46,7 +47,11 @@ substituted for a historical snapshot.
   persisted requester. A scheduled action with no initiator stays system-only.
 - Email/link-token actions identify a link holder, not a verified account actor.
   Wallet device registration identifies a device, not its pass beneficiary.
-- Anonymous requests remain anonymous. Legacy null actors with no reliable
+- Anonymous requests remain anonymous. Known automatic event/entity pairs (event-end exits, scheduled reveals, spot
+  expiration, reminder dispatch and export/deletion completion) explicitly use
+  System as executor and source, including legacy reads that recorded Web by
+  default. Device lifecycle events remain device-originated.
+- Legacy null actors with no reliable
   source are shown as unrecorded, not silently relabelled as the system.
 - Intentionally identity-free events (`ip: null`, `userAgent: null`) acquire
   neither an initiator nor request correlation. Account removal scrubs subject
@@ -99,5 +104,6 @@ private-content exclusion, actor/session/token/device/system distinctions,
 autosave grouping and account deletion. Browser checks cover desktop/narrow
 audit detail, related actions and application links for review/decision capability
 combinations. A new event should extend the action/entity catalogue and preserve
-this privacy boundary; new private historical content needs a separate explicit
-retention decision.
+this privacy boundary; private review/answer content remains excluded. Operational identifier histories
+are covered by account erasure, including historical email addresses; identifiers
+that were already replaced by a private-value marker are not guessed from current data.

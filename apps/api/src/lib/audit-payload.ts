@@ -1,4 +1,6 @@
 /** H53: retain operational facts, not a second copy of private/free-form content. */
+import { intrinsicAuditExecutor } from "./audit-actor.js";
+
 const PRIVATE_VALUE = "[private]";
 const PRIVATE_KEY =
   /password|secret|token|credential|email|phone|surname|first.?name|last.?name|\bname\b|notes?|message|description|headline|bio|address|location|diet|intolerance|birthday|birth_date|dni|photo|avatar|cv|url|storage.?key|deviceLibraryIdentifier|badge.?id|serialNumber|googleObjectId|translations|template|criteria|answers|responses|payload|body|title|subject|items/i;
@@ -6,6 +8,9 @@ const SAFE_TEXT_KEY =
   /^(audit_audience|status|statuses|state|capability|kind|type|mode|platform|visibility|source|decision|role|purpose|method|format|language|primaryLanguage|tvLanguage|slot|variant|position|target|triggerEvent|fieldKey|field_key|dimension|retention_mode|retentionMode|panel_key|scope|attendance_policy|attendancePolicy|identity_policy|identityPolicy|demo_requirement|demoRequirement|edit_session_id|last_edited_at|wifiSsid|wifi_ssid|timezone)$/;
 const FIELD_LIST_KEY =
   /^(fields|changed_fields|changedFields|retainedFields|retainedRoles|fixtureKeys)$/;
+// H53: operational identifiers are evidence, not secret authentication material.
+const IDENTIFIER_KEY =
+  /^(?:email|primary_?email|old_?email|new_?email|badge_?id|old_?badge_?id|new_?badge_?id|user_?id|actor_?id|subject_?user_?id|target_?id|author_?id|judge_?id|staff_?id|room_?id|repo_?id|project_?id|challenge_?id|enterprise_?id|application_?id|response_?id|role_?id|pass_?id|id)$/i;
 const TIME_KEY = /(?:_at|At|_from|From|_until|Until|_date|Date|_time|Time)$/;
 
 function object(value: unknown): value is Record<string, unknown> {
@@ -52,6 +57,8 @@ export function changedAuditFields(before: unknown, after: unknown): string[] {
 
 export function privateAuditSnapshot(value: unknown, key = ""): unknown {
   if (value == null) return value;
+  if ((typeof value === "string" || typeof value === "number") && IDENTIFIER_KEY.test(key))
+    return value;
   if (
     typeof value === "boolean" &&
     [
@@ -113,8 +120,19 @@ export function privateAuditSnapshot(value: unknown, key = ""): unknown {
 
 /** H53: apply the same minimization to legacy rows returned by the API. */
 export function presentAuditRow(row: Record<string, unknown>): Record<string, unknown> {
+  const executor = intrinsicAuditExecutor(String(row.entity_type ?? ""), String(row.action ?? ""));
   return {
     ...row,
+    ...(executor
+      ? {
+          actor_id: null,
+          actor_name: null,
+          actor_surname: null,
+          actor_email: null,
+          actor_kind: executor,
+          source: executor,
+        }
+      : {}),
     changed_fields:
       Array.isArray(row.changed_fields) && row.changed_fields.length > 0
         ? row.changed_fields

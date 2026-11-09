@@ -2478,8 +2478,8 @@ describe("staff user routes (H7)", () => {
       [String(target)],
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0].before.email).toBe("[private]");
-    expect(rows[0].after.email).toBe("[private]");
+    expect(rows[0].before.email).toBe("old@example.test");
+    expect(rows[0].after.email).toBe("new@example.test");
     const oldSubmission = await pool.query(
       `SELECT 1 FROM submissions WHERE repo_id = $1 AND user_id = $2`,
       [oldRepo.rows[0].id, target],
@@ -2737,6 +2737,29 @@ describe("staff user routes (H7)", () => {
       payload: { email: "historical-new@example.test" },
     });
     expect(changed.statusCode).toBe(200);
+    const { audit } = await import("../../src/lib/audit.js");
+    await audit(pool, {
+      actorId: admin,
+      entityType: "invite",
+      entityId: "historical-email-evidence",
+      action: "create",
+      after: { email: "historical-old@example.test" },
+    });
+    await audit(pool, {
+      actorId: admin,
+      entityType: "badge",
+      entityId: target,
+      action: "rotate",
+      before: { badge_id: "B-OLD-HISTORICAL" },
+      after: { badge_id: "B-HISTORICAL" },
+    });
+    await audit(pool, {
+      actorId: admin,
+      entityType: "badge",
+      entityId: "unrelated-badge-history",
+      action: "rotate",
+      after: { badge_id: "B-HISTORICAL" },
+    });
     await pool.query(`UPDATE users SET badge_id = 'B-HISTORICAL' WHERE id = $1`, [target]);
     await pool.query(
       `INSERT INTO check_in_logs (user_id, badge_id, staff_id) VALUES ($1, 'B-HISTORICAL', $2)`,
@@ -2752,6 +2775,18 @@ describe("staff user routes (H7)", () => {
     expect(
       (await pool.query(`SELECT 1 FROM user_email_history WHERE user_id = $1`, [target])).rowCount,
     ).toBe(0);
+    expect(
+      (
+        await pool.query(
+          "SELECT 1 FROM audit_log WHERE entity_id='historical-email-evidence' OR (entity_type='badge' AND entity_id=$1)",
+          [String(target)],
+        )
+      ).rowCount,
+    ).toBe(0);
+    expect(
+      (await pool.query("SELECT 1 FROM audit_log WHERE entity_id='unrelated-badge-history'"))
+        .rowCount,
+    ).toBe(1);
   });
 
   it("does not copy identity-shaped free text into the anonymous demographics (H54)", async () => {
