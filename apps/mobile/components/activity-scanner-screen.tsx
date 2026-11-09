@@ -84,6 +84,9 @@ interface ActivityScanResult {
  * the two-pane Activities window) takes the activity from `activityId`, draws its own title band
  * of height `topInset` and keeps the result overlay inside the pane, like the Schedule detail.
  */
+/** Window width kept free for Back, the queue button and the bar's gutters beside the title. */
+const TOOLBAR_TITLE_RESERVE = 180;
+
 export function ActivityScannerScreen({
   activityId: embeddedActivityId,
   embedded = false,
@@ -110,7 +113,7 @@ export function ActivityScannerScreen({
   const { language, t } = useLocale();
   const insets = useSafeAreaInsets();
   const { gutter } = useOperatorLayout(null);
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width: windowWidth } = useWindowDimensions();
   const tabBarBottomInset = useRouterTabBarBottomInset();
   const glassAvailable = isRealLiquidGlassAvailable();
   const { me } = useMeContext();
@@ -593,7 +596,13 @@ export function ActivityScannerScreen({
               adjustsFontSizeToFit
               minimumFontScale={CHROME_MIN_FONT_SCALE}
               testID={UI_TEST_IDS.scanner.result}
-              style={{ color: colors.label, ...SCREEN_TITLE }}
+              // A long name must truncate: an over-wide title makes UIKit move Back and the
+              // queue button into the bar's overflow menu.
+              style={{
+                color: colors.label,
+                maxWidth: Math.max(96, windowWidth - TOOLBAR_TITLE_RESERVE),
+                ...SCREEN_TITLE,
+              }}
             >
               {activityName}
             </Text>
