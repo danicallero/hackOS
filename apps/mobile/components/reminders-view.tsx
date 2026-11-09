@@ -111,7 +111,7 @@ export function ScheduleReminderSections({
 
   if (!ready) {
     if (notifications.error)
-      return <RequestFeedback error={notifications.error} onRetry={notifications.retry} />;
+      return <RequestFeedback blank error={notifications.error} onRetry={notifications.retry} />;
     if (error && !loading) return <RequestFeedback error={error} onRetry={() => void reload()} />;
     if (loading || !notifications.ready) return <RequestFeedback loading />;
     return <EmptyState icon="calendar" title={t("scheduleEmpty")} />;
