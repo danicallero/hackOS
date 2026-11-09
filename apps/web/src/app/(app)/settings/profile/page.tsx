@@ -62,14 +62,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
-  // The Help desk tab hosts the same networking-profile editor above its own settings.
+  // The Help desk tab holds only its own settings; the public profile editor lives in its tab.
   const [helperDirty, setHelperDirty] = useState(false);
-  const [profileDirty, setProfileDirty] = useState(false);
   const setHelpDeskDirty = useDirtySetter(setDirty, "helpDesk");
   useEffect(() => {
-    onPublicDirty(profileDirty);
-    setHelpDeskDirty(helperDirty || profileDirty);
-  }, [helperDirty, profileDirty, setHelpDeskDirty, onPublicDirty]);
+    setHelpDeskDirty(helperDirty);
+  }, [helperDirty, setHelpDeskDirty]);
   const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
@@ -78,7 +76,7 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
       case "helpDesk":
-        return null; // One persistent editor below is shared by both tabs (H61).
+        return null; // The tab content below keeps the public profile and help desk editors mounted (H61).
       case "meals":
         return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
       case "passes":
@@ -127,7 +125,11 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
               section={{ id: "public" }}
               tabTitle={tab === "help-desk" ? "helpDeskTitle" : "publicProfileTitle"}
             >
-              {me.hasEventAccess ? <PublicProfileCard onDirtyChange={setProfileDirty} /> : null}
+              {me.hasEventAccess ? (
+                <div hidden={tab === "help-desk"}>
+                  <PublicProfileCard onDirtyChange={onPublicDirty} />
+                </div>
+              ) : null}
               <div hidden={tab !== "help-desk"}>
                 <HelperSection onDirtyChange={setHelperDirty} />
               </div>

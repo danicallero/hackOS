@@ -150,8 +150,11 @@ describe("Profile tabs (H28, #1083)", () => {
     nav.search = "tab=help-desk";
     await render();
     expect(openPanel()[0].textContent).toContain("helper-body");
-    // The networking-profile editor sits above the help desk settings.
-    expect(openPanel()[0].textContent).toContain("public-body");
+    // The public profile editor stays mounted (drafts survive) but hidden: the tabs never show both.
+    const publicBody = Array.from(openPanel()[0].querySelectorAll("p")).find(
+      (node) => node.textContent === "public-body",
+    );
+    expect(publicBody?.closest("[hidden]")).not.toBeNull();
   });
 
   it("lets an accepted mentor without event access prepare the help desk section (H61)", async () => {

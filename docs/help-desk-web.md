@@ -35,9 +35,8 @@ also enables public-profile sharing; unpublishing support leaves that choice on.
 
 Helpers edit in My profile: the Public profile tab owns the bio, headline and
 CV (the same fields a badge scan shows), and its own **Help desk** tab
-(`?tab=help-desk`) renders the same `PublicProfileCard` editor (preview, in-place editing, save) for people with event access, then `settings/profile/helper-section.tsx`: the
-"Available to mentor" switch (publication), then the **Mentor profile** block in
-the same order as mobile: "Challenge alerts" (checkboxes of the event's challenges, for any eligible helper;
+(`?tab=help-desk`) holds only the help desk settings (the public profile editor stays in its own tab, so the two are never shown together), in `settings/profile/helper-section.tsx`: the
+"Available to mentor" switch (publication), then, in the same order as mobile, "Challenge alerts" (checkboxes of the event's challenges, for any eligible helper;
 none = every request); knowledge; and the
 availability plan day by day (every day of the hacking window, else the event
 window, with its ranges, a 24-hour track and an Add availability action
