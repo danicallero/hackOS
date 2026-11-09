@@ -24,9 +24,9 @@ import {
   LegacyScreenHeader,
   Separator,
 } from "@/components/native-ui";
+import { OfflineScanningNote } from "@/components/offline-scanning-note";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { StaleDataBanner } from "@/components/stale-data-banner";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
@@ -436,9 +436,7 @@ export function PeopleDirectoryScreen({
                 retrying={sync.syncing}
               />
             ) : null}
-            {syncError && !isSyncConflict(syncError) ? (
-              <StaleDataBanner updatedAt={sync.lastSync} />
-            ) : null}
+            {syncError && !isSyncConflict(syncError) ? <OfflineScanningNote /> : null}
           </View>
         ) : null
       }

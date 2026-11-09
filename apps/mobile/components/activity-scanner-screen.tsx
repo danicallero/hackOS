@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
+import { OfflineScanningNote } from "@/components/offline-scanning-note";
 import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
 import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
@@ -156,7 +157,6 @@ export function ActivityScannerScreen({
 
   const [insideError, setInsideError] = useState<Error | null>(null);
   const [statsError, setStatsError] = useState<Error | null>(null);
-  const [statsLoading, setStatsLoading] = useState(true);
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [activityError, setActivityError] = useState<Error | null>(null);
   const [stats, setStats] = useState<ActivityStats | null>(null);
@@ -237,15 +237,12 @@ export function ActivityScannerScreen({
   }, [nfcRunning, focused, result, registering, nfcVisible]);
 
   const loadStats = useCallback(async () => {
-    setStatsLoading(true);
     try {
       const response = await apiFetch<{ items: ActivityStats[] }>("/api/activities/scannable");
       setStats(response.items.find((item) => item.activityId === activityId) ?? null);
       setStatsError(null);
     } catch (cause) {
       setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
-    } finally {
-      setStatsLoading(false);
     }
   }, [activityId]);
 
@@ -650,17 +647,7 @@ export function ActivityScannerScreen({
                 />
               ) : null}
               {/* Offline is not a failure: scans are queued, only the live figures are missing. */}
-              {insideError || statsError ? (
-                <View
-                  accessibilityRole="text"
-                  style={{ alignItems: "center", flexDirection: "row", gap: 6 }}
-                >
-                  <SymbolView name="wifi.slash" size={14} tintColor={colors.secondaryLabel} />
-                  <Text style={[type.footnote, { color: colors.secondaryLabel }]}>
-                    {t("scannerOfflineScanning")}
-                  </Text>
-                </View>
-              ) : null}
+              {insideError || statsError ? <OfflineScanningNote /> : null}
               <ActivityStatistics
                 activity={activity}
                 stats={stats}
