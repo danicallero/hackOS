@@ -15,6 +15,8 @@ export const ERROR_REASONS = {
   SCAN_TIMESTAMP_IN_FUTURE: "scan_timestamp_in_future",
   /** 409: the scanned badge was revoked. */
   BADGE_REVOKED: "badge_revoked",
+  /** 409: an offline scan expected one person but the badge belongs to another. */
+  BADGE_OWNER_MISMATCH: "badge_owner_mismatch",
   /** 409: the scanned ticket was revoked. */
   TICKET_REVOKED: "ticket_revoked",
   /** 409: a team member is busy in another judging room. */

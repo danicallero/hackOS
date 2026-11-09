@@ -46,6 +46,8 @@ export async function activityScan(
   input: {
     badgeId?: string;
     ticketToken?: string;
+    /** The person the operator saw when scanning offline; a different owner rejects the scan. */
+    expectedUserId?: number;
     allowRepeat: boolean;
     scannedAt?: Date;
     sourceDeviceId?: string;
@@ -67,6 +69,13 @@ export async function activityScan(
   const userId = input.ticketToken
     ? await resolveByTicket(pool, input.ticketToken)
     : await resolveByBadge(pool, input.badgeId!);
+  if (input.expectedUserId != null && input.expectedUserId !== userId) {
+    // The offline accreditation this scan relied on did not hold (the badge went to
+    // someone else), so the entry is rejected instead of crediting its real owner.
+    throw new AppError(409, "badge_owner_mismatch", "This badge belongs to someone else", {
+      code: ERROR_REASONS.BADGE_OWNER_MISMATCH,
+    });
+  }
   if (input.scannedAt && isImplausiblyFuture(input.scannedAt)) {
     throw new BadRequestError("Offline scan timestamp must be in the past", {
       code: ERROR_REASONS.SCAN_TIMESTAMP_IN_FUTURE,

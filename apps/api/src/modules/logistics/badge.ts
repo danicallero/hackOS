@@ -1,5 +1,6 @@
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import type { Queryable } from "../../db/pool.js";
+import { isImplausiblyFuture } from "../../lib/clock.js";
 import { AppError } from "../../lib/errors.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
 
@@ -133,4 +134,36 @@ export async function resolveByBadges(
     else out.set(badgeId, new AppError(404, "badge_unknown", "Badge not recognized"));
   });
   return out;
+}
+
+/** How far back an offline accreditation may claim it happened (a long offline stretch). */
+const MAX_OFFLINE_ASSIGNMENT_AGE_MS = 72 * 60 * 60 * 1000;
+
+/**
+ * H54 (DELTA): an accreditation recorded offline carries the time the operator
+ * assigned the badge. Pins `users.badge_assigned_at` to it for the current
+ * transaction (read by `h54_set_badge_assigned_at`) so scans taken with the badge
+ * in between are not rejected as predating the assignment. Never in the future,
+ * never before the previous assignment boundary, and bounded in age; anything
+ * else is rejected so a client cannot backdate a badge to legitimise old scans.
+ */
+export async function pinBadgeAssignmentTime(
+  client: Queryable,
+  assignedAt: Date | undefined,
+  previousAssignedAt: Date | null | undefined,
+): Promise<void> {
+  if (assignedAt == null) return;
+  const tooOld = Date.now() - assignedAt.getTime() > MAX_OFFLINE_ASSIGNMENT_AGE_MS;
+  const beforePrevious =
+    previousAssignedAt != null && assignedAt.getTime() < previousAssignedAt.getTime();
+  if (isImplausiblyFuture(assignedAt) || tooOld || beforePrevious) {
+    throw new AppError(
+      400,
+      "badge_assignment_time_invalid",
+      "The recorded badge assignment time is not plausible",
+    );
+  }
+  await client.query(`SELECT set_config('hackos.badge_assigned_at', $1, true)`, [
+    assignedAt.toISOString(),
+  ]);
 }

@@ -415,6 +415,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         ticketToken: req.body.ticketToken,
         badgeId: req.body.badgeId,
         method: req.body.method,
+        assignedAt: req.body.assignedAt,
       }),
   );
 
@@ -435,6 +436,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         badgeId: req.body.badgeId,
         method: req.body.method,
         attendeeRole: req.body.attendeeRole,
+        assignedAt: req.body.assignedAt,
       }),
   );
 
@@ -457,6 +459,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         currentBadgeId: req.body.currentBadgeId,
         newBadgeId: req.body.newBadgeId,
         reason: req.body.reason,
+        assignedAt: req.body.assignedAt,
       }),
   );
 
@@ -706,6 +709,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       const r = await activityScan(actor(req.userId), req.params.id, {
         badgeId: req.body.badgeId,
         ticketToken: req.body.ticketToken,
+        expectedUserId: req.body.expectedUserId,
         allowRepeat: req.body.allowRepeat,
         scannedAt: req.body.scannedAt,
       });
