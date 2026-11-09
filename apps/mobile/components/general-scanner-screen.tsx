@@ -178,19 +178,23 @@ export function GeneralScannerScreen() {
   // Server-side per-role counts are refreshed by scoped logistics events,
   // rather than a global cache version. Falls back to the local roster below
   // when offline.
-  const loadRoleStats = useCallback(() => {
-    void apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
-      .then((res) => {
-        setRoleStats(res.byRole);
-        setStatsError(null);
-      })
-      .catch((cause) => {
-        setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
-        // Preserve the latest server counts; retry keeps the scanner usable.
-        // Offline or request failed — the local-roster fallback in `stats`
-        // below keeps the tiles usable, just without cross-device accuracy.
-      });
-  }, []);
+  const loadRoleStats = useCallback(
+    () =>
+      apiFetch<{ byRole: ScannerRoleStat[] }>("/api/scanner/role-stats")
+        .then((res) => {
+          setRoleStats(res.byRole);
+          setStatsError(null);
+          return true;
+        })
+        .catch((cause) => {
+          setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
+          return false;
+          // Preserve the latest server counts; retry keeps the scanner usable.
+          // Offline or request failed — the local-roster fallback in `stats`
+          // below keeps the tiles usable, just without cross-device accuracy.
+        }),
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -398,7 +402,7 @@ export function GeneralScannerScreen() {
               <QrCamera
                 surfaceHeader={(layout) => (
                   <>
-                    {statsError ? <OfflineScanningNote /> : null}
+                    {statsError ? <OfflineScanningNote onReconnect={loadRoleStats} /> : null}
                     <ScannerGroupStatistics stats={stats} layout={layout.stats} />
                     {error ? (
                       <GlassView

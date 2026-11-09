@@ -1108,5 +1108,6 @@
   "mobileStatesCoverageEmpty": "No coverage scheduled",
   "mobileStatesScheduleTranslationsError": "Saved, but the translations weren't. Edit the entry to try again.",
   "mobileSurfaceOpenSettings": "Open Settings",
-  "scannerOfflineScanning": "Offline scanning"
+  "scannerOfflineScanning": "Offline scanning",
+  "scannerReconnect": "Reconnect"
 }
