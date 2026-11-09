@@ -14,13 +14,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FilterMenu } from "@/components/filter-menu";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
-import { OfflineScanningNote } from "@/components/offline-scanning-note";
 import { NATIVE_PANE_STACK, PanePeopleStack } from "@/components/pane-people-stack";
 import { PanePlaceholder } from "@/components/pane-placeholder";
 import { PersonOperationsScreen } from "@/components/person-operations-screen";
 import { QrCamera } from "@/components/QrCamera";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
+import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
 import { apiFetch } from "@/lib/api";
 import { useBookCrease } from "@/lib/fold-region";
@@ -402,7 +402,7 @@ export function GeneralScannerScreen() {
               <QrCamera
                 surfaceHeader={(layout) => (
                   <>
-                    {statsError ? <OfflineScanningNote onReconnect={loadRoleStats} /> : null}
+                    {statsError ? <OfflineNotice onReconnect={loadRoleStats} /> : null}
                     <ScannerGroupStatistics stats={stats} layout={layout.stats} />
                     {error ? (
                       <GlassView

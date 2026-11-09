@@ -53,8 +53,6 @@
   "goHome": "Go to home screen",
   "retry": "Retry",
   "requestError": "Couldn't load this information. Try again.",
-  "requestOfflineTitle": "You're offline",
-  "requestOfflineBody": "Connect to the internet to load this.",
   "requestServerError": "The server is temporarily unavailable. Try again in a moment.",
   "requestUnavailable": "This information isn't available for this account yet.",
   "requestSessionExpired": "Your session is no longer valid. Sign out and sign in again.",
@@ -63,7 +61,6 @@
   "sessionRecoveryTitle": "Couldn't restore your session",
   "sessionRecoveryDescription": "Check your connection and try again. If it continues, sign in again.",
   "continueOffline": "Continue offline",
-  "offlineDataLine": "Offline mode · Updated {updatedAt}",
   "yesterday": "Yesterday",
   "clockSkewTitle": "Device clock looks off",
   "clockSkewBody": "This device's clock doesn't match the server's. Queued scan times are being auto-corrected, but you should fix the device clock (auto date & time) as soon as possible.",
@@ -992,6 +989,7 @@
   "maintenanceFailedBody": "The restore needs an administrator. The app resumes once it is resolved.",
   "mobileStatesScheduleTranslationsError": "Saved, but the translations weren't. Edit the entry to try again.",
   "mobileSurfaceOpenSettings": "Open Settings",
-  "scannerOfflineMode": "Offline mode",
-  "scannerReconnect": "Reconnect"
+  "offlineMode": "Offline mode",
+  "offlineModeUpdated": "Offline mode · Updated {updatedAt}",
+  "offlineReconnect": "Reconnect"
 }
