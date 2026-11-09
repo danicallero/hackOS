@@ -2,7 +2,6 @@ import { Text, View } from "react-native";
 import { SymbolView } from "@/components/symbol";
 import { formatLastUpdate } from "@/lib/format-date";
 import { useLocale } from "@/lib/i18n";
-import { useMeContext } from "@/lib/me-context";
 import { colors } from "@/theme/colors";
 import { type } from "@/theme/tokens";
 
@@ -13,15 +12,7 @@ import { type } from "@/theme/tokens";
  */
 export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
   const { language, t } = useLocale();
-  const { me } = useMeContext();
   if (!updatedAt) return null;
-  const capabilities = me?.capabilities ?? [];
-  const hasOperationsMenu =
-    capabilities.includes("*") ||
-    capabilities.some((capability) =>
-      ["accredit:scan", "presence:scan", "activity:scan"].includes(capability),
-    );
-
   const formatted = formatLastUpdate(updatedAt, language, t);
 
   // Neutral and quiet, but a visible capsule: no warning colour, one line.
@@ -37,7 +28,6 @@ export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
         flexDirection: "row",
         gap: 8,
         marginBottom: 14,
-        marginRight: hasOperationsMenu ? 72 : 0,
         paddingHorizontal: 14,
         paddingVertical: 10,
       }}
