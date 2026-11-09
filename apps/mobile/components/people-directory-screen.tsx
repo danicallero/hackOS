@@ -24,9 +24,9 @@ import {
   LegacyScreenHeader,
   Separator,
 } from "@/components/native-ui";
-import { OfflineScanningNote } from "@/components/offline-scanning-note";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
 import { useLocale } from "@/lib/i18n";
 import { emitManualActivityScan } from "@/lib/manual-activity-scan";
@@ -437,7 +437,7 @@ export function PeopleDirectoryScreen({
               />
             ) : null}
             {syncError && !isSyncConflict(syncError) ? (
-              <OfflineScanningNote onReconnect={async () => Boolean(await sync.sync())} />
+              <OfflineNotice onReconnect={async () => Boolean(await sync.sync())} />
             ) : null}
           </View>
         ) : null

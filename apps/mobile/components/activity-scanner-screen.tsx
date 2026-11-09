@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassView, isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { AdaptiveBackButton } from "@/components/native-ui";
 import { NfcReader } from "@/components/nfc-reader";
-import { OfflineScanningNote } from "@/components/offline-scanning-note";
 import { NATIVE_PANE_STACK, PaneNativeStack } from "@/components/pane-native-stack";
 import { PeopleDirectoryScreen } from "@/components/people-directory-screen";
 import { PeopleFinderPane } from "@/components/people-finder-pane";
@@ -28,6 +27,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { NfcScannerSurface } from "@/components/scanner-nfc-surface";
 import { ScannerStatBlock } from "@/components/scanner-stat-block";
 import { ScannerQueueStatus } from "@/components/scanner-transaction-status";
+import { OfflineNotice } from "@/components/status-notice";
 import { SymbolView } from "@/components/symbol";
 import { resultCardMaxHeight } from "@/lib/activity-pane";
 import { apiFetch } from "@/lib/api";
@@ -656,7 +656,7 @@ export function ActivityScannerScreen({
               ) : null}
               {/* Offline is not a failure: scans are queued, only the live figures are missing. */}
               {insideError || statsError ? (
-                <OfflineScanningNote
+                <OfflineNotice
                   onReconnect={async () =>
                     (await Promise.all([loadInside(), loadStats()])).every(Boolean)
                   }

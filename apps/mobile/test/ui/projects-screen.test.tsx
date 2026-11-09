@@ -112,6 +112,7 @@ import {
 } from "@/components/project-detail-screen";
 import { clearGallerySnapshots, ProjectGalleryScreen } from "@/components/project-gallery-screen";
 import { ProjectInvitesScreen } from "@/components/project-invites-screen";
+import { resetStatusNoticeAttempts } from "@/components/status-notice";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { NativeProject } from "@/lib/projects";
 import { renderMobile } from "./render";
@@ -130,6 +131,7 @@ const project: NativeProject = {
   presentations: [],
 };
 beforeEach(() => {
+  resetStatusNoticeAttempts();
   clearGallerySnapshots();
   mockParams = { id: "5" };
   mockApi.mockReset();

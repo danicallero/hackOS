@@ -53,8 +53,6 @@
   "goHome": "Ir á pantalla principal",
   "retry": "Reintentar",
   "requestError": "Non se puido cargar esta información. Téntao de novo.",
-  "requestOfflineTitle": "Sen conexión",
-  "requestOfflineBody": "Conéctate a internet para cargar isto.",
   "requestServerError": "O servidor non está dispoñible temporalmente. Proba de novo nun momento.",
   "requestUnavailable": "Esta información aínda non está dispoñible para esta conta.",
   "requestSessionExpired": "A túa sesión xa non é válida. Pecha sesión e volve entrar.",
@@ -63,7 +61,6 @@
   "sessionRecoveryTitle": "Non se puido recuperar a túa sesión",
   "sessionRecoveryDescription": "Comproba a conexión e téntao de novo. Se continúa, volve iniciar sesión.",
   "continueOffline": "Continuar sen conexión",
-  "offlineDataLine": "Modo sen conexión · Actualizado {updatedAt}",
   "yesterday": "Onte",
   "clockSkewTitle": "O reloxo do dispositivo parece incorrecto",
   "clockSkewBody": "O reloxo deste dispositivo non coincide co do servidor. As horas dos escaneos na cola están a corrixirse automaticamente, pero deberías arranxar o reloxo do dispositivo (data e hora automáticas) canto antes.",
@@ -1107,6 +1104,7 @@
   "mobileStatesCoverageEmpty": "Sen cobertura programada",
   "mobileStatesScheduleTranslationsError": "Gardado, pero non as traducións. Edita a entrada para tentalo de novo.",
   "mobileSurfaceOpenSettings": "Abrir axustes",
-  "scannerOfflineMode": "Modo sen conexión",
-  "scannerReconnect": "Reconectar"
+  "offlineMode": "Modo sen conexión",
+  "offlineModeUpdated": "Modo sen conexión · Actualizado {updatedAt}",
+  "offlineReconnect": "Reconectar"
 }
