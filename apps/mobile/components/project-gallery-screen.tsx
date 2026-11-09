@@ -30,7 +30,6 @@ import {
   mergeProjects,
   type NativeProject,
 } from "@/lib/projects";
-import { fixedScrollHeaderOptions } from "@/lib/screen-header-options";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { listDetailLayout } from "@/lib/window-size";
@@ -170,12 +169,18 @@ export function ProjectGalleryScreen() {
       return;
     }
     navigation.setOptions({
-      // H18: a compact title with the soft scroll edge (R032), not a collapsing large title: the
-      // list passes under the bar with UIKit's blur instead of a hard cut over the status bar.
-      ...fixedScrollHeaderOptions(t("gallery"), false),
-      // Android has no content inset: a transparent header there floats over the list.
+      // The same large title as the other pushed pages (Statistics, Storage); the soft scroll
+      // edge lets the list pass under the bar with UIKit's blur instead of a hard cut.
+      title: t("gallery"),
+      headerShown: true,
+      headerLargeTitle: Platform.OS === "ios",
+      headerBlurEffect: "none",
+      // Android has no large-title bar or content inset: a transparent header there floats over the list.
       headerTransparent: Platform.OS === "ios",
       headerStyle: Platform.OS === "ios" ? undefined : { backgroundColor: colors.background },
+      scrollEdgeEffects: { top: "soft" },
+      headerLargeTitleShadowVisible: false,
+      headerShadowVisible: false,
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
       headerSearchBarOptions: {
         placeholder: t("projectSearch"),
@@ -358,14 +363,14 @@ export function ProjectGalleryScreen() {
               gap: 20,
               paddingBottom: empty ? 96 : 32,
               flexGrow: 1,
-              justifyContent: empty ? "center" : undefined,
+              // Centre an empty state; a status notice stays at the top under the title.
+              justifyContent: empty && !error ? "center" : undefined,
             }}
           >
             {closed ? (
               <EmptyState icon="clock" title={closed} />
             ) : error ? (
               <RequestFeedback
-                blank={projects.length === 0}
                 error={error}
                 onRetry={
                   error instanceof ApiError && error.status === 403 ? undefined : () => void load()

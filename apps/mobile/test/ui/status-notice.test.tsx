@@ -1,21 +1,11 @@
 import { act, fireEvent, screen } from "@testing-library/react-native";
 import { View } from "react-native";
-import { RequestFeedback } from "@/components/RequestFeedback";
 import { ErrorNotice, OfflineNotice, resetStatusNoticeAttempts } from "@/components/status-notice";
 import { renderMobile } from "./render";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
 
-jest.mock("@/lib/api", () => ({
-  ApiError: class ApiError extends Error {
-    status: number;
-    constructor(message: string, status: number) {
-      super(message);
-      this.status = status;
-    }
-  },
-}));
 jest.mock("@/lib/i18n", () => ({
   useLocale: () => ({ language: "en", t: (key: string) => key }),
 }));
@@ -76,16 +66,6 @@ describe("status notices", () => {
     await renderMobile(<ErrorNotice message="Server error" onRetry={onRetry} />);
     expect(screen.getByText("Server error")).toBeTruthy();
     await act(async () => fireEvent.press(screen.getByLabelText("retry")));
-    expect(onRetry).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a centred empty state when a first load fails with nothing behind it", async () => {
-    const onRetry = jest.fn().mockResolvedValue(true);
-    await renderMobile(
-      <RequestFeedback blank error={new TypeError("Network request failed")} onRetry={onRetry} />,
-    );
-    expect(screen.getByText("offlineMode")).toBeTruthy();
-    await act(async () => fireEvent.press(screen.getByLabelText("offlineReconnect")));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

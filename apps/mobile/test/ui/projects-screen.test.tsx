@@ -580,7 +580,7 @@ it("shows gallery winners only from the projection and no retry when denied (H18
   expect(screen.getAllByText(/projectWinner/)).toHaveLength(1);
 });
 
-it("gives the gallery a compact title with the soft scroll edge, not a collapsing large title (H18)", async () => {
+it("gives the gallery the common large title with a soft scroll edge, not a hard cut (H18)", async () => {
   settle({
     "/api/public/projects?page=1&pageSize=20&search=": {
       items: [],
@@ -591,7 +591,7 @@ it("gives the gallery a compact title with the soft scroll edge, not a collapsin
   });
   await renderMobile(<ProjectGalleryScreen />);
   const options = mockSetOptions.mock.calls.at(-1)?.[0];
-  expect(options.headerLargeTitle).toBe(false);
+  expect(options.headerLargeTitle).toBe(true);
   expect(options.scrollEdgeEffects).toEqual({ top: "soft" });
 });
 

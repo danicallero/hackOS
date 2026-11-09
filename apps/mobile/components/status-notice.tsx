@@ -1,16 +1,8 @@
 import { useIsFocused } from "expo-router";
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import {
-  Pressable,
-  type StyleProp,
-  StyleSheet,
-  type TextStyle,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Pressable, StyleSheet, useColorScheme, View } from "react-native";
 import { AppActivityIndicator } from "@/components/app-activity-indicator";
 import { AppText as Text } from "@/components/app-text";
-import { EmptyState } from "@/components/native-ui";
 import { SymbolView, type SymbolViewProps } from "@/components/symbol";
 import { formatLastUpdate } from "@/lib/format-date";
 import { useLocale } from "@/lib/i18n";
@@ -71,50 +63,6 @@ async function runAttempt(key: string, action: Action) {
   emitAttempts();
 }
 
-/** The retry control: label, spinner while it runs, red cross if it failed (same width throughout). */
-function AttemptAction({
-  attemptKey,
-  label,
-  onAction,
-  textStyle,
-}: {
-  attemptKey: string;
-  label: string;
-  onAction: Action;
-  textStyle: StyleProp<TextStyle>;
-}) {
-  const state = useSyncExternalStore(
-    subscribeAttempts,
-    () => attempts.get(attemptKey) ?? "idle",
-    () => "idle" as Attempt,
-  );
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ busy: state === "loading" }}
-      disabled={state !== "idle"}
-      hitSlop={8}
-      onPress={() => void runAttempt(attemptKey, onAction)}
-      style={{ alignItems: "center", justifyContent: "center" }}
-    >
-      <Text style={[textStyle, { fontWeight: "600", opacity: state === "idle" ? 1 : 0 }]}>
-        {label}
-      </Text>
-      {state === "loading" ? (
-        <View pointerEvents="none" style={styles.overlay}>
-          <AppActivityIndicator size={14} />
-        </View>
-      ) : null}
-      {state === "failed" ? (
-        <View pointerEvents="none" style={styles.overlay}>
-          <SymbolView name="xmark.circle.fill" size={14} tintColor={colors.destructive} />
-        </View>
-      ) : null}
-    </Pressable>
-  );
-}
-
 /**
  * The app's one status line for a failed or unreachable load: a full-width capsule
  * with an icon, a short message and a trailing action. The action swaps in place
@@ -138,6 +86,12 @@ function StatusNotice({
   // The theme tokens are module-level: subscribe so a live light/dark switch repaints the notice.
   useColorScheme();
   const key = `${tone}:${text}`;
+  const state = useSyncExternalStore(
+    subscribeAttempts,
+    () => attempts.get(key) ?? "idle",
+    () => "idle" as Attempt,
+  );
+
   const error = tone === "error";
   const color = error ? colors.onDestructiveSurface : colors.secondaryLabel;
   const textStyle = [type.footnote, { color }];
@@ -164,12 +118,29 @@ function StatusNotice({
         {text}
       </Text>
       {onAction ? (
-        <AttemptAction
-          attemptKey={key}
-          label={actionLabel}
-          onAction={onAction}
-          textStyle={textStyle}
-        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          accessibilityState={{ busy: state === "loading" }}
+          disabled={state !== "idle"}
+          hitSlop={8}
+          onPress={() => void runAttempt(key, onAction)}
+          style={{ alignItems: "center", justifyContent: "center" }}
+        >
+          <Text style={[textStyle, { fontWeight: "600", opacity: state === "idle" ? 1 : 0 }]}>
+            {actionLabel}
+          </Text>
+          {state === "loading" ? (
+            <View pointerEvents="none" style={styles.overlay}>
+              <AppActivityIndicator size={14} />
+            </View>
+          ) : null}
+          {state === "failed" ? (
+            <View pointerEvents="none" style={styles.overlay}>
+              <SymbolView name="xmark.circle.fill" size={14} tintColor={colors.destructive} />
+            </View>
+          ) : null}
+        </Pressable>
       ) : null}
     </View>
   );
@@ -308,39 +279,4 @@ export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: A
     action: onRetry,
   });
   return view ? <StatusNotice {...view} onAction={view.action} /> : null;
-}
-
-/**
- * A failure with nothing to show behind it (first load): a centred empty state with the
- * same retry control, instead of a line floating on a blank screen.
- */
-export function BlankFailure({
-  offline,
-  message,
-  onRetry,
-}: {
-  offline: boolean;
-  message: string;
-  onRetry?: Action;
-}) {
-  useColorScheme();
-  const { t } = useLocale();
-  const label = offline ? t("offlineReconnect") : t("retry");
-  const title = offline ? t("offlineMode") : message;
-  return (
-    <EmptyState
-      icon={offline ? "wifi.slash" : "exclamationmark.circle"}
-      title={title}
-      action={
-        onRetry ? (
-          <AttemptAction
-            attemptKey={`blank:${title}`}
-            label={label}
-            onAction={onRetry}
-            textStyle={[type.body, { color: colors.accent }]}
-          />
-        ) : undefined
-      }
-    />
-  );
 }
