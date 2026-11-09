@@ -1107,5 +1107,6 @@
   "mobileStatesNoChallenges": "Aún no hay retos",
   "mobileStatesCoverageEmpty": "Sin cobertura programada",
   "mobileStatesScheduleTranslationsError": "Guardado, pero no las traducciones. Edita la entrada para reintentarlo.",
-  "mobileSurfaceOpenSettings": "Abrir ajustes"
+  "mobileSurfaceOpenSettings": "Abrir ajustes",
+  "scannerOfflineScanning": "Escaneo sin conexión"
 }

@@ -1107,5 +1107,6 @@
   "mobileStatesNoChallenges": "No challenges yet",
   "mobileStatesCoverageEmpty": "No coverage scheduled",
   "mobileStatesScheduleTranslationsError": "Saved, but the translations weren't. Edit the entry to try again.",
-  "mobileSurfaceOpenSettings": "Open Settings"
+  "mobileSurfaceOpenSettings": "Open Settings",
+  "scannerOfflineScanning": "Offline scanning"
 }
