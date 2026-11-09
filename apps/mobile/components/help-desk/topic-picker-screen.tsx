@@ -134,6 +134,18 @@ export function HelpTopicPickerScreen() {
           />
         </Section>
       ) : null}
+      {!allowOther && !name ? (
+        <Section>
+          <CheckRow
+            label={t("helpNoneSelected")}
+            selected={selected.length === 0}
+            onPress={() => {
+              void haptic("selection");
+              setTopicSelection([]);
+            }}
+          />
+        </Section>
+      ) : null}
       {rows.length > 0 || (allowAdd && name && !known) ? (
         <Section>
           {rows.map((topic, index) => {
