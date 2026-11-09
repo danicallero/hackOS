@@ -1686,10 +1686,11 @@ avatar that collapses into the Dynamic Island — fed by
 one "Stated availability" section: a Now row (scheduled vs inside the venue,
 H24) and one row per event day. Editing happens in the same public profile
 editor: `components/help-desk/helper-profile-section.tsx` sits under the card
-for eligible helpers, in the order a helper decides. The editor opens as the
-person's own card, never dimmed, edited with the bar's pencil as in the public
-profile editor (it edits only that card; the help desk settings below are
-always live). The role renders as an accent pill. Then: an "Available to
+for eligible helpers, as a **Help desk** section under the card and its share
+switch (there is no separate help desk page: `/helper-profile` is the same
+screen, or only the section plus Sign out for an accepted mentor without event
+access). The pencil edits the card alone; the settings below are always live. The role
+renders as an accent pill. Then: an "Available to
 mentor" switch (the published state; it needs no knowledge area: a helper with none
 is a generalist who receives every request; publishing also turns the public profile's share
 switch on, and the screen mirrors it; unpublishing leaves sharing as is); for
