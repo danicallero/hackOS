@@ -463,36 +463,6 @@ export default function NetworkingProfileScreen({
                 />
               </Section>
             ) : null}
-            {mode === "helpDesk" ? (
-              <View
-                style={{
-                  alignItems: "center",
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  paddingHorizontal: 16,
-                }}
-              >
-                <Text
-                  accessibilityRole="header"
-                  style={{ color: colors.secondaryLabel, fontSize: type.footnote.fontSize }}
-                >
-                  {t("networkingTitle")}
-                </Text>
-                <View style={{ flexDirection: "row", gap: 20 }}>
-                  {editing ? (
-                    <InlineAction label={t("cancel")} disabled={saving} onPress={stopEditing} />
-                  ) : null}
-                  <InlineAction
-                    label={editing ? t("save") : t("networkingEdit")}
-                    emphasis
-                    disabled={
-                      editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare
-                    }
-                    onPress={() => (editing ? void save() : startEditing())}
-                  />
-                </View>
-              </View>
-            ) : null}
             {/* Not shared yet: the card is a preview of what scanners will get. */}
             <View
               style={{
@@ -543,16 +513,14 @@ export default function NetworkingProfileScreen({
               onPress={() => (editing ? stopEditing() : router.back())}
             />
           </Stack.Toolbar>
-          {mode === "helpDesk" ? null : (
-            <Stack.Toolbar placement="right">
-              <Stack.Toolbar.Button
-                icon={editing ? "checkmark" : "pencil"}
-                accessibilityLabel={editing ? t("save") : t("networkingEdit")}
-                disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
-                onPress={() => (editing ? void save() : startEditing())}
-              />
-            </Stack.Toolbar>
-          )}
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              icon={editing ? "checkmark" : "pencil"}
+              accessibilityLabel={editing ? t("save") : t("networkingEdit")}
+              disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
+              onPress={() => (editing ? void save() : startEditing())}
+            />
+          </Stack.Toolbar>
         </>
       ) : null}
       {profile?.cv && cvOpen ? (
@@ -574,7 +542,7 @@ export default function NetworkingProfileScreen({
             disabled={saving}
             onPress={() => (editing ? stopEditing() : router.back())}
           />
-          {mode === "helpDesk" ? null : editing ? (
+          {editing ? (
             <FloatingGlassButton
               top={16 + topInset}
               side="right"
@@ -598,41 +566,6 @@ export default function NetworkingProfileScreen({
         </>
       )}
     </>
-  );
-}
-
-/** A text action at the end of a section header (Edit, Save, Cancel). */
-function InlineAction({
-  label,
-  onPress,
-  disabled,
-  emphasis = false,
-}: {
-  label: string;
-  onPress: () => void;
-  disabled?: boolean;
-  emphasis?: boolean;
-}) {
-  return (
-    <PressableFeedback
-      feedback="opacity"
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      hitSlop={8}
-      onPress={onPress}
-      style={{ opacity: disabled ? 0.4 : 1 }}
-    >
-      <Text
-        style={{
-          color: colors.interactiveText,
-          fontSize: type.footnote.fontSize,
-          fontWeight: emphasis ? "600" : "400",
-        }}
-      >
-        {label}
-      </Text>
-    </PressableFeedback>
   );
 }
 
