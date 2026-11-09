@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { coverageDays, validAvailability, validHelpRequest } from "./help-desk";
+import {
+  coverageDays,
+  validAvailability,
+  validHelpRequest,
+  workingHoursIntervals,
+} from "./help-desk";
 
 const interval = (start: string, end: string) => ({
   startsAt: `2027-02-${start}:00.000Z`,
@@ -85,5 +90,26 @@ describe("coverage days (H67)", () => {
       iso < "2027-02-20T10" ? "a" : "b",
     );
     expect(days.map((day) => day.key)).toEqual(["a", "b"]);
+  });
+});
+
+describe("workingHoursIntervals (H62)", () => {
+  it("proposes two blocks per day in the event zone, clipped to the window and valid", () => {
+    const window = { startsAt: "2027-02-26T12:00:00.000Z", endsAt: "2027-02-28T09:00:00.000Z" };
+    const result = workingHoursIntervals(window, "UTC");
+    expect(result.map((item) => item.startsAt.slice(5, 16))).toEqual([
+      "02-26T12:00",
+      "02-26T16:00",
+      "02-27T10:00",
+      "02-27T16:00",
+    ]);
+    expect(result.at(-1)?.endsAt).toBe("2027-02-27T20:00:00.000Z");
+    expect(validAvailability(result)).toBe(true);
+  });
+  it("reads the clock in the event zone", () => {
+    const window = { startsAt: "2027-02-26T00:00:00.000Z", endsAt: "2027-02-26T23:00:00.000Z" };
+    expect(workingHoursIntervals(window, "Europe/Madrid")[0].startsAt).toBe(
+      "2027-02-26T09:00:00.000Z",
+    );
   });
 });

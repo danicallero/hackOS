@@ -1,6 +1,10 @@
 "use client";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
-import { MAX_AVAILABILITY_INTERVALS, MAX_INTERVAL_MS } from "@hackos/shared/help-desk";
+import {
+  MAX_AVAILABILITY_INTERVALS,
+  MAX_INTERVAL_MS,
+  workingHoursIntervals,
+} from "@hackos/shared/help-desk";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useId, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -86,6 +90,17 @@ export function AvailabilityEditor({
           {t("helpDeskAddInterval")}
         </Button>
       </div>
+      {profile.availability.length === 0 && window ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          onClick={() => void replace(workingHoursIntervals(window, zone))}
+        >
+          {t("helpDeskWorkingHours")}
+        </Button>
+      ) : null}
       <ScheduleDays
         intervals={profile.availability}
         disabled={pending}

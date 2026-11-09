@@ -4079,6 +4079,7 @@
   "helpDeskGoTo": "Meet {name} at {location}",
   "helpDeskPublish": "Available to mentor",
   "helpDeskMentorProfile": "Mentor profile",
+  "helpDeskWorkingHours": "Typical working hours",
   "helpDeskAddIntervalOn": "Add availability on {day}",
   "helpDeskAddInterval": "Add availability",
   "helpDeskRemoveInterval": "Remove {interval}",

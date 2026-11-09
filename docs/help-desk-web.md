@@ -40,7 +40,7 @@ the same order as mobile: for sponsor representatives with own challenges, "I
 only want to be notified about my challenge's requests"; knowledge; and the
 availability plan day by day (every day of the hacking window, else the event
 window, with its ranges, a 24-hour track and an Add availability action
-prefilled on that day). Publishing also turns the
+prefilled on that day; while empty, a "Typical working hours" button fills it). Publishing also turns the
 public profile sharing on (the API does it; unpublishing leaves it). The tab is
 shown by `visibleProfileTabs(helperEligible)`, so accepted mentors without
 event access still reach it.
