@@ -38,7 +38,6 @@ export function DecisionMenu({
   responseId,
   canOverride,
   onRequestRevoke,
-  onRequestReject,
   onAccepted,
 }: {
   status: ResponseRow["status"];
@@ -47,7 +46,6 @@ export function DecisionMenu({
   responseId: number;
   canOverride: boolean;
   onRequestRevoke: () => void;
-  onRequestReject: () => void;
   onAccepted: () => void;
 }) {
   const { t } = useLocale();
@@ -81,7 +79,17 @@ export function DecisionMenu({
           >
             {t("accept")}
           </DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" disabled={busy} onSelect={onRequestReject}>
+          <DropdownMenuItem
+            variant="destructive"
+            disabled={busy}
+            onSelect={() =>
+              void run(
+                t("rejectedUnsentToast"),
+                () => api.post(`/api/responses/${responseId}/decide`, { decision: "rejected" }),
+                { refresh: false, nextStatus: "rejected_internal" },
+              )
+            }
+          >
             {t("reject")}
           </DropdownMenuItem>
         </>

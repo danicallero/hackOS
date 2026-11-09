@@ -562,10 +562,28 @@ describe("review + decide (H13, H14)", () => {
       method: "POST",
       url: `/api/responses/${responseId}/decide`,
       headers: asUser(decider),
-      payload: { decision: "rejected", reason: "  Incomplete answers  " },
+      payload: { decision: "rejected" },
     });
     expect(decide.statusCode).toBe(200);
+    expect((await getResponse(responseId)).rejection_reason).toBeNull();
+
+    const setReason = (reason: string | null) =>
+      a.inject({
+        method: "PATCH",
+        url: `/api/responses/${responseId}/rejection-reason`,
+        headers: asUser(decider),
+        payload: { reason },
+      });
+    expect((await setReason("  First draft  ")).statusCode).toBe(200);
+    expect((await setReason("  Incomplete answers  ")).statusCode).toBe(200);
     expect((await getResponse(responseId)).rejection_reason).toBe("Incomplete answers");
+    const unauthorized = await a.inject({
+      method: "PATCH",
+      url: `/api/responses/${responseId}/rejection-reason`,
+      headers: asUser(reviewer),
+      payload: { reason: "nope" },
+    });
+    expect(unauthorized.statusCode).toBe(403);
 
     const mine = async () =>
       (
@@ -593,6 +611,8 @@ describe("review + decide (H13, H14)", () => {
       [userId],
     );
     expect(rows[0].payload.vars.rejectionDetails).toContain("Incomplete answers");
+    // Once sent, the reason can no longer be edited.
+    expect((await setReason("late edit")).statusCode).toBe(409);
 
     // Going back to review drops the reason.
     await a.inject({
@@ -602,6 +622,28 @@ describe("review + decide (H13, H14)", () => {
       payload: { decision: "review" },
     });
     expect((await getResponse(responseId)).rejection_reason).toBeNull();
+  });
+
+  it("rejection without a reason sends the plain rejection email (H14)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    const { rows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].payload.vars.rejectionDetails).toBe("");
   });
 
   it("capacity guard: accepting past capacity is a 409", async () => {

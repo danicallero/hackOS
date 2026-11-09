@@ -199,6 +199,8 @@ export interface ResponseRow {
   staff_notes: string | null;
   /** Reason recorded with a rejection (H14); visible to reviewers. */
   rejection_reason?: string | null;
+  /** Applicant language; the rejection reason is written in it. */
+  user_language?: string | null;
   submitted_at: string | null;
   decision_sent_at: string | null;
   confirmation_expires_at: string | null;

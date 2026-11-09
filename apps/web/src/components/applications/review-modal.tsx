@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { exportAnswers } from "@/components/applications/answers-export";
 import {
   AnswersSection,
+  RejectionReasonCard,
   ReviewsPage,
   StaffNotesCard,
 } from "@/components/applications/answers-section";
@@ -48,8 +49,6 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, templateFieldId } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -257,9 +256,8 @@ export function ReviewModal({
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
-  const [confirmReject, setConfirmReject] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [rejectionReason, setRejectionReason] = useState(response.rejection_reason ?? null);
+  const [savingReason, setSavingReason] = useState(false);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [reviewPage, setReviewPage] = useState<"application" | "reviews">("application");
   const [modalStatus, setModalStatus] = useState(response.status);
@@ -520,6 +518,21 @@ export function ReviewModal({
     }
   }
 
+  async function saveRejectionReason(value: string) {
+    setSavingReason(true);
+    try {
+      const reason = value.trim() || null;
+      await api.patch(`/api/responses/${response.id}/rejection-reason`, { reason });
+      setRejectionReason(reason);
+      await onChanged();
+      toast.success(t("rejectionReasonSaved"), { compactTitle: t("toastDecisions") });
+    } catch (err) {
+      toast.error(apiErrorText(err, t, t("actionFailed")), t("toastDecisions"));
+    } finally {
+      setSavingReason(false);
+    }
+  }
+
   const st = modalStatus;
   // A draft hasn't been submitted yet, so there's nothing for a reviewer to score.
   const canScore = canReview && st !== "draft";
@@ -577,10 +590,6 @@ export function ReviewModal({
       responseId={response.id}
       canOverride={canOverride}
       onRequestRevoke={() => setConfirmRevoke(true)}
-      onRequestReject={() => {
-        setRejectReason("");
-        setConfirmReject(true);
-      }}
       onAccepted={showApplicantAcceptedToast}
     />
   ) : undefined;
@@ -962,14 +971,16 @@ export function ReviewModal({
                 />
               )}
 
-              {rejectionReason && (st === "rejected_internal" || st === "rejected") && (
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">{t("rejectionReason")}</p>
-                  <p className="whitespace-pre-line text-sm text-muted-foreground">
-                    {rejectionReason}
-                  </p>
-                </div>
-              )}
+              {(st === "rejected_internal" || st === "rejected") &&
+                (rejectionReason || (canDecide && st === "rejected_internal")) && (
+                  <RejectionReasonCard
+                    reason={rejectionReason ?? ""}
+                    editable={canDecide && st === "rejected_internal"}
+                    language={response.user_language}
+                    saving={savingReason}
+                    onSave={saveRejectionReason}
+                  />
+                )}
 
               {canReview && (
                 <StaffNotesCard
@@ -987,44 +998,6 @@ export function ReviewModal({
               )}
             </>
           )}
-
-          <AlertModal
-            open={confirmReject}
-            onOpenChange={setConfirmReject}
-            title={t("reject")}
-            description={t("rejectionReasonHint")}
-            cancelLabel={t("cancel")}
-            confirmLabel={t("reject")}
-            destructive
-            pending={busy}
-            onConfirm={() => {
-              const reason = rejectReason.trim() || null;
-              void run(
-                t("rejectedUnsentToast"),
-                () =>
-                  api.post(`/api/responses/${response.id}/decide`, {
-                    decision: "rejected",
-                    reason,
-                  }),
-                { refresh: false, nextStatus: "rejected_internal" },
-              )
-                .then(() => setRejectionReason(reason))
-                .finally(() => setConfirmReject(false));
-            }}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="rejection-reason" className="text-sm font-medium">
-                {t("rejectionReason")}
-              </Label>
-              <Textarea
-                id="rejection-reason"
-                rows={3}
-                maxLength={1000}
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-              />
-            </div>
-          </AlertModal>
 
           <AlertModal
             open={confirmRevoke}

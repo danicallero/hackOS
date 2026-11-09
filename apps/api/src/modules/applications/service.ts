@@ -862,9 +862,7 @@ export async function decide(
   actorId: number,
   responseId: number,
   decision: "accepted" | "rejected",
-  reason?: string | null,
 ): Promise<ResponseRow> {
-  const rejectionReason = decision === "rejected" ? reason?.trim() || null : null;
   return withTransaction(async (client) => {
     const resp = await lockResponse(client, responseId, actorId);
     // Serialize capacity checks across parallel accepts on the same form.
@@ -884,9 +882,8 @@ export async function decide(
 
     const internalStatus = decision === "accepted" ? "accepted_internal" : "rejected_internal";
     const updated = await client.query(
-      `UPDATE application_responses SET status = $2, rejection_reason = $3
-        WHERE id = $1 RETURNING *`,
-      [responseId, internalStatus, rejectionReason],
+      `UPDATE application_responses SET status = $2 WHERE id = $1 RETURNING *`,
+      [responseId, internalStatus],
     );
     await audit(client, {
       actorId,
@@ -894,8 +891,38 @@ export async function decide(
       entityId: responseId,
       action: `decided_${decision}`,
       before: { status: "review" },
-      after: { status: internalStatus, decision_sent_at: null, rejection_reason: rejectionReason },
+      after: { status: internalStatus, decision_sent_at: null },
       reason: "internal decision (unsent)",
+    });
+    return updated.rows[0];
+  });
+}
+
+/** Add, change or clear the reason of an unsent internal rejection (H14). */
+export async function setRejectionReason(
+  actorId: number,
+  responseId: number,
+  reason: string | null,
+): Promise<ResponseRow> {
+  const next = reason?.trim() || null;
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId, actorId);
+    if (resp.status !== "rejected_internal") {
+      throw new ConflictError("Only an unsent internal rejection can have its reason edited", {
+        status: resp.status,
+      });
+    }
+    const updated = await client.query(
+      `UPDATE application_responses SET rejection_reason = $2 WHERE id = $1 RETURNING *`,
+      [responseId, next],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: "rejection_reason_updated",
+      before: { rejection_reason: resp.rejection_reason },
+      after: { rejection_reason: next },
     });
     return updated.rows[0];
   });
@@ -1451,9 +1478,8 @@ export async function batchDecide(
   actorId: number,
   responseIds: number[],
   decision: "accepted" | "rejected",
-  reason?: string | null,
 ): Promise<BatchResult> {
-  return runBatch(responseIds, (id) => decide(actorId, id, decision, reason));
+  return runBatch(responseIds, (id) => decide(actorId, id, decision));
 }
 
 /** Batch re-accept declined/rejected/expired responses (M2). */
@@ -1665,6 +1691,8 @@ interface ResponseDetail {
   user: {
     name: string | null;
     email: string;
+    /** Applicant language: the rejection reason should be written in it. */
+    language: string | null;
     shirt_size: string | null;
     food_intolerances: number[];
     food_intolerance_notes: string | null;
@@ -1729,7 +1757,7 @@ export async function getResponseDetail(
   canViewAllReviews: boolean,
 ): Promise<ResponseDetail> {
   const { rows } = await pool.query(
-    `SELECT r.*, u.notes AS staff_notes,
+    `SELECT r.*, u.notes AS staff_notes, u.language AS user_language,
             NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
             u.name AS first_name, u.surname AS last_name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
@@ -1749,6 +1777,7 @@ export async function getResponseDetail(
   const {
     name,
     email,
+    user_language,
     shirt_size,
     food_intolerances,
     food_intolerance_notes,
@@ -1794,6 +1823,7 @@ export async function getResponseDetail(
     user: {
       name,
       email,
+      language: user_language ?? null,
       shirt_size,
       food_intolerances,
       food_intolerance_notes,
