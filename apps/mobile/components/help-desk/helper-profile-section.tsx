@@ -81,6 +81,8 @@ export function HelperProfileSection({
   const [error, setError] = useState<Error | null>(null);
   const [draft, setDraft] = useState<DayDraft | null>(null);
   const [picking, setPicking] = useState(false);
+  const [topicsRequest, setTopicsRequest] = useState(0);
+  const publishAfterTopics = useRef(false);
   const latest = useRef<{
     profile: MyHelperProfile<DirectoryEntry> | null;
     saveProfile: (
@@ -170,11 +172,10 @@ export function HelperProfileSection({
     const ids = (list: HelpTopic[]) => list.map((topic) => topic.id).join(",");
     if (ids(topics) === ids(current.topics)) return;
     // Removing the last topic also withdraws the profile: a published helper needs knowledge.
-    void latest.current.saveProfile(
-      current.published && topics.length > 0,
-      topics,
-      current.challengeIds,
-    );
+    // A switch turned on before any topic existed publishes once the first is chosen.
+    const publish = (current.published || publishAfterTopics.current) && topics.length > 0;
+    publishAfterTopics.current = false;
+    void latest.current.saveProfile(publish, topics, current.challengeIds);
   }, []);
 
   if (!profile?.eligible) {
@@ -258,12 +259,18 @@ export function HelperProfileSection({
   const needsTopic = profile.topics.length === 0;
   return (
     <>
-      <Section footer={needsTopic ? t("helpMentorNeedsTopic") : undefined}>
+      <Section>
         <ToggleRow
           label={t("helpMentorAvailable")}
           value={profile.published}
-          disabled={!profile.published && needsTopic}
-          onChange={(published) => void saveProfile(published, profile.topics)}
+          onChange={(published) => {
+            if (published && needsTopic) {
+              publishAfterTopics.current = true;
+              setTopicsRequest((value) => value + 1);
+              return;
+            }
+            void saveProfile(published, profile.topics);
+          }}
         />
         {profile.challengeOptions.length > 0 ? (
           <>
@@ -281,7 +288,13 @@ export function HelperProfileSection({
         ) : null}
       </Section>
       <Section>
-        <TopicField selected={profile.topics} onChange={changeTopics} maximum={20} allowAdd />
+        <TopicField
+          selected={profile.topics}
+          onChange={changeTopics}
+          maximum={20}
+          allowAdd
+          openRequest={topicsRequest}
+        />
       </Section>
       <Section title={t("helpHoursTitle")}>
         {days.map((day, index) => (

@@ -397,10 +397,13 @@ export function TopicField({
   onOtherChange,
   allowAdd = false,
   disabled = false,
+  openRequest = 0,
 }: {
   selected: HelpTopic[];
   onChange: (topics: HelpTopic[]) => void;
   maximum: number;
+  /** Increment to open the picker from outside (a switch that needs a topic first). */
+  openRequest?: number;
   /** The request form's "Other" choice, edited inside the picker; absent for helper knowledge. */
   other?: boolean;
   onOtherChange?: (other: boolean) => void;
@@ -419,16 +422,22 @@ export function TopicField({
     if (opened.current && onOtherChange) onOtherChange(draft.other);
   }, [draft.other, onOtherChange]);
   const names = [...selected.map((topic) => topic.name), ...(other ? [t("helpOther")] : [])];
+  const open = () => {
+    opened.current = true;
+    seedTopicSelection(selected, maximum, onOtherChange ? !!other : null, allowAdd);
+    router.push("/help-topics");
+  };
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (openRequest > 0) openRef.current();
+  }, [openRequest]);
   return (
     <NavRow
       title={t("helpTopics")}
       value={names.length ? names.join(", ") : t("add")}
       disabled={disabled}
-      onPress={() => {
-        opened.current = true;
-        seedTopicSelection(selected, maximum, onOtherChange ? !!other : null, allowAdd);
-        router.push("/help-topics");
-      }}
+      onPress={open}
     />
   );
 }
