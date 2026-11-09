@@ -20,6 +20,7 @@ of help desk writes.
 | `/help-desk/requests/:id/requester` | The requester's public profile (same `PersonProfile`), when the API's `requesterProfile` is non-null | Helpers who can read the request |
 | `/help-desk/requests/:id` | Follow a request, including notification links | API-authorized requester, team member, helper or coverage reader |
 | `/help-desk/inbox` | Compatible entry to the unified selector, defaulting to Open for eligible helpers | `HELPDESK_OFFER` |
+| `/help-desk/hours` | Opening hours editor (H64) | `HELPDESK_MANAGE` |
 | `/help-desk/coverage` | Event coverage timeline, topic counts and current presence | `HELPDESK_COVERAGE` |
 
 The header's gear menu holds Coverage (`HELPDESK_COVERAGE`) and My support profile (eligible people, → Settings › Help desk); the sibling navigation keeps Requests and Support team, with a live available count on the directory link. My requests, Open and My assignments share one `TabBar` on the entry screen. Open/My assignments require both `HELPDESK_OFFER` and server eligibility; request capability remains additive. Coverage-only viewers retain directory access without querying request lists. Topic pickers allow adding to the catalogue only in the support profile (`allowAdd`). Coverage bars show their count when slots are 1 h or wider. The personal sidebar entry uses capability constants. Each page renders
@@ -96,6 +97,19 @@ request using its numeric ID. Internal delivery fields are not rendered as
 message details. Empty, loading, retryable failure and denied states use existing
 shared components. Copy is supplied in Spanish, Galician and English in the web
 locale resources, maintained by the shared workstream.
+
+## Opening hours (H64)
+
+`hours/` lets `HELPDESK_MANAGE` set when the help desk accepts new requests,
+reached from the header options menu. `HoursEditor` lists the windows (event time
+zone, `GET/PUT /api/helpdesk/schedule`), shows Open now / Closed with the next
+change, and adds (prefilled from `suggestedInterval`), edits or removes a
+window; each change saves the complete sorted replacement at once. No windows
+means always open. Order and overlap are checked before the call; the API
+refuses the rest. Closed only blocks creating: `useHelpdeskSchedule`
+(`hooks/`) shares the schedule, rereads it every minute and at the next change,
+and Request help is disabled (header action and form) with one line,
+`HelpdeskClosedNotice`. Only an explicit `open: false` closes.
 
 ## Verification
 

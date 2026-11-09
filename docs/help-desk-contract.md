@@ -16,7 +16,7 @@ key + same body = same response, no second write or delivery).
 | `HELPDESK_OFFER` | `helpdesk:offer` | Own helper profile and availability; helper inbox; claim/release/resolve | Mentor, Sponsor, Organizer, Day Staff, Event Director |
 | `HELPDESK_REQUEST` | `helpdesk:request` | Browse helpers; create, follow and cancel own/team requests | Participant, Event Director |
 | `HELPDESK_COVERAGE` | `helpdesk:coverage` | Coverage view (H67) | Organizer, Event Director |
-| `HELPDESK_MANAGE` | `helpdesk:manage` | Rename and merge knowledge topics | Event Director |
+| `HELPDESK_MANAGE` | `helpdesk:manage` | Rename and merge knowledge topics; set the opening hours | Event Director |
 
 `*` passes every check. **Browsing** helpers needs any of `helpdesk:request`, `helpdesk:offer`,
 `helpdesk:coverage`. The topic catalogue (`GET /api/helpdesk/topics`)
@@ -152,6 +152,16 @@ type CoverageReport = {
 
 ## Endpoints
 
+### Opening hours (H64)
+
+`HelpdeskSchedule` lives in `packages/shared/src/help-desk.ts`. No windows
+means always open. Only creating requests is gated.
+
+| Method & path | Guard | Body | Response |
+| --- | --- | --- | --- |
+| `GET /api/helpdesk/schedule` | authenticated (no event access needed) | - | `HelpdeskSchedule`: `configured`, `open` (server clock; true when not configured), `windows` (ascending), `nextChangeAt` (next start when closed, end of the current continuous opening when open, else null), `suggestedInterval` |
+| `PUT /api/helpdesk/schedule` | `helpdesk:manage` | `{ windows: { startsAt, endsAt }[] }` (0-30, each end after start, no overlaps; replaces the set, `[]` clears it) | `HelpdeskSchedule`; 400 on invalid windows. Audited; idempotent. |
+
 ### Knowledge catalogue (H61)
 
 | Method & path | Guard | Body / query | Response |
@@ -187,7 +197,7 @@ readable by browsers through the existing photo route.
 | --- | --- | --- | --- |
 | `GET /api/helpdesk/projects` | `helpdesk:request` | — | `{ projects: {id, name}[] }` the caller's active projects (team targets) |
 | `GET /api/helpdesk/challenges` | `helpdesk:request` | — | `{ challenges: {id, name, mine}[] }` visible non-test challenges, the caller's own project challenges first (`mine: true`) |
-| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, projectId?: number \| null, challengeId?: number \| null (visible challenge, else 400), preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 403 when not a member of `projectId`. |
+| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, projectId?: number \| null, challengeId?: number \| null (visible challenge, else 400), preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 409 `helpdesk_closed` outside the configured opening hours; 403 when not a member of `projectId`. |
 | `GET /api/helpdesk/requests/mine` | `helpdesk:request` | — | `{ requests: HelpRequest[] }` own + teams', newest first |
 | `GET /api/helpdesk/requests/:id` | requester, team member, helper (`helpdesk:offer` eligible), coverage, `helpdesk:manage` | — | `HelpRequest & { requesterProfile: DirectoryEntry \| null }` — the profile only for a routed helper, the claimer or `helpdesk:manage`, and only while the requester shares their public profile; 404 otherwise |
 | `PATCH /api/helpdesk/requests/:id` | requester or team member | `{ description, location, topicIds, other, challengeId?, preferSponsor? }` (creation rules) | `HelpRequest`, moved to the end of the queue and re-routed (only new matches are notified); 409 `help_request_already_claimed` when claimed, `help_request_closed` when resolved/cancelled |
@@ -222,6 +232,7 @@ Localized text: `apiError_<code>` in `packages/shared/locales/*/common.json`.
 | --- | --- |
 | `helper_not_eligible` | 403 |
 | `help_request_active` | 409 (`details.requestId` when known) |
+| `helpdesk_closed` | 409 (`details.nextChangeAt`: next opening, or null) |
 | `help_request_already_claimed` | 409 |
 | `help_request_closed` | 409 |
 | `help_request_not_claimable` | 409 (own or team request) |

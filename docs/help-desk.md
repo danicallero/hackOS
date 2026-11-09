@@ -14,7 +14,7 @@ Migration: `0901_help_desk.sql` includes the complete unmerged PR schema, challe
 | `helpdesk:offer` | Mentor, Sponsor, Organizer, Day Staff, Event Director | Own helper profile and availability, helper inbox, claim/release/resolve |
 | `helpdesk:request` | Participant, Event Director | Browse helpers, open/cancel/resolve own and team requests |
 | `helpdesk:coverage` | Organizer, Event Director | Coverage view (H67) |
-| `helpdesk:manage` | Event Director | Rename and merge catalogue topics |
+| `helpdesk:manage` | Event Director | Rename and merge catalogue topics; set the opening hours (H64) |
 
 **Eligibility.** A helper is eligible while they hold `helpdesk:offer`, or
 have an accepted or confirmed application response to a form whose granted
@@ -66,6 +66,26 @@ equivalent names (case, accents, spacing; `name_key`) resolve to the existing
 row instead of a duplicate. "Other" is not a row — requests carry `other` —
 and its translations are reserved. `helpdesk:manage` renames topics and
 merges duplicates (profiles and requests move to the target).
+
+## Opening hours (H64)
+
+`helpdesk_open_windows` holds the dated windows in which the help desk accepts
+**new** requests ("opens with the hacking, continuous until day X, reopens
+at..."). No rows means always open (`configured: false`). `PUT
+/api/helpdesk/schedule` (`helpdesk:manage`) replaces the whole set (≤30
+windows, each ending after it starts, no overlaps; an empty list clears it)
+and is audited as `helpdesk_schedule` / `replaced` in the same transaction;
+repeating the stored windows writes nothing. `GET /api/helpdesk/schedule`
+(any signed-in person, event access not needed) returns `configured`, `open`
+(server clock), sorted `windows`, `nextChangeAt` (next window start when
+closed, end of the current continuous opening when open; touching windows
+count as one) and `suggestedInterval` (hacking window, else event window).
+Outside the windows only `POST /api/helpdesk/requests` is refused (409
+`helpdesk_closed`, checked in the creating transaction, `details.nextChangeAt`
+when known); claims, resolution, cancelling or editing existing requests,
+browsing and helper settings are unaffected. Idempotent retries of an
+already created request replay the original response. Writes wake the
+payload-free `domain:helpdesk` refresh.
 
 ## Browsing (H63)
 

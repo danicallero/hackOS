@@ -4170,5 +4170,19 @@
   "helpDeskAllRequests": "Solicitudes",
   "helpDeskOpenRequests": "Abertas",
   "helpDeskEditInterval": "Editar intervalo {interval}",
-  "helpDeskEditIntervalTitle": "Editar intervalo"
+  "helpDeskEditIntervalTitle": "Editar intervalo",
+  "helpDeskHours": "Horario",
+  "helpDeskHoursAdd": "Engadir franxa",
+  "helpDeskHoursEditTitle": "Editar franxa",
+  "helpDeskHoursEmpty": "Sempre aberto. Engade unha franxa para aceptar novas solicitudes só nesos horarios.",
+  "helpDeskHoursOpenNow": "Aberto agora",
+  "helpDeskHoursClosedNow": "Pechado",
+  "helpDeskHoursCloses": "Pecha {date}",
+  "helpDeskHoursOpens": "Abre {date}",
+  "helpDeskHoursOverlap": "Solápase con outra franxa.",
+  "helpDeskHoursIncomplete": "Escolle un inicio e un fin.",
+  "helpDeskHoursEdit": "Editar franxa {window}",
+  "helpDeskHoursRemove": "Quitar franxa {window}",
+  "helpDeskClosed": "O servizo de axuda está pechado.",
+  "helpDeskClosedOpens": "O servizo de axuda está pechado. Abre {date}"
 }

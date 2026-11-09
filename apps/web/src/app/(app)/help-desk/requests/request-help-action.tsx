@@ -4,6 +4,7 @@ import { QuestionIcon } from "@phosphor-icons/react/dist/csr/Question";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useHelpdeskSchedule } from "@/hooks/use-helpdesk-schedule";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { RequestEditor } from "./request-editor";
@@ -16,10 +17,11 @@ export function RequestHelpAction() {
   const pathname = usePathname();
   const search = useSearchParams();
   const [open, setOpen] = useState(false);
+  const hours = useHelpdeskSchedule(allowed);
   if (!allowed) return null;
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
+      <Button disabled={hours.closed} onClick={() => setOpen(true)}>
         <QuestionIcon aria-hidden="true" />
         {t("helpDeskRequestHelp")}
       </Button>

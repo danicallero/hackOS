@@ -44,6 +44,20 @@ export const availabilityBody = z.object({
 });
 export type AvailabilityInput = z.infer<typeof availabilityBody>;
 
+export const scheduleBody = z.strictObject({
+  windows: z
+    .array(
+      z
+        .object({ startsAt: instant, endsAt: instant })
+        .refine((w) => Date.parse(w.endsAt) > Date.parse(w.startsAt), {
+          message: "Must end after it starts",
+          path: ["endsAt"],
+        }),
+    )
+    .max(30),
+});
+export type ScheduleInput = z.infer<typeof scheduleBody>;
+
 export const helperQuery = z.object({
   topicId: id.optional(),
   q: z.string().trim().max(80).optional(),

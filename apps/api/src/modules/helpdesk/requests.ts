@@ -24,6 +24,7 @@ import {
   presentSql,
   toCard,
 } from "./helpers.js";
+import { assertHelpdeskOpen } from "./schedule.js";
 import type { ClaimInput, CreateRequestInput, EditRequestInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
@@ -515,6 +516,7 @@ export async function createRequest(
     if (!(await hasEventAccess(client, userId))) {
       throw new ForbiddenError("The help desk is only available to event attendees");
     }
+    await assertHelpdeskOpen(client);
     const repoId = input.projectId ?? null;
     if (repoId != null) {
       // Lock the project so two members cannot open simultaneous requests.

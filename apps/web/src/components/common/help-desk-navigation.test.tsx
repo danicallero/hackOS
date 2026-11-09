@@ -30,6 +30,9 @@ vi.mock("@/lib/i18n", () => ({
 vi.mock("@/hooks/use-own-helper-profile", () => ({
   useOwnHelperProfile: () => ({ data: { eligible: env.eligible } }),
 }));
+vi.mock("@/hooks/use-helpdesk-schedule", () => ({
+  useHelpdeskSchedule: () => ({ data: null, closed: false }),
+}));
 vi.mock("@/app/(app)/help-desk/requests/request-help-action", () => ({
   RequestHelpAction: () => null,
 }));
@@ -76,6 +79,13 @@ it("keeps the selected view through the directory and counts actual availability
     "/help-desk?tab=claims",
   );
   expect(queryByRole(container, "link", { name: "helpDeskInbox" })).toBeNull();
+});
+it("offers opening hours only with the manage capability (H64)", async () => {
+  await act(async () => root.render(<HelpDeskSectionHeader />));
+  await act(async () =>
+    userEvent.click(getByRole(container, "button", { name: "helpDeskOptions" })),
+  );
+  expect(queryByRole(document.body, "menuitem", { name: "helpDeskHours" })).toBeNull();
 });
 it("puts coverage and the eligible profile in the menu and respects combinations", async () => {
   await act(async () => root.render(<HelpDeskSectionHeader />));

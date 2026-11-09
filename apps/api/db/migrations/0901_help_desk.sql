@@ -11,6 +11,9 @@
 --     user_public_profiles, so the bio is the same on both profiles.
 --   * helper_availability: dated start/end intervals (H62). Venue presence
 --     stays in time_logs (H24) and is never derived from these rows.
+--   * helpdesk_open_windows: DELTA(H64) the dated windows in which the help
+--     desk accepts NEW requests. No rows = always open. Only creating a
+--     request is gated; claims, resolution and browsing are not.
 --   * help_requests (+ topics, recipients): H64-H66. `recipients` records the
 --     routed audience once per (request, helper) so retries never notify twice.
 --
@@ -75,6 +78,14 @@ CREATE TABLE helper_availability (
 );
 CREATE INDEX helper_availability_user ON helper_availability (user_id, starts_at);
 CREATE INDEX helper_availability_window_idx ON helper_availability (starts_at, ends_at);
+
+CREATE TABLE helpdesk_open_windows (
+  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  starts_at timestamptz NOT NULL,
+  ends_at timestamptz NOT NULL,
+  CONSTRAINT helpdesk_open_windows_window CHECK (ends_at > starts_at)
+);
+CREATE INDEX helpdesk_open_windows_range ON helpdesk_open_windows (starts_at, ends_at);
 
 CREATE TABLE help_requests (
   id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -148,6 +159,7 @@ CREATE INDEX help_request_recipients_user ON help_request_recipients (user_id);
 COMMENT ON TABLE help_topics IS 'H61 shared knowledge catalogue for helper profiles and help requests; Other is help_requests.other, not a row.';
 COMMENT ON TABLE helper_profiles IS 'H61 explicit help desk publication. Identity and bio are projected from users/user_public_profiles, never copied.';
 COMMENT ON TABLE helper_profile_challenges IS 'DELTA(H65) challenges a helper is alerted about and sees; no rows means every request. Open to any eligible helper.';
+COMMENT ON TABLE helpdesk_open_windows IS 'DELTA(H64) windows in which the help desk accepts new requests; no rows means always open.';
 COMMENT ON TABLE helper_availability IS 'H62 stated availability intervals; venue presence stays in time_logs (H24).';
 COMMENT ON TABLE help_requests IS 'H64-H66 help requests (individual or team via repo_id) and their single claim.';
 COMMENT ON TABLE help_request_recipients IS 'H65 routed audience: one row per notified helper, so retries never deliver twice.';

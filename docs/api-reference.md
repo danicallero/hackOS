@@ -267,7 +267,7 @@ lives in identity but follows the profile's photo switch. Full detail:
 Help desk: helper profiles (`/api/me/helper-profile`, projected from the
 public profile so the bio is shared), the self-service knowledge catalogue,
 stated availability, browsing helpers, help requests with H65 routing to
-available present helpers, single-winner claims and organizer coverage under
+available present helpers (with admin-set opening hours for new requests), single-winner claims and organizer coverage under
 `/api/helpdesk`. Full detail: [`help-desk.md`](./help-desk.md); client
 contract: [`help-desk-contract.md`](./help-desk-contract.md).
 
@@ -607,7 +607,7 @@ code when there is no reason.
 | `schedule_ends_before_starts` | 400 | Schedule item ends at or before it starts |
 | `schedule_scan_needs_participants` | 400 | A scan-required item must be participant-visible |
 | `schedule_item_not_found` | 404 | Schedule item does not exist |
-| `helper_not_eligible`, `help_request_*`, `topic_*`, `availability_*` | 400/403/409 | Help desk reasons (H61-H66); full table in [`help-desk-contract.md`](./help-desk-contract.md) |
+| `helper_not_eligible`, `helpdesk_closed`, `help_request_*`, `topic_*`, `availability_*` | 400/403/409 | Help desk reasons (H61-H66); full table in [`help-desk-contract.md`](./help-desk-contract.md) |
 
 Application response validation (`400`, "Response fails template validation")
 returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such as

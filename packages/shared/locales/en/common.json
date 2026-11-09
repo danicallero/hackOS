@@ -101,6 +101,7 @@
   "apiError_review_field_lease_required": "Your editing lease has expired or belongs to another judge.",
   "apiError_certificate_review_required": "Awaiting attendance review",
   "apiError_helper_not_eligible": "Only mentors, sponsor representatives and staff can offer help.",
+  "apiError_helpdesk_closed": "The help desk is closed right now.",
   "apiError_help_request_active": "There is already an active help request.",
   "apiError_help_request_already_claimed": "Someone else already took this request.",
   "apiError_help_request_closed": "This help request is closed.",

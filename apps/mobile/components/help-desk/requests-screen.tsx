@@ -6,6 +6,7 @@ import { EmptyState, Section, Separator, ToggleRow } from "@/components/native-u
 import { NoResultsState } from "@/components/no-results-state";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { CheckRow } from "@/components/searchable-picker";
+import { InfoNotice } from "@/components/status-notice";
 import { alert } from "@/lib/alert";
 import {
   type HelpChallenge,
@@ -19,6 +20,7 @@ import { useMeContext } from "@/lib/me-context";
 import { has } from "@/lib/tabs";
 import { useHelpDraftGuard } from "@/lib/use-help-draft-guard";
 import { type HelpResource, useHelpResource } from "@/lib/use-help-resource";
+import { helpClosedText, useHelpSchedule } from "@/lib/use-help-schedule";
 import { ChallengeField, HelpInput, HelpPage, HelpText, TopicField } from "./primitives";
 import { RequestRow } from "./rows";
 
@@ -84,12 +86,14 @@ export function HelpRequestList({
 
 /** H64: a modal form (Close / Send) for me or one of my teams, with topics or Other. */
 export function NewHelpRequestScreen() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const router = useRouter();
   // `edit` is the id of an open request being replaced (PATCH); it moves to the end of the queue.
   const { edit } = useLocalSearchParams<{ edit?: string }>();
   const { me } = useMeContext();
   const allowed = has(me?.capabilities ?? [], CAPABILITIES.HELPDESK_REQUEST);
+  // Only creating is closed outside the opening hours; editing an open request keeps working.
+  const hours = useHelpSchedule(allowed && !edit);
   const existing = useHelpResource<HelpRequest>(
     edit ? `/api/helpdesk/requests/${encodeURIComponent(edit)}` : null,
   );
@@ -148,7 +152,8 @@ export function NewHelpRequestScreen() {
   // An edit needs the saved request to compare with: without it the form would PATCH blanks,
   // and an unchanged edit would only push the request to the back of the queue.
   const editReady = !edit || (!!original && dirty);
-  const valid = validHelpRequest(description, location, topics, other) && editReady;
+  const valid =
+    validHelpRequest(description, location, topics, other) && editReady && !hours.closed;
   async function submit() {
     if (busy || !valid) return;
     if (edit) {
@@ -221,6 +226,9 @@ export function NewHelpRequestScreen() {
         />
       ) : (
         <>
+          {hours.closed ? (
+            <InfoNotice icon="clock" text={helpClosedText(hours.schedule, language, t)} />
+          ) : null}
           {!edit && teams.error ? (
             <RequestFeedback error={teams.error} onRetry={() => void teams.load()} />
           ) : null}

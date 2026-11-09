@@ -251,7 +251,7 @@ export async function getMyHelperProfile(
  * H62: the interval clients prefill for a new availability entry: the hacking
  * window, else the event window, else null.
  */
-async function suggestedAvailability(db: Queryable): Promise<AvailabilityInterval | null> {
+export async function suggestedAvailability(db: Queryable): Promise<AvailabilityInterval | null> {
   const { rows } = await db.query<{ starts_at: Date | null; ends_at: Date | null }>(
     `SELECT CASE WHEN hacking_starts_at IS NOT NULL AND hacking_ends_at IS NOT NULL
                  THEN hacking_starts_at ELSE event_starts_at END AS starts_at,

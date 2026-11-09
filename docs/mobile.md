@@ -1653,6 +1653,12 @@ grouped list, each gated by capability; a gear menu (Coverage, My support profil
 button, which is the trailing toolbar button (`hand.raised`, `helpdesk:request` only; a native toolbar item, so it joins the system column on foldables like other trailing actions); coverage-only accounts see no request or
 helper actions.
 
+**Opening hours (H64).** `lib/use-help-schedule.ts` reads `GET /api/helpdesk/schedule`
+(rereading at the next change). While `open` is false the Request help action and
+the new-request Send are disabled and an `InfoNotice` (neutral, action-less
+`status-notice.tsx` line) says the help desk is closed and when it opens; editing
+an open request is unaffected. Hours are edited on web only.
+
 **Native chrome.** The tab root uses the reusable fixed title described above; pushed pages and sheets retain their native titles. Every help desk page and sheet uses one header
 configuration, the People/Account one: a transparent native header with the
 soft scroll-edge effect, no `headerStyle` colour and no custom blur, with the

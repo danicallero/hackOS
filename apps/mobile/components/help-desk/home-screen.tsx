@@ -5,11 +5,13 @@ import { Section } from "@/components/native-ui";
 import { NavRow } from "@/components/project-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { SegmentedControl } from "@/components/segmented-control";
+import { InfoNotice } from "@/components/status-notice";
 import type { HelperCard, HelpRequest, MyHelperProfile } from "@/lib/help-desk";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { canUseHelpDesk, has } from "@/lib/tabs";
 import { useHelpResource } from "@/lib/use-help-resource";
+import { helpClosedText, useHelpSchedule } from "@/lib/use-help-schedule";
 import { HelpPage, type HelpPageMenu, HelpText } from "./primitives";
 import { HelpRequestList } from "./requests-screen";
 import { HELP_STATUS } from "./rows";
@@ -33,13 +35,14 @@ const VIEW_LABEL: Record<RequestView, MessageKey> = {
  * coverage are one grouped list.
  */
 export function HelpDeskScreen() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const router = useRouter();
   const { me } = useMeContext();
   const capabilities = me?.capabilities ?? [];
   const allowed = canUseHelpDesk(capabilities);
   const canRequest = has(capabilities, CAPABILITIES.HELPDESK_REQUEST);
   const profile = useHelpResource<MyHelperProfile>("/api/me/helper-profile");
+  const hours = useHelpSchedule(allowed && canRequest);
   const helper = has(capabilities, CAPABILITIES.HELPDESK_OFFER) && profile.data?.eligible === true;
   const views: RequestView[] = [
     ...(canRequest ? (["mine"] as const) : []),
@@ -114,7 +117,12 @@ export function HelpDeskScreen() {
       menu={allowed && menuItems.length ? { label: t("helpMore"), items: menuItems } : undefined}
       action={
         allowed && canRequest
-          ? { icon: "hand.raised", label: t("helpRequest"), onPress: newRequest }
+          ? {
+              icon: "hand.raised",
+              label: t("helpRequest"),
+              onPress: newRequest,
+              disabled: hours.closed,
+            }
           : undefined
       }
     >
@@ -122,6 +130,9 @@ export function HelpDeskScreen() {
         <HelpText>{t("helpNoAccess")}</HelpText>
       ) : (
         <>
+          {hours.closed ? (
+            <InfoNotice icon="clock" text={helpClosedText(hours.schedule, language, t)} />
+          ) : null}
           {canBrowse ? (
             <Section>
               <NavRow

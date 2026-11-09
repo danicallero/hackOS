@@ -39,6 +39,7 @@ import {
   releaseRequest,
   resolveRequest,
 } from "./requests.js";
+import { getSchedule, replaceSchedule } from "./schedule.js";
 import {
   availabilityBody,
   claimBody,
@@ -50,6 +51,7 @@ import {
   idParams,
   inboxQuery,
   mergeBody,
+  scheduleBody,
   topicBody,
   topicQuery,
   userParams,
@@ -222,6 +224,39 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
     },
   );
 
+  // ── H64 opening hours ──────────────────────────────────────────────────
+  r.get(
+    "/api/helpdesk/schedule",
+    {
+      config: authenticated,
+      preHandler: requireAuth,
+      schema: {
+        summary: "Read the help desk opening hours",
+        description:
+          "When the help desk accepts new help requests (H64): `configured` (false when no window exists: always open), `open` (now inside a window, server clock; always true when not configured), `windows` sorted by start, `nextChangeAt` (the next window start when closed, the end of the current continuous opening when open, null when it never changes) and `suggestedInterval` (hacking window, else event window, else null: what clients prefill for a new window). Any signed-in person may read it, before or without event access. Only creating requests is gated by it.",
+      },
+    },
+    async () => getSchedule(),
+  );
+  r.put(
+    "/api/helpdesk/schedule",
+    {
+      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
+      schema: {
+        body: scheduleBody,
+        summary: "Set the help desk opening hours",
+        description:
+          "Replaces every opening window (H64) with up to 30 `{ startsAt, endsAt }` instants, each ending after it starts and none overlapping (400); an empty list clears the schedule and the help desk is always open. Outside the windows, creating a request answers 409 `helpdesk_closed`; claims, resolution, browsing helpers, helper settings and existing requests are unaffected. Returns the new schedule as GET /api/helpdesk/schedule. Audited with the old and new windows; repeating the stored windows writes nothing.",
+      },
+    },
+    async (req) => {
+      const { changed, schedule } = await replaceSchedule(req.userId as number, req.body);
+      req.domainUnchanged = !changed;
+      return schedule;
+    },
+  );
+
   // ── H63 browse helpers ─────────────────────────────────────────────────
   r.get(
     "/api/helpdesk/helpers",
@@ -293,7 +328,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: createRequestBody,
         summary: "Request help",
         description:
-          "Opens a help request for the caller or, with `projectId`, for their project team (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per team, or per person for individual requests (409 `help_request_active`); 403 without event access or project membership. Audited.",
+          "Opens a help request for the caller or, with `projectId`, for their project team (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per team, or per person for individual requests (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access or project membership. Audited.",
       },
     },
     async (req, reply) => reply.code(201).send(await createRequest(req.userId as number, req.body)),

@@ -15,11 +15,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useHelpdeskSchedule } from "@/hooks/use-helpdesk-schedule";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import type { HelpChallengeOption, HelpRequest, HelpTopic } from "../model";
 import { HelpdeskError, TopicsPicker } from "../shared";
+import { HelpdeskClosedNotice } from "./closed-notice";
 /** Creates a request, or with `request` edits an open one (it moves to the end of the queue). */
 export function RequestForm({
   onSaved,
@@ -47,6 +49,9 @@ export function RequestForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [invalid, setInvalid] = useState(false);
+  // Only creating is closed outside the opening hours; editing an open request keeps working.
+  const hours = useHelpdeskSchedule(!request);
+  const closed = !request && hours.closed;
   const projects = useServerResource(["helpdesk", "projects"], (signal) =>
     api.get<{ projects: { id: number; name: string }[] }>("/api/helpdesk/projects", { signal }),
   );
@@ -117,7 +122,7 @@ export function RequestForm({
       className="space-y-5"
       onSubmit={(event) => {
         event.preventDefault();
-        if (pending || (request && !dirty)) return;
+        if (pending || closed || (request && !dirty)) return;
         if (!topics.length && !other) {
           setInvalid(true);
           return;
@@ -241,11 +246,12 @@ export function RequestForm({
         </div>
       </fieldset>
       {error ? <HelpdeskError error={error} fallback="helpDeskSaveError" /> : null}
+      {closed ? <HelpdeskClosedNotice schedule={hours.data} /> : null}
       <div className="flex justify-end">
         <Button
           type="submit"
           loading={pending}
-          disabled={(!!request && !dirty) || topics.length > 5}
+          disabled={(!!request && !dirty) || topics.length > 5 || closed}
         >
           {t(request ? "saveChanges" : "helpDeskSend")}
         </Button>

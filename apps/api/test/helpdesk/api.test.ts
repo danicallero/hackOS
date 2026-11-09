@@ -1511,3 +1511,127 @@ describe("H8, H63 support public roles", () => {
     );
   });
 });
+
+/** H64: opening hours gate only the creation of new requests. */
+describe("H64 opening hours", () => {
+  const manageCaps = [CAPABILITIES.HELPDESK_MANAGE];
+  const win = (fromH: number, toH: number) => ({
+    startsAt: new Date(Date.now() + fromH * hour).toISOString(),
+    endsAt: new Date(Date.now() + toH * hour).toISOString(),
+  });
+  const body = { description: "Stuck", location: "Table 4", topicIds: [], other: true };
+
+  it("is always open until windows are configured", async () => {
+    const p = await createUser();
+    const res = await call("GET", "/api/helpdesk/schedule", p);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      configured: false,
+      open: true,
+      windows: [],
+      nextChangeAt: null,
+    });
+    expect((await app.inject({ method: "GET", url: "/api/helpdesk/schedule" })).statusCode).toBe(
+      401,
+    );
+  });
+
+  it("stores sorted windows, reports state and clears them", async () => {
+    const m = await createUserWithCapabilities(manageCaps);
+    const later = win(5, 6);
+    const now = win(-1, 2);
+    const put = await call("PUT", "/api/helpdesk/schedule", m, { windows: [later, now] });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toMatchObject({
+      configured: true,
+      open: true,
+      windows: [now, later],
+      nextChangeAt: now.endsAt,
+    });
+    const closed = await call("PUT", "/api/helpdesk/schedule", m, { windows: [later] });
+    expect(closed.json()).toMatchObject({ open: false, nextChangeAt: later.startsAt });
+    const reader = await createUser();
+    expect((await call("GET", "/api/helpdesk/schedule", reader)).json().windows).toEqual([later]);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'helpdesk_schedule'`,
+    );
+    expect(rows[0].n).toBe(2);
+    const clear = await call("PUT", "/api/helpdesk/schedule", m, { windows: [] });
+    expect(clear.json()).toMatchObject({ configured: false, open: true, nextChangeAt: null });
+  });
+
+  it("treats touching windows as one continuous opening and keeps same-key retries", async () => {
+    const m = await createUserWithCapabilities(manageCaps);
+    const put = await call("PUT", "/api/helpdesk/schedule", m, {
+      windows: [win(-1, 1), win(1, 3)],
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().nextChangeAt).toBe(put.json().windows[1].endsAt);
+    const repeat = await call("PUT", "/api/helpdesk/schedule", m, {
+      windows: put.json().windows,
+    });
+    expect(repeat.statusCode).toBe(200);
+    const { rows } = await pool.query(
+      `SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'helpdesk_schedule'`,
+    );
+    expect(rows[0].n).toBe(1);
+  });
+
+  it("requires helpdesk:manage to write", async () => {
+    const p = await createUserWithCapabilities(participantCaps);
+    const res = await call("PUT", "/api/helpdesk/schedule", p, { windows: [win(1, 2)] });
+    expect(res.statusCode).toBe(403);
+    expect((await call("GET", "/api/helpdesk/schedule", p)).json().configured).toBe(false);
+  });
+
+  it("rejects reversed, overlapping and too many windows", async () => {
+    const m = await createUserWithCapabilities(manageCaps);
+    const reversed = await call("PUT", "/api/helpdesk/schedule", m, {
+      windows: [{ startsAt: win(2, 3).endsAt, endsAt: win(2, 3).startsAt }],
+    });
+    expect(reversed.statusCode).toBe(400);
+    const overlap = await call("PUT", "/api/helpdesk/schedule", m, {
+      windows: [win(1, 3), win(2, 4)],
+    });
+    expect(overlap.statusCode).toBe(400);
+    const many = await call("PUT", "/api/helpdesk/schedule", m, {
+      windows: Array.from({ length: 31 }, (_, i) => win(i * 2, i * 2 + 1)),
+    });
+    expect(many.statusCode).toBe(400);
+    expect((await call("GET", "/api/helpdesk/schedule", m)).json().configured).toBe(false);
+  });
+
+  it("refuses new requests while closed, with the original reply kept for retries", async () => {
+    const m = await createUserWithCapabilities(manageCaps);
+    const p = await createUserWithCapabilities(participantCaps);
+    await admitParticipant(p);
+    const idem = key();
+    const send = (extra: Record<string, string> = {}) =>
+      app.inject({
+        method: "POST",
+        url: "/api/helpdesk/requests",
+        headers: { ...asUser(p), "idempotency-key": idem, ...extra },
+        payload: body,
+      });
+    const created = await send();
+    expect(created.statusCode).toBe(201);
+    await call("PUT", "/api/helpdesk/schedule", m, { windows: [win(3, 4)] });
+    const replay = await send();
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json().id).toBe(created.json().id);
+
+    const q = await createUserWithCapabilities(participantCaps);
+    await admitParticipant(q);
+    const refused = await call("POST", "/api/helpdesk/requests", q, body);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({ error: { details: { code: "helpdesk_closed" } } });
+
+    // Everything else keeps working: the existing request can be cancelled.
+    const cancel = await call("POST", `/api/helpdesk/requests/${created.json().id}/cancel`, p);
+    expect(cancel.statusCode).toBe(200);
+
+    await call("PUT", "/api/helpdesk/schedule", m, { windows: [win(-1, 1)] });
+    const open = await call("POST", "/api/helpdesk/requests", q, body);
+    expect(open.statusCode).toBe(201);
+  });
+});

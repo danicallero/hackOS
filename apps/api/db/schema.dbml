@@ -723,6 +723,14 @@ Table help_topics {
   Note: 'H61 shared knowledge catalogue for helper profiles and help requests; Other is help_requests.other, not a row.'
 }
 
+Table helpdesk_open_windows {
+  ends_at "timestamp with time zone" [not null]
+  id integer [pk, increment, not null]
+  starts_at "timestamp with time zone" [not null]
+
+  Note: 'DELTA(H64) windows in which the help desk accepts new requests; no rows means always open.'
+}
+
 Table helper_availability {
   ends_at "timestamp with time zone" [not null]
   id integer [pk, increment, not null]

@@ -4,6 +4,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/csr/ChartBar";
+import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
 import { GearSixIcon } from "@phosphor-icons/react/dist/csr/GearSix";
 import { ImagesIcon } from "@phosphor-icons/react/dist/csr/Images";
@@ -14,6 +15,7 @@ import { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { HelperCard } from "@/app/(app)/help-desk/model";
+import { HelpdeskClosedNotice } from "@/app/(app)/help-desk/requests/closed-notice";
 import { RequestHelpAction } from "@/app/(app)/help-desk/requests/request-help-action";
 import { useHelpdesk } from "@/app/(app)/help-desk/shared";
 import { ActionGroup } from "@/components/common/action-group";
@@ -27,6 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useHelpdeskSchedule } from "@/hooks/use-helpdesk-schedule";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnreadCount } from "@/hooks/use-unread-count";
 import { useLocale } from "@/lib/i18n";
@@ -186,6 +189,13 @@ export function ProjectsSectionHeader({
   );
 }
 
+/** H64: why Request help is disabled, shown to the people who would use it. */
+function HelpDeskClosed() {
+  const allowed = useSessionContext().can(CAPABILITIES.HELPDESK_REQUEST);
+  const hours = useHelpdeskSchedule(allowed);
+  return allowed ? <HelpdeskClosedNotice schedule={hours.data} /> : null;
+}
+
 function HelpDeskNavigation() {
   const { t } = useLocale();
   const { canAny } = useSessionContext();
@@ -250,12 +260,18 @@ function HelpDeskNavigation() {
   );
 }
 
-/** H61/H67: Coverage and the caller's own support profile live in the header's options menu. */
+/** H61/H67: Hours, Coverage and the caller's own support profile live in the header's options menu. */
 function HelpDeskOptions() {
   const { t } = useLocale();
   const { can } = useSessionContext();
   const own = useOwnHelperProfile();
   const entries = [
+    {
+      href: "/help-desk/hours",
+      label: t("helpDeskHours"),
+      icon: ClockIcon,
+      visible: can(CAPABILITIES.HELPDESK_MANAGE),
+    },
     {
       href: "/help-desk/coverage",
       label: t("helpDeskCoverage"),
@@ -304,6 +320,7 @@ export function HelpDeskSectionHeader({ meta }: { meta?: React.ReactNode }) {
         primaryAction={<RequestHelpAction />}
       />
       <HelpDeskNavigation />
+      <HelpDeskClosed />
     </div>
   );
 }

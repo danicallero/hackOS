@@ -101,6 +101,7 @@
   "apiError_review_field_lease_required": "Tu bloqueo de edición ha caducado o pertenece a otro jurado.",
   "apiError_certificate_review_required": "Pendiente de revisión de asistencia",
   "apiError_helper_not_eligible": "Solo mentores, representantes de patrocinadores y staff pueden ofrecer ayuda.",
+  "apiError_helpdesk_closed": "El puesto de ayuda está cerrado ahora mismo.",
   "apiError_help_request_active": "Ya hay una solicitud de ayuda activa.",
   "apiError_help_request_already_claimed": "Otra persona ya ha atendido esta solicitud.",
   "apiError_help_request_closed": "Esta solicitud de ayuda está cerrada.",

@@ -59,6 +59,8 @@ export const ERROR_REASONS = {
   HELPER_NOT_ELIGIBLE: "helper_not_eligible",
   /** 409: the person or team already has an open or claimed help request (H64). */
   HELP_REQUEST_ACTIVE: "help_request_active",
+  /** 409: new help requests are only accepted inside the configured opening windows (H64). */
+  HELPDESK_CLOSED: "helpdesk_closed",
   /** 409: another helper won the claim (H66). */
   HELP_REQUEST_ALREADY_CLAIMED: "help_request_already_claimed",
   /** 409: the help request is resolved or cancelled. */

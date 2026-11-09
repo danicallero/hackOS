@@ -459,7 +459,8 @@ The web personal sidebar adds **Help desk** (`/help-desk`) for any of
 `HELPDESK_REQUEST`, `HELPDESK_OFFER` or `HELPDESK_COVERAGE`. Its entry shares
 one selector: My requests with request capability, Open and My assignments with
 offer capability plus server eligibility. The Support team directory remains
-one labelled sibling link with the live count of available people. Coverage
+one labelled sibling link with the live count of available people. Opening hours
+(`/help-desk/hours`, `HELPDESK_MANAGE`), Coverage
 (`HELPDESK_COVERAGE`) and My support profile (server eligibility, including
 accepted mentors before confirmation) stay in the header menu. The latter
 opens `/settings/profile?tab=help-desk`; `/help-desk/profile` still redirects.

@@ -1109,5 +1109,7 @@
   "mobileSurfaceOpenSettings": "Abrir ajustes",
   "offlineMode": "Modo sin conexión",
   "offlineModeUpdated": "Modo sin conexión · Actualizado {updatedAt}",
-  "offlineReconnect": "Reconectar"
+  "offlineReconnect": "Reconectar",
+  "helpClosed": "El servicio de ayuda está cerrado.",
+  "helpClosedOpens": "El servicio de ayuda está cerrado. Abre {date}"
 }

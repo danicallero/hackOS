@@ -4170,5 +4170,19 @@
   "helpDeskAllRequests": "Requests",
   "helpDeskOpenRequests": "Open",
   "helpDeskEditInterval": "Edit interval {interval}",
-  "helpDeskEditIntervalTitle": "Edit interval"
+  "helpDeskEditIntervalTitle": "Edit interval",
+  "helpDeskHours": "Opening hours",
+  "helpDeskHoursAdd": "Add window",
+  "helpDeskHoursEditTitle": "Edit window",
+  "helpDeskHoursEmpty": "Always open. Add a window to accept new requests only during set hours.",
+  "helpDeskHoursOpenNow": "Open now",
+  "helpDeskHoursClosedNow": "Closed",
+  "helpDeskHoursCloses": "Closes {date}",
+  "helpDeskHoursOpens": "Opens {date}",
+  "helpDeskHoursOverlap": "Overlaps another window.",
+  "helpDeskHoursIncomplete": "Choose a start and an end.",
+  "helpDeskHoursEdit": "Edit window {window}",
+  "helpDeskHoursRemove": "Remove window {window}",
+  "helpDeskClosed": "The help desk is closed.",
+  "helpDeskClosedOpens": "The help desk is closed. Opens {date}"
 }

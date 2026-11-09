@@ -121,6 +121,9 @@ jest.mock("@/components/RequestFeedback", () => ({
     error ? <MockText>{error.message}</MockText> : null,
 }));
 jest.mock("@/components/project-ui", () => ({ NavRow: () => null }));
+jest.mock("@/components/status-notice", () => ({
+  InfoNotice: ({ text }: { text: string }) => <MockText>{text}</MockText>,
+}));
 jest.mock("@/theme", () => ({
   colors: new Proxy({}, { get: () => "#000" }),
   space: new Proxy({}, { get: () => 8 }),
@@ -375,6 +378,20 @@ it("submits a team request using Other without inventing a topic (H64/H65)", asy
     challengeId: 5,
     preferSponsor: true,
   });
+});
+
+it("blocks sending while the help desk is closed and says so (H64)", async () => {
+  mockOverrides["/api/helpdesk/schedule"] = {
+    data: { open: false, nextChangeAt: null, windows: [], configured: true },
+  };
+  await render(<NewHelpRequestScreen />);
+  expect(screen.getByText(mockhelpDeskEn.helpClosed)).toBeTruthy();
+  await fireEvent.changeText(screen.getByLabelText("What do you need?"), "Need help");
+  await fireEvent.changeText(screen.getByLabelText("Where are you?"), "Desk 5");
+  await fireEvent.press(screen.getByLabelText("Other"));
+  await fireEvent.press(screen.getByLabelText("Send request"));
+  expect(mockMutate).not.toHaveBeenCalled();
+  mockOverrides = {};
 });
 
 it("shows the challenge and sponsor preference on the request (H65)", async () => {

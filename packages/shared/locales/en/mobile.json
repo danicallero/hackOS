@@ -1109,5 +1109,7 @@
   "mobileSurfaceOpenSettings": "Open Settings",
   "offlineMode": "Offline mode",
   "offlineModeUpdated": "Offline mode · Updated {updatedAt}",
-  "offlineReconnect": "Reconnect"
+  "offlineReconnect": "Reconnect",
+  "helpClosed": "The help desk is closed.",
+  "helpClosedOpens": "The help desk is closed. Opens {date}"
 }
