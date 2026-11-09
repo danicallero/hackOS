@@ -30,6 +30,7 @@ import {
   mergeProjects,
   type NativeProject,
 } from "@/lib/projects";
+import { fixedScrollHeaderOptions } from "@/lib/screen-header-options";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { useStreamRefresh } from "@/lib/use-stream-refresh";
 import { listDetailLayout } from "@/lib/window-size";
@@ -169,16 +170,12 @@ export function ProjectGalleryScreen() {
       return;
     }
     navigation.setOptions({
-      title: t("gallery"),
-      headerShown: true,
-      headerLargeTitle: Platform.OS === "ios",
-      headerBlurEffect: "none",
-      // Android has no large-title bar or content inset: a transparent header there floats over the list.
+      // H18: a compact title with the soft scroll edge (R032), not a collapsing large title: the
+      // list passes under the bar with UIKit's blur instead of a hard cut over the status bar.
+      ...fixedScrollHeaderOptions(t("gallery"), false),
+      // Android has no content inset: a transparent header there floats over the list.
       headerTransparent: Platform.OS === "ios",
-      headerStyle: { backgroundColor: Platform.OS === "ios" ? "transparent" : colors.background },
-      scrollEdgeEffects: { top: "hidden", bottom: "hidden", left: "hidden", right: "hidden" },
-      headerLargeTitleShadowVisible: false,
-      headerShadowVisible: false,
+      headerStyle: Platform.OS === "ios" ? undefined : { backgroundColor: colors.background },
       headerRight: glassAvailable || challenges.length === 0 ? undefined : () => filter,
       headerSearchBarOptions: {
         placeholder: t("projectSearch"),
