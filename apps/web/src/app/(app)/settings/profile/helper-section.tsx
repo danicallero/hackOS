@@ -59,7 +59,6 @@ function HelperForm({
   const [challengeIds, setChallengeIds] = useState(profile.challengeIds);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [missingTopics, setMissingTopics] = useState(false);
   const dirty =
     published !== profile.published ||
     challengeIds.join(",") !== profile.challengeIds.join(",") ||
@@ -74,17 +73,11 @@ function HelperForm({
     CAPABILITIES.HELPDESK_OFFER,
     CAPABILITIES.HELPDESK_COVERAGE,
   );
-  const showMissing = missingTopics && published && topics.length === 0;
   return (
     <form
       className="space-y-(--space-within-section)"
       onSubmit={async (event) => {
         event.preventDefault();
-        // The API refuses to publish without knowledge (helper_profile_incomplete).
-        if (published && topics.length === 0) {
-          setMissingTopics(true);
-          return;
-        }
         setPending(true);
         setError(null);
         try {
@@ -135,11 +128,6 @@ function HelperForm({
         <div className="space-y-2">
           <Label htmlFor={id}>{t("helpDeskKnowledge")}</Label>
           <TopicsPicker id={id} value={topics} onChange={setTopics} disabled={pending} allowAdd />
-          {showMissing ? (
-            <p role="alert" className="text-destructive text-sm">
-              {t("helpDeskPublishNeedsTopic")}
-            </p>
-          ) : null}
         </div>
         <AvailabilityEditor profile={profile} onSaved={onSaved} />
       </fieldset>

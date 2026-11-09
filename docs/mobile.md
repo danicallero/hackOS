@@ -1684,8 +1684,8 @@ for eligible helpers, in the order a helper decides. The editor opens as the
 person's own card, never dimmed, edited with the bar's pencil as in the public
 profile editor (it edits only that card; the help desk settings below are
 always live). The role renders as an accent pill. Then: an "Available to
-mentor" switch (the published state; turning it on before any knowledge area exists
-opens the topic picker and publishes once the first is chosen; publishing also turns the public profile's share
+mentor" switch (the published state; it needs no knowledge area: a helper with none
+is a generalist who receives every request; publishing also turns the public profile's share
 switch on, and the screen mirrors it; unpublishing leaves sharing as is); for
 any eligible helper with challenges in the event, a "Challenge alerts" row
 (All requests, or the chosen challenge names) that opens a multi-select sheet

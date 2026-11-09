@@ -172,12 +172,13 @@ describe("H61 helper profile", () => {
   it("leaves the bio to the public profile, stays separate from sharing consent and shows knowledge on the public card", async () => {
     const h = await createUserWithCapabilities(helperCaps);
     const t = await topic("Angular", h);
-    const incomplete = await call("PUT", "/api/me/helper-profile", h, {
+    // A helper can publish without naming any knowledge: a generalist (H61, H65).
+    const generalist = await call("PUT", "/api/me/helper-profile", h, {
       published: true,
       topicIds: [],
     });
-    expect(incomplete.statusCode).toBe(409);
-    expect(incomplete.json().error.details.code).toBe("helper_profile_incomplete");
+    expect(generalist.statusCode).toBe(200);
+    expect(generalist.json()).toMatchObject({ published: true, topics: [] });
     const withBio = await call("PUT", "/api/me/helper-profile", h, {
       published: true,
       topicIds: [t],
@@ -205,7 +206,8 @@ describe("H61 helper profile", () => {
       `SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'helper_profile' AND actor_id = $1`,
       [h],
     );
-    expect(rows[0].n).toBe(1);
+    // The generalist publish and the later topic change are each audited once; repeats are not.
+    expect(rows[0].n).toBe(2);
   });
 
   it("lets accepted mentors prepare before confirmation and refuses everyone else", async () => {

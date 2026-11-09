@@ -49,7 +49,7 @@ profile alone does not publish a helper card. The card follows the public profil
 surname and photo switches; the photo route serves a published helper's photo
 to anyone with a help desk capability while the photo switch is on.
 
-Publishing needs at least one topic. While published, the topics also appear
+Publishing does not need any topic: a helper with none is a generalist and is a candidate for every request (H65). While published, the topics also appear
 as `helpTopics` on the person's #934 public-profile card (`DirectoryEntry`)
 for the people who scanned them.
 

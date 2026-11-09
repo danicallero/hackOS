@@ -101,7 +101,6 @@
   "apiError_review_field_lease_required": "O teu bloqueo de edición caducou ou pertence a outro xurado.",
   "apiError_certificate_review_required": "Pendente de revisión de asistencia",
   "apiError_helper_not_eligible": "Só mentores, representantes de patrocinadores e staff poden ofrecer axuda.",
-  "apiError_helper_profile_incomplete": "Escolle polo menos un tema antes de publicar.",
   "apiError_help_request_active": "Xa hai unha solicitude de axuda activa.",
   "apiError_help_request_already_claimed": "Outra persoa xa atendeu esta solicitude.",
   "apiError_help_request_closed": "Esta solicitude de axuda está pechada.",

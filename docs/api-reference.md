@@ -607,7 +607,7 @@ code when there is no reason.
 | `schedule_ends_before_starts` | 400 | Schedule item ends at or before it starts |
 | `schedule_scan_needs_participants` | 400 | A scan-required item must be participant-visible |
 | `schedule_item_not_found` | 404 | Schedule item does not exist |
-| `helper_not_eligible`, `helper_profile_incomplete`, `help_request_*`, `topic_*`, `availability_*` | 400/403/409 | Help desk reasons (H61-H66); full table in [`help-desk-contract.md`](./help-desk-contract.md) |
+| `helper_not_eligible`, `help_request_*`, `topic_*`, `availability_*` | 400/403/409 | Help desk reasons (H61-H66); full table in [`help-desk-contract.md`](./help-desk-contract.md) |
 
 Application response validation (`400`, "Response fails template validation")
 returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such as

@@ -57,8 +57,6 @@ export const ERROR_REASONS = {
   PROJECT_GITHUB_REQUIRED: "project_github_required",
   /** 403: help desk actions need `helpdesk:offer` or an accepted helper application (H61). */
   HELPER_NOT_ELIGIBLE: "helper_not_eligible",
-  /** 409: a helper profile needs at least one topic to be published (H61). */
-  HELPER_PROFILE_INCOMPLETE: "helper_profile_incomplete",
   /** 409: the person or team already has an open or claimed help request (H64). */
   HELP_REQUEST_ACTIVE: "help_request_active",
   /** 409: another helper won the claim (H66). */

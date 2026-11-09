@@ -346,11 +346,6 @@ export async function updateMyHelperProfile(
       [userId],
     );
     const beforeTopics = topicRows.map((r) => Number(r.topic_id));
-    if (input.published && topicIds.length === 0) {
-      throw new ConflictError("Choose at least one topic before publishing", {
-        code: ERROR_REASONS.HELPER_PROFILE_INCOMPLETE,
-      });
-    }
 
     const beforeChallenges = (await challengeLimit(client, userId)) ?? [];
     let challengeIds = beforeChallenges;

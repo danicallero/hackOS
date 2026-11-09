@@ -475,8 +475,10 @@ async function routeAudience(
     challenge_ok: boolean;
   }>(
     `SELECT u.id AS user_id,
-            EXISTS (SELECT 1 FROM helper_topics ht
-                     WHERE ht.user_id = u.id AND ht.topic_id = ANY($2::int[])) AS matches,
+            -- A helper with no topics is a generalist: any request matches (H61, H65).
+            NOT EXISTS (SELECT 1 FROM helper_topics ht WHERE ht.user_id = u.id)
+              OR EXISTS (SELECT 1 FROM helper_topics ht
+                          WHERE ht.user_id = u.id AND ht.topic_id = ANY($2::int[])) AS matches,
             NOT EXISTS (SELECT 1 FROM helper_profile_challenges hc WHERE hc.user_id = u.id)
               OR EXISTS (SELECT 1 FROM helper_profile_challenges hc
                           WHERE hc.user_id = u.id AND hc.challenge_id = $3::int) AS challenge_ok

@@ -168,7 +168,7 @@ type CoverageReport = {
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
 | `GET /api/me/helper-profile` | authenticated | — | `MyHelperProfile` (works before event access; `eligible:false` when not a helper). Also `challengeIds: number[]` (empty = every request), `challenges: {id, name}[]` (selected) and `challengeOptions: {id, name}[]` (visible challenges to pick from), and `suggestedInterval: {startsAt, endsAt} \| null` (event_config hacking window, else event window, else null; clients prefill new availability with it). |
-| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing), challengeIds?: number[] (≤50 visible challenges, else 400; omitted keeps the stored set, [] clears it) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs ≥1 topic (409 `helper_profile_incomplete`). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Turning publication on (unpublished → published) also sets the public profile's `directory_visible` (and `consented_at`) in the same transaction, audited as changed field `directoryVisible`; unpublishing never unshares. Help desk readers get `profile.cvUrl` when the helper shares their CV and download it from `GET /api/directory/:userId/cv`, as a badge scanner would. |
+| `PUT /api/me/helper-profile` | eligible (403 otherwise) | `{ published: boolean, topicIds: number[] (0-20, existing), challengeIds?: number[] (≤50 visible challenges, else 400; omitted keeps the stored set, [] clears it) }` (strict: any other field, `bio` included, is 400) | `MyHelperProfile`. Publishing needs no topic (a helper with none is a generalist). The bio and every other profile field are edited only through `PUT /api/me/public-profile`. Turning publication on (unpublished → published) also sets the public profile's `directory_visible` (and `consented_at`) in the same transaction, audited as changed field `directoryVisible`; unpublishing never unshares. Help desk readers get `profile.cvUrl` when the helper shares their CV and download it from `GET /api/directory/:userId/cv`, as a badge scanner would. |
 | `PUT /api/me/helper-profile/availability` | eligible | `{ intervals: AvailabilityInterval[] }` (0-30, each ≤24 h, no overlaps, none starting before `suggestedInterval.startsAt`; replaces the set) | `MyHelperProfile`; 400 `availability_overlap` / `availability_invalid` / `availability_before_window` |
 
 ### Browse helpers (H63)
@@ -221,7 +221,6 @@ Localized text: `apiError_<code>` in `packages/shared/locales/*/common.json`.
 | Code | Status |
 | --- | --- |
 | `helper_not_eligible` | 403 |
-| `helper_profile_incomplete` | 409 |
 | `help_request_active` | 409 (`details.requestId` when known) |
 | `help_request_already_claimed` | 409 |
 | `help_request_closed` | 409 |
