@@ -9,7 +9,7 @@ import { colors } from "@/theme/colors";
 
 const FAILED_VISIBLE_MS = 3000;
 // An instant failure must still look like an attempt.
-const MIN_ATTEMPT_MS = 900;
+const MIN_ATTEMPT_MS = 500;
 
 /**
  * Scanning keeps working offline: a quiet note, never an error banner. Reconnect

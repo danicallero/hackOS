@@ -908,7 +908,7 @@ they are not device screenshots or proof of native toolbar behavior.
   fallback. Participant ranks exclude waiting sibling entries of teams already
   called, in a room, presenting or completed in the same shared queue. My queue
   refreshes when the tab regains focus and keeps its last response on the device
-  (`cacheFirst`), shown under the "Offline data" banner when the server does
+  (`cacheFirst`), shown under the quiet "Offline mode" line when the server does
   not answer; My Projects shares that cache entry. On a phone its header is the
   compact translucent title used by Open-source licenses. On the first visit to My queue for each
   account, the app shows a

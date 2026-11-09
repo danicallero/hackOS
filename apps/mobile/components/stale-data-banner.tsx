@@ -24,49 +24,30 @@ export function StaleDataBanner({ updatedAt }: { updatedAt: string | null }) {
 
   const formatted = formatLastUpdate(updatedAt, language, t);
 
+  // Quiet, like the scanner's offline note: one grey line, no card, no warning colour.
   return (
     <View
       accessibilityLiveRegion="polite"
       style={{
-        alignItems: "flex-start",
-        backgroundColor: colors.warningSurface,
-        borderCurve: "continuous",
-        borderRadius: 14,
+        alignItems: "center",
         flexDirection: "row",
-        gap: 10,
+        gap: 6,
         marginBottom: 14,
-        padding: 13,
-        paddingRight: hasOperationsMenu ? 72 : 13,
+        paddingRight: hasOperationsMenu ? 72 : 0,
       }}
     >
       <SymbolView
-        name="exclamationmark.triangle.fill"
-        tintColor={colors.onWarningSurface}
-        size={20}
+        name="wifi.slash"
+        size={14}
+        tintColor={colors.secondaryLabel}
         accessible={false}
       />
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text
-          selectable
-          style={{
-            color: colors.onWarningSurface,
-            fontSize: type.subhead.fontSize,
-            fontWeight: "700",
-          }}
-        >
-          {t("offlineDataTitle")}
-        </Text>
-        <Text
-          selectable
-          style={{
-            color: colors.onWarningSurface,
-            fontSize: type.footnote.fontSize,
-            lineHeight: 18,
-          }}
-        >
-          {t("offlineDataBody", { updatedAt: formatted })}
-        </Text>
-      </View>
+      <Text
+        selectable
+        style={{ color: colors.secondaryLabel, flex: 1, fontSize: type.footnote.fontSize }}
+      >
+        {t("offlineDataLine", { updatedAt: formatted })}
+      </Text>
     </View>
   );
 }
