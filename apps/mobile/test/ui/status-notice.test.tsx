@@ -1,6 +1,6 @@
 import { act, fireEvent, screen } from "@testing-library/react-native";
 import { View } from "react-native";
-import { ErrorNotice, OfflineNotice } from "@/components/status-notice";
+import { ErrorNotice, OfflineNotice, resetStatusNoticeAttempts } from "@/components/status-notice";
 import { renderMobile } from "./render";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -11,7 +11,10 @@ jest.mock("@/lib/i18n", () => ({
 }));
 
 describe("status notices", () => {
-  beforeEach(() => jest.useFakeTimers());
+  beforeEach(() => {
+    jest.useFakeTimers();
+    resetStatusNoticeAttempts();
+  });
   afterEach(() => jest.useRealTimers());
 
   it("shows one offline notice when several requests on a screen fail", async () => {
@@ -22,6 +25,22 @@ describe("status notices", () => {
       </View>,
     );
     expect(screen.getAllByText(/offlineMode/)).toHaveLength(1);
+  });
+
+  it("merges an offline notice and a failed load into one that retries both", async () => {
+    const reconnect = jest.fn().mockResolvedValue(true);
+    const retry = jest.fn().mockResolvedValue(true);
+    await renderMobile(
+      <View>
+        <OfflineNotice updatedAt="2026-11-09T07:00:00Z" onReconnect={reconnect} />
+        <ErrorNotice message="Couldn't load" onRetry={retry} />
+      </View>,
+    );
+    expect(screen.queryByText("Couldn't load")).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    await act(async () => fireEvent.press(screen.getByRole("button")));
+    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   it("shows a spinner for a minimum time, then a cross, then the label again", async () => {

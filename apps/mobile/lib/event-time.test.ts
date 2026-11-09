@@ -96,4 +96,12 @@ describe("formatting", () => {
       /Yesterday/,
     );
   });
+
+  it("writes an old date as dd/mm/yyyy", () => {
+    const t = () => "Yesterday";
+    const now = new Date("2026-11-09T10:00:00.000Z");
+    expect(formatLastUpdate("2026-10-19T01:11:00.000Z", "en", t, now, MADRID)).toMatch(
+      /^19\/10\/2026, /,
+    );
+  });
 });
