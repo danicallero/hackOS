@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import helpDeskEn from "@hackos/shared/locales/en/mobile.json";
 import helpDeskEs from "@hackos/shared/locales/es/mobile.json";
 import helpDeskGl from "@hackos/shared/locales/gl/mobile.json";
-import { canBrowseHelpDesk } from "./help-desk";
+import { canBrowseHelpDesk, planDays } from "./help-desk";
 
 jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 describe("help desk boundaries (H61–H67)", () => {
@@ -64,5 +64,26 @@ describe("filterHelpers (H63)", () => {
       ),
     ).toEqual([2]);
     expect(filterHelpers(list, { query: "zz", kinds: [], topicIds: [] })).toEqual([]);
+  });
+});
+
+describe("planDays (H62)", () => {
+  const window = { startsAt: "2026-11-27T09:00:00.000Z", endsAt: "2026-11-29T15:00:00.000Z" };
+  it("lists every hacking day with its stated ranges", () => {
+    const days = planDays(
+      window,
+      [{ startsAt: "2026-11-28T10:00:00.000Z", endsAt: "2026-11-28T12:00:00.000Z" }],
+      "en",
+    );
+    expect(days.map((day) => day.key)).toEqual(["2026-11-27", "2026-11-28", "2026-11-29"]);
+    expect(days.map((day) => day.ranges.length)).toEqual([0, 1, 0]);
+  });
+  it("keeps a day outside the window that holds a range, and works without a window", () => {
+    const days = planDays(
+      null,
+      [{ startsAt: "2026-12-01T10:00:00.000Z", endsAt: "2026-12-01T11:00:00.000Z" }],
+      "en",
+    );
+    expect(days.map((day) => day.key)).toEqual(["2026-12-01"]);
   });
 });

@@ -104,3 +104,39 @@ export function availabilityDays(
   }
   return [...days.values()];
 }
+
+export interface PlanDay extends AvailabilityDay {
+  /** Where a new range on this day starts (same clock time as the window's start). */
+  anchor: Date;
+}
+
+/**
+ * H62: the day-by-day plan: every event-zone day of the hacking window (else the
+ * event window), each with the ranges already stated that day, plus any day
+ * outside the window that still holds a range. `index` is the position in
+ * `intervals`.
+ */
+export function planDays(
+  window: AvailabilityInterval | null,
+  intervals: AvailabilityInterval[],
+  language: string,
+): PlanDay[] {
+  const days = new Map<string, PlanDay>();
+  if (window) {
+    const start = Date.parse(window.startsAt);
+    const end = Date.parse(window.endsAt);
+    for (let at = start; at <= end && days.size < 14; at += 24 * 3_600_000) {
+      const iso = new Date(at).toISOString();
+      const key = eventDayKey(iso);
+      if (key && !days.has(key)) {
+        days.set(key, { key, label: dayLabel(iso, language), ranges: [], anchor: new Date(at) });
+      }
+    }
+  }
+  for (const day of availabilityDays(intervals, language)) {
+    const existing = days.get(day.key);
+    if (existing) existing.ranges = day.ranges;
+    else days.set(day.key, { ...day, anchor: new Date(day.ranges[0].interval.startsAt) });
+  }
+  return [...days.values()].sort((a, b) => a.key.localeCompare(b.key));
+}

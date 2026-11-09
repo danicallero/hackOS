@@ -1680,17 +1680,21 @@ avatar that collapses into the Dynamic Island — fed by
 one "Stated availability" section: a Now row (scheduled vs inside the venue,
 H24) and one row per event day. Editing happens in the same public profile
 editor: `components/help-desk/helper-profile-section.tsx` sits under the card
-for eligible helpers with the publish switch (publishing also turns the public
-profile's share switch on, and the screen mirrors it; unpublishing leaves
-sharing as is), knowledge topics, the "When do you plan to be at the venue?"
-availability block (Add opens the from/to picker prefilled with the API's
-`suggestedInterval` for the first interval) and, for sponsors with challenges
-(`canLimitToChallenges`), an "Only requests about my challenges" switch with
-the challenge names as its footer. Each change saves at once,
-like the profile's share switch; the bio stays one of the card's own fields.
-Availability rows open a sheet with Start / End date-and-time rows (Calendar's
-event editor), Save, and a confirmed Remove; the full list is sent as the
-replacement the API expects.
+for eligible helpers with an "Available to mentor" switch (the published state;
+publishing also turns the public profile's share switch on, and the screen
+mirrors it; unpublishing leaves sharing as is) and a "Mentor profile" row into
+`app/helper-mentor.tsx` (`mentor-profile-screen.tsx`). Switching on without any
+knowledge area opens the mentor profile instead. The mentor profile shows, for
+sponsors with challenges (`canLimitToChallenges`), the "I only want to be
+notified about my challenge's requests" switch first (the challenge names as its
+footer), then the knowledge areas, then the plan day by day: one section per
+hacking day (`planDays`, from `suggestedInterval`: hacking window, else event
+window) listing that day's ranges and an "Add availability" row that opens the
+from/to sheet prefilled on that day. Each change saves at once, like the
+profile's share switch; the bio stays one of the card's own fields. Range rows
+open a sheet with Start / End date-and-time rows (Calendar's event editor),
+Save, and a confirmed Remove; the full list is sent as the replacement the API
+expects.
 
 **Directory (H63).** The Support team: photo rows with the role (a sponsor's
 company), topics and a scheduled / inside-the-venue line, the same native header
