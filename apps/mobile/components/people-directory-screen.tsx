@@ -436,7 +436,9 @@ export function PeopleDirectoryScreen({
                 retrying={sync.syncing}
               />
             ) : null}
-            {syncError && !isSyncConflict(syncError) ? <OfflineScanningNote /> : null}
+            {syncError && !isSyncConflict(syncError) ? (
+              <OfflineScanningNote onReconnect={async () => Boolean(await sync.sync())} />
+            ) : null}
           </View>
         ) : null
       }

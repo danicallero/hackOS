@@ -199,14 +199,20 @@ export function ActivityScannerScreen({
   const roster = syncState.serverSnapshot?.people ?? people;
   const inside =
     serverInside ?? roster?.filter((person) => person.lastPresenceKind === "in").length;
-  const loadInside = useCallback(() => {
-    void apiFetch<{ byRole: { inside: number }[] }>("/api/scanner/role-stats")
-      .then((response) => {
-        setServerInside(response.byRole.reduce((sum, row) => sum + row.inside, 0));
-        setInsideError(null);
-      })
-      .catch((cause) => setInsideError(cause instanceof Error ? cause : new Error(String(cause))));
-  }, []);
+  const loadInside = useCallback(
+    () =>
+      apiFetch<{ byRole: { inside: number }[] }>("/api/scanner/role-stats")
+        .then((response) => {
+          setServerInside(response.byRole.reduce((sum, row) => sum + row.inside, 0));
+          setInsideError(null);
+          return true;
+        })
+        .catch((cause) => {
+          setInsideError(cause instanceof Error ? cause : new Error(String(cause)));
+          return false;
+        }),
+    [],
+  );
   useEffect(() => {
     if (focused) loadInside();
   }, [focused, loadInside]);
@@ -241,8 +247,10 @@ export function ActivityScannerScreen({
       const response = await apiFetch<{ items: ActivityStats[] }>("/api/activities/scannable");
       setStats(response.items.find((item) => item.activityId === activityId) ?? null);
       setStatsError(null);
+      return true;
     } catch (cause) {
       setStatsError(cause instanceof Error ? cause : new Error(String(cause)));
+      return false;
     }
   }, [activityId]);
 
@@ -647,7 +655,13 @@ export function ActivityScannerScreen({
                 />
               ) : null}
               {/* Offline is not a failure: scans are queued, only the live figures are missing. */}
-              {insideError || statsError ? <OfflineScanningNote /> : null}
+              {insideError || statsError ? (
+                <OfflineScanningNote
+                  onReconnect={async () =>
+                    (await Promise.all([loadInside(), loadStats()])).every(Boolean)
+                  }
+                />
+              ) : null}
               <ActivityStatistics
                 activity={activity}
                 stats={stats}
