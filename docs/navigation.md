@@ -53,7 +53,7 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 ### Stable personal area (`PERSONAL_NAV`)
 
 The personal sidebar exposes **Home**, **My applications**, **Projects**,
-**Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+**Contacts**, **Help desk** (with a help desk capability) and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
 and Inbox (`/inbox`) in a shared internal navigation row.
 Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
 keeps the parent selected on every grouped route, including records, and Home
@@ -447,3 +447,50 @@ reserve two summary lines and group challenge previews with their disclosure cou
 team avatars and the project action share the footer. My projects loads its private list in
 the browser: the session cookie belongs to the API origin, so a Next server render cannot
 authenticate it and would bounce signed-in people through `/login` in a loop.
+
+## Help desk (H61–H67)
+
+The web personal sidebar adds **Help desk** (`/help-desk`) for any of
+`HELPDESK_REQUEST`, `HELPDESK_OFFER` or `HELPDESK_COVERAGE`. Its entry shares
+one selector: My requests with request capability, Open and My assignments with
+offer capability plus server eligibility. The Support team directory remains
+one labelled sibling link with the live count of available people. Coverage
+(`HELPDESK_COVERAGE`) and My support profile (server eligibility, including
+accepted mentors before confirmation) stay in the header menu. The latter
+opens `/settings/profile?tab=help-desk`; `/help-desk/profile` still redirects.
+
+Published `/help-desk/requests` and `/help-desk/inbox` entries render the same
+selector. `?tab=mine|open|claims` restores selection; request-row links preserve
+the originating list URL for the labelled return action. The inbox URL defaults
+to Open, other entries to the first authorized view. Numeric notification links
+at `/help-desk/requests/:id` remain readable under API authorization. Published
+helpers use `/help-desk/helpers/:userId`, rendering the shared public profile.
+
+Mobile exposes **Help desk** as a direct tab during the event for
+`HELPDESK_REQUEST` or `HELPDESK_OFFER`. Participants land on their own/team
+requests; helpers land on their inbox. The browsable helper directory and
+other authorized views remain reachable alongside, including both request
+and helper views for an account holding both capabilities. Contacts/Diary
+moves to overflow when the tab budget is tight; Scanner stays direct for
+staff. Coverage-only accounts retain an entry to coverage without gaining
+request or helper actions.
+
+The tab implementation must keep the exhaustive route/overflow registry,
+selection and return behavior, and notification deep links consistent.
+The tab key is `help-desk`, with the `lifepreserver` icon and `helpDesk`
+label. Its native Stack is `/(tabs)/help-desk`; the overflow pseudo-tab is
+`/(tabs)/others/help-desk`, first in overflow order. It is offered for any of
+`HELPDESK_REQUEST`, `HELPDESK_OFFER` or `HELPDESK_COVERAGE` and promoted ahead
+of Projects and Contacts when direct space is available. The home selects
+participant requests, helper inbox or the dual-capability view as appropriate.
+The root `/helper-profile` editor and `/help-topics` modal remain separately
+routable. Coverage requires `HELPDESK_COVERAGE`; request actions follow the
+server's viewer permissions.
+
+The mobile helper profile is the root `/helper-profile` route, with access
+resolved by `GET /api/me/helper-profile` eligibility. An eligible accepted
+mentor without event access can sign in to prepare that profile while the
+event tabs remain guarded. Publication/profile fields and availability have
+separate saves. Explicit help desk publication makes the helper and stated
+schedule browsable without creating a diary contact or changing networking
+sharing consent (H61–H63).

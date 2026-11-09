@@ -98,5 +98,18 @@
   "apiErrorRateLimited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
   "apiErrorServer": "Algo ha fallado por nuestra parte. Inténtalo de nuevo o avisa al staff si persiste.",
   "apiError_review_field_lease_required": "Tu bloqueo de edición ha caducado o pertenece a otro jurado.",
-  "apiError_certificate_review_required": "Pendiente de revisión de asistencia"
+  "apiError_certificate_review_required": "Pendiente de revisión de asistencia",
+  "apiError_helper_not_eligible": "Solo mentores, representantes de patrocinadores y staff pueden ofrecer ayuda.",
+  "apiError_helper_profile_incomplete": "Elige al menos un tema antes de publicar.",
+  "apiError_help_request_active": "Ya hay una solicitud de ayuda activa.",
+  "apiError_help_request_already_claimed": "Otra persona ya ha atendido esta solicitud.",
+  "apiError_help_request_closed": "Esta solicitud de ayuda está cerrada.",
+  "apiError_help_request_not_claimable": "No puedes atender tu propia solicitud.",
+  "apiError_help_request_not_claimer": "Solo quien atendió esta solicitud puede liberarla.",
+  "apiError_help_request_not_claimed": "Solo se puede marcar como resuelta una solicitud ya atendida.",
+  "apiError_topic_name_taken": "Ya existe un tema con este nombre. Combínalos.",
+  "apiError_topic_reserved": "Otro ya está disponible en todas las solicitudes.",
+  "apiError_topic_unknown": "Uno de los temas ya no existe. Recarga e inténtalo de nuevo.",
+  "apiError_availability_overlap": "Los intervalos de disponibilidad no pueden solaparse.",
+  "apiError_availability_invalid": "Cada intervalo debe terminar después de empezar y durar como máximo 24 horas."
 }

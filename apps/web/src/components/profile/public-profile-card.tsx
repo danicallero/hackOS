@@ -22,6 +22,7 @@ import {
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-live-query";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -44,10 +45,11 @@ const CV_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * While the opt-in is off only the opt-in itself counts: hidden fields can
- * neither enable Save nor be published by it (#934).
+ * neither enable Save nor be published by it (#934). A published helper
+ * profile shows the fields on the help desk (H61), so they stay editable.
  */
-function sameSettings(a: Settings, b: Settings): boolean {
-  if (!a.directoryVisible && !b.directoryVisible) return true;
+function sameSettings(a: Settings, b: Settings, helperPublished = false): boolean {
+  if (!helperPublished && !a.directoryVisible && !b.directoryVisible) return true;
   return (Object.keys(a) as (keyof Settings)[]).every((key) => {
     if (key === "socials") {
       return JSON.stringify(savedLinks(a.socials)) === JSON.stringify(savedLinks(b.socials));
@@ -107,15 +109,20 @@ function previewEntry(
 export function PublicProfileCard({
   onboarding,
   onDirtyChange,
+  onSaved,
 }: {
   onboarding?: { onFinished: () => void; onLater: () => void };
   /** Lets the profile's section list mark a section that holds unsaved edits. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Called after a successful save, so another mounted copy of the editor can reload. */
+  onSaved?: () => void;
 } = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
   // Bumped by every successful save; a GET that started earlier is stale.
   const generation = useRef(0);
+  // H61: the same fields are what help desk users see while the helper profile is published.
+  const helperPublished = useOwnHelperProfile().data?.published === true;
   const { data, error, refetch } = useLiveQuery<Snapshot>(
     async () => {
       const startedAt = generation.current;
@@ -127,8 +134,8 @@ export function PublicProfileCard({
     REALTIME_SCOPES.PERSONAL,
     [EVENTS.USER_SESSION_CHANGED],
     {
-      queryKey: [me?.name, me?.surname, me?.image],
-      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image],
+      queryKey: [me?.name, me?.surname, me?.image, helperPublished],
+      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image, helperPublished],
     },
   );
   const [saved, setSaved] = useState<Snapshot | null>(null);
@@ -145,15 +152,18 @@ export function PublicProfileCard({
   const stored = profile ? settingsFrom(profile) : null;
   const initialSettings = onboarding && stored ? { ...stored, directoryVisible: true } : stored;
   const settings = edits ?? initialSettings;
-  const dirty = Boolean(initialSettings && settings && !sameSettings(settings, initialSettings));
+  const dirty = Boolean(
+    initialSettings && settings && !sameSettings(settings, initialSettings, helperPublished),
+  );
+  const fieldsOpen = Boolean(settings?.directoryVisible || helperPublished);
   useUnsavedChangesGuard(dirty);
 
   const preview = useMemo(() => {
-    if (!me || !profile || !settings?.directoryVisible) return null;
+    if (!me || !profile || !settings || !fieldsOpen) return null;
     return dirty
       ? previewEntry(me, settings, profile.preview, profile.cv !== null)
       : profile.preview;
-  }, [me, profile, settings, dirty]);
+  }, [me, profile, settings, dirty, fieldsOpen]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [onDirtyChange, dirty]);
@@ -176,7 +186,7 @@ export function PublicProfileCard({
     setEdits((current) => {
       const next = { ...(current ?? (initialSettings as Settings)), ...patch };
       // Back to the stored settings (hidden edits are discarded): follow refreshes again.
-      return sameSettings(next, initialSettings as Settings) ? null : next;
+      return sameSettings(next, initialSettings as Settings, helperPublished) ? null : next;
     });
   }
 
@@ -189,10 +199,12 @@ export function PublicProfileCard({
   async function onSubmit(event: React.FormEvent, directoryVisible = settings?.directoryVisible) {
     event.preventDefault();
     if (!settings || !stored) return;
-    // Turning the opt-in off keeps the stored public fields: nothing hidden is published.
-    const body = directoryVisible
-      ? { ...settings, directoryVisible: true }
-      : { ...stored, directoryVisible: false };
+    // Turning the opt-in off keeps the stored public fields: nothing hidden is
+    // published. A published helper still edits them for the help desk (H61).
+    const body =
+      directoryVisible || helperPublished
+        ? { ...settings, directoryVisible: Boolean(directoryVisible) }
+        : { ...stored, directoryVisible: false };
     setSavingChoice(directoryVisible ? "create" : "hidden");
     setSaveError(null);
     if (
@@ -224,6 +236,7 @@ export function PublicProfileCard({
       idempotencyKey.current = null;
       commit(next);
       setEdits(null);
+      onSaved?.();
       if (onboarding) onboarding.onFinished();
       else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
@@ -285,7 +298,10 @@ export function PublicProfileCard({
               hint={t("publicProfileAudience")}
             />
           )}
-          {settings.directoryVisible && (
+          {!settings.directoryVisible && helperPublished && (
+            <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
+          )}
+          {fieldsOpen && (
             <>
               <ProfileVisibilityFields
                 settings={settings}

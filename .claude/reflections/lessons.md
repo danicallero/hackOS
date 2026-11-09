@@ -1077,7 +1077,7 @@ Date: 2026-11-08
 Adding a new family of native pages or sheets with a shared page wrapper.
 
 ### Mistake
-A new family of pages shared a wrapper that set `headerTransparent: false` with an opaque
+The help desk wrapper set `headerTransparent: false` with an opaque
 `headerStyle` colour (and sheets `headerBlurEffect: "none"`), so every new page
 and modal painted a grey band and clipped content instead of scrolling under
 the native scroll-edge blur. The first fix made sheets transparent but left
@@ -1143,3 +1143,39 @@ a single successful capture does not establish that the effect is stable.
 ### Exceptions
 A screen that intentionally has no header (full-bleed camera, Account root)
 follows its own established configuration.
+
+## [R033] A person shown in a new feature uses the existing profile surface
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-08
+
+### Trigger
+A feature shows or edits a person (helper, mentor, sponsor, staff) who already
+has a public profile elsewhere in the product.
+
+### Mistake
+The help desk built its own helper card and a separate helper editor, with a
+double title, pills and chips, so the same person looked and was edited
+differently depending on where they were opened.
+
+### Lesson
+Users expect one profile per person. "Similar" is not enough: the feature must
+render the same profile component with the same fields, and edit it in the same
+editor, adding only the feature's own sections.
+
+### Action
+Feed the existing profile screen/editor from the feature's API (same entry
+shape) and append feature-specific sections below it. Keep the feature's
+consent (e.g. publication) as its own explicit control in that editor. Delete
+the parallel card/editor in the same change.
+
+### Validation
+Open the person from the feature and from the original entry point and compare
+screenshots: same layout, fields and header behaviour; editing from either
+place changes both.
+
+### Exceptions
+A deliberately reduced view required by privacy (fields the viewer may not
+see) hides those fields, but keeps the same component and layout.

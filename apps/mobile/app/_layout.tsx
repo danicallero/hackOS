@@ -16,6 +16,7 @@ import { AppBackGesture } from "@/components/app-back-gesture";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
 import { MaintenanceScreen } from "@/components/maintenance-screen";
 import { PendingRemovalScreen } from "@/components/pending-removal-screen";
+import { RequestFeedback } from "@/components/RequestFeedback";
 import { SessionState } from "@/components/session-state";
 import { UpgradeRequiredScreen } from "@/components/upgrade-required-screen";
 import { useColorScheme } from "@/components/useColorScheme";
@@ -27,7 +28,11 @@ import { useLiveActivities } from "@/lib/live-activities/use-live-activities";
 import { useMaintenancePhase } from "@/lib/maintenance";
 import { MeProvider, useMeContext } from "@/lib/me-context";
 import { canEnterMobileApp, isMobileAccessDenied } from "@/lib/mobile-access";
-import { nativeStackScreenOptions, transparentDetailHeaderOptions } from "@/lib/navigation";
+import {
+  helpSheetOptions,
+  nativeStackScreenOptions,
+  transparentDetailHeaderOptions,
+} from "@/lib/navigation";
 import { setNfcShield } from "@/lib/nfc-reader";
 import {
   NOTIFICATION_ONBOARDING_PATH,
@@ -45,6 +50,7 @@ import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-e
 import { sideRegionForInsets, useSideRegion } from "@/lib/side-region";
 import { isOperator } from "@/lib/tabs";
 import { useUpgradeRequired } from "@/lib/upgrade-required";
+import { useHelperPreparationAccess } from "@/lib/use-helper-preparation-access";
 import { useLocalReminders } from "@/lib/use-local-reminders";
 import { useSideInsets } from "@/lib/vertical-bar-edge";
 import { warmWalletCache } from "@/lib/wallet-cache";
@@ -128,6 +134,10 @@ function RootLayoutSession() {
 function RootLayoutSessionContents() {
   const { me, authenticated, loading, error, offlineEntryAvailable, enterOffline } = useMeContext();
   const { mode } = useApiMode();
+  const helperAccess = useHelperPreparationAccess(
+    authenticated ? me?.id : undefined,
+    me?.hasEventAccess,
+  );
   const initialSessionPending = useInitialSessionPending(loading);
   const upgradeRequired = useUpgradeRequired();
   const maintenancePhase = useMaintenancePhase();
@@ -158,7 +168,7 @@ function RootLayoutSessionContents() {
       <LiveActivities authenticated={authenticated} />
       <WalletCacheWarmup authenticated={authenticated} />
       <NotificationListeners />
-      <MobileAccessGate authenticated={authenticated} />
+      <MobileAccessGate authenticated={authenticated} helperAccess={helperAccess} />
       <PersonalEventStream authenticated={authenticated} />
       <ProfileTasksPrompt authenticated={authenticated} sessionPending={initialSessionPending} />
       <NotificationOnboardingPrompt
@@ -170,6 +180,7 @@ function RootLayoutSessionContents() {
         <AppBackGesture>
           <RootLayoutNav
             authenticated={authenticated}
+            helperAccess={helperAccess}
             pending={initialSessionPending}
             me={me}
             loading={loading}
@@ -317,6 +328,7 @@ function NotificationListeners() {
   const navigationState = useRootNavigationState();
   const isReady = useRef(false);
   const pendingNavigation = useRef(false);
+  const pendingHelpRequest = useRef<number | null>(null);
   const navigationReady = Boolean(navigationState?.key);
   const queueRoute = isOperator(me?.capabilities ?? []) ? "/(tabs)/others/queue" : "/(tabs)/queue";
   const queueRouteRef = useRef<Href>(queueRoute);
@@ -325,6 +337,13 @@ function NotificationListeners() {
   queueRouteRef.current = queueRoute;
 
   useEffect(() => {
+    if (pendingHelpRequest.current && navigationReady) {
+      router.push({
+        pathname: "/(tabs)/help-desk/request/[id]",
+        params: { id: pendingHelpRequest.current },
+      });
+      pendingHelpRequest.current = null;
+    }
     if (pendingNavigation.current && navigationReady) {
       pendingNavigation.current = false;
       router.push(queueRouteRef.current);
@@ -333,10 +352,20 @@ function NotificationListeners() {
 
   useEffect(
     () =>
-      setupNotificationListeners(() => {
-        if (isReady.current) router.push(queueRouteRef.current);
-        else pendingNavigation.current = true;
-      }),
+      setupNotificationListeners(
+        () => {
+          if (isReady.current) router.push(queueRouteRef.current);
+          else pendingNavigation.current = true;
+        },
+        (requestId) => {
+          if (isReady.current)
+            router.push({
+              pathname: "/(tabs)/help-desk/request/[id]",
+              params: { id: requestId },
+            });
+          else pendingHelpRequest.current = requestId;
+        },
+      ),
     [router],
   );
 
@@ -449,7 +478,15 @@ function PendingCompanyTagResume({ authenticated }: { authenticated: boolean }) 
 }
 
 /** Signs ordinary applicants back out before they can enter event-day routes. */
-function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
+type HelperPreparationAccess = ReturnType<typeof useHelperPreparationAccess>;
+
+function MobileAccessGate({
+  authenticated,
+  helperAccess,
+}: {
+  authenticated: boolean;
+  helperAccess: HelperPreparationAccess;
+}) {
   const { me, loading } = useMeContext();
   const router = useRouter();
   useEffect(() => {
@@ -458,6 +495,9 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
       loading ||
       !me ||
       me.hasEventAccess ||
+      helperAccess.pending ||
+      helperAccess.eligible ||
+      helperAccess.error ||
       me.accountState === "removal_pending"
     )
       return;
@@ -467,13 +507,22 @@ function MobileAccessGate({ authenticated }: { authenticated: boolean }) {
         params: { accessDenied: "1" },
       });
     });
-  }, [authenticated, loading, me, router]);
+  }, [
+    authenticated,
+    loading,
+    me,
+    router,
+    helperAccess.pending,
+    helperAccess.eligible,
+    helperAccess.error,
+  ]);
 
   return null;
 }
 
 function RootLayoutNav({
   authenticated,
+  helperAccess,
   pending,
   me,
   loading,
@@ -482,6 +531,7 @@ function RootLayoutNav({
   enterOffline,
 }: {
   authenticated: boolean;
+  helperAccess: HelperPreparationAccess;
   pending: boolean;
   me: ReturnType<typeof useMeContext>["me"];
   loading: boolean;
@@ -549,7 +599,9 @@ function RootLayoutNav({
   // Access is part of the navigation guard, not just an asynchronous sign-out
   // side effect. This prevents an ineligible account from mounting any event
   // screen during the frame(s) before MobileAccessGate revokes its session.
-  if (isMobileAccessDenied(authenticated, me?.hasEventAccess)) {
+  if (isMobileAccessDenied(authenticated, me?.hasEventAccess) && !helperAccess.eligible) {
+    if (helperAccess.error)
+      return <RequestFeedback error={helperAccess.error} onRetry={helperAccess.retry} />;
     return <View style={{ backgroundColor: colors.background, flex: 1 }} />;
   }
 
@@ -622,6 +674,11 @@ function RootLayoutNav({
               presentation: networkingPresentation,
             }}
           />
+        </Stack.Protected>
+        <Stack.Protected guard={authenticated && (canEnterApp || helperAccess.eligible)}>
+          <Stack.Screen name="helper-profile" options={{ headerShown: true }} />
+          <Stack.Screen name="help-challenges" options={helpSheetOptions} />
+          <Stack.Screen name="help-topics" options={helpSheetOptions} />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
         <Stack.Screen name="s/[code]" options={{ headerShown: false }} />

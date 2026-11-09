@@ -28,6 +28,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   exports: "Application and operational data exports (H54, H56).",
   directory: "Opt-in public participant profiles and their shared details (#934).",
   diary: "The attendee's saved people and sponsor stands (#935).",
+  helpdesk: "Helper profiles, knowledge topics, help requests and coverage (H61–H67).",
   reports: "Attendee content reports and the organiser moderation inbox (H18).",
   certificates:
     "Attendance certificates, their policy, issue, revocation and verification (#1083).",
@@ -57,6 +58,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   )
     return "certificates";
   if (pathMatchesPrefix(url, "/api/me/diary")) return "diary";
+  if (pathMatchesPrefix(url, "/api/me/helper-profile")) return "helpdesk";
   if (pathMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";
   if (pathMatchesPrefix(url, "/api/me/projects")) return "projects";
   if (
@@ -140,6 +142,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (pathMatchesPrefix(url, "/api/enterprises")) return "enterprises";
   if (pathMatchesPrefix(url, "/api/sponsor-faq")) return "sponsors";
   if (pathMatchesPrefix(url, "/api/diary")) return "diary";
+  if (pathMatchesPrefix(url, "/api/helpdesk")) return "helpdesk";
   if (pathMatchesPrefix(url, "/api/event")) return "event";
   if (pathMatchesPrefix(url, "/api/exports")) return "exports";
   if (pathMatchesPrefix(url, "/api/directory")) return "directory";

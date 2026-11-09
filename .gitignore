@@ -1,6 +1,7 @@
 node_modules/
 dist/
 coverage/
+!apps/web/src/app/**/coverage/
 artifacts/
 *.log
 .env

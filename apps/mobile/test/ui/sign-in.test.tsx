@@ -114,7 +114,9 @@ describe("native sign-in UI contract", () => {
   });
 
   it("signs out and routes an authenticated account without mobile access to the modal", async () => {
-    mockApiFetch.mockResolvedValueOnce({ name: "HackUDC 2026" });
+    mockApiFetch
+      .mockResolvedValueOnce({ name: "HackUDC 2026" })
+      .mockResolvedValueOnce({ eligible: false });
     const user = userEvent.setup();
     await renderMobile(<SignInScreen />);
 
@@ -127,6 +129,19 @@ describe("native sign-in UI contract", () => {
       pathname: "/(auth)/sign-in",
       params: { accessDenied: "1" },
     });
+  });
+
+  it("opens accepted helper preparation without granting event access (H61)", async () => {
+    mockApiFetch
+      .mockResolvedValueOnce({ name: "HackUDC 2026" })
+      .mockResolvedValueOnce({ eligible: true });
+    const user = userEvent.setup();
+    await renderMobile(<SignInScreen />);
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.email), "mentor@example.com");
+    await user.type(screen.getByTestId(UI_TEST_IDS.auth.password), "secret");
+    await user.press(screen.getByTestId(UI_TEST_IDS.auth.submit));
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/helper-profile"));
+    expect(mockSignOut).not.toHaveBeenCalled();
   });
 
   it("keeps submit discoverable and reports missing credentials beside the fields", async () => {

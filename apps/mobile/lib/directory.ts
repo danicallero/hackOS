@@ -18,6 +18,7 @@ export interface DirectoryEntry {
   cvUrl: string | null;
   projects: { kind: "project"; id: number; name: string }[];
   challenges: { id: number; name: string }[];
+  helpTopics?: { id: number; name: string }[];
 }
 
 /** Absolute URL of an authenticated, root-relative API asset route. */

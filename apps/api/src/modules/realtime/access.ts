@@ -15,6 +15,7 @@ export const scopedRefreshTopic = z.enum([
   SSE_TOPICS.AUDIT,
   SSE_TOPICS.TV,
   SSE_TOPICS.DIRECTORY,
+  SSE_TOPICS.HELPDESK,
 ]);
 
 const logisticsRefreshCapabilities = [
@@ -25,6 +26,12 @@ const logisticsRefreshCapabilities = [
   CAPABILITIES.INTOLERANCES_MANAGE,
   CAPABILITIES.SCHEDULE_READ,
   CAPABILITIES.SCHEDULE_MANAGE,
+] as const;
+
+const helpdeskRefreshCapabilities = [
+  CAPABILITIES.HELPDESK_OFFER,
+  CAPABILITIES.HELPDESK_REQUEST,
+  CAPABILITIES.HELPDESK_COVERAGE,
 ] as const;
 
 export async function requireScopedRefreshAccess(
@@ -57,6 +64,17 @@ export async function requireScopedRefreshAccess(
       throw new ForbiddenError("Public profiles are only available to event attendees");
     }
     return;
+  }
+  if (topic === SSE_TOPICS.HELPDESK) {
+    // Payload-free; any help desk role may refresh its helper, inbox or
+    // coverage view (H61-H67). Accepted mentors without the capability yet
+    // refetch their own profile on focus instead.
+    for (const capability of helpdeskRefreshCapabilities) {
+      if (await userHasCapability(context, capability)) return;
+    }
+    throw new ForbiddenError("Missing help desk capability", {
+      capabilities: helpdeskRefreshCapabilities,
+    });
   }
   if (topic !== SSE_TOPICS.LOGISTICS) return;
   for (const capability of logisticsRefreshCapabilities) {

@@ -10,11 +10,15 @@ import { CvViewer } from "@/components/cv-viewer";
 import { DiaryNoteEditor } from "@/components/diary-note-editor";
 import { FavouriteStar } from "@/components/favourite-star";
 import { GlassView } from "@/components/glass-view";
+import { HelperCompany, HelperPresence } from "@/components/help-desk/rows";
 import {
   AndroidStatusBarScrim,
   EmptyState,
+  InfoRow,
   LegacyHeaderIconButton,
   Section,
+  Separator,
+  StatusPill,
 } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -31,6 +35,7 @@ import { ApiError, apiFetch } from "@/lib/api";
 import type { DiaryEntry } from "@/lib/diary";
 import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
+import { availabilityDays, type HelperDetail } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { safeBack } from "@/lib/navigation";
 import { reportContent } from "@/lib/reports";
@@ -38,9 +43,13 @@ import { isPadIdiom } from "@/lib/tabs";
 import { colors, radius, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
+const notFound = () => new ApiError("Person not found", 404, "not_found");
+const profileUserId = (value: DirectoryEntry | HelperDetail<DirectoryEntry>) =>
+  "profile" in value ? value.profile.userId : value.userId;
+
 type State =
   | { status: "loading" }
-  | { status: "ready"; person: DirectoryEntry }
+  | { status: "ready"; person: DirectoryEntry; helper: HelperDetail<DirectoryEntry> | null }
   | { status: "missing" }
   | { status: "error"; error: Error };
 
@@ -51,12 +60,16 @@ type State =
  * so both show the same unavailable state. The diary entry carries the
  * reader's favourite and note.
  */
-export function PersonProfileScreen() {
+export function PersonProfileScreen({
+  source = "diary",
+}: {
+  source?: "diary" | "helpDesk" | "requester";
+} = {}) {
   const avatarSize = isPadIdiom() ? 144 : 112;
   const { id } = useLocalSearchParams<{ id: string }>();
   const userId = Number(id);
   const router = useRouter();
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const readable = useParticipantLayout("list");
   const insets = useSafeAreaInsets();
   // iOS shows the transparent native header, whose height the automatic
@@ -66,6 +79,7 @@ export function PersonProfileScreen() {
     headerHeight: process.env.EXPO_OS === "ios" ? headerHeight : 0,
   });
   const [state, setState] = useState<State>({ status: "loading" });
+  const [loadError, setLoadError] = useState<Error | null>(null);
   const [entry, setEntry] = useState<DiaryEntry | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState<"star" | "remove" | "note" | null>(null);
@@ -85,30 +99,53 @@ export function PersonProfileScreen() {
       setState({ status: "missing" });
       return;
     }
+    // H63: a published helper opens the same profile, read through the help
+    // desk (publication is the consent), plus their schedule and presence.
     const [person, diary] = await Promise.allSettled([
-      apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
+      source === "helpDesk"
+        ? apiFetch<HelperDetail<DirectoryEntry>>(`/api/helpdesk/helpers/${userId}`)
+        : source === "requester"
+          ? // H64: the route id is the request; the API embeds the requester's public profile.
+            apiFetch<{ requesterProfile: DirectoryEntry | null }>(
+              `/api/helpdesk/requests/${userId}`,
+            ).then((request) => request.requesterProfile ?? Promise.reject(notFound()))
+          : apiFetch<DirectoryEntry>(`/api/directory/${userId}`),
       apiFetch<{ items: DiaryEntry[] }>("/api/me/diary"),
     ]);
     if (request !== requestId.current) return;
     if (diary.status === "fulfilled") {
+      const personId = person.status === "fulfilled" ? profileUserId(person.value) : userId;
       setEntry(
         diary.value.items.find(
-          (item) => item.kind === "person" && item.person?.userId === userId,
+          (item) => item.kind === "person" && item.person?.userId === personId,
         ) ?? null,
       );
     }
-    if (person.status === "fulfilled") setState({ status: "ready", person: person.value });
-    else if (person.reason instanceof ApiError && person.reason.status === 404) {
+    if (person.status === "fulfilled") {
+      setLoadError(null);
+      const value = person.value;
+      setState(
+        "profile" in value
+          ? { status: "ready", person: value.profile, helper: value }
+          : { status: "ready", person: value, helper: null },
+      );
+    } else if (
+      person.reason instanceof ApiError &&
+      (person.reason.status === 404 || person.reason.status === 403)
+    ) {
       setState({ status: "missing" });
     } else {
-      setState({
-        status: "error",
-        error: person.reason instanceof Error ? person.reason : new Error(String(person.reason)),
-      });
+      const error =
+        person.reason instanceof Error ? person.reason : new Error(String(person.reason));
+      setLoadError(error);
+      setState((current) => (current.status === "ready" ? current : { status: "error", error }));
     }
-  }, [userId]);
+  }, [userId, source]);
 
   useEffect(() => {
+    setState({ status: "loading" });
+    setEntry(null);
+    setLoadError(null);
     void load();
   }, [load]);
 
@@ -170,6 +207,7 @@ export function PersonProfileScreen() {
 
   const goBack = () => safeBack(router, "/");
   const person = state.status === "ready" ? state.person : null;
+  const helper = state.status === "ready" ? state.helper : null;
 
   return (
     <View ref={avatarCollapse.hostRef} onLayout={avatarCollapse.onHostLayout} style={{ flex: 1 }}>
@@ -241,6 +279,9 @@ export function PersonProfileScreen() {
           <AppRefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />
         }
       >
+        {loadError && state.status === "ready" ? (
+          <RequestFeedback error={loadError} onRetry={() => void load()} retrying={refreshing} />
+        ) : null}
         {state.status === "loading" ? (
           <RequestFeedback loading />
         ) : state.status === "error" ? (
@@ -250,6 +291,7 @@ export function PersonProfileScreen() {
         ) : (
           <>
             <ProfileCard
+              beforeKnowledge={helper ? <HelperCompany helper={helper} /> : undefined}
               data={person}
               onNameLayout={avatarCollapse.onNameLayout}
               avatar={
@@ -305,6 +347,29 @@ export function PersonProfileScreen() {
               }
             />
 
+            {helper ? (
+              <Section title={t("helpSchedule")} footer={t("helpScheduleNote")}>
+                {helper.ownChallengesOnly && helper.ownChallenges.length > 0 ? (
+                  <InfoRow
+                    label={t("helpOnlyMyChallenges")}
+                    value={helper.ownChallenges.map((challenge) => challenge.name).join(", ")}
+                  />
+                ) : null}
+                <View style={{ padding: 16 }}>
+                  <HelperPresence helper={helper} />
+                </View>
+                {availabilityDays(helper.availability, language).map((day) => (
+                  <View key={day.key}>
+                    <Separator inset={16} />
+                    <InfoRow
+                      label={day.label}
+                      value={day.ranges.map((range) => range.label).join(", ")}
+                    />
+                  </View>
+                ))}
+              </Section>
+            ) : null}
+
             {entry ? (
               <Section>
                 <PressableFeedback
@@ -330,7 +395,7 @@ export function PersonProfileScreen() {
               <PressableFeedback
                 feedback="row"
                 accessibilityRole="button"
-                onPress={() => reportContent({ userId }, t)}
+                onPress={() => reportContent({ userId: person.userId }, t)}
                 style={{
                   alignItems: "center",
                   minHeight: 50,
@@ -357,6 +422,22 @@ export function PersonProfileScreen() {
           size={avatarSize}
           variant="person"
         />
+      ) : null}
+      {helper?.visibleRoleName ? (
+        process.env.EXPO_OS === "ios" ? (
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.View hidesSharedBackground>
+              <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
+            </Stack.Toolbar.View>
+          </Stack.Toolbar>
+        ) : (
+          <View
+            pointerEvents="none"
+            style={{ position: "absolute", right: 16, top: insets.top + 8 }}
+          >
+            <StatusPill tone="accent">{helper.visibleRoleName}</StatusPill>
+          </View>
+        )
       ) : null}
     </View>
   );

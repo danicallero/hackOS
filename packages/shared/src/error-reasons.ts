@@ -51,6 +51,32 @@ export const ERROR_REASONS = {
   PROJECT_FROZEN: "project_frozen",
   /** 400: the event requires a linked GitHub repository to submit. */
   PROJECT_GITHUB_REQUIRED: "project_github_required",
+  /** 403: help desk actions need `helpdesk:offer` or an accepted helper application (H61). */
+  HELPER_NOT_ELIGIBLE: "helper_not_eligible",
+  /** 409: a helper profile needs at least one topic to be published (H61). */
+  HELPER_PROFILE_INCOMPLETE: "helper_profile_incomplete",
+  /** 409: the person or team already has an open or claimed help request (H64). */
+  HELP_REQUEST_ACTIVE: "help_request_active",
+  /** 409: another helper won the claim (H66). */
+  HELP_REQUEST_ALREADY_CLAIMED: "help_request_already_claimed",
+  /** 409: the help request is resolved or cancelled. */
+  HELP_REQUEST_CLOSED: "help_request_closed",
+  /** 409: helpers cannot claim their own or their team's request. */
+  HELP_REQUEST_NOT_CLAIMABLE: "help_request_not_claimable",
+  /** 409: only the claiming helper can release a request. */
+  HELP_REQUEST_NOT_CLAIMER: "help_request_not_claimer",
+  /** 409: resolve needs a claimed request. */
+  HELP_REQUEST_NOT_CLAIMED: "help_request_not_claimed",
+  /** 409: a topic rename collides with another topic; merge instead (H61). */
+  TOPIC_NAME_TAKEN: "topic_name_taken",
+  /** 400: "Other" is a request flag, not a catalogue topic (H61, H64). */
+  TOPIC_RESERVED: "topic_reserved",
+  /** 400: a referenced knowledge topic does not exist. */
+  TOPIC_UNKNOWN: "topic_unknown",
+  /** 400: stated availability intervals overlap (H62). */
+  AVAILABILITY_OVERLAP: "availability_overlap",
+  /** 400: an availability interval is empty or longer than 24 hours (H62). */
+  AVAILABILITY_INVALID: "availability_invalid",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

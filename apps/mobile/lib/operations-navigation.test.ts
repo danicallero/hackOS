@@ -86,4 +86,14 @@ describe("operations navigation", () => {
   ])("returns from %s to the Account root when its menu item is selected", (path) => {
     expect(resolveOperationsNavigationAction(path, OVERFLOW_TAB_ROUTE.account)).toBe("replace");
   });
+
+  it("treats the Help desk overflow route as its own pseudo-tab (H61-H67)", () => {
+    expect(operationsSectionFromPathname("/(tabs)/others/help-desk")).toBe("help-desk");
+    expect(resolveOperationsNavigationAction("/others/help-desk", "/(tabs)/others/help-desk")).toBe(
+      "noop",
+    );
+    expect(resolveOperationsNavigationAction("/others/diary", "/(tabs)/others/help-desk")).toBe(
+      "replace",
+    );
+  });
 });

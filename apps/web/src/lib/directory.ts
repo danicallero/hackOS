@@ -17,6 +17,7 @@ export interface SocialLink {
 
 /** `DirectoryEntry` from the API: everything someone who scanned the person may see. */
 export interface DirectoryEntry {
+  helpTopics?: { id: number; name: string }[];
   userId: number;
   displayName: string;
   /** Authenticated API path (see `apiAssetUrl`), never a public bucket URL. */

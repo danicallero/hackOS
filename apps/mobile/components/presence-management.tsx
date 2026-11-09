@@ -47,8 +47,9 @@ export type SignalKind = "in" | "out" | "activity";
 
 export interface PresenceSignal {
   id: number;
-  source: "door" | "activity";
-  kind: SignalKind;
+  source: "door" | "activity" | "help";
+  /** "help" is a help desk contact (H65), shown in the timeline but never edited here. */
+  kind: SignalKind | "help";
   occurredAt: string;
   activityId: number | null;
   activityName: string | null;
@@ -178,6 +179,7 @@ export function PresenceManagement({
   }
 
   function editSignal(signal: PresenceSignal) {
+    if (signal.kind === "help") return;
     setDraft({
       signal,
       kind: signal.kind,
@@ -188,6 +190,8 @@ export function PresenceManagement({
   }
 
   function confirmDelete(signal: PresenceSignal) {
+    if (signal.kind === "help" || signal.source === "help") return;
+    const target = signal as PresenceSignal & { source: "door" | "activity"; kind: SignalKind };
     alert(t("presenceDeleteSignal"), t("presenceDeleteConfirm"), [
       { text: t("cancel"), style: "cancel" },
       {
@@ -199,14 +203,14 @@ export function PresenceManagement({
             const scanId = await enqueueLocalScan(
               {
                 kind: "presence_signal_delete",
-                source: signal.source,
+                source: target.source,
                 logId: signal.id,
                 userId,
                 badgeId,
                 occurredAt: signal.occurredAt,
                 direction:
-                  signal.source === "door" && signal.kind !== "activity" ? signal.kind : undefined,
-                activityId: signal.source === "activity" ? signal.activityId : undefined,
+                  target.source === "door" && target.kind !== "activity" ? target.kind : undefined,
+                activityId: target.source === "activity" ? target.activityId : undefined,
                 notes: signal.notes,
               },
               ownerUserId,
@@ -365,7 +369,7 @@ export function PresenceManagement({
               {group.items.map(({ signal, window }) => (
                 <SignalCard
                   key={`${signal.source}-${signal.id}`}
-                  editable={canEdit}
+                  editable={canEdit && signal.kind !== "help"}
                   focused={focusSignal?.id === signal.id && focusSignal.source === signal.source}
                   onFocusedLayout={onFocusedSignalLayout}
                   signal={signal}
@@ -488,6 +492,7 @@ function iconForSignal(signal: PresenceSignal): {
   icon: Extract<SymbolViewProps["name"], string>;
   background: ViewStyle["backgroundColor"];
 } {
+  if (signal.kind === "help") return { icon: "lifepreserver", background: colors.accent };
   if (signal.kind === "activity") {
     return {
       icon: isMealActivityKind(signal.category) ? "fork.knife" : "figure.run",
@@ -579,11 +584,13 @@ function SignalCard({
   const { t } = useLocale();
   const cardRef = useRef<View>(null);
   const title =
-    signal.kind === "activity"
-      ? (signal.activityName ?? t("presenceSignalActivity"))
-      : signal.kind === "in"
-        ? t("presenceSignalEntry")
-        : t("presenceSignalExit");
+    signal.kind === "help"
+      ? t("helpDesk")
+      : signal.kind === "activity"
+        ? (signal.activityName ?? t("presenceSignalActivity"))
+        : signal.kind === "in"
+          ? t("presenceSignalEntry")
+          : t("presenceSignalExit");
   const { icon, background } = iconForSignal(signal);
   const recordedBy = signal.recordedBy
     ? [signal.recordedBy.name, signal.recordedBy.surname].filter(Boolean).join(" ")

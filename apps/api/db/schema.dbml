@@ -668,6 +668,90 @@ Table github_user_installations {
   }
 }
 
+Table help_request_recipients {
+  notified_at "timestamp with time zone" [not null, default: `now()`]
+  request_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (request_id, user_id) [pk]
+  }
+
+  Note: 'H65 routed audience: one row per notified helper, so retries never deliver twice.'
+}
+
+Table help_request_topics {
+  request_id integer [not null]
+  topic_id integer [not null]
+
+  indexes {
+  (request_id, topic_id) [pk]
+  }
+}
+
+Table help_requests {
+  cancelled_at "timestamp with time zone"
+  challenge_id integer
+  claimed_at "timestamp with time zone"
+  claimed_by integer
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  description text [not null]
+  id integer [pk, increment, not null]
+  location text [not null]
+  meeting_location text
+  meeting_mode text
+  other boolean [not null, default: `false`]
+  prefer_sponsor boolean [not null, default: `false`]
+  queued_at "timestamp with time zone" [not null, default: `now()`]
+  repo_id integer
+  requester_id integer
+  resolved_at "timestamp with time zone"
+  routing text [not null]
+  status text [not null, default: `'open'::text`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  Note: 'H64-H66 help requests (individual or team via repo_id) and their single claim.'
+}
+
+Table help_topics {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  id integer [pk, increment, not null]
+  name text [not null]
+  name_key text [unique, not null]
+  proposed_by integer
+
+  Note: 'H61 shared knowledge catalogue for helper profiles and help requests; Other is help_requests.other, not a row.'
+}
+
+Table helper_availability {
+  ends_at "timestamp with time zone" [not null]
+  id integer [pk, increment, not null]
+  starts_at "timestamp with time zone" [not null]
+  user_id integer [not null]
+
+  Note: 'H62 stated availability intervals; venue presence stays in time_logs (H24).'
+}
+
+Table helper_profiles {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  own_challenges_only boolean [not null, default: `false`]
+  published boolean [not null, default: `false`]
+  published_at "timestamp with time zone"
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [pk, not null]
+
+  Note: 'H61 explicit help desk publication. Identity and bio are projected from users/user_public_profiles, never copied.'
+}
+
+Table helper_topics {
+  topic_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, topic_id) [pk]
+  }
+}
+
 Table idempotency_keys {
   completed_at "timestamp with time zone"
   created_at "timestamp with time zone" [not null, default: `now()`]
@@ -1580,6 +1664,19 @@ Ref: github_pull_requests.repo_id > repos.id
 Ref: github_repo_links.linked_by > users.id
 Ref: github_repo_links.repo_id > repos.id
 Ref: github_user_installations.user_id > users.id
+Ref: help_request_recipients.request_id > help_requests.id
+Ref: help_request_recipients.user_id > users.id
+Ref: help_request_topics.request_id > help_requests.id
+Ref: help_request_topics.topic_id > help_topics.id
+Ref: help_requests.challenge_id > challenges.id
+Ref: help_requests.claimed_by > users.id
+Ref: help_requests.repo_id > repos.id
+Ref: help_requests.requester_id > users.id
+Ref: help_topics.proposed_by > users.id
+Ref: helper_availability.user_id > helper_profiles.user_id
+Ref: helper_profiles.user_id > users.id
+Ref: helper_topics.topic_id > help_topics.id
+Ref: helper_topics.user_id > helper_profiles.user_id
 Ref: judging_field_leases.judge_id > users.id
 Ref: judging_field_leases.queue_entry_id > queue_entries.id
 Ref: judging_session.judge_id > users.id

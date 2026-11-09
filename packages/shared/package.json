@@ -33,6 +33,7 @@
     "./account-removal": "./src/account-removal.ts",
     "./event-time-store": "./src/event-time-store.ts",
     "./forms": "./src/forms.ts",
+    "./help-desk": "./src/help-desk.ts",
     "./phone": "./src/phone.ts",
     "./idempotency": "./src/idempotency.ts",
     "./projects": "./src/projects.ts",

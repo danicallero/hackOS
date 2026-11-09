@@ -14,6 +14,7 @@ import { useApiMode } from "@/lib/api-mode";
 import { appVersionLabel } from "@/lib/app-version";
 import { signIn, signOut } from "@/lib/auth-client";
 import { EVENT_WEBSITE_DISPLAY, EVENT_WEBSITE_URL } from "@/lib/env";
+import type { MyHelperProfile } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useMeActions } from "@/lib/me-context";
 import {
@@ -148,6 +149,11 @@ export default function SignInScreen() {
         return;
       }
       if (!me.hasEventAccess && me.accountState !== "removal_pending") {
+        const helper = await apiFetch<MyHelperProfile>("/api/me/helper-profile");
+        if (helper.eligible) {
+          router.replace("/helper-profile");
+          return;
+        }
         await signOut();
         router.replace({ pathname: "/(auth)/sign-in", params: { accessDenied: "1" } });
         return;
