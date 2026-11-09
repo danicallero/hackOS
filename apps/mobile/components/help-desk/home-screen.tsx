@@ -154,7 +154,11 @@ export function HelpDeskScreen() {
               onClearFilters={() => setStatuses([])}
             />
           ) : null}
-          <RequestFeedback error={profile.error} onRetry={() => void profile.load()} />
+          {/* The list already reports a failed load: one banner, not one per request. */}
+          <RequestFeedback
+            error={list.error ? null : profile.error}
+            onRetry={() => void profile.load()}
+          />
         </>
       )}
     </HelpPage>
