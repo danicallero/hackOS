@@ -13,6 +13,7 @@ import {
 import { sharedCache } from "../../../lib/shared-cache.js";
 import { broadcast } from "../../../lib/sse.js";
 import {
+  announcementAuditSnapshot,
   createAnnouncement,
   deleteAnnouncement,
   fanOutIfVisibleNow,
@@ -216,7 +217,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           entityType: "announcement",
           entityId: created.id,
           action: "create",
-          after: created,
+          after: await announcementAuditSnapshot(client, created),
         });
         await fanOutIfVisibleNow(client, created);
         return created;
@@ -243,7 +244,10 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     async (req) => {
       const body = req.body;
       const announcement = await withTransaction(async (client) => {
-        const before = await getAnnouncement(client, req.params.id, req.userId as number);
+        const before = await announcementAuditSnapshot(
+          client,
+          await getAnnouncement(client, req.params.id, req.userId as number),
+        );
         const updated = await updateAnnouncement(
           client,
           req.params.id,
@@ -268,7 +272,7 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
           entityId: updated.id,
           action: "update",
           before,
-          after: updated,
+          after: await announcementAuditSnapshot(client, updated),
         });
         await fanOutIfVisibleNow(client, updated);
         return updated;
@@ -292,13 +296,17 @@ export function registerAnnouncementRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const deleted = await withTransaction(async (client) => {
+        const before = await announcementAuditSnapshot(
+          client,
+          await getAnnouncement(client, req.params.id, req.userId as number),
+        );
         const deleted = await deleteAnnouncement(client, req.params.id, req.userId as number);
         await audit(client, {
           actorId: req.userId as number,
           entityType: "announcement",
           entityId: deleted.id,
           action: "delete",
-          before: deleted,
+          before,
         });
         return deleted;
       });

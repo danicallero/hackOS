@@ -11,8 +11,8 @@ source of truth; this document describes the unified administrative trail.
 An entry identifies its action, affected entity, creation time, source and
 executor. `changed_fields` records the affected field names before minimization.
 Safe operational values (states, scores, flags, counts, timestamps and internal
-relationship IDs) can show before/after differences. Private text, personal
-identifiers, credentials, attachments and free-form content are replaced by a
+relationship IDs) can show before/after differences. Private subject text, personal
+identifiers, credentials and attachments are replaced by a
 private-value marker. No content hashes are retained. The same policy applies
 to single/batched writes and API reads of historical rows.
 
@@ -26,6 +26,16 @@ full object or a partial configuration update. Otherwise fields are computed
 from the original snapshots, ignoring object-key ordering and update timestamps.
 Producers with neither snapshots nor field metadata remain explicitly without
 change details: the UI must not invent what changed.
+
+Public event content uses an entity-specific allowlist: Wallet broadcasts,
+explicitly untargeted announcements, schedule descriptions/locations, challenge
+content, company/form/role names, catalogue labels and certificate templates are
+readable. Targeted or unknown-audience announcements, personal reviews/answers,
+stand-tag labels, internal notes and credentials remain minimized. Audience and content are captured under the same announcement row lock. Public content
+never exempts nested private/credential fields. A queued alert is labelled queued,
+not sent. Existing minimized Wallet alerts can recover their content from the
+immutable broadcast operation with the same ID; mutable current content is never
+substituted for a historical snapshot.
 
 ## Who acted
 
@@ -74,6 +84,7 @@ event per action and preserving the existing single history/broadcast invariant.
 `GET /api/audit` and `GET /api/audit/:id` require `AUDIT_READ`. Responses include
 minimized snapshots, changed fields, executor/initiator context and correlation.
 `requestId` filters related events; actor filters match executor or initiator.
+The desktop table constrains column widths and truncates long changed-field summaries with an ellipsis (the full list remains in the detail) so the subject, actor and source remain visible without horizontal scrolling.
 The UI localizes the current action/entity catalogue in English, Spanish and
 Galician, shows recursive object differences and changed fields separately from
 private values, and links supported subjects to their existing detail routes.

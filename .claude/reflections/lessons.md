@@ -619,7 +619,7 @@ visible; an accessible overflow menu contains only those that cannot fit. Test
 smaller permission sets and resizing, and check that export remains reachable. Review metadata must use the parent surface; do not add a
 contrasting sticky strip that covers the content being read.
 Check table geometry, useful field hierarchy, action order, pending feedback
-and panel widths. Recheck each route after a shared pattern changes.
+and panel widths. Populate table screenshots with long metadata and unbroken identifiers, then verify the final column remains inside the viewport at intermediate desktop widths; short fixtures can hide intrinsic-width overflow. Recheck each route after a shared pattern changes.
 
 ### Exceptions
 Fixed operational workspaces and intentionally compact forms keep their
@@ -1159,11 +1159,15 @@ Proposed retaining previous and final review text in the audit log.
 
 ### Lesson
 Traceability does not require duplicating private content into a second history.
+Classify content by domain and audience: a public event broadcast or catalogue
+label is not private review text just because both are strings.
 
 ### Action
 Record actor, subject, changed field names and timing. Limit before/after values
 to explicitly safe operational fields. Group autosaves within an editing session;
-do not persist note text, answers, or content hashes in audit payloads.
+do not persist private note text, answers, or content hashes in audit payloads.
+Keep explicitly public content readable, and retain safe operational flags while
+continuing to suppress their underlying personal values and credentials.
 
 ### Validation
 Assert that private sentinel text never appears in serialized audit rows and

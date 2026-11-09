@@ -46,7 +46,12 @@ export function diffAuditSnapshot(before: unknown, after: unknown): AuditDiffRow
 
   const beforeObj = isPlainObject(before) ? before : {};
   const afterObj = isPlainObject(after) ? after : {};
-  const metadata = new Set(["changed_fields", "edit_session_id", "last_edited_at"]);
+  const metadata = new Set([
+    "changed_fields",
+    "edit_session_id",
+    "last_edited_at",
+    "audit_audience",
+  ]);
   const keys = Array.from(new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]))
     .filter((key) => !metadata.has(key))
     .sort((left, right) => left.localeCompare(right));
@@ -69,7 +74,11 @@ export function diffAuditSnapshot(before: unknown, after: unknown): AuditDiffRow
         rows.push({ ...row, key: `${key}.${row.key}` });
       continue;
     }
-    if (isPlainObject(beforeObj[key]) && isPlainObject(afterObj[key])) {
+    if (
+      (isPlainObject(beforeObj[key]) || isPlainObject(afterObj[key])) &&
+      (beforeObj[key] == null || isPlainObject(beforeObj[key])) &&
+      (afterObj[key] == null || isPlainObject(afterObj[key]))
+    ) {
       for (const row of diffAuditSnapshot(beforeObj[key], afterObj[key]) ?? []) {
         rows.push({ ...row, key: `${key}.${row.key}` });
       }

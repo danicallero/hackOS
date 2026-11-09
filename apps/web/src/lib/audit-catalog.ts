@@ -14,7 +14,7 @@ export const AUDIT_ACTIONS = {
   add_challenge: "auditEventAddChallenge",
   challenge_add: "auditEventAddChallenge",
   "alert.send": "auditEventAlertSend",
-  alert_queued: "auditEventAlertSend",
+  alert_queued: "auditEventAlertQueued",
   anonymized: "auditEventAnonymized",
   artwork_reset: "auditEventArtworkReset",
   assign_enterprise: "auditEventAssignEnterprise",
