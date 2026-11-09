@@ -210,3 +210,19 @@ export function coverageDays(
   }
   return days;
 }
+
+/**
+ * H64: when the help desk accepts new requests. `windows` are the opening
+ * periods an admin set (continuous from start to end); none configured means
+ * always open (`configured: false`). Closed only disables creating requests:
+ * claims, resolution, browsing and helper settings keep working.
+ */
+export interface HelpdeskSchedule {
+  configured: boolean;
+  open: boolean;
+  windows: AvailabilityInterval[];
+  /** The next instant `open` flips, or null when it never will. */
+  nextChangeAt: string | null;
+  /** Prefill for a new window: the hacking window, else the event window, else null. */
+  suggestedInterval: AvailabilityInterval | null;
+}
