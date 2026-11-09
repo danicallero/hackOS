@@ -36,3 +36,22 @@ export async function typeInto(label: string, value: string) {
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
+
+/** Module mocks shared by the dialog suites: load them from `vi.mock` with `await import`. */
+export const apiMock = { api: { put: vi.fn() }, ApiError: class extends Error {} };
+export const i18nMock = {
+  useLocale: () => ({
+    language: "en",
+    t: (key: string, values?: Record<string, unknown>) =>
+      values ? `${key} ${JSON.stringify(values)}` : key,
+  }),
+};
+export const dateTimeInputMock = {
+  DateTimeInput: ({ onChange, ...props }: { onChange: (value: string) => void }) => (
+    <input {...props} onChange={(event) => onChange(event.target.value)} />
+  ),
+};
+
+/** Two stated intervals on one event day, for the editors' fixtures. */
+export const first = { startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T12:00:00.000Z" };
+export const second = { startsAt: "2027-02-27T14:00:00.000Z", endsAt: "2027-02-27T16:00:00.000Z" };

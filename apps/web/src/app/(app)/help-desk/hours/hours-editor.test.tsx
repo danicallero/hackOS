@@ -5,24 +5,15 @@ import { act, useState } from "react";
 import type { Root } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
-import { dialog, setupMountedRoot, typeInto } from "../dialog-test-utils";
+import { dialog, first, second, setupMountedRoot, typeInto } from "../dialog-test-utils";
 import { HoursEditor } from "./hours-editor";
 
-vi.mock("@/lib/api", () => ({ api: { put: vi.fn() }, ApiError: class extends Error {} }));
-vi.mock("@/lib/i18n", () => ({
-  useLocale: () => ({
-    language: "en",
-    t: (key: string, values?: Record<string, unknown>) =>
-      values ? `${key} ${JSON.stringify(values)}` : key,
-  }),
-}));
-vi.mock("@/components/common/datetime-input", () => ({
-  DateTimeInput: ({ onChange, ...props }: { onChange: (value: string) => void }) => (
-    <input {...props} onChange={(event) => onChange(event.target.value)} />
-  ),
-}));
-const first = { startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T12:00:00.000Z" };
-const second = { startsAt: "2027-02-27T14:00:00.000Z", endsAt: "2027-02-27T16:00:00.000Z" };
+vi.mock("@/lib/api", async () => (await import("../dialog-test-utils")).apiMock);
+vi.mock("@/lib/i18n", async () => (await import("../dialog-test-utils")).i18nMock);
+vi.mock(
+  "@/components/common/datetime-input",
+  async () => (await import("../dialog-test-utils")).dateTimeInputMock,
+);
 const base: HelpdeskSchedule = {
   configured: true,
   open: false,
