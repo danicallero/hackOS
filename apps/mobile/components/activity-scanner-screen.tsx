@@ -42,11 +42,13 @@ import { scanOutcomeHaptic } from "@/lib/scan-haptics";
 import {
   enqueueLocalScan,
   findPersonByBadge,
+  findPersonById,
   findPersonByTicket,
   getActivityState,
   listScannerActivities,
   listScannerPeople,
 } from "@/lib/scanner-db";
+import { pendingBadgeClaim } from "@/lib/scanner-model";
 import { scannerQueueHealth } from "@/lib/scanner-state";
 import { resolveActivityText, type ScannerActivity, type ScannerPerson } from "@/lib/scanner-types";
 import { fixedScrollHeaderOptions, screenTitleElement } from "@/lib/screen-header-options";
@@ -277,6 +279,7 @@ export function ActivityScannerScreen({
       allowRepeat: boolean,
       count: number,
       ticketToken?: string,
+      expectedUserId?: number,
     ) => {
       if (ownerUserId === undefined) return;
       setRegistering(true);
@@ -287,6 +290,7 @@ export function ActivityScannerScreen({
             kind: "activity",
             activityId,
             ...(ticketToken ? { ticketToken } : { badgeId }),
+            ...(expectedUserId ? { expectedUserId } : {}),
             allowRepeat,
             scannedAt: new Date().toISOString(),
           },
@@ -356,6 +360,22 @@ export function ActivityScannerScreen({
           : ticketPerson
             ? { person: ticketPerson, revoked: false }
             : await findPersonByBadge(badgeId);
+        // A badge given on this device whose accreditation has not synced yet is real for
+        // the operator; the API reconciles it on replay and rejects the scan if it was not.
+        let queuedOwner: ScannerPerson | null = null;
+        if (!found.person) {
+          const claim = pendingBadgeClaim(syncState.queue, badgeId);
+          if (claim) {
+            queuedOwner =
+              "userId" in claim
+                ? (syncState.serverSnapshot?.people.find((p) => p.userId === claim.userId) ??
+                  (await findPersonById(claim.userId)))
+                : (syncState.serverSnapshot?.people.find(
+                    (p) => p.ticketToken === claim.ticketToken,
+                  ) ?? (await findPersonByTicket(claim.ticketToken)));
+          }
+        }
+        if (queuedOwner) found.person = queuedOwner;
         if (!found.person) {
           setError(found.revoked ? t("scannerBadgeRevoked") : t("scannerBadgeUnknown"));
           setResult(null);
@@ -391,12 +411,12 @@ export function ActivityScannerScreen({
           });
           return;
         }
-        await store(found.person, badgeId, false, count, ticketToken);
+        await store(found.person, badgeId, false, count, ticketToken, queuedOwner?.userId);
       } finally {
         setRegistering(false);
       }
     },
-    [activityId, store, syncState.serverSnapshot, t],
+    [activityId, store, syncState.queue, syncState.serverSnapshot, t],
   );
 
   useEffect(() => {

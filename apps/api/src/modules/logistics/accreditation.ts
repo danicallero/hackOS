@@ -9,6 +9,7 @@ import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { assignAttendeeRole, hasEventAccess } from "../identity/role.js";
 import { lockRoleGraph } from "../identity/role-authority.js";
 import { broadcastForActiveUser } from "./active-broadcast.js";
+import { pinBadgeAssignmentTime } from "./badge.js";
 import { loadPersonCard } from "./cards.js";
 import { scannerCredentialDigest } from "./credential-tombstones.js";
 import { reconcileTicketAccess } from "./tickets.js";
@@ -117,7 +118,7 @@ async function hasTicket(userId: number): Promise<boolean> {
  */
 export async function checkIn(
   actorId: number,
-  input: { ticketToken: string; badgeId: string; method: CheckInMethod },
+  input: { ticketToken: string; badgeId: string; method: CheckInMethod; assignedAt?: Date },
 ) {
   await assertTicketNotRevoked(pool, input.ticketToken);
   const t = await pool.query(`SELECT user_id FROM tickets WHERE token = $1`, [input.ticketToken]);
@@ -126,6 +127,7 @@ export async function checkIn(
     userId: t.rows[0].user_id as number,
     badgeId: input.badgeId,
     method: input.method,
+    assignedAt: input.assignedAt,
   });
 }
 
@@ -171,6 +173,8 @@ export async function checkInUser(
     badgeId: string;
     method: CheckInMethod;
     attendeeRole?: "participant" | "mentor";
+    /** Offline accreditation: when the operator assigned the badge (H54, bounded). */
+    assignedAt?: Date;
   },
 ) {
   const result = await withTransaction(async (client) => {
@@ -236,6 +240,7 @@ export async function checkInUser(
       throw new ConflictError("Badge already assigned to another user", { badgeId: input.badgeId });
     }
 
+    await pinBadgeAssignmentTime(client, input.assignedAt, null);
     try {
       await client.query(`UPDATE users SET badge_id = $1 WHERE id = $2`, [
         input.badgeId,
@@ -321,7 +326,13 @@ export async function checkInUser(
  */
 export async function rotateBadge(
   actorId: number,
-  input: { userId?: number; currentBadgeId?: string; newBadgeId: string; reason: string },
+  input: {
+    userId?: number;
+    currentBadgeId?: string;
+    newBadgeId: string;
+    reason: string;
+    assignedAt?: Date;
+  },
 ) {
   let voidedPassIds: number[] = [];
   const result = await withTransaction(async (client) => {
@@ -337,7 +348,7 @@ export async function rotateBadge(
     }
 
     const u = await client.query(
-      `SELECT id, badge_id, badge_id_history
+      `SELECT id, badge_id, badge_id_history, badge_assigned_at
          FROM users
         WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
         FOR UPDATE`,
@@ -364,6 +375,7 @@ export async function rotateBadge(
       ? [...(user.badge_id_history ?? []), oldBadge]
       : (user.badge_id_history ?? []);
 
+    await pinBadgeAssignmentTime(client, input.assignedAt, user.badge_assigned_at as Date | null);
     try {
       await client.query(`UPDATE users SET badge_id = $1, badge_id_history = $2 WHERE id = $3`, [
         input.newBadgeId,

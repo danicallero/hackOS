@@ -2827,6 +2827,16 @@ build/drive/capture recipe and the local-port and
 
 ## Scanner state transitions
 
+**Badges accredited offline (H22, H25, H54).** A badge assigned on this device
+but not yet synced is real for the operator: the activity scanner resolves it
+from the queued accreditation or rotation (`pendingBadgeClaim`,
+`lib/scanner-model.ts`) and records the scan with `expectedUserId`. The
+accreditation replays first with its own `assignedAt` (the API bounds it: not in
+the future, not before the previous assignment, at most 72 h old) so the scan's
+timestamp is not "before the assignment". If the badge went to someone else the
+accreditation is refused (409) and the dependent scan is rejected too
+(`badge_owner_mismatch`) instead of crediting the real owner.
+
 A scan is inserted in SQLite before any network
 request: `pending -> acknowledged` only after a 2xx response (including an
 idempotency replay), or `pending -> failed` for an explicit 4xx business

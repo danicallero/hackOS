@@ -63,6 +63,7 @@
   "apiError_idempotency_payload_mismatch": "This request conflicts with an earlier one. Reload and try again.",
   "apiError_scan_timestamp_in_future": "The scan time is ahead of the server clock. Check the device date and time.",
   "apiError_badge_revoked": "This badge has been revoked.",
+  "apiError_badge_owner_mismatch": "This badge belongs to someone else.",
   "apiError_ticket_revoked": "This ticket has been revoked.",
   "apiError_badge_unknown": "Badge not recognized.",
   "apiError_badge_scan_before_assignment": "This scan predates the current badge assignment.",

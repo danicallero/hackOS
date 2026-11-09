@@ -385,6 +385,7 @@ export function PersonOperationsScreen({
           currentBadgeId: currentBadge,
           newBadgeId: nextBadge,
           reason: t("badgeReplacementReason"),
+          assignedAt: new Date().toISOString(),
         }
       : {
           kind: "accreditation_user",
@@ -392,6 +393,7 @@ export function PersonOperationsScreen({
           badgeId: nextBadge,
           method: "manual",
           attendeeRole,
+          assignedAt: new Date().toISOString(),
         };
     // H22/H23: close badge input before storage/network work to avoid duplicate assignment.
     setBadgeReaderVisible(false);
