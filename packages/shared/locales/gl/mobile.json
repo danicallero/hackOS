@@ -993,6 +993,6 @@
   "maintenanceFailedBody": "A restauración precisa dun administrador. A app continúa cando se resolva.",
   "mobileStatesScheduleTranslationsError": "Gardado, pero non as traducións. Edita a entrada para tentalo de novo.",
   "mobileSurfaceOpenSettings": "Abrir axustes",
-  "scannerOfflineScanning": "Escaneo sen conexión",
+  "scannerOfflineMode": "Modo sen conexión",
   "scannerReconnect": "Reconectar"
 }

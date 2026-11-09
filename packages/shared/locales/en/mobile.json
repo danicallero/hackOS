@@ -993,6 +993,6 @@
   "maintenanceFailedBody": "The restore needs an administrator. The app resumes once it is resolved.",
   "mobileStatesScheduleTranslationsError": "Saved, but the translations weren't. Edit the entry to try again.",
   "mobileSurfaceOpenSettings": "Open Settings",
-  "scannerOfflineScanning": "Offline scanning",
+  "scannerOfflineMode": "Offline mode",
   "scannerReconnect": "Reconnect"
 }
