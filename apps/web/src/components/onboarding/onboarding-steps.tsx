@@ -68,6 +68,30 @@ export const STEP_TITLES: Record<OnboardingStep, MessageKey> = {
   completion: "onboardingStepCompletion",
 };
 
+/** One line on what each step is for, shown on the intro page. */
+export const STEP_DESCRIPTIONS: Partial<Record<OnboardingStep, MessageKey>> = {
+  profile: "onboardingDescProfile",
+  dietary: "onboardingDescDietary",
+  networking: "onboardingDescNetworking",
+  mentor_profile: "onboardingDescMentor",
+  rsvp: "onboardingDescRsvp",
+  notifications: "onboardingDescNotifications",
+  share: "onboardingDescShare",
+};
+
+/** Steps whose answers live in My profile: say where to change them afterwards. */
+export function ChangeLaterNote({ tab }: { tab: string }) {
+  const { t } = useLocale();
+  return (
+    <p className="text-muted-foreground text-sm text-pretty">
+      {t("onboardingEditLater")}{" "}
+      <Link className="underline underline-offset-4" href={`/settings/profile?tab=${tab}`}>
+        {t("myProfile")}
+      </Link>
+    </p>
+  );
+}
+
 /** The public event feed: name, tagline and dates exactly as the organizer configured them. */
 export function useEventFacts(): PublicEvent | null {
   const [event, setEvent] = useState<PublicEvent | null>(null);
@@ -182,6 +206,7 @@ export function NetworkingStep({ decide }: StepProps) {
           onLater: () => decide("defer"),
         }}
       />
+      <ChangeLaterNote tab="public" />
     </div>
   );
 }
@@ -189,16 +214,19 @@ export function NetworkingStep({ decide }: StepProps) {
 export function MentorStep(props: StepProps) {
   const [dirty, setDirty] = useState(false);
   return (
-    <MentorProfileEditor
-      onSaved={() => props.decide("complete")}
-      onDirtyChange={setDirty}
-      actions={
-        <>
-          <StepAlternatives {...props} />
-          <ContinueWhenClean dirty={dirty} pending={props.pending} decide={props.decide} />
-        </>
-      }
-    />
+    <div className="space-y-6">
+      <MentorProfileEditor
+        onSaved={() => props.decide("complete")}
+        onDirtyChange={setDirty}
+        actions={
+          <>
+            <StepAlternatives {...props} />
+            <ContinueWhenClean dirty={dirty} pending={props.pending} decide={props.decide} />
+          </>
+        }
+      />
+      <ChangeLaterNote tab="mentoring" />
+    </div>
   );
 }
 

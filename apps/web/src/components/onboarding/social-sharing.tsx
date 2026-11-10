@@ -112,9 +112,10 @@ const STRIP_RATIO = 294 / 1125;
 type Copy = (typeof copyFragments)["es"];
 type CopyKey = keyof Copy;
 
+/** The name as configured; the year is added only when the name carries none (the edition year can differ from the event dates). */
 export function eventTitle(event: Pick<SocialSharingEvent, "name" | "year">): string {
   const year = String(event.year);
-  return event.name.includes(year) ? event.name : `${event.name} ${year}`;
+  return !year || /\b\d{4}\b/.test(event.name) ? event.name : `${event.name} ${year}`;
 }
 
 function fill(template: string, values: Record<string, string>): string {

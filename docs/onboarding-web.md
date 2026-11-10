@@ -5,6 +5,19 @@ status and rule (`GET /api/me/onboarding`, `resolveOnboarding` in
 `packages/shared/src/onboarding.ts`); the web renders one step at a time and
 persists each answer. Nothing here gates event access.
 
+## Entry
+
+- **After creating an account** (claim-account) the person lands on
+  `/verify-email?pending=1&next=/onboarding`: the verification link is sent on
+  arrival, with Resend and **Do it later**, which continues into the app where
+  the verification banner keeps asking. Verifying from the email lands on
+  `/onboarding`. A person whose address is already verified skips the page.
+- **Intro.** `/onboarding` without `?step=` opens "Let's finish setting up your
+  experience": only the steps still open, each with its title and a one-line
+  purpose, then Start (first open step) or Later (the app). When the organizer
+  wrote a welcome message the welcome step opens first instead. With nothing
+  open the route redirects to the app home.
+
 ## Journey
 
 `/onboarding` (`apps/web/src/app/(app)/onboarding/page.tsx` →
@@ -59,8 +72,12 @@ re-opens skipped steps for people who already answered.
 
 ## Look
 
-Text only. Progress is a row of numbered markers: a completed step is a green
-check, the current one is filled, and each is a button to revisit that step.
+Text only. Progress is a row of numbered markers for the steps that were still
+open when the journey was entered (finished ones are not listed again, and
+welcome/completion are not numbered): a step finished during the session is a
+green check, the current one is filled, and each is a button to revisit that
+step. "Step n of N" counts the same markers. The public-profile and mentor steps
+end with a pointer to where the answer can be changed later (My profile).
 `forPerson` (`lib/onboarding.ts`) trims the journey to what the person can act
 on: no profile step once identity fields are locked, no dietary step once the
 answer is locked, and no welcome step without an organizer message. The old
@@ -68,8 +85,10 @@ next-entry popups (dietary, meals, notifications) are gone; the journey and the
 completion list replace them. Confetti on the completion step is decorative
 (`aria-hidden`) and not rendered at all under reduced motion.
 
-My profile keeps everything reachable afterwards: Attendance (RSVP answers) in
-Personal details, and Mentor profile and Share in Public profile.
+My profile keeps everything reachable afterwards, in tabs: Personal details
+(with Attendance), Public profile, Mentoring (Mentor profile and Help desk, only
+for people who can offer help), Wallet (passes, certificates and the share
+image) and Account. `?tab=help-desk` still opens Mentoring.
 
 ## Tests
 

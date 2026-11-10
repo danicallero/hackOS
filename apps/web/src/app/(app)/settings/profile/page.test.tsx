@@ -124,6 +124,7 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(headings.map((h) => [h.textContent, h.className])).toEqual([
       ["wallet", "sr-only"],
       ["certificates", "type-section-title"],
+      ["onboardingStepShare", "type-section-title"],
     ]);
     for (const section of openPanel()[0].querySelectorAll("section[aria-labelledby]")) {
       const label = document.getElementById(section.getAttribute("aria-labelledby") ?? "");
@@ -154,16 +155,16 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(container.textContent).not.toContain("roles-body");
   });
 
-  it("puts an eligible helper's help desk settings inside the Public profile tab (H61)", async () => {
+  it("puts an eligible helper's help desk settings in the Mentoring tab (H61)", async () => {
     helper.eligible = true;
-    nav.search = "tab=public";
+    nav.search = "tab=mentoring";
     await render();
-    expect(tabs()).not.toContain("helpDeskTitle");
-    expect(openPanel()[0].textContent).toContain("public-body");
+    expect(tabs()).toContain("profileMentoringTitle");
     expect(openPanel()[0].textContent).toContain("helper-body");
+    expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
-  it("opens the Public profile tab for the old ?tab=help-desk link (H61)", async () => {
+  it("opens the Mentoring tab for the old ?tab=help-desk link (H61)", async () => {
     helper.eligible = true;
     nav.search = "tab=help-desk";
     await render();
@@ -174,11 +175,10 @@ describe("Profile tabs (H28, #1083)", () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     helper.eligible = true;
-    nav.search = "tab=public";
+    nav.search = "tab=mentoring";
     await render();
-    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "accountTitle"]);
+    expect(tabs()).toEqual(["personalDetails", "profileMentoringTitle", "accountTitle"]);
     expect(openPanel()[0].textContent).toContain("helper-body");
-    expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
   it("adds the RSVP section to Personal details only while the person has open RSVPs", async () => {
@@ -190,24 +190,23 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).not.toContain("rsvp-body");
   });
 
-  it("lets the person revisit the share card from the public profile tab", async () => {
+  it("lets the person revisit the share card from the Wallet tab", async () => {
+    nav.search = "tab=wallet";
     await render();
-    await openTab(1);
     expect(container.textContent).toContain("share-body");
   });
 
-  it("adds the mentor section to the public profile tab only for holders of the capability", async () => {
+  it("adds the Mentoring tab only for holders of the capability", async () => {
     session.me = { ...participant, capabilities: ["helpdesk:offer"] };
+    nav.search = "tab=mentoring";
     await render();
-    await openTab(1);
     expect(container.textContent).toContain("mentor-body");
     session.me = { ...participant, capabilities: ["*"] };
     await render();
-    await openTab(1);
     expect(container.textContent).toContain("mentor-body");
     session.me = participant;
     await render();
-    await openTab(1);
+    expect(tabs()).not.toContain("profileMentoringTitle");
     expect(container.textContent).not.toContain("mentor-body");
   });
 

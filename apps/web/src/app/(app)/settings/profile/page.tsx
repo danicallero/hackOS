@@ -12,10 +12,12 @@ import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor"
 import { PersonalDetails } from "@/components/profile/personal-details";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useRsvps } from "@/hooks/use-rsvps";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { initials } from "@/lib/initials";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
@@ -58,8 +60,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
-    // The help desk settings now live under the public profile (H61).
-    aliases: { "help-desk": "public" },
+    // The help desk settings live under Mentoring (H61).
+    aliases: { "help-desk": "mentoring" },
   });
   // A tab mounts when first opened and then stays mounted so a draft survives
   // switching; tabs never opened do not fetch their data (#1227).
@@ -114,6 +116,18 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   return (
     <PageLayout width="reading">
       <PageHeader title={t("myProfile")} />
+      <div className="flex min-w-0 items-center gap-3">
+        <Avatar className="size-12">
+          <AvatarImage src={me.image ?? undefined} alt="" />
+          <AvatarFallback>
+            {initials([me.name, me.surname].filter(Boolean).join(" "))}
+          </AvatarFallback>
+        </Avatar>
+        <div className="min-w-0">
+          <p className="truncate font-medium">{[me.name, me.surname].filter(Boolean).join(" ")}</p>
+          <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+        </div>
+      </div>
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar width="content">
           {tabs.map((item) => (

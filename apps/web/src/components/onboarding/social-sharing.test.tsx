@@ -118,6 +118,11 @@ describe("caption and share links", () => {
 
   it("does not repeat a year already in the name", () => {
     expect(eventTitle({ name: "HackUDC 2027", year: 2027 })).toBe("HackUDC 2027");
+    // The dates can fall in another year than the edition named in the title.
+    expect(eventTitle({ name: "HackUDC 2027 development", year: 2026 })).toBe(
+      "HackUDC 2027 development",
+    );
+    expect(eventTitle({ name: "HackUDC", year: 2027 })).toBe("HackUDC 2027");
   });
 
   it("encodes the caption in LinkedIn and X links without image or tracking parameters", () => {

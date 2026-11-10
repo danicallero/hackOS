@@ -14,11 +14,13 @@ import {
   NotificationsStep,
   ProfileStep,
   ShareStep,
+  STEP_DESCRIPTIONS,
   STEP_TITLES,
   type StepProps,
   WelcomeStep,
 } from "@/components/onboarding/onboarding-steps";
 import { RsvpStep } from "@/components/onboarding/rsvp-step";
+import { Button } from "@/components/ui/button";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { pickText, useLocale } from "@/lib/i18n";
@@ -54,6 +56,9 @@ export function OnboardingFlow() {
   const [error, setError] = useState<string | null>(null);
   const [local, setLocal] = useState<OnboardingStep | null>(null);
   const moved = useRef(false);
+  // Steps still open when the journey was entered: finished ones are not listed again.
+  const started = useRef<ReadonlySet<OnboardingStep> | null>(null);
+  const [intro, setIntro] = useState(() => params.get("step") === null);
 
   useEffect(() => {
     if (me) markOnboardingOffered(me.id);
@@ -62,6 +67,12 @@ export function OnboardingFlow() {
   const data = state.data && me ? forPerson(state.data, me) : null;
   const requested = local ?? params.get("step");
   const step = data ? currentStep(data, requested) : null;
+  if (data && started.current === null)
+    started.current = new Set(pendingSteps(data).map((item) => item.step));
+  const nothingOpen = data !== null && pendingSteps(data).length === 0 && !requested;
+  useEffect(() => {
+    if (nothingOpen) router.replace(APP_HOME_PATH);
+  }, [nothingOpen, router]);
 
   /** One writer for the step in the URL, guarded so an unchanged value never touches history (R003). */
   const show = useCallback(
@@ -107,7 +118,7 @@ export function OnboardingFlow() {
         onRetry={state.reload}
       />
     );
-  if (!data || !step) return data ? <Nothing /> : <Spinner className="size-6" />;
+  if (!data || !step || nothingOpen) return <Spinner className="size-6" />;
 
   const props: StepProps = {
     allowed: step.actions,
@@ -115,9 +126,24 @@ export function OnboardingFlow() {
     decide: (action) => void decide(step.step, action),
   };
   const numbered = data.steps.filter(
-    (item) => item.step !== "welcome" && item.step !== "completion",
+    (item) =>
+      item.step !== "welcome" &&
+      item.step !== "completion" &&
+      (started.current?.has(item.step) || item.step === step.step),
   );
   const position = numbered.findIndex((item) => item.step === step.step);
+  const first = pendingSteps(data).find((item) => item.step !== "completion");
+  if (intro && first && first.step !== "welcome" && step.step === first.step)
+    return (
+      <Intro
+        steps={numbered.filter((item) => item.status === "pending")}
+        onStart={() => {
+          setIntro(false);
+          show(first.step);
+        }}
+        onLater={() => router.push(APP_HOME_PATH)}
+      />
+    );
 
   return (
     <div className="space-y-6">
@@ -130,7 +156,7 @@ export function OnboardingFlow() {
         }
       />
       <ol className="flex flex-wrap gap-2" aria-label={t("onboardingProgress")}>
-        {data.steps.map((item, index) => {
+        {numbered.map((item, index) => {
           const done = item.status === "completed";
           const current = item.step === step.step;
           return (
@@ -211,7 +237,44 @@ function welcomeText(state: OnboardingState, language: Language): string {
   return message ? pickText({ es: "", gl: "", en: "", ...message }, language) : "";
 }
 
-function Nothing() {
+/** Entry page: what is left, before the first step. */
+function Intro({
+  steps,
+  onStart,
+  onLater,
+}: {
+  steps: { step: OnboardingStep }[];
+  onStart: () => void;
+  onLater: () => void;
+}) {
   const { t } = useLocale();
-  return <p className="text-muted-foreground">{t("onboardingNothingToDo")}</p>;
+  return (
+    <div className="space-y-6">
+      <PageHeader title={t("onboardingIntroTitle")} meta={t("onboardingIntroSub")} />
+      <ol className="divide-y divide-border/60 rounded-surface border">
+        {steps.map((item, index) => {
+          const description = STEP_DESCRIPTIONS[item.step];
+          return (
+            <li key={item.step} className="flex items-start gap-3 px-4 py-3">
+              <span className="text-muted-foreground w-5 shrink-0 text-sm tabular-nums">
+                {index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="font-medium">{t(STEP_TITLES[item.step])}</p>
+                {description && <p className="text-muted-foreground text-sm">{t(description)}</p>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onLater}>
+          {t("onboardingLater")}
+        </Button>
+        <Button type="button" onClick={onStart}>
+          {t("onboardingStart")}
+        </Button>
+      </div>
+    </div>
+  );
 }
