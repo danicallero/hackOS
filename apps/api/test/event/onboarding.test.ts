@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { attendanceKind } from "../../src/modules/identity/attendance.js";
-import { createResponse, sampleTemplate } from "../applications/fixtures.js";
+import { createApplication, createResponse, sampleTemplate } from "../applications/fixtures.js";
 import {
   assignRole,
   asUser,
@@ -279,6 +279,23 @@ describe("HackUDC 2027 onboarding", () => {
     expect(await attendanceKind(pool, sponsor)).toBe("participant");
     await pool.query("DELETE FROM user_roles WHERE user_id=$1", [unknown]);
     expect(await attendanceKind(pool, unknown)).toBeNull();
+  });
+
+  it("ignores a declined registration when classifying attendance", async () => {
+    await pool.query("INSERT INTO event_config (id) VALUES (1)");
+    const userId = await createUserWithCapabilities([]);
+    const applicationId = await createApplication();
+    const responseId = await createResponse(userId, applicationId, { status: "confirmed" });
+    await pool.query("UPDATE application_responses SET confirmed_at = now() WHERE id = $1", [
+      responseId,
+    ]);
+    await grantAttendeeRole(userId, "mentor");
+    expect(await attendanceKind(pool, userId)).toBe("participant");
+    // doDecline flips the status and keeps confirmed_at.
+    await pool.query("UPDATE application_responses SET status = 'declined' WHERE id = $1", [
+      responseId,
+    ]);
+    expect(await attendanceKind(pool, userId)).toBe("mentor");
   });
 
   it("withdraws networking visibility on decline and never makes consent required", async () => {

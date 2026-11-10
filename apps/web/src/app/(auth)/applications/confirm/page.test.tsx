@@ -75,7 +75,7 @@ describe("acceptance confirmation", () => {
     container.remove();
   });
 
-  it("keeps the holder signed in and opens the schedule", async () => {
+  it("keeps the holder signed in and opens the onboarding journey", async () => {
     await act(async () => root.render(<ConfirmSpotPage />));
     expect(state.signOut).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Ada Lovelace");
@@ -86,7 +86,7 @@ describe("acceptance confirmation", () => {
         .find((button) => button.textContent === "goToApp")
         ?.click();
     });
-    expect(state.push).toHaveBeenCalledWith("/schedule");
+    expect(state.push).toHaveBeenCalledWith("/onboarding");
     expect(state.signOut).not.toHaveBeenCalled();
   });
 

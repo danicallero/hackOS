@@ -9,13 +9,13 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { QrCode } from "@/components/common/qr-code";
 import { Spinner } from "@/components/common/spinner";
 import { WalletButtons } from "@/components/common/wallet-buttons";
-import { NetworkingOnboarding } from "@/components/profile/networking-onboarding";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEmailLinkToken } from "@/hooks/use-email-link-token";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { ONBOARDING_PATH } from "@/lib/onboarding";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import { isConfirmExpiredError, useTokenAction } from "../lib";
@@ -93,7 +93,7 @@ function ConfirmInner() {
     setNavigating(true);
     try {
       if (sessionStatus === "authenticated" && me?.id === result?.user_id) {
-        router.push("/schedule");
+        router.push(ONBOARDING_PATH);
         return;
       }
       if (sessionStatus === "authenticated") {
@@ -101,7 +101,7 @@ function ConfirmInner() {
         if (response.error) throw new Error(response.error.message);
         await refresh();
       }
-      router.push(withReturnPath("/login", "/schedule"));
+      router.push(withReturnPath("/login", ONBOARDING_PATH));
     } catch {
       setSessionError(true);
     } finally {
@@ -268,11 +268,7 @@ function ConfirmInner() {
       </CardContent>
     </Card>
   );
-  return sessionStatus === "authenticated" && me?.id === result?.user_id ? (
-    <NetworkingOnboarding embedded>{confirmation}</NetworkingOnboarding>
-  ) : (
-    confirmation
-  );
+  return confirmation;
 }
 
 export default function ConfirmSpotPage() {

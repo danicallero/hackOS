@@ -60,14 +60,14 @@ CREATE VIEW public.event_attendance_kinds AS
 SELECT u.id AS user_id, e.event_key,
   CASE
     WHEN EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id = ar.application_id
-      WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'participant'
+      WHERE ar.user_id = u.id AND ar.status = 'confirmed' AND a.attendance_kind = 'participant'
         AND a.event_key = e.event_key)
       OR EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
         JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
         WHERE ur.user_id = u.id AND ev.event_key = e.event_key AND r.name = 'Participant' AND r.deleted_at IS NULL)
       THEN 'participant'
     WHEN EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id = ar.application_id
-      WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'mentor'
+      WHERE ar.user_id = u.id AND ar.status = 'confirmed' AND a.attendance_kind = 'mentor'
         AND a.event_key = e.event_key)
       OR EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
         JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
@@ -75,7 +75,7 @@ SELECT u.id AS user_id, e.event_key,
       THEN 'mentor'
     WHEN EXISTS (SELECT 1 FROM public.sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
     WHEN EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id = ar.application_id
-      WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'staff'
+      WHERE ar.user_id = u.id AND ar.status = 'confirmed' AND a.attendance_kind = 'staff'
         AND a.event_key = e.event_key)
       OR EXISTS (SELECT 1 FROM public.user_event_access ea
         JOIN public.user_roles ur ON ur.user_id = ea.user_id
@@ -87,7 +87,7 @@ SELECT u.id AS user_id, e.event_key,
   END AS kind,
   CASE
     WHEN EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id = ar.application_id
-      WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'participant'
+      WHERE ar.user_id = u.id AND ar.status = 'confirmed' AND a.attendance_kind = 'participant'
         AND a.event_key = e.event_key) THEN 'confirmed_application'
     WHEN EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
       JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
@@ -101,7 +101,7 @@ WHERE EXISTS (SELECT 1 FROM public.user_event_access ea
   JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
   WHERE ea.user_id = u.id AND ev.event_key=e.event_key)
    OR EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id=ar.application_id
-      WHERE ar.user_id=u.id AND ar.confirmed_at IS NOT NULL AND a.event_key=e.event_key);
+      WHERE ar.user_id=u.id AND ar.status = 'confirmed' AND a.event_key=e.event_key);
 
 CREATE TABLE public.onboarding_step_states (
   user_id integer NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
