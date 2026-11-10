@@ -541,14 +541,14 @@ const STACK_LAYOUT = {
     host: 38,
   },
   story: {
-    top: 262,
-    bottom: 1600,
-    kicker: 44,
-    name: 112,
-    role: 46,
-    passMax: 640,
-    gull: 140,
-    host: 46,
+    top: 250,
+    bottom: 1730,
+    kicker: 36,
+    name: 88,
+    role: 38,
+    passMax: 900,
+    gull: 130,
+    host: 44,
   },
 } as const;
 
@@ -702,10 +702,7 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
     const textBottom = layout.top + textH;
     const bottom = layout.bottom - hostBlock;
     let w = Math.min(layout.passMax, width - margin * 2);
-    while (
-      w > 300 &&
-      bottom - w * (1165 / 838) * Math.cos(tilt) < textBottom + layout.gull * 0.25
-    ) {
+    while (w > 300 && bottom - w * (1165 / 838) * Math.cos(tilt) < textBottom + layout.gull * 0.9) {
       w -= 4;
     }
     ctx.save();
