@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { CateringRsvpSection } from "@/components/onboarding/catering-rsvp";
-import { StepAlternatives, type StepProps } from "@/components/onboarding/onboarding-steps";
+import {
+  StepAlternatives,
+  type StepProps,
+  useFormSubmit,
+} from "@/components/onboarding/onboarding-steps";
 import { Button } from "@/components/ui/button";
 import { useRsvps } from "@/hooks/use-rsvps";
 import { useLocale } from "@/lib/i18n";
@@ -20,6 +24,7 @@ export function RsvpStep(props: StepProps) {
   const { me } = useSessionContext();
   const rsvps = useRsvps(me?.id ?? null);
   const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
   if (!me) return null;
   // Continue only while there is nothing to save; with edits, Save completes the step.
   const actions = (
@@ -40,11 +45,13 @@ export function RsvpStep(props: StepProps) {
   if (rsvps.items?.length === 0)
     return <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div>;
   return (
-    <CateringRsvpSection
-      userId={me.id}
-      onSaved={() => props.decide("complete")}
-      onDirtyChange={setDirty}
-      actions={actions}
-    />
+    <div ref={root}>
+      <CateringRsvpSection
+        userId={me.id}
+        onSaved={() => props.decide("complete")}
+        onDirtyChange={setDirty}
+        actions={actions}
+      />
+    </div>
   );
 }

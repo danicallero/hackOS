@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
+  dirty: false,
   toastError: vi.fn(),
   role: "Participant" as string | null,
   locks: { profileLocked: false, dietaryLocked: false },
@@ -57,52 +58,67 @@ vi.mock("@/hooks/use-server-resource", () => ({
   },
 }));
 // Step bodies are exercised in their own tests; here each exposes the decision callbacks.
-vi.mock("@/components/onboarding/onboarding-steps", () => ({
-  STEP_TITLES: new Proxy({}, { get: (_t, name) => `title:${String(name)}` }),
-  STEP_DESCRIPTIONS: new Proxy({}, { get: (_t, name) => `desc:${String(name)}` }),
-  WelcomeStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
-    <button type="button" onClick={() => decide("complete")}>
-      welcome-start
-    </button>
-  ),
-  ProfileStep: ({
-    allowed,
-    decide,
-  }: {
-    allowed: string[];
-    decide: (a: OnboardingAction) => void;
-  }) => (
-    <div>
-      {allowed.includes("skip") && (
-        <button type="button" onClick={() => decide("skip")}>
-          skip
+vi.mock("@/components/onboarding/onboarding-steps", async () => {
+  const React = await import("react");
+  const LeaveContext = React.createContext<{ current: unknown } | null>(null);
+  return {
+    LeaveContext,
+    STEP_TITLES: new Proxy({}, { get: (_t, name) => `title:${String(name)}` }),
+    STEP_DESCRIPTIONS: new Proxy({}, { get: (_t, name) => `desc:${String(name)}` }),
+    WelcomeStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
+      <button type="button" onClick={() => decide("complete")}>
+        welcome-start
+      </button>
+    ),
+    ProfileStep: function ProfileStep({
+      allowed,
+      decide,
+    }: {
+      allowed: string[];
+      decide: (a: OnboardingAction) => void;
+    }) {
+      const leave = React.useContext(LeaveContext);
+      React.useEffect(() => {
+        if (!leave) return;
+        leave.current = { dirty: mocks.dirty, submit: () => decide("complete") };
+        return () => {
+          leave.current = null;
+        };
+      }, [leave, decide]);
+      return (
+        <div>
+          {allowed.includes("skip") && (
+            <button type="button" onClick={() => decide("skip")}>
+              skip
+            </button>
+          )}
+          {allowed.includes("defer") && (
+            <button type="button" onClick={() => decide("defer")}>
+              later
+            </button>
+          )}
+        </div>
+      );
+    },
+    NetworkingStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
+      <div>
+        <button type="button" onClick={() => decide("complete")}>
+          create
         </button>
-      )}
-      {allowed.includes("defer") && (
+        <button type="button" onClick={() => decide("decline")}>
+          decline
+        </button>
         <button type="button" onClick={() => decide("defer")}>
           later
         </button>
-      )}
-    </div>
-  ),
-  NetworkingStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
-    <div>
-      <button type="button" onClick={() => decide("complete")}>
-        create
-      </button>
-      <button type="button" onClick={() => decide("decline")}>
-        decline
-      </button>
-      <button type="button" onClick={() => decide("defer")}>
-        later
-      </button>
-    </div>
-  ),
-  MentorStep: () => <p>mentor-body</p>,
-  NotificationsStep: () => <p>notifications-body</p>,
-  ShareStep: () => <p>share-body</p>,
-  CompletionStep: () => <p>completion-body</p>,
-}));
+      </div>
+    ),
+    MentorStep: () => <p>mentor-body</p>,
+    NotificationsStep: () => <p>notifications-body</p>,
+    ShareStep: () => <p>share-body</p>,
+    CompletionStep: () => <p>completion-body</p>,
+  };
+});
 vi.mock("@/components/onboarding/rsvp-step", () => ({ RsvpStep: () => <p>rsvp-body</p> }));
 
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
@@ -155,6 +171,7 @@ const click = async (label: string) => {
 };
 
 beforeEach(() => {
+  mocks.dirty = false;
   for (const mock of Object.values(mocks)) if (typeof mock === "function") mock.mockReset();
   mocks.role = "Participant";
   mocks.locks = { profileLocked: false, dietaryLocked: false };
@@ -338,5 +355,35 @@ describe("OnboardingFlow", () => {
     mocks.read.mockResolvedValue(journey({ networking: step("networking", "completed") }));
     await mount();
     expect(container.textContent).toContain("completion-body");
+  });
+
+  it("saves a step's edits before moving to the marker the person chose", async () => {
+    window.history.replaceState(null, "", "/onboarding?step=profile");
+    mocks.read.mockResolvedValue(
+      journey({ profile: step("profile", "pending", ["complete", "skip"]) }),
+    );
+    mocks.dirty = true;
+    await mount();
+    const markers = [...container.querySelectorAll("ol button")];
+    // Markers: profile, networking, mentor_profile; head for the last one.
+    await act(async () => (markers[2] as HTMLButtonElement).click());
+    expect(mocks.decide).toHaveBeenCalledWith("profile", "complete", undefined);
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?step=mentor_profile", {
+      scroll: false,
+    });
+  });
+
+  it("moves straight to the marker when the step has no unsaved edits", async () => {
+    window.history.replaceState(null, "", "/onboarding?step=profile");
+    mocks.read.mockResolvedValue(
+      journey({ profile: step("profile", "pending", ["complete", "skip"]) }),
+    );
+    await mount();
+    const markers = [...container.querySelectorAll("ol button")];
+    await act(async () => (markers[2] as HTMLButtonElement).click());
+    expect(mocks.decide).not.toHaveBeenCalled();
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?step=mentor_profile", {
+      scroll: false,
+    });
   });
 });

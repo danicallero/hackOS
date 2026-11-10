@@ -59,6 +59,14 @@ persists each answer. Nothing here gates event access.
   skipped or declined keeps its answer: Skip, Later and Continue on it just move
   on without writing, so they never fail with a conflict. A failed save is a
   toast named after the step, and the step stays open.
+- **Leaving with edits.** Going to another step through the progress markers
+  never drops what was typed. A form step (details, food, mentor, attendance)
+  runs its own form: it validates, saves and completes the step, then continues
+  to the chosen marker; if it does not validate it stays with its errors. The
+  public-profile step saves a draft (the fields, still hidden and unanswered),
+  because consent is only ever the explicit Create. The mentor step also asks
+  when the mentor plans to be at the venue (the same intervals as the help desk,
+  saved as they are added).
 - **Networking consent** is only ever the explicit *create* answer, which saves
   the public profile with `directoryVisible: true`. *Decline* saves it hidden
   (disabling any earlier publication); *later* stores a deferral and touches

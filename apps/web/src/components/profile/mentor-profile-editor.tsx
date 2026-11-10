@@ -27,6 +27,7 @@ export function MentorProfileEditor({
   onDirtyChange,
   actions,
   submitLabel,
+  extra,
 }: {
   onSaved?: (profile: MentorProfile) => void;
   onDirtyChange?: (dirty: boolean) => void;
@@ -34,6 +35,8 @@ export function MentorProfileEditor({
   actions?: React.ReactNode;
   /** Guided flow: one always-enabled primary action instead of Save. */
   submitLabel?: string;
+  /** More to fill in before the actions (the onboarding step adds the venue plan). */
+  extra?: React.ReactNode;
 }) {
   const { t } = useLocale();
   const labelId = useId();
@@ -122,6 +125,7 @@ export function MentorProfileEditor({
           aria-labelledby={labelId}
         />
       </div>
+      {extra}
       {error && (
         <p role="alert" className="text-destructive text-sm">
           {error}

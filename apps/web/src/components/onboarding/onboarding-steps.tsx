@@ -2,7 +2,16 @@
 
 import type { OnboardingAction, OnboardingStep } from "@hackos/shared/onboarding";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  type MutableRefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { AvailabilityEditor } from "@/app/(app)/help-desk/availability-editor";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Spinner } from "@/components/common/spinner";
 import { Confetti } from "@/components/onboarding/confetti";
@@ -18,6 +27,7 @@ import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Button } from "@/components/ui/button";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
@@ -35,6 +45,32 @@ export interface StepProps {
   pending: boolean;
   /** Persist a decision for this step and move on. */
   decide: (action: OnboardingAction) => void;
+}
+
+/**
+ * What leaving a step through the progress markers needs from it: whether it holds
+ * unsaved edits, and how to save them. `draft` saves without answering the step
+ * (networking, where only the explicit Create is consent); otherwise `submit`
+ * runs the step's own form, so validation and the save are the form's.
+ */
+export interface LeaveHandle {
+  dirty: boolean;
+  submit?: () => void;
+  draft?: () => Promise<boolean>;
+}
+export const LeaveContext = createContext<MutableRefObject<LeaveHandle | null> | null>(null);
+
+/** Registers the step's unsaved-edit handle with the journey while it is shown. */
+export function useLeaveHandle(handle: LeaveHandle) {
+  const ref = useContext(LeaveContext);
+  const { dirty, submit, draft } = handle;
+  useEffect(() => {
+    if (!ref) return;
+    ref.current = { dirty, submit, draft };
+    return () => {
+      ref.current = null;
+    };
+  }, [ref, dirty, submit, draft]);
 }
 
 /** "Later" and "Skip" exactly as the server offers them; a required step shows neither Skip. */
@@ -173,27 +209,43 @@ function ContinueWhenClean({
   );
 }
 
+/** Submits the step's own form, so leaving with edits validates and saves them. */
+export function useFormSubmit(dirty: boolean) {
+  const root = useRef<HTMLDivElement>(null);
+  const submit = useCallback(() => root.current?.querySelector("form")?.requestSubmit(), []);
+  useLeaveHandle({ dirty, submit });
+  return root;
+}
+
 export function ProfileStep(props: StepProps & { part: "identity" | "dietary" }) {
   const { part, decide, pending } = props;
   const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
   return (
-    <PersonalDetails
-      part={part}
-      onDirtyChange={setDirty}
-      onSaved={() => decide("complete")}
-      actions={
-        <>
-          <StepAlternatives {...props} />
-          <ContinueWhenClean dirty={dirty} pending={pending} decide={decide} />
-        </>
-      }
-    />
+    <div ref={root}>
+      <PersonalDetails
+        part={part}
+        onDirtyChange={setDirty}
+        onSaved={() => decide("complete")}
+        actions={
+          <>
+            <StepAlternatives {...props} />
+            <ContinueWhenClean dirty={dirty} pending={pending} decide={decide} />
+          </>
+        }
+      />
+    </div>
   );
 }
 
 /** Create, decline and later are three distinct persisted answers; consent is only the explicit create. */
 export function NetworkingStep({ decide }: StepProps) {
   const { me } = useSessionContext();
+  // Leaving with edits keeps them as a draft; only the explicit Create is consent.
+  const [dirty, setDirty] = useState(false);
+  const saveDraft = useRef<(() => Promise<boolean>) | null>(null);
+  const draft = useCallback(async () => (await saveDraft.current?.()) ?? true, []);
+  useLeaveHandle({ dirty, draft });
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -201,9 +253,11 @@ export function NetworkingStep({ decide }: StepProps) {
         <p className="font-medium">{[me?.name, me?.surname].filter(Boolean).join(" ")}</p>
       </div>
       <PublicProfileCard
+        onDirtyChange={setDirty}
         onboarding={{
           onFinished: (choice) => decide(choice === "create" ? "complete" : "decline"),
           onLater: () => decide("defer"),
+          saveDraft,
         }}
       />
       <ChangeLaterNote tab="public" />
@@ -213,10 +267,18 @@ export function NetworkingStep({ decide }: StepProps) {
 
 export function MentorStep(props: StepProps) {
   const { t } = useLocale();
+  const own = useOwnHelperProfile();
+  const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
   return (
-    <div className="space-y-6">
+    <div ref={root} className="space-y-6">
       <MentorProfileEditor
+        onDirtyChange={setDirty}
         onSaved={() => props.decide("complete")}
+        // When the mentor plans to be at the venue; each change saves on its own (H62).
+        extra={
+          own.data?.eligible ? <AvailabilityEditor profile={own.data} onSaved={own.mutate} /> : null
+        }
         submitLabel={t("onboardingContinue")}
         actions={<StepAlternatives {...props} />}
       />

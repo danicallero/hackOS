@@ -9,6 +9,8 @@ import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
 import {
   CompletionStep,
+  LeaveContext,
+  type LeaveHandle,
   MentorStep,
   NetworkingStep,
   NotificationsStep,
@@ -59,6 +61,9 @@ export function OnboardingFlow() {
   const [busy, setBusy] = useState(false);
   const [local, setLocal] = useState<OnboardingStep | null>(null);
   const moved = useRef(false);
+  // The shown step's unsaved edits, and where the person was heading when they left it.
+  const leave = useRef<LeaveHandle | null>(null);
+  const heading = useRef<{ step: OnboardingStep; at: number } | null>(null);
   // Steps still open when the journey was entered: finished ones are not listed again.
   const started = useRef<ReadonlySet<OnboardingStep> | null>(null);
   const [intro, setIntro] = useState(() => params.get("step") === null);
@@ -115,7 +120,11 @@ export function OnboardingFlow() {
           after.find((item) => item.status === "pending") ??
           pendingSteps(fresh)[0] ??
           fresh.steps.find((item) => item.step === "completion");
-        if (from === "completion" || !next) router.push(leaveTo);
+        // Leaving through a marker saved the step first: continue to where they pointed.
+        const target = heading.current;
+        heading.current = null;
+        if (target && Date.now() - target.at < 10_000) show(target.step);
+        else if (from === "completion" || !next) router.push(leaveTo);
         else show(next.step);
       } catch (cause) {
         toast.error(apiErrorText(cause, t, t("onboardingCouldNotSave")), {
@@ -127,6 +136,22 @@ export function OnboardingFlow() {
     },
     [refresh, router, show, state, t, leaveTo],
   );
+
+  /**
+   * Progress markers: edits on the shown step are validated and saved first, never
+   * dropped. A form that does not validate keeps the person on the step with its
+   * own errors; a saved step then continues to the marker they chose.
+   */
+  async function goTo(target: OnboardingStep) {
+    const handle = leave.current;
+    if (!handle?.dirty || target === step?.step) return show(target);
+    if (handle.draft) {
+      if (await handle.draft()) show(target);
+      return;
+    }
+    heading.current = { step: target, at: Date.now() };
+    handle.submit?.();
+  }
 
   if (state.error)
     return (
@@ -172,7 +197,7 @@ export function OnboardingFlow() {
             <li key={item.step}>
               <button
                 type="button"
-                onClick={() => show(item.step)}
+                onClick={() => void goTo(item.step)}
                 aria-current={current ? "step" : undefined}
                 aria-label={`${t(STEP_TITLES[item.step])}${done ? ` · ${t("onboardingStatusDone")}` : ""}`}
                 className={cn(
@@ -189,18 +214,20 @@ export function OnboardingFlow() {
           );
         })}
       </ol>
-      <section aria-labelledby="onboarding-step">
-        <span id="onboarding-step" className="sr-only">
-          {t(STEP_TITLES[step.step])}
-        </span>
-        <StepBody
-          language={language}
-          step={step.step}
-          props={props}
-          state={data}
-          onOpenStep={show}
-        />
-      </section>
+      <LeaveContext.Provider value={leave}>
+        <section aria-labelledby="onboarding-step">
+          <span id="onboarding-step" className="sr-only">
+            {t(STEP_TITLES[step.step])}
+          </span>
+          <StepBody
+            language={language}
+            step={step.step}
+            props={props}
+            state={data}
+            onOpenStep={show}
+          />
+        </section>
+      </LeaveContext.Provider>
     </div>
   );
 }
