@@ -3,14 +3,25 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MentorProfile } from "@/lib/mentor-profile";
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), save: vi.fn(), get: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  read: vi.fn(),
+  save: vi.fn(),
+  get: vi.fn(),
+  putHelper: vi.fn(),
+  helper: null as unknown,
+}));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
 vi.mock("@/lib/mentor-profile", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/mentor-profile")>()),
   readMentorProfile: mocks.read,
   saveMentorProfile: mocks.save,
 }));
-vi.mock("@/lib/api", () => ({ api: { get: mocks.get } }));
+vi.mock("@/lib/api", () => ({ api: { get: mocks.get, put: mocks.putHelper } }));
+vi.mock("@/lib/session", () => ({ useSessionContext: () => ({ canAny: () => false }) }));
+vi.mock("@/hooks/use-own-helper-profile", () => ({
+  useOwnHelperProfile: () => ({ data: mocks.helper, loading: false, mutate: vi.fn() }),
+}));
+vi.mock("@/app/(app)/help-desk/shared", () => ({ TopicsPicker: () => <p>topics</p> }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn() } }));
 vi.mock("@/hooks/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: () => undefined }));
 vi.mock("@/hooks/use-server-resource", () => ({
@@ -69,7 +80,8 @@ class ResizeObserverStub {
 
 beforeEach(() => {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
-  for (const mock of Object.values(mocks)) mock.mockReset();
+  for (const mock of [mocks.read, mocks.save, mocks.get, mocks.putHelper]) mock.mockReset();
+  mocks.helper = null;
   mocks.get.mockResolvedValue({
     items: [
       { id: 1, name: "Design" },
@@ -125,5 +137,35 @@ describe("MentorProfileEditor", () => {
     expect(submit?.textContent).toContain("Continue");
     expect(submit?.disabled).toBe(false);
     expect(container.textContent).not.toContain("unsavedChanges");
+  });
+
+  it("publishes the mentor and help desk profiles with one switch", async () => {
+    mocks.read.mockResolvedValue(profile());
+    mocks.save.mockResolvedValue(profile({ published: true }));
+    mocks.helper = {
+      eligible: true,
+      published: false,
+      topics: [{ id: 5, name: "Rust" }],
+      challengeIds: [3],
+      challengeOptions: [],
+      preview: { userId: 7 },
+    };
+    mocks.putHelper.mockResolvedValue(mocks.helper);
+    await mount();
+    expect(container.querySelectorAll("button[role=switch]")).toHaveLength(1);
+    await act(async () =>
+      (container.querySelector("button[role=switch]") as HTMLButtonElement).click(),
+    );
+    await act(async () =>
+      container
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(mocks.save).toHaveBeenCalledWith(true, [1]);
+    expect(mocks.putHelper).toHaveBeenCalledWith("/api/me/helper-profile", {
+      published: true,
+      topicIds: [5],
+      challengeIds: [3],
+    });
   });
 });

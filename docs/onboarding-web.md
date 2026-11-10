@@ -76,6 +76,13 @@ persists each answer. Nothing here gates event access.
 
 ## Mentor profile
 
+One switch, **Appear as a mentor**, publishes both the mentor profile and, for
+someone who is also a helper, the help desk profile (H61): saving writes
+`/api/me/mentor-profile` and `/api/me/helper-profile` together. In My profile ›
+Mentoring the same form also holds the help desk's challenge alerts and
+knowledge, and the venue plan below it; the journey step asks only for the areas
+and the venue plan.
+
 `GET/PUT /api/me/mentor-profile` (see [`directory.md`](./directory.md)). The
 editor is the same component in onboarding and in My profile › Public profile
 (shown only to holders of `helpdesk:offer`); bio, headline, photo and links stay

@@ -8,7 +8,6 @@ import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { CateringRsvpSection } from "@/components/onboarding/catering-rsvp";
 import { ShareCard } from "@/components/onboarding/onboarding-steps";
-import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
 import { PersonalDetails } from "@/components/profile/personal-details";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
@@ -24,7 +23,7 @@ import { useUrlTab } from "@/lib/url-tab";
 import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
-import { HelperSection } from "./helper-section";
+import { MentoringSection } from "./mentoring-section";
 import { PasswordRow } from "./password-card";
 import { ProfileRoles } from "./profile-roles";
 import {
@@ -72,13 +71,11 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
     public: false,
     mentor: false,
     rsvp: false,
-    helpDesk: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
   const onMentorDirty = useDirtySetter(setDirty, "mentor");
   const onRsvpDirty = useDirtySetter(setDirty, "rsvp");
-  const setHelpDeskDirty = useDirtySetter(setDirty, "helpDesk");
 
   function body(id: ProfileSectionId) {
     switch (id) {
@@ -86,10 +83,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
         return me.hasEventAccess ? <PublicProfileCard onDirtyChange={onPublicDirty} /> : null;
-      case "helpDesk":
-        return <HelperSection onDirtyChange={setHelpDeskDirty} />;
       case "mentor":
-        return <MentorProfileEditor onDirtyChange={onMentorDirty} />;
+        return <MentoringSection onDirtyChange={onMentorDirty} />;
       case "share":
         return <ShareCard />;
       case "rsvp":

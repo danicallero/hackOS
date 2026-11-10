@@ -48,10 +48,7 @@ vi.mock("@/components/onboarding/catering-rsvp", () => ({
   CateringRsvpSection: () => <p>rsvp-body</p>,
 }));
 vi.mock("@/components/onboarding/onboarding-steps", () => ({ ShareCard: () => <p>share-body</p> }));
-vi.mock("@/components/profile/mentor-profile-editor", () => ({
-  MentorProfileEditor: () => <p>mentor-body</p>,
-}));
-vi.mock("./helper-section", () => ({ HelperSection: () => <p>helper-body</p> }));
+vi.mock("./mentoring-section", () => ({ MentoringSection: () => <p>mentor-body</p> }));
 vi.mock("@/hooks/use-own-helper-profile", () => ({
   useOwnHelperProfile: () => ({ data: { eligible: helper.eligible } }),
 }));
@@ -160,7 +157,7 @@ describe("Profile tabs (H28, #1083)", () => {
     nav.search = "tab=mentoring";
     await render();
     expect(tabs()).toContain("profileMentoringTitle");
-    expect(openPanel()[0].textContent).toContain("helper-body");
+    expect(openPanel()[0].textContent).toContain("mentor-body");
     expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
@@ -168,17 +165,17 @@ describe("Profile tabs (H28, #1083)", () => {
     helper.eligible = true;
     nav.search = "tab=help-desk";
     await render();
-    expect(openPanel()[0].textContent).toContain("helper-body");
+    expect(openPanel()[0].textContent).toContain("mentor-body");
   });
 
-  it("lets an accepted mentor without event access prepare the help desk section (H61)", async () => {
+  it("lets an accepted mentor without event access prepare their mentoring (H61)", async () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     helper.eligible = true;
     nav.search = "tab=mentoring";
     await render();
     expect(tabs()).toEqual(["personalDetails", "profileMentoringTitle", "accountTitle"]);
-    expect(openPanel()[0].textContent).toContain("helper-body");
+    expect(openPanel()[0].textContent).toContain("mentor-body");
   });
 
   it("adds the RSVP section to Personal details only while the person has open RSVPs", async () => {
