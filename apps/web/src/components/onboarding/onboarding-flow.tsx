@@ -20,7 +20,7 @@ import {
 import { RsvpStep } from "@/components/onboarding/rsvp-step";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
-import { type MessageKey, pickText, useLocale } from "@/lib/i18n";
+import { pickText, useLocale } from "@/lib/i18n";
 import {
   APP_HOME_PATH,
   currentStep,
