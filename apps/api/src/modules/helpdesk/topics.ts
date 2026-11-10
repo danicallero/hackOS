@@ -166,6 +166,60 @@ export async function mergeTopic(
   });
 }
 
+export interface ManagedTopic extends HelpTopic {
+  helpers: number;
+  requests: number;
+}
+
+/** The whole catalogue with how much each topic is used, for its manager (H61). */
+export async function listManagedTopics(): Promise<ManagedTopic[]> {
+  const { rows } = await pool.query<{
+    id: number;
+    name: string;
+    helpers: number;
+    requests: number;
+  }>(
+    `SELECT t.id, t.name,
+            (SELECT count(*)::int FROM helper_topics ht WHERE ht.topic_id = t.id) AS helpers,
+            (SELECT count(*)::int FROM help_request_topics rt WHERE rt.topic_id = t.id) AS requests
+       FROM help_topics t
+      ORDER BY lower(t.name), t.id`,
+  );
+  return rows.map((row) => ({
+    ...toTopic(row),
+    helpers: Number(row.helpers),
+    requests: Number(row.requests),
+  }));
+}
+
+/** Removes a topic nobody uses; one in use is merged into another instead. */
+export async function deleteTopic(actorId: number, id: number): Promise<void> {
+  await withTransaction(async (client) => {
+    const { rows } = await client.query<{ id: number; name: string }>(
+      "SELECT id, name FROM help_topics WHERE id = $1 FOR UPDATE",
+      [id],
+    );
+    if (!rows[0]) throw new NotFoundError("Topic not found");
+    const { rows: used } = await client.query(
+      `SELECT 1 FROM helper_topics WHERE topic_id = $1
+       UNION ALL SELECT 1 FROM help_request_topics WHERE topic_id = $1 LIMIT 1`,
+      [id],
+    );
+    if (used[0])
+      throw new ConflictError("This topic is in use; merge it into another instead", {
+        code: ERROR_REASONS.TOPIC_IN_USE,
+      });
+    await client.query("DELETE FROM help_topics WHERE id = $1", [id]);
+    await audit(client, {
+      actorId,
+      entityType: "help_topic",
+      entityId: id,
+      action: "deleted",
+      before: { name: rows[0].name },
+    });
+  });
+}
+
 export async function assertTopicsExist(db: Queryable, topicIds: number[]): Promise<void> {
   if (topicIds.length === 0) return;
   const { rows } = await db.query<{ n: number }>(

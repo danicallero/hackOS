@@ -24,7 +24,7 @@ let keySeq = 0;
 const key = () => `hd-${++keySeq}-${crypto.randomUUID()}`;
 
 function call(
-  method: "GET" | "POST" | "PUT" | "PATCH",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   url: string,
   as: number,
   payload?: unknown,
@@ -1691,5 +1691,36 @@ describe("user management edits a person's helper profile", () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+});
+
+describe("knowledge catalogue management (H61)", () => {
+  it("lists usage, renames, merges and deletes only unused topics", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.HELPDESK_MANAGE]);
+    const helperUser = await createUserWithCapabilities(helperCaps);
+    const used = await topic("Rust");
+    const dup = await topic("rust lang");
+    const spare = await topic("Obsolete");
+    await call("PUT", "/api/me/helper-profile", helperUser, { published: false, topicIds: [dup] });
+
+    const list = await call("GET", "/api/helpdesk/topics/manage", manager);
+    expect(list.statusCode).toBe(200);
+    const byId = new Map(
+      list.json().topics.map((t: { id: number; helpers: number }) => [t.id, t.helpers]),
+    );
+    expect(byId.get(dup)).toBe(1);
+    expect(byId.get(spare)).toBe(0);
+
+    expect((await call("DELETE", `/api/helpdesk/topics/${dup}`, manager)).statusCode).toBe(409);
+    expect((await call("DELETE", `/api/helpdesk/topics/${spare}`, manager)).statusCode).toBe(204);
+    const merge = await call("POST", `/api/helpdesk/topics/${dup}/merge`, manager, {
+      targetId: used,
+    });
+    expect(merge.statusCode).toBe(200);
+    const after = await call("GET", "/api/helpdesk/topics/manage", manager);
+    expect(after.json().topics.find((t: { id: number }) => t.id === used).helpers).toBe(1);
+
+    const plain = await createUserWithCapabilities(helperCaps);
+    expect((await call("GET", "/api/helpdesk/topics/manage", plain)).statusCode).toBe(403);
   });
 });

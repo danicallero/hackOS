@@ -14,7 +14,7 @@ Migration: `0901_help_desk.sql` includes the complete unmerged PR schema, challe
 | `helpdesk:offer` | Mentor, Sponsor, Organizer, Day Staff, Event Director | Own helper profile and availability, helper inbox, claim/release/resolve |
 | `helpdesk:request` | Participant, Event Director | Browse helpers, open/cancel/resolve own and team requests |
 | `helpdesk:coverage` | Organizer, Event Director | Coverage view (H67) |
-| `helpdesk:manage` | Event Director | Rename and merge catalogue topics; set the opening hours (H64) |
+| `helpdesk:manage` | Event Director | Rename, merge and delete unused catalogue topics (Libraries › Knowledge areas); set the opening hours (H64) |
 
 **Eligibility.** A helper is eligible while they hold `helpdesk:offer`, or
 have an accepted or confirmed application response to a form whose granted
@@ -201,3 +201,18 @@ person from requests: their individual requests lose description and
 location and are cancelled if active; team requests keep their text for the
 team but lose the requester; a claim they held returns to `open`. The data
 export includes `helperProfile` and the requests they opened.
+
+## Knowledge areas and staff edits
+
+The catalogue is also a mentor's list of areas (`GET /api/me/mentor-profile`
+reads the same topics). `GET /api/helpdesk/topics/manage` (`helpdesk:manage`)
+lists every topic with `helpers` and `requests` counts for the manager in
+Libraries › Knowledge areas; `DELETE /api/helpdesk/topics/:id` removes a topic
+nobody uses (409 `topic_in_use` otherwise: merge it).
+
+User management edits a person's helper profile with
+`GET/PUT /api/users/:id/helper-profile` and
+`PUT /api/users/:id/helper-profile/availability` (`users:read`/`users:write`),
+audited with source `admin`. Staff can change topics, challenge alerts and
+availability and can unpublish, but never publish: that is the person's own
+consent (403 `helper_publish_own_consent`).

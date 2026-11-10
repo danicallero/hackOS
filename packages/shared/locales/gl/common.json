@@ -121,5 +121,6 @@
   "apiError_availability_invalid": "Cada intervalo debe rematar despois de comezar e durar como máximo 24 horas.",
   "apiError_availability_before_window": "A dispoñibilidade non pode comezar antes do tempo de hacking.",
   "apiError_schedule_audience_role_invalid": "Escolle roles marcados como visibles publicamente.",
-  "apiError_helper_publish_own_consent": "Só a propia persoa pode publicar o seu perfil do help desk."
+  "apiError_helper_publish_own_consent": "Só a propia persoa pode publicar o seu perfil do help desk.",
+  "apiError_topic_in_use": "Esta área de coñecemento está en uso. Fusióna con outra."
 }

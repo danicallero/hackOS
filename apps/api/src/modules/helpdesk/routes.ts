@@ -57,7 +57,14 @@ import {
   topicQuery,
   userParams,
 } from "./schemas.js";
-import { createTopic, mergeTopic, renameTopic, searchTopics } from "./topics.js";
+import {
+  createTopic,
+  deleteTopic,
+  listManagedTopics,
+  mergeTopic,
+  renameTopic,
+  searchTopics,
+} from "./topics.js";
 
 const BROWSE = HELPDESK_BROWSE;
 
@@ -141,6 +148,36 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
       const result = await createTopic(req.userId as number, req.body.name);
       req.domainUnchanged = !result.created;
       return reply.code(result.created ? 201 : 200).send(result);
+    },
+  );
+  r.get(
+    "/api/helpdesk/topics/manage",
+    {
+      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      preHandler: requireCapability(CAPABILITIES.HELPDESK_MANAGE),
+      schema: {
+        summary: "List the knowledge catalogue with its usage",
+        description:
+          "Every help desk topic with `helpers` (profiles that list it) and `requests` (requests about it), for the knowledge areas manager in Libraries (H61). Requires `helpdesk:manage`.",
+      },
+    },
+    async () => ({ topics: await listManagedTopics() }),
+  );
+  r.delete(
+    "/api/helpdesk/topics/:id",
+    {
+      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
+      schema: {
+        params: idParams,
+        summary: "Delete an unused help desk topic",
+        description:
+          "Deletes a topic that no helper profile and no request uses (H61); one in use answers 409 `topic_in_use`: merge it into another topic instead. Audited.",
+      },
+    },
+    async (req, reply) => {
+      await deleteTopic(req.userId as number, req.params.id);
+      return reply.code(204).send();
     },
   );
   r.patch(
