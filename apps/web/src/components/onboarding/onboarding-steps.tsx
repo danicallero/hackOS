@@ -106,22 +106,13 @@ export function WelcomeStep({
   const event = useEventFacts();
   const dates = eventDateRange(event, language);
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-6">
-        <div className="min-w-0 space-y-3">
-          {/* biome-ignore lint/performance/noImgElement: static brand wordmark. */}
-          <img
-            src="/onboarding/hackudc-wordmark.png"
-            alt={event?.name ?? ""}
-            className="h-10 w-auto max-w-full sm:h-12"
-          />
-          {event?.tagline && <p className="text-lg text-pretty">{event.tagline}</p>}
-          {dates && <p className="text-muted-foreground">{dates}</p>}
-          {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
-        </div>
-        {/* biome-ignore lint/performance/noImgElement: decorative brand art. */}
-        <img src="/onboarding/gaviota-flight.png" alt="" className="h-32 w-auto" />
+    <div className="space-y-6">
+      <div className="space-y-1">
+        {event?.name && <p className="type-section-title">{event.name}</p>}
+        {event?.tagline && <p className="text-pretty">{event.tagline}</p>}
+        {dates && <p className="text-muted-foreground">{dates}</p>}
       </div>
+      {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <StepAlternatives
           allowed={allowed.filter((a) => a === "skip")}
@@ -304,6 +295,7 @@ export function ShareStep({ decide }: StepProps) {
           photoUrl: me.image,
         }}
         onContinue={() => decide("complete")}
+        onSkip={() => decide("skip")}
       />
     </div>
   );

@@ -497,6 +497,19 @@ describe("<SocialSharing />", () => {
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
+  it("reports Skip through onSkip when given, and Continue through onContinue after acting", async () => {
+    const onContinue = vi.fn();
+    const onSkip = vi.fn();
+    await mount({ onContinue, onSkip });
+    await act(async () => button(/Omitir/)?.click());
+    expect(onSkip).toHaveBeenCalledTimes(1);
+    expect(onContinue).not.toHaveBeenCalled();
+    await act(async () => button(/Descargar imagen/)?.click());
+    await act(async () => button(/Continuar/)?.click());
+    expect(onContinue).toHaveBeenCalledTimes(1);
+    expect(onSkip).toHaveBeenCalledTimes(1);
+  });
+
   it("omits the footer action when there is no onContinue", async () => {
     await mount();
     expect(button(/Omitir|Continuar/)).toBeUndefined();

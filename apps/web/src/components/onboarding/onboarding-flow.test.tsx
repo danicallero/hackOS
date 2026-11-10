@@ -164,8 +164,9 @@ describe("OnboardingFlow", () => {
   it("resumes at the first pending step and marks it as the current one", async () => {
     await mount();
     expect(container.querySelector("h1")?.textContent).toBe("title:networking");
-    const current = container.querySelector('[aria-current="step"]');
-    expect(current?.textContent).toContain("title:networking");
+    const progress = container.querySelector('[role="progressbar"]');
+    expect(progress?.getAttribute("aria-valuetext")).toBe("title:networking");
+    expect(progress?.children.length).toBe(5);
     expect(container.textContent).toContain("create");
   });
 

@@ -12,7 +12,7 @@ persists each answer. Nothing here gates event access.
 
 | Step | Content | Persisted answers |
 |---|---|---|
-| `welcome` | Event name, tagline and dates from `/api/public/event` (verified configuration only; nothing is hardcoded); the organizer's welcome text when the API serves it | complete, skip |
+| `welcome` | Event name, tagline and dates from `/api/public/event` (verified configuration only; nothing is hardcoded); the organizer's welcome text (`welcomeMessage` in `GET /api/me/onboarding`) | complete, skip |
 | `profile` | Account photo and identity fields (`PersonalDetails part="identity"`) | complete, defer (skip when optional) |
 | `dietary` | The dietary answer (`PersonalDetails part="dietary"`) | same |
 | `networking` | The public-profile card: **create** (explicit opt-in), **decline**, **later** | complete / decline / defer, three distinct rows |
@@ -57,11 +57,12 @@ welcome message in es/gl/en. A required step is always enabled and networking is
 never required. Changing enabled/required/kinds raises the revision, which
 re-opens skipped steps for people who already answered.
 
-## Brand and motion
+## Look
 
-Static brand art lives in `apps/web/public/onboarding/` (from the event's
-Desktop/hack27 assets). Confetti is decorative (`aria-hidden`) and is not
-rendered at all under reduced motion.
+Text only: the welcome step shows the event name, tagline, configured dates and
+the organizer's message, with no imagery. A thin segmented progress bar
+(`role="progressbar"`) marks the current step. Confetti on the completion step is
+decorative (`aria-hidden`) and is not rendered at all under reduced motion.
 
 ## Tests
 

@@ -35,14 +35,6 @@ import { useSessionContext } from "@/lib/session";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const STATUS_LABELS: Record<OnboardingState["steps"][number]["status"], MessageKey> = {
-  pending: "onboardingStatusPending",
-  completed: "onboardingStatusCompleted",
-  skipped: "onboardingStatusSkipped",
-  deferred: "onboardingStatusDeferred",
-  declined: "onboardingStatusDeclined",
-};
-
 /**
  * The resumable onboarding journey. The server resolves every step's status and
  * allowed decisions; this renders one step at a time, persists each answer
@@ -135,28 +127,34 @@ export function OnboardingFlow() {
             : undefined
         }
       />
-      <nav aria-label={t("onboardingProgress")}>
-        <ol className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 sm:flex-wrap">
-          {data.steps.map((item) => (
-            <li key={item.step}>
-              <button
-                type="button"
-                onClick={() => show(item.step)}
-                aria-current={item.step === step.step ? "step" : undefined}
-                className={cn(
-                  "min-h-(--target-min) shrink-0 whitespace-nowrap rounded-button px-3 text-sm",
-                  item.step === step.step
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent",
-                )}
-              >
-                {t(STEP_TITLES[item.step])}
-                <span className="sr-only"> {t(STATUS_LABELS[item.status])}</span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      </nav>
+      <div
+        role="progressbar"
+        aria-label={t("onboardingProgress")}
+        aria-valuemin={0}
+        aria-valuemax={data.steps.length}
+        aria-valuenow={
+          Math.max(
+            0,
+            data.steps.findIndex((item) => item.step === step.step),
+          ) + 1
+        }
+        aria-valuetext={t(STEP_TITLES[step.step])}
+        className="flex gap-1"
+      >
+        {data.steps.map((item) => (
+          <span
+            key={item.step}
+            className={cn(
+              "h-1 flex-1 rounded-full",
+              item.step === step.step
+                ? "bg-primary"
+                : item.status === "pending"
+                  ? "bg-border"
+                  : "bg-primary/40",
+            )}
+          />
+        ))}
+      </div>
       {error && <ContextualError message={error} />}
       <section aria-labelledby="onboarding-step">
         <span id="onboarding-step" className="sr-only">

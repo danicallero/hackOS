@@ -62,6 +62,11 @@ export interface SocialSharingProps {
   attendee: SocialSharingAttendee;
   /** Renders Skip (before any action) / Continue (after one). */
   onContinue?: () => void;
+  /**
+   * Called instead of `onContinue` when Skip is pressed before any action, so the
+   * host can record "skipped" apart from "done". Falls back to `onContinue`.
+   */
+  onSkip?: () => void;
   className?: string;
 }
 
@@ -799,7 +804,13 @@ type RenderState =
  * behind a Share menu. Structure follows the Wallet pass on the profile
  * (bounded surface, official artwork, quiet secondary actions).
  */
-export function SocialSharing({ event, attendee, onContinue, className }: SocialSharingProps) {
+export function SocialSharing({
+  event,
+  attendee,
+  onContinue,
+  onSkip,
+  className,
+}: SocialSharingProps) {
   const { language } = useLocale();
   const copy = copyFragments[language];
   const text = (key: CopyKey, values: Record<string, string> = {}) => fill(copy[key], values);
@@ -1040,7 +1051,11 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
         {onContinue && (
-          <Button variant={acted ? "default" : "ghost"} onClick={onContinue} className="sm:mr-auto">
+          <Button
+            variant={acted ? "default" : "ghost"}
+            onClick={acted ? onContinue : (onSkip ?? onContinue)}
+            className="sm:mr-auto"
+          >
             {acted ? copy.continue : copy.skip}
           </Button>
         )}
