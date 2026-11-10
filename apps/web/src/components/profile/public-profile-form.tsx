@@ -3,7 +3,7 @@
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import { SOCIAL_ICON, SocialLinks } from "@/components/profile/social-links";
@@ -20,6 +20,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useServerResource } from "@/hooks/use-server-resource";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import {
   apiAssetUrl,
   type DirectoryEntry,
@@ -31,6 +34,7 @@ import {
 } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { toast } from "@/lib/toast";
 
 /**
  * Public profile form pieces and the reader's card (#934, #935), shared by
@@ -133,10 +137,13 @@ export function ProfileTextFields({
   settings,
   onChange,
   className,
+  ownAccount = false,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   className: string;
+  /** Own profile only: shows the member's linked GitHub account as their GitHub link. */
+  ownAccount?: boolean;
 }) {
   const { t } = useLocale();
   return (
@@ -157,7 +164,11 @@ export function ProfileTextFields({
         />
       </div>
       <BioField value={settings.bio} onChange={(bio) => onChange({ bio })} />
-      <LinksEditor links={settings.socials} onChange={(socials) => onChange({ socials })} />
+      <LinksEditor
+        links={settings.socials}
+        onChange={(socials) => onChange({ socials })}
+        ownAccount={ownAccount}
+      />
     </>
   );
 }
@@ -254,12 +265,56 @@ export function BioField({
   );
 }
 
+/** GitHub comes from the linked GitHub account, not from a typed address. */
+const LINK_KINDS = SOCIAL_KINDS.filter((kind) => kind !== "github");
+
+function GithubAccountRow() {
+  const { t } = useLocale();
+  const status = useServerResource(["me-github"], (signal) =>
+    api.get<{ configured: boolean; login: string | null }>("/api/me/github", { signal }),
+  );
+  const [busy, setBusy] = useState(false);
+  if (!status.data?.configured) return null;
+  const login = status.data.login;
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <SOCIAL_ICON.github aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+      {login ? (
+        <span className="min-w-0 truncate text-sm">github.com/{login}</span>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {});
+              window.location.assign(url);
+            } catch (err) {
+              toast.error(apiErrorText(err, t, t("couldNotLoadProject")), {
+                compactTitle: "GitHub",
+              });
+              setBusy(false);
+            }
+          }}
+        >
+          {t("githubLinkAccount")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function LinksEditor({
   links,
   onChange,
+  ownAccount,
 }: {
   links: EditableLink[];
   onChange: (links: EditableLink[]) => void;
+  ownAccount: boolean;
 }) {
   const { t } = useLocale();
   const headingId = useId();
@@ -270,6 +325,7 @@ function LinksEditor({
       <span id={headingId} className="block text-sm font-medium">
         {t("publicProfileLinks")}
       </span>
+      {ownAccount && <GithubAccountRow />}
       {links.length > 0 && (
         <ul className="space-y-2">
           {links.map((link) => {
@@ -288,7 +344,7 @@ function LinksEditor({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SOCIAL_KINDS.map((kind) => (
+                    {LINK_KINDS.map((kind) => (
                       <SelectItem key={kind} value={kind}>
                         {t(SOCIAL_LABEL[kind])}
                       </SelectItem>
@@ -337,7 +393,7 @@ function LinksEditor({
 /** The first kind not used yet, so a new row rarely needs a type change. */
 function nextKind(links: EditableLink[]): SocialKind {
   const used = new Set(links.map((link) => link.kind));
-  return SOCIAL_KINDS.find((kind) => !used.has(kind)) ?? "other";
+  return LINK_KINDS.find((kind) => !used.has(kind)) ?? "other";
 }
 
 const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {

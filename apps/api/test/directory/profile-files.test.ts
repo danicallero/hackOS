@@ -137,35 +137,54 @@ async function cvKey(userId: number): Promise<string | null> {
 describe("bio and social links (#935)", () => {
   it("normalizes links, shows them to readers and audits only field names", async () => {
     const me = await person();
+    await pool.query(
+      `INSERT INTO github_accounts (user_id, github_id, login) VALUES ($1, 41, 'ana')`,
+      [me],
+    );
     const res = await putProfile(me, {
       ...VISIBLE,
       bio: "  Line one\r\nLine two  ",
+      // A typed GitHub address is dropped: that link comes from the linked account.
       socials: [
-        { kind: "github", url: "github.com/ana" },
+        { kind: "github", url: "github.com/someone-else" },
         { kind: "linkedin", url: "https://WWW.LinkedIn.com/in/ana" },
       ],
     });
     expect(res.statusCode).toBe(200);
-    const socials = [
-      { kind: "github", url: "https://github.com/ana" },
-      { kind: "linkedin", url: "https://www.linkedin.com/in/ana" },
-    ];
+    const typed = [{ kind: "linkedin", url: "https://www.linkedin.com/in/ana" }];
+    const shown = [...typed, { kind: "github", url: "https://github.com/ana" }];
     expect(res.json()).toMatchObject({
       bio: "Line one\nLine two",
-      socials,
+      socials: typed,
       shareCv: false,
       cv: null,
-      preview: { bio: "Line one\nLine two", socials, cvUrl: null },
+      preview: { bio: "Line one\nLine two", socials: shown, cvUrl: null },
     });
     await savedByReader(me);
     const entry = await get(`/api/directory/${me}`, reader);
-    expect(entry.json()).toMatchObject({ bio: "Line one\nLine two", socials, cvUrl: null });
+    expect(entry.json()).toMatchObject({ bio: "Line one\nLine two", socials: shown, cvUrl: null });
 
     const { rows } = await pool.query(
       `SELECT after FROM audit_log WHERE action = 'public_profile.updated'`,
     );
     expect(rows[0].after.changedFields).toEqual(["directoryVisible", "bio", "socials"]);
     expect(JSON.stringify(rows)).not.toMatch(/github|linkedin|Line one/);
+  });
+
+  it("shows no GitHub link without a linked account or while the profile is hidden", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, socials: [] });
+    await savedByReader(me);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+    await pool.query(
+      `INSERT INTO github_accounts (user_id, github_id, login) VALUES ($1, 42, 'ana')`,
+      [me],
+    );
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([
+      { kind: "github", url: "https://github.com/ana" },
+    ]);
+    await pool.query(`DELETE FROM github_accounts WHERE user_id = $1`, [me]);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
   });
 
   it("keeps omitted fields and clears explicit nulls", async () => {
@@ -679,7 +698,7 @@ describe("account removal and export (H54)", () => {
     await putProfile(me, {
       ...VISIBLE,
       bio: "Exported",
-      socials: [{ kind: "github", url: "github.com/ana" }],
+      socials: [{ kind: "linkedin", url: "linkedin.com/in/ana" }],
       shareCv: true,
     });
     const photo = await photoKey(me);
@@ -693,7 +712,7 @@ describe("account removal and export (H54)", () => {
     });
     expect(bundle.publicProfile).toMatchObject({
       bio: "Exported",
-      socials: [{ kind: "github", url: "https://github.com/ana" }],
+      socials: [{ kind: "linkedin", url: "https://linkedin.com/in/ana" }],
       share_cv: true,
       cv_filename: "cv.pdf",
     });

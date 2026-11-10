@@ -322,6 +322,10 @@ describe("H63 helper profile detail", () => {
          location_note = EXCLUDED.location_note, socials = EXCLUDED.socials`,
       [h],
     );
+    await pool.query(
+      `INSERT INTO github_accounts (user_id, github_id, login) VALUES ($1, 63, 'linked-helper')`,
+      [h],
+    );
     const res = await call("GET", `/api/helpdesk/helpers/${h}`, p);
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -331,7 +335,7 @@ describe("H63 helper profile detail", () => {
       headline: "iOS lead",
       bio: "Loves Swift",
       locationNote: "Hall B",
-      socials: [{ kind: "github", url: "https://github.com/h" }],
+      socials: [{ kind: "github", url: "https://github.com/linked-helper" }],
       photoUrl: null,
       cvUrl: null,
       helpTopics: [{ id: t, name: "Swift" }],

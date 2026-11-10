@@ -61,12 +61,15 @@ const socialUrl = z
 export const socialLink = z.object({ kind: z.enum(SOCIAL_KINDS), url: socialUrl });
 export type SocialLink = z.infer<typeof socialLink>;
 
+// The GitHub link comes from the linked GitHub account (POST /api/me/github/authorize),
+// so a typed `github` entry is dropped instead of stored.
 const socials = z
   .array(socialLink)
   .max(SOCIALS_MAX)
   .refine((links) => new Set(links.map((link) => link.url)).size === links.length, {
     message: "Each link may appear only once",
-  });
+  })
+  .transform((links) => links.filter((link) => link.kind !== "github"));
 
 export const publicProfileBody = z.object({
   directoryVisible: z.boolean(),
