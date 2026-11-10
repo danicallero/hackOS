@@ -104,15 +104,22 @@ export function WelcomeStep({
   const event = useEventFacts();
   const dates = eventDateRange(event, language);
   return (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <p className="type-label text-muted-foreground">{event?.name ?? ""}</p>
-        {event?.tagline && <p className="text-lg text-pretty">{event.tagline}</p>}
-        {dates && <p className="text-muted-foreground">{dates}</p>}
-        {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-6">
+        <div className="min-w-0 space-y-3">
+          {/* biome-ignore lint/performance/noImgElement: static brand wordmark. */}
+          <img
+            src="/onboarding/hackudc-wordmark.png"
+            alt={event?.name ?? ""}
+            className="h-10 w-auto max-w-full sm:h-12"
+          />
+          {event?.tagline && <p className="text-lg text-pretty">{event.tagline}</p>}
+          {dates && <p className="text-muted-foreground">{dates}</p>}
+          {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
+        </div>
+        {/* biome-ignore lint/performance/noImgElement: decorative brand art. */}
+        <img src="/onboarding/gaviota-flight.png" alt="" className="h-32 w-auto" />
       </div>
-      {/* biome-ignore lint/performance/noImgElement: static brand art, decorative. */}
-      <img src="/onboarding/gaviota.png" alt="" className="max-h-48 w-auto" />
       <div className="flex flex-wrap items-center justify-end gap-2">
         <StepAlternatives
           allowed={allowed.filter((a) => a === "skip")}
@@ -132,25 +139,37 @@ export function WelcomeStep({
   );
 }
 
-export function ProfileStep(props: StepProps & { part: "identity" | "dietary" }) {
+/** Continue only while there is nothing to save; with edits the form's Save completes the step. */
+function ContinueWhenClean({
+  dirty,
+  pending,
+  decide,
+}: {
+  dirty: boolean;
+  pending: boolean;
+  decide: StepProps["decide"];
+}) {
   const { t } = useLocale();
+  if (dirty) return null;
+  return (
+    <Button type="button" variant="outline" disabled={pending} onClick={() => decide("complete")}>
+      {t("onboardingContinue")}
+    </Button>
+  );
+}
+
+export function ProfileStep(props: StepProps & { part: "identity" | "dietary" }) {
   const { part, decide, pending } = props;
+  const [dirty, setDirty] = useState(false);
   return (
     <PersonalDetails
       part={part}
-      onDirtyChange={() => undefined}
+      onDirtyChange={setDirty}
       onSaved={() => decide("complete")}
       actions={
         <>
           <StepAlternatives {...props} />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => decide("complete")}
-          >
-            {t("onboardingContinue")}
-          </Button>
+          <ContinueWhenClean dirty={dirty} pending={pending} decide={decide} />
         </>
       }
     />
@@ -177,21 +196,15 @@ export function NetworkingStep({ decide }: StepProps) {
 }
 
 export function MentorStep(props: StepProps) {
-  const { t } = useLocale();
+  const [dirty, setDirty] = useState(false);
   return (
     <MentorProfileEditor
       onSaved={() => props.decide("complete")}
+      onDirtyChange={setDirty}
       actions={
         <>
           <StepAlternatives {...props} />
-          <Button
-            type="button"
-            variant="outline"
-            disabled={props.pending}
-            onClick={() => props.decide("complete")}
-          >
-            {t("onboardingContinue")}
-          </Button>
+          <ContinueWhenClean dirty={dirty} pending={props.pending} decide={props.decide} />
         </>
       }
     />

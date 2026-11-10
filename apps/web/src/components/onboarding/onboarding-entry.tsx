@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
+  APP_HOME_PATH,
   hasPendingOnboarding,
   ONBOARDING_PATH,
   readOnboarding,
@@ -12,7 +13,7 @@ import { useSessionContext } from "@/lib/session";
 
 /**
  * Offers the onboarding journey once per browser session, only when the person
- * lands on the home page. It is a redirect, never a gate: every other route
+ * lands on the app home. It is a redirect, never a gate: every other route
  * renders immediately, a failed read is ignored, and /onboarding stays
  * reachable (My profile, the completion step) whenever steps are still open.
  */
@@ -24,7 +25,8 @@ export function OnboardingEntry({ children }: { children: React.ReactNode }) {
   const userId = me?.id ?? null;
 
   useEffect(() => {
-    if (!eligible || userId === null || pathname !== "/" || wasOnboardingOffered(userId)) return;
+    if (!eligible || userId === null || pathname !== APP_HOME_PATH || wasOnboardingOffered(userId))
+      return;
     const controller = new AbortController();
     readOnboarding(controller.signal)
       .then((state) => {

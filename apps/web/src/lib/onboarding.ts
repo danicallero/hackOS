@@ -15,6 +15,8 @@ export interface OnboardingState {
 }
 
 export const ONBOARDING_PATH = "/onboarding";
+/** The signed-in home (nav "Inicio"); `/` is the public landing page. */
+export const APP_HOME_PATH = "/event";
 
 export const readOnboarding = (signal?: AbortSignal) =>
   api.get<OnboardingState>("/api/me/onboarding", { signal });

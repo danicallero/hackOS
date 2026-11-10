@@ -30,7 +30,7 @@ persists each answer. Nothing here gates event access.
   step shows Later but never Skip. No role or attendance-kind logic lives in the
   client, so participants, mentors, sponsors and staff share one code path.
 - **Never blocking.** `OnboardingEntry` (in `AuthGuard`) offers the journey once
-  per browser session, only when the person lands on `/`, and only when steps
+  per browser session, only when the person lands on the app home (`/event`), and only when steps
   are pending; every other route renders immediately and a failed read is
   ignored. Required steps are completion constraints only.
 - **Networking consent** is only ever the explicit *create* answer, which saves

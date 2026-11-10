@@ -4,6 +4,7 @@ import type { OnboardingAction, OnboardingStep } from "@hackos/shared/onboarding
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { PageHeader } from "@/components/common/page-header";
 import { Spinner } from "@/components/common/spinner";
 import {
   CompletionStep,
@@ -21,6 +22,7 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, pickText, useLocale } from "@/lib/i18n";
 import {
+  APP_HOME_PATH,
   currentStep,
   decideStep,
   deferUntilTomorrow,
@@ -93,7 +95,7 @@ export function OnboardingFlow() {
           after.find((item) => item.status === "pending") ??
           pendingSteps(fresh)[0] ??
           fresh.steps.find((item) => item.step === "completion");
-        if (from === "completion" || !next) router.push("/");
+        if (from === "completion" || !next) router.push(APP_HOME_PATH);
         else show(next.step);
       } catch (cause) {
         setError(apiErrorText(cause, t, t("onboardingCouldNotSave")));
@@ -125,8 +127,16 @@ export function OnboardingFlow() {
 
   return (
     <div className="space-y-6">
+      <PageHeader
+        title={t(STEP_TITLES[step.step])}
+        meta={
+          position >= 0
+            ? t("onboardingStepCount", { current: position + 1, total: numbered.length })
+            : undefined
+        }
+      />
       <nav aria-label={t("onboardingProgress")}>
-        <ol className="flex flex-wrap gap-2">
+        <ol className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 sm:flex-wrap">
           {data.steps.map((item) => (
             <li key={item.step}>
               <button
@@ -134,7 +144,7 @@ export function OnboardingFlow() {
                 onClick={() => show(item.step)}
                 aria-current={item.step === step.step ? "step" : undefined}
                 className={cn(
-                  "min-h-(--target-min) rounded-button px-3 text-sm",
+                  "min-h-(--target-min) shrink-0 whitespace-nowrap rounded-button px-3 text-sm",
                   item.step === step.step
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:bg-accent",
@@ -147,14 +157,6 @@ export function OnboardingFlow() {
           ))}
         </ol>
       </nav>
-      <header className="space-y-1">
-        <h1 className="type-page-title">{t(STEP_TITLES[step.step])}</h1>
-        {position >= 0 && (
-          <p className="text-muted-foreground text-sm">
-            {t("onboardingStepCount", { current: position + 1, total: numbered.length })}
-          </p>
-        )}
-      </header>
       {error && <ContextualError message={error} />}
       <section aria-labelledby="onboarding-step">
         <span id="onboarding-step" className="sr-only">

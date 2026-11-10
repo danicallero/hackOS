@@ -2,10 +2,9 @@ import { CommandPalette } from "@/components/common/command-palette";
 import { QuickArrival } from "@/components/common/quick-arrival";
 import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-sidebar";
 import { AuthGuard } from "@/components/layout/auth-guard";
-import { NotificationOnboardingDialog } from "@/components/layout/notification-onboarding-dialog";
-import { ProfileTasksDialog } from "@/components/layout/profile-tasks-dialog";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/layout/skip-link";
 import { VerificationBanner } from "@/components/layout/verification-banner";
+import { EntryPrompts } from "@/components/onboarding/entry-prompts";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 /**
@@ -25,8 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NotificationSidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
           </div>
           <VerificationBanner />
-          <ProfileTasksDialog />
-          <NotificationOnboardingDialog />
+          <EntryPrompts />
           <CommandPalette />
           <QuickArrival />
           <main
