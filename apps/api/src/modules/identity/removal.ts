@@ -808,10 +808,8 @@ async function prepareAccountRemoval(
             WHERE id = $1`,
           [options.targetId],
         );
-        // #933: meal plans are personal data; the row CASCADE covers final deletion.
-        await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [
-          options.targetId,
-        ]);
+        // #933: meal plans (RSVP answers) are personal data; the row CASCADE covers final deletion.
+        await client.query(`DELETE FROM activity_rsvps WHERE user_id = $1`, [options.targetId]);
       }
       if (options.preserveIdempotency) {
         // Keep the marker in the identity-free completion scope selected by
@@ -1844,7 +1842,7 @@ export async function resetReviewFixtureAccount(
   await scrubRelationships(client, user);
   await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [user.id]);
   await client.query(`DELETE FROM user_email_history WHERE user_id = $1`, [user.id]);
-  await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM activity_rsvps WHERE user_id = $1`, [user.id]);
   await client.query(
     `UPDATE users
         SET email = $2,

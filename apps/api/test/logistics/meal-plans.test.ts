@@ -3,12 +3,15 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import {
+  assignRole,
   asUser,
   buildTestApp,
+  createRole,
   createUser,
   createUserWithCapabilities,
   truncateAll,
 } from "../helpers.js";
+import { seedEventConfig } from "../rsvp-helpers.js";
 
 /** #933: logistics read side of sponsor meal plans and the staff correction. */
 
@@ -17,6 +20,7 @@ const HOUR = 3_600_000;
 
 beforeEach(async () => {
   await truncateAll();
+  await seedEventConfig(await db());
   const { valkey } = await import("../../src/lib/valkey.js");
   await valkey.flushdb();
   app ??= await buildTestApp();
@@ -56,6 +60,8 @@ async function sponsor(
 ): Promise<number> {
   const pool = await db();
   const userId = await createUser({ name: options.name ?? "Ana" });
+  // Attendance kinds only exist for accounts with event access.
+  await assignRole(userId, await createRole([], { eventAccess: true }));
   await pool.query(
     `UPDATE users SET surname = $2, food_intolerances = $3, food_intolerance_notes = $4,
                       is_test_account = $5
@@ -88,6 +94,7 @@ async function meal(
   } = {},
 ): Promise<number> {
   const pool = await db();
+  await seedEventConfig(pool);
   const startsAt = new Date(Date.now() + (options.startsInHours ?? 72) * HOUR);
   const audiences = options.audiences ?? ["sponsor"];
   const { rows: schedule } = await pool.query(
@@ -105,12 +112,19 @@ async function meal(
     `INSERT INTO activities (name, category, schedule_id) VALUES ($1, $2, $3) RETURNING id`,
     [options.name ?? "Lunch", options.category ?? "meal", schedule[0].id],
   );
+  // Meals are asked of sponsors through per-activity RSVP settings.
+  // An entry that no longer lists sponsors models a switched-off RSVP.
+  await pool.query(
+    `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
+     SELECT $1, event_key, $2, ARRAY['sponsor'] FROM event_config WHERE id = 1`,
+    [rows[0].id, audiences.includes("sponsor") || audiences.length === 0],
+  );
   return rows[0].id;
 }
 
 async function plan(userId: number, activityId: number, attending: boolean) {
   await (await db()).query(
-    `INSERT INTO meal_attendance_plans (user_id, activity_id, attending) VALUES ($1, $2, $3)`,
+    `INSERT INTO activity_rsvps (user_id, activity_id, event_key, attending) SELECT $1, $2, event_key, $3 FROM event_config WHERE id = 1`,
     [userId, activityId, attending],
   );
 }
@@ -236,9 +250,9 @@ describe("GET /api/logistics/meal-plans/:activityId/export.csv (#933)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
     expect(res.body).toBe(
-      "\uFEFFname,surname,enterprise,intolerances,notes\r\n" +
-        "Bea,Alonso,Globex,,\r\n" +
-        'Ana,Zubiri,"Acme, Inc",Lactose,No nuts\r\n',
+      "\uFEFFname,surname,enterprise,intolerances,notes,kind,option\r\n" +
+        "Bea,Alonso,Globex,,,sponsor,\r\n" +
+        'Ana,Zubiri,"Acme, Inc",Lactose,No nuts,sponsor,\r\n',
     );
     const { rows } = await (await db()).query(
       `SELECT actor_id FROM audit_log
@@ -422,14 +436,14 @@ describe("PUT /api/users/:id/meal-plan (#933)", () => {
 
     const notRep = await put(manager, notSponsor, [{ activityId: lunch, attending: true }]);
     expect(notRep.statusCode).toBe(403);
-    expect(notRep.json().error.details.code).toBe("not_sponsor");
+    expect(notRep.json().error.details.code).toBe("meal_plan_not_eligible");
 
     const closed = await put(manager, target, [
       { activityId: lunch, attending: true },
       { activityId: locked, attending: false },
     ]);
     expect(closed.statusCode).toBe(409);
-    expect(closed.json().error.details.code).toBe("meal_plan_locked");
+    expect(closed.json().error.details.code).toBe("rsvp_locked");
     expect(await auditRows(target)).toHaveLength(0);
   });
 
@@ -450,7 +464,7 @@ describe("PUT /api/users/:id/meal-plan (#933)", () => {
     try {
       const res = await put(manager, target, [{ activityId: lunch, attending: true }]);
       expect(res.statusCode).toBe(500);
-      const { rows } = await pool.query(`SELECT 1 FROM meal_attendance_plans WHERE user_id = $1`, [
+      const { rows } = await pool.query(`SELECT 1 FROM activity_rsvps WHERE user_id = $1`, [
         target,
       ]);
       expect(rows).toHaveLength(0);

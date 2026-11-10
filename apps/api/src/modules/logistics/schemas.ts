@@ -443,6 +443,7 @@ export const mealPlanSummariesResponse = z.object({
       startsAt: z.string(),
       attending: z.number(),
       notAttending: z.number(),
+      unsure: z.number(),
       unanswered: z.number(),
       intolerances: z.array(
         z.object({ id: z.number(), label: z.record(z.string(), z.string()), n: z.number() }),
