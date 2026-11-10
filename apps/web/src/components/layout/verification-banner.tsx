@@ -2,6 +2,7 @@
 
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { usePathname } from "next/navigation";
+import { ShellBanner } from "@/components/layout/shell-banner";
 import { Button } from "@/components/ui/button";
 import { useVerificationResend } from "@/hooks/use-verification-resend";
 import { useLocale } from "@/lib/i18n";
@@ -24,7 +25,7 @@ export function VerificationBanner() {
   if (!me || me.emailVerified) return null;
 
   return (
-    <div className="border-warning/40 bg-warning/10 text-warning-foreground flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm sm:px-6">
+    <ShellBanner tone="warning" className="text-warning-foreground">
       <EnvelopeSimpleIcon aria-hidden="true" className="text-warning size-4 shrink-0" />
       <span className="text-foreground">{t("emailNotVerified")}</span>
       <Button
@@ -37,6 +38,6 @@ export function VerificationBanner() {
       >
         {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("verifyNow")}
       </Button>
-    </div>
+    </ShellBanner>
   );
 }

@@ -3,6 +3,7 @@
 import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ShellBanner } from "@/components/layout/shell-banner";
 import { Button } from "@/components/ui/button";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { useLocale } from "@/lib/i18n";
@@ -27,12 +28,12 @@ export function OnboardingBanner() {
   if (!eligible || !me || !state.data) return null;
   if (openSteps(forPerson(state.data, me)).length === 0) return null;
   return (
-    <div className="border-primary/30 bg-primary/10 flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm sm:px-6">
+    <ShellBanner tone="info">
       <ListChecksIcon aria-hidden="true" className="text-primary size-4 shrink-0" />
       <span className="text-foreground">{t("onboardingBanner")}</span>
       <Button asChild size="sm" variant="outline">
         <Link href={withReturnPath(ONBOARDING_PATH, pathname)}>{t("onboardingContinue")}</Link>
       </Button>
-    </div>
+    </ShellBanner>
   );
 }
