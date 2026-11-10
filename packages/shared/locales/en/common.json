@@ -119,5 +119,6 @@
   "apiError_topic_unknown": "One of the topics no longer exists. Refresh and try again.",
   "apiError_availability_overlap": "Availability intervals must not overlap.",
   "apiError_availability_invalid": "Each interval must end after it starts and last at most 24 hours.",
-  "apiError_availability_before_window": "Availability cannot start before the hacking time."
+  "apiError_availability_before_window": "Availability cannot start before the hacking time.",
+  "apiError_schedule_audience_role_invalid": "Choose roles that are marked as publicly visible."
 }

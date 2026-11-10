@@ -2,6 +2,7 @@
 
 import { type ActivityKind, activityKindLabelKey } from "@hackos/shared/activity-kinds";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -21,10 +22,12 @@ import {
   matchesScheduleKindFilter,
 } from "@/components/public/schedule-kind-filter";
 import { ScheduleTimeline } from "@/components/public/schedule-timeline";
+import { useRsvps } from "@/hooks/use-rsvps";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, resolveScheduleText } from "@/lib/logistics";
 import { getPublicEvent } from "@/lib/public-content";
+import { useSessionContext } from "@/lib/session";
 
 /**
  * The public schedule combines the event and activity reads required by H47.
@@ -52,6 +55,14 @@ export function PublicScheduleView() {
   const [search, setSearch] = useState("");
   const [locations, setLocations] = useState<string[]>([]);
   const [kindFilter, setKindFilter] = useState<Set<ActivityKind>>(new Set());
+  // The signed-in attendee's own answers (RSVP), so what they said they will attend is one filter away.
+  const { me } = useSessionContext();
+  const rsvps = useRsvps(me?.hasEventAccess ? me.id : null);
+  const answers = useMemo(
+    () => new Map((rsvps.items ?? []).map((item) => [item.activityId, item.answer])),
+    [rsvps.items],
+  );
+  const [attendanceFilter, setAttendanceFilter] = useState<Set<string>>(new Set());
 
   const loadEvent = useCallback(async () => {
     setEventLoading(true);
@@ -96,14 +107,32 @@ export function PublicScheduleView() {
         (item) =>
           matchesScheduleSegmentFilter(item, segmentFilter) &&
           matchesScheduleKindFilter(item, kindFilter) &&
+          (!attendanceFilter.size || attendanceFilter.has(answers.get(item.id) ?? "")) &&
           (!locations.length || locations.includes(item.location ?? "")) &&
           `${item.title} ${item.description ?? ""} ${item.location ?? ""}`
             .toLocaleLowerCase(language)
             .includes(search.trim().toLocaleLowerCase(language)),
       ) ?? null,
-    [items, segmentFilter, kindFilter, locations, search, language],
+    [items, segmentFilter, kindFilter, attendanceFilter, answers, locations, search, language],
   );
+  const answered = [...answers.values()].some((answer) => answer === "yes" || answer === "unsure");
   const filters: FilterDefinition[] = [
+    ...(answered
+      ? [
+          {
+            id: "attendance",
+            label: t("scheduleMyAttendance"),
+            icon: CheckCircleIcon,
+            type: "multiple" as const,
+            value: [...attendanceFilter],
+            onChange: (values: string[]) => setAttendanceFilter(new Set(values)),
+            options: [
+              { value: "yes", label: t("scheduleGoing") },
+              { value: "unsure", label: t("rsvpUnsure") },
+            ],
+          },
+        ]
+      : []),
     ...(availableKinds.length > 1
       ? [
           {

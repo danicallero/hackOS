@@ -1,5 +1,5 @@
 "use client";
-import { SCHEDULE_AUDIENCES } from "@hackos/shared/schedule-form";
+import { roleAudienceId, SCHEDULE_AUDIENCES } from "@hackos/shared/schedule-form";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useState } from "react";
 import { DateTimeInput } from "@/components/common/datetime-input";
@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAudienceRoles } from "@/hooks/use-audience-roles";
 import { useInlineEditState } from "@/hooks/use-inline-edit-state";
 import { ApiError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -422,9 +423,10 @@ export function EditableSelectCell({
 export function audienceSummary(
   audiences: ScheduleAudience[],
   t: ReturnType<typeof useLocale>["t"],
+  roleNames?: ReadonlyMap<number, string>,
 ): string {
   if (audiences.length === 0) return t("audienceFilterStaffOnly");
-  return audiences.map((audience) => scheduleAudienceLabel(audience, t)).join(", ");
+  return audiences.map((audience) => scheduleAudienceLabel(audience, t, roleNames)).join(", ");
 }
 
 export function EditableAudienceCell({
@@ -437,6 +439,7 @@ export function EditableAudienceCell({
   onSave: (next: ScheduleAudience[]) => Promise<CellSaveResult>;
 }) {
   const { t } = useLocale();
+  const audienceRoles = useAudienceRoles();
   const inputId = useId();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<ScheduleAudience[]>(audiences);
@@ -452,7 +455,10 @@ export function EditableAudienceCell({
       const next = new Set(current);
       if (checked) next.add(audience);
       else next.delete(audience);
-      return SCHEDULE_AUDIENCES.filter((option) => next.has(option));
+      return [
+        ...SCHEDULE_AUDIENCES.filter((option) => next.has(option)),
+        ...[...next].filter((option) => roleAudienceId(option) !== null),
+      ];
     });
   }
 
@@ -480,20 +486,29 @@ export function EditableAudienceCell({
           data-schedule-activate="true"
         >
           <span className="sr-only">{t("editScheduleFieldAria", { field: fieldLabel })}: </span>
-          {audienceSummary(audiences, t)}
+          {audienceSummary(audiences, t, audienceRoles.names)}
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 space-y-3">
-        <div className="space-y-1">
-          {SCHEDULE_AUDIENCES.map((audience) => (
-            <div key={audience} className="flex items-center gap-2 py-1 text-sm">
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {[
+            ...SCHEDULE_AUDIENCES.map((audience) => ({
+              value: audience as ScheduleAudience,
+              label: scheduleAudienceLabel(audience, t),
+            })),
+            ...audienceRoles.roles.map((role) => ({
+              value: `role:${role.id}` as ScheduleAudience,
+              label: role.name,
+            })),
+          ].map(({ value, label }) => (
+            <div key={value} className="flex items-center gap-2 py-1 text-sm">
               <Checkbox
-                id={`${inputId}-${audience}`}
-                checked={draft.includes(audience)}
+                id={`${inputId}-${value}`}
+                checked={draft.includes(value)}
                 disabled={saving}
-                onCheckedChange={(checked) => toggle(audience, checked === true)}
+                onCheckedChange={(checked) => toggle(value, checked === true)}
               />
-              <Label htmlFor={`${inputId}-${audience}`}>{scheduleAudienceLabel(audience, t)}</Label>
+              <Label htmlFor={`${inputId}-${value}`}>{label}</Label>
             </div>
           ))}
         </div>

@@ -4,7 +4,7 @@ import {
   toActivityKind,
 } from "@hackos/shared/activity-kinds";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
-import type { ScheduleAudience } from "@hackos/shared/schedule-form";
+import { roleAudienceId, type ScheduleAudience } from "@hackos/shared/schedule-form";
 import { formatEventDate, formatHoursMinutes } from "@/lib/datetime";
 import { getEventTimeZone } from "@/lib/event-time";
 import type { Translate } from "@/lib/i18n";
@@ -63,13 +63,19 @@ export function scheduleStatusLabel(status: ScheduleStatus, t: Translate): strin
  * Anonymous/public web+TV feeds are served the same slice as "participant" —
  * there is no separate "public" audience.
  */
-export function scheduleAudienceLabel(audience: ScheduleAudience, t: Translate): string {
-  const labels: Record<ScheduleAudience, string> = {
+export function scheduleAudienceLabel(
+  audience: ScheduleAudience,
+  t: Translate,
+  roleNames?: ReadonlyMap<number, string>,
+): string {
+  const roleId = roleAudienceId(audience);
+  if (roleId !== null) return roleNames?.get(roleId) ?? t("rolesTitle");
+  const labels = {
     sponsor: t("audienceSponsor"),
     participant: t("audienceParticipant"),
     mentor: t("audienceMentor"),
-  };
-  return labels[audience];
+  } as const;
+  return labels[audience as keyof typeof labels];
 }
 
 // --- Keyboard grid navigation (H59) ---------------------------------------

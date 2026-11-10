@@ -4286,5 +4286,7 @@
   "mentorExpertisePlaceholder": "Busca o añade un área…",
   "onboardingBanner": "Termina de configurar tu experiencia.",
   "emailNotVerifiedShort": "Correo sin verificar",
-  "audienceStaffOnly": "Solo staff"
+  "audienceStaffOnly": "Solo staff",
+  "scheduleMyAttendance": "Mi asistencia",
+  "scheduleGoing": "Voy a ir"
 }

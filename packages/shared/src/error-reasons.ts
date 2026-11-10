@@ -55,6 +55,8 @@ export const ERROR_REASONS = {
   PROJECT_FROZEN: "project_frozen",
   /** 400: the event requires a linked GitHub repository to submit. */
   PROJECT_GITHUB_REQUIRED: "project_github_required",
+  /** 400: a schedule audience names a role that is not an existing publicly visible role (H59). */
+  SCHEDULE_AUDIENCE_ROLE_INVALID: "schedule_audience_role_invalid",
   MENTOR_PROFILE_NOT_ELIGIBLE: "mentor_profile_not_eligible",
   ONBOARDING_STEP_REQUIRED: "onboarding_step_required",
   ONBOARDING_FACT_INCOMPLETE: "onboarding_fact_incomplete",

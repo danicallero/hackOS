@@ -10,6 +10,7 @@ import { scheduleTypeLabel } from "@hackos/shared/display-labels";
 import {
   prepareScheduleSubmission,
   SCHEDULE_AUDIENCES,
+  type ScheduleAudience,
   scheduleItemToForm as sharedScheduleItemToForm,
 } from "@hackos/shared/schedule-form";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
@@ -41,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useAudienceRoles } from "@/hooks/use-audience-roles";
 import { ApiError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
@@ -350,8 +352,9 @@ export function ScheduleFormModal({
   // describe when a *tagged* audience gets to see an item, so they're meaningless
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
   const hasAudience = (values.audiences ?? []).length > 0;
+  const audienceRoles = useAudienceRoles();
 
-  function toggleAudience(audience: (typeof SCHEDULE_AUDIENCES)[number], checked: boolean) {
+  function toggleAudience(audience: ScheduleAudience, checked: boolean) {
     setValues((v) => {
       const current = new Set(v.audiences ?? []);
       if (checked) current.add(audience);
@@ -449,14 +452,20 @@ export function ScheduleFormModal({
           <MultiSelect
             id="schedule-audiences"
             inDialog
-            options={SCHEDULE_AUDIENCES.map((audience) => ({
-              value: audience,
-              label: scheduleAudienceLabel(audience, t),
-            }))}
+            options={[
+              ...SCHEDULE_AUDIENCES.map((audience) => ({
+                value: audience,
+                label: scheduleAudienceLabel(audience, t),
+              })),
+              ...audienceRoles.roles.map((role) => ({
+                value: `role:${role.id}`,
+                label: role.name,
+              })),
+            ]}
             value={values.audiences ?? []}
             onChange={(next) => {
               const current = values.audiences ?? [];
-              for (const audience of SCHEDULE_AUDIENCES) {
+              for (const audience of new Set([...current, ...next]) as Set<ScheduleAudience>) {
                 const was = current.includes(audience);
                 const now = next.includes(audience);
                 if (was !== now) toggleAudience(audience, now);

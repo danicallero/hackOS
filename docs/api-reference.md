@@ -379,7 +379,12 @@ mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
 
 Schedule items (H48) carry an optional `audiences` set
-(`sponsor`/`participant`/`mentor`). Staff always sees every item
+(`sponsor`/`participant`/`mentor`, plus publicly visible roles as `role:<id>`:
+whoever holds at least one of the named roles sees the item, and is asked for
+an RSVP when the activity asks attendance, besides the configured kinds;
+`GET /api/schedule/audience-roles` lists the roles that can be named and writes
+naming any other role fail with `schedule_audience_role_invalid`; migration
+`0804`). Staff always sees every item
 unconditionally and is never a stored audience value; an empty `audiences`
 array means "staff-only" — and a staff-only item has no meaningful
 `visibility` at all, since `visibility`/`publishAt` only describe *when a
