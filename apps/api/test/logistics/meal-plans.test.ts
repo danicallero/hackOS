@@ -250,9 +250,9 @@ describe("GET /api/logistics/meal-plans/:activityId/export.csv (#933)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
     expect(res.body).toBe(
-      "\uFEFFname,surname,enterprise,intolerances,notes,kind,option\r\n" +
-        "Bea,Alonso,Globex,,,sponsor,\r\n" +
-        'Ana,Zubiri,"Acme, Inc",Lactose,No nuts,sponsor,\r\n',
+      "\uFEFFname,surname,enterprise,intolerances,notes,kind\r\n" +
+        "Bea,Alonso,Globex,,,sponsor\r\n" +
+        'Ana,Zubiri,"Acme, Inc",Lactose,No nuts,sponsor\r\n',
     );
     const { rows } = await (await db()).query(
       `SELECT actor_id FROM audit_log

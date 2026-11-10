@@ -23,11 +23,6 @@ import { attendanceKind } from "../identity/attendance.js";
 
 export type RsvpAnswer = "yes" | "no" | "unsure";
 
-export interface RsvpOption {
-  key: string;
-  label: string;
-}
-
 /** Attendee-facing item (contracts-v2 §6, with `answer` replacing the boolean). */
 export interface RsvpItem {
   activityId: number;
@@ -37,15 +32,9 @@ export interface RsvpItem {
   closesAt: string;
   location: string | null;
   required: boolean;
-  options: RsvpOption[];
   answer: RsvpAnswer | null;
-  optionKey: string | null;
-  /** Label of the stored option, also when it has been retired. */
-  optionLabel: string | null;
   /** Unsure is only accepted on optional items; a required item needs yes or no. */
   allowsUnsure: boolean;
-  /** The stored option is no longer configured: it still counts, but must be re-picked to change. */
-  optionRetired: boolean;
   locked: boolean;
   isMeal: boolean;
 }
@@ -56,13 +45,6 @@ export interface OfferedRsvp extends RsvpItem {
   endsAt: string;
   /** A stored row exists (yes, no or unsure). */
   answered: boolean;
-}
-
-interface StoredOption {
-  key: string;
-  label_i18n: Record<string, string>;
-  /** Removed by an organizer: kept so past answers keep resolving their label. */
-  retired?: boolean;
 }
 
 export const CUTOFF_HOURS_SQL = `COALESCE((SELECT meal_plan_cutoff_hours FROM event_config WHERE id = 1), 24)`;
@@ -119,13 +101,11 @@ interface OfferedRow {
   ends_at: Date;
   location: string | null;
   required: boolean;
-  options: StoredOption[];
   st_name: Record<string, string> | null;
   st_description: Record<string, string> | null;
   rsvp_date: Date | null;
   closes_at: Date;
   attending: boolean | null;
-  option_key: string | null;
   answered: boolean;
   is_meal: boolean;
   locked: boolean;
@@ -147,10 +127,10 @@ export async function offeredRsvps(
   const { rows } = await db.query<OfferedRow>(
     `SELECT a.id AS activity_id, a.name, a.name_i18n, a.description, a.description_i18n,
             a.primary_language, s.starts_at, s.ends_at, s.location,
-            st.required, st.options, st.name_i18n AS st_name, st.description_i18n AS st_description,
+            st.required, st.name_i18n AS st_name, st.description_i18n AS st_description,
             st.rsvp_date,
             COALESCE(st.closes_at, s.starts_at - make_interval(hours => ${CUTOFF_HOURS_SQL})) AS closes_at,
-            r.attending, r.option_key, (r.user_id IS NOT NULL) AS answered,
+            r.attending, (r.user_id IS NOT NULL) AS answered,
             (a.category = ANY($4::text[])) AS is_meal,
             now() >= COALESCE(st.closes_at, s.starts_at - make_interval(hours => ${CUTOFF_HOURS_SQL})) AS locked
        FROM activity_rsvp_settings st
@@ -166,46 +146,30 @@ export async function offeredRsvps(
       ORDER BY s.starts_at, a.id`,
     [userId, eventKey, kind, mealKinds(), options.mealsOnly ?? false],
   );
-  return rows.map((row) => {
-    const opts: RsvpOption[] = row.options
-      .filter((o) => !o.retired)
-      .map((o) => ({ key: o.key, label: pickLabel(o.label_i18n, language) }));
-    const stored = row.options.find((o) => o.key === row.option_key);
-    return {
-      activityId: row.activity_id,
-      name: resolveName(
-        row.st_name,
-        { name: row.name, nameI18n: row.name_i18n, primary: row.primary_language },
-        language,
-      ),
-      description:
-        row.st_description && pickLabel(row.st_description, language)
-          ? pickLabel(row.st_description, language)
-          : row.description,
-      date: (row.rsvp_date ?? row.starts_at).toISOString(),
-      closesAt: row.closes_at.toISOString(),
-      location: row.location,
-      required: row.required,
-      options: opts,
-      answer: answerOf(row.attending, row.answered),
-      optionKey: row.answered ? row.option_key : null,
-      optionLabel:
-        row.answered && row.option_key
-          ? stored
-            ? pickLabel(stored.label_i18n, language)
-            : row.option_key
-          : null,
-      allowsUnsure: !row.required,
-      optionRetired:
-        row.answered && row.option_key !== null && !opts.some((o) => o.key === row.option_key),
-      locked: row.locked,
-      isMeal: row.is_meal,
-      nameI18n: row.name_i18n,
-      startsAt: row.starts_at.toISOString(),
-      endsAt: row.ends_at.toISOString(),
-      answered: row.answered,
-    };
-  });
+  return rows.map((row) => ({
+    activityId: row.activity_id,
+    name: resolveName(
+      row.st_name,
+      { name: row.name, nameI18n: row.name_i18n, primary: row.primary_language },
+      language,
+    ),
+    description:
+      row.st_description && pickLabel(row.st_description, language)
+        ? pickLabel(row.st_description, language)
+        : row.description,
+    date: (row.rsvp_date ?? row.starts_at).toISOString(),
+    closesAt: row.closes_at.toISOString(),
+    location: row.location,
+    required: row.required,
+    answer: answerOf(row.attending, row.answered),
+    allowsUnsure: !row.required,
+    locked: row.locked,
+    isMeal: row.is_meal,
+    nameI18n: row.name_i18n,
+    startsAt: row.starts_at.toISOString(),
+    endsAt: row.ends_at.toISOString(),
+    answered: row.answered,
+  }));
 }
 
 export function toRsvpItem(entry: OfferedRsvp): RsvpItem {
@@ -257,8 +221,6 @@ export async function hasPendingRsvps(
 export interface RsvpAnswerInput {
   activityId: number;
   answer: RsvpAnswer;
-  /** Omitted keeps a still-valid stored option; null clears it. */
-  optionKey?: string | null;
 }
 
 export interface SubmitOptions {
@@ -316,7 +278,7 @@ export async function submitRsvps(
       mealsOnly: mealFacade,
     });
     const offered = new Map(before.map((m) => [m.activityId, m]));
-    const writes = new Map<number, { attending: boolean | null; optionKey: string | null }>();
+    const writes = new Map<number, { attending: boolean | null }>();
 
     for (const input of answers) {
       const item = offered.get(input.activityId);
@@ -346,35 +308,9 @@ export async function submitRsvps(
         });
       }
       const attending = attendingOf(input.answer);
-      let optionKey: string | null = null;
-      if (attending === true && item.options.length > 0) {
-        const given =
-          input.optionKey === undefined
-            ? item.optionKey !== null && !item.optionRetired
-              ? item.optionKey
-              : null
-            : input.optionKey;
-        // An unchanged retired option may be echoed back; picking one needs a live option.
-        const keepsRetired =
-          given !== null && given === item.optionKey && item.optionRetired && item.answer === "yes";
-        if (given === null || (!keepsRetired && !item.options.some((o) => o.key === given))) {
-          throw new BadRequestError("Choose one of the options", {
-            code: "rsvp_option_required",
-            activityId: input.activityId,
-          });
-        }
-        optionKey = given;
-      } else if (input.optionKey !== undefined && input.optionKey !== null) {
-        throw new BadRequestError("This answer takes no option", {
-          code: "rsvp_option_invalid",
-          activityId: input.activityId,
-        });
-      }
-
       const unchanged =
         item.answered &&
-        (item.answer === "yes" ? true : item.answer === "no" ? false : null) === attending &&
-        item.optionKey === optionKey;
+        (item.answer === "yes" ? true : item.answer === "no" ? false : null) === attending;
       if (item.locked) {
         if (unchanged) continue;
         // The legacy facade never rejected an answer for a locked meal nobody answered.
@@ -384,7 +320,7 @@ export async function submitRsvps(
           activityId: input.activityId,
         });
       }
-      writes.set(input.activityId, { attending, optionKey });
+      writes.set(input.activityId, { attending });
     }
 
     if (!actorId) {
@@ -406,21 +342,14 @@ export async function submitRsvps(
     let changed: number[] = [];
     if (ids.length > 0) {
       const { rows } = await client.query<{ activity_id: number }>(
-        `INSERT INTO activity_rsvps (user_id, activity_id, event_key, attending, option_key)
-         SELECT $1, t.activity_id, $2, t.attending, t.option_key
-           FROM unnest($3::int[], $4::boolean[], $5::text[]) AS t(activity_id, attending, option_key)
+        `INSERT INTO activity_rsvps (user_id, activity_id, event_key, attending)
+         SELECT $1, t.activity_id, $2, t.attending
+           FROM unnest($3::int[], $4::boolean[]) AS t(activity_id, attending)
          ON CONFLICT (user_id, activity_id, event_key)
-           DO UPDATE SET attending = EXCLUDED.attending, option_key = EXCLUDED.option_key
-         WHERE (activity_rsvps.attending, activity_rsvps.option_key)
-               IS DISTINCT FROM (EXCLUDED.attending, EXCLUDED.option_key)
+           DO UPDATE SET attending = EXCLUDED.attending
+         WHERE activity_rsvps.attending IS DISTINCT FROM EXCLUDED.attending
          RETURNING activity_id`,
-        [
-          userId,
-          eventKey,
-          ids,
-          ids.map((id) => writes.get(id)?.attending ?? null),
-          ids.map((id) => writes.get(id)?.optionKey ?? null),
-        ],
+        [userId, eventKey, ids, ids.map((id) => writes.get(id)?.attending ?? null)],
       );
       changed = rows.map((row) => row.activity_id);
     }

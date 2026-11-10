@@ -1,13 +1,10 @@
 "use client";
 
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
-import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
-import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -20,22 +17,20 @@ import { LANGS, languageName, useLocale } from "@/lib/i18n";
 import {
   askableKinds,
   draftToBody,
-  MAX_RSVP_OPTIONS,
   type RsvpKind,
   type RsvpSettings,
   type RsvpSettingsDraft,
   type RsvpSummary,
   settingsDraftError,
   settingsToDraft,
-  slugifyOptionKey,
 } from "@/lib/rsvp";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /**
  * Organizer RSVP editor for one schedule entry (schedule:manage): enable and
- * require the RSVP, who is asked, name/description/date overrides, the answer
- * options and live counts. Meals can never ask participants.
+ * require the RSVP, who is asked, name/description/date overrides and live
+ * counts. Meals can never ask participants.
  *
  * Integration point for the schedule editor: render
  * `<CateringSettingsPanel scheduleId={item.id} />` for an existing entry. It owns
@@ -64,7 +59,6 @@ export function CateringSettingsPanel({
     settings.descriptionI18n,
     settings.rsvpDate,
     settings.closesAt,
-    settings.options,
   ])}`;
   return (
     <SettingsForm key={version} settings={settings} save={save} onDirtyChange={onDirtyChange} />
@@ -89,7 +83,6 @@ function SettingsForm({
   const changed = JSON.stringify(draft) !== JSON.stringify(initial);
   const invalid = settingsDraftError(draft);
   const kinds = askableKinds(settings.isMeal);
-  const retired = settings.options.filter((o) => o.retired);
 
   useEffect(() => {
     onDirtyChange?.(changed);
@@ -97,13 +90,6 @@ function SettingsForm({
   }, [changed, onDirtyChange]);
 
   const patch = (next: Partial<RsvpSettingsDraft>) => setDraft((d) => ({ ...d, ...next }));
-
-  function addOption() {
-    const taken = new Set([...draft.options, ...settings.options].map((o) => o.key));
-    patch({
-      options: [...draft.options, { key: slugifyOptionKey("option", taken), labelI18n: {} }],
-    });
-  }
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -223,52 +209,6 @@ function SettingsForm({
               />
             </CollapsibleContent>
           </Collapsible>
-
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">{t("rsvpOptions")}</legend>
-            {draft.options.map((option, index) => (
-              <div key={option.key} className="flex items-start gap-2">
-                <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-3">
-                  {LANGS.map((lang) => (
-                    <Input
-                      key={lang}
-                      aria-label={`${t("rsvpOptionLabel")} (${languageName(lang)})`}
-                      placeholder={languageName(lang)}
-                      value={option.labelI18n[lang] ?? ""}
-                      onChange={(e) =>
-                        patch({
-                          options: draft.options.map((o, i) =>
-                            i === index
-                              ? { ...o, labelI18n: { ...o.labelI18n, [lang]: e.target.value } }
-                              : o,
-                          ),
-                        })
-                      }
-                    />
-                  ))}
-                </div>
-                <IconButton
-                  label={t("rsvpRemoveOption")}
-                  onClick={() => patch({ options: draft.options.filter((_, i) => i !== index) })}
-                >
-                  <XIcon />
-                </IconButton>
-              </div>
-            ))}
-            {draft.options.length < MAX_RSVP_OPTIONS && (
-              <Button type="button" variant="outline" size="sm" onClick={addOption}>
-                <PlusIcon />
-                {t("rsvpAddOption")}
-              </Button>
-            )}
-            {retired.length > 0 && (
-              <p className="text-muted-foreground text-xs">
-                {t("rsvpRetiredOptions", {
-                  options: retired.map((o) => Object.values(o.labelI18n)[0] ?? o.key).join(", "),
-                })}
-              </p>
-            )}
-          </fieldset>
         </>
       )}
 
@@ -328,21 +268,15 @@ function LocalizedFields({
   );
 }
 
-/** Live headcounts for one activity: answers, by option, and who is still missing. */
+/** Live headcounts for one activity: answers and who is still missing. */
 export function RsvpCounts({ counts }: { counts: RsvpSummary }) {
-  const { t, language } = useLocale();
-  const optionLabel = (o: RsvpSummary["byOption"][number]) =>
-    (o.labelI18n?.[language] ?? o.labelI18n?.en ?? Object.values(o.labelI18n ?? {})[0] ?? o.key) +
-    (o.retired ? ` · ${t("rsvpOptionRetired")}` : "");
+  const { t } = useLocale();
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
       <Count label={t("rsvpYes")} value={counts.attending} />
       <Count label={t("rsvpNo")} value={counts.notAttending} />
       <Count label={t("rsvpUnsure")} value={counts.unsure} />
       <Count label={t("rsvpUnanswered")} value={counts.unanswered} />
-      {counts.byOption.map((o) => (
-        <Count key={o.key} label={optionLabel(o)} value={o.n} />
-      ))}
     </dl>
   );
 }

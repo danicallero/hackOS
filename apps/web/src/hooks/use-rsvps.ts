@@ -35,7 +35,7 @@ export function useRsvps(userId: number | null) {
         if (userId !== null) mutate(next);
         return next.items;
       } catch (err) {
-        // The offered list, a lock or the options changed under the caller: show the current list.
+        // The offered list or a lock changed under the caller: show the current list.
         if (userId !== null && STALE_RSVP_REASONS.has(apiErrorReason(err) ?? "")) {
           invalidateServerState(rsvpsKey(userId));
           await readServerState(rsvpsKey(userId), fetchRsvps).then(mutate, () => reload());

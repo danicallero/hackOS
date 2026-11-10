@@ -1,8 +1,8 @@
 # Catering and activity RSVPs
 
 Per-activity RSVPs generalise the sponsor meal plans (#933): an organizer asks
-selected attendance kinds to answer yes / no / not sure for an activity, with
-optional answer options (menus), and logistics reads truthful headcounts.
+selected attendance kinds to answer yes / no / not sure for an activity, and
+logistics reads truthful headcounts.
 Code: `apps/api/src/modules/rsvps/` (service, settings, summary, routes); the
 meal-plan routes are facades over it (`identity/meal-plan.ts`,
 `logistics/meal-plans.ts`). Web: `apps/web/src/components/onboarding/catering-rsvp.tsx`
@@ -11,11 +11,13 @@ meal-plan routes are facades over it (`identity/meal-plan.ts`,
 ## Data
 
 - `activity_rsvp_settings` — PK `(activity_id, event_key)`: `enabled`,
-  `required`, `kinds`, name/description overrides, `rsvp_date`, `closes_at`,
-  `options` (`[{ key, label_i18n, retired? }]`, at most 10 active).
+  `required`, `kinds`, name/description overrides, `rsvp_date`, `closes_at`.
 - `activity_rsvps` — PK `(user_id, activity_id, event_key)`. `attending` is
   `true` (yes), `false` (no) or `NULL` (**unsure, an explicit answer**); no row
-  means unanswered. `option_key` is only set for a yes.
+  means unanswered.
+
+The old `options` / `option_key` columns stay in the schema (applied
+migrations are immutable) but the product no longer reads or writes them.
 
 Both tables are keyed by the event key, so an earlier edition's configuration
 and answers stay as history and never leak into the current edition. Changing
@@ -41,14 +43,11 @@ someone who could not have answered.
 
 ## Answers
 
-`PUT /api/me/rsvps` takes `{ answers: [{ activityId, answer, optionKey? }] }`.
+`PUT /api/me/rsvps` takes `{ answers: [{ activityId, answer }] }`.
 
 - **Required** items must be answered with yes or no (`400 rsvp_incomplete`
   when missing; `400 rsvp_unsure_not_allowed`). Optional items can be skipped
   or answered "not sure".
-- An activity with options needs an option for a yes (`400
-  rsvp_option_required`); omitting `optionKey` keeps a still-valid stored
-  option; a no or unsure carries none (`400 rsvp_option_invalid`).
 - Closing: `closes_at`, by default `event_config.meal_plan_cutoff_hours` before
   the start. Changing a locked answer is `409 rsvp_locked`; echoing it unchanged
   is accepted. Items that ended, were hidden or switched off since the list
@@ -59,30 +58,21 @@ someone who could not have answered.
 - Staff corrections (`PUT /api/users/:id/rsvps`, `meal-plans:manage`) are
   partial and write one `rsvp.updated` audit row with attending ids only.
 
-## Options history
-
-Options have stable keys. Saving settings never deletes one: a key left out is
-kept as `retired` (labels preserved), no longer offered, still counted and
-labelled in summaries and exports. A person whose stored option was retired
-keeps it (`optionRetired`) until they pick a live one; echoing it unchanged is
-accepted. Re-sending the key reinstates it.
-
 ## Counts
 
 `GET /api/logistics/rsvps` (`logistics:stats`) and `GET /api/schedule/:id/rsvp`
 (`schedule:manage`, field `counts`) return per activity `attending`,
-`notAttending`, `unsure`, `unanswered`, `eligible`, `byKind`, `byOption`,
-`intolerances` and `withNotes`. Counted people are active, non-anonymized,
+`notAttending`, `unsure`, `unanswered`, `eligible`, `byKind`, `intolerances` and `withNotes`. Counted people are active, non-anonymized,
 eligible by the rule above, and on the reader's side of the review-fixture
 boundary. The per-person CSV (`/api/logistics/meal-plans/:id/export.csv`,
-`meal-plans:export`) lists eligible people attending, with kind and option.
+`meal-plans:export`) lists eligible people attending, with kind, enterprise,
+intolerances and dietary notes.
 
 ## Meal-plan facade
 
 `GET`/`PUT /api/me/meal-plan` and `/api/users/:id/meal-plan` keep their yes/no
 shape over the meal RSVPs. `not_sponsor` became `meal_plan_not_eligible` (403:
-participants and unclassified accounts). "Unsure" reads as unanswered; a
-meal with options needs `rsvp_option_required` resolved through `/api/me/rsvps`.
+participants and unclassified accounts). "Unsure" reads as unanswered.
 `meal_plan_incomplete`, `meal_plan_locked` and `meal_not_offered` are unchanged.
 The facade still requires every open meal in a self submission.
 

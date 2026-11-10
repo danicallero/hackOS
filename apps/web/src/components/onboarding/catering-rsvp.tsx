@@ -22,9 +22,8 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /**
- * Attendee RSVP editor: one row per open RSVP (yes / no / unsure, plus an
- * option when the organizer defined some). Used as an editable section of My
- * profile and as the onboarding RSVP step. Skipping an optional item is a valid
+ * Attendee RSVP editor: one row per open RSVP (yes / no / unsure). Used as an
+ * editable section of My profile and as the onboarding RSVP step. Skipping an optional item is a valid
  * state; a required one blocks Save until answered. Locked items are read-only.
  *
  * Integration points for the host page:
@@ -57,9 +56,7 @@ export function CateringRsvpSection({
   }
   if (!items || items.length === 0) return null;
   // Remount on every stored list so the draft restarts from the stored answers.
-  const version = items
-    .map((i) => `${i.activityId}:${i.answer}:${i.optionKey}:${i.locked}:${i.options.length}`)
-    .join(",");
+  const version = items.map((i) => `${i.activityId}:${i.answer}:${i.locked}`).join(",");
   return (
     <CateringRsvpForm
       key={version}
@@ -135,23 +132,7 @@ export function CateringRsvpForm({
   }, [changed, onDirtyChange]);
 
   function setAnswer(item: RsvpItem, answer: RsvpAnswer) {
-    setDraft((current) => ({
-      ...current,
-      [item.activityId]: {
-        answer,
-        // A yes keeps a valid chosen option; anything else clears it.
-        optionKey:
-          answer === "yes" && item.options.length === 1
-            ? item.options[0].key
-            : answer === "yes"
-              ? current[item.activityId].optionKey
-              : null,
-      },
-    }));
-  }
-
-  function setOption(item: RsvpItem, optionKey: string) {
-    setDraft((current) => ({ ...current, [item.activityId]: { answer: "yes", optionKey } }));
+    setDraft((current) => ({ ...current, [item.activityId]: { answer } }));
   }
 
   async function onSubmit(event: React.FormEvent) {
@@ -199,7 +180,6 @@ export function CateringRsvpForm({
               draft={draft[item.activityId]}
               disabled={pending}
               onAnswer={(answer) => setAnswer(item, answer)}
-              onOption={(key) => setOption(item, key)}
             />
           ))}
         </ul>
@@ -213,13 +193,11 @@ function RsvpRow({
   draft,
   disabled,
   onAnswer,
-  onOption,
 }: {
   item: RsvpItem;
   draft: RsvpDraft[number];
   disabled: boolean;
   onAnswer: (answer: RsvpAnswer) => void;
-  onOption: (key: string) => void;
 }) {
   const { t, language } = useLocale();
   const answers: RsvpAnswer[] = item.allowsUnsure ? ["yes", "no", "unsure"] : ["yes", "no"];
@@ -229,7 +207,6 @@ function RsvpRow({
     unsure: t("rsvpUnsure"),
   };
   const missing = needsAnswer(item, draft.answer);
-  const retired = item.optionRetired && draft.optionKey === item.optionKey;
 
   return (
     <li className="space-y-2 py-3">
@@ -260,26 +237,6 @@ function RsvpRow({
           </Choice>
         ))}
       </div>
-      {draft.answer === "yes" && item.options.length > 0 && (
-        <div role="radiogroup" aria-label={t("rsvpOption")} className="flex flex-wrap gap-2">
-          {item.options.map((option) => (
-            <Choice
-              key={option.key}
-              checked={draft.optionKey === option.key}
-              disabled={disabled || item.locked}
-              invalid={!draft.optionKey || retired}
-              onSelect={() => onOption(option.key)}
-            >
-              {option.label}
-            </Choice>
-          ))}
-          {retired && item.optionLabel && (
-            <span className="text-muted-foreground self-center text-sm">
-              {item.optionLabel} · {t("rsvpOptionRetired")}
-            </span>
-          )}
-        </div>
-      )}
       {item.locked && <p className="text-muted-foreground text-xs">{t("rsvpClosed")}</p>}
     </li>
   );

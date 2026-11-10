@@ -15,23 +15,17 @@ export interface RsvpItem {
   closesAt: string;
   location: string | null;
   required: boolean;
-  options: { key: string; label: string }[];
   answer: RsvpAnswer | null;
-  optionKey: string | null;
-  optionLabel: string | null;
   allowsUnsure: boolean;
-  optionRetired: boolean;
   locked: boolean;
   isMeal: boolean;
 }
 
-/** One draft answer per item; `optionKey` only matters for "yes". */
-export type RsvpDraft = Record<number, { answer: RsvpAnswer | null; optionKey: string | null }>;
+/** One draft answer per item. */
+export type RsvpDraft = Record<number, { answer: RsvpAnswer | null }>;
 
 export function draftFromItems(items: readonly RsvpItem[]): RsvpDraft {
-  return Object.fromEntries(
-    items.map((item) => [item.activityId, { answer: item.answer, optionKey: item.optionKey }]),
-  );
+  return Object.fromEntries(items.map((item) => [item.activityId, { answer: item.answer }]));
 }
 
 /** An open item still needs the person: no answer yet, or "unsure" on a required item. */
@@ -40,24 +34,16 @@ export function needsAnswer(item: RsvpItem, answer: RsvpAnswer | null): boolean 
   return answer === null ? item.required : item.required && answer === "unsure";
 }
 
-/** "yes" on an item with options also needs one chosen; a retired stored option must be re-picked. */
-export function needsOption(item: RsvpItem, draft: RsvpDraft[number]): boolean {
-  if (draft.answer !== "yes" || item.options.length === 0) return false;
-  return !draft.optionKey || !item.options.some((o) => o.key === draft.optionKey);
-}
-
 export function isItemChanged(item: RsvpItem, draft: RsvpDraft[number]): boolean {
-  return (
-    draft.answer !== item.answer || (draft.answer === "yes" && draft.optionKey !== item.optionKey)
-  );
+  return draft.answer !== item.answer;
 }
 
-/** True while the draft cannot be submitted: a required item unanswered or a chosen yes without option. */
+/** True while the draft cannot be submitted: a required item is unanswered. */
 export function draftBlocked(items: readonly RsvpItem[], draft: RsvpDraft): boolean {
   return items.some((item) => {
     if (item.locked) return false;
     const d = draft[item.activityId];
-    return needsAnswer(item, d.answer) || needsOption(item, d);
+    return needsAnswer(item, d.answer);
   });
 }
 
@@ -71,13 +57,7 @@ export function rsvpBody(items: readonly RsvpItem[], draft: RsvpDraft) {
     answers: items.flatMap((item) => {
       const d = draft[item.activityId];
       if (item.locked || d.answer === null || !isItemChanged(item, d)) return [];
-      return [
-        {
-          activityId: item.activityId,
-          answer: d.answer,
-          ...(d.answer === "yes" && item.options.length > 0 ? { optionKey: d.optionKey } : {}),
-        },
-      ];
+      return [{ activityId: item.activityId, answer: d.answer }];
     }),
   };
 }
@@ -91,8 +71,6 @@ export const STALE_RSVP_REASONS = new Set([
   "rsvp_locked",
   "rsvp_incomplete",
   "rsvp_not_offered",
-  "rsvp_option_required",
-  "rsvp_option_invalid",
   "rsvp_participants_excluded",
 ]);
 
@@ -114,20 +92,8 @@ export interface RsvpSummary extends RsvpKindCounts {
   required: boolean;
   eligible: number;
   byKind: Partial<Record<RsvpKind, RsvpKindCounts>>;
-  byOption: {
-    key: string;
-    labelI18n: Record<string, string> | null;
-    retired: boolean;
-    n: number;
-  }[];
   intolerances: { id: number; label: Record<string, string>; n: number }[];
   withNotes: number;
-}
-
-export interface RsvpSettingsOption {
-  key: string;
-  labelI18n: Record<string, string>;
-  retired: boolean;
 }
 
 export interface RsvpSettings {
@@ -141,7 +107,6 @@ export interface RsvpSettings {
   descriptionI18n: Record<string, string> | null;
   rsvpDate: string | null;
   closesAt: string | null;
-  options: RsvpSettingsOption[];
   defaults: { name: string; description: string | null; date: string; closesAt: string };
   counts: RsvpSummary | null;
 }
@@ -155,29 +120,11 @@ export interface RsvpSettingsDraft {
   descriptionI18n: Record<string, string>;
   rsvpDate: string;
   closesAt: string;
-  options: { key: string; labelI18n: Record<string, string> }[];
 }
-
-export const OPTION_KEY_PATTERN = /^[a-z0-9_]{1,30}$/;
-export const MAX_RSVP_OPTIONS = 10;
 
 /** Kinds an activity may ask: meals never include participants. */
 export function askableKinds(isMeal: boolean): RsvpKind[] {
   return RSVP_KINDS.filter((kind) => !(isMeal && kind === "participant"));
-}
-
-export function slugifyOptionKey(label: string, taken: ReadonlySet<string>): string {
-  const base =
-    label
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .slice(0, 26) || "option";
-  let key = base;
-  for (let i = 2; taken.has(key); i++) key = `${base}_${i}`;
-  return key;
 }
 
 export function settingsToDraft(
@@ -192,9 +139,6 @@ export function settingsToDraft(
     descriptionI18n: { ...(settings.descriptionI18n ?? {}) },
     rsvpDate: toLocal(settings.rsvpDate),
     closesAt: toLocal(settings.closesAt),
-    options: settings.options
-      .filter((o) => !o.retired)
-      .map((o) => ({ key: o.key, labelI18n: { ...o.labelI18n } })),
   };
 }
 
@@ -216,15 +160,11 @@ export function draftToBody(
     descriptionI18n: nonBlank(draft.descriptionI18n),
     rsvpDate: toIso(draft.rsvpDate),
     closesAt: toIso(draft.closesAt),
-    options: draft.options.map((o) => ({ key: o.key, labelI18n: nonBlank(o.labelI18n) ?? {} })),
   };
 }
 
 /** Why the draft can't be saved, as a message key, or null. */
-export function settingsDraftError(
-  draft: RsvpSettingsDraft,
-): "rsvpKindsRequired" | "rsvpOptionLabelRequired" | null {
+export function settingsDraftError(draft: RsvpSettingsDraft): "rsvpKindsRequired" | null {
   if (draft.enabled && draft.kinds.length === 0) return "rsvpKindsRequired";
-  if (draft.options.some((o) => nonBlank(o.labelI18n) === null)) return "rsvpOptionLabelRequired";
   return null;
 }

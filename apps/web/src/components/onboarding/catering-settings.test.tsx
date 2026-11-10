@@ -53,10 +53,6 @@ function settings(overrides: Partial<RsvpSettings> = {}): RsvpSettings {
     descriptionI18n: null,
     rsvpDate: null,
     closesAt: null,
-    options: [
-      { key: "veg", labelI18n: { en: "Vegetarian" }, retired: false },
-      { key: "old", labelI18n: { en: "Old dish" }, retired: true },
-    ],
     defaults: { name: "Lunch", description: null, date: "2026-10-20T12:00:00.000Z", closesAt: "x" },
     counts: {
       activityId: 7,
@@ -71,7 +67,6 @@ function settings(overrides: Partial<RsvpSettings> = {}): RsvpSettings {
       unsure: 1,
       unanswered: 0,
       byKind: {},
-      byOption: [{ key: "veg", labelI18n: { en: "Vegetarian" }, retired: false, n: 2 }],
       intolerances: [],
       withNotes: 0,
     },
@@ -114,15 +109,9 @@ describe("CateringSettingsPanel", () => {
     expect(container.textContent).toContain("rsvpKindParticipant");
   });
 
-  it("shows counts and keeps retired options out of the editable list", () => {
+  it("shows counts and saves the draft body", async () => {
     render(settings());
     expect(container.textContent).toContain("rsvpUnsure");
-    expect(container.querySelectorAll("[aria-label^=rsvpOptionLabel]")).toHaveLength(3);
-    expect(container.textContent).toContain("rsvpRetiredOptions");
-  });
-
-  it("saves the draft body with retired options left to the server", async () => {
-    render(settings());
     await act(async () => container.querySelector<HTMLButtonElement>("[data-submit]")?.click());
     expect(mocks.save).toHaveBeenCalledWith({
       enabled: true,
@@ -132,7 +121,6 @@ describe("CateringSettingsPanel", () => {
       descriptionI18n: null,
       rsvpDate: null,
       closesAt: null,
-      options: [{ key: "veg", labelI18n: { en: "Vegetarian" } }],
     });
   });
 

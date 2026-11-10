@@ -8,7 +8,6 @@ import {
   type RsvpSettingsDraft,
   rsvpBody,
   settingsDraftError,
-  slugifyOptionKey,
 } from "./rsvp";
 
 function item(overrides: Partial<RsvpItem> = {}): RsvpItem {
@@ -20,12 +19,8 @@ function item(overrides: Partial<RsvpItem> = {}): RsvpItem {
     closesAt: "2026-10-19T12:00:00.000Z",
     location: null,
     required: false,
-    options: [],
     answer: null,
-    optionKey: null,
-    optionLabel: null,
     allowsUnsure: true,
-    optionRetired: false,
     locked: false,
     isMeal: true,
     ...overrides,
@@ -41,26 +36,14 @@ describe("rsvpBody", () => {
       item({ activityId: 4, answer: "no" }),
     ];
     const draft = draftFromItems(items);
-    draft[2] = { answer: "unsure", optionKey: null };
-    draft[4] = { answer: "yes", optionKey: null };
+    draft[2] = { answer: "unsure" };
+    draft[4] = { answer: "yes" };
     expect(rsvpBody(items, draft)).toEqual({
       answers: [
         { activityId: 2, answer: "unsure" },
         { activityId: 4, answer: "yes" },
       ],
     });
-  });
-
-  it("carries the option for a yes and never for a no", () => {
-    const options = [{ key: "veg", label: "Vegetarian" }];
-    const items = [item({ options })];
-    const draft = draftFromItems(items);
-    draft[1] = { answer: "yes", optionKey: "veg" };
-    expect(rsvpBody(items, draft).answers).toEqual([
-      { activityId: 1, answer: "yes", optionKey: "veg" },
-    ]);
-    draft[1] = { answer: "no", optionKey: null };
-    expect(rsvpBody(items, draft).answers).toEqual([{ activityId: 1, answer: "no" }]);
   });
 });
 
@@ -74,20 +57,9 @@ describe("draftBlocked", () => {
     const items = [item({ required: true, allowsUnsure: false })];
     const draft = draftFromItems(items);
     expect(draftBlocked(items, draft)).toBe(true);
-    draft[1] = { answer: "unsure", optionKey: null };
+    draft[1] = { answer: "unsure" };
     expect(draftBlocked(items, draft)).toBe(true);
-    draft[1] = { answer: "no", optionKey: null };
-    expect(draftBlocked(items, draft)).toBe(false);
-  });
-
-  it("blocks a yes without a live option, including a retired stored one", () => {
-    const options = [{ key: "std", label: "Standard" }];
-    const items = [
-      item({ options, answer: "yes", optionKey: "veg", optionRetired: true, optionLabel: "Veg" }),
-    ];
-    const draft = draftFromItems(items);
-    expect(draftBlocked(items, draft)).toBe(true);
-    draft[1] = { answer: "yes", optionKey: "std" };
+    draft[1] = { answer: "no" };
     expect(draftBlocked(items, draft)).toBe(false);
   });
 
@@ -106,7 +78,6 @@ describe("settings helpers", () => {
     descriptionI18n: {},
     rsvpDate: "",
     closesAt: "",
-    options: [{ key: "std", labelI18n: { en: "Standard", es: "" } }],
     ...overrides,
   });
 
@@ -123,7 +94,6 @@ describe("settings helpers", () => {
       required: false,
       nameI18n: { es: "Comida" },
       descriptionI18n: null,
-      options: [{ key: "std", labelI18n: { en: "Standard" } }],
     });
   });
 
@@ -131,14 +101,5 @@ describe("settings helpers", () => {
     expect(settingsDraftError(draft())).toBeNull();
     expect(settingsDraftError(draft({ kinds: [] }))).toBe("rsvpKindsRequired");
     expect(settingsDraftError(draft({ enabled: false, kinds: [] }))).toBeNull();
-    expect(settingsDraftError(draft({ options: [{ key: "a", labelI18n: { en: " " } }] }))).toBe(
-      "rsvpOptionLabelRequired",
-    );
-  });
-
-  it("derives stable unique option keys", () => {
-    expect(slugifyOptionKey("Vegetariano sin gluten!", new Set())).toBe("vegetariano_sin_gluten");
-    expect(slugifyOptionKey("Normal", new Set(["normal", "normal_2"]))).toBe("normal_3");
-    expect(slugifyOptionKey("¡¿", new Set())).toBe("option");
   });
 });

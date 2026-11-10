@@ -30,13 +30,6 @@ export interface RsvpSummary extends KindCounts {
   required: boolean;
   eligible: number;
   byKind: Partial<Record<AttendanceKind, KindCounts>>;
-  /** Attending people per option; retired option keys keep their count. */
-  byOption: Array<{
-    key: string;
-    labelI18n: Record<string, string> | null;
-    retired: boolean;
-    n: number;
-  }>;
   /** Among people attending, one entry per declared intolerance. */
   intolerances: Array<{ id: number; label: Record<string, string>; n: number }>;
   /** People attending with free-text dietary notes. */
@@ -74,10 +67,9 @@ export async function rsvpSummaries(
     starts_at: Date;
     is_meal: boolean;
     required: boolean;
-    options: Array<{ key: string; label_i18n: Record<string, string>; retired?: boolean }>;
   }>(
     `SELECT a.id, a.name, a.name_i18n, s.starts_at, (a.category = ANY($3::text[])) AS is_meal,
-            st.required, st.options
+            st.required
        FROM activity_rsvp_settings st
        JOIN activities a ON a.id = st.activity_id
        JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
@@ -95,7 +87,6 @@ export async function rsvpSummaries(
     activity_id: number;
     kind: AttendanceKind;
     state: "yes" | "no" | "unsure" | "unanswered";
-    option_key: string | null;
     n: number;
     with_notes: number;
   }>(
@@ -104,7 +95,6 @@ export async function rsvpSummaries(
             CASE WHEN r.user_id IS NULL THEN 'unanswered'
                  WHEN r.attending IS NULL THEN 'unsure'
                  WHEN r.attending THEN 'yes' ELSE 'no' END AS state,
-            r.option_key,
             count(*)::int AS n,
             count(*) FILTER (WHERE r.attending
               AND btrim(coalesce(p.food_intolerance_notes, '')) <> '')::int AS with_notes
@@ -114,7 +104,7 @@ export async function rsvpSummaries(
        LEFT JOIN activity_rsvps r
               ON r.activity_id = st.activity_id AND r.user_id = p.id AND r.event_key = st.event_key
       WHERE st.event_key = $1 AND st.activity_id = ANY($2::int[])
-      GROUP BY st.activity_id, p.kind, state, r.option_key`,
+      GROUP BY st.activity_id, p.kind, state`,
     [eventKey, ids, mealKinds()],
   );
   const { rows: intolerances } = await pool.query<{
@@ -141,7 +131,6 @@ export async function rsvpSummaries(
   return activities.map((activity) => {
     const total = zero();
     const byKind: Partial<Record<AttendanceKind, KindCounts>> = {};
-    const byOption = new Map<string, number>();
     let withNotes = 0;
     let eligible = 0;
     for (const row of counts.filter((c) => c.activity_id === activity.id)) {
@@ -162,15 +151,7 @@ export async function rsvpSummaries(
       total[slot] += row.n;
       eligible += row.n;
       withNotes += row.with_notes;
-      if (row.state === "yes" && row.option_key) {
-        byOption.set(row.option_key, (byOption.get(row.option_key) ?? 0) + row.n);
-      }
     }
-    const configured = new Map(activity.options.map((o) => [o.key, o]));
-    const optionKeys = [
-      ...configured.keys(),
-      ...[...byOption.keys()].filter((k) => !configured.has(k)),
-    ];
     return {
       activityId: activity.id,
       name: activity.name,
@@ -181,12 +162,6 @@ export async function rsvpSummaries(
       eligible,
       ...total,
       byKind,
-      byOption: optionKeys.map((key) => ({
-        key,
-        labelI18n: configured.get(key)?.label_i18n ?? null,
-        retired: configured.get(key)?.retired === true,
-        n: byOption.get(key) ?? 0,
-      })),
       intolerances: intolerances
         .filter((i) => i.activity_id === activity.id)
         .map((i) => ({ id: i.id, label: i.label, n: i.n })),
@@ -201,7 +176,7 @@ function intoleranceLabel(label: Record<string, string>, language: string): stri
 
 /**
  * Catering CSV for one activity: one row per eligible person attending, with
- * kind, chosen option, enterprise(s), intolerance labels (in `language`) and notes.
+ * kind, enterprise(s), intolerance labels (in `language`) and notes.
  */
 export async function exportRsvpCsv(
   actorId: number,
@@ -223,13 +198,12 @@ export async function exportRsvpCsv(
     name: string | null;
     surname: string | null;
     kind: string;
-    option_key: string | null;
     enterprises: string | null;
     labels: Record<string, string>[] | null;
     notes: string | null;
   }>(
     `WITH ${people}
-     SELECT u.name, u.surname, p.kind, r.option_key,
+     SELECT u.name, u.surname, p.kind,
             (SELECT string_agg(DISTINCT e.name, '; ')
                FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
               WHERE sp.user_id = p.id) AS enterprises,
@@ -247,7 +221,7 @@ export async function exportRsvpCsv(
     [eventKey, activityId, mealKinds()],
   );
   return toCsv(
-    ["name", "surname", "enterprise", "intolerances", "notes", "kind", "option"],
+    ["name", "surname", "enterprise", "intolerances", "notes", "kind"],
     rows.map((r) => [
       r.name,
       r.surname,
@@ -255,7 +229,6 @@ export async function exportRsvpCsv(
       (r.labels ?? []).map((l) => intoleranceLabel(l, language)).join("; "),
       r.notes,
       r.kind,
-      r.option_key,
     ]),
   );
 }

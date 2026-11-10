@@ -49,12 +49,8 @@ function item(overrides: Partial<RsvpItem>): RsvpItem {
     closesAt: "2026-10-19T12:00:00.000Z",
     location: null,
     required: false,
-    options: [],
     answer: null,
-    optionKey: null,
-    optionLabel: null,
     allowsUnsure: true,
-    optionRetired: false,
     locked: false,
     isMeal: true,
     ...overrides,
@@ -121,40 +117,6 @@ describe("CateringRsvpForm", () => {
     const labels = [...container.querySelectorAll("[role=radio]")].map((b) => b.textContent);
     expect(labels).toEqual(["rsvpYes", "rsvpNo"]);
     click(radio("Lunch", "rsvpNo"));
-    expect(submit().disabled).toBe(false);
-  });
-
-  it("asks for an option after yes and clears it on no", () => {
-    render([
-      item({
-        options: [
-          { key: "veg", label: "Vegetarian" },
-          { key: "std", label: "Standard" },
-        ],
-      }),
-    ]);
-    expect(container.querySelector("[aria-label=rsvpOption]")).toBeNull();
-    click(radio("Lunch", "rsvpYes"));
-    expect(submit().disabled).toBe(true);
-    click(radio("rsvpOption", "Vegetarian"));
-    expect(submit().disabled).toBe(false);
-    click(radio("Lunch", "rsvpNo"));
-    expect(container.querySelector("[aria-label=rsvpOption]")).toBeNull();
-  });
-
-  it("shows a retired stored option and demands a live one", () => {
-    render([
-      item({
-        options: [{ key: "std", label: "Standard" }],
-        answer: "yes",
-        optionKey: "veg",
-        optionLabel: "Vegetarian",
-        optionRetired: true,
-      }),
-    ]);
-    expect(container.textContent).toContain("Vegetarian · rsvpOptionRetired");
-    expect(submit().disabled).toBe(true);
-    click(radio("rsvpOption", "Standard"));
     expect(submit().disabled).toBe(false);
   });
 

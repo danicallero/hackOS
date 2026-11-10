@@ -14,7 +14,7 @@ import {
 } from "../helpers.js";
 import { seedEventConfig } from "../rsvp-helpers.js";
 
-/** Per-activity RSVPs: eligibility, answers, options, locks, history and counts. */
+/** Per-activity RSVPs: eligibility, answers, locks, editions and counts. */
 
 let app: App;
 const HOUR = 3_600_000;
@@ -67,7 +67,6 @@ async function activity(
     kinds?: Kind[];
     required?: boolean;
     enabled?: boolean;
-    options?: Array<{ key: string; label_i18n: Record<string, string>; retired?: boolean }>;
     closesInHours?: number;
   } = {},
 ): Promise<number> {
@@ -85,14 +84,13 @@ async function activity(
   if (options.kinds) {
     await pool.query(
       `INSERT INTO activity_rsvp_settings
-         (activity_id, event_key, enabled, required, kinds, options, closes_at)
-       SELECT $1, event_key, $2, $3, $4::text[], $5::jsonb, $6 FROM event_config WHERE id = 1`,
+         (activity_id, event_key, enabled, required, kinds, closes_at)
+       SELECT $1, event_key, $2, $3, $4::text[], $5 FROM event_config WHERE id = 1`,
       [
         rows[0].id,
         options.enabled ?? true,
         options.required ?? false,
         options.kinds,
-        JSON.stringify(options.options ?? []),
         options.closesInHours === undefined
           ? null
           : new Date(Date.now() + options.closesInHours * HOUR),
@@ -102,7 +100,7 @@ async function activity(
   return rows[0].id;
 }
 
-type Answer = { activityId: number; answer: "yes" | "no" | "unsure"; optionKey?: string | null };
+type Answer = { activityId: number; answer: "yes" | "no" | "unsure" };
 
 async function getItems(userId: number) {
   const res = await app.inject({ method: "GET", url: "/api/me/rsvps", headers: asUser(userId) });
@@ -121,7 +119,7 @@ function putAnswers(userId: number, answers: Answer[], key?: string) {
 
 async function stored(userId: number) {
   const { rows } = await (await db()).query(
-    `SELECT activity_id, event_key, attending, option_key FROM activity_rsvps
+    `SELECT activity_id, event_key, attending FROM activity_rsvps
       WHERE user_id = $1 ORDER BY activity_id, event_key`,
     [userId],
   );
@@ -249,34 +247,14 @@ describe("answers", () => {
     ).toBe(200);
   });
 
-  it("validates options, keeps the stored one when omitted and clears it on no", async () => {
+  it("rejects the removed option field on an answer", async () => {
     const sponsor = await person("sponsor");
-    const meal = await activity({
-      kinds: ["sponsor"],
-      options: [
-        { key: "veg", label_i18n: { es: "Vegetariano", en: "Vegetarian" } },
-        { key: "std", label_i18n: { es: "Normal", en: "Standard" } },
-      ],
-    });
-    const none = await putAnswers(sponsor, [{ activityId: meal, answer: "yes" }]);
-    expect(none.statusCode).toBe(400);
-    expect(none.json().error.details.code).toBe("rsvp_option_required");
-    const bad = await putAnswers(sponsor, [{ activityId: meal, answer: "yes", optionKey: "nope" }]);
-    expect(bad.statusCode).toBe(400);
-    const takesNone = await putAnswers(sponsor, [
-      { activityId: meal, answer: "no", optionKey: "veg" },
+    const meal = await activity({ kinds: ["sponsor"] });
+    const res = await putAnswers(sponsor, [
+      { activityId: meal, answer: "yes", optionKey: "veg" } as Answer,
     ]);
-    expect(takesNone.json().error.details.code).toBe("rsvp_option_invalid");
-
-    expect(
-      (await putAnswers(sponsor, [{ activityId: meal, answer: "yes", optionKey: "veg" }]))
-        .statusCode,
-    ).toBe(200);
-    // Omitted keeps the stored option.
-    expect((await putAnswers(sponsor, [{ activityId: meal, answer: "yes" }])).statusCode).toBe(200);
-    expect((await stored(sponsor))[0].option_key).toBe("veg");
-    expect((await putAnswers(sponsor, [{ activityId: meal, answer: "no" }])).statusCode).toBe(200);
-    expect((await stored(sponsor))[0]).toMatchObject({ attending: false, option_key: null });
+    expect(res.statusCode).toBe(400);
+    expect(await stored(sponsor)).toEqual([]);
   });
 
   it("locks changes after the close, but echoing an answer unchanged is accepted", async () => {
@@ -365,29 +343,22 @@ describe("answers", () => {
   });
 });
 
-describe("options history", () => {
-  it("retires removed options, keeps past answers, labels and counts", async () => {
+describe("removed option concept", () => {
+  it("no longer exposes options on items or summaries and rejects them in settings", async () => {
     const organizer = await createUserWithCapabilities([
       CAPABILITIES.SCHEDULE_MANAGE,
       CAPABILITIES.LOGISTICS_STATS,
     ]);
     const sponsor = await person("sponsor");
-    const meal = await activity({
-      kinds: ["sponsor"],
-      options: [
-        { key: "veg", label_i18n: { en: "Vegetarian" } },
-        { key: "std", label_i18n: { en: "Standard" } },
-      ],
-    });
-    await putAnswers(sponsor, [{ activityId: meal, answer: "yes", optionKey: "veg" }]);
+    const meal = await activity({ kinds: ["sponsor"] });
+    await putAnswers(sponsor, [{ activityId: meal, answer: "yes" }]);
     const { rows } = await (await db()).query(`SELECT schedule_id FROM activities WHERE id = $1`, [
       meal,
     ]);
-    const url = `/api/schedule/${rows[0].schedule_id}/rsvp`;
 
     const put = await app.inject({
       method: "PUT",
-      url,
+      url: `/api/schedule/${rows[0].schedule_id}/rsvp`,
       headers: asUser(organizer),
       payload: {
         enabled: true,
@@ -400,35 +371,18 @@ describe("options history", () => {
         options: [{ key: "std", labelI18n: { en: "Standard" } }],
       },
     });
-    expect(put.statusCode).toBe(200);
-    expect(put.json().options).toEqual([
-      { key: "std", labelI18n: { en: "Standard" }, retired: false },
-      { key: "veg", labelI18n: { en: "Vegetarian" }, retired: true },
-    ]);
+    expect(put.statusCode).toBe(400);
 
     const [item] = await getItems(sponsor);
-    expect(item).toMatchObject({
-      answer: "yes",
-      optionKey: "veg",
-      optionLabel: "Vegetarian",
-      optionRetired: true,
-      options: [{ key: "std", label: "Standard" }],
-    });
-    // Echoing the retired answer unchanged is accepted; picking another works.
-    expect(
-      (await putAnswers(sponsor, [{ activityId: meal, answer: "yes", optionKey: "veg" }]))
-        .statusCode,
-    ).toBe(200);
+    expect(item).not.toHaveProperty("options");
+    expect(item).not.toHaveProperty("optionKey");
 
     const counts = await app.inject({
       method: "GET",
       url: "/api/logistics/rsvps",
       headers: asUser(organizer),
     });
-    expect(counts.json().activities[0].byOption).toEqual([
-      { key: "std", labelI18n: { en: "Standard" }, retired: false, n: 0 },
-      { key: "veg", labelI18n: { en: "Vegetarian" }, retired: true, n: 1 },
-    ]);
+    expect(counts.json().activities[0]).not.toHaveProperty("byOption");
   });
 });
 
@@ -458,8 +412,8 @@ describe("event editions", () => {
     expect((await getItems(sponsor))[0]).toMatchObject({ answer: null });
     expect((await putAnswers(sponsor, [{ activityId: meal, answer: "no" }])).statusCode).toBe(200);
     expect(await stored(sponsor)).toEqual([
-      { activity_id: meal, event_key: "default", attending: true, option_key: null },
-      { activity_id: meal, event_key: "next-edition", attending: false, option_key: null },
+      { activity_id: meal, event_key: "default", attending: true },
+      { activity_id: meal, event_key: "next-edition", attending: false },
     ]);
   });
 });
@@ -474,7 +428,6 @@ describe("organizer settings", () => {
       descriptionI18n: null,
       rsvpDate: null,
       closesAt: null,
-      options: [],
       ...overrides,
     };
   }
@@ -505,24 +458,6 @@ describe("organizer settings", () => {
     expect(food.json().error.details.code).toBe("rsvp_participants_excluded");
     expect((await send(payload({ enabled: false, required: true }))).statusCode).toBe(400);
     expect((await send(payload({ kinds: [] }))).statusCode).toBe(400);
-    expect(
-      (await send(payload({ options: [{ key: "A b", labelI18n: { en: "x" } }] }))).statusCode,
-    ).toBe(400);
-    expect(
-      (
-        await send(
-          payload({
-            options: [
-              { key: "a", labelI18n: { en: "x" } },
-              { key: "a", labelI18n: { en: "y" } },
-            ],
-          }),
-        )
-      ).statusCode,
-    ).toBe(400);
-    expect(
-      (await send(payload({ options: [{ key: "a", labelI18n: { en: " " } }] }))).statusCode,
-    ).toBe(400);
 
     const date = new Date(Date.now() + 100 * HOUR).toISOString();
     const key = crypto.randomUUID();
