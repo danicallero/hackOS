@@ -115,6 +115,8 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     eventKey: event.event_key,
     revision: event.onboarding_revision,
     steps: resolveOnboarding(config, event.onboarding_revision, states, facts),
+    // The organizer's localized welcome text, for the welcome step only.
+    welcomeMessage: event.onboarding_config.welcome?.message ?? null,
     facts,
     pendingMealRsvps: rsvp.pending_meal_count > 0,
   };

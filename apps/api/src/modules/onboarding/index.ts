@@ -31,12 +31,15 @@ export function registerOnboardingModule(app: FastifyInstance): void {
       schema: {
         summary: "Read my onboarding",
         description:
-          "Resumable current-edition onboarding steps, re-evaluated against current attendance, capability, RSVP and profile facts on every request.",
+          "Resumable current-edition onboarding steps, re-evaluated against current attendance, capability, RSVP and profile facts on every request. `welcomeMessage` is the organizer's localized welcome text ({es, gl, en}) or null.",
       },
     },
     async (req) => {
-      const { eventKey, revision, steps } = await readOnboarding(pool, req.userId as number);
-      return { eventKey, revision, steps };
+      const { eventKey, revision, steps, welcomeMessage } = await readOnboarding(
+        pool,
+        req.userId as number,
+      );
+      return { eventKey, revision, steps, welcomeMessage };
     },
   );
   api.put(

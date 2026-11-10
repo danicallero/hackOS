@@ -83,6 +83,33 @@ describe("HackUDC 2027 onboarding", () => {
     );
   });
 
+  it("serves the organizer's welcome message to attendees, null when none is set", async () => {
+    const app = await getApp();
+    const userId = await attendee();
+    const read = async () =>
+      (
+        await app.inject({ method: "GET", url: "/api/me/onboarding", headers: asUser(userId) })
+      ).json().welcomeMessage;
+    expect(await read()).toBeNull();
+    const manager = await createUserWithCapabilities(["event:manage"]);
+    const saved = await app.inject({
+      method: "PUT",
+      url: "/api/event/onboarding",
+      headers: asUser(manager),
+      payload: {
+        welcome: {
+          enabled: true,
+          required: false,
+          kinds: ["participant", "mentor", "sponsor", "staff"],
+          reaskOnChange: false,
+          message: { es: "Hola", gl: "Ola", en: "Hello" },
+        },
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(await read()).toEqual({ es: "Hola", gl: "Ola", en: "Hello" });
+  });
+
   it("recognizes existing dietary answers and optional RSVP unsure without a step row", async () => {
     const app = await getApp();
     const userId = await attendee();
