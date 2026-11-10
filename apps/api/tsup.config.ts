@@ -4,7 +4,7 @@ export default defineConfig({
   entry: {
     server: "src/server.ts",
     worker: "src/worker.ts",
-    migrate: "scripts/migrate.ts",
+    migrate: "scripts/migrate-cli.ts",
     seed: "scripts/seed.ts",
     "event-day-load": "scripts/event-day-load.ts",
     "create-superadmin": "scripts/create-superadmin.ts",

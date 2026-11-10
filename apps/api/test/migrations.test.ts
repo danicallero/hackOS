@@ -136,6 +136,37 @@ describe("consolidated migration baseline (H1-H59)", () => {
     );
   });
 
+  it("lets an older image start after a newer release applied extra migrations", async () => {
+    await withClient((client) =>
+      client.query("INSERT INTO _migrations (name, checksum) VALUES ($1, $2)", [
+        "9999_from_a_newer_release.sql",
+        "feedface",
+      ]),
+    );
+    try {
+      await expect(migrate(databaseUrl.toString())).resolves.toEqual([]);
+      await withClient((client) =>
+        client.query("UPDATE _migrations SET name = $1 WHERE name = $2", [
+          "0001_retired_lineage.sql",
+          "0001_hackos_baseline.sql",
+        ]),
+      );
+      await expect(migrate(databaseUrl.toString())).rejects.toThrow(
+        /Migration ledger contains "0001_retired_lineage\.sql"/,
+      );
+    } finally {
+      await withClient(async (client) => {
+        await client.query("UPDATE _migrations SET name = $1 WHERE name = $2", [
+          "0001_hackos_baseline.sql",
+          "0001_retired_lineage.sql",
+        ]);
+        await client.query("DELETE FROM _migrations WHERE name = $1", [
+          "9999_from_a_newer_release.sql",
+        ]);
+      });
+    }
+  });
+
   it("rejects duplicate numeric prefixes", () => {
     expect(() => validateMigrationFilenames(["0701_a.sql", "0701_b.sql"])).toThrow(
       /Duplicate migration sequence 0701/,

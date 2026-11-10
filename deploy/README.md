@@ -477,7 +477,31 @@ initial file transfer, manual rollback and staging, but it is not required for
 normal production rollouts. A successful explicit-SHA rollback writes
 `/opt/hackos/.release-policy` with a secret-free hold; the five-minute updater
 exits while that hold exists. A successful `latest`/`promote` deployment removes
-the hold. Failed deployments leave the existing policy unchanged.
+the hold. A failed deployment is rolled back automatically (below); on production
+that rollback also writes a hold at the release that is serving, with
+`reason=failed-release:<sha>`, so the updater does not retry the same broken
+release every tick. Promote the fixed release explicitly to clear it.
+
+### Failed releases and rollback (#1276)
+
+`incus-deploy.sh` is shared by staging (ARM64 host over SSH) and production
+(`hackos` LXC). It records the running API and web tags before changing
+anything and applies this order:
+
+1. `migrate` runs first and must succeed; a failing migration aborts the deploy
+   while the running API and worker are still untouched.
+2. `api`/`worker`, then `web`, are recreated and must become healthy. A
+   container that is restarting or has exited fails the wait immediately.
+3. If recreation or a healthcheck fails, the previous tags are recreated from
+   the images already on the host (no registry access), health is awaited, and
+   the deployment still exits non-zero. `.image-tags` keeps the previous release.
+
+Migrations that already ran stay applied. The runner accepts ledger entries from
+a newer release (same baseline lineage) so the previous image can start, which
+means each release must keep its schema compatible with the release before it
+(expand, then contract). `deploy/test-deploy-rollback.sh` covers these paths and
+CI also upgrades a database from the base branch's migrations with the built
+`node dist/migrate.js`.
 
 Both workflows check the tag and select the exact commit encoded in
 `sha-<commit>`. The production workflow transfers files with `incus file push`
