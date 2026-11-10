@@ -315,6 +315,7 @@ describe("saved profile reads (#934, #935)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       userId: jose,
+      mentor: null,
       displayName: "José Á.",
       photoUrl: `/api/users/${jose}/photo?v=aaaaaaaaaaaa`,
       headline: null,

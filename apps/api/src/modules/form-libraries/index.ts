@@ -5,9 +5,10 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption } from "../../lib/route-policy.js";
+import { isMentorEligible, MENTOR_NOT_ELIGIBLE } from "../directory/mentor.js";
 import { replaceLibraryAnswers } from "./service.js";
 
 const params = z.object({ id: z.uuid() });
@@ -62,15 +63,21 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
         body: z.object({ name }),
         summary: "Propose a question library value",
         description:
-          "Creates or reuses a case-insensitive normalized value in this question only. No quota on how many values a participant may propose. Audited atomically (H11/H16/H53).",
+          "Creates or reuses a case-insensitive normalized value in this question only. In the profile-scope mentor expertise library only effective holders of `helpdesk:offer` may propose (403 `mentor_profile_not_eligible`). No quota on how many values a participant may propose. Audited atomically (H11/H16/H53).",
       },
     },
     async (q) =>
       withTransaction(async (db) => {
-        const locked = await db.query(`SELECT id FROM form_libraries WHERE id=$1 FOR UPDATE`, [
-          q.params.id,
-        ]);
+        const locked = await db.query(
+          `SELECT id,profile FROM form_libraries WHERE id=$1 FOR UPDATE`,
+          [q.params.id],
+        );
         if (!locked.rowCount) throw new NotFoundError("Field library not found");
+        // Profile-scope catalogues (mentor expertise) are extended by eligible holders only.
+        if (locked.rows[0].profile && !(await isMentorEligible(db, q.userId as number)))
+          throw new ForbiddenError("The mentor profile needs the permission to offer help", {
+            code: MENTOR_NOT_ELIGIBLE,
+          });
         const { rows } = await db.query(
           `INSERT INTO form_library_values(library_id,name,is_test_account) SELECT $1,$2,is_test_account FROM users WHERE id=$3 ON CONFLICT(library_id,lower(name),is_test_account) DO UPDATE SET name=form_library_values.name RETURNING id,name`,
           [q.params.id, q.body.name, q.userId],
