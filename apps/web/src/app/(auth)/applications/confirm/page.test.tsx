@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ConfirmSpotPage from "./page";
 
 const state = vi.hoisted(() => ({
-  currentUserId: 42,
+  currentUserId: 42 as number | null,
+  sessionStatus: "authenticated" as "authenticated" | "unauthenticated",
   push: vi.fn(),
   refresh: vi.fn(async () => {}),
   signOut: vi.fn(async () => ({ error: null })),
@@ -18,12 +19,13 @@ vi.mock("@/lib/i18n", () => ({
 }));
 vi.mock("@/lib/session", () => ({
   useSessionContext: () => ({
-    me: { id: state.currentUserId },
-    status: "authenticated",
+    me: state.currentUserId == null ? null : { id: state.currentUserId },
+    status: state.sessionStatus,
     refresh: state.refresh,
   }),
 }));
 vi.mock("@/lib/auth-client", () => ({ signOut: state.signOut }));
+vi.mock("@/hooks/use-email-link-token", () => ({ useEmailLinkToken: () => "confirmation" }));
 vi.mock("../lib", () => ({
   isConfirmExpiredError: () => false,
   useTokenAction: () => ({
@@ -59,6 +61,7 @@ describe("acceptance confirmation", () => {
 
   beforeEach(() => {
     state.currentUserId = 42;
+    state.sessionStatus = "authenticated";
     state.push.mockClear();
     state.refresh.mockClear();
     state.signOut.mockClear();
@@ -72,7 +75,7 @@ describe("acceptance confirmation", () => {
     container.remove();
   });
 
-  it("keeps the holder signed in and opens the schedule", async () => {
+  it("keeps the holder signed in and opens the onboarding journey", async () => {
     await act(async () => root.render(<ConfirmSpotPage />));
     expect(state.signOut).not.toHaveBeenCalled();
     expect(container.textContent).toContain("Ada Lovelace");
@@ -83,7 +86,7 @@ describe("acceptance confirmation", () => {
         .find((button) => button.textContent === "goToApp")
         ?.click();
     });
-    expect(state.push).toHaveBeenCalledWith("/schedule");
+    expect(state.push).toHaveBeenCalledWith("/onboarding");
     expect(state.signOut).not.toHaveBeenCalled();
   });
 
@@ -91,5 +94,12 @@ describe("acceptance confirmation", () => {
     state.currentUserId = 7;
     await act(async () => root.render(<ConfirmSpotPage />));
     expect(state.signOut).toHaveBeenCalledOnce();
+  });
+
+  it("leaves an anonymous visitor without a session", async () => {
+    state.currentUserId = null;
+    state.sessionStatus = "unauthenticated";
+    await act(async () => root.render(<ConfirmSpotPage />));
+    expect(state.signOut).not.toHaveBeenCalled();
   });
 });

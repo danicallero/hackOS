@@ -113,6 +113,37 @@ Table activity_logs {
   user_id integer [not null]
 }
 
+Table activity_rsvp_settings {
+  activity_id integer [not null]
+  closes_at "timestamp with time zone"
+  description_i18n jsonb
+  enabled boolean [not null, default: `false`]
+  event_key text [not null]
+  kinds "text[]" [not null, default: `'{}'::text[]`]
+  name_i18n jsonb
+  options jsonb [not null, default: `'[]'::jsonb`]
+  rsvp_date "timestamp with time zone"
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+  (activity_id, event_key) [pk]
+  }
+}
+
+Table activity_rsvps {
+  activity_id integer [not null]
+  attending boolean
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null]
+  option_key text
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, activity_id, event_key) [pk]
+  }
+}
+
 Table announcement_reads {
   announcement_id integer [not null]
   read_at "timestamp with time zone" [not null, default: `now()`]
@@ -243,12 +274,14 @@ Table application_responses {
 Table applications {
   ask_food_intolerances boolean [not null, default: `false`]
   ask_shirt_size boolean [not null, default: `false`]
+  attendance_kind text [not null, default: `'participant'::text`]
   capacity integer
   close_at "timestamp with time zone"
   confirmation_window_hours integer [not null, default: `168`]
   created_at "timestamp with time zone" [not null, default: `now()`]
   current_form_version integer [not null, default: `1`]
   description text
+  event_key text [not null, default: `'default'::text`]
   id integer [pk, increment, not null]
   name text [not null]
   open_at "timestamp with time zone"
@@ -552,14 +585,26 @@ Table enterprises {
   website text
 }
 
+Table event_attendance_kinds {
+  event_key text
+  evidence text
+  kind text
+  user_id integer
+
+  Note: 'Read-only database view.'
+}
+
 Table event_config {
   event_ends_at "timestamp with time zone"
+  event_key text [not null, default: `'default'::text`]
   event_starts_at "timestamp with time zone"
   hacking_ends_at "timestamp with time zone"
   hacking_starts_at "timestamp with time zone"
   id integer [pk, not null]
   meal_plan_cutoff_hours integer [not null, default: `24`, note: '#933: meal plans lock this many hours before each meal starts.']
   name text
+  onboarding_config jsonb [not null, default: `'{}'::jsonb`]
+  onboarding_revision integer [not null, default: `1`]
   pass_back_fields jsonb [not null, default: `'[]'::jsonb`]
   pass_field_labels jsonb [not null, default: `'{}'::jsonb`]
   pass_field_visibility jsonb [not null, default: `'{}'::jsonb`]
@@ -611,6 +656,7 @@ Table form_libraries {
   application_id integer
   field_key text [not null]
   id uuid [pk, not null]
+  profile boolean [not null, default: `false`]
   project boolean [not null, default: `false`]
 }
 
@@ -889,20 +935,6 @@ Table live_activity_settings {
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
-Table meal_attendance_plans {
-  activity_id integer [not null]
-  attending boolean [not null]
-  created_at "timestamp with time zone" [not null, default: `now()`]
-  updated_at "timestamp with time zone" [not null, default: `now()`]
-  user_id integer [not null]
-
-  indexes {
-  (user_id, activity_id) [pk]
-  }
-
-  Note: '#933: personal meal plan of a sponsor; deleted with the account (H54).'
-}
-
 Table meal_scan_batch_items {
   activity_id integer [not null]
   allow_repeat boolean [not null, default: `false`]
@@ -935,6 +967,29 @@ Table meal_scan_batches {
   updated_at "timestamp with time zone" [not null, default: `now()`]
 }
 
+Table mentor_profile_expertise {
+  event_key text [not null]
+  library_value_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, event_key, library_value_id) [pk]
+  }
+}
+
+Table mentor_profiles {
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null]
+  published boolean [not null, default: `false`]
+  published_at "timestamp with time zone"
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, event_key) [pk]
+  }
+}
+
 Table notification_automation_settings {
   id integer [pk, not null, default: `1`]
   schedule_reminder_lead_minutes integer
@@ -965,6 +1020,21 @@ Table notification_preferences {
 
   indexes {
   (user_id, category, channel) [pk]
+  }
+}
+
+Table onboarding_step_states {
+  config_revision integer [not null]
+  decided_at "timestamp with time zone" [not null, default: `now()`]
+  deferred_until "timestamp with time zone"
+  event_key text [not null]
+  status text [not null]
+  step text [not null]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, event_key, step) [pk]
   }
 }
 
@@ -1464,6 +1534,17 @@ Table user_public_profiles {
   Note: '#934 directory opt-in and public fields; #935 extends it. Absence of a row = not visible.'
 }
 
+Table user_role_event_evidence {
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null]
+  role_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, role_id, event_key) [pk]
+  }
+}
+
 Table user_roles {
   assigned_at "timestamp with time zone" [not null, default: `now()`]
   assigned_by integer
@@ -1620,6 +1701,9 @@ Ref: activities.schedule_id > schedule.id
 Ref: activity_logs.activity_id > activities.id
 Ref: activity_logs.logged_by > users.id
 Ref: activity_logs.user_id > users.id
+Ref: activity_rsvp_settings.activity_id > activities.id
+Ref: activity_rsvps.activity_id > activities.id
+Ref: activity_rsvps.user_id > users.id
 Ref: announcement_reads.announcement_id > announcements.id
 Ref: announcement_reads.user_id > users.id
 Ref: announcement_recipients.announcement_id > announcements.id
@@ -1715,14 +1799,17 @@ Ref: live_activity_kind_orders.user_id > users.id
 Ref: live_activity_kind_roles.kind > live_activity_kind_settings.kind
 Ref: live_activity_kind_roles.role_id > roles.id
 Ref: live_activity_sessions.device_id > live_activity_devices.id
-Ref: meal_attendance_plans.activity_id > activities.id
-Ref: meal_attendance_plans.user_id > users.id
 Ref: meal_scan_batch_items.activity_id > activities.id
 Ref: meal_scan_batch_items.batch_id > meal_scan_batches.id
 Ref: meal_scan_batches.activity_id > activities.id
 Ref: meal_scan_batches.submitted_by > users.id
+Ref: mentor_profile_expertise.event_key > mentor_profiles.event_key
+Ref: mentor_profile_expertise.library_value_id > form_library_values.id
+Ref: mentor_profile_expertise.user_id > mentor_profiles.user_id
+Ref: mentor_profiles.user_id > users.id
 Ref: notification_outbox.user_id > users.id
 Ref: notification_preferences.user_id > users.id
+Ref: onboarding_step_states.user_id > users.id
 Ref: project_challenges.challenge_id > challenges.id
 Ref: project_challenges.repo_id > repos.id
 Ref: project_edit_requests.decided_by > users.id
@@ -1789,6 +1876,8 @@ Ref: user_invite_link_redemptions.user_id > users.id
 Ref: user_invite_links.created_by > users.id
 Ref: user_invite_links.enterprise_id > enterprises.id
 Ref: user_public_profiles.user_id > users.id
+Ref: user_role_event_evidence.role_id > roles.id
+Ref: user_role_event_evidence.user_id > users.id
 Ref: user_roles.assigned_by > users.id
 Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id

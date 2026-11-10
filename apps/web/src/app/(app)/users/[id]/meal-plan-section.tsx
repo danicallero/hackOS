@@ -52,7 +52,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
       })
       .catch((err) => {
         // Not a sponsor representative: no section.
-        if (cancelled || apiErrorReason(err) === "not_sponsor") return;
+        if (cancelled || apiErrorReason(err) === "meal_plan_not_eligible") return;
         setLoadFailed(true);
       });
     return () => {

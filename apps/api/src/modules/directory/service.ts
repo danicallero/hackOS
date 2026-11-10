@@ -10,6 +10,7 @@ import {
 } from "../../lib/errors.js";
 import { photoUrl, safePdfFilename } from "../../lib/profile-files.js";
 import { hasEventAccess } from "../identity/role.js";
+import { readPublishedMentor } from "./mentor.js";
 import type { PublicProfileInput, SocialLink } from "./schemas.js";
 
 /**
@@ -34,6 +35,11 @@ export interface DirectoryEntry {
   /** Deprecated: the first of `projects`, kept for app builds that predate it. */
   project: DirectoryProject | null;
   challenges: { id: number; name: string }[];
+  /**
+   * Expertise of a published mentor profile whose owner still holds the
+   * capability; independent of the networking opt-in (onboarding contract §5).
+   */
+  mentor: { expertise: string[] } | null;
   /** H61: knowledge of a published helper profile; `[]` otherwise. */
   helpTopics: { id: number; name: string }[];
 }
@@ -211,9 +217,20 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
     projects,
     project: projects[0] ?? null,
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
+    mentor: null,
     helpTopics: (row.help_topics ?? []).map((t) => ({ id: Number(t.id), name: t.name })),
   };
 }
+
+/**
+ * A person who published a mentor profile but keeps the networking opt-in
+ * off: only the name as they would show it by default (surname initial) and
+ * the expertise; no photo, bio, links, CV or projects.
+ */
+const MENTOR_ONLY_PROFILE = `(SELECT user_id, false AS directory_visible, false AS show_surname,
+    false AS show_photo, false AS show_project, NULL::text AS headline, NULL::text AS bio,
+    NULL::text AS location_note, '[]'::jsonb AS socials, false AS share_cv, NULL::text AS cv_key
+    FROM mentor_profiles WHERE published) p`;
 
 /**
  * Whether `userId`'s photo is published to profile readers: the same
@@ -269,8 +286,19 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
     `${entrySql("user_public_profiles p")} WHERE ${VISIBLE_WHERE} AND u.id = $1`,
     [userId],
   );
-  if (!rows[0]) throw new NotFoundError("Person not found");
-  return toEntry(rows[0]);
+  const mentor = await readPublishedMentor(pool, userId);
+  if (!rows[0]) {
+    if (!mentor) throw new NotFoundError("Person not found");
+    const { rows: only } = await pool.query<EntryRow>(
+      `${entrySql(MENTOR_ONLY_PROFILE)}
+        WHERE u.is_test_account = false AND u.id = $1
+          AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)`,
+      [userId],
+    );
+    if (!only[0]) throw new NotFoundError("Person not found");
+    return { ...toEntry(only[0]), mentor };
+  }
+  return { ...toEntry(rows[0]), mentor };
 }
 
 /**

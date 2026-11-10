@@ -1,4 +1,5 @@
 import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { ATTENDANCE_KINDS } from "@hackos/shared/onboarding";
 import { z } from "zod";
 import { PERSON_FIELDS } from "./people.js";
 
@@ -348,6 +349,16 @@ export const scheduleBody = z.object({
       "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
         "the event's Live Activity lead time before the start, then 'now, ends in'). Defaults to false.",
     ),
+  rsvp: z
+    .object({
+      enabled: z.boolean(),
+      kinds: z.array(z.enum(ATTENDANCE_KINDS)).max(ATTENDANCE_KINDS.length).default([]),
+    })
+    .optional()
+    .describe(
+      "Create the activity already asking attendance to these kinds. Only asked-to-someone " +
+        "activities appear in the logistics attendance overview.",
+    ),
 });
 
 /**
@@ -359,7 +370,7 @@ export const scheduleBody = z.object({
  * their create-time defaults (H59).
  */
 export const schedulePatchBody = scheduleBody
-  .omit({ visibility: true, audiences: true })
+  .omit({ visibility: true, audiences: true, rsvp: true })
   .partial()
   .extend({
     visibility: z.enum(["shown", "hidden"]).optional(),
@@ -443,6 +454,7 @@ export const mealPlanSummariesResponse = z.object({
       startsAt: z.string(),
       attending: z.number(),
       notAttending: z.number(),
+      unsure: z.number(),
       unanswered: z.number(),
       intolerances: z.array(
         z.object({ id: z.number(), label: z.record(z.string(), z.string()), n: z.number() }),

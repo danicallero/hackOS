@@ -111,7 +111,8 @@ export function PublicProfileCard({
   onDirtyChange,
   onSaved,
 }: {
-  onboarding?: { onFinished: () => void; onLater: () => void };
+  /** `onFinished` says which explicit choice was saved: create (opt in) or hidden (decline). */
+  onboarding?: { onFinished: (choice: "create" | "hidden") => void; onLater: () => void };
   /** Lets the profile's section list mark a section that holds unsaved edits. */
   onDirtyChange?: (dirty: boolean) => void;
   /** Called after a successful save, so another mounted copy of the editor can reload. */
@@ -237,7 +238,7 @@ export function PublicProfileCard({
       commit(next);
       setEdits(null);
       onSaved?.();
-      if (onboarding) onboarding.onFinished();
+      if (onboarding) onboarding.onFinished(directoryVisible ? "create" : "hidden");
       else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
       setSaveError(apiErrorText(err, t, t("couldNotSavePublicProfile")));

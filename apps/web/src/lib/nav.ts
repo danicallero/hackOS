@@ -497,6 +497,12 @@ export const WORKSPACES: Workspace[] = [
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
+        title: "rsvpOverviewTitle",
+        href: "/logistics/rsvps",
+        icon: UserCheckIcon,
+        anyCapability: [CAPABILITIES.LOGISTICS_STATS, CAPABILITIES.MEAL_PLANS_EXPORT],
+      },
+      {
         title: "logisticsStats",
         href: "/logistics/stats",
         icon: ChartBarIcon,

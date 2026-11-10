@@ -9,20 +9,20 @@ import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { QrCode } from "@/components/common/qr-code";
 import { Spinner } from "@/components/common/spinner";
 import { WalletButtons } from "@/components/common/wallet-buttons";
-import { NetworkingOnboarding } from "@/components/profile/networking-onboarding";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEmailLinkToken } from "@/hooks/use-email-link-token";
 import { signOut } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
+import { ONBOARDING_PATH } from "@/lib/onboarding";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import { isConfirmExpiredError, useTokenAction } from "../lib";
 
 // Public spot-confirmation landing page (H15). The acceptance email links here
-// with ?token=… (service.ts builds ${WEB_URL}/applications/confirm?token=…).
-// It POSTs the token to the public confirm route — no sign-in required — and
-// shows the outcome. A second click is idempotent (already_confirmed).
+// with #token=…. The visitor deliberately POSTs the token to confirm; GET
+// and link-scanner visits are read-only.
 //
 // The email token is an identity assertion, never a session (issue #369): the
 // page offers the ticket in Apple/Google Wallet using the scoped credential
@@ -44,7 +44,7 @@ interface ConfirmResult {
 type SessionNotice = "none" | "other_account";
 
 function ConfirmInner() {
-  const token = useSearchParams().get("token");
+  const token = useEmailLinkToken(useSearchParams().get("token"));
   const router = useRouter();
   const { t } = useLocale();
   const { me, status: sessionStatus, refresh } = useSessionContext();
@@ -64,6 +64,7 @@ function ConfirmInner() {
   const [sessionNotice, setSessionNotice] = useState<SessionNotice>("none");
   const [sessionError, setSessionError] = useState(false);
   const [navigating, setNavigating] = useState(false);
+
   const endedSession = useRef(false);
 
   // H15 / #369: preserve the ticket holder’s own session; close a different
@@ -92,7 +93,7 @@ function ConfirmInner() {
     setNavigating(true);
     try {
       if (sessionStatus === "authenticated" && me?.id === result?.user_id) {
-        router.push("/schedule");
+        router.push(ONBOARDING_PATH);
         return;
       }
       if (sessionStatus === "authenticated") {
@@ -100,7 +101,7 @@ function ConfirmInner() {
         if (response.error) throw new Error(response.error.message);
         await refresh();
       }
-      router.push(withReturnPath("/login", "/schedule"));
+      router.push(withReturnPath("/login", ONBOARDING_PATH));
     } catch {
       setSessionError(true);
     } finally {
@@ -108,6 +109,26 @@ function ConfirmInner() {
     }
   }, [sessionStatus, me, result, refresh, router]);
 
+  if (state === "ready" || state === "used") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {state === "used" ? t("confirmationLinkUsedTitle") : t("confirmPlace")}
+          </CardTitle>
+          {state === "used" && <CardDescription>{t("confirmationLinkUsedDesc")}</CardDescription>}
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {state === "ready" && (
+            <Button type="button" disabled={!token} onClick={() => void submit()}>
+              {t("confirmPlace")}
+            </Button>
+          )}
+          {!token && <p role="alert">{t("confirmationLinkInvalidDesc")}</p>}
+        </CardContent>
+      </Card>
+    );
+  }
   if (state === "loading") {
     return (
       <Card aria-busy="true">
@@ -247,11 +268,7 @@ function ConfirmInner() {
       </CardContent>
     </Card>
   );
-  return sessionStatus === "authenticated" && me?.id === result?.user_id ? (
-    <NetworkingOnboarding embedded>{confirmation}</NetworkingOnboarding>
-  ) : (
-    confirmation
-  );
+  return confirmation;
 }
 
 export default function ConfirmSpotPage() {

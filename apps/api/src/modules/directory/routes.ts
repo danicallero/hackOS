@@ -18,7 +18,9 @@ import {
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
 import { mayOpenHelper, mayOpenRequester } from "../helpdesk/helpers.js";
+import { getMentorProfile, writeMentorProfile } from "./mentor.js";
 import {
+  mentorProfileBody,
   moderationBody,
   moderationParams,
   ownPublicProfileBody,
@@ -310,6 +312,79 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         cacheControl: PDF_CACHE,
         filename: cv.filename,
       });
+    },
+  );
+
+  const mentorNote =
+    "`expertise` is the person's chosen values of the profile-scope expertise library (`libraryId`, read and extended through /api/form-libraries/:id); the library is shared by every eligible person and values are never per-user. `eligible` is true only for an effective holder of `helpdesk:offer` (the wildcard counts); no role, attendance or networking opt-in is needed. A person who loses the capability keeps their stored data, which is neither listed nor offered while ineligible and reappears unchanged if the capability returns.";
+  const mentorPut =
+    "Replaces the profile for the current event: `published` and the full `expertiseIds` list (≤30 values of the expertise library; unknown ids answer 400). Publication is independent of the directory opt-in and exposes only the expertise to people who scanned the owner. 403 `details.code: mentor_profile_not_eligible` without the capability, leaving stored data untouched; accounts being removed (H54) answer 409. Audited as `mentor_profile.updated` with the changed field names only; repeating the stored profile writes nothing (#1011).";
+  r.get(
+    "/api/me/mentor-profile",
+    {
+      config: authenticated,
+      preHandler: requireAuth,
+      schema: {
+        summary: "Read my mentor profile",
+        description: `The caller's mentor profile for the current event. ${mentorNote}`,
+      },
+    },
+    async (req) => getMentorProfile(req.userId as number),
+  );
+  r.put(
+    "/api/me/mentor-profile",
+    {
+      config: authenticated,
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        body: mentorProfileBody,
+        summary: "Update my mentor profile",
+        description: mentorPut,
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const { changed, profile } = await writeMentorProfile(userId, req.body, {
+        actorId: userId,
+        source: "web",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+  r.get(
+    "/api/users/:id/mentor-profile",
+    {
+      config: usersReader,
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: moderationParams,
+        summary: "Read a person's mentor profile",
+        description: `User management: anyone's mentor profile in the shape of GET /api/me/mentor-profile. ${mentorNote} 404 for an unknown or out-of-scope account.`,
+      },
+    },
+    async (req) => getMentorProfile(await staffSubject(req)),
+  );
+  r.put(
+    "/api/users/:id/mentor-profile",
+    {
+      config: usersWriter,
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: moderationParams,
+        body: mentorProfileBody,
+        summary: "Edit a person's mentor profile",
+        description: `User management: same body and rules as PUT /api/me/mentor-profile, audited with source \`admin\`. ${mentorPut}`,
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await writeMentorProfile(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
     },
   );
 }

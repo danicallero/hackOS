@@ -896,7 +896,8 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
         description:
           "Creates a schedule item and its linked scanner activity (H48, H25, H26). " +
           "`audiences` decides who sees it once shown (H59); `liveActivityAudience` " +
-          "(default false) also gives that audience an attendee Live Activity (#966).",
+          "(default false) also gives that audience an attendee Live Activity (#966). " +
+          "`rsvp` marks the activity as asking attendance to those kinds from creation.",
       },
     },
     async (req, reply) =>
@@ -916,6 +917,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
           notes: req.body.notes ?? null,
           liveActivityAudience: req.body.liveActivityAudience,
           titleLanguage: req.body.titleLanguage,
+          rsvp: req.body.rsvp,
         }),
       ),
   );

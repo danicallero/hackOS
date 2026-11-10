@@ -6,9 +6,15 @@ import { CertificatesPanel } from "@/components/certificates/certificates-panel"
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
+import { CateringRsvpSection } from "@/components/onboarding/catering-rsvp";
+import { ShareCard } from "@/components/onboarding/onboarding-steps";
+import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
+import { PersonalDetails } from "@/components/profile/personal-details";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
+import { WalletSection } from "@/components/profile/wallet-section";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
+import { useRsvps } from "@/hooks/use-rsvps";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
@@ -17,9 +23,7 @@ import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
 import { HelperSection } from "./helper-section";
-import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
-import { PersonalDetails } from "./personal-details";
 import { ProfileRoles } from "./profile-roles";
 import {
   type EditableSection,
@@ -27,7 +31,6 @@ import {
   type SectionDef,
   visibleProfileTabs,
 } from "./profile-sections";
-import { WalletSection } from "./wallet-section";
 
 export default function ProfileSettingsPage() {
   const { me, isPureApplicant } = useSessionContext();
@@ -44,8 +47,14 @@ export default function ProfileSettingsPage() {
  */
 function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boolean }) {
   const { t } = useLocale();
+  const rsvps = useRsvps(me.hasEventAccess ? me.id : null);
   const helper = useOwnHelperProfile();
-  const tabs = visibleProfileTabs(me, isPureApplicant, helper.data?.eligible === true);
+  const tabs = visibleProfileTabs(
+    me,
+    isPureApplicant,
+    (rsvps.items?.length ?? 0) > 0,
+    helper.data?.eligible === true,
+  );
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
@@ -59,13 +68,15 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   const [dirty, setDirty] = useState<Record<EditableSection, boolean>>({
     personal: false,
     public: false,
+    mentor: false,
+    rsvp: false,
     helpDesk: false,
-    meals: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
+  const onMentorDirty = useDirtySetter(setDirty, "mentor");
+  const onRsvpDirty = useDirtySetter(setDirty, "rsvp");
   const setHelpDeskDirty = useDirtySetter(setDirty, "helpDesk");
-  const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
     switch (id) {
@@ -75,8 +86,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return me.hasEventAccess ? <PublicProfileCard onDirtyChange={onPublicDirty} /> : null;
       case "helpDesk":
         return <HelperSection onDirtyChange={setHelpDeskDirty} />;
-      case "meals":
-        return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
+      case "mentor":
+        return <MentorProfileEditor onDirtyChange={onMentorDirty} />;
+      case "share":
+        return <ShareCard />;
+      case "rsvp":
+        return <CateringRsvpSection userId={me.id} onDirtyChange={onRsvpDirty} />;
       case "passes":
         return <WalletSection />;
       case "certificates":

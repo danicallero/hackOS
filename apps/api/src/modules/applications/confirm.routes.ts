@@ -21,8 +21,8 @@ import {
  *   via=email_link : public POST with the token from the acceptance email
  *   via=web        : authenticated owner action on their own response
  *   via=admin_override : staff (APPLICATIONS_DECIDE) acting on behalf
- * Confirm only while the token is unexpired AND status is accepted; a second
- * confirm is idempotent-friendly (returns already-confirmed). Declining just
+ * Email links are single-use; a replay with the same Idempotency-Key returns
+ * the stored result. Declining just
  * moves status → declined; dietary data is left in place so the applicant
  * can be re-accepted later without losing it.
  */
@@ -43,7 +43,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         body: confirmTokenSchema,
         summary: "Confirm a spot from the acceptance email",
         description:
-          "Public confirm for the token in the acceptance email (H15). The token is a single-purpose identity assertion, NOT a session: this route ignores cookies, issues no session, and grants nothing beyond this action (issue #369). The target account's primary email must be verified before the accepted response can advance to confirmed. Confirmation assigns the roles configured on the form, then returns an entrance ticket and `wallet_token` only when those roles (or another assigned role) grant event access. The historical string fields remain present for the already-published client and are empty when no role grants access; a scoped non-empty credential is valid for one hour and can only fetch THIS user's entrance pass from /api/wallet/scoped/apple/ticket.pkpass or /api/wallet/scoped/google/ticket. The response also includes `user_id`, `holder_name`, and `masked_email` so the landing page can identify the account and prompt the visitor to sign in as that person. A second confirm is idempotent (`already_confirmed`) and re-evaluates current role access.",
+          "Public single-use confirm for the acceptance-email token (H15). A deliberate POST validates token purpose, expiry, unused state, response association, target user and current email under transaction locks; GET never mutates. The token is not a session. Confirmation assigns configured roles and returns a ticket and a one-hour, owner-scoped wallet credential when event access exists. Same-key retries replay the first result; a new request with a used token fails with confirmation_used and never reissues a credential. The response includes the owner ID and masked email for safe session handling.",
         response: { 200: confirmByEmailResponseSchema },
       },
     },
@@ -76,7 +76,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
         body: confirmTokenSchema,
         summary: "Decline a spot from the acceptance email",
         description:
-          "Public decline for the token in the acceptance email (H15), the counterpart to /api/applications/confirm. The target account's primary email must be verified before the accepted response can advance to declined. Moves the response to declined; a second decline is idempotent (`already_declined`).",
+          "Public single-use decline for the acceptance-email token (H15). A deliberate POST validates the token and current owner/email under transaction locks before moving an accepted response to declined. Same-key retries replay the result; a used token cannot reverse an earlier confirmation or decline.",
       },
     },
     async (req) => {
@@ -115,7 +115,7 @@ export function registerConfirmRoutes(app: FastifyInstance): void {
   r.post(
     "/api/me/responses/:responseId/decline",
     {
-      preHandler: requireAuth,
+      preHandler: [requireAuth, idempotencyGuard],
       config: routeAccess({ kind: "authenticated" }),
       schema: {
         summary: "Decline my own spot",

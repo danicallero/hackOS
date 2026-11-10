@@ -37,7 +37,6 @@ import { ApiError, api } from "@/lib/api";
 import { signIn } from "@/lib/auth-client";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
-import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
 import { passwordSchema } from "@/lib/password-schema";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
@@ -172,7 +171,6 @@ function ClaimInner() {
       try {
         const result = await signIn.email({ email: account.email, password: values.password });
         if (!result.error) {
-          resetNetworkingOnboardingDeferrals();
           await refresh();
           router.push(
             destinationForKind(lookup && lookup !== "error" ? lookup.kind : "participant"),

@@ -17,6 +17,7 @@ import { DeviceMobileIcon } from "@phosphor-icons/react/dist/csr/DeviceMobile";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
+import { ListChecksIcon } from "@phosphor-icons/react/dist/csr/ListChecks";
 import { MapPinIcon } from "@phosphor-icons/react/dist/csr/MapPin";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
@@ -41,6 +42,7 @@ import { EventTab } from "./event-tab";
 import { InvitesTab } from "./invites-tab";
 import { LiveActivitiesTab } from "./live-activities-tab";
 import { NotificationsTab } from "./notifications-tab";
+import { OnboardingTab } from "./onboarding-tab";
 import { PresenceTab } from "./presence-tab";
 import { ResetJudgingDataTab } from "./reset-judging-data-tab";
 import { VenueTab } from "./venue-tab";
@@ -49,7 +51,7 @@ import { WalletTab } from "./wallet-tab";
 // Grouped by what an organizer is trying to change, not by the module that
 // stores it: every date and deadline sits under "dates".
 const GROUPS = [
-  { id: "general", label: "settingsGroupGeneral", categories: ["event", "venue"] },
+  { id: "general", label: "settingsGroupGeneral", categories: ["event", "venue", "onboarding"] },
   {
     id: "dates",
     label: "settingsGroupDates",
@@ -80,6 +82,7 @@ const CATEGORY_ICONS = {
   judging: ClockIcon,
   liveActivities: DeviceMobileIcon,
   notifications: BellIcon,
+  onboarding: ListChecksIcon,
   danger: WarningIcon,
 } as const;
 
@@ -97,6 +100,7 @@ const SECTIONS: Record<Category, (onDirtyChange: (dirty: boolean) => void) => Re
   judging: (onDirtyChange) => <JudgingWindowTab onDirtyChange={onDirtyChange} />,
   liveActivities: (onDirtyChange) => <LiveActivitiesTab onDirtyChange={onDirtyChange} />,
   notifications: (onDirtyChange) => <NotificationsTab onDirtyChange={onDirtyChange} />,
+  onboarding: (onDirtyChange) => <OnboardingTab onDirtyChange={onDirtyChange} />,
   danger: () => <ResetJudgingDataTab icon={WarningIcon} />,
 };
 
@@ -127,6 +131,7 @@ export default function EventSettingsPage() {
     judging: canJudging,
     liveActivities: canEvent,
     notifications: canEvent,
+    onboarding: canEvent,
     danger: canDanger,
   };
   const visibleCategories = CATEGORIES.filter((c) => canByCategory[c]);
@@ -147,6 +152,7 @@ export default function EventSettingsPage() {
     judging: t("judgingWindowTitle"),
     liveActivities: t("liveActivitiesTitle"),
     notifications: t("notificationsAutomationTitle"),
+    onboarding: t("onboardingSettingsTitle"),
     danger: t("dangerZone"),
   };
 

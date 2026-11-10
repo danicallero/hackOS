@@ -40,6 +40,20 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
       {
+        source: "/applications/:action(confirm|decline)",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
+      {
+        source: "/verify-email",
+        headers: [
+          { key: "Referrer-Policy", value: "strict-origin" },
+          { key: "Cache-Control", value: "no-store" },
+        ],
+      },
+      {
         source: "/.well-known/apple-app-site-association",
         headers: [{ key: "Content-Type", value: "application/json" }],
       },

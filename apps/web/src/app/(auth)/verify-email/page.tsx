@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useEmailLinkToken } from "@/hooks/use-email-link-token";
 import { useVerificationResend } from "@/hooks/use-verification-resend";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -68,10 +69,9 @@ function VerifyEmailInner() {
   // originally interrupted from, falling back to the schedule.
   const rawNext = params.get("next");
   const next = safeReturnPath(rawNext, "/event");
-  // The emailed link lands here with the token instead of hitting the API:
-  // link scanners GET every URL in a message, so verification only happens on
-  // an explicit click (a navigation, which scanners never perform).
-  const token = params.get("token");
+  // The emailed link lands here with the token in the fragment. Link scanners
+  // may GET the page, but only the explicit form POST verifies the address.
+  const token = useEmailLinkToken(params.get("token"));
 
   const form = useForm<Values>({
     mode: "onBlur",
@@ -93,10 +93,6 @@ function VerifyEmailInner() {
 
   if (token && !errorInfo && !verified) {
     const callback = safeReturnPath(params.get("callback"), "/verify-email?verified=1");
-    const confirmUrl = `${API_URL}/api/auth/verify-email?${new URLSearchParams({
-      token,
-      callbackURL: `${window.location.origin}${callback}`,
-    })}`;
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
@@ -106,9 +102,13 @@ function VerifyEmailInner() {
           <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
-          <Button className="w-full" onClick={() => window.location.assign(confirmUrl)}>
-            {t("confirmEmail")}
-          </Button>
+          <form method="post" action={`${API_URL}/api/auth/verify-email/confirm`}>
+            <input type="hidden" name="token" value={token} />
+            <input type="hidden" name="callback" value={callback} />
+            <Button className="w-full" type="submit">
+              {t("confirmEmail")}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     );

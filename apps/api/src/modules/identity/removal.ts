@@ -808,8 +808,13 @@ async function prepareAccountRemoval(
             WHERE id = $1`,
           [options.targetId],
         );
-        // #933: meal plans are personal data; the row CASCADE covers final deletion.
-        await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [
+        // HackUDC 2027 onboarding: scrub edition-scoped personal decisions and profiles.
+        await client.query(`DELETE FROM activity_rsvps WHERE user_id = $1`, [options.targetId]);
+        await client.query(`DELETE FROM onboarding_step_states WHERE user_id = $1`, [
+          options.targetId,
+        ]);
+        await client.query(`DELETE FROM mentor_profiles WHERE user_id = $1`, [options.targetId]);
+        await client.query(`DELETE FROM user_role_event_evidence WHERE user_id = $1`, [
           options.targetId,
         ]);
       }
@@ -1871,7 +1876,10 @@ export async function resetReviewFixtureAccount(
   await scrubRelationships(client, user);
   await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [user.id]);
   await client.query(`DELETE FROM user_email_history WHERE user_id = $1`, [user.id]);
-  await client.query(`DELETE FROM meal_attendance_plans WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM activity_rsvps WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM onboarding_step_states WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM mentor_profiles WHERE user_id = $1`, [user.id]);
+  await client.query(`DELETE FROM user_role_event_evidence WHERE user_id = $1`, [user.id]);
   await client.query(
     `UPDATE users
         SET email = $2,

@@ -24,7 +24,6 @@ import { Input } from "@/components/ui/input";
 import { signIn } from "@/lib/auth-client";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
-import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
 import {
   type AccountRemovalProgress,
   clearAccountRemovalProgress,
@@ -110,7 +109,6 @@ function LoginInner() {
       form.setError("root", { message: localizedSignInError(error, t) });
       return;
     }
-    resetNetworkingOnboardingDeferrals();
     await refresh();
     // The authenticated-status effect above owns the post-login transition
     // (including ?next). A second push here can race a pending sign-out route.

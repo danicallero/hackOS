@@ -66,12 +66,28 @@ other module's exported function instead), and, if it does background work, a
 
 ## Modules
 
+### onboarding (HackUDC 2027 onboarding)
+
+Resolves current-edition participant steps from attendance and profile facts, and persists audited, idempotent decisions. See [onboarding](./onboarding.md).
+
 ### identity (H1–H10)
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), authenticated password change (`POST /api/auth/change-password`),
 staff user management, and invitations including reusable enterprise and
 account links (H9/H10/H43).
+Email verification links open the web page with a fragment token. The page
+requires an explicit form POST to `/api/auth/verify-email/confirm` from the
+configured web origin. The API rejects direct verification GETs, and the POST
+invokes Better Auth's supported GET handler internally so its token checks,
+session behavior and redirect remain authoritative (H2). A matching active
+session is refreshed; Better Auth creates a target-account session when needed.
+The landing page uses `Referrer-Policy: strict-origin`: a native form POST then
+sends the site Origin for CSRF validation, while no token or return path leaves
+in a referrer. Run the browser regression with `VERIFY_API_URL`,
+`VERIFY_WEB_URL`, `TEST_DATABASE_URL` (an isolated `_test` database) and
+`pnpm --filter @hackos/api test:browser:verify-email` after starting both apps.
+
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email
@@ -125,10 +141,9 @@ count; never once dietary data is locked, H7: after an accepted application
 it takes one first answer, then only staff change it, and `/api/me` reports
 `dietaryLocked`), and
 `meal_plan` while a sponsor representative has an open offered
-meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
-/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
-and its shown schedule entry includes the `sponsor` audience (an entry without
-audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
+meal without an answer. The meal plan is a facade over per-activity RSVPs ([`catering-rsvp.md`](./catering-rsvp.md)): eligible attendees (never registered participants) read and replace it through `GET`/`PUT
+/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics,
+its RSVP settings are enabled for the current event key and ask the caller's attendance kind, and it locks `event_config.meal_plan_cutoff_hours`
 (24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
 starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
 was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
@@ -139,7 +154,7 @@ unanswered and the sponsor's `confirmedAt` is not set; always audited as
 CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`). The
 staff profile response includes `isSponsorRep` so the web overview only loads a
 meal plan for sponsor representatives, rather than probing non-sponsors and
-receiving the expected `403 not_sponsor`.
+receiving the expected `403 meal_plan_not_eligible`.
 
 On the web, the `(app)` layout shows a dismissable dialog with one step per
 pending task ("Later" hides it for the browser session via `sessionStorage`),
@@ -198,6 +213,17 @@ submission with a fresh confirmation email. Form deletion removes its responses,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
+
+Acceptance email links carry their bearer token in a URL fragment so the web
+server, referrer and request logs do not receive it. Landing pages do not act on
+load: a deliberate button submits the token in a body to the public confirmation
+or decline route. Each route checks purpose, unused state, expiry, association
+with the response, owner and current email while holding user, response and
+token locks. Successful use consumes the token. A repeated request with the same
+idempotency key replays its response; another use reports `confirmation_used`
+without issuing another Wallet credential. Expired and invalid links have
+separate errors. An authenticated owner may still decline through their own
+response route after confirming.
 
 The review modal opens on a standard view: `applications.review_hidden_fields` lists the answer keys
 hidden by default (set with `PATCH /api/applications/:id`, `applications:manage`, no form-version

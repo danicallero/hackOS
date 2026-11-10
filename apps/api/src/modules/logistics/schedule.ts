@@ -1,6 +1,7 @@
 import { DEFAULT_ACTIVITY_KIND, isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
+import type { AttendanceKind } from "@hackos/shared/onboarding";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
@@ -8,11 +9,13 @@ import { type AuthorizationContext, getEffectiveCapabilities } from "../../lib/c
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { likeContains } from "../../lib/like.js";
 import { broadcast } from "../../lib/sse.js";
+import { currentEventKey } from "../event/context.js";
 import { computeMembershipFlags, mentorOrParticipantType } from "../identity/role.js";
 import { requestLiveActivitySync } from "../live-activities/kick.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import type { Language } from "../notifications/translate/index.js";
 import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
+import { validateRsvpSettings } from "../rsvps/settings.js";
 
 const SCHEDULE_COLUMNS =
   "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, primary_language, title_i18n, description_i18n, live_activity_audience, created_at, updated_at";
@@ -75,6 +78,8 @@ export interface ScheduleInput {
   liveActivityAudience?: boolean;
   /** Language `title`/`description` are written in; defaults to the author's account language. */
   titleLanguage?: Language;
+  /** Create the item already asking attendance to these kinds. */
+  rsvp?: { enabled: boolean; kinds: AttendanceKind[] };
 }
 
 export interface SchedulePatch {
@@ -296,9 +301,10 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
       ],
     );
     const item = serialize(rows[0]);
-    await client.query(
+    const { rows: activities } = await client.query<{ id: number }>(
       `INSERT INTO activities (name, description, category, requires_scan, schedule_id, primary_language)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
       [
         item.title,
         item.description,
@@ -308,12 +314,32 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
         item.primaryLanguage,
       ],
     );
+    const activityId = activities[0]?.id;
+    if (activityId === undefined) throw new Error("Activity insert returned no id");
+    const rsvp = input.rsvp;
+    if (rsvp?.enabled) {
+      const settings = {
+        enabled: true,
+        kinds: [...rsvp.kinds].sort((a, b) => a.localeCompare(b)),
+        nameI18n: null,
+        descriptionI18n: null,
+        rsvpDate: null,
+        closesAt: null,
+      };
+      validateRsvpSettings(settings, isMealActivityKind(item.type));
+      const eventKey = await currentEventKey(client);
+      await client.query(
+        `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
+         VALUES ($1, $2, $3, $4::text[])`,
+        [activityId, eventKey, settings.enabled, settings.kinds],
+      );
+    }
     await audit(client, {
       actorId,
       entityType: "schedule",
       entityId: item.id,
       action: "create",
-      after: item,
+      after: { ...item, rsvp: rsvp?.enabled ? rsvp : null },
     });
     return item;
   });

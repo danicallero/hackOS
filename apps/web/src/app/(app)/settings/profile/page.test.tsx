@@ -32,8 +32,8 @@ vi.mock("@/components/common/page-header", () => ({
 vi.mock("@/components/certificates/certificates-panel", () => ({
   CertificatesPanel: () => <p>certificates-body</p>,
 }));
-vi.mock("./wallet-section", () => ({ WalletSection: () => <p>wallet-body</p> }));
-vi.mock("./personal-details", () => ({
+vi.mock("@/components/profile/wallet-section", () => ({ WalletSection: () => <p>wallet-body</p> }));
+vi.mock("@/components/profile/personal-details", () => ({
   PersonalDetails: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => {
     useEffect(() => onDirtyChange(personal.dirty), [onDirtyChange]);
     return <p>personal-body</p>;
@@ -42,11 +42,19 @@ vi.mock("./personal-details", () => ({
 vi.mock("@/components/profile/public-profile-card", () => ({
   PublicProfileCard: () => <p>public-body</p>,
 }));
+const rsvps = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/use-rsvps", () => ({ useRsvps: () => ({ items: rsvps.items }) }));
+vi.mock("@/components/onboarding/catering-rsvp", () => ({
+  CateringRsvpSection: () => <p>rsvp-body</p>,
+}));
+vi.mock("@/components/onboarding/onboarding-steps", () => ({ ShareCard: () => <p>share-body</p> }));
+vi.mock("@/components/profile/mentor-profile-editor", () => ({
+  MentorProfileEditor: () => <p>mentor-body</p>,
+}));
 vi.mock("./helper-section", () => ({ HelperSection: () => <p>helper-body</p> }));
 vi.mock("@/hooks/use-own-helper-profile", () => ({
   useOwnHelperProfile: () => ({ data: { eligible: helper.eligible } }),
 }));
-vi.mock("./meals-section", () => ({ MealsSection: () => <p>meals-body</p> }));
 vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));
 vi.mock("./password-card", () => ({ PasswordRow: () => null }));
@@ -66,6 +74,7 @@ const participant = {
   emailVerified: true,
   visibleRoleName: "Hacker",
   hasEventAccess: true,
+  capabilities: [] as string[],
   isSponsorRep: false,
   roles: [{ id: 1, name: "Hacker", isVisible: true }],
 };
@@ -172,10 +181,34 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
-  it("adds Meals to Personal details for a sponsor representative", async () => {
-    session.me = { ...participant, isSponsorRep: true };
+  it("adds the RSVP section to Personal details only while the person has open RSVPs", async () => {
+    rsvps.items = [{ activityId: 1 }];
     await render();
-    expect(openPanel()[0].textContent).toContain("meals-body");
+    expect(openPanel()[0].textContent).toContain("rsvp-body");
+    rsvps.items = [];
+    await render();
+    expect(openPanel()[0].textContent).not.toContain("rsvp-body");
+  });
+
+  it("lets the person revisit the share card from the public profile tab", async () => {
+    await render();
+    await openTab(1);
+    expect(container.textContent).toContain("share-body");
+  });
+
+  it("adds the mentor section to the public profile tab only for holders of the capability", async () => {
+    session.me = { ...participant, capabilities: ["helpdesk:offer"] };
+    await render();
+    await openTab(1);
+    expect(container.textContent).toContain("mentor-body");
+    session.me = { ...participant, capabilities: ["*"] };
+    await render();
+    await openTab(1);
+    expect(container.textContent).toContain("mentor-body");
+    session.me = participant;
+    await render();
+    await openTab(1);
+    expect(container.textContent).not.toContain("mentor-body");
   });
 
   const openTab = async (index: number) => {

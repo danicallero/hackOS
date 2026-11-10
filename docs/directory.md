@@ -55,6 +55,32 @@ Module: `apps/api/src/modules/directory/` (the photo routes live in
 Tests: `apps/api/test/directory/api.test.ts` and
 `apps/api/test/directory/profile-files.test.ts`.
 
+## Mentor profile (HackUDC 2027 onboarding)
+
+A person who holds the effective `helpdesk:offer` capability (the wildcard counts;
+no role, attendance kind or networking opt-in is needed) may keep a mentor
+profile: a published flag plus expertise values for the current `event_key`.
+Bio, headline, photo and links stay in the public profile; there is no second copy.
+
+| Route | Access | Behaviour |
+|---|---|---|
+| `GET/PUT /api/me/mentor-profile` | authenticated | `{ eligible, published, libraryId, expertise: {id,label}[] }`; PUT takes `{ published, expertiseIds }` |
+| `GET/PUT /api/users/:id/mentor-profile` | `users:read` / `users:write` | same shape, audited with source `admin` |
+
+- Expertise values come from the profile-scope library `mentor_expertise`
+  (`/api/form-libraries/:libraryId`, new values by `POST .../proposals`, restricted
+  to eligible holders).
+- Without the capability PUT answers 403 `details.code: mentor_profile_not_eligible`.
+  Stored data is never deleted: it is neither listed nor offered while ineligible and
+  returns unchanged when the capability does.
+- `GET /api/directory/:userId` carries `mentor: { expertise: string[] }` only while the
+  profile is published and its owner still eligible. Publishing is independent of the
+  networking opt-in: with the opt-in off a scanner receives only the name (surname
+  initial) and the expertise, 404 when nothing is published.
+- Audit `mentor_profile.updated` records changed field names only, never expertise text.
+
+Tests: `apps/api/test/directory/mentor-profile.test.ts`.
+
 ## Mobile and the confirmation invite
 
 The mobile app edits the same profile from Account ("Edit networking profile",
