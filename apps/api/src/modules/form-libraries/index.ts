@@ -145,12 +145,6 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
           const { sourceIds, targetId } = q.body.merge;
           if (sourceIds.includes(targetId) || deleting.has(targetId))
             throw new BadRequestError("Choose a retained value for merging");
-          await db.query(
-            `INSERT INTO mentor_profile_expertise (user_id,event_key,library_value_id)
-             SELECT user_id,event_key,$2 FROM mentor_profile_expertise WHERE library_value_id=ANY($1::int[])
-             ON CONFLICT DO NOTHING`,
-            [sourceIds, targetId],
-          );
           for (const id of sourceIds) deleting.add(id);
         }
         if (deleting.size)

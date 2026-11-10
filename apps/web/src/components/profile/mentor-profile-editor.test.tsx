@@ -6,7 +6,6 @@ import type { MentorProfile } from "@/lib/mentor-profile";
 const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   save: vi.fn(),
-  get: vi.fn(),
   putHelper: vi.fn(),
   helper: null as unknown,
 }));
@@ -16,35 +15,35 @@ vi.mock("@/lib/mentor-profile", async (importOriginal) => ({
   readMentorProfile: mocks.read,
   saveMentorProfile: mocks.save,
 }));
-vi.mock("@/lib/api", () => ({ api: { get: mocks.get, put: mocks.putHelper } }));
+vi.mock("@/lib/api", () => ({ api: { put: mocks.putHelper } }));
 vi.mock("@/lib/session", () => ({ useSessionContext: () => ({ canAny: () => false }) }));
-vi.mock("@/hooks/use-own-helper-profile", () => ({
-  useOwnHelperProfile: () => ({ data: mocks.helper, loading: false, mutate: vi.fn() }),
-}));
-vi.mock("@/app/(app)/help-desk/shared", () => ({ TopicsPicker: () => <p>topics</p> }));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn() } }));
 vi.mock("@/hooks/use-unsaved-changes-guard", () => ({ useUnsavedChangesGuard: () => undefined }));
+vi.mock("@/hooks/use-own-helper-profile", () => ({
+  useHelperProfileOf: () => ({ data: mocks.helper, loading: false, mutate: vi.fn() }),
+}));
 vi.mock("@/hooks/use-server-resource", () => ({
-  useServerResource: (
-    key: unknown[],
-    fetcher: (s: AbortSignal) => Promise<unknown>,
-    o?: { enabled?: boolean },
-  ) => {
+  useServerResource: (key: unknown[], fetcher: (s: AbortSignal) => Promise<unknown>) => {
     const [data, setData] = useState<unknown>(null);
     const k = JSON.stringify(key);
     // biome-ignore lint/correctness/useExhaustiveDependencies: key identifies the resource.
     useEffect(() => {
-      if (o?.enabled === false) return;
       void fetcher(new AbortController().signal).then(setData);
-    }, [k, o?.enabled]);
+    }, [k]);
     return { data, error: null, loading: !data, reload: () => undefined, mutate: setData };
   },
 }));
-vi.mock("@/components/common/library-picker", () => ({
-  LibraryPicker: ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) => (
+vi.mock("@/app/(app)/help-desk/shared", () => ({
+  TopicsPicker: ({
+    value,
+    onChange,
+  }: {
+    value: { id: number; name: string }[];
+    onChange: (v: { id: number; name: string }[]) => void;
+  }) => (
     <div>
-      <span data-testid="names">{value.join("|")}</span>
-      <button type="button" onClick={() => onChange([...value, "Rust"])}>
+      <span data-testid="topics">{value.map((topic) => topic.name).join("|")}</span>
+      <button type="button" onClick={() => onChange([...value, { id: 9, name: "Rust" }])}>
         add-rust
       </button>
     </div>
@@ -59,8 +58,16 @@ import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor"
 const profile = (over: Partial<MentorProfile> = {}): MentorProfile => ({
   eligible: true,
   published: false,
-  libraryId: "lib-1",
-  expertise: [{ id: 1, label: "Design" }],
+  expertise: [],
+  ...over,
+});
+const helperProfile = (over: Record<string, unknown> = {}) => ({
+  eligible: true,
+  published: false,
+  topics: [{ id: 5, name: "Design" }],
+  challengeIds: [3],
+  challengeOptions: [],
+  preview: { userId: 7 },
   ...over,
 });
 
@@ -71,6 +78,16 @@ const mount = async (onSaved = vi.fn()) => {
   await act(async () => undefined);
   return onSaved;
 };
+const submit = () =>
+  act(async () =>
+    container
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+const click = (label: string) =>
+  act(async () =>
+    [...container.querySelectorAll("button")].find((b) => b.textContent === label)?.click(),
+  );
 
 class ResizeObserverStub {
   observe() {}
@@ -80,14 +97,9 @@ class ResizeObserverStub {
 
 beforeEach(() => {
   (globalThis as { ResizeObserver?: unknown }).ResizeObserver = ResizeObserverStub;
-  for (const mock of [mocks.read, mocks.save, mocks.get, mocks.putHelper]) mock.mockReset();
-  mocks.helper = null;
-  mocks.get.mockResolvedValue({
-    items: [
-      { id: 1, name: "Design" },
-      { id: 2, name: "Rust" },
-    ],
-  });
+  for (const mock of [mocks.read, mocks.save, mocks.putHelper]) mock.mockReset();
+  mocks.helper = helperProfile();
+  mocks.putHelper.mockResolvedValue(helperProfile());
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -98,74 +110,54 @@ afterEach(() => {
 });
 
 describe("MentorProfileEditor", () => {
-  it("renders nothing for a person who cannot offer help, keeping their data server-side", async () => {
+  it("renders nothing for a person who can neither mentor nor help", async () => {
     mocks.read.mockResolvedValue(profile({ eligible: false, published: true }));
+    mocks.helper = helperProfile({ eligible: false });
     await mount();
     expect(container.textContent).toBe("");
   });
 
-  it("saves publication and expertise ids, independent of any networking choice", async () => {
+  it("publishes the mentor and help desk profiles with one switch and saves the areas", async () => {
     mocks.read.mockResolvedValue(profile());
     mocks.save.mockResolvedValue(profile({ published: true }));
     const onSaved = await mount();
+    expect(container.querySelectorAll("button[role=switch]")).toHaveLength(1);
     await act(async () =>
       (container.querySelector("button[role=switch]") as HTMLButtonElement).click(),
     );
-    await act(async () =>
-      [...container.querySelectorAll("button")]
-        .find((button) => button.textContent === "add-rust")
-        ?.click(),
-    );
-    await act(async () =>
-      container
-        .querySelector("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
-    );
-    expect(mocks.save).toHaveBeenCalledWith(true, [1, 2]);
+    await click("add-rust");
+    await submit();
+    expect(mocks.save).toHaveBeenCalledWith(true, undefined);
+    expect(mocks.putHelper).toHaveBeenCalledWith("/api/me/helper-profile", {
+      published: true,
+      topicIds: [5, 9],
+      challengeIds: [3],
+    });
     expect(onSaved).toHaveBeenCalled();
   });
 
   it("offers one always-enabled primary action in a guided flow and hides the save status", async () => {
     mocks.read.mockResolvedValue(profile());
-    mocks.save.mockResolvedValue(profile());
-    const onSaved = vi.fn();
     await act(async () =>
-      root.render(<MentorProfileEditor onSaved={onSaved} submitLabel="Continue" />),
+      root.render(<MentorProfileEditor onSaved={vi.fn()} submitLabel="Continue" />),
     );
     await act(async () => undefined);
-    const submit = container.querySelector<HTMLButtonElement>("button[type=submit]");
-    expect(submit?.textContent).toContain("Continue");
-    expect(submit?.disabled).toBe(false);
+    const button = container.querySelector<HTMLButtonElement>("button[type=submit]");
+    expect(button?.textContent).toContain("Continue");
+    expect(button?.disabled).toBe(false);
     expect(container.textContent).not.toContain("unsavedChanges");
   });
 
-  it("publishes the mentor and help desk profiles with one switch", async () => {
+  it("writes a person's profile through the user-management routes", async () => {
     mocks.read.mockResolvedValue(profile());
     mocks.save.mockResolvedValue(profile({ published: true }));
-    mocks.helper = {
-      eligible: true,
-      published: false,
-      topics: [{ id: 5, name: "Rust" }],
-      challengeIds: [3],
-      challengeOptions: [],
-      preview: { userId: 7 },
-    };
-    mocks.putHelper.mockResolvedValue(mocks.helper);
-    await mount();
-    expect(container.querySelectorAll("button[role=switch]")).toHaveLength(1);
+    await act(async () => root.render(<MentorProfileEditor subjectId={42} />));
+    await act(async () => undefined);
     await act(async () =>
       (container.querySelector("button[role=switch]") as HTMLButtonElement).click(),
     );
-    await act(async () =>
-      container
-        .querySelector("form")
-        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
-    );
-    expect(mocks.save).toHaveBeenCalledWith(true, [1]);
-    expect(mocks.putHelper).toHaveBeenCalledWith("/api/me/helper-profile", {
-      published: true,
-      topicIds: [5],
-      challengeIds: [3],
-    });
+    await submit();
+    expect(mocks.save).toHaveBeenCalledWith(true, 42);
+    expect(mocks.putHelper.mock.calls[0][0]).toBe("/api/users/42/helper-profile");
   });
 });

@@ -14,26 +14,26 @@ import { admitParticipant } from "../projects/fixtures.js";
 /** Mentor/helper profile (onboarding contract §5): eligibility is only `helpdesk:offer`. */
 
 let app: App;
-let libraryId: string;
 let keySeq = 0;
 
 const getApp = useTestApp();
 beforeEach(async () => {
   app = await getApp();
-  const { rows } = await pool.query(
-    `INSERT INTO form_libraries (id, project, profile, field_key)
-     VALUES (gen_random_uuid(), false, true, 'mentor_expertise')
-     ON CONFLICT (field_key) WHERE profile DO UPDATE SET field_key = EXCLUDED.field_key
-     RETURNING id`,
-  );
-  libraryId = rows[0].id;
 });
 
-async function value(name: string) {
+/** A help desk knowledge topic the person lists as an area (the mentor's expertise). */
+async function topic(userId: number, name: string) {
+  await pool.query(`INSERT INTO helper_profiles (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, [
+    userId,
+  ]);
   const { rows } = await pool.query(
-    `INSERT INTO form_library_values (library_id, name, is_test_account) VALUES ($1, $2, false) RETURNING id`,
-    [libraryId, name],
+    `INSERT INTO help_topics (name, name_key) VALUES ($1, lower($1)) RETURNING id`,
+    [name],
   );
+  await pool.query(`INSERT INTO helper_topics (user_id, topic_id) VALUES ($1, $2)`, [
+    userId,
+    rows[0].id,
+  ]);
   return rows[0].id as number;
 }
 
@@ -59,9 +59,9 @@ describe("mentor eligibility is the effective capability only", () => {
     ["a wildcard holder", [CAPABILITIES.ADMIN_ALL]],
   ])("%s may edit and publish", async (_label, caps) => {
     const id = await createUserWithCapabilities(caps);
-    const expertise = await value("Rust");
-    expect((await get(id)).json()).toMatchObject({ eligible: true, published: false, libraryId });
-    const res = await put(id, { published: true, expertiseIds: [expertise] });
+    const expertise = await topic(id, "Rust");
+    expect((await get(id)).json()).toMatchObject({ eligible: true, published: false });
+    const res = await put(id, { published: true });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       eligible: true,
@@ -73,7 +73,7 @@ describe("mentor eligibility is the effective capability only", () => {
   it("a participant holding the capability qualifies, with no networking opt-in", async () => {
     const id = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
     await admitParticipant(id);
-    const res = await put(id, { published: true, expertiseIds: [] });
+    const res = await put(id, { published: true });
     expect(res.statusCode).toBe(200);
     const { rows } = await pool.query(`SELECT 1 FROM user_public_profiles WHERE user_id=$1`, [id]);
     expect(rows).toHaveLength(0);
@@ -82,7 +82,7 @@ describe("mentor eligibility is the effective capability only", () => {
   it("without the capability the profile is ineligible and PUT answers 403 with the reason", async () => {
     const id = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
     expect((await get(id)).json()).toMatchObject({ eligible: false, published: false });
-    const res = await put(id, { published: true, expertiseIds: [] });
+    const res = await put(id, { published: true });
     expect(res.statusCode).toBe(403);
     expect(res.json().error.details.code).toBe("mentor_profile_not_eligible");
   });
@@ -91,31 +91,24 @@ describe("mentor eligibility is the effective capability only", () => {
     const id = await createUser();
     const roleId = await createRole([CAPABILITIES.HELPDESK_OFFER]);
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [id, roleId]);
-    const expertise = await value("Design");
-    await put(id, { published: true, expertiseIds: [expertise] });
+    const expertise = await topic(id, "Design");
+    await put(id, { published: true });
     await pool.query(`DELETE FROM user_roles WHERE user_id=$1 AND role_id=$2`, [id, roleId]);
     expect((await get(id)).json()).toMatchObject({
       eligible: false,
       published: true,
       expertise: [{ id: expertise, label: "Design" }],
     });
-    expect((await put(id, { published: false, expertiseIds: [] })).statusCode).toBe(403);
+    expect((await put(id, { published: false })).statusCode).toBe(403);
     await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [id, roleId]);
     expect((await get(id)).json()).toMatchObject({ eligible: true, published: true });
   });
 });
 
 describe("mentor profile writes", () => {
-  it("rejects unknown expertise values and values of other libraries", async () => {
-    const id = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    const res = await put(id, { published: true, expertiseIds: [999999] });
-    expect(res.statusCode).toBe(400);
-  });
-
   it("replays an idempotent retry and writes nothing when unchanged", async () => {
     const id = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    const a = await value("Go");
-    const body = { published: true, expertiseIds: [a] };
+    const body = { published: true };
     const first = await put(id, body, "/api/me/mentor-profile", "same");
     const replay = await put(id, body, "/api/me/mentor-profile", "same");
     expect(replay.json()).toEqual(first.json());
@@ -126,25 +119,20 @@ describe("mentor profile writes", () => {
     expect(rows[0].n).toBe(1);
   });
 
-  it("audits changed field names only, never expertise text", async () => {
+  it("audits the changed field name only", async () => {
     const id = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    const secret = await value("SentinelExpertiseZZ");
-    await put(id, { published: true, expertiseIds: [secret] });
+    await topic(id, "SentinelExpertiseZZ");
+    await put(id, { published: true });
     const { rows } = await pool.query(`SELECT * FROM audit_log WHERE entity_type='mentor_profile'`);
     expect(JSON.stringify(rows)).not.toContain("SentinelExpertiseZZ");
-    expect(rows[0].changed_fields.sort()).toEqual(["expertise", "published"]);
+    expect(rows[0].changed_fields).toEqual(["published"]);
   });
 
   it("concurrent identical writes leave one consistent profile", async () => {
     const id = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    const a = await value("A");
-    const b = await value("B");
-    const results = await Promise.all([
-      put(id, { published: true, expertiseIds: [a, b] }),
-      put(id, { published: true, expertiseIds: [b, a] }),
-    ]);
+    const results = await Promise.all([put(id, { published: true }), put(id, { published: true })]);
     expect(results.map((r) => r.statusCode)).toEqual([200, 200]);
-    expect((await get(id)).json().expertise).toHaveLength(2);
+    expect((await get(id)).json().published).toBe(true);
   });
 
   it("staff read and write need users capabilities and are audited as admin", async () => {
@@ -153,69 +141,12 @@ describe("mentor profile writes", () => {
     const writer = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
     const path = `/api/users/${target}/mentor-profile`;
     expect((await get(reader, path)).statusCode).toBe(200);
-    expect((await put(reader, { published: true, expertiseIds: [] }, path)).statusCode).toBe(403);
-    expect((await put(writer, { published: true, expertiseIds: [] }, path)).statusCode).toBe(200);
+    expect((await put(reader, { published: true }, path)).statusCode).toBe(403);
+    expect((await put(writer, { published: true }, path)).statusCode).toBe(200);
     const { rows } = await pool.query(
       `SELECT source FROM audit_log WHERE entity_type='mentor_profile'`,
     );
     expect(rows[0].source).toBe("admin");
-  });
-});
-
-describe("expertise library", () => {
-  it("only eligible holders may add values to the profile library", async () => {
-    const eligible = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    const other = await createUser();
-    const url = `/api/form-libraries/${libraryId}/proposals`;
-    const denied = await app.inject({
-      method: "POST",
-      url,
-      headers: { ...asUser(other), "idempotency-key": "p1" },
-      payload: { name: "Kotlin" },
-    });
-    expect(denied.statusCode).toBe(403);
-    const ok = await app.inject({
-      method: "POST",
-      url,
-      headers: { ...asUser(eligible), "idempotency-key": "p2" },
-      payload: { name: "Kotlin" },
-    });
-    expect(ok.statusCode).toBe(200);
-  });
-});
-
-describe("expertise curation", () => {
-  const manage = (userId: number, payload: object) =>
-    app.inject({
-      method: "POST",
-      url: `/api/profile/libraries/${libraryId}/manage`,
-      headers: { ...asUser(userId), "idempotency-key": `c-${++keySeq}` },
-      payload,
-    });
-
-  it("merge moves every mentor's choice to the retained value; delete removes it", async () => {
-    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
-    const mentor = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    const a = await value("JS");
-    const b = await value("JavaScript");
-    const c = await value("Obsolete");
-    await put(mentor, { published: true, expertiseIds: [a, c] });
-    const merged = await manage(staff, { merge: { sourceIds: [a], targetId: b }, deleteIds: [c] });
-    expect(merged.statusCode).toBe(200);
-    expect((await get(mentor)).json().expertise).toEqual([{ id: b, label: "JavaScript" }]);
-  });
-
-  it("is limited to user-management staff and to the profile library", async () => {
-    const plain = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
-    expect((await manage(plain, {})).statusCode).toBe(403);
-    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
-    const other = await app.inject({
-      method: "POST",
-      url: `/api/profile/libraries/${crypto.randomUUID()}/manage`,
-      headers: { ...asUser(staff), "idempotency-key": "x" },
-      payload: {},
-    });
-    expect(other.statusCode).toBe(404);
   });
 });
 
@@ -252,8 +183,8 @@ describe("scanner view of a mentor", () => {
 
   it("a published mentor stays readable with the networking opt-in off, exposing only name and expertise", async () => {
     const { id } = await mentor("Mia");
-    const expertise = await value("Kubernetes");
-    await put(id, { published: true, expertiseIds: [expertise] });
+    await topic(id, "Kubernetes");
+    await put(id, { published: true });
     await pool.query(
       `INSERT INTO user_public_profiles (user_id, directory_visible, bio, headline) VALUES ($1,false,'private bio','private headline')`,
       [id],
@@ -274,7 +205,7 @@ describe("scanner view of a mentor", () => {
 
   it("an unpublished mentor and a hidden person stay 404", async () => {
     const { id } = await mentor("Nia");
-    await put(id, { published: false, expertiseIds: [] });
+    await put(id, { published: false });
     expect((await card(await reader(id), id)).statusCode).toBe(404);
   });
 
@@ -286,7 +217,8 @@ describe("scanner view of a mentor", () => {
     );
     const viewer = await reader(id);
     expect((await card(viewer, id)).json().mentor).toBeNull();
-    await put(id, { published: true, expertiseIds: [await value("Python")] });
+    await topic(id, "Python");
+    await put(id, { published: true });
     expect((await card(viewer, id)).json().mentor).toEqual({ expertise: ["Python"] });
     await pool.query(`DELETE FROM user_roles WHERE user_id=$1 AND role_id=$2`, [id, roleId]);
     expect((await card(viewer, id)).json().mentor).toBeNull();

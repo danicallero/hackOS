@@ -12,3 +12,9 @@ $$;
 ALTER TABLE public.schedule DROP CONSTRAINT schedule_audiences_valid;
 ALTER TABLE public.schedule
   ADD CONSTRAINT schedule_audiences_valid CHECK (public.schedule_audiences_valid(audiences));
+
+-- DELTA(H61): a mentor's expertise is the helper's knowledge (helper_topics), one
+-- shared catalogue, so the separate mentor expertise library and its per-person
+-- selection are retired. Mentor publication stays in mentor_profiles.
+DROP TABLE public.mentor_profile_expertise;
+DELETE FROM public.form_libraries WHERE profile AND field_key = 'mentor_expertise';

@@ -90,7 +90,5 @@ export const userParams = z.object({ userId: z.coerce.number().int().positive() 
 export const moderationParams = z.object({ id: z.coerce.number().int().positive() });
 export const moderationBody = z.object({ reason: z.string().trim().min(1).max(500) });
 
-export const mentorProfileBody = z.object({
-  published: z.boolean(),
-  expertiseIds: z.array(z.number().int().positive()).max(30),
-});
+// `expertiseIds` of the retired mentor library is ignored: the areas are the help desk topics.
+export const mentorProfileBody = z.object({ published: z.boolean() });

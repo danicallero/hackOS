@@ -7,18 +7,21 @@ import type { Me } from "./types";
 export interface MentorProfile {
   eligible: boolean;
   published: boolean;
-  /** The shared expertise catalogue, read through /api/form-libraries/:id. */
-  libraryId: string | null;
+  /** The person's help desk knowledge topics, which a scan shows. */
   expertise: { id: number; label: string }[];
 }
 
 export const MENTOR_PROFILE_PATH = "/api/me/mentor-profile";
 
-export const readMentorProfile = (signal?: AbortSignal) =>
-  api.get<MentorProfile>(MENTOR_PROFILE_PATH, { signal });
+/** The caller's mentor profile, or (user management) another person's. */
+const mentorPath = (subjectId?: number) =>
+  subjectId === undefined ? MENTOR_PROFILE_PATH : `/api/users/${subjectId}/mentor-profile`;
 
-export const saveMentorProfile = (published: boolean, expertiseIds: number[]) =>
-  api.put<MentorProfile>(MENTOR_PROFILE_PATH, { published, expertiseIds });
+export const readMentorProfile = (signal?: AbortSignal, subjectId?: number) =>
+  api.get<MentorProfile>(mentorPath(subjectId), { signal });
+
+export const saveMentorProfile = (published: boolean, subjectId?: number) =>
+  api.put<MentorProfile>(mentorPath(subjectId), { published });
 
 /** The session-side hint; the API's `eligible` stays the authority. */
 export function canOfferHelp(me: Pick<Me, "capabilities">): boolean {

@@ -64,12 +64,12 @@ Bio, headline, photo and links stay in the public profile; there is no second co
 
 | Route | Access | Behaviour |
 |---|---|---|
-| `GET/PUT /api/me/mentor-profile` | authenticated | `{ eligible, published, libraryId, expertise: {id,label}[] }`; PUT takes `{ published, expertiseIds }` |
+| `GET/PUT /api/me/mentor-profile` | authenticated | `{ eligible, published, expertise: {id,label}[] }`; PUT takes `{ published }` |
 | `GET/PUT /api/users/:id/mentor-profile` | `users:read` / `users:write` | same shape, audited with source `admin` |
 
-- Expertise values come from the profile-scope library `mentor_expertise`
-  (`/api/form-libraries/:libraryId`, new values by `POST .../proposals`, restricted
-  to eligible holders).
+- `expertise` is the person's help desk knowledge topics (`helper_topics`, edited with
+  `PUT /api/me/helper-profile`): one catalogue, curated in Libraries › Knowledge areas.
+  The former mentor expertise library was retired (migration `0804`).
 - Without the capability PUT answers 403 `details.code: mentor_profile_not_eligible`.
   Stored data is never deleted: it is neither listed nor offered while ineligible and
   returns unchanged when the capability does.
