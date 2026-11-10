@@ -16,9 +16,14 @@ A change to enablement, requirement or applicable kinds increments the revision.
 The networking step is always optional; configuration cannot require consent.
 `PUT /api/me/onboarding/:step` persists a completed, skipped, deferred or
 declined decision with an idempotency key, row lock and audit entry. Deferred
-decisions become pending at their chosen future time. Completed steps re-open
-when their underlying fact becomes false, and skipped steps re-open on a later
-configuration revision. Welcome, share and completion are persisted milestones.
+decisions become pending at their chosen future time. Existing profile, dietary, notification, directory consent, mentor and RSVP facts
+are shown as completed even before a step-state row exists, so migration does not
+re-prompt people who already answered. An explicit Complete action can record
+that fact as a milestone. Completed steps re-open when their underlying fact
+becomes false, and skipped steps re-open on a later configuration revision.
+The RSVP step is pending only for an unlocked offered item without an answer
+(or a required item with an invalid unsure answer); locked unanswered items
+never trap onboarding. Welcome, share and completion are persisted milestones.
 
 Attendance is derived in `event_attendance_kinds` and read through
 `identity/attendance.ts`. Confirmed participant application evidence wins over

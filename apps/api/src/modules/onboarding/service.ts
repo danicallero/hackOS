@@ -45,23 +45,37 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     [userId, event.event_key],
   );
   const { rows: rsvpRows } = await db.query<{
-    open_count: number;
+    accessible_count: number;
     required_count: number;
-    missing_required: number;
+    pending_count: number;
+    pending_meal_count: number;
   }>(
-    `SELECT count(*)::int AS open_count,
-            count(*) FILTER (WHERE s.required)::int AS required_count,
-            count(*) FILTER (WHERE s.required AND r.user_id IS NULL)::int AS missing_required
+    `SELECT
+       count(*) FILTER (WHERE NOT locked OR answered)::int AS accessible_count,
+       count(*) FILTER (WHERE required)::int AS required_count,
+       count(*) FILTER (WHERE NOT locked AND (NOT answered OR (required AND attending IS NULL)))::int AS pending_count,
+       count(*) FILTER (WHERE is_meal AND NOT locked AND (NOT answered OR (required AND attending IS NULL)))::int AS pending_meal_count
+     FROM (
+       SELECT s.required, r.user_id IS NOT NULL AS answered, r.attending,
+              a.category = ANY($4::text[]) AS is_meal,
+              now() >= COALESCE(s.closes_at,sc.starts_at - make_interval(hours =>
+                COALESCE((SELECT meal_plan_cutoff_hours FROM event_config WHERE id=1),24))) AS locked
        FROM activity_rsvp_settings s
        JOIN activities a ON a.id=s.activity_id
        JOIN schedule sc ON sc.id=a.schedule_id
        LEFT JOIN activity_rsvps r ON r.activity_id=a.id AND r.event_key=s.event_key AND r.user_id=$1
-      WHERE s.event_key=$2 AND s.enabled AND sc.visibility='shown' AND sc.ends_at>now()
-        AND $3::text = ANY(s.kinds)
-        AND NOT ($3='participant' AND a.category = ANY($4::text[]))`,
+       WHERE s.event_key=$2 AND s.enabled AND sc.visibility='shown' AND sc.ends_at>now()
+         AND $3::text = ANY(s.kinds)
+         AND NOT ($3='participant' AND a.category = ANY($4::text[]))
+     ) offers`,
     [userId, event.event_key, kind, [...MEAL_ACTIVITY_KINDS]],
   );
-  const rsvp = rsvpRows[0] ?? { open_count: 0, required_count: 0, missing_required: 0 };
+  const rsvp = rsvpRows[0] ?? {
+    accessible_count: 0,
+    required_count: 0,
+    pending_count: 0,
+    pending_meal_count: 0,
+  };
   const config: OnboardingConfig = {
     ...event.onboarding_config,
     rsvp: {
@@ -72,13 +86,13 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
   const facts: OnboardingFacts = {
     attendanceKind: kind as AttendanceKind | null,
     mentorEligible: eligible,
-    openRsvps: rsvp.open_count > 0,
+    openRsvps: rsvp.accessible_count > 0,
     complete: {
       profile: Boolean(user?.name && user?.surname),
       dietary: Boolean(user?.dietary_confirmed_at),
       networking: Boolean(profileRows[0]?.directory_visible),
       mentor_profile: Boolean(mentorRows[0]?.published),
-      rsvp: rsvp.missing_required === 0,
+      rsvp: rsvp.pending_count === 0,
       notifications: Boolean(user?.notification_onboarded_at),
     },
   };
@@ -102,5 +116,6 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     revision: event.onboarding_revision,
     steps: resolveOnboarding(config, event.onboarding_revision, states, facts),
     facts,
+    pendingMealRsvps: rsvp.pending_meal_count > 0,
   };
 }

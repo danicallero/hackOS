@@ -71,7 +71,20 @@ export function registerOnboardingModule(app: FastifyInstance): void {
         const current = await readOnboarding(client, userId);
         const resolved = current.steps.find((item) => item.step === step);
         if (!resolved) throw new NotFoundError("Onboarding step not applicable");
-        if (resolved.status !== "pending" && !(step === "networking" && action === "decline"))
+        const { rows: previous } = await client.query<{ status: string }>(
+          "SELECT status FROM onboarding_step_states WHERE user_id=$1 AND event_key=$2 AND step=$3 FOR UPDATE",
+          [userId, current.eventKey, step],
+        );
+        const recordingExistingFact =
+          action === "complete" &&
+          resolved.status === "completed" &&
+          current.facts.complete[step] === true &&
+          previous.length === 0;
+        if (
+          resolved.status !== "pending" &&
+          !recordingExistingFact &&
+          !(step === "networking" && action === "decline")
+        )
           throw new ConflictError("Onboarding step already decided");
         if (resolved.required && (action === "skip" || action === "decline")) {
           throw new BadRequestError("Required step cannot be skipped or declined", {
@@ -94,10 +107,6 @@ export function registerOnboardingModule(app: FastifyInstance): void {
             code: ERROR_REASONS.ONBOARDING_STEP_REQUIRED,
           });
         }
-        const { rows: previous } = await client.query<{ status: string }>(
-          "SELECT status FROM onboarding_step_states WHERE user_id=$1 AND event_key=$2 AND step=$3 FOR UPDATE",
-          [userId, current.eventKey, step],
-        );
         const status =
           action === "complete"
             ? "completed"

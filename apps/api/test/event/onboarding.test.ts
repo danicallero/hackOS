@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { attendanceKind } from "../../src/modules/identity/attendance.js";
-import { sampleTemplate } from "../applications/fixtures.js";
+import { createResponse, sampleTemplate } from "../applications/fixtures.js";
 import {
   assignRole,
   asUser,
@@ -80,6 +80,59 @@ describe("HackUDC 2027 onboarding", () => {
     });
     expect(after.json().steps.find((s: { step: string }) => s.step === "welcome")?.status).toBe(
       "pending",
+    );
+  });
+
+  it("recognizes existing dietary answers and optional RSVP unsure without a step row", async () => {
+    const app = await getApp();
+    const userId = await attendee();
+    await pool.query("UPDATE users SET dietary_confirmed_at=now() WHERE id=$1", [userId]);
+    const start = new Date(Date.now() + 72 * 3600_000);
+    const { rows: schedule } = await pool.query(
+      "INSERT INTO schedule (title,starts_at,ends_at,visibility,audiences) VALUES ('Workshop',$1,$2,'shown',ARRAY['participant']) RETURNING id",
+      [start, new Date(start.getTime() + 3600_000)],
+    );
+    const { rows: activity } = await pool.query(
+      "INSERT INTO activities (name,category,schedule_id) VALUES ('Workshop','activity',$1) RETURNING id",
+      [schedule[0].id],
+    );
+    await pool.query(
+      "INSERT INTO activity_rsvp_settings (activity_id,event_key,enabled,required,kinds) VALUES ($1,'default',true,false,ARRAY['staff'])",
+      [activity[0].id],
+    );
+    const get = () =>
+      app.inject({ method: "GET", url: "/api/me/onboarding", headers: asUser(userId) });
+    const firstResponse = await get();
+    expect(firstResponse.statusCode, firstResponse.body).toBe(200);
+    const first = firstResponse.json();
+    expect(first.steps.find((step: { step: string }) => step.step === "dietary")?.status).toBe(
+      "completed",
+    );
+    expect(first.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
+      "pending",
+    );
+    await pool.query(
+      "INSERT INTO activity_rsvps (user_id,activity_id,event_key,attending) VALUES ($1,$2,'default',NULL)",
+      [userId, activity[0].id],
+    );
+    const answered = (await get()).json();
+    expect(answered.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
+      "completed",
+    );
+    await pool.query("UPDATE activity_rsvp_settings SET required=true WHERE activity_id=$1", [
+      activity[0].id,
+    ]);
+    const nowRequired = (await get()).json();
+    expect(nowRequired.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
+      "pending",
+    );
+    await pool.query(
+      "UPDATE activity_rsvp_settings SET closes_at=now()-interval '1 hour' WHERE activity_id=$1",
+      [activity[0].id],
+    );
+    const locked = (await get()).json();
+    expect(locked.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
+      "completed",
     );
   });
 
@@ -167,6 +220,23 @@ describe("HackUDC 2027 onboarding", () => {
       [created.json().id],
     );
     expect(rows[0]).toEqual({ event_key: "hackudc-2027", attendance_kind: "mentor" });
+    const changed = await app.inject({
+      method: "PATCH",
+      url: `/api/applications/${created.json().id}`,
+      headers: asUser(manager),
+      payload: { attendance_kind: "staff" },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().attendance_kind).toBe("staff");
+    const applicant = await createUser();
+    await createResponse(applicant, created.json().id, { status: "confirmed" });
+    const locked = await app.inject({
+      method: "PATCH",
+      url: `/api/applications/${created.json().id}`,
+      headers: asUser(manager),
+      payload: { attendance_kind: "participant" },
+    });
+    expect(locked.statusCode).toBe(409);
   });
 
   it("classifies participant evidence ahead of mentor and sponsor, and unknown users fail closed", async () => {
@@ -202,7 +272,7 @@ describe("HackUDC 2027 onboarding", () => {
       headers: asUser(userId),
       payload: { action: "complete" },
     });
-    expect(completed.statusCode).toBe(200);
+    expect(completed.statusCode, completed.body).toBe(200);
     const response = await app.inject({
       method: "PUT",
       url: "/api/me/onboarding/networking",

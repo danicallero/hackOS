@@ -117,20 +117,20 @@ export function resolveOnboarding(
     const state = byStep.get(step);
     const changed = Boolean(state && state.configRevision < revision);
     const pending =
-      !state ||
-      (state.status === "deferred" &&
-        state.deferredUntil !== null &&
-        new Date(state.deferredUntil) <= now) ||
-      (state.status === "skipped" && changed) ||
-      (state.status === "declined" && settings.required && settings.reaskOnChange && changed) ||
-      (state.status === "completed" &&
+      (!state && facts.complete[step] !== true) ||
+      (state?.status === "deferred" &&
+        state?.deferredUntil !== null &&
+        new Date(state?.deferredUntil ?? 0) <= now) ||
+      (state?.status === "skipped" && changed) ||
+      (state?.status === "declined" && settings.required && settings.reaskOnChange && changed) ||
+      (state?.status === "completed" &&
         (facts.complete[step] === false || (settings.reaskOnChange && changed)));
     return [
       {
         step,
-        status: pending ? ("pending" as const) : state.status,
+        status: pending ? ("pending" as const) : (state?.status ?? "completed"),
         required: settings.required,
-        deferredUntil: pending ? null : state.deferredUntil,
+        deferredUntil: pending ? null : (state?.deferredUntil ?? null),
         actions: pending
           ? ([
               "complete",

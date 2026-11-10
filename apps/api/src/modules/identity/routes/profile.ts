@@ -590,11 +590,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         ) {
           pendingProfileTasks.push("dietary");
         }
-        if (
-          eventAccess &&
-          membership.isSponsorRep &&
-          onboarding.steps.some((step) => step.step === "rsvp" && step.status === "pending")
-        ) {
+        if (eventAccess && membership.isSponsorRep && onboarding.pendingMealRsvps) {
           pendingProfileTasks.push("meal_plan");
         }
         return {
