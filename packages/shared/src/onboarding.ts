@@ -1,4 +1,4 @@
-import { CAPABILITIES } from "./capabilities.js";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 
 /** HackUDC 2027 onboarding: event-scoped attendance and resumable steps. */
 export const MENTOR_PROFILE_CAPABILITY = CAPABILITIES.HELPDESK_OFFER;
