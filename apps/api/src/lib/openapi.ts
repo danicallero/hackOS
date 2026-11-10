@@ -293,7 +293,8 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
   addAuthOperation(paths, "/api/auth/verify-email", "get", {
     tags: ["auth"],
     summary: "Verify email",
-    description: "Confirm email ownership with verification token.",
+    description:
+      "Read-only scanner-safe endpoint; returns 405. The web verification page submits the token deliberately to POST /api/auth/verify-email/confirm.",
     security: [],
     parameters: [
       {
@@ -303,6 +304,14 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
         schema: { type: "string" },
       },
     ],
+  });
+
+  addAuthOperation(paths, "/api/auth/verify-email/confirm", "post", {
+    tags: ["auth"],
+    summary: "Confirm email after user action",
+    description:
+      "Accepts the verification page's form POST from the configured web origin, invokes Better Auth's verification handler, and redirects to the safe callback. The token is sent in the body, never in the request URL.",
+    security: [],
   });
 
   openapiObject.paths = paths;

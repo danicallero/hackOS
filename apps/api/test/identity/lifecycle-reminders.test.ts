@@ -114,7 +114,7 @@ describe("unverified-account reminders", () => {
     const userId = await unverifiedUser();
     await runReminders();
     const [mail] = await emails(userId);
-    expect(mail?.payload.vars.verifyUrl).toContain("/verify-email?token=");
+    expect(mail?.payload.vars.verifyUrl).toContain("#token=");
     expect(mail?.payload.vars.deleteUrl).toContain("/delete-account?token=");
   });
 

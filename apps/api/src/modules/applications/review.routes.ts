@@ -373,7 +373,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       const link = await getConfirmLink(req.params.responseId);
       if (!link) return { confirm_url: null };
       return {
-        confirm_url: `/applications/confirm?token=${link.token}`,
+        confirm_url: `/applications/confirm#token=${link.token}`,
         expires_at: link.expiresAt,
       };
     },

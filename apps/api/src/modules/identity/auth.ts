@@ -102,18 +102,16 @@ const trustedOrigins = [
 ];
 
 /**
- * Turn a Better Auth email link (which points at the API's verify endpoint)
- * into one that redirects the browser back to a real frontend page after the
- * action, instead of dumping a raw API JSON response. The token is preserved;
- * only the post-action `callbackURL` is set to the web app (WEB_URL, which is
- * in trustedOrigins above).
+ * Keep the verification token in the fragment so GET scanners and request
+ * logs never receive it. The landing page submits it to the guarded POST;
+ * Better Auth still owns the actual verification and session issuance.
  */
 function withFrontendCallback(token: string, path: string): string {
   // The emailed link opens a web page that asks for a click before calling the
   // API: link scanners (Microsoft Safe Links, antivirus gateways) GET every URL
   // in a message, and a direct GET to the API verified accounts on their own.
-  const params = new URLSearchParams({ token, callback: path });
-  return `${WEB_URL}/verify-email?${params.toString()}`;
+  const params = new URLSearchParams({ callback: path });
+  return `${WEB_URL}/verify-email?${params.toString()}#token=${encodeURIComponent(token)}`;
 }
 
 /**

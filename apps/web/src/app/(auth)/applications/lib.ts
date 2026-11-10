@@ -2,17 +2,17 @@
 
 // Shared state machine behind the token-based confirm/decline landing pages
 // (H15): both /applications/confirm and /applications/decline POST an email
-// token with an idempotency key, then distinguish expired vs. invalid-link
+// token only after a button press, then distinguish expired vs. invalid-link
 // vs. generic failure. Colocated here since it has exactly these two
 // consumers (README "Page structure": sibling routes may import a logic
 // module by relative path).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 
-type TokenActionState = "loading" | "done" | "error" | "expired";
+type TokenActionState = "ready" | "loading" | "done" | "error" | "expired" | "used";
 
 interface UseTokenActionOptions {
   token: string | null;
@@ -30,7 +30,7 @@ interface UseTokenActionResult<T> {
   retry: () => Promise<void>;
 }
 
-/** Runs once on mount, and again whenever `retry()` is called. */
+/** Runs only on an explicit user action; retries keep their idempotency key. */
 export function useTokenAction<T>({
   token,
   endpoint,
@@ -39,11 +39,10 @@ export function useTokenAction<T>({
   fallbackMessage,
 }: UseTokenActionOptions): UseTokenActionResult<T> {
   const { t } = useLocale();
-  const [state, setState] = useState<TokenActionState>("loading");
+  const [state, setState] = useState<TokenActionState>("ready");
   const [result, setResult] = useState<T | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [linkInvalid, setLinkInvalid] = useState(false);
-  const ran = useRef(false);
   const idempotencyKey = useRef<string | null>(null);
 
   const run = useCallback(async () => {
@@ -70,6 +69,13 @@ export function useTokenAction<T>({
         setState("expired");
         return;
       }
+      if (
+        err instanceof ApiError &&
+        (err.details as { code?: string } | undefined)?.code === "confirmation_used"
+      ) {
+        setState("used");
+        return;
+      }
       if (err instanceof ApiError && err.code === "not_found") {
         setLinkInvalid(true);
         setErrorMsg(invalidLinkMessage);
@@ -79,12 +85,6 @@ export function useTokenAction<T>({
       setState("error");
     }
   }, [token, endpoint, isExpired, invalidLinkMessage, fallbackMessage, t]);
-
-  useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
-    void run();
-  }, [run]);
 
   return { state, result, errorMsg, linkInvalid, retry: run };
 }
@@ -96,9 +96,9 @@ export function isConfirmExpiredError(err: unknown): boolean {
   return details.code === "confirmation_expired" || details.expired === true;
 }
 
-/** The decline endpoint signals an expired confirmation window via `status` (H15). */
+/** Both expired link tokens and expired decision windows need the same guidance. */
 export function isDeclineExpiredError(err: unknown): boolean {
   if (!(err instanceof ApiError) || !err.details || typeof err.details !== "object") return false;
-  const details = err.details as { status?: unknown };
-  return details.status === "expired";
+  const details = err.details as { code?: unknown; status?: unknown };
+  return details.code === "confirmation_expired" || details.status === "expired";
 }

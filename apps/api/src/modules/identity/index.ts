@@ -126,6 +126,16 @@ async function betterAuthPassthrough(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<FastifyReply> {
+  const authPath = request.url.split("?", 1)[0];
+  // H2: scanners may follow links with GET. Only a deliberate form POST may
+  // invoke Better Auth's GET-only verification handler.
+  if (authPath === "/api/auth/verify-email" && ["GET", "HEAD"].includes(request.method)) {
+    return reply.code(405).header("allow", "POST").send({ error: "Use the verification page" });
+  }
+  const verifying = authPath === "/api/auth/verify-email/confirm" && request.method === "POST";
+  if (verifying && request.headers.origin !== new URL(config.WEB_URL).origin) {
+    throw new ForbiddenError("Verification requires the site origin");
+  }
   await enforcePendingBetterAuthRoute(request);
 
   const isEmailSignIn =
@@ -159,6 +169,21 @@ async function betterAuthPassthrough(
 
   const host = request.headers.host ?? "localhost";
   const url = new URL(request.url, `http://${host}`);
+  if (verifying) {
+    const form = Buffer.isBuffer(request.body)
+      ? new URLSearchParams(request.body.toString("utf8"))
+      : new URLSearchParams();
+    const token = form.get("token");
+    const callback = form.get("callback");
+    if (!token || !callback?.startsWith("/verify-email?") || callback.startsWith("//")) {
+      throw new ForbiddenError("Invalid verification request");
+    }
+    url.pathname = "/api/auth/verify-email";
+    url.search = new URLSearchParams({
+      token,
+      callbackURL: new URL(callback, config.WEB_URL).toString(),
+    }).toString();
+  }
 
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
@@ -171,8 +196,9 @@ async function betterAuthPassthrough(
   // forging that header when the API isn't actually behind a proxy.
   headers.set("x-forwarded-for", request.ip);
 
-  const init: RequestInit = { method: request.method, headers };
-  const hasBody = !["GET", "HEAD"].includes(request.method) && Buffer.isBuffer(request.body);
+  const init: RequestInit = { method: verifying ? "GET" : request.method, headers };
+  const hasBody =
+    !verifying && !["GET", "HEAD"].includes(request.method) && Buffer.isBuffer(request.body);
   if (hasBody) init.body = new Uint8Array(request.body as Buffer);
 
   const webRequest = new Request(url, init);
@@ -381,6 +407,12 @@ async function pendingAuthTarget(
   if (path === "/api/auth/verify-email") {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
     return pendingAccountByVerificationToken(url.searchParams.get("token"));
+  }
+
+  if (path === "/api/auth/verify-email/confirm" && Buffer.isBuffer(request.body)) {
+    return pendingAccountByVerificationToken(
+      new URLSearchParams(request.body.toString("utf8")).get("token"),
+    );
   }
 
   return null;

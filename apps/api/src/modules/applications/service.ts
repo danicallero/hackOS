@@ -835,11 +835,25 @@ async function lockVerifiedResponseByToken(
   token: string,
   action: "confirmation" | "decline",
 ): Promise<ResponseRow> {
+  const { rows: tokenRows } = await client.query(
+    `SELECT used_at, expires_at FROM email_verification_tokens
+     WHERE token = $1 AND type = 'spot_confirmation'`,
+    [token],
+  );
+  if (!tokenRows[0]) throw new NotFoundError(`Invalid ${action} token`);
+  if (tokenRows[0].used_at) {
+    throw new ConflictError("This confirmation link has already been used", {
+      code: "confirmation_used",
+    });
+  }
+  if (new Date(tokenRows[0].expires_at).getTime() <= Date.now()) {
+    throw new ConflictError("This confirmation link has expired", { code: "confirmation_expired" });
+  }
   const { rows: targetRows } = await client.query(
     `SELECT r.id, r.user_id FROM email_verification_tokens t
      JOIN application_responses r ON r.id =
        (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
-     WHERE t.token = $1 AND t.type = 'spot_confirmation'`,
+     WHERE t.token = $1 AND t.type = 'spot_confirmation' AND t.user_id = r.user_id`,
     [token],
   );
   const target = targetRows[0] as { id: number; user_id: number } | undefined;
@@ -847,14 +861,29 @@ async function lockVerifiedResponseByToken(
   await assertVerifiedPrimaryEmail(client, target.user_id, { forUpdate: true });
 
   const { rows } = await client.query(
-    `SELECT r.* FROM email_verification_tokens t
+    `SELECT r.*, t.used_at AS token_used_at, t.expires_at AS token_expires_at,
+            t.email AS token_email, u.email AS current_email
+     FROM email_verification_tokens t
      JOIN application_responses r ON r.id =
        (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
+     JOIN users u ON u.id = r.user_id
      WHERE t.token = $1 AND t.type = 'spot_confirmation' AND r.id = $2
-     FOR UPDATE OF r`,
+       AND t.user_id = r.user_id
+     FOR UPDATE OF r, t`,
     [token, target.id],
   );
   if (!rows[0]) throw new NotFoundError(`Invalid ${action} token`);
+  if (rows[0].token_email.toLowerCase() !== rows[0].current_email.toLowerCase()) {
+    throw new NotFoundError(`Invalid ${action} token`);
+  }
+  if (rows[0].token_used_at) {
+    throw new ConflictError("This confirmation link has already been used", {
+      code: "confirmation_used",
+    });
+  }
+  if (new Date(rows[0].token_expires_at).getTime() <= Date.now()) {
+    throw new ConflictError("This confirmation link has expired", { code: "confirmation_expired" });
+  }
   return rows[0];
 }
 
@@ -1571,9 +1600,11 @@ export async function getConfirmLink(
      FROM application_responses r
      JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
      WHERE r.id = $1 AND r.status = 'accepted' AND t.type = 'spot_confirmation'
+       AND t.used_at IS NULL AND t.expires_at > now() AND t.user_id = r.user_id
        AND EXISTS (
          SELECT 1 FROM users u
           WHERE u.id = r.user_id AND u.is_test_account = false
+            AND lower(u.email) = lower(t.email)
        )
      ORDER BY t.id DESC LIMIT 1`,
     [responseId],
@@ -1651,8 +1682,8 @@ async function decisionNotificationPayload(
       timeZoneName: "short",
     }).format(rows[0].expires_at);
     decisionDetails = translateEmail("mail.application.decision.confirmationDetails", language, {
-      confirmUrl: `${config.WEB_URL}/applications/confirm?token=${confirmToken}`,
-      declineUrl: `${config.WEB_URL}/applications/decline?token=${confirmToken}`,
+      confirmUrl: `${config.WEB_URL}/applications/confirm#token=${confirmToken}`,
+      declineUrl: `${config.WEB_URL}/applications/decline#token=${confirmToken}`,
       deadlineNotice: translateEmail("mail.application.decision.confirmationDeadline", language, {
         deadline,
       }),
@@ -2042,6 +2073,11 @@ export async function confirmByToken(token: string): Promise<EmailConfirmResult>
   return withTransaction(async (client) => {
     await lockRoleGraph(client);
     const resp = await lockVerifiedResponseByToken(client, token, "confirmation");
+    if (resp.status !== "accepted") {
+      throw new ConflictError("This confirmation link has already been used", {
+        code: "confirmation_used",
+      });
+    }
     const result = await doConfirm(client, resp, "email_link", resp.user_id);
     const grant = result.ticketToken
       ? await issueWalletAccessToken(client, resp.user_id, "ticket")
@@ -2093,6 +2129,11 @@ export async function declineByToken(token: string): Promise<{
   const result = await withTransaction(async (client) => {
     await lockRoleGraph(client);
     const resp = await lockVerifiedResponseByToken(client, token, "decline");
+    if (resp.status !== "accepted") {
+      throw new ConflictError("This confirmation link has already been used", {
+        code: "confirmation_used",
+      });
+    }
     const decline = await doDecline(client, resp, "email_link", resp.user_id);
     return { ...decline, userId: resp.user_id };
   });

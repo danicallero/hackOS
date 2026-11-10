@@ -76,6 +76,12 @@ route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), authenticated password change (`POST /api/auth/change-password`),
 staff user management, and invitations including reusable enterprise and
 account links (H9/H10/H43).
+Email verification links open the web page with a fragment token. The page
+requires an explicit form POST to `/api/auth/verify-email/confirm` from the
+configured web origin. The API rejects direct verification GETs, and the POST
+invokes Better Auth's supported GET handler internally so its token checks,
+session behavior and redirect remain authoritative (H2). A matching active
+session is refreshed; Better Auth creates a target-account session when needed.
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email
@@ -201,6 +207,17 @@ submission with a fresh confirmation email. Form deletion removes its responses,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
+
+Acceptance email links carry their bearer token in a URL fragment so the web
+server, referrer and request logs do not receive it. Landing pages do not act on
+load: a deliberate button submits the token in a body to the public confirmation
+or decline route. Each route checks purpose, unused state, expiry, association
+with the response, owner and current email while holding user, response and
+token locks. Successful use consumes the token. A repeated request with the same
+idempotency key replays its response; another use reports `confirmation_used`
+without issuing another Wallet credential. Expired and invalid links have
+separate errors. An authenticated owner may still decline through their own
+response route after confirming.
 
 The review modal opens on a standard view: `applications.review_hidden_fields` lists the answer keys
 hidden by default (set with `PATCH /api/applications/:id`, `applications:manage`, no form-version

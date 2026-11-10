@@ -773,6 +773,11 @@ answers through `lib/onboarding.ts`. Reusable pieces that moved out of routes:
 `components/profile/personal-details.tsx` (`part` and `onSaved`),
 `components/profile/wallet-section.tsx`, `components/onboarding/notification-choices.tsx`.
 
+Acceptance and verification email links keep bearer tokens in URL fragments.
+Their landing pages clear the fragment and require a deliberate action before
+submitting a token in a request body. These pages send no referrer and are not
+cached. A scanner's GET therefore cannot confirm, decline or verify an account.
+
 ## Personal profile layout (H6/H7/H8)
 
 The profile uses the content canvas with two equal columns from the `xl`
