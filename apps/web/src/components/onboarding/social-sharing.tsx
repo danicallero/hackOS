@@ -134,6 +134,11 @@ export function shareFileName(
 
 type Drawable = CanvasImageSource & { width: number; height: number };
 
+/** Frees a decoded ImageBitmap's pixels; plain `<img>` sources have nothing to release. */
+function releaseImage(image: Drawable | null | undefined): void {
+  if (image && "close" in image && typeof image.close === "function") image.close();
+}
+
 function loadStaticImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -208,6 +213,8 @@ async function loadCardAssets(eventLogo: string | undefined, signal: AbortSignal
   return {
     assets: { logo, gallery, gull } satisfies CardAssets,
     usesCustomLogo: Boolean(custom),
+    /** Decoded per render, so the caller releases it once the card is drawn. */
+    customLogo: custom,
   };
 }
 
@@ -522,8 +529,16 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
   const caption = edited ?? buildCaption(language, event);
   const fileName = shareFileName(event, attendee.displayName, format);
 
-  // Decoded images survive format switches; only a changed source reloads them.
+  // The decoded photo survives format switches; only a changed source reloads
+  // it. This ref owns exactly one bitmap: it is closed when replaced, when the
+  // photo goes away, and on unmount. A fetch that finishes after its run was
+  // aborted closes its own bitmap instead of caching it.
   const photoCache = useRef<{ url: string; image: Drawable } | null>(null);
+  const releasePhoto = useCallback(() => {
+    releaseImage(photoCache.current?.image);
+    photoCache.current = null;
+  }, []);
+  useEffect(() => releasePhoto, [releasePhoto]);
 
   useEffect(() => {
     void attempt;
@@ -531,39 +546,53 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     let objectUrl: string | null = null;
     setRender({ status: "loading" });
     (async () => {
-      const [sansFont, { assets, usesCustomLogo }] = await Promise.all([
-        loadFonts(),
-        loadCardAssets(event.logo, controller.signal),
-      ]);
-      let photo: Drawable | null = null;
-      let photoFailed = false;
-      if (attendee.photoUrl && photoCache.current?.url === attendee.photoUrl) {
-        photo = photoCache.current.image;
-      } else if (attendee.photoUrl) {
-        try {
-          photo = await fetchImage(attendee.photoUrl, "include", controller.signal);
-          photoCache.current = { url: attendee.photoUrl, image: photo };
-        } catch {
-          // A failed photo is retried on the next render, never cached.
-          photoFailed = !controller.signal.aborted;
+      if (photoCache.current && photoCache.current.url !== attendee.photoUrl) releasePhoto();
+      let customLogo: Drawable | null = null;
+      try {
+        const [sansFont, loaded] = await Promise.all([
+          loadFonts(),
+          loadCardAssets(event.logo, controller.signal),
+        ]);
+        customLogo = loaded.customLogo;
+        const { assets, usesCustomLogo } = loaded;
+        let photo: Drawable | null = null;
+        let photoFailed = false;
+        if (attendee.photoUrl && photoCache.current?.url === attendee.photoUrl) {
+          photo = photoCache.current.image;
+        } else if (attendee.photoUrl) {
+          try {
+            const fetched = await fetchImage(attendee.photoUrl, "include", controller.signal);
+            if (controller.signal.aborted) {
+              releaseImage(fetched);
+            } else {
+              releasePhoto();
+              photo = fetched;
+              photoCache.current = { url: attendee.photoUrl, image: fetched };
+            }
+          } catch {
+            // A failed photo is retried on the next render, never cached.
+            photoFailed = !controller.signal.aborted;
+          }
         }
+        if (controller.signal.aborted) return;
+        const blob = await renderShareImage({
+          format,
+          eventName: title,
+          headline: fill(copyFragments[language].cardHeadline, { event: title }),
+          displayName: attendee.displayName,
+          roleLabel: attendee.roleLabel,
+          details: details || undefined,
+          photo,
+          assets,
+          textWordmark: usesCustomLogo ? false : !/hackudc/i.test(event.name),
+          sansFont,
+        });
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setRender({ status: "ready", blob, url: objectUrl, photoFailed });
+      } finally {
+        releaseImage(customLogo);
       }
-      if (controller.signal.aborted) return;
-      const blob = await renderShareImage({
-        format,
-        eventName: title,
-        headline: fill(copyFragments[language].cardHeadline, { event: title }),
-        displayName: attendee.displayName,
-        roleLabel: attendee.roleLabel,
-        details: details || undefined,
-        photo,
-        assets,
-        textWordmark: usesCustomLogo ? false : !/hackudc/i.test(event.name),
-        sansFont,
-      });
-      if (controller.signal.aborted) return;
-      objectUrl = URL.createObjectURL(blob);
-      setRender({ status: "ready", blob, url: objectUrl, photoFailed });
     })().catch(() => {
       if (!controller.signal.aborted) setRender({ status: "error" });
     });
@@ -582,6 +611,7 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     attendee.displayName,
     attendee.roleLabel,
     attendee.photoUrl,
+    releasePhoto,
   ]);
 
   const blob = render.status === "ready" ? render.blob : null;

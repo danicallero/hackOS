@@ -394,4 +394,110 @@ describe("<SocialSharing />", () => {
       "Vémonos alí",
     );
   });
+
+  describe("decoded bitmap lifecycle", () => {
+    interface Bitmap {
+      tag: string;
+      width: number;
+      height: number;
+      close: ReturnType<typeof vi.fn>;
+    }
+    let bitmaps: Bitmap[];
+    let gate: Promise<void> | null;
+
+    beforeEach(() => {
+      bitmaps = [];
+      gate = null;
+      fetchMock.mockImplementation(async (url: string) => ({
+        ok: true,
+        blob: async () => Object.assign(new Blob(["x"]), { tag: url }),
+      }));
+      vi.stubGlobal(
+        "createImageBitmap",
+        vi.fn(async (blob: Blob & { tag: string }) => {
+          if (gate) await gate;
+          const bitmap = { tag: blob.tag, width: 200, height: 200, close: vi.fn() };
+          bitmaps.push(bitmap);
+          return bitmap;
+        }),
+      );
+    });
+
+    const photo = (tag: string) => bitmaps.filter((b) => b.tag.endsWith(tag));
+    const rerender = (props: Partial<React.ComponentProps<typeof SocialSharing>>) =>
+      act(async () => {
+        root.render(<SocialSharing event={event} attendee={attendee} {...props} />);
+      });
+    const settled = () =>
+      vi.waitFor(() => expect(container.querySelector("figure img")).not.toBeNull());
+
+    it("keeps the photo across format switches and closes it on unmount", async () => {
+      await mount();
+      await act(async () =>
+        (container.querySelector('input[value="square"]') as HTMLInputElement).click(),
+      );
+      await vi.waitFor(() => expect(canvasSizes.at(-1)).toEqual([2160, 2160]));
+      expect(photo("/7/photo")).toHaveLength(1);
+      expect(photo("/7/photo")[0].close).not.toHaveBeenCalled();
+      act(() => root.unmount());
+      expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1);
+      root = createRoot(container);
+    });
+
+    it("closes the previous bitmap when the photo source changes", async () => {
+      await mount();
+      await rerender({ attendee: { ...attendee, photoUrl: "/api/users/8/photo" } });
+      await vi.waitFor(() => expect(photo("/8/photo")).toHaveLength(1));
+      await settled();
+      expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1);
+      expect(photo("/8/photo")[0].close).not.toHaveBeenCalled();
+    });
+
+    it("closes the bitmap when the photo is removed", async () => {
+      await mount();
+      await rerender({ attendee: { displayName: "Ada Lovelace" } });
+      await settled();
+      expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes a photo that finishes decoding after the component unmounted", async () => {
+      let open!: () => void;
+      gate = new Promise((resolve) => {
+        open = resolve;
+      });
+      await act(async () => {
+        root.render(<SocialSharing event={event} attendee={attendee} />);
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      act(() => root.unmount());
+      open();
+      await vi.waitFor(() => expect(photo("/7/photo")).toHaveLength(1));
+      await vi.waitFor(() => expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1));
+      root = createRoot(container);
+    });
+
+    it("closes a stale in-flight photo when the source changed before it decoded", async () => {
+      let open!: () => void;
+      gate = new Promise((resolve) => {
+        open = resolve;
+      });
+      await act(async () => {
+        root.render(<SocialSharing event={event} attendee={attendee} />);
+      });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      await rerender({ attendee: { ...attendee, photoUrl: "/api/users/8/photo" } });
+      open();
+      await vi.waitFor(() => expect(photo("/8/photo")).toHaveLength(1));
+      await settled();
+      expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1);
+      expect(photo("/8/photo")[0].close).not.toHaveBeenCalled();
+    });
+
+    it("closes a custom event logo once the card is drawn", async () => {
+      await mount({ event: { ...event, logo: "/api/logo.png" } });
+      const logos = bitmaps.filter((b) => b.tag.endsWith("/logo.png"));
+      expect(logos).toHaveLength(1);
+      expect(logos[0].close).toHaveBeenCalledTimes(1);
+    });
+  });
 });
