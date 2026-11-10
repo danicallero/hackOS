@@ -93,5 +93,5 @@ The facade still requires every open meal in a self submission.
   (`items`, `save`, `formId`) for a host such as the onboarding flow.
 - `CateringSettingsPanel` (`{ scheduleId, onDirtyChange? }`) owns its Save; it
   must not live inside the schedule entry's `<form>`.
-- Locale strings are in `apps/web/locale-fragments/catering-rsvp.<lang>.json`
-  until merged into `web.json`.
+- Locale strings live in `web.json`; their source fragments and a merge script are in
+  `apps/web/locale-fragments/`.
