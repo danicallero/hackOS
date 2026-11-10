@@ -4164,7 +4164,7 @@
   "helpDeskClaimConflict": "Esta solicitud ya está asignada. Se ha actualizado la bandeja.",
   "helpDeskComing": "{name} va de camino a {location}",
   "helpDeskGoTo": "Reúnete con {name} en {location}",
-  "helpDeskPublish": "Disponible para mentorizar",
+  "helpDeskPublish": "Aparecer en el help desk",
   "helpDeskAddIntervalOn": "Añadir disponibilidad el {day}",
   "helpDeskAddInterval": "Añadir disponibilidad",
   "helpDeskRemoveInterval": "Quitar {interval}",
@@ -4282,5 +4282,7 @@
   "onboardingDescShare": "Una imagen para publicar en tus redes.",
   "onboardingIntroTitle": "Terminemos de configurar tu experiencia",
   "onboardingIntroSub": "Unos pasos rápidos. Puedes salir en cualquier momento y seguir más tarde.",
-  "profileMentoringTitle": "Mentoría"
+  "profileMentoringTitle": "Mentoría",
+  "helpDeskSearchChallenges": "Buscar retos…",
+  "mentorExpertisePlaceholder": "Busca o añade un área…"
 }

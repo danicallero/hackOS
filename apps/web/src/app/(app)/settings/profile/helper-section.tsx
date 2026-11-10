@@ -3,9 +3,9 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { FormActions } from "@/components/common/form-actions";
+import { MultiSelect } from "@/components/common/multi-select";
 import { SwitchRow } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
@@ -99,30 +99,24 @@ function HelperForm({
       <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
         <SwitchRow checked={published} onChange={setPublished} label={t("helpDeskPublish")} />
         {profile.challengeOptions.length > 0 ? (
-          <fieldset className="space-y-2">
-            <legend className="type-label">{t("helpDeskChallengeAlerts")}</legend>
+          <div className="space-y-2">
+            <Label htmlFor={`${id}-challenges`}>{t("helpDeskChallengeAlerts")}</Label>
+            <MultiSelect
+              id={`${id}-challenges`}
+              options={profile.challengeOptions.map((option) => ({
+                value: String(option.id),
+                label: option.name,
+              }))}
+              value={challengeIds.map(String)}
+              onChange={(values) => setChallengeIds(values.map(Number))}
+              placeholder={t("helpDeskAllChallenges")}
+              searchPlaceholder={t("helpDeskSearchChallenges")}
+              disabled={pending}
+            />
             <p className="text-muted-foreground text-sm text-pretty">
               {t("helpDeskChallengeAlertsNote")}
             </p>
-            <ul className="space-y-1">
-              {profile.challengeOptions.map((option) => (
-                <li key={option.id} className="flex items-center gap-2">
-                  <Checkbox
-                    id={`${id}-challenge-${option.id}`}
-                    checked={challengeIds.includes(option.id)}
-                    onCheckedChange={(checked) =>
-                      setChallengeIds(
-                        checked
-                          ? [...challengeIds, option.id]
-                          : challengeIds.filter((value) => value !== option.id),
-                      )
-                    }
-                  />
-                  <Label htmlFor={`${id}-challenge-${option.id}`}>{option.name}</Label>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
+          </div>
         ) : null}
         <div className="space-y-2">
           <Label htmlFor={id}>{t("helpDeskKnowledge")}</Label>

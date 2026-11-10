@@ -212,18 +212,13 @@ export function NetworkingStep({ decide }: StepProps) {
 }
 
 export function MentorStep(props: StepProps) {
-  const [dirty, setDirty] = useState(false);
+  const { t } = useLocale();
   return (
     <div className="space-y-6">
       <MentorProfileEditor
         onSaved={() => props.decide("complete")}
-        onDirtyChange={setDirty}
-        actions={
-          <>
-            <StepAlternatives {...props} />
-            <ContinueWhenClean dirty={dirty} pending={props.pending} decide={props.decide} />
-          </>
-        }
+        submitLabel={t("onboardingContinue")}
+        actions={<StepAlternatives {...props} />}
       />
       <ChangeLaterNote tab="mentoring" />
     </div>

@@ -26,11 +26,14 @@ export function MentorProfileEditor({
   onSaved,
   onDirtyChange,
   actions,
+  submitLabel,
 }: {
   onSaved?: (profile: MentorProfile) => void;
   onDirtyChange?: (dirty: boolean) => void;
   /** Extra trailing actions (onboarding's Skip / Later). */
   actions?: React.ReactNode;
+  /** Guided flow: one always-enabled primary action instead of Save. */
+  submitLabel?: string;
 }) {
   const { t } = useLocale();
   const labelId = useId();
@@ -103,27 +106,34 @@ export function MentorProfileEditor({
 
   return (
     <form onSubmit={save} className="space-y-5" aria-label={t("mentorProfileTitle")}>
-      <div className="space-y-2">
-        <Label id={labelId}>{t("mentorExpertise")}</Label>
-        <LibraryPicker
-          libraryId={stored.libraryId ?? undefined}
-          value={shownNames}
-          onChange={setNames}
-          aria-labelledby={labelId}
-        />
-      </div>
       <SwitchRow
         checked={shownPublished}
         onChange={setPublished}
         label={t("mentorPublish")}
         hint={t("mentorPublishHint")}
       />
+      <div className="space-y-2">
+        <Label id={labelId}>{t("mentorExpertise")}</Label>
+        <LibraryPicker
+          libraryId={stored.libraryId ?? undefined}
+          value={shownNames}
+          onChange={setNames}
+          placeholder={t("mentorExpertisePlaceholder")}
+          aria-labelledby={labelId}
+        />
+      </div>
       {error && (
         <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
       )}
-      <FormActions pending={pending} state={state} disabled={!dirty} secondaryActions={actions} />
+      <FormActions
+        pending={pending}
+        state={state}
+        disabled={!dirty}
+        secondaryActions={actions}
+        submitLabel={submitLabel}
+      />
     </form>
   );
 }

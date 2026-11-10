@@ -18,27 +18,37 @@ export function FormActions({
   disabled = false,
   form,
   secondaryActions,
+  submitLabel,
 }: {
   pending: boolean;
   state: SaveState;
   disabled?: boolean;
   form?: string;
   secondaryActions?: React.ReactNode;
+  /**
+   * Inside a guided flow the one primary action names what happens next
+   * ("Continue"): it is always enabled and the save status is not shown.
+   */
+  submitLabel?: string;
 }) {
   const { t } = useLocale();
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-3">
-      <SaveStatus state={pending ? "saving" : state} showIcon={!pending} />
+      {submitLabel ? (
+        <span />
+      ) : (
+        <SaveStatus state={pending ? "saving" : state} showIcon={!pending} />
+      )}
       <ActionGroup className="ml-auto">
         {secondaryActions}
         <ShortcutTooltip shortcut="save">
           <SubmitButton
             pending={pending}
-            disabled={disabled}
+            disabled={submitLabel ? false : disabled}
             form={form}
             {...{ [SAVE_SHORTCUT_ATTR]: pending ? "saving" : state }}
           >
-            {t("saveChanges")}
+            {submitLabel ?? t("saveChanges")}
           </SubmitButton>
         </ShortcutTooltip>
       </ActionGroup>

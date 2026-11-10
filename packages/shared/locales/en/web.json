@@ -4164,7 +4164,7 @@
   "helpDeskClaimConflict": "This request has already been claimed. The inbox has been refreshed.",
   "helpDeskComing": "{name} is on the way to {location}",
   "helpDeskGoTo": "Meet {name} at {location}",
-  "helpDeskPublish": "Available to mentor",
+  "helpDeskPublish": "Listed in the help desk",
   "helpDeskAddIntervalOn": "Add availability on {day}",
   "helpDeskAddInterval": "Add availability",
   "helpDeskRemoveInterval": "Remove {interval}",
@@ -4282,5 +4282,7 @@
   "onboardingDescShare": "An image to post on your social networks.",
   "onboardingIntroTitle": "Let's finish setting up your experience",
   "onboardingIntroSub": "A few quick steps. You can leave at any point and continue later.",
-  "profileMentoringTitle": "Mentoring"
+  "profileMentoringTitle": "Mentoring",
+  "helpDeskSearchChallenges": "Search challenges…",
+  "mentorExpertisePlaceholder": "Search or add an area…"
 }

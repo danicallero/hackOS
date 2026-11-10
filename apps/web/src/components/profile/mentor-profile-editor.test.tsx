@@ -99,7 +99,11 @@ describe("MentorProfileEditor", () => {
     await act(async () =>
       (container.querySelector("button[role=switch]") as HTMLButtonElement).click(),
     );
-    await act(async () => (container.querySelector("button") as HTMLButtonElement).click());
+    await act(async () =>
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "add-rust")
+        ?.click(),
+    );
     await act(async () =>
       container
         .querySelector("form")
@@ -107,5 +111,19 @@ describe("MentorProfileEditor", () => {
     );
     expect(mocks.save).toHaveBeenCalledWith(true, [1, 2]);
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("offers one always-enabled primary action in a guided flow and hides the save status", async () => {
+    mocks.read.mockResolvedValue(profile());
+    mocks.save.mockResolvedValue(profile());
+    const onSaved = vi.fn();
+    await act(async () =>
+      root.render(<MentorProfileEditor onSaved={onSaved} submitLabel="Continue" />),
+    );
+    await act(async () => undefined);
+    const submit = container.querySelector<HTMLButtonElement>("button[type=submit]");
+    expect(submit?.textContent).toContain("Continue");
+    expect(submit?.disabled).toBe(false);
+    expect(container.textContent).not.toContain("unsavedChanges");
   });
 });
