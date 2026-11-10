@@ -27,7 +27,6 @@ export function OnboardingEntry({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const eligible = Boolean(me?.hasEventAccess && me.emailVerified);
-  const here = pathname + (typeof window === "undefined" ? "" : window.location.search);
   const userId = me?.id ?? null;
 
   useEffect(() => {
@@ -46,11 +45,11 @@ export function OnboardingEntry({ children }: { children: React.ReactNode }) {
           !controller.signal.aborted &&
           hasPendingOnboarding(forPerson(state, { profileLocked, dietaryLocked }))
         )
-          router.replace(withReturnPath(ONBOARDING_PATH, here));
+          router.replace(withReturnPath(ONBOARDING_PATH, pathname));
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [eligible, userId, pathname, here, router, profileLocked, dietaryLocked]);
+  }, [eligible, userId, pathname, router, profileLocked, dietaryLocked]);
 
   return children;
 }
