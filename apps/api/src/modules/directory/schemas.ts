@@ -76,6 +76,8 @@ export const publicProfileBody = z.object({
   showSurname: z.boolean(),
   showPhoto: z.boolean(),
   showProject: z.boolean(),
+  // Omitted by older clients: keep the stored setting. New profiles default to visible.
+  showGithub: z.boolean().optional(),
   headline: publicText(80),
   locationNote: publicText(60),
   // #935: omitted keeps the stored value, so older clients replace only what they know.
