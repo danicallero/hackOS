@@ -148,16 +148,25 @@ describe("MentorProfileEditor", () => {
     expect(container.textContent).not.toContain("unsavedChanges");
   });
 
-  it("writes a person's profile through the user-management routes", async () => {
-    mocks.read.mockResolvedValue(profile());
-    mocks.save.mockResolvedValue(profile({ published: true }));
+  it("writes a person's profile through the user-management routes, and can only unpublish", async () => {
+    mocks.read.mockResolvedValue(profile({ published: true }));
+    mocks.save.mockResolvedValue(profile({ published: false }));
+    mocks.helper = helperProfile({ published: true });
     await act(async () => root.render(<MentorProfileEditor subjectId={42} />));
     await act(async () => undefined);
-    await act(async () =>
-      (container.querySelector("button[role=switch]") as HTMLButtonElement).click(),
-    );
+    const toggle = container.querySelector("button[role=switch]") as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    await act(async () => toggle.click());
     await submit();
-    expect(mocks.save).toHaveBeenCalledWith(true, 42);
+    expect(mocks.save).toHaveBeenCalledWith(false, 42);
     expect(mocks.putHelper.mock.calls[0][0]).toBe("/api/users/42/helper-profile");
+  });
+
+  it("does not let user management publish a person who has not", async () => {
+    mocks.read.mockResolvedValue(profile());
+    await act(async () => root.render(<MentorProfileEditor subjectId={42} />));
+    await act(async () => undefined);
+    expect(container.querySelector<HTMLButtonElement>("button[role=switch]")?.disabled).toBe(true);
+    expect(container.textContent).toContain("mentorPublishOwnConsent");
   });
 });

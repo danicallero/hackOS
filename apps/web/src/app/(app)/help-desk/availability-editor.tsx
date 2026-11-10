@@ -23,9 +23,12 @@ import { ScheduleDays } from "./schedule-view";
 export function AvailabilityEditor({
   profile,
   onSaved,
+  path = "/api/me/helper-profile/availability",
 }: {
   profile: MyHelperProfile;
   onSaved: (profile: MyHelperProfile) => void;
+  /** User management writes another person's availability through its own route. */
+  path?: string;
 }) {
   const { t } = useLocale();
   const zone = useEventTimeZone();
@@ -39,7 +42,7 @@ export function AvailabilityEditor({
     setPending(true);
     setError(null);
     try {
-      onSaved(await api.put<MyHelperProfile>("/api/me/helper-profile/availability", { intervals }));
+      onSaved(await api.put<MyHelperProfile>(path, { intervals }));
       return true;
     } catch (err) {
       setError(err);

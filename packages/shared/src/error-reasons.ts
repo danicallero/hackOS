@@ -65,6 +65,8 @@ export const ERROR_REASONS = {
   MEAL_PLAN_NOT_ELIGIBLE: "meal_plan_not_eligible",
   /** 403: help desk actions need `helpdesk:offer` or an accepted helper application (H61). */
   HELPER_NOT_ELIGIBLE: "helper_not_eligible",
+  /** 403: user management cannot publish a person's help desk profile; publishing is their own consent (H61). */
+  HELPER_PUBLISH_OWN_CONSENT: "helper_publish_own_consent",
   /** 409: the person or team already has an open or claimed help request (H64). */
   HELP_REQUEST_ACTIVE: "help_request_active",
   /** 409: new help requests are only accepted inside the configured opening windows (H64). */

@@ -96,6 +96,8 @@ export function MentorProfileEditor({
     CAPABILITIES.HELPDESK_OFFER,
     CAPABILITIES.HELPDESK_COVERAGE,
   );
+  // User management can unpublish, never publish: that is the person's own consent.
+  const ownConsentOnly = subjectId !== undefined && !storedPublished;
   const state: SaveState = error ? "error" : dirty ? "unsaved" : "saved";
 
   async function save(event: React.FormEvent) {
@@ -140,7 +142,8 @@ export function MentorProfileEditor({
         checked={shownPublished}
         onChange={setPublished}
         label={t("mentorPublish")}
-        hint={t("mentorPublishHint")}
+        hint={ownConsentOnly ? t("mentorPublishOwnConsent") : t("mentorPublishHint")}
+        disabled={ownConsentOnly}
       />
       {helper && (
         <div className="space-y-2">

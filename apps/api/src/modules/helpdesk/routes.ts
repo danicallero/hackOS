@@ -12,6 +12,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { coverageReport } from "./coverage.js";
@@ -219,6 +220,72 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const { changed, profile } = await replaceMyAvailability(req.userId as number, req.body);
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+
+  // ── User management: edit a person's helper profile ───────────────────
+  const staffSubject = async (req: FastifyRequest<{ Params: { id: number } }>) => {
+    await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
+    return req.params.id;
+  };
+  r.get(
+    "/api/users/:id/helper-profile",
+    {
+      config: cap(CAPABILITIES.USERS_READ),
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: idParams,
+        summary: "Read a person's helper profile",
+        description:
+          "User management: anyone's help desk profile in the shape of GET /api/me/helper-profile, shared or not. Not audited, like every user-management read. 404 for an unknown or out-of-scope account (H61, H8).",
+      },
+    },
+    async (req) => getMyHelperProfile(await staffSubject(req)),
+  );
+  r.put(
+    "/api/users/:id/helper-profile",
+    {
+      config: cap(CAPABILITIES.USERS_WRITE),
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: idParams,
+        body: helperProfileBody,
+        summary: "Edit a person's helper profile",
+        description:
+          "User management: same body and rules as PUT /api/me/helper-profile (publication, topics, challenge alerts), audited with the acting staff member and source `admin`. 403 `helper_not_eligible` when the person cannot have a helper profile (H61).",
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await updateMyHelperProfile(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+  r.put(
+    "/api/users/:id/helper-profile/availability",
+    {
+      config: cap(CAPABILITIES.USERS_WRITE),
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: idParams,
+        body: availabilityBody,
+        summary: "Set a person's help availability",
+        description:
+          "User management: same body and rules as PUT /api/me/helper-profile/availability, audited with the acting staff member and source `admin` (H62).",
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await replaceMyAvailability(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
       req.domainUnchanged = !changed;
       return profile;
     },

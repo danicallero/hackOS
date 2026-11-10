@@ -31,6 +31,9 @@ vi.mock("@/components/profile/cv-viewer", () => ({
 }));
 
 import { api } from "@/lib/api";
+
+vi.mock("./staff-mentoring", () => ({ StaffMentoring: () => null }));
+
 import { PublicProfileTab } from "./public-profile-tab";
 
 const user = { id: 7, image: "/api/users/7/photo" } as UserDetail;

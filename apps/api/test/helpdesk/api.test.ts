@@ -1635,3 +1635,61 @@ describe("H64 opening hours", () => {
     expect(open.statusCode).toBe(201);
   });
 });
+
+describe("user management edits a person's helper profile", () => {
+  it("edits topics and unpublishes as admin, but never publishes for the person", async () => {
+    const person = await createUserWithCapabilities(helperCaps);
+    const staff = await createUserWithCapabilities([
+      CAPABILITIES.USERS_READ,
+      CAPABILITIES.USERS_WRITE,
+    ]);
+    const t = await topic("Kubernetes");
+    const own = await call("PUT", "/api/me/helper-profile", person, {
+      published: true,
+      topicIds: [],
+    });
+    expect(own.statusCode).toBe(200);
+
+    const edited = await call("PUT", `/api/users/${person}/helper-profile`, staff, {
+      published: true,
+      topicIds: [t],
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().topics.map((x: { id: number }) => x.id)).toEqual([t]);
+    const read = await call("GET", `/api/users/${person}/helper-profile`, staff);
+    expect(read.json()).toMatchObject({ eligible: true, published: true });
+
+    const off = await call("PUT", `/api/users/${person}/helper-profile`, staff, {
+      published: false,
+      topicIds: [t],
+    });
+    expect(off.json().published).toBe(false);
+    const on = await call("PUT", `/api/users/${person}/helper-profile`, staff, {
+      published: true,
+      topicIds: [t],
+    });
+    expect(on.statusCode).toBe(403);
+    expect(on.json().error.details.code).toBe("helper_publish_own_consent");
+
+    const { rows } = await pool.query(
+      `SELECT actor_id, source FROM audit_log WHERE entity_type = 'helper_profile' AND action = 'updated' ORDER BY id DESC LIMIT 1`,
+    );
+    expect(rows[0]).toMatchObject({ actor_id: staff, source: "admin" });
+  });
+
+  it("needs the user-management capabilities", async () => {
+    const person = await createUserWithCapabilities(helperCaps);
+    const reader = await createUserWithCapabilities([CAPABILITIES.USERS_READ]);
+    const plain = await createUser();
+    expect((await call("GET", `/api/users/${person}/helper-profile`, reader)).statusCode).toBe(200);
+    expect((await call("GET", `/api/users/${person}/helper-profile`, plain)).statusCode).toBe(403);
+    expect(
+      (
+        await call("PUT", `/api/users/${person}/helper-profile`, reader, {
+          published: false,
+          topicIds: [],
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+});

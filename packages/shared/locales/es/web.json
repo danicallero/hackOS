@@ -4288,5 +4288,6 @@
   "emailNotVerifiedShort": "Correo sin verificar",
   "audienceStaffOnly": "Solo staff",
   "scheduleMyAttendance": "Mi asistencia",
-  "scheduleGoing": "Voy a ir"
+  "scheduleGoing": "Voy a ir",
+  "mentorPublishOwnConsent": "Solo la propia persona puede activarlo."
 }

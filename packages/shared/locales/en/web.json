@@ -4288,5 +4288,6 @@
   "emailNotVerifiedShort": "Email not verified",
   "audienceStaffOnly": "Staff only",
   "scheduleMyAttendance": "My attendance",
-  "scheduleGoing": "I'm going"
+  "scheduleGoing": "I'm going",
+  "mentorPublishOwnConsent": "Only the person can turn this on."
 }
