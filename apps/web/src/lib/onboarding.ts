@@ -10,6 +10,8 @@ export interface OnboardingState {
   eventKey: string;
   revision: number;
   steps: ResolvedOnboardingStep[];
+  /** The organizer's localized welcome text, when the API serves it to attendees. */
+  welcomeMessage?: Partial<Record<"es" | "gl" | "en", string>> | null;
 }
 
 export const ONBOARDING_PATH = "/onboarding";

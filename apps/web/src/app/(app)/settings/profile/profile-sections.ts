@@ -1,4 +1,5 @@
 import type { MessageKey } from "@/lib/i18n";
+import { canOfferHelp } from "@/lib/mentor-profile";
 import type { Me } from "@/lib/types";
 
 type ProfileTabId = "personal" | "public" | "wallet" | "account";
@@ -6,6 +7,7 @@ type ProfileTabId = "personal" | "public" | "wallet" | "account";
 export type ProfileSectionId =
   | "personal"
   | "public"
+  | "mentor"
   | "meals"
   | "passes"
   | "certificates"
@@ -14,7 +16,7 @@ export type ProfileSectionId =
   | "danger";
 
 /** Sections with their own Save; their tab is marked while one holds unsaved edits. */
-export type EditableSection = "personal" | "public" | "meals";
+export type EditableSection = "personal" | "public" | "mentor" | "meals";
 
 export interface SectionDef {
   id: ProfileSectionId;
@@ -34,7 +36,11 @@ const TABS: TabDef[] = [
     title: "personalDetails",
     sections: [{ id: "personal" }, { id: "meals", title: "meals" }],
   },
-  { id: "public", title: "publicProfileTitle", sections: [{ id: "public" }] },
+  {
+    id: "public",
+    title: "publicProfileTitle",
+    sections: [{ id: "public" }, { id: "mentor", title: "mentorProfileTitle" }],
+  },
   {
     id: "wallet",
     title: "wallet",
@@ -65,6 +71,8 @@ export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
       case "certificates":
       case "public":
         return me.hasEventAccess;
+      case "mentor":
+        return me.hasEventAccess && canOfferHelp(me);
       case "meals":
         return me.isSponsorRep;
       case "roles":

@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react";
 
-const COLORS = ["var(--primary)", "var(--chart-2, #f59e0b)", "var(--chart-3, #22c55e)", "var(--chart-4, #3b82f6)"];
+const COLORS = [
+  "var(--primary)",
+  "var(--chart-2, #f59e0b)",
+  "var(--chart-3, #22c55e)",
+  "var(--chart-4, #3b82f6)",
+];
 const PIECES = 36;
 
 /** True when the person asked the system to reduce motion. */

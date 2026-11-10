@@ -6,7 +6,10 @@ import { CertificatesPanel } from "@/components/certificates/certificates-panel"
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
+import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
+import { PersonalDetails } from "@/components/profile/personal-details";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
+import { WalletSection } from "@/components/profile/wallet-section";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
@@ -17,7 +20,6 @@ import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
 import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
-import { PersonalDetails } from "@/components/profile/personal-details";
 import { ProfileRoles } from "./profile-roles";
 import {
   type EditableSection,
@@ -25,7 +27,6 @@ import {
   type SectionDef,
   visibleProfileTabs,
 } from "./profile-sections";
-import { WalletSection } from "./wallet-section";
 
 export default function ProfileSettingsPage() {
   const { me, isPureApplicant } = useSessionContext();
@@ -54,10 +55,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   const [dirty, setDirty] = useState<Record<EditableSection, boolean>>({
     personal: false,
     public: false,
+    mentor: false,
     meals: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
+  const onMentorDirty = useDirtySetter(setDirty, "mentor");
   const onMealsDirty = useDirtySetter(setDirty, "meals");
 
   function body(id: ProfileSectionId) {
@@ -66,6 +69,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return <PersonalDetails onDirtyChange={onPersonalDirty} />;
       case "public":
         return <PublicProfileCard onDirtyChange={onPublicDirty} />;
+      case "mentor":
+        return <MentorProfileEditor onDirtyChange={onMentorDirty} />;
       case "meals":
         return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
       case "passes":

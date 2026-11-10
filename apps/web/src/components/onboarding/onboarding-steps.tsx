@@ -16,6 +16,7 @@ import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor"
 import { PersonalDetails } from "@/components/profile/personal-details";
 import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
+import { WalletSection } from "@/components/profile/wallet-section";
 import { Button } from "@/components/ui/button";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
@@ -93,7 +94,12 @@ export function eventDateRange(
   return end && end !== start ? `${start} – ${end}` : start;
 }
 
-export function WelcomeStep({ decide, pending, allowed }: StepProps) {
+export function WelcomeStep({
+  decide,
+  pending,
+  allowed,
+  message,
+}: StepProps & { message?: string }) {
   const { t, language } = useLocale();
   const event = useEventFacts();
   const dates = eventDateRange(event, language);
@@ -103,12 +109,22 @@ export function WelcomeStep({ decide, pending, allowed }: StepProps) {
         <p className="type-label text-muted-foreground">{event?.name ?? ""}</p>
         {event?.tagline && <p className="text-lg text-pretty">{event.tagline}</p>}
         {dates && <p className="text-muted-foreground">{dates}</p>}
+        {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
       </div>
       {/* biome-ignore lint/performance/noImgElement: static brand art, decorative. */}
       <img src="/onboarding/gaviota.png" alt="" className="max-h-48 w-auto" />
       <div className="flex flex-wrap items-center justify-end gap-2">
-        <StepAlternatives allowed={allowed.filter((a) => a === "skip")} pending={pending} decide={decide} />
-        <Button type="button" disabled={pending} loading={pending} onClick={() => decide("complete")}>
+        <StepAlternatives
+          allowed={allowed.filter((a) => a === "skip")}
+          pending={pending}
+          decide={decide}
+        />
+        <Button
+          type="button"
+          disabled={pending}
+          loading={pending}
+          onClick={() => decide("complete")}
+        >
           {t("onboardingStart")}
         </Button>
       </div>
@@ -127,7 +143,12 @@ export function ProfileStep(props: StepProps & { part: "identity" | "dietary" })
       actions={
         <>
           <StepAlternatives {...props} />
-          <Button type="button" variant="outline" disabled={pending} onClick={() => decide("complete")}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => decide("complete")}
+          >
             {t("onboardingContinue")}
           </Button>
         </>
@@ -197,7 +218,9 @@ export function NotificationsStep(props: StepProps) {
         setEmail(initialEmailChoices(loaded));
         setError(null);
       })
-      .catch((cause) => active && setError(apiErrorText(cause, t, t("couldNotLoadPreferencesToast"))));
+      .catch(
+        (cause) => active && setError(apiErrorText(cause, t, t("couldNotLoadPreferencesToast"))),
+      );
     return () => {
       active = false;
     };
@@ -227,7 +250,13 @@ export function NotificationsStep(props: StepProps) {
 
   return (
     <div className="space-y-4">
-      <NotificationChoices prefs={prefs} email={email} onChange={setEmail} pending={busy} error={error} />
+      <NotificationChoices
+        prefs={prefs}
+        email={email}
+        onChange={setEmail}
+        pending={busy}
+        error={error}
+      />
       <div className="flex flex-wrap items-center justify-end gap-2">
         <StepAlternatives {...props} pending={props.pending || busy} />
         <Button type="button" loading={busy} disabled={props.pending} onClick={() => void save()}>
@@ -273,6 +302,7 @@ export function CompletionStep({
   pending,
 }: StepProps & { state: OnboardingState; onOpenStep: (step: OnboardingStep) => void }) {
   const { t } = useLocale();
+  const { me, isPureApplicant } = useSessionContext();
   const open = state.steps.filter(
     (step) =>
       step.step !== "completion" &&
@@ -300,6 +330,14 @@ export function CompletionStep({
           </ul>
         </section>
       )}
+      {me?.hasEventAccess && !isPureApplicant && (
+        <section aria-labelledby="onboarding-wallet" className="space-y-3">
+          <h2 id="onboarding-wallet" className="type-section-title">
+            {t("wallet")}
+          </h2>
+          <WalletSection />
+        </section>
+      )}
       <p className="text-muted-foreground text-sm text-pretty">
         {t("onboardingEditLater")}{" "}
         <Link className="underline underline-offset-4" href="/settings/profile">
@@ -307,7 +345,12 @@ export function CompletionStep({
         </Link>
       </p>
       <div className="flex justify-end">
-        <Button type="button" disabled={pending} loading={pending} onClick={() => decide("complete")}>
+        <Button
+          type="button"
+          disabled={pending}
+          loading={pending}
+          onClick={() => decide("complete")}
+        >
           {t("onboardingDone")}
         </Button>
       </div>
