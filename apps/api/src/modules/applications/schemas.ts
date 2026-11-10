@@ -33,6 +33,7 @@ export const createApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().default(168),
     ask_shirt_size: z.boolean().default(false),
     ask_food_intolerances: z.boolean().default(false),
+    attendance_kind: z.enum(["participant", "mentor", "staff"]).default("participant"),
     // H8/H11: roles granted alongside ticket issuance on confirmation.
     // Omitted/null grants nothing.
     grants_role_ids: z.array(z.number().int().positive()).nullish(),
@@ -56,6 +57,7 @@ export const updateApplicationSchema = z
     confirmation_window_hours: z.number().int().positive().optional(),
     ask_shirt_size: z.boolean().optional(),
     ask_food_intolerances: z.boolean().optional(),
+    attendance_kind: z.enum(["participant", "mentor", "staff"]).optional(),
     /** Answer keys hidden in the standard review view (H13); reviewers can still show everything. */
     review_hidden_fields: z.array(z.string().min(1).max(200)).max(500).optional(),
     // Omitted = leave the form's role grants unchanged; explicit [] clears

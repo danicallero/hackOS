@@ -9,18 +9,30 @@ ALTER TABLE public.applications
   ADD COLUMN attendance_kind text NOT NULL DEFAULT 'participant' CHECK (attendance_kind IN ('participant','mentor','staff'));
 UPDATE public.applications SET event_key = (SELECT event_key FROM public.event_config WHERE id = 1);
 ALTER TABLE public.applications ALTER COLUMN event_key SET NOT NULL;
-ALTER TABLE public.user_roles ADD COLUMN event_key text;
-UPDATE public.user_roles SET event_key = (SELECT event_key FROM public.event_config WHERE id = 1);
-ALTER TABLE public.user_roles ALTER COLUMN event_key SET NOT NULL;
-CREATE FUNCTION public.stamp_attendance_role_event_key() RETURNS trigger LANGUAGE plpgsql AS $$
+ALTER TABLE public.applications ALTER COLUMN event_key SET DEFAULT 'default';
+-- Event-scoped evidence records every role assignment attempt, including a
+-- repeated ON CONFLICT DO NOTHING grant in a later edition. It is evidence of
+-- a grant, not an editable attendance-kind field.
+CREATE TABLE public.user_role_event_evidence (
+  user_id integer NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  role_id integer NOT NULL REFERENCES public.roles(id) ON DELETE CASCADE,
+  event_key text NOT NULL,
+  assigned_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id,role_id,event_key)
+);
+INSERT INTO public.user_role_event_evidence (user_id,role_id,event_key,assigned_at)
+SELECT ur.user_id,ur.role_id,e.event_key,ur.assigned_at
+FROM public.user_roles ur CROSS JOIN public.event_config e;
+CREATE FUNCTION public.record_role_event_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.event_key IS NULL THEN
-    SELECT event_key INTO NEW.event_key FROM public.event_config WHERE id = 1;
-  END IF;
+  INSERT INTO public.user_role_event_evidence (user_id,role_id,event_key)
+  VALUES (NEW.user_id,NEW.role_id,
+    COALESCE((SELECT event_key FROM public.event_config WHERE id=1),'default'))
+  ON CONFLICT DO NOTHING;
   RETURN NEW;
 END; $$;
-CREATE TRIGGER user_roles_event_key BEFORE INSERT ON public.user_roles
-  FOR EACH ROW EXECUTE FUNCTION public.stamp_attendance_role_event_key();
+CREATE TRIGGER user_roles_event_evidence BEFORE INSERT ON public.user_roles
+  FOR EACH ROW EXECUTE FUNCTION public.record_role_event_evidence();
 
 ALTER TABLE public.role_capabilities DROP CONSTRAINT role_capabilities_known_catalogue;
 ALTER TABLE public.role_capabilities ADD CONSTRAINT role_capabilities_known_catalogue
@@ -51,19 +63,24 @@ SELECT u.id AS user_id, e.event_key,
       WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'participant'
         AND a.event_key = e.event_key)
       OR EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
-        WHERE ur.user_id = u.id AND ur.event_key = e.event_key AND r.name = 'Participant' AND r.deleted_at IS NULL)
+        JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
+        WHERE ur.user_id = u.id AND ev.event_key = e.event_key AND r.name = 'Participant' AND r.deleted_at IS NULL)
       THEN 'participant'
     WHEN EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id = ar.application_id
       WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'mentor'
         AND a.event_key = e.event_key)
       OR EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
-        WHERE ur.user_id = u.id AND ur.event_key = e.event_key AND r.name = 'Mentor' AND r.deleted_at IS NULL)
+        JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
+        WHERE ur.user_id = u.id AND ev.event_key = e.event_key AND r.name = 'Mentor' AND r.deleted_at IS NULL)
       THEN 'mentor'
     WHEN EXISTS (SELECT 1 FROM public.sponsors s WHERE s.user_id = u.id) THEN 'sponsor'
     WHEN EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id = ar.application_id
       WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'staff'
         AND a.event_key = e.event_key)
-      OR EXISTS (SELECT 1 FROM public.user_event_access ea WHERE ea.user_id = u.id)
+      OR EXISTS (SELECT 1 FROM public.user_event_access ea
+        JOIN public.user_roles ur ON ur.user_id = ea.user_id
+        JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
+        WHERE ea.user_id = u.id AND ev.event_key=e.event_key)
       THEN 'staff'
     ELSE NULL
   END AS kind,
@@ -72,11 +89,17 @@ SELECT u.id AS user_id, e.event_key,
       WHERE ar.user_id = u.id AND ar.confirmed_at IS NOT NULL AND a.attendance_kind = 'participant'
         AND a.event_key = e.event_key) THEN 'confirmed_application'
     WHEN EXISTS (SELECT 1 FROM public.user_roles ur JOIN public.roles r ON r.id = ur.role_id
-      WHERE ur.user_id = u.id AND ur.event_key = e.event_key AND r.name = 'Participant' AND r.deleted_at IS NULL) THEN 'attendee_role'
+      JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
+      WHERE ur.user_id = u.id AND ev.event_key = e.event_key AND r.name = 'Participant' AND r.deleted_at IS NULL) THEN 'attendee_role'
     ELSE 'other'
   END AS evidence
 FROM public.users u CROSS JOIN public.event_config e
-WHERE EXISTS (SELECT 1 FROM public.user_event_access ea WHERE ea.user_id = u.id);
+WHERE EXISTS (SELECT 1 FROM public.user_event_access ea
+  JOIN public.user_roles ur ON ur.user_id=ea.user_id
+  JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
+  WHERE ea.user_id = u.id AND ev.event_key=e.event_key)
+   OR EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id=ar.application_id
+      WHERE ar.user_id=u.id AND ar.confirmed_at IS NOT NULL AND a.event_key=e.event_key);
 
 CREATE TABLE public.onboarding_step_states (
   user_id integer NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
@@ -154,11 +177,15 @@ CREATE TRIGGER activity_rsvps_updated_at BEFORE UPDATE ON public.activity_rsvps
 -- Existing sponsor meal answers become current-edition RSVP answers. A row with
 -- attending NULL is the distinct explicit "unsure" answer; no row is unanswered.
 INSERT INTO public.activity_rsvp_settings (activity_id,event_key,enabled,kinds)
-SELECT DISTINCT a.id,e.event_key,true,ARRAY['sponsor']::text[]
-FROM public.activities a JOIN public.schedule sc ON sc.id = a.schedule_id
-CROSS JOIN public.event_config e
-WHERE a.category = 'meal' AND sc.visibility = 'shown' AND sc.ends_at > now()
-  AND 'sponsor' = ANY(sc.audiences)
+SELECT DISTINCT offered.activity_id,e.event_key,true,ARRAY['sponsor']::text[]
+FROM (
+  SELECT a.id AS activity_id FROM public.activities a
+  JOIN public.schedule sc ON sc.id = a.schedule_id
+  WHERE a.category = 'meal' AND sc.visibility = 'shown' AND sc.ends_at > now()
+    AND 'sponsor' = ANY(sc.audiences)
+  UNION
+  SELECT activity_id FROM public.meal_attendance_plans
+) offered CROSS JOIN public.event_config e
 ON CONFLICT DO NOTHING;
 INSERT INTO public.activity_rsvps (user_id,activity_id,event_key,attending,created_at,updated_at)
 SELECT p.user_id,p.activity_id,e.event_key,p.attending,p.created_at,p.updated_at

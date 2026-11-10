@@ -66,6 +66,10 @@ other module's exported function instead), and, if it does background work, a
 
 ## Modules
 
+### onboarding (HackUDC 2027 onboarding)
+
+Resolves current-edition participant steps from attendance and profile facts, and persists audited, idempotent decisions. See [onboarding](./onboarding.md).
+
 ### identity (H1–H10)
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH

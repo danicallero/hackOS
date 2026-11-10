@@ -281,7 +281,7 @@ Table applications {
   created_at "timestamp with time zone" [not null, default: `now()`]
   current_form_version integer [not null, default: `1`]
   description text
-  event_key text [not null]
+  event_key text [not null, default: `'default'::text`]
   id integer [pk, increment, not null]
   name text [not null]
   open_at "timestamp with time zone"
@@ -1432,10 +1432,20 @@ Table user_public_profiles {
   Note: '#934 directory opt-in and public fields; #935 extends it. Absence of a row = not visible.'
 }
 
+Table user_role_event_evidence {
+  assigned_at "timestamp with time zone" [not null, default: `now()`]
+  event_key text [not null]
+  role_id integer [not null]
+  user_id integer [not null]
+
+  indexes {
+  (user_id, role_id, event_key) [pk]
+  }
+}
+
 Table user_roles {
   assigned_at "timestamp with time zone" [not null, default: `now()`]
   assigned_by integer
-  event_key text [not null]
   role_id integer [not null]
   source text [not null, default: `'manual'::text`]
   user_id integer [not null]
@@ -1749,6 +1759,8 @@ Ref: user_invite_link_redemptions.user_id > users.id
 Ref: user_invite_links.created_by > users.id
 Ref: user_invite_links.enterprise_id > enterprises.id
 Ref: user_public_profiles.user_id > users.id
+Ref: user_role_event_evidence.role_id > roles.id
+Ref: user_role_event_evidence.user_id > users.id
 Ref: user_roles.assigned_by > users.id
 Ref: user_roles.role_id > roles.id
 Ref: user_roles.user_id > users.id

@@ -55,6 +55,7 @@ export const ERROR_REASONS = {
   PROJECT_GITHUB_REQUIRED: "project_github_required",
   MENTOR_PROFILE_NOT_ELIGIBLE: "mentor_profile_not_eligible",
   ONBOARDING_STEP_REQUIRED: "onboarding_step_required",
+  ONBOARDING_FACT_INCOMPLETE: "onboarding_fact_incomplete",
   RSVP_LOCKED: "rsvp_locked",
   RSVP_INCOMPLETE: "rsvp_incomplete",
   RSVP_PARTICIPANTS_EXCLUDED: "rsvp_participants_excluded",

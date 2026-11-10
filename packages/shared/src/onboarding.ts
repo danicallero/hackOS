@@ -18,6 +18,15 @@ export const ONBOARDING_STEPS = [
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 export type OnboardingStatus = "completed" | "skipped" | "deferred" | "declined";
 export type OnboardingAction = "complete" | "skip" | "defer" | "decline";
+export const ONBOARDING_PROFILE_FIELDS = [
+  "name",
+  "surname",
+  "phone",
+  "language",
+  "shirtSize",
+  "dietary",
+  "photo",
+] as const;
 export type OnboardingStepConfig = {
   enabled: boolean;
   required: boolean;
@@ -25,10 +34,13 @@ export type OnboardingStepConfig = {
   reaskOnChange: boolean;
 };
 export type OnboardingConfig = Partial<Record<OnboardingStep, Partial<OnboardingStepConfig>>> & {
+  brand?: { logoUrl?: string; accentColor?: string };
   welcome?: Partial<OnboardingStepConfig> & {
     message?: Partial<Record<"es" | "gl" | "en", string>>;
   };
-  profile?: Partial<OnboardingStepConfig> & { fields?: string[] };
+  profile?: Partial<OnboardingStepConfig> & {
+    fields?: (typeof ONBOARDING_PROFILE_FIELDS)[number][];
+  };
 };
 export type OnboardingState = {
   step: OnboardingStep;
