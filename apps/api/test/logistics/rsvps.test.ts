@@ -443,6 +443,12 @@ describe("event editions", () => {
     // No settings for the new key yet: nothing is offered, nothing is counted.
     expect(await getItems(sponsor)).toEqual([]);
 
+    // Event access is edition-scoped: the sponsor needs this edition's role evidence too.
+    await pool.query(
+      `INSERT INTO user_role_event_evidence (user_id, role_id, event_key, assigned_at)
+       SELECT user_id, role_id, 'next-edition', now() FROM user_role_event_evidence WHERE user_id = $1`,
+      [sponsor],
+    );
     await pool.query(
       `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
        VALUES ($1, 'next-edition', true, ARRAY['sponsor'])`,
