@@ -28,12 +28,16 @@ export function OnboardingBanner() {
   if (!eligible || !me || !state.data) return null;
   if (openSteps(forPerson(state.data, me)).length === 0) return null;
   return (
-    <ShellBanner tone="info">
-      <ListChecksIcon aria-hidden="true" className="text-primary size-4 shrink-0" />
-      <span className="text-foreground">{t("onboardingBanner")}</span>
-      <Button asChild size="sm" variant="outline">
-        <Link href={withReturnPath(ONBOARDING_PATH, pathname)}>{t("onboardingContinue")}</Link>
-      </Button>
+    <ShellBanner
+      tone="info"
+      icon={<ListChecksIcon aria-hidden="true" className="text-primary size-4 shrink-0" />}
+      action={
+        <Button asChild size="sm" variant="outline">
+          <Link href={withReturnPath(ONBOARDING_PATH, pathname)}>{t("onboardingContinue")}</Link>
+        </Button>
+      }
+    >
+      {t("onboardingBanner")}
     </ShellBanner>
   );
 }

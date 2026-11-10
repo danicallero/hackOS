@@ -4285,5 +4285,6 @@
   "profileMentoringTitle": "Mentoría",
   "helpDeskSearchChallenges": "Buscar retos…",
   "mentorExpertisePlaceholder": "Busca o añade un área…",
-  "onboardingBanner": "Termina de configurar tu experiencia."
+  "onboardingBanner": "Termina de configurar tu experiencia.",
+  "emailNotVerifiedShort": "Correo sin verificar"
 }

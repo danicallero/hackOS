@@ -19,7 +19,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <SidebarProvider className="xl:has-data-judging-page:h-svh xl:has-data-judging-page:overflow-hidden">
         <SkipLink />
         <AppSidebar />
-        <SidebarInset className="min-h-0 min-w-0 bg-shell xl:has-data-judging-page:overflow-hidden">
+        <SidebarInset className="group/shell min-h-0 min-w-0 bg-shell xl:has-data-judging-page:overflow-hidden">
           <div className="pointer-events-none absolute top-3 left-3 z-40 md:hidden">
             <NotificationSidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
           </div>

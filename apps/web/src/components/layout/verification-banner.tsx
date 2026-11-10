@@ -25,19 +25,24 @@ export function VerificationBanner() {
   if (!me || me.emailVerified) return null;
 
   return (
-    <ShellBanner tone="warning" className="text-warning-foreground">
-      <EnvelopeSimpleIcon aria-hidden="true" className="text-warning size-4 shrink-0" />
-      <span className="text-foreground">{t("emailNotVerified")}</span>
-      <Button
-        size="sm"
-        variant="outline"
-        className="border-warning/50 bg-warning/10 text-warning-foreground hover:bg-warning/20 hover:text-warning-foreground"
-        disabled={cooldown > 0 || resending}
-        onClick={() => void resend()}
-        loading={resending}
-      >
-        {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("verifyNow")}
-      </Button>
+    <ShellBanner
+      tone="warning"
+      icon={<EnvelopeSimpleIcon aria-hidden="true" className="text-warning size-4 shrink-0" />}
+      action={
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-warning/50 bg-warning/10 text-warning-foreground hover:bg-warning/20 hover:text-warning-foreground"
+          disabled={cooldown > 0 || resending}
+          onClick={() => void resend()}
+          loading={resending}
+        >
+          {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("verifyNow")}
+        </Button>
+      }
+    >
+      <span className="md:hidden">{t("emailNotVerifiedShort")}</span>
+      <span className="hidden md:inline">{t("emailNotVerified")}</span>
     </ShellBanner>
   );
 }
