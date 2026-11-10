@@ -143,7 +143,7 @@ export async function putRsvpSettings(
     );
     const next = {
       enabled: input.enabled,
-      kinds: [...input.kinds].sort(),
+      kinds: [...input.kinds].sort((a, b) => a.localeCompare(b)),
       name_i18n: clean(input.nameI18n),
       description_i18n: clean(input.descriptionI18n),
       rsvp_date: input.rsvpDate ? new Date(input.rsvpDate).toISOString() : null,

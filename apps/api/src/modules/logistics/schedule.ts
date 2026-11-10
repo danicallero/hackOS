@@ -320,7 +320,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
     if (rsvp?.enabled) {
       const settings = {
         enabled: true,
-        kinds: [...rsvp.kinds].sort(),
+        kinds: [...rsvp.kinds].sort((a, b) => a.localeCompare(b)),
         nameI18n: null,
         descriptionI18n: null,
         rsvpDate: null,

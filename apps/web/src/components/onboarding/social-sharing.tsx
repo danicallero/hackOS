@@ -176,7 +176,7 @@ function slug(value: string): string {
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/^-|-$/g, "");
 }
 
 export function shareFileName(
@@ -605,7 +605,7 @@ function posterRows(
   if (o.roleLabel) {
     const role = fitText(ctx, o.roleLabel, (s) => sans(500, s), sizes.role, 20, maxWidth, 1);
     rows.push({
-      text: o.roleLabel === role.lines[0] ? role.lines[0] : role.lines[0],
+      text: role.lines[0],
       font: sans(500, role.size),
       color: COLORS.blue,
       lineHeight: role.size * 1.5,

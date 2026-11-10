@@ -59,8 +59,10 @@ export function MentorProfileEditor({
   const dirty =
     stored !== null &&
     (shownPublished !== stored.published ||
-      JSON.stringify([...shownNames].sort()) !==
-        JSON.stringify(stored.expertise.map((item) => item.label).sort()));
+      JSON.stringify([...shownNames].sort((a, b) => a.localeCompare(b))) !==
+        JSON.stringify(
+          stored.expertise.map((item) => item.label).sort((a, b) => a.localeCompare(b)),
+        ));
   useUnsavedChangesGuard(dirty);
   useEffect(() => onDirtyChange?.(dirty), [dirty, onDirtyChange]);
 

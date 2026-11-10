@@ -25,7 +25,7 @@ test("email verification click sends the site Origin and establishes a verified 
     headers: { "content-type": "application/json", origin: new URL(webUrl).origin },
     body: JSON.stringify({
       email,
-      password: "BrowserVerify!234",
+      password: `Bv!${randomUUID()}`,
       name: "Browser",
       surname: "Test",
     }),
