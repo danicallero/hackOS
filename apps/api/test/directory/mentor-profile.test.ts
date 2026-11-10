@@ -184,6 +184,41 @@ describe("expertise library", () => {
   });
 });
 
+describe("expertise curation", () => {
+  const manage = (userId: number, payload: object) =>
+    app.inject({
+      method: "POST",
+      url: `/api/profile/libraries/${libraryId}/manage`,
+      headers: { ...asUser(userId), "idempotency-key": `c-${++keySeq}` },
+      payload,
+    });
+
+  it("merge moves every mentor's choice to the retained value; delete removes it", async () => {
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const mentor = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
+    const a = await value("JS");
+    const b = await value("JavaScript");
+    const c = await value("Obsolete");
+    await put(mentor, { published: true, expertiseIds: [a, c] });
+    const merged = await manage(staff, { merge: { sourceIds: [a], targetId: b }, deleteIds: [c] });
+    expect(merged.statusCode).toBe(200);
+    expect((await get(mentor)).json().expertise).toEqual([{ id: b, label: "JavaScript" }]);
+  });
+
+  it("is limited to user-management staff and to the profile library", async () => {
+    const plain = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
+    expect((await manage(plain, {})).statusCode).toBe(403);
+    const staff = await createUserWithCapabilities([CAPABILITIES.USERS_WRITE]);
+    const other = await app.inject({
+      method: "POST",
+      url: `/api/profile/libraries/${crypto.randomUUID()}/manage`,
+      headers: { ...asUser(staff), "idempotency-key": "x" },
+      payload: {},
+    });
+    expect(other.statusCode).toBe(404);
+  });
+});
+
 describe("scanner view of a mentor", () => {
   async function reader(target: number) {
     const id = await createUser();

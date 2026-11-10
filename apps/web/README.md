@@ -764,6 +764,15 @@ tasks. It reuses `PublicProfileCard` and the photo editor. The server records
 completion separately from visibility; deferral lasts until the next sign-in.
 Public email confirmation only shows the editor for the token owner's session.
 
+## Onboarding journey
+
+`/onboarding` is the resumable, never-blocking onboarding flow; see
+[`docs/onboarding-web.md`](../../docs/onboarding-web.md). The server resolves
+steps and allowed decisions; web components receive `StepProps` and persist
+answers through `lib/onboarding.ts`. Reusable pieces that moved out of routes:
+`components/profile/personal-details.tsx` (`part` and `onSaved`),
+`components/profile/wallet-section.tsx`, `components/onboarding/notification-choices.tsx`.
+
 ## Personal profile layout (H6/H7/H8)
 
 The profile uses the content canvas with two equal columns from the `xl`

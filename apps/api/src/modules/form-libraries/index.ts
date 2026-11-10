@@ -92,6 +92,82 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
         return rows[0];
       }),
   );
+  r.post(
+    "/api/profile/libraries/:id/manage",
+    {
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      ...routeAccessOption({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
+      schema: {
+        params,
+        body,
+        summary: "Curate the mentor expertise library",
+        description:
+          "User management: renames, deletes or merges values of the profile-scope expertise library, inside the caller's fixture boundary. Merging moves every mentor's chosen expertise to the retained value; deleting removes it from mentor profiles. Audited in one transaction with the value names only (H53, onboarding).",
+      },
+    },
+    async (q) =>
+      withTransaction(async (db) => {
+        const { rows } = await db.query(
+          `SELECT id FROM form_libraries WHERE id=$1 AND profile FOR UPDATE`,
+          [q.params.id],
+        );
+        if (!rows[0]) throw new NotFoundError("Field library not found");
+        const values = await db.query(
+          `SELECT id,name FROM form_library_values WHERE library_id=$1 AND is_test_account=(SELECT is_test_account FROM users WHERE id=$2) FOR UPDATE`,
+          [q.params.id, q.userId],
+        );
+        const ids = [
+          ...q.body.renames.map((item) => item.id),
+          ...q.body.deleteIds,
+          ...(q.body.merge ? [q.body.merge.targetId, ...q.body.merge.sourceIds] : []),
+        ];
+        if (ids.some((id) => !values.rows.some((item) => item.id === id)))
+          throw new NotFoundError("Library value not found");
+        const before = structuredClone(values.rows.filter((row) => ids.includes(row.id)));
+        for (const item of q.body.renames) {
+          if (
+            values.rows.some(
+              (other) =>
+                other.id !== item.id &&
+                other.name.toLocaleLowerCase() === item.name.toLocaleLowerCase(),
+            )
+          )
+            throw new BadRequestError(
+              "Merge duplicate library values instead of renaming them to the same name",
+            );
+          await db.query(`UPDATE form_library_values SET name=$2 WHERE id=$1`, [
+            item.id,
+            item.name,
+          ]);
+        }
+        const deleting = new Set(q.body.deleteIds);
+        if (q.body.merge) {
+          const { sourceIds, targetId } = q.body.merge;
+          if (sourceIds.includes(targetId) || deleting.has(targetId))
+            throw new BadRequestError("Choose a retained value for merging");
+          await db.query(
+            `INSERT INTO mentor_profile_expertise (user_id,event_key,library_value_id)
+             SELECT user_id,event_key,$2 FROM mentor_profile_expertise WHERE library_value_id=ANY($1::int[])
+             ON CONFLICT DO NOTHING`,
+            [sourceIds, targetId],
+          );
+          for (const id of sourceIds) deleting.add(id);
+        }
+        if (deleting.size)
+          await db.query(`DELETE FROM form_library_values WHERE id=ANY($1::int[])`, [
+            [...deleting],
+          ]);
+        await audit(db, {
+          actorId: q.userId,
+          entityType: "form_library",
+          entityId: q.params.id,
+          action: "curate",
+          before,
+          after: q.body,
+        });
+        return { ok: true };
+      }),
+  );
   for (const project of [true, false]) {
     const capability = project ? CAPABILITIES.PROJECTS_EDIT : CAPABILITIES.APPLICATIONS_MANAGE;
     r.post(

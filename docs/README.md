@@ -67,6 +67,10 @@ Architecture & modules:
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and
   account-removal coverage.
+- [Onboarding, web](./onboarding-web.md) — the resumable `/onboarding` journey,
+  mentor profile section and organizer onboarding settings.
+- [Onboarding social sharing](./onboarding-social-sharing.md) — the share
+  step's card component.
 - [Content reports (H18)](./content-reports.md) — attendee reports of projects and
   public profiles, and the organiser inbox that closes them.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
