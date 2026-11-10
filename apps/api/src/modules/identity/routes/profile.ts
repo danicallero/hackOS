@@ -584,12 +584,14 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           (row.dietary_confirmed_at !== null || row.dietary_data_state === "present");
         const onboarding = await readOnboarding(client, userId);
         if (
+          eventAccess &&
           !dietaryLocked &&
           onboarding.steps.some((step) => step.step === "dietary" && step.status === "pending")
         ) {
           pendingProfileTasks.push("dietary");
         }
         if (
+          eventAccess &&
           membership.isSponsorRep &&
           onboarding.steps.some((step) => step.step === "rsvp" && step.status === "pending")
         ) {

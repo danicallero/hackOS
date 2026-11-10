@@ -79,6 +79,7 @@ SELECT u.id AS user_id, e.event_key,
         AND a.event_key = e.event_key)
       OR EXISTS (SELECT 1 FROM public.user_event_access ea
         JOIN public.user_roles ur ON ur.user_id = ea.user_id
+        JOIN public.roles access_role ON access_role.id=ur.role_id AND access_role.event_access AND access_role.deleted_at IS NULL
         JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
         WHERE ea.user_id = u.id AND ev.event_key=e.event_key)
       THEN 'staff'
@@ -96,6 +97,7 @@ SELECT u.id AS user_id, e.event_key,
 FROM public.users u CROSS JOIN public.event_config e
 WHERE EXISTS (SELECT 1 FROM public.user_event_access ea
   JOIN public.user_roles ur ON ur.user_id=ea.user_id
+  JOIN public.roles access_role ON access_role.id=ur.role_id AND access_role.event_access AND access_role.deleted_at IS NULL
   JOIN public.user_role_event_evidence ev ON ev.user_id=ur.user_id AND ev.role_id=ur.role_id
   WHERE ea.user_id = u.id AND ev.event_key=e.event_key)
    OR EXISTS (SELECT 1 FROM public.application_responses ar JOIN public.applications a ON a.id=ar.application_id
