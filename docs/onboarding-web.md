@@ -12,7 +12,7 @@ persists each answer. Nothing here gates event access.
 
 | Step | Content | Persisted answers |
 |---|---|---|
-| `welcome` | Event name, tagline and dates from `/api/public/event` (verified configuration only; nothing is hardcoded); the organizer's welcome text (`welcomeMessage` in `GET /api/me/onboarding`) | complete, skip |
+| `welcome` | Only when the organizer wrote a message (`welcomeMessage` in `GET /api/me/onboarding`): a greeting and that message | complete, skip |
 | `profile` | Account photo and identity fields (`PersonalDetails part="identity"`) | complete, defer (skip when optional) |
 | `dietary` | The dietary answer (`PersonalDetails part="dietary"`) | same |
 | `networking` | The public-profile card: **create** (explicit opt-in), **decline**, **later** | complete / decline / defer, three distinct rows |
@@ -59,10 +59,17 @@ re-opens skipped steps for people who already answered.
 
 ## Look
 
-Text only: the welcome step shows the event name, tagline, configured dates and
-the organizer's message, with no imagery. A thin segmented progress bar
-(`role="progressbar"`) marks the current step. Confetti on the completion step is
-decorative (`aria-hidden`) and is not rendered at all under reduced motion.
+Text only. Progress is a row of numbered markers: a completed step is a green
+check, the current one is filled, and each is a button to revisit that step.
+`forPerson` (`lib/onboarding.ts`) trims the journey to what the person can act
+on: no profile step once identity fields are locked, no dietary step once the
+answer is locked, and no welcome step without an organizer message. The old
+next-entry popups (dietary, meals, notifications) are gone; the journey and the
+completion list replace them. Confetti on the completion step is decorative
+(`aria-hidden`) and not rendered at all under reduced motion.
+
+My profile keeps everything reachable afterwards: Attendance (RSVP answers) in
+Personal details, and Mentor profile and Share in Public profile.
 
 ## Tests
 
