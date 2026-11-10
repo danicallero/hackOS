@@ -176,3 +176,30 @@ describe("PersonDetail (#934, #935)", () => {
     expect(container.querySelector("h1")?.textContent).toBe("Back again");
   });
 });
+
+describe("shared helper identity (H63)", () => {
+  it("puts company with logo before knowledge and keeps presence on the avatar", async () => {
+    const { PersonProfile } = await import("./person-detail");
+    const renderProfile = (present: boolean) =>
+      root.render(
+        <PersonProfile
+          entry={entry({ helpTopics: [{ id: 1, name: "Angular" }] })}
+          context="Support team"
+          visibleRole="Mentor"
+          company={{ name: "QA Corp", logoUrl: "/api/enterprises/7/logo" }}
+          present={present}
+        />,
+      );
+    await act(async () => renderProfile(true));
+    expect(container.querySelector("header")?.textContent).toContain("Mentor");
+    expect(container.querySelector('img[src$="/api/enterprises/7/logo"]')).not.toBeNull();
+    expect([...container.querySelectorAll("dt")].map((el) => el.textContent)).toEqual([
+      "helpDeskCompany",
+      "helpDeskKnowledge",
+    ]);
+    expect(container.textContent).toContain("helpDeskPresent");
+    await act(async () => renderProfile(false));
+    expect(container.textContent).not.toContain("helpDeskPresent");
+    expect(container.textContent).not.toContain("helpDeskOutside");
+  });
+});

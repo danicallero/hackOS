@@ -12,7 +12,7 @@ import {
   deleteDraft,
   enrichTemplate,
   listMyResponses,
-  maskStatus,
+  maskResponse,
   saveDraft,
   submitResponse,
 } from "./service.js";
@@ -84,9 +84,8 @@ export function registerMeRoutes(app: FastifyInstance): void {
         [req.userId],
       );
       return {
-        ...row,
+        ...maskResponse(row),
         can_delete_draft: await canDeleteDraft(pool, row),
-        status: maskStatus(row.status),
         template: enriched,
         sections,
         ask_shirt_size,
@@ -115,7 +114,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
     },
     async (req) => {
       const row = await saveDraft(req.userId as number, req.params.id, req.body.responses);
-      return { ...row, status: maskStatus(row.status) };
+      return maskResponse(row);
     },
   );
 
@@ -158,7 +157,7 @@ export function registerMeRoutes(app: FastifyInstance): void {
         req.body,
       );
       return {
-        response: { ...response, status: maskStatus(response.status) },
+        response: maskResponse(response),
         privacy_notice: privacyNotice,
       };
     },

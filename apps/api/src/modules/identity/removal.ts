@@ -1436,6 +1436,33 @@ async function scrubRelationships(
   // #934: the opted-in public profile is identity-bearing; anonymized rows
   // keep the users row, so the cascade alone would not remove it.
   await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
+  // H61-H66: the helper card, its knowledge and schedule, and routed-audience
+  // rows go. Requests survive for the team without the person: an individual
+  // request loses its text and is cancelled if still active; a claim held by
+  // the person returns to open so the requester can be helped by someone else.
+  await client.query(`DELETE FROM help_request_recipients WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM helper_profiles WHERE user_id = $1`, [userId]);
+  await client.query(
+    `UPDATE help_requests
+        SET status = CASE WHEN repo_id IS NULL AND status IN ('open', 'claimed')
+                          THEN 'cancelled' ELSE status END,
+            cancelled_at = CASE WHEN repo_id IS NULL AND status IN ('open', 'claimed')
+                                THEN now() ELSE cancelled_at END,
+            description = CASE WHEN repo_id IS NULL THEN '' ELSE description END,
+            location = CASE WHEN repo_id IS NULL THEN '' ELSE location END,
+            requester_id = NULL
+      WHERE requester_id = $1`,
+    [userId],
+  );
+  await client.query(
+    `UPDATE help_requests
+        SET status = 'open', claimed_by = NULL, claimed_at = NULL,
+            meeting_mode = NULL, meeting_location = NULL
+      WHERE claimed_by = $1 AND status = 'claimed'`,
+    [userId],
+  );
+  await client.query(`UPDATE help_requests SET claimed_by = NULL WHERE claimed_by = $1`, [userId]);
+  await client.query(`UPDATE help_topics SET proposed_by = NULL WHERE proposed_by = $1`, [userId]);
   // #935: the subject's own event diary, and every entry in other attendees'
   // diaries that points at them.
   await client.query(`DELETE FROM diary_entries WHERE owner_id = $1 OR target_user_id = $1`, [

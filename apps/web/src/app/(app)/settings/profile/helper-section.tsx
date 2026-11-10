@@ -1,0 +1,150 @@
+"use client";
+import { CAPABILITIES } from "@hackos/shared/capabilities";
+import Link from "next/link";
+import { useEffect, useId, useState } from "react";
+import { FormActions } from "@/components/common/form-actions";
+import { SwitchRow } from "@/components/profile/public-profile-form";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
+import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
+import { api } from "@/lib/api";
+import { useLocale } from "@/lib/i18n";
+import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
+import { AvailabilityEditor } from "../../help-desk/availability-editor";
+import type { MyHelperProfile } from "../../help-desk/model";
+import { HelpdeskError, HelpdeskLoading, TopicsPicker } from "../../help-desk/shared";
+
+/**
+ * Help desk part of the public profile (H61, H62): publish the helper profile,
+ * pick knowledge, state availability. The bio, photo and links stay in the
+ * public profile form above; publishing shows that same profile on the help
+ * desk. Rendered for eligible helpers only, which includes accepted mentors
+ * before confirmation (no event access yet).
+ */
+export function HelperSection({ onDirtyChange }: { onDirtyChange?: (dirty: boolean) => void }) {
+  const own = useOwnHelperProfile();
+  if (own.loading) return <HelpdeskLoading />;
+  if (own.error) return <HelpdeskError error={own.error} retry={own.reload} />;
+  if (!own.data?.eligible) return null;
+  const profile = own.data;
+  return (
+    <div className="space-y-8">
+      <HelperForm
+        key={`${profile.published}-${profile.challengeIds.join(",")}-${profile.topics.map((topic) => topic.id).join(",")}`}
+        profile={profile}
+        onSaved={own.mutate}
+        onDirtyChange={onDirtyChange}
+      />
+    </div>
+  );
+}
+
+function HelperForm({
+  profile,
+  onSaved,
+  onDirtyChange,
+}: {
+  profile: MyHelperProfile;
+  onSaved: (profile: MyHelperProfile) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const { t } = useLocale();
+  const { canAny } = useSessionContext();
+  const id = useId();
+  const [published, setPublished] = useState(profile.published);
+  const [topics, setTopics] = useState(profile.topics);
+  const [challengeIds, setChallengeIds] = useState(profile.challengeIds);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const dirty =
+    published !== profile.published ||
+    challengeIds.join(",") !== profile.challengeIds.join(",") ||
+    topics.map((x) => x.id).join(",") !== profile.topics.map((x) => x.id).join(",");
+  useUnsavedChangesGuard(dirty);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [onDirtyChange, dirty]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
+  const canBrowse = canAny(
+    CAPABILITIES.HELPDESK_REQUEST,
+    CAPABILITIES.HELPDESK_OFFER,
+    CAPABILITIES.HELPDESK_COVERAGE,
+  );
+  return (
+    <form
+      className="space-y-(--space-within-section)"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setPending(true);
+        setError(null);
+        try {
+          onSaved(
+            await api.put<MyHelperProfile>("/api/me/helper-profile", {
+              published,
+              topicIds: topics.map((topic) => topic.id),
+              challengeIds,
+            }),
+          );
+          toast.success(t("helpDeskSaved"), { compactTitle: t("helpDeskProfile") });
+        } catch (err) {
+          setError(err);
+        } finally {
+          setPending(false);
+        }
+      }}
+    >
+      <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
+        <SwitchRow checked={published} onChange={setPublished} label={t("helpDeskPublish")} />
+        {profile.challengeOptions.length > 0 ? (
+          <fieldset className="space-y-2">
+            <legend className="type-label">{t("helpDeskChallengeAlerts")}</legend>
+            <p className="text-muted-foreground text-sm text-pretty">
+              {t("helpDeskChallengeAlertsNote")}
+            </p>
+            <ul className="space-y-1">
+              {profile.challengeOptions.map((option) => (
+                <li key={option.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`${id}-challenge-${option.id}`}
+                    checked={challengeIds.includes(option.id)}
+                    onCheckedChange={(checked) =>
+                      setChallengeIds(
+                        checked
+                          ? [...challengeIds, option.id]
+                          : challengeIds.filter((value) => value !== option.id),
+                      )
+                    }
+                  />
+                  <Label htmlFor={`${id}-challenge-${option.id}`}>{option.name}</Label>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
+        ) : null}
+        <div className="space-y-2">
+          <Label htmlFor={id}>{t("helpDeskKnowledge")}</Label>
+          <TopicsPicker id={id} value={topics} onChange={setTopics} disabled={pending} allowAdd />
+        </div>
+        <AvailabilityEditor profile={profile} onSaved={onSaved} />
+      </fieldset>
+      {error ? <HelpdeskError error={error} fallback="helpDeskSaveError" /> : null}
+      <FormActions
+        pending={pending}
+        state={error ? "error" : dirty ? "unsaved" : "saved"}
+        disabled={!dirty}
+        secondaryActions={
+          profile.published && canBrowse ? (
+            <Button asChild variant="ghost">
+              <Link href={`/help-desk/helpers/${profile.preview.userId}`}>
+                {t("helpDeskViewPublished")}
+              </Link>
+            </Button>
+          ) : undefined
+        }
+      />
+    </form>
+  );
+}

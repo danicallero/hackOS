@@ -288,3 +288,42 @@ describe("presence breakdown (H24 CSV export)", () => {
     expect(buildPresenceIntervals(events, at(13))).toHaveLength(0);
   });
 });
+
+describe("help checkpoints (H66, H24)", () => {
+  it("secures a provisional window opened by a door entry", () => {
+    const events: PresenceEvent[] = [
+      { t: at(9), kind: "in" },
+      { t: at(14), kind: "help" },
+    ];
+    const [first, renewed] = buildCertaintyWindows(events, at(15));
+    expect(first).toMatchObject({ status: "secured", securedUntil: at(14), closedBy: "help" });
+    expect(renewed).toMatchObject({ openedBy: "help", status: "provisional" });
+    expect(guaranteedHours(events, at(15))).toBe(5);
+  });
+
+  it("never creates presence on its own", () => {
+    const events: PresenceEvent[] = [{ t: at(10), kind: "help" }];
+    expect(buildCertaintyWindows(events, at(11))).toHaveLength(0);
+    expect(hours(events, at(11))).toBe(0);
+    expect(isPresentAt(events, at(10))).toBe(false);
+  });
+
+  it("is ignored once the window expired and does not revive it", () => {
+    const events: PresenceEvent[] = [
+      { t: at(0), kind: "in" },
+      { t: at(13), kind: "help" },
+    ];
+    expect(hours(events, at(14))).toBe(0);
+    expect(buildPresenceIntervals(events, at(14))).toHaveLength(0);
+  });
+
+  it("does not hide an illegal in→in or change door state", () => {
+    const events: PresenceEvent[] = [
+      { t: at(9), kind: "in" },
+      { t: at(10), kind: "help" },
+      { t: at(11), kind: "in" },
+    ];
+    expect(buildCertaintyWindows(events, at(12)).some((w) => w.conflict)).toBe(true);
+    expect(guaranteedHours(events, at(12))).toBe(1);
+  });
+});

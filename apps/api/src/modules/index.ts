@@ -8,6 +8,7 @@ import { registerEventModule } from "./event/index.js";
 import { registerExportsModule } from "./exports/index.js";
 import { registerFormLibrariesModule } from "./form-libraries/index.js";
 import { registerGithubModule } from "./github/index.js";
+import { registerHelpdeskModule } from "./helpdesk/index.js";
 import { registerIdentityModule } from "./identity/index.js";
 import { registerLiveActivitiesModule } from "./live-activities/index.js";
 import { registerLogisticsModule } from "./logistics/index.js";
@@ -41,6 +42,7 @@ export async function registerModules(app: FastifyInstance): Promise<void> {
   await registerExportsModule(app); // WS-F  (H54, H56)
   registerFormLibrariesModule(app);
   await registerGithubModule(app); // GitHub App repo linking and activity ranking
+  await registerHelpdeskModule(app); // H61-H67 help desk
   await registerIdentityModule(app); // WS-A1 (H1-H10)
   await registerLiveActivitiesModule(app); // #966 Live Activities (H38, H25, H26)
   await registerLogisticsModule(app); // WS-C  (H22-H27)

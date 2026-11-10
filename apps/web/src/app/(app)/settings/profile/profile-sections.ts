@@ -10,6 +10,7 @@ export type ProfileSectionId =
   | "mentor"
   | "share"
   | "rsvp"
+  | "helpDesk"
   | "passes"
   | "certificates"
   | "security"
@@ -17,7 +18,7 @@ export type ProfileSectionId =
   | "danger";
 
 /** Sections with their own Save; their tab is marked while one holds unsaved edits. */
-export type EditableSection = "personal" | "public" | "mentor" | "rsvp";
+export type EditableSection = "personal" | "public" | "mentor" | "rsvp" | "helpDesk";
 
 export interface SectionDef {
   id: ProfileSectionId;
@@ -42,6 +43,7 @@ const TABS: TabDef[] = [
     title: "publicProfileTitle",
     sections: [
       { id: "public" },
+      { id: "helpDesk", title: "helpDeskTitle" },
       { id: "mentor", title: "mentorProfileTitle" },
       { id: "share", title: "onboardingStepShare" },
     ],
@@ -66,9 +68,16 @@ const TABS: TabDef[] = [
  * The tabs and sections this account has. Passes follow the personal nav's
  * rule (hidden for pure applicants); certificates and the public profile need
  * current event access, as their APIs do (#934, #1083). A tab with no
- * section left is dropped.
+ * section left is dropped. The help desk section follows the API's helper
+ * eligibility, so an accepted mentor can prepare it before confirmation,
+ * without event access (H61).
  */
-export function visibleProfileTabs(me: Me, isPureApplicant: boolean, hasRsvps = false): TabDef[] {
+export function visibleProfileTabs(
+  me: Me,
+  isPureApplicant: boolean,
+  hasRsvps = false,
+  helperEligible = false,
+): TabDef[] {
   const visible = (id: ProfileSectionId) => {
     switch (id) {
       case "passes":
@@ -82,6 +91,8 @@ export function visibleProfileTabs(me: Me, isPureApplicant: boolean, hasRsvps = 
         return me.hasEventAccess;
       case "rsvp":
         return me.hasEventAccess && hasRsvps;
+      case "helpDesk":
+        return helperEligible;
       case "roles":
         return me.roles.length > 0;
       default:

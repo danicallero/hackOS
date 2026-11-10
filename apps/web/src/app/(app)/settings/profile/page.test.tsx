@@ -51,6 +51,10 @@ vi.mock("@/components/onboarding/onboarding-steps", () => ({ ShareCard: () => <p
 vi.mock("@/components/profile/mentor-profile-editor", () => ({
   MentorProfileEditor: () => <p>mentor-body</p>,
 }));
+vi.mock("./helper-section", () => ({ HelperSection: () => <p>helper-body</p> }));
+vi.mock("@/hooks/use-own-helper-profile", () => ({
+  useOwnHelperProfile: () => ({ data: { eligible: helper.eligible } }),
+}));
 vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));
 vi.mock("./password-card", () => ({ PasswordRow: () => null }));
@@ -58,6 +62,7 @@ vi.mock("./github-row", () => ({ GithubRow: () => null }));
 vi.mock("./profile-roles", () => ({ ProfileRoles: () => <p>roles-body</p> }));
 
 const personal = { dirty: false };
+const helper = { eligible: false };
 
 import ProfileSettingsPage from "./page";
 
@@ -81,6 +86,7 @@ describe("Profile tabs (H28, #1083)", () => {
   beforeEach(() => {
     nav.search = "";
     personal.dirty = false;
+    helper.eligible = false;
     session.me = { ...participant };
     session.isPureApplicant = false;
     container = document.createElement("div");
@@ -146,6 +152,33 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(tabs()).toEqual(["personalDetails", "accountTitle"]);
     expect(container.textContent).not.toContain("public-body");
     expect(container.textContent).not.toContain("roles-body");
+  });
+
+  it("puts an eligible helper's help desk settings inside the Public profile tab (H61)", async () => {
+    helper.eligible = true;
+    nav.search = "tab=public";
+    await render();
+    expect(tabs()).not.toContain("helpDeskTitle");
+    expect(openPanel()[0].textContent).toContain("public-body");
+    expect(openPanel()[0].textContent).toContain("helper-body");
+  });
+
+  it("opens the Public profile tab for the old ?tab=help-desk link (H61)", async () => {
+    helper.eligible = true;
+    nav.search = "tab=help-desk";
+    await render();
+    expect(openPanel()[0].textContent).toContain("helper-body");
+  });
+
+  it("lets an accepted mentor without event access prepare the help desk section (H61)", async () => {
+    session.me = { ...participant, hasEventAccess: false, roles: [] };
+    session.isPureApplicant = true;
+    helper.eligible = true;
+    nav.search = "tab=public";
+    await render();
+    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "accountTitle"]);
+    expect(openPanel()[0].textContent).toContain("helper-body");
+    expect(openPanel()[0].textContent).not.toContain("public-body");
   });
 
   it("adds the RSVP section to Personal details only while the person has open RSVPs", async () => {

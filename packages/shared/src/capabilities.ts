@@ -43,7 +43,6 @@ export const CAPABILITIES = {
   // checks them until the #933 staff export/override routes land.
   MEAL_PLANS_EXPORT: "meal-plans:export",
   MEAL_PLANS_MANAGE: "meal-plans:manage", // edit someone else's meal plan
-  HELPDESK_OFFER: "helpdesk:offer", // publish a helper profile and offer help
 
   // queue & judging (H29-H40)
   QUEUE_STATUS: "queue:status", // view your own queue status
@@ -78,6 +77,12 @@ export const CAPABILITIES = {
   VENUE_MANAGE: "venue:manage", // venue name/GPS + Wi-Fi credentials
   WALLET_MANAGE: "wallet:manage", // Apple Wallet pass fields/labels
   PRESENCE_MANAGE: "presence:manage", // H24 automatic-presence policy
+
+  // help desk (H61-H67)
+  HELPDESK_OFFER: "helpdesk:offer", // own helper profile/availability, helper inbox, claim requests
+  HELPDESK_REQUEST: "helpdesk:request", // browse helpers, request help for yourself or your team
+  HELPDESK_COVERAGE: "helpdesk:coverage", // organizer coverage view (H67)
+  HELPDESK_MANAGE: "helpdesk:manage", // rename and merge knowledge topics
 
   // comms & admin (H50-H54)
   NOTIFICATIONS_SEND: "notifications:send",
@@ -119,7 +124,6 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "intolerances:manage": "Maintain the food-intolerance dictionary",
   "meal-plans:export": "Export per-person meal plans with dietary data",
   "meal-plans:manage": "Edit anyone's meal plan",
-  "helpdesk:offer": "Publish a helper profile and claim help requests",
   "queue:status": "View your own judging queue and status",
   "queue:operate": "Call, skip, mark no-show, pause, or requeue teams",
   "queue:admin": "Manage rooms, assignments, settings, and disqualifications",
@@ -136,6 +140,10 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "venue:manage": "Edit venue location and Wi-Fi credentials",
   "wallet:manage": "Edit Apple Wallet pass fields and labels",
   "presence:manage": "Configure automatic-presence policy",
+  "helpdesk:offer": "Publish a helper profile and claim help requests",
+  "helpdesk:request": "Browse helpers and request help",
+  "helpdesk:coverage": "View help desk coverage across the event",
+  "helpdesk:manage": "Rename and merge help desk knowledge topics",
   "notifications:send": "Send notifications to users",
   "audit:read": "Read the audit log",
   "exports:run": "Run data exports",

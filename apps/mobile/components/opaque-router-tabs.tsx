@@ -49,6 +49,7 @@ import { MIN_TARGET, type } from "@/theme/tokens";
 type TabLabelKey =
   | "tabAccount"
   | "tabActivities"
+  | "helpDesk"
   | "tabDiary"
   | "tabQueue"
   | "tabQueueOperations"
@@ -84,6 +85,13 @@ const TAB_DEFINITIONS: Record<TabKey, TabDefinition> = {
     labelKey: "tabDiary",
     selectedIcon: "person.2.crop.square.stack.fill",
     triggerName: "diary",
+  },
+  "help-desk": {
+    href: "/(tabs)/help-desk",
+    icon: "lifepreserver",
+    labelKey: "helpDesk",
+    selectedIcon: "lifepreserver.fill",
+    triggerName: "help-desk",
   },
   operations: {
     href: "/(tabs)/operations",
@@ -124,6 +132,7 @@ const REGISTERED_TAB_ROUTES: RouterTabRoute[] = [
   { href: "/(tabs)/schedule", name: "schedule" },
   { href: "/(tabs)/queue", name: "queue" },
   { href: "/(tabs)/diary", name: "diary" },
+  { href: "/(tabs)/help-desk", name: "help-desk" },
   { href: "/(tabs)/operations", name: "operations" },
   { href: "/(tabs)/scan", name: "scan" },
   { href: "/(tabs)/activities", name: "activities" },
@@ -220,6 +229,17 @@ function OverflowAccountAvatar({
  * the Liquid Glass/opaque geometry; this adapter owns hackOS capabilities,
  * copy, icons and the Others pseudo-tab menu.
  */
+/**
+ * H61-H67: pressing the selected Help desk tab pops its stack to the root in
+ * one step, so repeated taps settle there instead of stepping between pages.
+ */
+export function reselectHelpDesk(
+  router: { canDismiss: () => boolean; dismissAll: () => void },
+  wasSelected: boolean,
+): void {
+  if (wasSelected && router.canDismiss()) router.dismissAll();
+}
+
 export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: OpaqueRouterTabsProps) {
   const { t } = useLocale();
   const systemColorScheme = useColorScheme();
@@ -306,11 +326,18 @@ export function OpaqueRouterTabs({ capabilities, hasQueueItems, account }: Opaqu
           // H55: Account owns pushed settings; pressing its tab returns to the profile.
           if (tab.name === TAB_DEFINITIONS.account.triggerName) {
             router.navigate(OVERFLOW_TAB_ROUTE.account);
+          } else if (tab.name === TAB_DEFINITIONS["help-desk"].triggerName) {
+            // H61-H67: both entering and reselecting open the root; do not
+            // resume the last coverage/profile page from another tab.
+            if (wasSelected) reselectHelpDesk(router, true);
+            else router.replace(TAB_DEFINITIONS["help-desk"].href);
           } else if (wasSelected) emitTabReselect(tab.name);
         }}
         onTabSelect={(index) => {
           void haptic("selection");
           if (visibleTabKeys[index] === "account") router.navigate(OVERFLOW_TAB_ROUTE.account);
+          if (visibleTabKeys[index] === "help-desk")
+            router.replace(TAB_DEFINITIONS["help-desk"].href);
         }}
         overflow={
           overflowIds.length > 0 ? (

@@ -326,6 +326,7 @@ describe("saved profile reads (#934, #935)", () => {
       projects: [{ kind: "project", id: expect.any(Number), name: "Neural Beans" }],
       project: { kind: "project", id: expect.any(Number), name: "Neural Beans" },
       challenges: [{ id: challenge, name: "Green AI" }],
+      helpTopics: [],
     });
     const body = res.body;
     for (const forbidden of [

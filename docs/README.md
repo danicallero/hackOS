@@ -72,6 +72,10 @@ Architecture & modules:
   mentor profile section and organizer onboarding settings.
 - [Onboarding social sharing](./onboarding-social-sharing.md) — the share
   step's card component.
+- [Help desk (H61-H67)](./help-desk.md) — helper profiles sharing the public
+  bio, knowledge catalogue, stated availability versus presence, request
+  routing, atomic claims and coverage; client contract in
+  [`help-desk-contract.md`](./help-desk-contract.md).
 - [Content reports (H18)](./content-reports.md) — attendee reports of projects and
   public profiles, and the organiser inbox that closes them.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
@@ -132,6 +136,8 @@ Architecture & modules:
   and transformations, layout persistence, and granular statistics ACLs.
 
 Frontend (web & mobile):
+
+- [Web help desk](./help-desk-web.md) — published helpers, shared bio and knowledge, dated availability, team requests, helper inbox and coverage (H61–H67).
 
 - [Design system, UI & UX](./DESIGN.md) — the consolidated design rulebook,
   indexed and summarized per section: principles, tokens (with intent and

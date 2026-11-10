@@ -1,0 +1,153 @@
+jest.mock("@/lib/api", () => ({ apiFetch: jest.fn() }));
+jest.mock("@/components/person-avatar", () => ({ PersonAvatar: () => null }));
+jest.mock("@/theme/colors", () => ({ colors: new Proxy({}, { get: () => "#000" }) }));
+jest.mock("@/components/filter-menu", () => ({ FilterMenu: () => null }));
+
+import { fireEvent, render, screen } from "@testing-library/react-native";
+import { Pressable as MockPressable, Text as MockText, View as MockView } from "react-native";
+import { HelpDeskScreen } from "@/components/help-desk/home-screen";
+
+let mockCaps: string[] = [];
+let mockEligible = false;
+let mockClosed = false;
+jest.mock("@/lib/use-help-schedule", () => ({
+  useHelpSchedule: () => ({ closed: mockClosed, schedule: null }),
+  helpClosedText: () => "closedText",
+}));
+jest.mock("@/components/status-notice", () => ({
+  InfoNotice: ({ text }: { text: string }) => <MockText>{text}</MockText>,
+}));
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock("@/lib/me-context", () => ({
+  useMeContext: () => ({ me: { id: 7, capabilities: mockCaps } }),
+}));
+jest.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
+jest.mock("@/components/RequestFeedback", () => ({ RequestFeedback: () => null }));
+jest.mock("@/components/native-ui", () => ({
+  Section: ({ children }: { children: React.ReactNode }) => <MockView>{children}</MockView>,
+  Separator: () => null,
+}));
+jest.mock("@/components/project-ui", () => ({
+  NavRow: ({ title, onPress }: { title: string; onPress: () => void }) => (
+    <MockPressable accessibilityRole="button" onPress={onPress}>
+      <MockText>{title}</MockText>
+    </MockPressable>
+  ),
+}));
+jest.mock("@/components/segmented-control", () => ({
+  SegmentedControl: ({
+    values,
+    onChange,
+  }: {
+    values: string[];
+    onChange: (index: number) => void;
+  }) => (
+    <MockView>
+      {values.map((value, index) => (
+        <MockPressable key={value} accessibilityRole="tab" onPress={() => onChange(index)}>
+          <MockText>{value}</MockText>
+        </MockPressable>
+      ))}
+    </MockView>
+  ),
+}));
+jest.mock("@/components/help-desk/requests-screen", () => ({
+  HelpRequestList: ({ path }: { path: string }) => <MockText>{`list:${path}`}</MockText>,
+}));
+jest.mock("@/components/help-desk/primitives", () => ({
+  HelpPage: ({
+    children,
+    action,
+    menu,
+  }: {
+    children: React.ReactNode;
+    action?: { label: string; onPress: () => void; disabled?: boolean };
+    menu?: { items: { id: string; title: string; onPress: () => void }[] };
+  }) => (
+    <MockView>
+      {menu?.items.map((item) => (
+        <MockPressable key={item.id} accessibilityRole="menuitem" onPress={item.onPress}>
+          <MockText>{item.title}</MockText>
+        </MockPressable>
+      ))}
+      {action ? (
+        <MockPressable
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          accessibilityState={{ disabled: !!action.disabled }}
+          disabled={action.disabled}
+          onPress={action.onPress}
+        />
+      ) : null}
+      {children}
+    </MockView>
+  ),
+  HelpText: ({ children }: { children: React.ReactNode }) => <MockText>{children}</MockText>,
+}));
+jest.mock("@/lib/use-help-resource", () => ({
+  useHelpResource: () => ({
+    data: { eligible: mockEligible },
+    loading: false,
+    error: null,
+    load: jest.fn(),
+  }),
+}));
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockEligible = false;
+  mockClosed = false;
+});
+
+describe("Help desk tab root (H64-H67)", () => {
+  it("defaults a participant to own and team requests with request actions", async () => {
+    mockCaps = ["helpdesk:request"];
+    await render(<HelpDeskScreen />);
+    expect(screen.getByText("list:/api/helpdesk/requests/mine")).toBeTruthy();
+    expect(screen.queryByRole("tab")).toBeNull();
+    // Request help is the trailing toolbar action, not a row of the options list.
+    expect(screen.queryByText("helpRequest")).toBeNull();
+    await fireEvent.press(screen.getByLabelText("helpRequest"));
+    expect(mockPush).toHaveBeenCalledWith("/(tabs)/help-desk/new-request");
+    expect(screen.queryByText("helpCoverage")).toBeNull();
+  });
+  it("defaults a helper to the open inbox and offers claims and the helper profile", async () => {
+    mockCaps = ["helpdesk:offer"];
+    mockEligible = true;
+    await render(<HelpDeskScreen />);
+    expect(screen.getByText("list:/api/helpdesk/inbox?scope=open")).toBeTruthy();
+    expect(screen.getByText("helpMyClaims")).toBeTruthy();
+    expect(screen.queryByLabelText("helpRequest")).toBeNull();
+    await fireEvent.press(screen.getByText("helpMyProfile"));
+    expect(mockPush).toHaveBeenCalledWith("/helper-profile");
+  });
+  it("lets a person with both capabilities switch between every list", async () => {
+    mockCaps = ["helpdesk:request", "helpdesk:offer"];
+    mockEligible = true;
+    await render(<HelpDeskScreen />);
+    expect(screen.getByText("list:/api/helpdesk/requests/mine")).toBeTruthy();
+    await fireEvent.press(screen.getByText("helpAllRequests"));
+    expect(screen.getByText("list:/api/helpdesk/inbox?scope=open")).toBeTruthy();
+    await fireEvent.press(screen.getByText("helpMyClaims"));
+    expect(screen.getByText("list:/api/helpdesk/inbox?scope=mine")).toBeTruthy();
+  });
+  it("shows coverage-only users the directory and coverage without request or helper actions", async () => {
+    mockCaps = ["helpdesk:coverage"];
+    await render(<HelpDeskScreen />);
+    expect(screen.queryByText(/^list:/)).toBeNull();
+    expect(screen.queryByLabelText("helpRequest")).toBeNull();
+    expect(screen.queryByText("helpMyProfile")).toBeNull();
+    await fireEvent.press(screen.getByText("helpCoverage"));
+    expect(mockPush).toHaveBeenCalledWith("/(tabs)/help-desk/coverage");
+  });
+  it("disables Request help and says why while the help desk is closed (H64)", async () => {
+    mockCaps = ["helpdesk:request"];
+    mockClosed = true;
+    await render(<HelpDeskScreen />);
+    expect(screen.getByText("closedText")).toBeTruthy();
+    expect(screen.getByLabelText("helpRequest").props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(screen.getByLabelText("helpRequest"));
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+});

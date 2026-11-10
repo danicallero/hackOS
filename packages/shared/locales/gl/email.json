@@ -92,8 +92,9 @@
         },
         "rejected": {
           "subject": "Sobre a túa solicitude de {{applicationName}} para {{eventName}}",
-          "body": "Ola {{name}},\n\nLamentablemente, a túa solicitude de {{applicationName}} para {{eventName}} non foi seleccionada nesta ocasión. Sabemos que non é a nova que agardabas.\n\nGrazas polo teu interese e polo tempo que dedicaches á túa solicitude. Agardamos verte en próximas edicións.\n\nUn saúdo,\nO equipo de organización"
+          "body": "Ola {{name}},\n\nLamentablemente, a túa solicitude de {{applicationName}} para {{eventName}} non foi seleccionada nesta ocasión. Sabemos que non é a nova que agardabas.{{rejectionDetails}}\n\nGrazas polo teu interese e polo tempo que dedicaches á túa solicitude. Agardamos verte en próximas edicións.\n\nUn saúdo,\nO equipo de organización"
         },
+        "rejectionDetails": "\n\nMotivo: {{reason}}",
         "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirmar a miña praza]({{confirmUrl}})\n\nSe ao final non podes vir, avísanos para que outra persoa poida aproveitar a túa praza:\n\n[Renunciar á miña praza]({{declineUrl}})\n\nSe pasa o prazo sen que confirmes, a praza liberarase automaticamente.",
         "confirmationDeadline": "Confirma a túa praza antes do {{deadline}}."
       },
@@ -114,6 +115,36 @@
       "reminder": {
         "subject": "Lembranza: {{title}}",
         "body": "Ola,\n\n{{title}} comeza ás {{startsAtLabel}}.{{locationLine}}\n\nVémonos alí!"
+      }
+    },
+    "helpdesk": {
+      "request": {
+        "subject": "Piden axuda: {{topics}}",
+        "body": "Alguén necesita axuda con {{topics}} en {{location}}. Abre o punto de axuda para atendela."
+      },
+      "requestOther": {
+        "subject": "Piden axuda",
+        "body": "Alguén necesita axuda en {{location}}. Abre o punto de axuda para atendela."
+      },
+      "onMyWay": {
+        "subject": "{{helperName}} vai de camiño",
+        "body": "{{helperName}} atendeu a túa solicitude de axuda e vai cara a {{location}}."
+      },
+      "meetAt": {
+        "subject": "Atópate con {{helperName}} en {{meetingLocation}}",
+        "body": "{{helperName}} atendeu a túa solicitude de axuda e agárdate en {{meetingLocation}}."
+      },
+      "released": {
+        "subject": "A túa solicitude de axuda volve estar aberta",
+        "body": "A persoa que a atendeu xa non pode ir. Outras persoas aínda poden atendela."
+      },
+      "cancelled": {
+        "subject": "Solicitude de axuda cancelada",
+        "body": "Quen pediu axuda xa non a necesita."
+      },
+      "resolved": {
+        "subject": "Solicitude de axuda resolta",
+        "body": "{{actorName}} marcou esta solicitude como resolta."
       }
     }
   },
@@ -150,6 +181,36 @@
       "reminder": {
         "title": "{{title}}",
         "body": "Comeza ás {{startsAtLabel}}{{locationSuffix}}"
+      }
+    },
+    "helpdesk": {
+      "request": {
+        "title": "Piden axuda: {{topics}}",
+        "body": "En {{location}}. Abre o punto de axuda para atendela."
+      },
+      "requestOther": {
+        "title": "Piden axuda",
+        "body": "En {{location}}. Abre o punto de axuda para atendela."
+      },
+      "onMyWay": {
+        "title": "{{helperName}} vai de camiño",
+        "body": "Vai cara a {{location}}."
+      },
+      "meetAt": {
+        "title": "Atópate con {{helperName}} en {{meetingLocation}}",
+        "body": "Atendeu a túa solicitude de axuda."
+      },
+      "released": {
+        "title": "Solicitude de axuda aberta de novo",
+        "body": "A persoa que a atendeu xa non pode ir."
+      },
+      "cancelled": {
+        "title": "Solicitude de axuda cancelada",
+        "body": "Xa non necesitan axuda."
+      },
+      "resolved": {
+        "title": "Solicitude de axuda resolta",
+        "body": "{{actorName}} marcou esta solicitude como resolta."
       }
     }
   }

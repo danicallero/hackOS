@@ -1,4 +1,4 @@
-import { Alert, type AlertButton, type AlertOptions, Platform } from "react-native";
+import { ActionSheetIOS, Alert, type AlertButton, type AlertOptions, Platform } from "react-native";
 
 /**
  * The app's one alert. iOS keeps UIKit's `UIAlertController`; Android shows the
@@ -50,4 +50,35 @@ export function subscribeAlerts(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/**
+ * Confirms a destructive action as Apple's action sheet: the destructive
+ * choice on top, Cancel at the bottom (HIG Action sheets). Android shows the
+ * same choice through `alert`.
+ */
+export function confirmDestructive({
+  title,
+  confirm,
+  cancel,
+  onConfirm,
+}: {
+  title: string;
+  confirm: string;
+  cancel: string;
+  onConfirm: () => void;
+}): void {
+  if (Platform.OS === "ios") {
+    ActionSheetIOS.showActionSheetWithOptions(
+      { title, options: [confirm, cancel], destructiveButtonIndex: 0, cancelButtonIndex: 1 },
+      (index) => {
+        if (index === 0) onConfirm();
+      },
+    );
+    return;
+  }
+  alert(title, undefined, [
+    { text: cancel, style: "cancel" },
+    { text: confirm, style: "destructive", onPress: onConfirm },
+  ]);
 }

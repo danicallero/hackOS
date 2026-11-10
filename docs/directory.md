@@ -2,8 +2,8 @@
 
 An opt-in public profile that an attendee shares with the people who scan
 their badge: name, photo, an optional headline, bio, location note, links and
-CV and, if they choose, their projects and their challenges. There is no
-browsable people directory: the product owner retired it on #935 ("al final
+CV and, if they choose, their projects and their challenges. Published helper profiles are separately browsable at the [help desk](./help-desk-web.md) (H61–H67); that projection exposes help information and creates no scan contact. There is no
+general browsable people directory: the product owner retired it on #935 ("al final
 queremos que sea dinámico"), so a person enters someone's event diary only by
 a scan ([`diary.md`](./diary.md)), and only then can that attendee read their
 profile. A scan is mutual: if the scanner also shares a profile, the scanned
@@ -217,6 +217,7 @@ badge or ticket.
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
+| `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,
 university, size, application state, roles or capabilities, presence, test
@@ -236,7 +237,7 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
-| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv` |
+| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
@@ -393,3 +394,12 @@ grouped separately in Personal details, and choosing No restrictions hides the
 optional fields while preserving their previous values for restoration when
 unticked. Email, password and GitHub live in Account and security; roles and
 account removal have their own sections.
+
+## Help desk knowledge (H61)
+
+Public profile previews and scanned-person readers show `helpTopics` for published
+helpers. The helper profile is this profile: the bio is edited only here. Publishing a
+helper profile does not change networking opt-in, but it is the consent that
+shows the person's entry (`helperProfileEntry`, same fields and per-field
+switches) in `GET /api/helpdesk/helpers/:userId`, and lets help desk readers
+open that helper's shared CV and photo without a scan.

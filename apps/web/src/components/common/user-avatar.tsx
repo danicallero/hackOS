@@ -22,6 +22,7 @@ export function UserAvatar({
   fallbackClassName,
   decorative = false,
   showInitials = false,
+  presenceLabel,
 }: {
   name: string;
   image: string | null | undefined;
@@ -30,8 +31,10 @@ export function UserAvatar({
   /** Next to a visible name the photo adds nothing for screen readers. */
   decorative?: boolean;
   showInitials?: boolean;
+  /** Current presence, announced by text and painted at the avatar edge. Omit when absent. */
+  presenceLabel?: string;
 }) {
-  return (
+  const avatar = (
     <Avatar className={className} aria-hidden={decorative || undefined}>
       {image ? <AvatarImage src={apiAssetUrl(image)} alt={decorative ? "" : name} /> : null}
       <AvatarFallback
@@ -43,5 +46,15 @@ export function UserAvatar({
         {showInitials ? initials(name) : null}
       </AvatarFallback>
     </Avatar>
+  );
+  return presenceLabel ? (
+    <span className="relative inline-flex shrink-0">
+      {avatar}
+      <span className="absolute -end-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-background bg-success">
+        <span className="sr-only">{presenceLabel}</span>
+      </span>
+    </span>
+  ) : (
+    avatar
   );
 }

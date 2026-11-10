@@ -40,6 +40,8 @@ export const SSE_TOPICS = {
   EXPORTS: "exports",
   /** audit log changes (H53) */
   AUDIT: "audit",
+  /** help desk helpers, open requests and coverage (H61-H67); payload-free */
+  HELPDESK: "helpdesk",
   /** per-user channel, suffixed with the user id: `user:42` (H31, H38) */
   USER_PREFIX: "user:",
 } as const;
@@ -90,6 +92,8 @@ export const EVENTS = {
   USER_NOTIFICATION_PREFERENCES_CHANGED: "user.notification_preferences.changed",
   /** Refresh the current account's session facts (roles, capabilities, affiliations). */
   USER_SESSION_CHANGED: "user.session.changed",
+  /** H64-H66: a help request the user follows or was routed changed; `{ requestId, status }`. */
+  HELPDESK_REQUEST_CHANGED: "helpdesk.request.changed",
   EXPORT_REQUEST_CHANGED: "exports.request.status_changed", // H54
 } as const;
 

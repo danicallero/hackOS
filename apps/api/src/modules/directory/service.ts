@@ -40,6 +40,8 @@ export interface DirectoryEntry {
    * capability; independent of the networking opt-in (onboarding contract §5).
    */
   mentor: { expertise: string[] } | null;
+  /** H61: knowledge of a published helper profile; `[]` otherwise. */
+  helpTopics: { id: number; name: string }[];
 }
 
 export interface DirectoryProject {
@@ -59,6 +61,7 @@ interface EntryRow {
   has_cv: boolean;
   projects: DirectoryProject[];
   challenges: DirectoryEntry["challenges"];
+  help_topics: DirectoryEntry["helpTopics"];
 }
 
 /**
@@ -178,7 +181,14 @@ function entrySql(profiles: string): string {
            SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.title) ORDER BY c.title, c.id)
              FROM challenges c
             WHERE ${CHALLENGE_OF_PROJECTS}
-         ), '[]'::jsonb) AS challenges
+         ), '[]'::jsonb) AS challenges,
+         COALESCE((
+           SELECT jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name) ORDER BY lower(t.name), t.id)
+             FROM helper_profiles hp
+             JOIN helper_topics ht ON ht.user_id = hp.user_id
+             JOIN help_topics t ON t.id = ht.topic_id
+            WHERE hp.user_id = u.id AND hp.published
+         ), '[]'::jsonb) AS help_topics
     FROM ${profiles}
     JOIN users u ON u.id = p.user_id
     ${DISPLAY_NAME_JOIN}
@@ -208,6 +218,7 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
     project: projects[0] ?? null,
     challenges: row.challenges.map((c) => ({ id: Number(c.id), name: c.name })),
     mentor: null,
+    helpTopics: (row.help_topics ?? []).map((t) => ({ id: Number(t.id), name: t.name })),
   };
 }
 
@@ -291,18 +302,18 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
 }
 
 /**
- * The shared CV of an opted-in person (#935). Hidden profiles, a CV that is
- * not shared and a missing CV all answer the same 404.
+ * The CV a person shares (#935): their application CV when there is one,
+ * otherwise their upload. `scope` is the visibility predicate over `p`/`u`;
+ * a hidden profile, an unshared CV and a missing CV all answer the same 404.
  */
-export async function getDirectoryCv(
-  readerId: number,
+async function readSharedCv(
   userId: number,
+  scope: string,
 ): Promise<{ key: string; filename: string }> {
-  await assertMayReadPerson(readerId, userId);
   const { rows } = await pool.query<{ cv_key: string | null; cv_filename: string | null }>(
     `SELECT p.cv_key, p.cv_filename
        FROM user_public_profiles p JOIN users u ON u.id = p.user_id
-      WHERE ${VISIBLE_WHERE} AND p.share_cv AND u.id = $1`,
+      WHERE ${scope} AND p.share_cv AND u.id = $1`,
     [userId],
   );
   if (!rows[0]) throw new NotFoundError("Person not found");
@@ -310,6 +321,44 @@ export async function getDirectoryCv(
   if (cv) return { key: cv.key, filename: cv.filename };
   if (!rows[0].cv_key || !rows[0].cv_filename) throw new NotFoundError("Person not found");
   return { key: rows[0].cv_key, filename: rows[0].cv_filename };
+}
+
+/** The shared CV of an opted-in person the reader saved (#935). */
+export async function getDirectoryCv(
+  readerId: number,
+  userId: number,
+): Promise<{ key: string; filename: string }> {
+  await assertMayReadPerson(readerId, userId);
+  return readSharedCv(userId, VISIBLE_WHERE);
+}
+
+/**
+ * H61, H63: a published helper's CV for help desk readers, while the person's
+ * own `share_cv` switch is on. Publishing the helper profile is the consent;
+ * badge-scan sharing (`directory_visible`) is not required. The caller has
+ * already checked the helper is listed and the reader may browse helpers.
+ */
+export async function getHelperCv(userId: number): Promise<{ key: string; filename: string }> {
+  return readSharedCv(userId, "u.is_test_account = false");
+}
+
+/** H64, H66: a requester's shared CV; needs a shared (visible) profile. The caller checked access. */
+export async function getRequesterCv(userId: number): Promise<{ key: string; filename: string }> {
+  return readSharedCv(userId, VISIBLE_WHERE);
+}
+
+/**
+ * H61, H63: a published helper's public profile exactly as people see it after
+ * scanning their badge, honouring the per-field switches but independent of
+ * `directory_visible` and diary saves. Creates nothing. The caller has
+ * already checked the helper is listed.
+ */
+export async function helperProfileEntry(
+  db: Queryable,
+  userId: number,
+  cvPath = `/api/directory/${userId}/cv`,
+): Promise<DirectoryEntry> {
+  return preview(db, userId, await readProfile(db, userId), cvPath);
 }
 
 /**
@@ -363,7 +412,7 @@ const DEFAULT_PROFILE: ProfileRow = {
   onboarding_completed_at: null,
 };
 
-const OWN_CV_PATH = "/api/me/public-profile/cv";
+export const OWN_CV_PATH = "/api/me/public-profile/cv";
 
 /** The staff CV route of user management (#935 moderation). */
 export function staffCvPath(userId: number): string {
