@@ -19,6 +19,7 @@ vi.mock("@/lib/toast", () => ({ toast }));
 import {
   buildCaption,
   type DrawCardOptions,
+  dateWithYear,
   drawShareCard,
   eventTitle,
   fetchImage,
@@ -92,7 +93,7 @@ describe("caption and share links", () => {
   it("builds the caption per language and only includes supplied details", () => {
     expect(buildCaption("es", event)).toBe("¡Voy a HackUDC 2027! Nos vemos allí.");
     expect(buildCaption("en", { ...event, dateLabel: "13–14 Nov", location: "A Coruña" })).toBe(
-      "I'm going to HackUDC 2027! 13–14 Nov · A Coruña. See you there.",
+      "I'm going to HackUDC 2027! 13–14 Nov 2027 · A Coruña. See you there.",
     );
     expect(buildCaption("gl", { ...event, location: "A Coruña" })).toBe(
       "Vou a HackUDC 2027! A Coruña. Vémonos alí.",
@@ -107,6 +108,12 @@ describe("caption and share links", () => {
     expect(publicEventUrl("not a url")).toBeNull();
     expect(publicEventUrl(undefined)).toBeNull();
     expect(buildCaption("en", { ...event, url: "ftp://x.test" })).not.toContain("ftp");
+  });
+
+  it("appends the year to a supplied date unless the label already has it", () => {
+    expect(dateWithYear({ year: 2027, dateLabel: "26 - 28 feb" })).toBe("26 - 28 feb 2027");
+    expect(dateWithYear({ year: 2027, dateLabel: "26 feb 2027" })).toBe("26 feb 2027");
+    expect(dateWithYear({ year: 2027 })).toBeUndefined();
   });
 
   it("does not repeat a year already in the name", () => {
@@ -144,7 +151,7 @@ describe("caption and share links", () => {
 describe("drawShareCard", () => {
   it("draws the pass fields; role and date/place only when supplied", () => {
     const withAll = recordingContext();
-    drawShareCard(withAll.ctx, options({ roleLabel: "Hacker", details: "Sample date" }));
+    drawShareCard(withAll.ctx, options({ roleLabel: "Hacker", date: "Sample date" }));
     expect(texts(withAll.calls)).toEqual(
       expect.arrayContaining([
         "Voy a HackUDC 2027",
@@ -438,7 +445,7 @@ describe("<SocialSharing />", () => {
       expect(a.rel).toContain("noopener");
       expect(a.rel).toContain("noreferrer");
     }
-    const caption = "¡Voy a HackUDC 2027! 13–14 Nov · A Coruña. Nos vemos allí.";
+    const caption = "¡Voy a HackUDC 2027! 13–14 Nov 2027 · A Coruña. Nos vemos allí.";
     expect(new URL(linkedin.href).searchParams.get("text")).toBe(caption);
     expect(new URL(x.href).searchParams.get("text")).toBe(caption);
     expect(document.body.textContent).toContain("no adjuntan la imagen");
@@ -451,7 +458,7 @@ describe("<SocialSharing />", () => {
     await vi.waitFor(() => expect(menuItem(/Copiar texto/)).toBeDefined());
     await user.click(menuItem(/Copiar texto/) as Element);
     expect(await navigator.clipboard.readText()).toBe(
-      "¡Voy a HackUDC 2027! 13–14 Nov · A Coruña. Nos vemos allí.",
+      "¡Voy a HackUDC 2027! 13–14 Nov 2027 · A Coruña. Nos vemos allí.",
     );
     expect(toast.success).toHaveBeenCalledWith("Texto copiado", expect.anything());
   });

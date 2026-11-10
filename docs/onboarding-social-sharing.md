@@ -52,9 +52,15 @@ The pass is the Apple Wallet pass at its real proportions (838×1165): organizer
 logo and date in the header, the strip, NAME and ROLE side by side (red mono
 labels, Inter values), and the photo where the QR sits (initials on ink when
 there is no photo). It is drawn slightly tilted on the ink canvas with Emilia
-the seagull perched on it. Landscape adds the headline, the name large, the role
-and the event host on the left; the vertical formats put the headline above and
-the host below, with the pass scaled per format. No email, QR, badge or ticket credentials ever appear.
+the seagull perched on it. All text is left-aligned on one margin. Landscape and Square put the text
+column (event line, name as the hero, role, host) on the left and the tilted
+pass on the right. Portrait and Story stack the text on top, anchor the pass to
+the right below it and put the host (the link, larger in Story) under it on the
+left; the column is centred in the format's safe band and the pass is scaled to
+fill what is left. The pass header shows the supplied date with the year
+(`dateWithYear`: "26 - 28 feb" becomes "26 - 28 feb 2027" unless the label
+already has it); the host line adds the supplied location. Long names shrink
+and wrap (up to three lines in Square). No email, QR, badge or ticket credentials ever appear.
 
 Assets, all copied from the repo into `apps/web/public/onboarding/`:
 
@@ -76,6 +82,22 @@ pass labels and date, matching the pass.
   decodes and a custom event logo are closed too.
 - Fonts: `document.fonts.load` for the page's Inter stack before drawing; a
   failure keeps the fallback stack.
+
+### Design notes (Instagram)
+
+Collected from public design guides, not Meta documentation, so treat the
+numbers as conservative defaults:
+
+- Story: keep text clear of roughly the top 250 px and bottom 250-350 px, where
+  Instagram overlays profile and reply UI; one focal point, large bold type,
+  hook then value then call to action top to bottom
+  ([story size guide](https://www.inro.social/blog/instagram-story-size),
+  [story design tips](https://designshack.net/articles/graphics/instagram-story-design),
+  [layout ideas](https://postsyncer.com/blog/instagram-story-layout-ideas)).
+- Feed: design at 4:5 (1080×1350) and keep key content in a centred 3:4 area,
+  since the profile grid crops to 3:4
+  ([image sizes](https://postsyncer.com/tips/instagram-image-sizes-complete-guide),
+  [post size guide](https://creatorflow.so/blog/instagram-post-size-guide/)).
 
 ## Sharing behaviour
 

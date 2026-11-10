@@ -116,6 +116,15 @@ function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 }
 
+/** The supplied date label plus the year, unless the label already carries it. */
+export function dateWithYear(
+  event: Pick<SocialSharingEvent, "year" | "dateLabel">,
+): string | undefined {
+  if (!event.dateLabel) return undefined;
+  const year = String(event.year);
+  return event.dateLabel.includes(year) ? event.dateLabel : `${event.dateLabel} ${year}`;
+}
+
 /** A public event URL without query or fragment, or null when it is not plain http(s). */
 export function publicEventUrl(value: string | undefined): URL | null {
   if (!value) return null;
@@ -137,7 +146,7 @@ export function buildCaption(
   language: Language,
   event: Pick<SocialSharingEvent, "name" | "year" | "dateLabel" | "location" | "url">,
 ): string {
-  const details = [event.dateLabel, event.location].filter(Boolean).join(" · ");
+  const details = [dateWithYear(event), event.location].filter(Boolean).join(" · ");
   const url = publicEventUrl(event.url);
   return fill(copyFragments[language].caption, {
     event: eventTitle(event),
@@ -276,7 +285,8 @@ export interface DrawCardOptions {
   displayName: string;
   roleLabel?: string;
   /** Date and place exactly as the event supplied them; omitted when it supplied none. */
-  details?: string;
+  /** Event date as supplied, with the year; shown in the pass header. */
+  date?: string;
   labels: { name: string; role: string };
   photo: Drawable | null;
   band: CardBand;
@@ -452,16 +462,8 @@ function drawPass(ctx: Ctx, o: DrawCardOptions, w: number) {
     const lh = headerH * 0.56;
     ctx.drawImage(logo, pad, (headerH - lh) / 2 + w * 0.01, (logo.width / logo.height) * lh, lh);
   }
-  if (o.details) {
-    const right = fitText(
-      ctx,
-      o.details,
-      (s) => `500 ${s}px ${MONO_FONT}`,
-      w * 0.04,
-      10,
-      w * 0.5,
-      1,
-    );
+  if (o.date) {
+    const right = fitText(ctx, o.date, (s) => `500 ${s}px ${MONO_FONT}`, w * 0.04, 10, w * 0.5, 1);
     ctx.font = `500 ${right.size}px ${MONO_FONT}`;
     ctx.fillStyle = COLORS.ink;
     ctx.textAlign = "right";
@@ -510,14 +512,113 @@ function drawSeagull(ctx: Ctx, o: DrawCardOptions, passW: number, height: number
 }
 
 /**
- * Vertical formats stack headline, tilted pass and host. Story keeps the
- * content clear of Instagram's top and bottom interface bands.
+ * Vertical formats follow the landscape hierarchy (event line, name, role),
+ * all left-aligned on one margin: the text block on top, the tilted pass
+ * anchored to the right below it as the focal point, the host as the call to
+ * action under it on the left. The column is centred inside the format's safe
+ * band, so no format has dead space at one end. Story keeps the
+ * top ~250 px and bottom ~340 px free of content (the bands Instagram overlays);
+ * portrait and square keep a margin so the 3:4 profile-grid crop does not cut
+ * anything (design notes in docs/onboarding-social-sharing.md).
  */
 const STACK_LAYOUT = {
-  square: { passW: 570, passTop: 185, kickerY: 60, kickerSize: 52, gull: 140, hostY: 1052 },
-  portrait: { passW: 640, passTop: 250, kickerY: 90, kickerSize: 58, gull: 150, hostY: 1290 },
-  story: { passW: 820, passTop: 440, kickerY: 285, kickerSize: 58, gull: 180, hostY: 1660 },
+  portrait: {
+    top: 84,
+    bottom: 1290,
+    kicker: 40,
+    name: 104,
+    role: 42,
+    passMax: 640,
+    gull: 130,
+    host: 38,
+  },
+  story: {
+    top: 262,
+    bottom: 1600,
+    kicker: 44,
+    name: 112,
+    role: 46,
+    passMax: 640,
+    gull: 140,
+    host: 46,
+  },
 } as const;
+
+interface PosterRow {
+  text: string;
+  font: string;
+  color: string;
+  lineHeight: number;
+}
+
+/** Event line, name (the hero) and role as measured rows, ready to draw at any alignment. */
+function posterRows(
+  ctx: Ctx,
+  o: DrawCardOptions,
+  maxWidth: number,
+  sizes: { kicker: number; name: number; role: number },
+  nameLines: number,
+  kickerLines: number,
+): PosterRow[] {
+  const sans = (weight: number, size: number) => `${weight} ${size}px ${o.sansFont}`;
+  const rows: PosterRow[] = [];
+  const kicker = fitText(ctx, o.line, (s) => sans(700, s), sizes.kicker, 24, maxWidth, kickerLines);
+  for (const text of kicker.lines) {
+    rows.push({
+      text,
+      font: sans(700, kicker.size),
+      color: COLORS.blue,
+      lineHeight: kicker.size * 1.1,
+    });
+  }
+  const name = fitText(
+    ctx,
+    o.displayName,
+    (s) => sans(700, s),
+    sizes.name,
+    44,
+    maxWidth,
+    nameLines,
+  );
+  rows.push({ text: "", font: "", color: "", lineHeight: sizes.kicker * 0.6 });
+  for (const text of name.lines) {
+    rows.push({
+      text,
+      font: sans(700, name.size),
+      color: COLORS.cream,
+      lineHeight: name.size * 1.08,
+    });
+  }
+  if (o.roleLabel) {
+    const role = fitText(ctx, o.roleLabel, (s) => sans(500, s), sizes.role, 20, maxWidth, 1);
+    rows.push({
+      text: o.roleLabel === role.lines[0] ? role.lines[0] : role.lines[0],
+      font: sans(500, role.size),
+      color: COLORS.blue,
+      lineHeight: role.size * 1.5,
+    });
+  }
+  return rows;
+}
+
+function drawPosterRows(
+  ctx: Ctx,
+  rows: PosterRow[],
+  x: number,
+  top: number,
+  align: "left" | "center",
+) {
+  let y = top;
+  ctx.textAlign = align;
+  for (const row of rows) {
+    y += row.lineHeight;
+    if (!row.text) continue;
+    ctx.font = row.font;
+    ctx.fillStyle = row.color;
+    ctx.fillText(row.text, x, y);
+  }
+  ctx.textAlign = "left";
+}
 
 /** Paints the whole card on `ctx` in logical units (the caller applies the 2x scale). */
 export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
@@ -526,72 +627,92 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
   ctx.fillRect(0, 0, width, height);
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-
-  const landscape = o.format === "landscape";
-  const margin = 72;
   const sans = (weight: number, size: number) => `${weight} ${size}px ${o.sansFont}`;
-
-  const stack = STACK_LAYOUT[o.format as Exclude<ShareFormat, "landscape">];
-  const passW = landscape ? 352 : stack.passW;
-  const passH = passW * (1165 / 838);
-  const center = landscape
-    ? { x: width - 72 - passW / 2 - 6, y: 125 + passH / 2 }
-    : { x: width / 2, y: stack.passTop + passH / 2 };
-  ctx.save();
-  ctx.translate(center.x, center.y);
-  ctx.rotate((landscape ? 3 : -2) * (Math.PI / 180));
-  ctx.translate(-passW / 2, -passH / 2);
-  drawPass(ctx, o, passW);
-  drawSeagull(ctx, o, passW, landscape ? 115 : stack.gull, landscape ? 0.62 : 0.8);
-  ctx.restore();
-
-  // Poster text: the event line, and for landscape the name as the hero.
-  const textW = landscape ? center.x - passW / 2 - margin - 40 : width - margin * 2;
-  let y = landscape ? 150 : stack.kickerY;
-  const kicker = fitText(
-    ctx,
-    o.line,
-    (s) => sans(700, s),
-    landscape ? 36 : stack.kickerSize,
-    24,
-    textW,
-    landscape ? 2 : 1,
-  );
-  ctx.fillStyle = landscape ? COLORS.blue : COLORS.cream;
-  ctx.font = sans(700, kicker.size);
-  for (const line of kicker.lines) {
-    y += kicker.size * 1.1;
-    ctx.fillText(line, margin, y);
-  }
-  if (landscape) {
-    y += 34;
-    const name = fitText(ctx, o.displayName, (s) => sans(700, s), 84, 44, textW, 2);
-    ctx.fillStyle = COLORS.cream;
-    ctx.font = sans(700, name.size);
-    for (const line of name.lines) {
-      y += name.size * 1.08;
-      ctx.fillText(line, margin, y);
-    }
-    if (o.roleLabel) {
-      const role = fitText(ctx, o.roleLabel, (s) => sans(500, s), 36, 20, textW, 1);
-      ctx.fillStyle = COLORS.blue;
-      ctx.font = sans(500, role.size);
-      y += role.size * 1.5;
-      ctx.fillText(role.lines[0], margin, y);
-    }
-  }
-  if (o.host) {
-    const host = fitText(ctx, o.host, (s) => sans(600, s), landscape ? 30 : 32, 18, textW, 1);
+  const drawHost = (
+    x: number,
+    y: number,
+    size: number,
+    maxWidth: number,
+    align: "left" | "center",
+  ) => {
+    if (!o.host) return;
+    const host = fitText(ctx, o.host, (s) => sans(600, s), size, 18, maxWidth, 1);
     ctx.fillStyle = COLORS.blue;
     ctx.font = sans(600, host.size);
-    if (landscape) {
-      ctx.fillText(host.lines[0], margin, height - 56);
-    } else {
-      ctx.textAlign = "center";
-      ctx.fillText(host.lines[0], width / 2, stack.hostY);
-      ctx.textAlign = "left";
-    }
+    ctx.textAlign = align;
+    ctx.fillText(host.lines[0], x, y);
+    ctx.textAlign = "left";
+  };
+
+  if (o.format === "landscape" || o.format === "square") {
+    // Side by side: text column left, tilted pass right.
+    const wide = o.format === "landscape";
+    const margin = wide ? 72 : 64;
+    const passW = wide ? 352 : 440;
+    const passH = passW * (1165 / 838);
+    const gull = wide ? 115 : 130;
+    const textW = wide ? 658 : width - margin - passW - 64 - 40;
+    const rows = posterRows(
+      ctx,
+      o,
+      textW,
+      wide ? { kicker: 36, name: 84, role: 36 } : { kicker: 34, name: 92, role: 38 },
+      wide ? 2 : 3,
+      2,
+    );
+    const textH = rows.reduce((sum, r) => sum + r.lineHeight, 0);
+    drawPosterRows(ctx, rows, margin, wide ? 128 : (height - textH) / 2 - 24, "left");
+    ctx.save();
+    ctx.translate(
+      width - 64 - passW / 2 - (wide ? 14 : 0),
+      (wide ? 125 : (height - passH) / 2 + gull / 2) + passH / 2,
+    );
+    ctx.rotate(3 * (Math.PI / 180));
+    ctx.translate(-passW / 2, -passH / 2);
+    drawPass(ctx, o, passW);
+    drawSeagull(ctx, o, passW, gull, 0.62);
+    ctx.restore();
+    drawHost(margin, height - (wide ? 56 : 64), 30, textW, "left");
+    return;
   }
+
+  const layout = STACK_LAYOUT[o.format];
+  const margin = 72;
+  const textW = width - margin * 2;
+  const rows = posterRows(ctx, o, textW, layout, o.format === "story" ? 2 : 1, 1);
+  const textH = rows.reduce((sum, r) => sum + r.lineHeight, 0);
+  const hostBlock = o.host ? layout.host * 2.4 : 20;
+  const region = layout.bottom - layout.top;
+  const fitPass = (gap: number) =>
+    Math.min(layout.passMax, (region - textH - gap - hostBlock) / (1165 / 838));
+  // The seagull stands on the pass's top-right; short text lets the pass rise
+  // beside it, a text line that reaches that corner needs the full clearance.
+  let widest = 0;
+  for (const row of rows) {
+    if (!row.text) continue;
+    ctx.font = row.font;
+    widest = Math.max(widest, ctx.measureText(row.text).width);
+  }
+  let gap = layout.gull * 0.3;
+  let passW = fitPass(gap);
+  if (margin + widest > width - margin - passW * 0.28) {
+    gap = layout.gull + 8;
+    passW = fitPass(gap);
+  }
+  const passH = passW * (1165 / 838);
+  const content = textH + gap + passH + hostBlock;
+  const top = layout.top + (region - content) / 2;
+
+  drawPosterRows(ctx, rows, margin, top, "left");
+  const passTop = top + textH + gap;
+  ctx.save();
+  ctx.translate(width - margin - passW / 2, passTop + passH / 2);
+  ctx.rotate(-2 * (Math.PI / 180));
+  ctx.translate(-passW / 2, -passH / 2);
+  drawPass(ctx, o, passW);
+  drawSeagull(ctx, o, passW, layout.gull, 0.8);
+  ctx.restore();
+  drawHost(margin, passTop + passH + layout.host * 1.7, layout.host, textW, "left");
 }
 
 export function createShareCanvas(format: ShareFormat): HTMLCanvasElement {
@@ -645,7 +766,7 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
   const [canShareFile, setCanShareFile] = useState(false);
 
   const title = eventTitle(event);
-  const details = [event.dateLabel, event.location].filter(Boolean).join(" · ");
+  const date = dateWithYear(event);
   const caption = buildCaption(language, event);
   const fileName = shareFileName(event, attendee.displayName, format);
 
@@ -705,10 +826,12 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
           },
           displayName: attendee.displayName,
           roleLabel: attendee.roleLabel,
-          details: details || undefined,
+          date,
           photo,
           band: loaded.band,
-          host: publicEventUrl(event.url)?.host,
+          host:
+            [publicEventUrl(event.url)?.host, event.location].filter(Boolean).join(" · ") ||
+            undefined,
           art,
           sansFont,
         });
@@ -730,7 +853,8 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     language,
     attempt,
     title,
-    details,
+    date,
+    event.location,
     event.name,
     event.logo,
     event.url,
