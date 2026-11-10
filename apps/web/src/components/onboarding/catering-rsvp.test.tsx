@@ -16,10 +16,19 @@ vi.mock("@/components/common/contextual-error", () => ({
   ContextualError: ({ message }: { message: string }) => <div role="alert">{message}</div>,
 }));
 vi.mock("@/components/common/form-actions", () => ({
-  FormActions: ({ disabled }: { disabled?: boolean }) => (
-    <button type="submit" data-submit disabled={disabled}>
-      save
-    </button>
+  FormActions: ({
+    disabled,
+    secondaryActions,
+  }: {
+    disabled?: boolean;
+    secondaryActions?: React.ReactNode;
+  }) => (
+    <div>
+      {secondaryActions}
+      <button type="submit" data-submit disabled={disabled}>
+        save
+      </button>
+    </div>
   ),
 }));
 vi.mock("@/components/common/section-card", () => ({
@@ -83,6 +92,19 @@ function render(items: RsvpItem[], save = vi.fn().mockResolvedValue(undefined)) 
 }
 
 describe("CateringRsvpForm", () => {
+  it("puts the host's actions beside Save", () => {
+    act(() =>
+      root.render(
+        <CateringRsvpForm
+          items={[item({})]}
+          save={vi.fn()}
+          actions={<button type="button">later</button>}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("later");
+  });
+
   it("lets an optional item be skipped and sends only what changed", async () => {
     const save = render([item({ activityId: 1 }), item({ activityId: 2, name: "Dinner" })]);
     click(radio("Dinner", "rsvpUnsure"));

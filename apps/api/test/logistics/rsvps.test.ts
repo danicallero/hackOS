@@ -443,16 +443,17 @@ describe("event editions", () => {
     // No settings for the new key yet: nothing is offered, nothing is counted.
     expect(await getItems(sponsor)).toEqual([]);
 
-    // Event access is edition-scoped: the sponsor needs this edition's role evidence too.
-    await pool.query(
-      `INSERT INTO user_role_event_evidence (user_id, role_id, event_key, assigned_at)
-       SELECT user_id, role_id, 'next-edition', now() FROM user_role_event_evidence WHERE user_id = $1`,
-      [sponsor],
-    );
+    // Even with settings, last edition's event access is no evidence for the new one.
     await pool.query(
       `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
        VALUES ($1, 'next-edition', true, ARRAY['sponsor'])`,
       [meal],
+    );
+    expect(await getItems(sponsor)).toEqual([]);
+    await pool.query(
+      `INSERT INTO user_role_event_evidence (user_id, role_id, event_key)
+       SELECT user_id, role_id, 'next-edition' FROM user_roles WHERE user_id = $1`,
+      [sponsor],
     );
     expect((await getItems(sponsor))[0]).toMatchObject({ answer: null });
     expect((await putAnswers(sponsor, [{ activityId: meal, answer: "no" }])).statusCode).toBe(200);

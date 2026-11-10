@@ -17,6 +17,7 @@ import {
   type RsvpItem,
   rsvpWhen,
 } from "@/lib/rsvp";
+import { useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -39,8 +40,10 @@ export function CateringRsvpSection({
   onDirtyChange,
   onSaved,
   footer = true,
+  actions,
 }: {
   userId: number;
+  actions?: React.ReactNode;
   onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void | Promise<void>;
   /** Hosts that supply their own Save/Skip controls pass false and use `formId`. */
@@ -65,9 +68,38 @@ export function CateringRsvpSection({
       onDirtyChange={onDirtyChange}
       onSaved={onSaved}
       footer={footer}
+      actions={actions}
     />
   );
 }
+
+/**
+ * Self-contained variant for the onboarding step and My profile: reads the
+ * signed-in user, fetches and saves `/api/me/rsvps`, renders its own Save with
+ * the host's `actions` beside it, and renders nothing without open RSVPs.
+ */
+export function CateringRsvp({
+  actions,
+  onSaved,
+  onDirtyChange,
+}: {
+  actions?: React.ReactNode;
+  onSaved?: () => void | Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const me = useMe();
+  if (!me) return null;
+  return (
+    <CateringRsvpSection
+      userId={me.id}
+      actions={actions}
+      onSaved={onSaved}
+      onDirtyChange={onDirtyChange}
+    />
+  );
+}
+
+export default CateringRsvp;
 
 export function CateringRsvpForm({
   items,
@@ -76,6 +108,7 @@ export function CateringRsvpForm({
   onSaved,
   footer = true,
   formId,
+  actions,
 }: {
   items: readonly RsvpItem[];
   save: (items: readonly RsvpItem[], draft: RsvpDraft) => Promise<unknown>;
@@ -83,6 +116,8 @@ export function CateringRsvpForm({
   onSaved?: () => void | Promise<void>;
   footer?: boolean;
   formId?: string;
+  /** Host buttons (Later / Skip / Continue) shown beside Save. */
+  actions?: React.ReactNode;
 }) {
   const { t } = useLocale();
   const [draft, setDraft] = useState<RsvpDraft>(() => draftFromItems(items));
@@ -150,6 +185,7 @@ export function CateringRsvpForm({
               pending={pending}
               disabled={blocked}
               state={saveError ? "error" : changed ? "unsaved" : "saved"}
+              secondaryActions={actions}
             />
           ) : undefined
         }
