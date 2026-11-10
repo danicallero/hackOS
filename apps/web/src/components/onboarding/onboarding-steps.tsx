@@ -18,9 +18,11 @@ import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Button } from "@/components/ui/button";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { logisticsApi } from "@/lib/logistics";
 import { notificationsApi, type PreferencesResponse } from "@/lib/notifications";
 import type { OnboardingState } from "@/lib/onboarding";
 import { getPublicEvent } from "@/lib/public-content";
@@ -316,6 +318,9 @@ export function CompletionStep({
 }: StepProps & { state: OnboardingState; onOpenStep: (step: OnboardingStep) => void }) {
   const { t } = useLocale();
   const { me, isPureApplicant } = useSessionContext();
+  // The Wallet block appears only when there is a ticket or badge to add.
+  const ticket = useServerResource(["me-ticket"], () => logisticsApi.myTicket());
+  const hasPass = Boolean(ticket.data?.ticketToken || ticket.data?.badgeId);
   const open = state.steps.filter(
     (step) =>
       step.step !== "completion" &&
@@ -343,7 +348,7 @@ export function CompletionStep({
           </ul>
         </section>
       )}
-      {me?.hasEventAccess && !isPureApplicant && (
+      {me?.hasEventAccess && !isPureApplicant && hasPass && (
         <section aria-labelledby="onboarding-wallet" className="space-y-3">
           <h2 id="onboarding-wallet" className="type-section-title">
             {t("wallet")}
