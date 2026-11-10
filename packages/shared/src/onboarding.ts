@@ -106,13 +106,13 @@ export function resolveOnboarding(
     const settings = { ...DEFAULTS[step], ...config[step] };
     // Networking consent is always a choice; configuration cannot make it mandatory.
     if (step === "networking") settings.required = false;
-    if (
-      !settings.enabled ||
-      !facts.attendanceKind ||
-      !settings.kinds.includes(facts.attendanceKind)
-    )
+    if (!settings.enabled) return [];
+    if (step === "mentor_profile") {
+      // Helper eligibility is capability-only, including wildcard holders.
+      if (!facts.mentorEligible) return [];
+    } else if (!facts.attendanceKind || !settings.kinds.includes(facts.attendanceKind)) {
       return [];
-    if (step === "mentor_profile" && !facts.mentorEligible) return [];
+    }
     if (step === "rsvp" && !facts.openRsvps) return [];
     const state = byStep.get(step);
     const changed = Boolean(state && state.configRevision < revision);

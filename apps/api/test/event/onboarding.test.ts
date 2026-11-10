@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import { attendanceKind } from "../../src/modules/identity/attendance.js";
 import { sampleTemplate } from "../applications/fixtures.js";
-import { asUser, createUserWithCapabilities, grantAttendeeRole, useTestApp } from "../helpers.js";
+import {
+  assignRole,
+  asUser,
+  createRole,
+  createUser,
+  createUserWithCapabilities,
+  grantAttendeeRole,
+  useTestApp,
+} from "../helpers.js";
 
 const getApp = useTestApp();
 
@@ -12,6 +20,24 @@ async function attendee() {
 }
 
 describe("HackUDC 2027 onboarding", () => {
+  it("offers the helper step by effective capability without attendance classification", async () => {
+    const app = await getApp();
+    await pool.query("INSERT INTO event_config (id) VALUES (1)");
+    const userId = await createUser();
+    const roleId = await createRole(["helpdesk:offer"], { eventAccess: false });
+    await assignRole(userId, roleId);
+    expect(await attendanceKind(pool, userId)).toBeNull();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/me/onboarding",
+      headers: asUser(userId),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().steps.map((step: { step: string }) => step.step)).toEqual([
+      "mentor_profile",
+    ]);
+  });
+
   it("resolves current-edition steps and reasks after a config revision", async () => {
     const app = await getApp();
     const userId = await attendee();
