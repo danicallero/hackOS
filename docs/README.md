@@ -152,6 +152,8 @@ Frontend (web & mobile):
   public API, Liquid Glass and opaque fallback behaviour, scrub interaction,
   overflow-menu contract, safe-area geometry, testing, and the publishing
   checklist for a future package.
+- [Catering and activity RSVPs](./catering-rsvp.md) — per-activity yes/no/unsure answers,
+  options, participant exclusion, edition history and headcounts.
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
   Expo integration, capability-driven tabs, offline scanners, and participant
   screens, with the per-story status registry.

@@ -380,7 +380,7 @@ export async function submitRsvps(
         // The legacy facade never rejected an answer for a locked meal nobody answered.
         if (mealFacade && !item.answered) continue;
         throw new ConflictError("Changes to this RSVP are closed", {
-          code: "rsvp_locked",
+          code: mealFacade ? "meal_plan_locked" : "rsvp_locked",
           activityId: input.activityId,
         });
       }

@@ -443,7 +443,7 @@ describe("PUT /api/users/:id/meal-plan (#933)", () => {
       { activityId: locked, attending: false },
     ]);
     expect(closed.statusCode).toBe(409);
-    expect(closed.json().error.details.code).toBe("rsvp_locked");
+    expect(closed.json().error.details.code).toBe("meal_plan_locked");
     expect(await auditRows(target)).toHaveLength(0);
   });
 

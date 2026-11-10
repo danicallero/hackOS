@@ -1,0 +1,342 @@
+"use client";
+
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { XIcon } from "@phosphor-icons/react/dist/csr/X";
+import { useEffect, useId, useMemo, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
+import { DateTimeInput } from "@/components/common/datetime-input";
+import { FormActions } from "@/components/common/form-actions";
+import { IconButton } from "@/components/common/icon-button";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { useRsvpSettings } from "@/hooks/use-rsvp-settings";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
+import { LANGS, languageName, useLocale } from "@/lib/i18n";
+import {
+  askableKinds,
+  draftToBody,
+  MAX_RSVP_OPTIONS,
+  type RsvpKind,
+  type RsvpSettings,
+  type RsvpSettingsDraft,
+  type RsvpSummary,
+  settingsDraftError,
+  settingsToDraft,
+  slugifyOptionKey,
+} from "@/lib/rsvp";
+import { toast } from "@/lib/toast";
+
+/**
+ * Organizer RSVP editor for one schedule entry (schedule:manage): enable and
+ * require the RSVP, who is asked, name/description/date overrides, the answer
+ * options and live counts. Meals can never ask participants.
+ *
+ * Integration point for the schedule editor: render
+ * `<CateringSettingsPanel scheduleId={item.id} />` for an existing entry. It owns
+ * its own Save (the settings are a separate endpoint from the entry itself),
+ * so it must not share the entry form's `<form>`; `onDirtyChange` feeds the
+ * host's unsaved-changes guard.
+ */
+export function CateringSettingsPanel({
+  scheduleId,
+  onDirtyChange,
+}: {
+  scheduleId: number;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const { settings, loadError, reload, save } = useRsvpSettings(scheduleId);
+  const { t } = useLocale();
+  if (loadError && !settings) {
+    return <ContextualError message={t("couldNotLoadRsvpSettings")} onRetry={reload} />;
+  }
+  if (!settings) return null;
+  const version = `${settings.activityId}:${JSON.stringify([
+    settings.enabled,
+    settings.required,
+    settings.kinds,
+    settings.nameI18n,
+    settings.descriptionI18n,
+    settings.rsvpDate,
+    settings.closesAt,
+    settings.options,
+  ])}`;
+  return (
+    <SettingsForm key={version} settings={settings} save={save} onDirtyChange={onDirtyChange} />
+  );
+}
+
+function SettingsForm({
+  settings,
+  save,
+  onDirtyChange,
+}: {
+  settings: RsvpSettings;
+  save: (body: unknown) => Promise<RsvpSettings>;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const { t } = useLocale();
+  const baseId = useId();
+  const initial = useMemo(() => settingsToDraft(settings, toDatetimeLocal), [settings]);
+  const [draft, setDraft] = useState<RsvpSettingsDraft>(initial);
+  const [pending, setPending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const changed = JSON.stringify(draft) !== JSON.stringify(initial);
+  const invalid = settingsDraftError(draft);
+  const kinds = askableKinds(settings.isMeal);
+  const retired = settings.options.filter((o) => o.retired);
+
+  useEffect(() => {
+    onDirtyChange?.(changed);
+    return () => onDirtyChange?.(false);
+  }, [changed, onDirtyChange]);
+
+  const patch = (next: Partial<RsvpSettingsDraft>) => setDraft((d) => ({ ...d, ...next }));
+
+  function addOption() {
+    const taken = new Set([...draft.options, ...settings.options].map((o) => o.key));
+    patch({
+      options: [...draft.options, { key: slugifyOptionKey("option", taken), labelI18n: {} }],
+    });
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (invalid || pending) return;
+    setSaveError(null);
+    setPending(true);
+    try {
+      await save(draftToBody(draft, fromDatetimeLocal, settings.isMeal));
+      toast.success(t("rsvpSettingsSaved"), { compactTitle: t("toastSaveRsvpSettings") });
+    } catch {
+      const message = t("couldNotSaveRsvpSettings");
+      setSaveError(message);
+      toast.error(message, t("toastSaveRsvpSettings"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form className="min-w-0 space-y-5" onSubmit={onSubmit} noValidate>
+      {saveError && <ContextualError message={saveError} />}
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor={`${baseId}-enabled`}>{t("rsvpEnabled")}</Label>
+        <Switch
+          id={`${baseId}-enabled`}
+          checked={draft.enabled}
+          onCheckedChange={(enabled) => patch({ enabled, required: enabled && draft.required })}
+        />
+      </div>
+
+      {draft.enabled && (
+        <>
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor={`${baseId}-required`}>{t("rsvpRequired")}</Label>
+            <Switch
+              id={`${baseId}-required`}
+              checked={draft.required}
+              onCheckedChange={(required) => patch({ required })}
+            />
+          </div>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">{t("rsvpAudience")}</legend>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {kinds.map((kind) => (
+                <label
+                  key={kind}
+                  htmlFor={`${baseId}-kind-${kind}`}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <Checkbox
+                    id={`${baseId}-kind-${kind}`}
+                    checked={draft.kinds.includes(kind)}
+                    onCheckedChange={(checked) =>
+                      patch({
+                        kinds: checked
+                          ? [...draft.kinds, kind]
+                          : draft.kinds.filter((k) => k !== kind),
+                      })
+                    }
+                  />
+                  {t(KIND_LABEL[kind])}
+                </label>
+              ))}
+            </div>
+            {settings.isMeal && (
+              <p className="text-muted-foreground text-xs">{t("rsvpMealsNoParticipants")}</p>
+            )}
+          </fieldset>
+
+          <div className="grid items-start gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={`${baseId}-date`}>{t("rsvpDate")}</Label>
+              <DateTimeInput
+                id={`${baseId}-date`}
+                value={draft.rsvpDate}
+                onChange={(rsvpDate) => patch({ rsvpDate })}
+                nullOption={{ label: t("rsvpUseScheduleDate") }}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`${baseId}-closes`}>{t("rsvpClosesAt")}</Label>
+              <DateTimeInput
+                id={`${baseId}-closes`}
+                value={draft.closesAt}
+                onChange={(closesAt) => patch({ closesAt })}
+                nullOption={{ label: t("rsvpUseDefaultClose") }}
+              />
+            </div>
+          </div>
+
+          <LocalizedFields
+            baseId={baseId}
+            label={t("rsvpName")}
+            values={draft.nameI18n}
+            placeholder={settings.defaults.name}
+            onChange={(nameI18n) => patch({ nameI18n })}
+          />
+          <LocalizedFields
+            baseId={`${baseId}-d`}
+            label={t("rsvpDescription")}
+            values={draft.descriptionI18n}
+            placeholder={settings.defaults.description ?? ""}
+            multiline
+            onChange={(descriptionI18n) => patch({ descriptionI18n })}
+          />
+
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">{t("rsvpOptions")}</legend>
+            {draft.options.map((option, index) => (
+              <div key={option.key} className="flex items-start gap-2">
+                <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-3">
+                  {LANGS.map((lang) => (
+                    <Input
+                      key={lang}
+                      aria-label={`${t("rsvpOptionLabel")} (${languageName(lang)})`}
+                      placeholder={languageName(lang)}
+                      value={option.labelI18n[lang] ?? ""}
+                      onChange={(e) =>
+                        patch({
+                          options: draft.options.map((o, i) =>
+                            i === index
+                              ? { ...o, labelI18n: { ...o.labelI18n, [lang]: e.target.value } }
+                              : o,
+                          ),
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+                <IconButton
+                  label={t("rsvpRemoveOption")}
+                  onClick={() => patch({ options: draft.options.filter((_, i) => i !== index) })}
+                >
+                  <XIcon />
+                </IconButton>
+              </div>
+            ))}
+            {draft.options.length < MAX_RSVP_OPTIONS && (
+              <Button type="button" variant="outline" size="sm" onClick={addOption}>
+                <PlusIcon />
+                {t("rsvpAddOption")}
+              </Button>
+            )}
+            {retired.length > 0 && (
+              <p className="text-muted-foreground text-xs">
+                {t("rsvpRetiredOptions", {
+                  options: retired.map((o) => Object.values(o.labelI18n)[0] ?? o.key).join(", "),
+                })}
+              </p>
+            )}
+          </fieldset>
+        </>
+      )}
+
+      {invalid && <p className="text-destructive text-sm">{t(invalid)}</p>}
+      <FormActions
+        pending={pending}
+        disabled={Boolean(invalid)}
+        state={saveError ? "error" : changed ? "unsaved" : "saved"}
+      />
+      {settings.counts && <RsvpCounts counts={settings.counts} />}
+    </form>
+  );
+}
+
+const KIND_LABEL: Record<
+  RsvpKind,
+  "rsvpKindParticipant" | "rsvpKindMentor" | "rsvpKindSponsor" | "rsvpKindStaff"
+> = {
+  participant: "rsvpKindParticipant",
+  mentor: "rsvpKindMentor",
+  sponsor: "rsvpKindSponsor",
+  staff: "rsvpKindStaff",
+};
+
+function LocalizedFields({
+  baseId,
+  label,
+  values,
+  placeholder,
+  multiline = false,
+  onChange,
+}: {
+  baseId: string;
+  label: string;
+  values: Record<string, string>;
+  placeholder: string;
+  multiline?: boolean;
+  onChange: (values: Record<string, string>) => void;
+}) {
+  const Field = multiline ? Textarea : Input;
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">{label}</legend>
+      <div className="grid items-start gap-2 sm:grid-cols-3">
+        {LANGS.map((lang) => (
+          <Field
+            key={lang}
+            id={`${baseId}-${lang}`}
+            aria-label={`${label} (${languageName(lang)})`}
+            placeholder={placeholder}
+            value={values[lang] ?? ""}
+            onChange={(e) => onChange({ ...values, [lang]: e.target.value })}
+          />
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** Live headcounts for one activity: answers, by option, and who is still missing. */
+export function RsvpCounts({ counts }: { counts: RsvpSummary }) {
+  const { t, language } = useLocale();
+  const optionLabel = (o: RsvpSummary["byOption"][number]) =>
+    (o.labelI18n?.[language] ?? o.labelI18n?.en ?? Object.values(o.labelI18n ?? {})[0] ?? o.key) +
+    (o.retired ? ` · ${t("rsvpOptionRetired")}` : "");
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
+      <Count label={t("rsvpYes")} value={counts.attending} />
+      <Count label={t("rsvpNo")} value={counts.notAttending} />
+      <Count label={t("rsvpUnsure")} value={counts.unsure} />
+      <Count label={t("rsvpUnanswered")} value={counts.unanswered} />
+      {counts.byOption.map((o) => (
+        <Count key={o.key} label={optionLabel(o)} value={o.n} />
+      ))}
+    </dl>
+  );
+}
+
+function Count({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-muted-foreground wrap-anywhere">{label}</dt>
+      <dd className="font-medium tabular-nums">{value}</dd>
+    </div>
+  );
+}

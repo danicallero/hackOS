@@ -255,7 +255,7 @@ describe("PUT /api/me/meal-plan (#933)", () => {
     );
     const relocked = await putPlan(sponsor, [{ activityId: lunch, attending: true }]);
     expect(relocked.statusCode).toBe(409);
-    expect(relocked.json().error.details.code).toBe("rsvp_locked");
+    expect(relocked.json().error.details.code).toBe("meal_plan_locked");
     expect(await storedPlan(sponsor)).toEqual({ [lunch]: false });
   });
 

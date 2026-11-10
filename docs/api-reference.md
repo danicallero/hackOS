@@ -125,10 +125,9 @@ count; never once dietary data is locked, H7: after an accepted application
 it takes one first answer, then only staff change it, and `/api/me` reports
 `dietaryLocked`), and
 `meal_plan` while a sponsor representative has an open offered
-meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
-/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
-and its shown schedule entry includes the `sponsor` audience (an entry without
-audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
+meal without an answer. The meal plan is a facade over per-activity RSVPs ([`catering-rsvp.md`](./catering-rsvp.md)): eligible attendees (never registered participants) read and replace it through `GET`/`PUT
+/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics,
+its RSVP settings are enabled for the current event key and ask the caller's attendance kind, and it locks `event_config.meal_plan_cutoff_hours`
 (24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
 starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
 was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
@@ -139,7 +138,7 @@ unanswered and the sponsor's `confirmedAt` is not set; always audited as
 CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`). The
 staff profile response includes `isSponsorRep` so the web overview only loads a
 meal plan for sponsor representatives, rather than probing non-sponsors and
-receiving the expected `403 not_sponsor`.
+receiving the expected `403 meal_plan_not_eligible`.
 
 On the web, the `(app)` layout shows a dismissable dialog with one step per
 pending task ("Later" hides it for the browser session via `sessionStorage`),

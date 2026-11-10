@@ -106,7 +106,7 @@ describe("MealPlanSection (#933)", () => {
     // The API's actual shape: a generic 403 whose details name the reason.
     mocks.get.mockRejectedValue(
       new ApiError(403, "forbidden", "Only sponsor representatives have a meal plan", {
-        code: "not_sponsor",
+        code: "meal_plan_not_eligible",
       }),
     );
     await render();
