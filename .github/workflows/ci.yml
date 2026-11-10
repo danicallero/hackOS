@@ -45,6 +45,9 @@ jobs:
       - name: Validate combined production environment contract
         run: bash deploy/test-combined-env.sh
 
+      - name: Test deployment rollback and failed-migration handling
+        run: bash deploy/test-deploy-rollback.sh
+
   typecheck:
     name: typecheck
     runs-on: ubuntu-latest
@@ -135,6 +138,29 @@ jobs:
 
       - name: Run API integration tests
         run: pnpm --filter @hackos/api test
+
+      # #1276: a database already at the base branch's migrations must upgrade to
+      # this PR's set with the built `node dist/migrate.js` (the command the
+      # deploy runs). Fresh-database tests cannot see ordering conflicts such as
+      # a lower-numbered migration landing after a higher one was applied.
+      - name: Check the migration upgrade path from the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PGPASSWORD: hackos
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          mkdir -p "$RUNNER_TEMP/base"
+          git archive FETCH_HEAD apps/api/db/migrations | tar -x -C "$RUNNER_TEMP/base"
+          psql -h localhost -U hackos -d hackos_test -c 'CREATE DATABASE hackos_upgrade'
+          export DATABASE_URL=postgres://hackos:hackos@localhost:5432/hackos_upgrade
+          pnpm --filter @hackos/api exec tsup
+          cd apps/api
+          HACKOS_MIGRATIONS_DIR="$RUNNER_TEMP/base/apps/api/db/migrations" node dist/migrate.js
+          node dist/migrate.js
+          expected="$(ls db/migrations/*.sql | wc -l)"
+          applied="$(psql -h localhost -U hackos -d hackos_upgrade -Atc 'SELECT count(*) FROM _migrations')"
+          test "$applied" -ge "$expected" || { echo "ledger has $applied of $expected migrations"; exit 1; }
 
       - name: Stop S3Mock
         if: always()

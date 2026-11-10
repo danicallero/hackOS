@@ -275,6 +275,11 @@ fi
 export API_IMAGE_TAG="$api_image_tag"
 export WEB_IMAGE_TAG="$web_image_tag"
 
+# The release that is serving traffic now, captured before anything is
+# replaced, so a release that fails to start can be undone (#1276).
+previous_api_tag="$(running_image_tag api || state_value API_IMAGE_TAG || true)"
+previous_web_tag="$(running_image_tag web || state_value WEB_IMAGE_TAG || true)"
+
 run_compose() {
   local description="$1"
   shift
@@ -376,13 +381,22 @@ chmod 0640 "$release_dir/metadata"
 
 wait_for_health() {
   local service="$1"
-  local container_id status attempt
+  local container_id status state attempt
 
   echo "WAIT: healthcheck $service"
   for attempt in {1..60}; do
     container_id="$(compose ps --quiet "$service" 2>/dev/null || true)"
     if [[ -n "$container_id" ]]; then
       status="$(docker inspect --format '{{.State.Health.Status}}' "$container_id" 2>/dev/null || true)"
+      # A crash-looping container never reaches "unhealthy"; stop waiting as soon
+      # as it is restarting or has exited.
+      state="$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)"
+      case "$state" in
+        restarting|exited|dead)
+          echo "ERROR: $service container is $state" >&2
+          return 1
+          ;;
+      esac
       case "$status" in
         healthy)
           echo "OK: healthcheck $service"
@@ -399,6 +413,67 @@ wait_for_health() {
 
   echo "ERROR: healthcheck $service timed out" >&2
   return 1
+}
+
+# Put the previous release back after a failed rollout and fail the deployment
+# either way. The previous images are already on the host, so nothing is pulled.
+# Migrations that already ran stay applied: the runner lets an older image start
+# on a ledger that holds newer migrations, and releases keep schema changes
+# backward compatible with the release before them.
+rollback_and_fail() {
+  local reason="$1"
+  local restored=true
+
+  echo "ERROR: $reason" >&2
+  set +e
+  if [[ "$deploy_api" == true ]] && valid_image_tag "$previous_api_tag"; then
+    echo "ROLLBACK: restoring API and worker $previous_api_tag" >&2
+    export API_IMAGE_TAG="$previous_api_tag"
+    if compose up --detach --no-deps --force-recreate --pull never api worker >/dev/null 2>&1 \
+      && wait_for_health api && wait_for_health worker; then
+      echo "ROLLBACK: API and worker are healthy on $previous_api_tag" >&2
+    else
+      restored=false
+    fi
+  elif [[ "$deploy_api" == true ]]; then
+    echo "ROLLBACK: no previous API release is known" >&2
+    restored=false
+  fi
+  if [[ "$deploy_web" == true ]] && valid_image_tag "$previous_web_tag"; then
+    echo "ROLLBACK: restoring web $previous_web_tag" >&2
+    export WEB_IMAGE_TAG="$previous_web_tag"
+    if compose up --detach --no-deps --force-recreate --pull never web >/dev/null 2>&1 \
+      && wait_for_health web; then
+      echo "ROLLBACK: web is healthy on $previous_web_tag" >&2
+    else
+      restored=false
+    fi
+  fi
+  if [[ "$restored" == true ]]; then
+    echo "ERROR: $image_tag was rolled back; the previous release is serving traffic" >&2
+    hold_after_failed_release
+  else
+    echo "ERROR: rollback did not restore a healthy release; manual intervention required" >&2
+  fi
+  exit 1
+}
+
+# Production's five-minute updater retries any newer release on its own. After a
+# failed release hold it at the release that is serving, so the same broken
+# tag is not rebuilt, migrated and rolled back every tick. A newer release is
+# promoted explicitly once it is fixed.
+hold_after_failed_release() {
+  [[ "$environment" == production ]] || return 0
+  local held="${previous_api_tag:-$previous_web_tag}" policy_tmp
+  valid_image_tag "$held" || return 0
+  policy_tmp="$(mktemp "${policy_file}.XXXXXX")"
+  printf 'mode=hold\ntag=%s\nreason=failed-release:%s\nupdated_at=%s\n' \
+    "$held" \
+    "$image_tag" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$policy_tmp"
+  chmod 0600 "$policy_tmp"
+  mv -f "$policy_tmp" "$policy_file"
+  echo "OK: production release hold recorded at $held after failed $image_tag" >&2
 }
 
 echo "Deploying hackOS $environment ($image_tag)"
@@ -454,16 +529,20 @@ if [[ "$deploy_api" == true ]]; then
   phase "Applying database migrations"
   run_compose "migrate database" run --rm --no-deps migrate
   phase "Recreating API and worker"
-  run_compose "update api and worker" up --detach --no-deps --force-recreate api worker
-  wait_for_health api
-  wait_for_health worker
+  if ! run_compose "update api and worker" up --detach --no-deps --force-recreate api worker; then
+    rollback_and_fail "API and worker could not be recreated for $image_tag"
+  fi
+  wait_for_health api || rollback_and_fail "API did not become healthy on $api_image_tag"
+  wait_for_health worker || rollback_and_fail "worker did not become healthy on $api_image_tag"
 else
   echo "SKIP: API and worker unchanged"
 fi
 if [[ "$deploy_web" == true ]]; then
   phase "Recreating web"
-  run_compose "update web" up --detach --no-deps --force-recreate web
-  wait_for_health web
+  if ! run_compose "update web" up --detach --no-deps --force-recreate web; then
+    rollback_and_fail "web could not be recreated for $image_tag"
+  fi
+  wait_for_health web || rollback_and_fail "web did not become healthy on $web_image_tag"
 else
   # Retain the image while adopting Compose changes such as metrics volumes.
   run_compose "refresh retained web configuration" up --detach --no-deps --pull never web

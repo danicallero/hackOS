@@ -232,8 +232,9 @@ The production host stores `.image-tags` as the deployed image identity and
 from the operator shell or workflow with `release_action=rollback` writes a
 hold. The automatic five-minute updater exits while that hold exists. A
 successful `latest` operator deployment or workflow with
-`release_action=promote` clears it. A failed deployment does not change the
-hold, so a failed attempt cannot accidentally re-enable promotion.
+`release_action=promote` clears it. A failed deployment is rolled back to the serving release and, on
+production, writes a hold there (`reason=failed-release:<sha>`), so the
+updater does not retry the broken release; it never re-enables promotion.
 
 The hold is host-local and contains only mode, SHA, reason and timestamp. It
 must be included in host backups/runbooks; it is not an application secret.
