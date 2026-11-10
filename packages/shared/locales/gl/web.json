@@ -4285,5 +4285,6 @@
   "helpDeskSearchChallenges": "Buscar retos…",
   "mentorExpertisePlaceholder": "Busca ou engade unha área…",
   "onboardingBanner": "Remata de configurar a túa experiencia.",
-  "emailNotVerifiedShort": "Correo sen verificar"
+  "emailNotVerifiedShort": "Correo sen verificar",
+  "audienceStaffOnly": "Só staff"
 }

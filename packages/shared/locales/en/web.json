@@ -4285,5 +4285,6 @@
   "helpDeskSearchChallenges": "Search challenges…",
   "mentorExpertisePlaceholder": "Search or add an area…",
   "onboardingBanner": "Finish setting up your experience.",
-  "emailNotVerifiedShort": "Email not verified"
+  "emailNotVerifiedShort": "Email not verified",
+  "audienceStaffOnly": "Staff only"
 }

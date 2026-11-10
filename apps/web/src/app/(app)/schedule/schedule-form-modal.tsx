@@ -19,6 +19,7 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
+import { MultiSelect } from "@/components/common/multi-select";
 import { PublicationControls } from "@/components/common/publication-controls";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
@@ -445,20 +446,24 @@ export function ScheduleFormModal({
 
         <Field id="schedule-audiences" label={t("audienceLabel")}>
           <p className="text-muted-foreground -mt-1 text-xs">{t("staffSeeAllHint")}</p>
-          <div className="flex flex-wrap gap-4">
-            {SCHEDULE_AUDIENCES.map((audience) => (
-              <div key={audience} className="flex items-center gap-2">
-                <Checkbox
-                  id={`schedule-audience-${audience}`}
-                  checked={(values.audiences ?? []).includes(audience)}
-                  onCheckedChange={(checked) => toggleAudience(audience, checked === true)}
-                />
-                <Label htmlFor={`schedule-audience-${audience}`} className="font-normal">
-                  {scheduleAudienceLabel(audience, t)}
-                </Label>
-              </div>
-            ))}
-          </div>
+          <MultiSelect
+            id="schedule-audiences"
+            inDialog
+            options={SCHEDULE_AUDIENCES.map((audience) => ({
+              value: audience,
+              label: scheduleAudienceLabel(audience, t),
+            }))}
+            value={values.audiences ?? []}
+            onChange={(next) => {
+              const current = values.audiences ?? [];
+              for (const audience of SCHEDULE_AUDIENCES) {
+                const was = current.includes(audience);
+                const now = next.includes(audience);
+                if (was !== now) toggleAudience(audience, now);
+              }
+            }}
+            placeholder={t("audienceStaffOnly")}
+          />
         </Field>
 
         {isParticipant && (
