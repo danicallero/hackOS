@@ -53,6 +53,12 @@ persists each answer. Nothing here gates event access.
   `/onboarding` (`OnboardingBanner`, under the verification banner). Skipped and
   declined steps are the person's choice and do not keep it up; it is hidden on
   the journey itself and for people the journey does not apply to.
+- **Revisiting a step.** The progress markers reopen any listed step. A step
+  put off with Later can be answered or put off again (the server accepts a
+  second decision while it is `deferred`). A step that was already completed,
+  skipped or declined keeps its answer: Skip, Later and Continue on it just move
+  on without writing, so they never fail with a conflict. A failed save is a
+  toast named after the step, and the step stays open.
 - **Networking consent** is only ever the explicit *create* answer, which saves
   the public profile with `directoryVisible: true`. *Decline* saves it hidden
   (disabling any earlier publication); *later* stores a deferral and touches

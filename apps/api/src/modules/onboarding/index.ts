@@ -83,8 +83,10 @@ export function registerOnboardingModule(app: FastifyInstance): void {
           resolved.status === "completed" &&
           current.facts.complete[step] === true &&
           previous.length === 0;
+        // A step put off with Later is still open: it can be answered, or put off again.
         if (
           resolved.status !== "pending" &&
+          resolved.status !== "deferred" &&
           !recordingExistingFact &&
           !(step === "networking" && action === "decline")
         )

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
+  toastError: vi.fn(),
   role: "Participant" as string | null,
   locks: { profileLocked: false, dietaryLocked: false },
 }));
@@ -26,6 +27,7 @@ vi.mock("@/lib/i18n", () => ({
   }),
   pickText: () => "",
 }));
+vi.mock("@/lib/toast", () => ({ toast: { error: mocks.toastError } }));
 vi.mock("@/lib/session", () => ({
   useSessionContext: () => ({
     me: { id: 7, visibleRoleName: mocks.role, hasEventAccess: true, ...mocks.locks },
@@ -249,7 +251,19 @@ describe("OnboardingFlow", () => {
     await mount();
     await click("create");
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("onboardingCouldNotSave");
+    expect(mocks.toastError).toHaveBeenCalledWith("onboardingCouldNotSave", {
+      compactTitle: "title:networking",
+    });
+    expect(container.querySelector("h1")?.textContent).toBe("title:networking");
+  });
+
+  it("moves on without writing when a step that was already answered is decided again", async () => {
+    window.history.replaceState(null, "", "/onboarding?step=profile");
+    mocks.read.mockResolvedValue(journey({ profile: step("profile", "completed", ["skip"]) }));
+    await mount();
+    expect(container.textContent).toContain("skip");
+    await click("skip");
+    expect(mocks.decide).not.toHaveBeenCalled();
     expect(container.querySelector("h1")?.textContent).toBe("title:networking");
   });
 

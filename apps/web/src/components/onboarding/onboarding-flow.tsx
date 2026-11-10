@@ -37,6 +37,7 @@ import {
 } from "@/lib/onboarding";
 import { safeReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
+import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -56,7 +57,6 @@ export function OnboardingFlow() {
   const leaveTo = safeReturnPath(params.get("next"), APP_HOME_PATH);
   const state = useServerResource(["me", "onboarding"], (signal) => readOnboarding(signal));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [local, setLocal] = useState<OnboardingStep | null>(null);
   const moved = useRef(false);
   // Steps still open when the journey was entered: finished ones are not listed again.
@@ -97,9 +97,15 @@ export function OnboardingFlow() {
   const decide = useCallback(
     async (from: OnboardingStep, action: OnboardingAction) => {
       setBusy(true);
-      setError(null);
       try {
-        await decideStep(from, action, action === "defer" ? deferUntilTomorrow() : undefined);
+        // Revisiting a step that was already answered must not be refused: the answer
+        // stands, so move on without writing (only declining networking still applies).
+        const answered = state.data?.steps.find((item) => item.step === from)?.status;
+        const settled =
+          (answered === "completed" || answered === "skipped" || answered === "declined") &&
+          !(from === "networking" && action === "decline");
+        if (!settled)
+          await decideStep(from, action, action === "defer" ? deferUntilTomorrow() : undefined);
         const fresh = await readOnboarding();
         state.mutate(fresh);
         void refresh();
@@ -112,7 +118,9 @@ export function OnboardingFlow() {
         if (from === "completion" || !next) router.push(leaveTo);
         else show(next.step);
       } catch (cause) {
-        setError(apiErrorText(cause, t, t("onboardingCouldNotSave")));
+        toast.error(apiErrorText(cause, t, t("onboardingCouldNotSave")), {
+          compactTitle: t(STEP_TITLES[from]),
+        });
       } finally {
         setBusy(false);
       }
@@ -189,7 +197,6 @@ export function OnboardingFlow() {
           );
         })}
       </ol>
-      {error && <ContextualError message={error} />}
       <section aria-labelledby="onboarding-step">
         <span id="onboarding-step" className="sr-only">
           {t(STEP_TITLES[step.step])}
