@@ -25,7 +25,9 @@
     "skip": "Omitir",
     "continue": "Continuar",
     "labelName": "Nombre",
-    "labelRole": "Rol"
+    "labelRole": "Rol",
+    "formatPortrait": "Vertical",
+    "formatStory": "Historia"
   },
   "gl": {
     "title": "Conta o nas redes",
@@ -53,7 +55,9 @@
     "skip": "Omitir",
     "continue": "Continuar",
     "labelName": "Nome",
-    "labelRole": "Rol"
+    "labelRole": "Rol",
+    "formatPortrait": "Vertical",
+    "formatStory": "Historia"
   },
   "en": {
     "title": "Share it",
@@ -81,6 +85,8 @@
     "skip": "Skip",
     "continue": "Continue",
     "labelName": "Name",
-    "labelRole": "Role"
+    "labelRole": "Role",
+    "formatPortrait": "Portrait",
+    "formatStory": "Story"
   }
 }

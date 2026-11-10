@@ -65,14 +65,20 @@ export interface SocialSharingProps {
   className?: string;
 }
 
-export type ShareFormat = "landscape" | "square";
+export type ShareFormat = "landscape" | "square" | "portrait" | "story";
 
-/** Logical sizes: 1200×630 is the 1.91:1 link-card ratio of LinkedIn and X; 1080² is the feed square. */
+/**
+ * Logical sizes: 1200×630 is the 1.91:1 link card of LinkedIn and X, 1080² the
+ * feed square, 1080×1350 the Instagram 4:5 portrait and 1080×1920 the 9:16
+ * story.
+ */
 export const SHARE_SIZES: Record<ShareFormat, { width: number; height: number }> = {
   landscape: { width: 1200, height: 630 },
   square: { width: 1080, height: 1080 },
+  portrait: { width: 1080, height: 1350 },
+  story: { width: 1080, height: 1920 },
 };
-/** Output is drawn at 2× (2400×1260 and 2160×2160). */
+/** Output is drawn at 2× (e.g. 2400×1260 and 2160×3840). */
 export const SHARE_SCALE = 2;
 
 /** The Wallet pass palette: brand blue body, ink type, red labels, ink canvas (docs/DESIGN.md §2). */
@@ -503,6 +509,16 @@ function drawSeagull(ctx: Ctx, o: DrawCardOptions, passW: number, height: number
   ctx.drawImage(gull, passW * along, -height + 4, w, height);
 }
 
+/**
+ * Vertical formats stack headline, tilted pass and host. Story keeps the
+ * content clear of Instagram's top and bottom interface bands.
+ */
+const STACK_LAYOUT = {
+  square: { passW: 570, passTop: 185, kickerY: 60, kickerSize: 52, gull: 140, hostY: 1052 },
+  portrait: { passW: 640, passTop: 250, kickerY: 90, kickerSize: 58, gull: 150, hostY: 1290 },
+  story: { passW: 820, passTop: 440, kickerY: 285, kickerSize: 58, gull: 180, hostY: 1660 },
+} as const;
+
 /** Paints the whole card on `ctx` in logical units (the caller applies the 2x scale). */
 export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
   const { width, height } = SHARE_SIZES[o.format];
@@ -515,27 +531,28 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
   const margin = 72;
   const sans = (weight: number, size: number) => `${weight} ${size}px ${o.sansFont}`;
 
-  const passW = landscape ? 352 : 570;
+  const stack = STACK_LAYOUT[o.format as Exclude<ShareFormat, "landscape">];
+  const passW = landscape ? 352 : stack.passW;
   const passH = passW * (1165 / 838);
   const center = landscape
     ? { x: width - 72 - passW / 2 - 6, y: 125 + passH / 2 }
-    : { x: width / 2, y: 185 + passH / 2 };
+    : { x: width / 2, y: stack.passTop + passH / 2 };
   ctx.save();
   ctx.translate(center.x, center.y);
   ctx.rotate((landscape ? 3 : -2) * (Math.PI / 180));
   ctx.translate(-passW / 2, -passH / 2);
   drawPass(ctx, o, passW);
-  drawSeagull(ctx, o, passW, landscape ? 115 : 140, landscape ? 0.62 : 0.8);
+  drawSeagull(ctx, o, passW, landscape ? 115 : stack.gull, landscape ? 0.62 : 0.8);
   ctx.restore();
 
   // Poster text: the event line, and for landscape the name as the hero.
   const textW = landscape ? center.x - passW / 2 - margin - 40 : width - margin * 2;
-  let y = landscape ? 150 : 60;
+  let y = landscape ? 150 : stack.kickerY;
   const kicker = fitText(
     ctx,
     o.line,
     (s) => sans(700, s),
-    landscape ? 36 : 56,
+    landscape ? 36 : stack.kickerSize,
     24,
     textW,
     landscape ? 2 : 1,
@@ -571,7 +588,7 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
       ctx.fillText(host.lines[0], margin, height - 56);
     } else {
       ctx.textAlign = "center";
-      ctx.fillText(host.lines[0], width / 2, height - 28);
+      ctx.fillText(host.lines[0], width / 2, stack.hostY);
       ctx.textAlign = "left";
     }
   }
@@ -770,10 +787,12 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     }
   };
 
-  const square = format === "square";
+  const size = SHARE_SIZES[format];
   const formats: { value: ShareFormat; label: string }[] = [
     { value: "landscape", label: copy.formatLandscape },
     { value: "square", label: copy.formatSquare },
+    { value: "portrait", label: copy.formatPortrait },
+    { value: "story", label: copy.formatStory },
   ];
 
   return (
@@ -788,9 +807,11 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
       <figure
         className={cn(
           "mx-auto w-full overflow-hidden rounded-surface border",
-          square && "max-w-sm",
+          format === "square" && "max-w-sm",
+          format === "portrait" && "max-w-xs",
+          format === "story" && "max-w-60",
         )}
-        style={{ aspectRatio: square ? "1 / 1" : "1200 / 630" }}
+        style={{ aspectRatio: `${size.width} / ${size.height}` }}
         aria-busy={render.status === "loading"}
       >
         {render.status === "ready" && (
@@ -822,7 +843,7 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
         </p>
       )}
 
-      <fieldset className="flex justify-center gap-1">
+      <fieldset className="flex flex-wrap justify-center gap-1">
         <legend className="sr-only">{copy.format}</legend>
         {formats.map(({ value, label }) => (
           <label

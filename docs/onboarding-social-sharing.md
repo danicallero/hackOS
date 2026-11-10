@@ -32,23 +32,29 @@ placement, routing and the signed-in data.
 
 One preview, **Download image** as the primary action, **Share** as a menu
 (LinkedIn, X, Copy text, and "Send image…" where the browser can share files),
-and a quiet Landscape/Square selector. The "LinkedIn and X don't attach the
+and a quiet format selector (Horizontal, Cuadrado, Vertical, Historia). The "LinkedIn and X don't attach the
 image" note lives inside the menu. Feedback uses the shared toast. Structure
 follows the Wallet pass on the profile (bounded surface, official artwork,
 quiet secondary actions), not a custom panel.
 
 ## The image
 
-Drawn client-side on a canvas, exported as PNG at 2× (landscape 1200×630 →
-2400×1260, the 1.91:1 link-card ratio; square 1080² → 2160²). No image service.
+Drawn client-side on a canvas, exported as PNG at 2×. No image service.
+
+| Format | Logical size | PNG | Use |
+| --- | --- | --- | --- |
+| Landscape | 1200×630 | 2400×1260 | 1.91:1 link card (LinkedIn, X) |
+| Square | 1080×1080 | 2160×2160 | Feed square |
+| Portrait | 1080×1350 | 2160×2700 | Instagram 4:5 |
+| Story | 1080×1920 | 2160×3840 | 9:16 story; content kept clear of the top and bottom interface bands |
 
 The pass is the Apple Wallet pass at its real proportions (838×1165): organizer
 logo and date in the header, the strip, NAME and ROLE side by side (red mono
 labels, Inter values), and the photo where the QR sits (initials on ink when
 there is no photo). It is drawn slightly tilted on the ink canvas with Emilia
 the seagull perched on it. Landscape adds the headline, the name large, the role
-and the event host on the left; square puts the headline above and the host
-below. No email, QR, badge or ticket credentials ever appear.
+and the event host on the left; the vertical formats put the headline above and
+the host below, with the pass scaled per format. No email, QR, badge or ticket credentials ever appear.
 
 Assets, all copied from the repo into `apps/web/public/onboarding/`:
 

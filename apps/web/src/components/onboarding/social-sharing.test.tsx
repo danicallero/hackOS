@@ -239,7 +239,7 @@ describe("drawShareCard", () => {
     expect(texts(calls).some((t) => typeof t === "string" && t.endsWith("…"))).toBe(true);
   });
 
-  it("renders both ratios at 2× resolution", async () => {
+  it("renders every format at 2× resolution: link card, square, Instagram 4:5 and 9:16 story", async () => {
     const sizes: [number, number][] = [];
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (
       this: HTMLCanvasElement,
@@ -250,13 +250,32 @@ describe("drawShareCard", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((cb) =>
       cb(new Blob(["png"], { type: "image/png" })),
     );
-    await renderShareImage(options({ format: "landscape" }));
-    await renderShareImage(options({ format: "square" }));
+    for (const format of ["landscape", "square", "portrait", "story"] as const) {
+      await renderShareImage(options({ format }));
+    }
     expect(sizes).toEqual([
-      [SHARE_SIZES.landscape.width * 2, SHARE_SIZES.landscape.height * 2],
-      [SHARE_SIZES.square.width * 2, SHARE_SIZES.square.height * 2],
+      [2400, 1260],
+      [2160, 2160],
+      [2160, 2700],
+      [2160, 3840],
     ]);
+    expect(SHARE_SIZES.portrait.width / SHARE_SIZES.portrait.height).toBeCloseTo(4 / 5);
+    expect(SHARE_SIZES.story.width / SHARE_SIZES.story.height).toBeCloseTo(9 / 16);
     vi.restoreAllMocks();
+  });
+
+  it("keeps every drawn text inside the canvas for each vertical format", () => {
+    for (const format of ["square", "portrait", "story"] as const) {
+      const { ctx, calls } = recordingContext();
+      drawShareCard(ctx, options({ format, host: "hackudc.com", roleLabel: "Hacker" }));
+      const { height } = SHARE_SIZES[format];
+      const baselines = calls
+        .filter((c) => c.op === "fillText")
+        .map((c) => c.args[2] as number)
+        .filter((y) => typeof y === "number");
+      expect(baselines.length).toBeGreaterThan(0);
+      expect(Math.max(...baselines)).toBeLessThan(height);
+    }
   });
 });
 
@@ -378,13 +397,17 @@ describe("<SocialSharing />", () => {
     expect(toast.success).toHaveBeenCalledWith("Imagen descargada", expect.anything());
   });
 
-  it("switches to the square format", async () => {
+  it.each([
+    ["square", [2160, 2160]],
+    ["portrait", [2160, 2700]],
+    ["story", [2160, 3840]],
+  ] as const)("switches to the %s format", async (format, size) => {
     await mount();
-    const square = container.querySelector('input[value="square"]') as HTMLInputElement;
-    await act(async () => square.click());
-    await vi.waitFor(() => expect(canvasSizes.at(-1)).toEqual([2160, 2160]));
+    const radio = container.querySelector(`input[value="${format}"]`) as HTMLInputElement;
+    await act(async () => radio.click());
+    await vi.waitFor(() => expect(canvasSizes.at(-1)).toEqual(size));
     await act(async () => button(/Descargar imagen/)?.click());
-    expect(saveBlob.mock.calls[0][1]).toMatch(/-square\.png$/);
+    expect(saveBlob.mock.calls[0][1]).toMatch(new RegExp(`-${format}\\.png$`));
   });
 
   it("keeps one preview, a primary download and the networks behind the Share menu", async () => {
