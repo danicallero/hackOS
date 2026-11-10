@@ -4057,7 +4057,6 @@
   "onboardingContinue": "Continue",
   "onboardingDone": "Finish",
   "onboardingProgress": "Progress",
-  "onboardingStepCount": "Step {current} of {total}",
   "onboardingNothingToDo": "Nothing is pending.",
   "onboardingStillOpen": "Still open",
   "onboardingFinishStep": "Finish",

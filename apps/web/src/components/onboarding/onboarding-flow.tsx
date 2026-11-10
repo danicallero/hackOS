@@ -148,7 +148,6 @@ export function OnboardingFlow() {
       item.step !== "completion" &&
       (started.current?.has(item.step) || item.step === step.step),
   );
-  const position = numbered.findIndex((item) => item.step === step.step);
   const first = pendingSteps(data).find((item) => item.step !== "completion");
   if (intro && first && first.step !== "welcome" && step.step === first.step)
     return (
@@ -164,14 +163,7 @@ export function OnboardingFlow() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={t(STEP_TITLES[step.step])}
-        meta={
-          position >= 0
-            ? t("onboardingStepCount", { current: position + 1, total: numbered.length })
-            : undefined
-        }
-      />
+      <PageHeader title={t(STEP_TITLES[step.step])} />
       <ol className="flex flex-wrap gap-2" aria-label={t("onboardingProgress")}>
         {numbered.map((item, index) => {
           const done = item.status === "completed";

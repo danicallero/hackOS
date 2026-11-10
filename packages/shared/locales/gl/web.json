@@ -4057,7 +4057,6 @@
   "onboardingContinue": "Continuar",
   "onboardingDone": "Rematar",
   "onboardingProgress": "Progreso",
-  "onboardingStepCount": "Paso {current} de {total}",
   "onboardingNothingToDo": "Non tes nada pendente.",
   "onboardingStillOpen": "Pendente",
   "onboardingFinishStep": "Completar",

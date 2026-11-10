@@ -89,7 +89,7 @@ Text only. Progress is a row of numbered markers for the steps that were still
 open when the journey was entered (finished ones are not listed again, and
 welcome/completion are not numbered): a step finished during the session is a
 green check, the current one is filled, and each is a button to revisit that
-step. "Step n of N" counts the same markers. The public-profile and mentor steps
+step. The public-profile and mentor steps
 end with a pointer to where the answer can be changed later (My profile).
 `forPerson` (`lib/onboarding.ts`) trims the journey to what the person can act
 on: no profile step once identity fields are locked, no dietary step once the
