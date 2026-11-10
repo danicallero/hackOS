@@ -28,6 +28,8 @@ export const userParams = z.object({ userId: id });
 export const topicQuery = z.object({
   q: z.string().trim().max(60).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(20),
+  /** Request forms: only topics offered by published helpers who are in the venue now. */
+  available: z.enum(["1", "true"]).optional(),
 });
 export const topicBody = z.object({ name: line(60) });
 export const mergeBody = z.object({ targetId: id });
@@ -73,7 +75,6 @@ export const createRequestBody = z
     location: line(120),
     topicIds: z.array(id).max(5),
     other: z.boolean(),
-    projectId: id.nullable().optional(),
     challengeId: id.nullable().optional(),
     preferSponsor: z.boolean().default(false),
   })

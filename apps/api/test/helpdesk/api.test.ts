@@ -127,7 +127,7 @@ describe("H61 knowledge catalogue", () => {
     expect(accent.json().topics).toHaveLength(1);
   });
 
-  it("only eligible helpers or managers add topics; requesters can still search", async () => {
+  it("only eligible helpers add topics; requesters can still search", async () => {
     const requester = await createUserWithCapabilities(participantCaps);
     const denied = await call("POST", "/api/helpdesk/topics", requester, { name: "Nope" });
     expect(denied.statusCode).toBe(403);
@@ -139,8 +139,25 @@ describe("H61 knowledge catalogue", () => {
     ).toBe(201);
     const manager = await createUserWithCapabilities([CAPABILITIES.HELPDESK_MANAGE]);
     expect((await call("POST", "/api/helpdesk/topics", manager, { name: "Also" })).statusCode).toBe(
-      201,
+      403,
     );
+  });
+
+  it("shows requesters only the topics of helpers who are in the venue now", async () => {
+    const asker = await createUserWithCapabilities(participantCaps);
+    const here = await topic("InVenue");
+    const away = await topic("Away");
+    await helper([here]);
+    await helper([away], { present: false });
+    const names = async (as: number, query = "") =>
+      (await call("GET", `/api/helpdesk/topics${query}`, as))
+        .json()
+        .topics.map((t: { name: string }) => t.name);
+    expect(await names(asker)).toEqual(["InVenue"]);
+    // A helper preparing a profile sees the whole catalogue, unless a request form asks.
+    const preparing = await createUserWithCapabilities(helperCaps);
+    expect(await names(preparing)).toEqual(expect.arrayContaining(["InVenue", "Away"]));
+    expect(await names(preparing, "?available=1")).toEqual(["InVenue"]);
   });
 
   it("rejects catalogue access without a help desk role", async () => {
@@ -410,10 +427,8 @@ describe("H64-H65 requests and routing", () => {
     expect(await outbox(b)).toHaveLength(2);
   });
 
-  it("stays open with routing none when nobody is available, and one active request per team", async () => {
+  it("stays open with routing none when nobody is available, and one active request per person", async () => {
     const p = await createUserWithCapabilities(participantCaps);
-    const mate = await createUserWithCapabilities(participantCaps);
-    const repo = await team([p, mate]);
     const t = await topic("Go", p);
     await helper([t], { present: false });
     const first = await call("POST", "/api/helpdesk/requests", p, {
@@ -421,36 +436,22 @@ describe("H64-H65 requests and routing", () => {
       location: "Here",
       topicIds: [t],
       other: false,
-      projectId: repo,
     });
-    expect(first.json()).toMatchObject({
-      routing: "none",
-      notifiedCount: 0,
-      project: { id: repo },
-    });
-    const dup = await call("POST", "/api/helpdesk/requests", mate, {
+    expect(first.json()).toMatchObject({ routing: "none", notifiedCount: 0 });
+    const dup = await call("POST", "/api/helpdesk/requests", p, {
       description: "Again",
       location: "Here",
       topicIds: [],
       other: true,
-      projectId: repo,
     });
     expect(dup.statusCode).toBe(409);
     expect(dup.json().error.details.code).toBe("help_request_active");
-    const mine = await call("GET", "/api/helpdesk/requests/mine", mate);
+    const mine = await call("GET", "/api/helpdesk/requests/mine", p);
     expect(mine.json().requests.map((r: { id: number }) => r.id)).toEqual([first.json().id]);
     const outsider = await createUserWithCapabilities(participantCaps);
     expect(
       (await call("GET", `/api/helpdesk/requests/${first.json().id}`, outsider)).statusCode,
     ).toBe(404);
-    const notMember = await call("POST", "/api/helpdesk/requests", outsider, {
-      description: "x",
-      location: "y",
-      topicIds: [],
-      other: true,
-      projectId: repo,
-    });
-    expect(notMember.statusCode).toBe(403);
   });
 
   it("requires a topic or Other", async () => {
@@ -468,8 +469,7 @@ describe("H64-H65 requests and routing", () => {
 describe("H66 claiming", () => {
   async function openRequest() {
     const p = await createUserWithCapabilities(participantCaps);
-    const mate = await createUserWithCapabilities(participantCaps);
-    const repo = await team([p, mate]);
+    const mate = p;
     const t = await topic(`T-${crypto.randomUUID().slice(0, 6)}`, p);
     const helpers = [await helper([t]), await helper([t]), await helper([t])];
     const res = await call("POST", "/api/helpdesk/requests", p, {
@@ -477,12 +477,11 @@ describe("H66 claiming", () => {
       location: "Table 4",
       topicIds: [t],
       other: false,
-      projectId: repo,
     });
     return { p, mate, helpers, id: res.json().id as number };
   }
 
-  it("lets the requester and team open the claiming helper's profile, even unpublished, and nobody else", async () => {
+  it("lets the requester open the claiming helper's profile, even unpublished, and nobody else", async () => {
     const { p, mate, helpers, id } = await openRequest();
     const [h, other] = helpers as [number, number];
     const unrelated = await createUserWithCapabilities(participantCaps);
@@ -587,17 +586,14 @@ describe("H66 claiming", () => {
     expect(released.json()).toMatchObject({ status: "open", claim: null });
     expect((await outbox(mate)).some((n) => n.kind === "request_released")).toBe(true);
     await call("POST", `/api/helpdesk/requests/${id}/claim`, h2, { mode: "on_my_way" });
-    const resolved = await call("POST", `/api/helpdesk/requests/${id}/resolve`, mate);
+    const resolved = await call("POST", `/api/helpdesk/requests/${id}/resolve`, p);
     expect(resolved.json()).toMatchObject({ status: "resolved" });
-    expect((await outbox(p)).filter((notice) => notice.kind === "request_resolved")).toHaveLength(
-      1,
-    );
     expect((await outbox(h2)).filter((notice) => notice.kind === "request_resolved")).toHaveLength(
       1,
     );
-    expect(
-      (await outbox(mate)).filter((notice) => notice.kind === "request_resolved"),
-    ).toHaveLength(0);
+    expect((await outbox(p)).filter((notice) => notice.kind === "request_resolved")).toHaveLength(
+      0,
+    );
     expect((await call("POST", `/api/helpdesk/requests/${id}/resolve`, mate)).statusCode).toBe(409);
     expect((await outbox(h2)).filter((notice) => notice.kind === "request_resolved")).toHaveLength(
       1,
@@ -984,19 +980,6 @@ describe("H64-H65 challenge help and sponsor preference", () => {
     const res = await ask(p, { other: false, topicIds: [t], challengeId: myChallenge });
     expect(res.json().routing).toBe("none");
     expect(await outbox(sponsor)).toHaveLength(0);
-  });
-
-  it("keeps team visibility of challenge requests unchanged", async () => {
-    const e = await enterprise();
-    const c = await challenge(e);
-    const p = await createUserWithCapabilities(participantCaps);
-    const mate = await createUserWithCapabilities(participantCaps);
-    const repo = await team([p, mate]);
-    const res = await ask(p, { challengeId: c, projectId: repo });
-    expect(res.statusCode).toBe(201);
-    const seen = await call("GET", `/api/helpdesk/requests/${res.json().id}`, mate);
-    expect(seen.statusCode).toBe(200);
-    expect(seen.json()).toMatchObject({ challenge: { id: c }, viewer: { canCancel: true } });
   });
 });
 

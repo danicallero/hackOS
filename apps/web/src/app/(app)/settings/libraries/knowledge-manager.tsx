@@ -42,8 +42,9 @@ interface Area {
 
 /**
  * Knowledge areas (H61): the one catalogue behind a mentor's areas and the help
- * desk's topics. Staff with `helpdesk:manage` add, rename and merge duplicates, and
- * delete an area nobody uses; one in use is merged into another instead.
+ * desk's topics. Helpers add areas from their own profile; staff with
+ * `helpdesk:manage` rename and merge duplicates here and delete an area nobody
+ * uses (one in use is merged into another instead).
  */
 export function KnowledgeManager() {
   const { t } = useLocale();
@@ -88,12 +89,9 @@ export function KnowledgeManager() {
     }
   }
   async function save() {
-    if (!name.trim()) return;
+    if (!editing || !name.trim()) return;
     const done = await run(
-      () =>
-        editing
-          ? api.patch(`/api/helpdesk/topics/${editing.id}`, { name })
-          : api.post("/api/helpdesk/topics", { name }),
+      () => api.patch(`/api/helpdesk/topics/${editing?.id}`, { name }),
       t("knowledgeSaved"),
       t("couldNotSaveKnowledge"),
     );
@@ -149,11 +147,6 @@ export function KnowledgeManager() {
         onSearchChange={setSearch}
         searchLabel={t("searchKnowledgePlaceholder")}
         count={entries.length}
-        addLabel={t("addKnowledgeArea")}
-        onAdd={() => {
-          setEditing(null);
-          setName("");
-        }}
       />
       <DataTable
         columns={columns}
@@ -201,7 +194,7 @@ export function KnowledgeManager() {
         open={editing !== undefined}
         onOpenChange={(open) => !open && setEditing(undefined)}
         icon={BrainIcon}
-        title={editing ? t("renameKnowledgeTitle") : t("newKnowledgeTitle")}
+        title={t("renameKnowledgeTitle")}
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setEditing(undefined)}>

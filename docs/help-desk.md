@@ -97,11 +97,10 @@ creates no diary contact and returns nothing beyond the card.
 
 ## Requests (H64-H66)
 
-A request is individual or, with `projectId`, for one of the caller's active
-projects (`submissions.status = 'active'`); every active member then follows
-it, may cancel or resolve it, and receives the claim notice. Opening one
-requires event access. At most one request is active (open or claimed) per
-team, or per person for individual requests (partial unique indexes plus a
+A request is always for the caller (the team option was removed; requests
+stored with a project keep their team rules). Opening one requires event
+access. At most one request is active (open or claimed) per person (partial
+unique indexes plus a
 locked check), so double submits cannot open two.
 
 **Routing (H65)** runs once, at creation, inside the creating transaction:
@@ -216,3 +215,11 @@ User management edits a person's helper profile with
 audited with source `admin`. Staff can change topics, challenge alerts and
 availability and can unpublish, but never publish: that is the person's own
 consent (403 `helper_publish_own_consent`).
+
+## Topics when asking for help
+
+A request form lists only the knowledge areas that a published helper who is in
+the venue now (door scan, H24) offers: `GET /api/helpdesk/topics` answers
+requesters, and any call with `available=1`, with those; eligible helpers and
+managers otherwise get the whole catalogue. Only eligible helpers create areas
+(`POST /api/helpdesk/topics`); managers rename, merge and delete unused ones.

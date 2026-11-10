@@ -4142,8 +4142,6 @@
   "helpDeskNoHelpers": "Non hai perfís de apoio publicados",
   "helpDeskNoMatches": "Ningún perfil coincide con estes filtros",
   "helpDeskRequestHelp": "Pedir axuda",
-  "helpDeskFor": "Solicitude para",
-  "helpDeskMyself": "Min",
   "helpDeskTopics": "Temas",
   "helpDeskOther": "Outro",
   "helpDeskDescription": "Con que precisas axuda?",
@@ -4292,12 +4290,10 @@
   "mentorPublishOwnConsent": "Só a propia persoa pode activalo.",
   "knowledgeTab": "Áreas de coñecemento",
   "searchKnowledgePlaceholder": "Buscar áreas de coñecemento…",
-  "addKnowledgeArea": "Engadir área",
   "noKnowledgeYetTitle": "Aínda non hai áreas de coñecemento",
   "knowledgeUsage": "{helpers} helpers · {requests} peticións",
   "knowledgeUsageColumn": "Usada por",
   "renameKnowledgeTitle": "Renomear área",
-  "newKnowledgeTitle": "Nova área",
   "knowledgeSaved": "Área gardada",
   "couldNotSaveKnowledge": "Non se puido gardar a área",
   "couldNotLoadKnowledge": "Non se puideron cargar as áreas",
@@ -4308,5 +4304,6 @@
   "mergeKnowledgeDesc": "Pasa todos os helpers e peticións á área que conserves e elimina «{name}».",
   "knowledgeToKeep": "Área a conservar",
   "knowledgeMerged": "Áreas fusionadas",
-  "toastKnowledge": "Áreas de coñecemento"
+  "toastKnowledge": "Áreas de coñecemento",
+  "helpDeskFor": "Solicitude para"
 }

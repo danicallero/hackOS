@@ -2,7 +2,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import type { Queryable } from "../../db/pool.js";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
-import { AppError, BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
+import { AppError, BadRequestError, NotFoundError } from "../../lib/errors.js";
 import { currentEventKey } from "../event/context.js";
 
 /**

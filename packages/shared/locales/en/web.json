@@ -4142,8 +4142,6 @@
   "helpDeskNoHelpers": "No published support profiles",
   "helpDeskNoMatches": "No support profiles match these filters",
   "helpDeskRequestHelp": "Request help",
-  "helpDeskFor": "Request for",
-  "helpDeskMyself": "Myself",
   "helpDeskTopics": "Topics",
   "helpDeskOther": "Other",
   "helpDeskDescription": "What do you need help with?",
@@ -4292,12 +4290,10 @@
   "mentorPublishOwnConsent": "Only the person can turn this on.",
   "knowledgeTab": "Knowledge areas",
   "searchKnowledgePlaceholder": "Search knowledge areas…",
-  "addKnowledgeArea": "Add knowledge area",
   "noKnowledgeYetTitle": "No knowledge areas yet",
   "knowledgeUsage": "{helpers} helpers · {requests} requests",
   "knowledgeUsageColumn": "Used by",
   "renameKnowledgeTitle": "Rename knowledge area",
-  "newKnowledgeTitle": "New knowledge area",
   "knowledgeSaved": "Knowledge area saved",
   "couldNotSaveKnowledge": "Could not save the knowledge area",
   "couldNotLoadKnowledge": "Could not load the knowledge areas",
@@ -4308,5 +4304,6 @@
   "mergeKnowledgeDesc": "Moves every helper and request to the area you keep and deletes “{name}”.",
   "knowledgeToKeep": "Area to keep",
   "knowledgeMerged": "Knowledge areas merged",
-  "toastKnowledge": "Knowledge areas"
+  "toastKnowledge": "Knowledge areas",
+  "helpDeskFor": "Request for"
 }

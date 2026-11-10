@@ -75,8 +75,12 @@ export function TopicsPicker({
   const [q, setQ] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<unknown>(null);
-  const resource = useServerResource(["helpdesk", "topics", q], (signal) =>
-    api.get<{ topics: HelpTopic[] }>("/api/helpdesk/topics", { signal, query: { q, limit: 50 } }),
+  const resource = useServerResource(["helpdesk", "topics", q, Boolean(other)], (signal) =>
+    api.get<{ topics: HelpTopic[] }>("/api/helpdesk/topics", {
+      signal,
+      // A request form only offers what a helper in the venue can help with.
+      query: { q, limit: 50, available: other ? "1" : undefined },
+    }),
   );
   const options = [
     ...new Map(

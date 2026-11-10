@@ -21,9 +21,11 @@ import {
   getMyHelperProfile,
   HELPDESK_BROWSE,
   isEligibleHelper,
+  LISTED_HELPER_WHERE,
   listHelpers,
   mayBrowseHelpers,
   mayOpenHelper,
+  presentSql,
   replaceMyAvailability,
   updateMyHelperProfile,
 } from "./helpers.js";
@@ -34,7 +36,6 @@ import {
   editRequest,
   getRequest,
   listInbox,
-  listMyProjects,
   listMyRequests,
   listRequestChallenges,
   releaseRequest,
@@ -97,12 +98,10 @@ async function requireCatalogueAccess(req: FastifyRequest): Promise<void> {
   });
 }
 
-/** Adding topics is for people who can hold a helper profile, or `helpdesk:manage` (H61). */
+/** Only people who can hold a helper profile add knowledge areas (H61). */
 async function requireTopicProposer(req: FastifyRequest): Promise<void> {
   await assertActiveAuthenticatedUser(req);
   if (await isEligibleHelper(pool, req.userId as number)) return;
-  if (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.HELPDESK_MANAGE))
-    return;
   throw new ForbiddenError("Only people who can offer help may add topics", {
     code: ERROR_REASONS.HELPER_NOT_ELIGIBLE,
   });
@@ -127,10 +126,27 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         querystring: topicQuery,
         summary: "Search help desk topics",
         description:
-          "The shared knowledge catalogue used by helper profiles and help requests (H61). `q` matches anywhere in the name, ignoring case and accents; exact and prefix matches come first. Other is not a topic: requests carry `other`. Readable with any help desk capability or by an eligible helper (accepted mentor) preparing a profile.",
+          "The shared knowledge catalogue used by helper profiles and help requests (H61). Requesters, and any call with `available=1`, get only the topics offered by published helpers who are in the venue now (H24); eligible helpers and `helpdesk:manage` holders otherwise get the whole catalogue. `q` matches anywhere in the name, ignoring case and accents; exact and prefix matches come first. Other is not a topic: requests carry `other`. Readable with any help desk capability or by an eligible helper (accepted mentor) preparing a profile.",
       },
     },
-    async (req) => ({ topics: await searchTopics(req.query.q, req.query.limit) }),
+    async (req) => {
+      // Requesters (and any request form) see only what someone in the venue can help with;
+      // helpers preparing a profile and managers see the whole catalogue.
+      const wholeCatalogue =
+        !req.query.available &&
+        ((await isEligibleHelper(pool, req.userId as number)) ||
+          (await userHasCapability(
+            getRequestAuthorizationContext(req),
+            CAPABILITIES.HELPDESK_MANAGE,
+          )));
+      return {
+        topics: await searchTopics(
+          req.query.q,
+          req.query.limit,
+          wholeCatalogue ? undefined : `${LISTED_HELPER_WHERE} AND ${presentSql("u.id")}`,
+        ),
+      };
+    },
   );
   r.post(
     "/api/helpdesk/topics",
@@ -141,7 +157,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: topicBody,
         summary: "Add a help desk topic",
         description:
-          'Adds a missing topic to the shared catalogue (H61), like the university picker. An equivalent name (case, accents and spacing ignored) returns the existing topic with `created: false` and status 200; a new one answers 201. "Other" and its translations are reserved (400 `topic_reserved`). Only people who can have a helper profile (the `eligible` flag of GET /api/me/helper-profile, accepted mentors preparing a profile included) or hold `helpdesk:manage` may add topics; everyone else, requesters included, gets 403 `helper_not_eligible`. Audited; 20 proposals per hour per person.',
+          'Adds a missing topic to the shared catalogue (H61), like the university picker. An equivalent name (case, accents and spacing ignored) returns the existing topic with `created: false` and status 200; a new one answers 201. "Other" and its translations are reserved (400 `topic_reserved`). Only people who can have a helper profile (the `eligible` flag of GET /api/me/helper-profile, accepted mentors preparing a profile included) may add topics; everyone else, requesters and managers who are not helpers included, gets 403 `helper_not_eligible`. Audited; 20 proposals per hour per person.',
       },
     },
     async (req, reply) => {
@@ -398,19 +414,6 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
 
   // ── H64 requests (participant side) ────────────────────────────────────
   r.get(
-    "/api/helpdesk/projects",
-    {
-      config: cap(CAPABILITIES.HELPDESK_REQUEST),
-      preHandler: requireCapability(CAPABILITIES.HELPDESK_REQUEST),
-      schema: {
-        summary: "List my help request teams",
-        description:
-          "The caller's active projects, which a help request may target so the whole team follows it (H64).",
-      },
-    },
-    async (req) => ({ projects: await listMyProjects(req.userId as number) }),
-  );
-  r.get(
     "/api/helpdesk/challenges",
     {
       config: cap(CAPABILITIES.HELPDESK_REQUEST),
@@ -432,7 +435,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: createRequestBody,
         summary: "Request help",
         description:
-          "Opens a help request for the caller or, with `projectId`, for their project team (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per team, or per person for individual requests (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access or project membership. Audited.",
+          "Opens a help request for the caller (H64), always for them personally: a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per person (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access. Audited.",
       },
     },
     async (req, reply) => reply.code(201).send(await createRequest(req.userId as number, req.body)),

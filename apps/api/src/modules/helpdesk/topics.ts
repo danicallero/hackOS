@@ -35,19 +35,36 @@ function toTopic(row: { id: number; name: string }): HelpTopic {
   return { id: Number(row.id), name: row.name };
 }
 
-export async function searchTopics(q: string | undefined, limit: number): Promise<HelpTopic[]> {
+/**
+ * `availableWhere` limits the catalogue to topics some listed helper who is in the
+ * venue offers (an SQL condition over `hp` and `u`, from helpers.ts); a request
+ * can only be about what someone can help with right now.
+ */
+export async function searchTopics(
+  q: string | undefined,
+  limit: number,
+  availableWhere?: string,
+): Promise<HelpTopic[]> {
   const term = q?.trim();
   const params: unknown[] = [limit];
-  let where = "";
+  const conditions: string[] = [];
   let order = "lower(name), id";
+  if (availableWhere) {
+    conditions.push(
+      `EXISTS (SELECT 1 FROM helper_topics ht
+                 JOIN helper_profiles hp ON hp.user_id = ht.user_id
+                 JOIN users u ON u.id = hp.user_id
+                WHERE ht.topic_id = help_topics.id AND ${availableWhere})`,
+    );
+  }
   if (term) {
     params.push(`%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`, topicKey(term));
-    where = "WHERE unaccent(name) ILIKE unaccent($2)";
+    conditions.push("unaccent(name) ILIKE unaccent($2)");
     // Exact, then prefix matches first, so "Vite" ranks above "Vitest".
     order = "(name_key = $3) DESC, (name_key LIKE $3 || '%') DESC, lower(name), id";
   }
   const { rows } = await pool.query<{ id: number; name: string }>(
-    `SELECT id, name FROM help_topics ${where} ORDER BY ${order} LIMIT $1`,
+    `SELECT id, name FROM help_topics ${conditions.length ? `WHERE ${conditions.join(" AND ")}` : ""} ORDER BY ${order} LIMIT $1`,
     params,
   );
   return rows.map(toTopic);

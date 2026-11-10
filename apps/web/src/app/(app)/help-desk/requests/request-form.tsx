@@ -36,7 +36,6 @@ export function RequestForm({
 }) {
   const { t } = useLocale();
   const id = useId();
-  const [project, setProject] = useState(request?.project ? String(request.project.id) : "self");
   const [topics, setTopics] = useState<HelpTopic[]>(request?.topics ?? []);
   const [other, setOther] = useState(request?.other ?? false);
   const [challenge, setChallenge] = useState(
@@ -52,9 +51,6 @@ export function RequestForm({
   // Only creating is closed outside the opening hours; editing an open request keeps working.
   const hours = useHelpdeskSchedule(!request);
   const closed = !request && hours.closed;
-  const projects = useServerResource(["helpdesk", "projects"], (signal) =>
-    api.get<{ projects: { id: number; name: string }[] }>("/api/helpdesk/projects", { signal }),
-  );
   const challenges = useServerResource(["helpdesk", "challenges"], (signal) =>
     api.get<{ challenges: HelpChallengeOption[] }>("/api/helpdesk/challenges", {
       signal,
@@ -73,8 +69,7 @@ export function RequestForm({
       topics.length > 0 ||
       other ||
       challenge !== "none" ||
-      preferSponsor ||
-      project !== "self";
+      preferSponsor;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
@@ -105,7 +100,6 @@ export function RequestForm({
       if (request) await api.patch(`/api/helpdesk/requests/${request.id}`, body);
       else
         await api.post("/api/helpdesk/requests", {
-          projectId: project === "self" ? null : Number(project),
           ...body,
         });
       setConfirming(false);
@@ -132,29 +126,6 @@ export function RequestForm({
       }}
     >
       <fieldset className="space-y-5" disabled={pending}>
-        {request ? null : (
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-for`}>{t("helpDeskFor")}</Label>
-            <Select
-              value={project}
-              onValueChange={setProject}
-              disabled={pending || projects.loading}
-            >
-              <SelectTrigger id={`${id}-for`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="self">{t("helpDeskMyself")}</SelectItem>
-                {projects.data?.projects.map((project) => (
-                  <SelectItem key={project.id} value={String(project.id)}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        {projects.error ? <HelpdeskError error={projects.error} retry={projects.reload} /> : null}
         <div className="space-y-2">
           <Label htmlFor={`${id}-topics`}>{t("helpDeskTopics")}</Label>
           <TopicsPicker
