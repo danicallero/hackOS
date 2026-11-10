@@ -31,6 +31,7 @@ import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
+import { EVENT_CITY, EVENT_PUBLIC_URL } from "@/lib/event-brand";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { notificationsApi, type PreferencesResponse } from "@/lib/notifications";
@@ -141,6 +142,15 @@ export function useEventFacts(): PublicEvent | null {
     };
   }, []);
   return event;
+}
+
+/** Whole hours of the hacking window ("36 hours of development"); undefined without a window. */
+export function hackingHours(
+  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt"> | null,
+): number | undefined {
+  if (!event?.hackingStartsAt || !event.hackingEndsAt) return undefined;
+  const ms = Date.parse(event.hackingEndsAt) - Date.parse(event.hackingStartsAt);
+  return ms > 0 ? Math.round(ms / 3_600_000) : undefined;
 }
 
 /** "5 Jan 2026" or "5 Jan – 7 Jan 2026", only from configured instants; "" when unset. */
@@ -378,6 +388,13 @@ export function ShareCard({
         name: event.name,
         year: /^\d{4}$/.test(year) ? year : "",
         dateLabel: eventDateRange(event, language) || undefined,
+        location: EVENT_CITY,
+        url: EVENT_PUBLIC_URL,
+        hours: hackingHours(event),
+        dates:
+          event.hackingStartsAt && event.hackingEndsAt
+            ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
+            : undefined,
       }}
       attendee={{
         displayName: [me.name, me.surname].filter(Boolean).join(" "),
