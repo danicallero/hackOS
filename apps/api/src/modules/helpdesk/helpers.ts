@@ -341,8 +341,9 @@ export interface HelperActor {
 export async function updateMyHelperProfile(
   userId: number,
   input: HelperProfileInput,
-  actor: HelperActor = { actorId: userId, source: "web" },
+  actorOrSelf?: HelperActor,
 ): Promise<{ changed: boolean; profile: MyHelperProfile }> {
+  const actor: HelperActor = actorOrSelf ?? { actorId: userId, source: "web" };
   const changed = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
     await assertEligible(client, userId);
@@ -452,8 +453,9 @@ const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export async function replaceMyAvailability(
   userId: number,
   input: AvailabilityInput,
-  actor: HelperActor = { actorId: userId, source: "web" },
+  actorOrSelf?: HelperActor,
 ): Promise<{ changed: boolean; profile: MyHelperProfile }> {
+  const actor: HelperActor = actorOrSelf ?? { actorId: userId, source: "web" };
   const intervals = input.intervals
     .map((i) => ({ startsAt: new Date(i.startsAt), endsAt: new Date(i.endsAt) }))
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
