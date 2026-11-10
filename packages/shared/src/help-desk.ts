@@ -218,6 +218,8 @@ export function coverageDays(
  * claims, resolution, browsing and helper settings keep working.
  */
 export interface HelpdeskSchedule {
+  /** Only people with event access may open a request (the default); off lets any account holding `helpdesk:request` do so. */
+  eventAccessOnly: boolean;
   configured: boolean;
   open: boolean;
   windows: AvailabilityInterval[];

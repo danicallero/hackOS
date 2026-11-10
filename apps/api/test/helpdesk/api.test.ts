@@ -1707,3 +1707,34 @@ describe("knowledge catalogue management (H61)", () => {
     expect((await call("GET", "/api/helpdesk/topics/manage", plain)).statusCode).toBe(403);
   });
 });
+
+describe("who may request help (H64)", () => {
+  it("limits requests to people with event access unless the organizer opens them", async () => {
+    const manager = await createUserWithCapabilities([CAPABILITIES.HELPDESK_MANAGE]);
+    // helpdesk:request alone, without a role that grants event access.
+    const outsider = await createUserWithCapabilities(participantCaps);
+    await pool.query(
+      "UPDATE roles SET event_access = false WHERE id IN (SELECT role_id FROM user_roles WHERE user_id = $1)",
+      [outsider],
+    );
+    const body = { description: "Help", location: "Here", topicIds: [], other: true };
+    const blocked = await call("POST", "/api/helpdesk/requests", outsider, body);
+    expect(blocked.statusCode).toBe(403);
+
+    const schedule = await call("GET", "/api/helpdesk/schedule", outsider);
+    expect(schedule.json().eventAccessOnly).toBe(true);
+    const opened = await call("PUT", "/api/helpdesk/schedule", manager, {
+      windows: [],
+      eventAccessOnly: false,
+    });
+    expect(opened.json().eventAccessOnly).toBe(false);
+    expect((await call("POST", "/api/helpdesk/requests", outsider, body)).statusCode).toBe(201);
+
+    // Leaving the flag out keeps it; turning it back on closes the door again.
+    const kept = await call("PUT", "/api/helpdesk/schedule", manager, { windows: [] });
+    expect(kept.json().eventAccessOnly).toBe(false);
+    await call("PUT", "/api/helpdesk/schedule", manager, { windows: [], eventAccessOnly: true });
+    await pool.query("DELETE FROM help_requests");
+    expect((await call("POST", "/api/helpdesk/requests", outsider, body)).statusCode).toBe(403);
+  });
+});

@@ -4305,5 +4305,6 @@
   "knowledgeToKeep": "Area to keep",
   "knowledgeMerged": "Knowledge areas merged",
   "toastKnowledge": "Knowledge areas",
-  "helpDeskFor": "Request for"
+  "helpDeskFor": "Request for",
+  "helpDeskEventAccessOnly": "Only people with event access can request help"
 }

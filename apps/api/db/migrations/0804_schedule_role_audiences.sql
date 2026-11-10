@@ -18,3 +18,8 @@ ALTER TABLE public.schedule
 -- selection are retired. Mentor publication stays in mentor_profiles.
 DROP TABLE public.mentor_profile_expertise;
 DELETE FROM public.form_libraries WHERE profile AND field_key = 'mentor_expertise';
+
+-- DELTA(H64): the organizer can open requests to people without event access.
+-- Default true keeps the help desk to attendees, as it always was.
+ALTER TABLE public.event_config
+  ADD COLUMN helpdesk_event_access_only boolean NOT NULL DEFAULT true;

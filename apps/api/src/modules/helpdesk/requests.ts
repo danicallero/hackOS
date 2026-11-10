@@ -24,7 +24,7 @@ import {
   presentSql,
   toCard,
 } from "./helpers.js";
-import { assertHelpdeskOpen } from "./schedule.js";
+import { assertHelpdeskOpen, eventAccessOnly } from "./schedule.js";
 import type { ClaimInput, CreateRequestInput, EditRequestInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
@@ -502,7 +502,7 @@ export async function createRequest(
   const topicIds = [...new Set(input.topicIds)].sort((a, b) => a - b);
   const result = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
-    if (!(await hasEventAccess(client, userId))) {
+    if ((await eventAccessOnly(client)) && !(await hasEventAccess(client, userId))) {
       throw new ForbiddenError("The help desk is only available to event attendees");
     }
     await assertHelpdeskOpen(client);

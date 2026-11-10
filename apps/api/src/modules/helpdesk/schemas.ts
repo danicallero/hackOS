@@ -47,6 +47,7 @@ export const availabilityBody = z.object({
 export type AvailabilityInput = z.infer<typeof availabilityBody>;
 
 export const scheduleBody = z.strictObject({
+  eventAccessOnly: z.boolean().optional(),
   windows: z
     .array(
       z

@@ -223,3 +223,11 @@ the venue now (door scan, H24) offers: `GET /api/helpdesk/topics` answers
 requesters, and any call with `available=1`, with those; eligible helpers and
 managers otherwise get the whole catalogue. Only eligible helpers create areas
 (`POST /api/helpdesk/topics`); managers rename, merge and delete unused ones.
+
+## Who may request help
+
+By default only people with event access may open a request (403 otherwise).
+`PUT /api/helpdesk/schedule` takes `eventAccessOnly` (omitted keeps the stored
+value, `event_config.helpdesk_event_access_only`, migration `0804`); `false` lets
+any account holding `helpdesk:request` ask. The switch is at the top of
+Help desk › Hours and is audited with the opening windows.

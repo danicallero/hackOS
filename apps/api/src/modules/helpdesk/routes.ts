@@ -367,7 +367,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: scheduleBody,
         summary: "Set the help desk opening hours",
         description:
-          "Replaces every opening window (H64) with up to 30 `{ startsAt, endsAt }` instants, each ending after it starts and none overlapping (400); an empty list clears the schedule and the help desk is always open. Outside the windows, creating a request answers 409 `helpdesk_closed`; claims, resolution, browsing helpers, helper settings and existing requests are unaffected. Returns the new schedule as GET /api/helpdesk/schedule. Audited with the old and new windows; repeating the stored windows writes nothing.",
+          "Replaces every opening window (H64), and optionally `eventAccessOnly` (omitted keeps it; default true: only people with event access may open a request, false lets any account holding `helpdesk:request` do so), with up to 30 `{ startsAt, endsAt }` instants, each ending after it starts and none overlapping (400); an empty list clears the schedule and the help desk is always open. Outside the windows, creating a request answers 409 `helpdesk_closed`; claims, resolution, browsing helpers, helper settings and existing requests are unaffected. Returns the new schedule as GET /api/helpdesk/schedule. Audited with the old and new windows; repeating the stored windows writes nothing.",
       },
     },
     async (req) => {

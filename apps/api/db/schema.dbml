@@ -600,6 +600,7 @@ Table event_config {
   event_starts_at "timestamp with time zone"
   hacking_ends_at "timestamp with time zone"
   hacking_starts_at "timestamp with time zone"
+  helpdesk_event_access_only boolean [not null, default: `true`]
   id integer [pk, not null]
   meal_plan_cutoff_hours integer [not null, default: `24`, note: '#933: meal plans lock this many hours before each meal starts.']
   name text

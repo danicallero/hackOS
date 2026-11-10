@@ -15,6 +15,7 @@ vi.mock(
   async () => (await import("../dialog-test-utils")).dateTimeInputMock,
 );
 const base: HelpdeskSchedule = {
+  eventAccessOnly: true,
   configured: true,
   open: false,
   windows: [first, second],
@@ -69,6 +70,7 @@ describe("help desk hours (H64)", () => {
         second,
         { startsAt: "2027-02-27T16:00:00.000Z", endsAt: "2027-02-27T18:00:00.000Z" },
       ],
+      eventAccessOnly: true,
     });
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });
@@ -95,7 +97,21 @@ describe("help desk hours (H64)", () => {
         container.querySelector<HTMLButtonElement>('button[aria-label^="helpDeskHoursRemove"]')!,
       ),
     );
-    expect(api.put).toHaveBeenCalledWith("/api/helpdesk/schedule", { windows: [] });
+    expect(api.put).toHaveBeenCalledWith("/api/helpdesk/schedule", {
+      windows: [],
+      eventAccessOnly: true,
+    });
+  });
+  it("lets the organizer open requests to people without event access", async () => {
+    vi.mocked(api.put).mockResolvedValue(base);
+    await act(async () => root.render(<Editor />));
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>("button[role=switch]")?.click(),
+    );
+    expect(api.put).toHaveBeenCalledWith("/api/helpdesk/schedule", {
+      windows: base.windows,
+      eventAccessOnly: false,
+    });
   });
   it("keeps the dialog and shows the API error when saving fails", async () => {
     vi.mocked(api.put).mockRejectedValue(new Error("Offline"));
