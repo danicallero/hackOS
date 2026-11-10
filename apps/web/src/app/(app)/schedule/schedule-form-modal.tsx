@@ -24,6 +24,7 @@ import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { type UserOption, UserPicker } from "@/components/common/user-picker";
+import { CateringSettingsPanel } from "@/components/onboarding/catering-settings";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -622,6 +623,7 @@ export function ScheduleFormModal({
             ) : (
               <PendingOwnersField owners={pendingOwners} onChange={setPendingOwners} />
             )}
+            {scheduleId ? <CateringSettingsPanel scheduleId={scheduleId} /> : null}
           </CollapsibleContent>
         </Collapsible>
       </div>

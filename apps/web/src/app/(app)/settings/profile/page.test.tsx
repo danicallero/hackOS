@@ -42,7 +42,14 @@ vi.mock("@/components/profile/personal-details", () => ({
 vi.mock("@/components/profile/public-profile-card", () => ({
   PublicProfileCard: () => <p>public-body</p>,
 }));
-vi.mock("./meals-section", () => ({ MealsSection: () => <p>meals-body</p> }));
+const rsvps = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/use-rsvps", () => ({ useRsvps: () => ({ items: rsvps.items }) }));
+vi.mock("@/components/onboarding/catering-rsvp", () => ({
+  CateringRsvpSection: () => <p>rsvp-body</p>,
+}));
+vi.mock("@/components/profile/mentor-profile-editor", () => ({
+  MentorProfileEditor: () => <p>mentor-body</p>,
+}));
 vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));
 vi.mock("./password-card", () => ({ PasswordRow: () => null }));
@@ -140,10 +147,28 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(container.textContent).not.toContain("roles-body");
   });
 
-  it("adds Meals to Personal details for a sponsor representative", async () => {
-    session.me = { ...participant, isSponsorRep: true };
+  it("adds the RSVP section to Personal details only while the person has open RSVPs", async () => {
+    rsvps.items = [{ activityId: 1 }];
     await render();
-    expect(openPanel()[0].textContent).toContain("meals-body");
+    expect(openPanel()[0].textContent).toContain("rsvp-body");
+    rsvps.items = [];
+    await render();
+    expect(openPanel()[0].textContent).not.toContain("rsvp-body");
+  });
+
+  it("adds the mentor section to the public profile tab only for holders of the capability", async () => {
+    session.me = { ...participant, capabilities: ["helpdesk:offer"] };
+    await render();
+    await openTab(1);
+    expect(container.textContent).toContain("mentor-body");
+    session.me = { ...participant, capabilities: ["*"] };
+    await render();
+    await openTab(1);
+    expect(container.textContent).toContain("mentor-body");
+    session.me = participant;
+    await render();
+    await openTab(1);
+    expect(container.textContent).not.toContain("mentor-body");
   });
 
   const openTab = async (index: number) => {

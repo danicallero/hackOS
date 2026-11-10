@@ -6,11 +6,13 @@ import { CertificatesPanel } from "@/components/certificates/certificates-panel"
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
+import { CateringRsvpSection } from "@/components/onboarding/catering-rsvp";
 import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
 import { PersonalDetails } from "@/components/profile/personal-details";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
+import { useRsvps } from "@/hooks/use-rsvps";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
@@ -18,7 +20,6 @@ import { useUrlTab } from "@/lib/url-tab";
 import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
-import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
 import { ProfileRoles } from "./profile-roles";
 import {
@@ -43,7 +44,8 @@ export default function ProfileSettingsPage() {
  */
 function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boolean }) {
   const { t } = useLocale();
-  const tabs = visibleProfileTabs(me, isPureApplicant);
+  const rsvps = useRsvps(me.hasEventAccess ? me.id : null);
+  const tabs = visibleProfileTabs(me, isPureApplicant, (rsvps.items?.length ?? 0) > 0);
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,
@@ -56,12 +58,12 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
     personal: false,
     public: false,
     mentor: false,
-    meals: false,
+    rsvp: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
   const onPublicDirty = useDirtySetter(setDirty, "public");
   const onMentorDirty = useDirtySetter(setDirty, "mentor");
-  const onMealsDirty = useDirtySetter(setDirty, "meals");
+  const onRsvpDirty = useDirtySetter(setDirty, "rsvp");
 
   function body(id: ProfileSectionId) {
     switch (id) {
@@ -71,8 +73,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return <PublicProfileCard onDirtyChange={onPublicDirty} />;
       case "mentor":
         return <MentorProfileEditor onDirtyChange={onMentorDirty} />;
-      case "meals":
-        return <MealsSection userId={me.id} onDirtyChange={onMealsDirty} />;
+      case "rsvp":
+        return <CateringRsvpSection userId={me.id} onDirtyChange={onRsvpDirty} />;
       case "passes":
         return <WalletSection />;
       case "certificates":

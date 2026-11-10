@@ -8,7 +8,7 @@ export type ProfileSectionId =
   | "personal"
   | "public"
   | "mentor"
-  | "meals"
+  | "rsvp"
   | "passes"
   | "certificates"
   | "security"
@@ -16,7 +16,7 @@ export type ProfileSectionId =
   | "danger";
 
 /** Sections with their own Save; their tab is marked while one holds unsaved edits. */
-export type EditableSection = "personal" | "public" | "mentor" | "meals";
+export type EditableSection = "personal" | "public" | "mentor" | "rsvp";
 
 export interface SectionDef {
   id: ProfileSectionId;
@@ -34,7 +34,7 @@ const TABS: TabDef[] = [
   {
     id: "personal",
     title: "personalDetails",
-    sections: [{ id: "personal" }, { id: "meals", title: "meals" }],
+    sections: [{ id: "personal" }, { id: "rsvp", title: "onboardingStepRsvp" }],
   },
   {
     id: "public",
@@ -63,7 +63,7 @@ const TABS: TabDef[] = [
  * current event access, as their APIs do (#934, #1083). A tab with no
  * section left is dropped.
  */
-export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
+export function visibleProfileTabs(me: Me, isPureApplicant: boolean, hasRsvps = false): TabDef[] {
   const visible = (id: ProfileSectionId) => {
     switch (id) {
       case "passes":
@@ -73,8 +73,8 @@ export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
         return me.hasEventAccess;
       case "mentor":
         return me.hasEventAccess && canOfferHelp(me);
-      case "meals":
-        return me.isSponsorRep;
+      case "rsvp":
+        return me.hasEventAccess && hasRsvps;
       case "roles":
         return me.roles.length > 0;
       default:
