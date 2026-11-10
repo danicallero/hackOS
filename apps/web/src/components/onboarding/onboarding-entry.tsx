@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
   APP_HOME_PATH,
+  forPerson,
   hasPendingOnboarding,
   ONBOARDING_PATH,
   readOnboarding,
@@ -19,6 +20,8 @@ import { useSessionContext } from "@/lib/session";
  */
 export function OnboardingEntry({ children }: { children: React.ReactNode }) {
   const { me } = useSessionContext();
+  const profileLocked = Boolean(me?.profileLocked);
+  const dietaryLocked = Boolean(me?.dietaryLocked);
   const pathname = usePathname();
   const router = useRouter();
   const eligible = Boolean(me?.hasEventAccess && me.emailVerified);
@@ -30,12 +33,15 @@ export function OnboardingEntry({ children }: { children: React.ReactNode }) {
     const controller = new AbortController();
     readOnboarding(controller.signal)
       .then((state) => {
-        if (!controller.signal.aborted && hasPendingOnboarding(state))
+        if (
+          !controller.signal.aborted &&
+          hasPendingOnboarding(forPerson(state, { profileLocked, dietaryLocked }))
+        )
           router.replace(ONBOARDING_PATH);
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [eligible, userId, pathname, router]);
+  }, [eligible, userId, pathname, router, profileLocked, dietaryLocked]);
 
   return children;
 }

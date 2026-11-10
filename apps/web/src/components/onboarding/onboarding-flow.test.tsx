@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   refresh: vi.fn(),
   role: "Participant" as string | null,
+  locks: { profileLocked: false, dietaryLocked: false },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -27,7 +28,7 @@ vi.mock("@/lib/i18n", () => ({
 }));
 vi.mock("@/lib/session", () => ({
   useSessionContext: () => ({
-    me: { id: 7, visibleRoleName: mocks.role, hasEventAccess: true },
+    me: { id: 7, visibleRoleName: mocks.role, hasEventAccess: true, ...mocks.locks },
     refresh: mocks.refresh,
   }),
 }));
@@ -147,6 +148,7 @@ const click = async (label: string) => {
 beforeEach(() => {
   for (const mock of Object.values(mocks)) if (typeof mock === "function") mock.mockReset();
   mocks.role = "Participant";
+  mocks.locks = { profileLocked: false, dietaryLocked: false };
   window.history.replaceState(null, "", "/onboarding");
   mocks.read.mockResolvedValue(journey());
   mocks.decide.mockResolvedValue(undefined);
@@ -164,9 +166,10 @@ describe("OnboardingFlow", () => {
   it("resumes at the first pending step and marks it as the current one", async () => {
     await mount();
     expect(container.querySelector("h1")?.textContent).toBe("title:networking");
-    const progress = container.querySelector('[role="progressbar"]');
-    expect(progress?.getAttribute("aria-valuetext")).toBe("title:networking");
-    expect(progress?.children.length).toBe(5);
+    const current = container.querySelector('[aria-current="step"]');
+    expect(current?.getAttribute("aria-label")).toBe("title:networking");
+    // The welcome step has no organizer message, so it is not part of the journey.
+    expect(container.querySelectorAll("ol button").length).toBe(4);
     expect(container.textContent).toContain("create");
   });
 
@@ -240,6 +243,37 @@ describe("OnboardingFlow", () => {
     expect(mocks.push).not.toHaveBeenCalled();
     expect(container.textContent).toContain("onboardingCouldNotSave");
     expect(container.querySelector("h1")?.textContent).toBe("title:networking");
+  });
+
+  it("marks completed steps with a done label", async () => {
+    await mount();
+    const labels = [...container.querySelectorAll("ol button")].map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(labels[0]).toBe("title:profile · onboardingStatusDone");
+    expect(labels[1]).toBe("title:networking");
+  });
+
+  it("hides the profile and dietary steps from someone who can no longer change them", async () => {
+    mocks.locks = { profileLocked: true, dietaryLocked: true };
+    mocks.read.mockResolvedValue(
+      journey({ dietary: step("dietary", "pending"), profile: step("profile", "pending") }),
+    );
+    await mount();
+    const labels = [...container.querySelectorAll("ol button")].map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(labels.join()).not.toContain("title:profile");
+    expect(labels.join()).not.toContain("title:dietary");
+  });
+
+  it("shows the welcome step only when the organizer wrote a message", async () => {
+    mocks.read.mockResolvedValue({
+      ...journey({ welcome: step("welcome", "pending") }),
+      welcomeMessage: { es: "Hola" },
+    });
+    await mount();
+    expect(container.querySelector("h1")?.textContent).toBe("title:welcome");
   });
 
   it("renders the completion step when it is requested", async () => {

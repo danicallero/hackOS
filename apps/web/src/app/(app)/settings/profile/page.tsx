@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { TabBar } from "@/components/common/tab-bar";
 import { CateringRsvpSection } from "@/components/onboarding/catering-rsvp";
+import { ShareCard } from "@/components/onboarding/onboarding-steps";
 import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
 import { PersonalDetails } from "@/components/profile/personal-details";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
@@ -73,6 +74,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
         return <PublicProfileCard onDirtyChange={onPublicDirty} />;
       case "mentor":
         return <MentorProfileEditor onDirtyChange={onMentorDirty} />;
+      case "share":
+        return <ShareCard />;
       case "rsvp":
         return <CateringRsvpSection userId={me.id} onDirtyChange={onRsvpDirty} />;
       case "passes":

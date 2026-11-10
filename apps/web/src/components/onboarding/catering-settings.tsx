@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -8,7 +9,7 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
 import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -29,6 +30,7 @@ import {
   slugifyOptionKey,
 } from "@/lib/rsvp";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 /**
  * Organizer RSVP editor for one schedule entry (schedule:manage): enable and
@@ -145,69 +147,82 @@ function SettingsForm({
 
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("rsvpAudience")}</legend>
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
-              {kinds.map((kind) => (
-                <label
-                  key={kind}
-                  htmlFor={`${baseId}-kind-${kind}`}
-                  className="flex items-center gap-2 text-sm"
-                >
-                  <Checkbox
-                    id={`${baseId}-kind-${kind}`}
-                    checked={draft.kinds.includes(kind)}
-                    onCheckedChange={(checked) =>
+            <div className="flex flex-wrap gap-2">
+              {kinds.map((kind) => {
+                const on = draft.kinds.includes(kind);
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() =>
                       patch({
-                        kinds: checked
-                          ? [...draft.kinds, kind]
-                          : draft.kinds.filter((k) => k !== kind),
+                        kinds: on ? draft.kinds.filter((k) => k !== kind) : [...draft.kinds, kind],
                       })
                     }
-                  />
-                  {t(KIND_LABEL[kind])}
-                </label>
-              ))}
+                    className={cn(
+                      "inline-flex min-h-(--target-min) items-center gap-1.5 rounded-button border px-3 text-sm transition-colors",
+                      on
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-accent",
+                    )}
+                  >
+                    {on && <CheckIcon aria-hidden weight="bold" className="size-3.5" />}
+                    {t(KIND_LABEL[kind])}
+                  </button>
+                );
+              })}
             </div>
             {settings.isMeal && (
               <p className="text-muted-foreground text-xs">{t("rsvpMealsNoParticipants")}</p>
             )}
           </fieldset>
 
-          <div className="grid items-start gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor={`${baseId}-date`}>{t("rsvpDate")}</Label>
-              <DateTimeInput
-                id={`${baseId}-date`}
-                value={draft.rsvpDate}
-                onChange={(rsvpDate) => patch({ rsvpDate })}
-                nullOption={{ label: t("rsvpUseScheduleDate") }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`${baseId}-closes`}>{t("rsvpClosesAt")}</Label>
-              <DateTimeInput
-                id={`${baseId}-closes`}
-                value={draft.closesAt}
-                onChange={(closesAt) => patch({ closesAt })}
-                nullOption={{ label: t("rsvpUseDefaultClose") }}
-              />
-            </div>
-          </div>
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="-ml-2">
+                {t("rsvpCustomize")}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-5 pt-3">
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor={`${baseId}-date`}>{t("rsvpDate")}</Label>
+                  <DateTimeInput
+                    id={`${baseId}-date`}
+                    value={draft.rsvpDate}
+                    onChange={(rsvpDate) => patch({ rsvpDate })}
+                    nullOption={{ label: t("rsvpUseScheduleDate") }}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`${baseId}-closes`}>{t("rsvpClosesAt")}</Label>
+                  <DateTimeInput
+                    id={`${baseId}-closes`}
+                    value={draft.closesAt}
+                    onChange={(closesAt) => patch({ closesAt })}
+                    nullOption={{ label: t("rsvpUseDefaultClose") }}
+                  />
+                </div>
+              </div>
 
-          <LocalizedFields
-            baseId={baseId}
-            label={t("rsvpName")}
-            values={draft.nameI18n}
-            placeholder={settings.defaults.name}
-            onChange={(nameI18n) => patch({ nameI18n })}
-          />
-          <LocalizedFields
-            baseId={`${baseId}-d`}
-            label={t("rsvpDescription")}
-            values={draft.descriptionI18n}
-            placeholder={settings.defaults.description ?? ""}
-            multiline
-            onChange={(descriptionI18n) => patch({ descriptionI18n })}
-          />
+              <LocalizedFields
+                baseId={baseId}
+                label={t("rsvpName")}
+                values={draft.nameI18n}
+                placeholder={settings.defaults.name}
+                onChange={(nameI18n) => patch({ nameI18n })}
+              />
+              <LocalizedFields
+                baseId={`${baseId}-d`}
+                label={t("rsvpDescription")}
+                values={draft.descriptionI18n}
+                placeholder={settings.defaults.description ?? ""}
+                multiline
+                onChange={(descriptionI18n) => patch({ descriptionI18n })}
+              />
+            </CollapsibleContent>
+          </Collapsible>
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">{t("rsvpOptions")}</legend>

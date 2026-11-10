@@ -1,6 +1,7 @@
 "use client";
 
 import type { OnboardingAction, OnboardingStep } from "@hackos/shared/onboarding";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -26,6 +27,7 @@ import {
   currentStep,
   decideStep,
   deferUntilTomorrow,
+  forPerson,
   markOnboardingOffered,
   type OnboardingState,
   pendingSteps,
@@ -57,7 +59,7 @@ export function OnboardingFlow() {
     if (me) markOnboardingOffered(me.id);
   }, [me]);
 
-  const data = state.data;
+  const data = state.data && me ? forPerson(state.data, me) : null;
   const requested = local ?? params.get("step");
   const step = data ? currentStep(data, requested) : null;
 
@@ -127,34 +129,31 @@ export function OnboardingFlow() {
             : undefined
         }
       />
-      <div
-        role="progressbar"
-        aria-label={t("onboardingProgress")}
-        aria-valuemin={0}
-        aria-valuemax={data.steps.length}
-        aria-valuenow={
-          Math.max(
-            0,
-            data.steps.findIndex((item) => item.step === step.step),
-          ) + 1
-        }
-        aria-valuetext={t(STEP_TITLES[step.step])}
-        className="flex gap-1"
-      >
-        {data.steps.map((item) => (
-          <span
-            key={item.step}
-            className={cn(
-              "h-1 flex-1 rounded-full",
-              item.step === step.step
-                ? "bg-primary"
-                : item.status === "pending"
-                  ? "bg-border"
-                  : "bg-primary/40",
-            )}
-          />
-        ))}
-      </div>
+      <ol className="flex flex-wrap gap-2" aria-label={t("onboardingProgress")}>
+        {data.steps.map((item, index) => {
+          const done = item.status === "completed";
+          const current = item.step === step.step;
+          return (
+            <li key={item.step}>
+              <button
+                type="button"
+                onClick={() => show(item.step)}
+                aria-current={current ? "step" : undefined}
+                aria-label={`${t(STEP_TITLES[item.step])}${done ? ` · ${t("onboardingStatusDone")}` : ""}`}
+                className={cn(
+                  "inline-flex size-8 items-center justify-center rounded-full border text-sm tabular-nums transition-colors",
+                  done && "border-success bg-success text-success-foreground",
+                  !done && current && "border-primary bg-primary text-primary-foreground",
+                  !done && !current && "text-muted-foreground hover:bg-accent",
+                  done && current && "ring-2 ring-primary ring-offset-2 ring-offset-background",
+                )}
+              >
+                {done ? <CheckIcon aria-hidden weight="bold" className="size-4" /> : index + 1}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
       {error && <ContextualError message={error} />}
       <section aria-labelledby="onboarding-step">
         <span id="onboarding-step" className="sr-only">

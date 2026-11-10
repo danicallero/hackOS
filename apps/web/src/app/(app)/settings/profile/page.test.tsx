@@ -47,6 +47,7 @@ vi.mock("@/hooks/use-rsvps", () => ({ useRsvps: () => ({ items: rsvps.items }) }
 vi.mock("@/components/onboarding/catering-rsvp", () => ({
   CateringRsvpSection: () => <p>rsvp-body</p>,
 }));
+vi.mock("@/components/onboarding/onboarding-steps", () => ({ ShareCard: () => <p>share-body</p> }));
 vi.mock("@/components/profile/mentor-profile-editor", () => ({
   MentorProfileEditor: () => <p>mentor-body</p>,
 }));
@@ -154,6 +155,12 @@ describe("Profile tabs (H28, #1083)", () => {
     rsvps.items = [];
     await render();
     expect(openPanel()[0].textContent).not.toContain("rsvp-body");
+  });
+
+  it("lets the person revisit the share card from the public profile tab", async () => {
+    await render();
+    await openTab(1);
+    expect(container.textContent).toContain("share-body");
   });
 
   it("adds the mentor section to the public profile tab only for holders of the capability", async () => {

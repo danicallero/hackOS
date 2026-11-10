@@ -533,6 +533,15 @@ export function ScheduleFormModal({
           </Field>
         </div>
 
+        {scheduleId ? (
+          <section aria-labelledby="schedule-rsvp-title" className="space-y-3 border-t pt-5">
+            <h3 id="schedule-rsvp-title" className="type-label text-muted-foreground">
+              {t("rsvpSectionTitle")}
+            </h3>
+            <CateringSettingsPanel scheduleId={scheduleId} />
+          </section>
+        ) : null}
+
         <Collapsible open={translationsOpen} onOpenChange={setTranslationsOpen}>
           <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">
             <CollapsibleTrigger asChild>
@@ -623,7 +632,6 @@ export function ScheduleFormModal({
             ) : (
               <PendingOwnersField owners={pendingOwners} onChange={setPendingOwners} />
             )}
-            {scheduleId ? <CateringSettingsPanel scheduleId={scheduleId} /> : null}
           </CollapsibleContent>
         </Collapsible>
       </div>

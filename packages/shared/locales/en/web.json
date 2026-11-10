@@ -4111,5 +4111,9 @@
   "toastSaveRsvpSettings": "Save RSVP",
   "couldNotSaveRsvpSettings": "Could not save the RSVP settings",
   "couldNotLoadRsvpSettings": "Could not load the RSVP settings",
-  "rsvpUnanswered": "No answer"
+  "rsvpUnanswered": "No answer",
+  "onboardingGreeting": "Hi, {name}",
+  "onboardingStatusDone": "done",
+  "rsvpSectionTitle": "Attendance",
+  "rsvpCustomize": "Customize date, texts and close"
 }

@@ -4,6 +4,7 @@ import type {
   ResolvedOnboardingStep,
 } from "@hackos/shared/onboarding";
 import { api } from "./api";
+import type { Me } from "./types";
 
 /** GET /api/me/onboarding. The server resolves every step; the client never re-derives status. */
 export interface OnboardingState {
@@ -84,4 +85,21 @@ export function markOnboardingOffered(userId: number): void {
   } catch {
     /* The flow is optional; without storage it is offered again on the next load. */
   }
+}
+
+/**
+ * The journey as this person can act on it: steps they cannot change are not
+ * shown (identity fields once locked, dietary data once answered), and the
+ * welcome step only exists when the organizer wrote a message for it.
+ */
+export function forPerson(
+  state: OnboardingState,
+  me: Pick<Me, "profileLocked" | "dietaryLocked">,
+): OnboardingState {
+  const hidden = new Set<OnboardingStep>();
+  if (me.profileLocked) hidden.add("profile");
+  if (me.dietaryLocked) hidden.add("dietary");
+  const welcome = state.welcomeMessage;
+  if (!welcome || !Object.values(welcome).some(Boolean)) hidden.add("welcome");
+  return { ...state, steps: state.steps.filter((step) => !hidden.has(step.step)) };
 }

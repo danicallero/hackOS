@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CateringRsvpSection } from "@/components/onboarding/catering-rsvp";
 import { StepAlternatives, type StepProps } from "@/components/onboarding/onboarding-steps";
 import { Button } from "@/components/ui/button";
@@ -18,18 +19,22 @@ export function RsvpStep(props: StepProps) {
   const { t } = useLocale();
   const { me } = useSessionContext();
   const rsvps = useRsvps(me?.id ?? null);
+  const [dirty, setDirty] = useState(false);
   if (!me) return null;
+  // Continue only while there is nothing to save; with edits, Save completes the step.
   const actions = (
     <>
       <StepAlternatives {...props} />
-      <Button
-        type="button"
-        variant="outline"
-        disabled={props.pending}
-        onClick={() => props.decide("complete")}
-      >
-        {t("onboardingContinue")}
-      </Button>
+      {!dirty && (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={props.pending}
+          onClick={() => props.decide("complete")}
+        >
+          {t("onboardingContinue")}
+        </Button>
+      )}
     </>
   );
   if (rsvps.items?.length === 0)
@@ -38,6 +43,7 @@ export function RsvpStep(props: StepProps) {
     <CateringRsvpSection
       userId={me.id}
       onSaved={() => props.decide("complete")}
+      onDirtyChange={setDirty}
       actions={actions}
     />
   );

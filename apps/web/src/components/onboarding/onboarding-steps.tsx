@@ -96,22 +96,20 @@ export function eventDateRange(
   return end && end !== start ? `${start} – ${end}` : start;
 }
 
+/** Only shown when the organizer wrote a message: a greeting and that message, nothing else. */
 export function WelcomeStep({
   decide,
   pending,
   allowed,
   message,
 }: StepProps & { message?: string }) {
-  const { t, language } = useLocale();
-  const event = useEventFacts();
-  const dates = eventDateRange(event, language);
+  const { t } = useLocale();
+  const { me } = useSessionContext();
   return (
     <div className="space-y-6">
-      <div className="space-y-1">
-        {event?.name && <p className="type-section-title">{event.name}</p>}
-        {event?.tagline && <p className="text-pretty">{event.tagline}</p>}
-        {dates && <p className="text-muted-foreground">{dates}</p>}
-      </div>
+      {me?.name && (
+        <p className="type-section-title">{t("onboardingGreeting", { name: me.name })}</p>
+      )}
       {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <StepAlternatives
@@ -273,7 +271,14 @@ export function NotificationsStep(props: StepProps) {
   );
 }
 
-export function ShareStep({ decide }: StepProps) {
+/** The share card for the signed-in person; `onContinue`/`onSkip` only inside the journey. */
+export function ShareCard({
+  onContinue,
+  onSkip,
+}: {
+  onContinue?: () => void;
+  onSkip?: () => void;
+}) {
   const { me } = useSessionContext();
   const { language } = useLocale();
   const event = useEventFacts();
@@ -282,23 +287,25 @@ export function ShareStep({ decide }: StepProps) {
     ? formatEventDate(event.hackingStartsAt, language, "date", event.timezone).slice(-4)
     : "";
   return (
-    <div className="space-y-4">
-      <SocialSharing
-        event={{
-          name: event.name,
-          year: /^\d{4}$/.test(year) ? year : "",
-          dateLabel: eventDateRange(event, language) || undefined,
-        }}
-        attendee={{
-          displayName: [me.name, me.surname].filter(Boolean).join(" "),
-          roleLabel: me.visibleRoleName ?? undefined,
-          photoUrl: me.image,
-        }}
-        onContinue={() => decide("complete")}
-        onSkip={() => decide("skip")}
-      />
-    </div>
+    <SocialSharing
+      event={{
+        name: event.name,
+        year: /^\d{4}$/.test(year) ? year : "",
+        dateLabel: eventDateRange(event, language) || undefined,
+      }}
+      attendee={{
+        displayName: [me.name, me.surname].filter(Boolean).join(" "),
+        roleLabel: me.visibleRoleName ?? undefined,
+        photoUrl: me.image,
+      }}
+      onContinue={onContinue}
+      onSkip={onSkip}
+    />
   );
+}
+
+export function ShareStep({ decide }: StepProps) {
+  return <ShareCard onContinue={() => decide("complete")} onSkip={() => decide("skip")} />;
 }
 
 /** Where a still-open step can be finished later, so nothing needs to be remembered. */

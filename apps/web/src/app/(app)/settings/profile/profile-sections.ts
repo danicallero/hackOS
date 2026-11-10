@@ -8,6 +8,7 @@ export type ProfileSectionId =
   | "personal"
   | "public"
   | "mentor"
+  | "share"
   | "rsvp"
   | "passes"
   | "certificates"
@@ -39,7 +40,11 @@ const TABS: TabDef[] = [
   {
     id: "public",
     title: "publicProfileTitle",
-    sections: [{ id: "public" }, { id: "mentor", title: "mentorProfileTitle" }],
+    sections: [
+      { id: "public" },
+      { id: "mentor", title: "mentorProfileTitle" },
+      { id: "share", title: "onboardingStepShare" },
+    ],
   },
   {
     id: "wallet",
@@ -73,6 +78,8 @@ export function visibleProfileTabs(me: Me, isPureApplicant: boolean, hasRsvps = 
         return me.hasEventAccess;
       case "mentor":
         return me.hasEventAccess && canOfferHelp(me);
+      case "share":
+        return me.hasEventAccess;
       case "rsvp":
         return me.hasEventAccess && hasRsvps;
       case "roles":
