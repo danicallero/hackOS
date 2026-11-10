@@ -312,6 +312,7 @@ export function PublicProfileCard({
               <ProfileTextFields
                 settings={settings}
                 onChange={update}
+                ownAccount
                 className={
                   onboarding
                     ? "grid items-start gap-4 sm:grid-cols-2"

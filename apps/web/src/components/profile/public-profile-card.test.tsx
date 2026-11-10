@@ -156,6 +156,18 @@ describe("PublicProfileCard", () => {
     expect(container.textContent).not.toContain("publicProfilePreview");
   });
 
+  it("takes the GitHub link from the linked account instead of a typed address", async () => {
+    vi.mocked(api.get).mockImplementation(async (path: string) =>
+      path === "/api/me/github"
+        ? { configured: true, login: "maria" }
+        : profile({ directoryVisible: true }),
+    );
+    await render(<PublicProfileCard />);
+    expect(container.textContent).toContain("github.com/maria");
+    expect(container.textContent).not.toContain("githubLinkAccount");
+    expect(container.querySelectorAll("[aria-label=publicProfileLinkKind]")).toHaveLength(0);
+  });
+
   it("reveals the fields and a live preview once opted in", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     await render(<PublicProfileCard />);

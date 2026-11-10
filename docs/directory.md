@@ -136,7 +136,7 @@ including the account photo, stays in `users` and is projected, never copied.
 | `headline` | `NULL` | Free text, ≤80 characters. |
 | `location_note` | `NULL` | Free text written by the person (for example "Floor 1, table 12"), ≤60 characters. There is no staff-assigned seating and presence (`time_logs`) is never exposed. |
 | `bio` | `NULL` | Free text, ≤500 characters; line breaks kept, other control characters rejected. |
-| `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `github`, `x`, `instagram`, `website` or `other`. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
+| `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `x`, `instagram`, `website` or `other`; a submitted `github` entry is dropped, because the GitHub link is the member's linked GitHub account (`POST /api/me/github/authorize`) and readers see `https://github.com/<login>` appended to the stored links while that account is linked, and not at all after unlinking. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
 | `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
 | `onboarding_completed_at` | `NULL` | Explicit completion or opt-out of the web profile step (migration `0104`); separate from sharing consent. |
@@ -212,7 +212,7 @@ badge or ticket.
 | `displayName` | `name` + surname initial, or full surname | always |
 | `photoUrl` | `/api/users/:id/photo?v=…` for `users.photo_key` | `show_photo` and a photo exists |
 | `headline`, `bio`, `locationNote` | profile | when set |
-| `socials[]` `{kind, url}` | profile | always (may be empty) |
+| `socials[]` `{kind, url}` | profile, plus the linked GitHub account | always (may be empty) |
 | `cvUrl` | `/api/directory/:userId/cv` (the owner's preview: `/api/me/public-profile/cv`) | `share_cv` and a CV exists |
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |

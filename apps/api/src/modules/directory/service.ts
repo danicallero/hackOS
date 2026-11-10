@@ -160,10 +160,11 @@ const DISPLAY_NAME_JOIN = `
   ) e`;
 
 /**
- * Every field a reader can see. `profiles` is the FROM item that binds `p`:
+ * Every field a reader can see. The GitHub link is the member's linked GitHub account,
+ * never typed text. `profiles` is the FROM item that binds `p`:
  * the stored table or the owner's unsaved preview.
  */
-function entrySql(profiles: string): string {
+function entrySql(profiles: string, accountLinks = true): string {
   return `
   SELECT u.id AS user_id,
          e.display_name,
@@ -171,7 +172,12 @@ function entrySql(profiles: string): string {
          p.headline,
          p.bio,
          p.location_note,
-         p.socials,
+         COALESCE((SELECT jsonb_agg(s) FROM jsonb_array_elements(p.socials) s
+                    WHERE s->>'kind' <> 'github'), '[]'::jsonb)
+         || COALESCE((SELECT jsonb_build_array(
+                        jsonb_build_object('kind', 'github', 'url', 'https://github.com/' || ga.login))
+                        FROM github_accounts ga
+                       WHERE ga.user_id = u.id AND ${accountLinks}), '[]'::jsonb) AS socials,
          (p.share_cv AND COALESCE(fcv.key, p.cv_key) IS NOT NULL) AS has_cv,
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('kind', 'project', 'id', sr.id, 'name', sr.name) ORDER BY sr.id)
@@ -290,7 +296,7 @@ export async function getDirectoryEntry(readerId: number, userId: number): Promi
   if (!rows[0]) {
     if (!mentor) throw new NotFoundError("Person not found");
     const { rows: only } = await pool.query<EntryRow>(
-      `${entrySql(MENTOR_ONLY_PROFILE)}
+      `${entrySql(MENTOR_ONLY_PROFILE, false)}
         WHERE u.is_test_account = false AND u.id = $1
           AND EXISTS (SELECT 1 FROM user_event_access a WHERE a.user_id = u.id)`,
       [userId],
@@ -463,7 +469,9 @@ async function presentProfile(
     headline: profile.headline,
     bio: profile.bio,
     locationNote: profile.location_note,
-    socials: profile.socials.map(({ kind, url }) => ({ kind, url })),
+    socials: profile.socials
+      .filter(({ kind }) => kind !== "github")
+      .map(({ kind, url }) => ({ kind, url })),
     shareCv: profile.share_cv,
     cv: formCv
       ? {
