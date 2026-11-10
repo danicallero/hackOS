@@ -333,7 +333,15 @@ function fitText(
     }
   }
   ctx.font = font(min);
-  const lines = wrap(ctx, text, maxWidth);
+  let lines = wrap(ctx, text, maxWidth);
+  // Still too wide at the minimum (an unbreakable word): scale the size to the width.
+  const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
+  if (widest > maxWidth && lines.length <= maxLines) {
+    const size = Math.max(12, Math.floor((min * maxWidth) / widest));
+    ctx.font = font(size);
+    lines = wrap(ctx, text, maxWidth);
+    return { size, lines };
+  }
   const kept = lines.slice(0, maxLines);
   if (lines.length > maxLines) {
     let last = kept[maxLines - 1];
@@ -515,7 +523,7 @@ function drawSeagull(ctx: Ctx, o: DrawCardOptions, passW: number, height: number
  * Vertical formats follow the landscape hierarchy (event line, name, role),
  * all left-aligned on one margin: the text block on top, the tilted pass
  * anchored to the right below it as the focal point, the host as the call to
- * action under it on the left. The column is centred inside the format's safe
+ * action centred under the pass. The column is centred inside the format's safe
  * band, so no format has dead space at one end. Story keeps the
  * top ~250 px and bottom ~340 px free of content (the bands Instagram overlays);
  * portrait and square keep a margin so the 3:4 profile-grid crop does not cut
@@ -648,10 +656,10 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
     // Side by side: text column left, tilted pass right.
     const wide = o.format === "landscape";
     const margin = wide ? 72 : 64;
-    const passW = wide ? 352 : 440;
+    const passW = wide ? 352 : 470;
     const passH = passW * (1165 / 838);
-    const gull = wide ? 115 : 130;
-    const textW = wide ? 658 : width - margin - passW - 64 - 40;
+    const gull = wide ? 115 : 140;
+    const textW = wide ? 658 : width - margin - passW - 64 - 56;
     const rows = posterRows(
       ctx,
       o,
@@ -660,28 +668,62 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
       wide ? 2 : 3,
       2,
     );
-    const textH = rows.reduce((sum, r) => sum + r.lineHeight, 0);
-    drawPosterRows(ctx, rows, margin, wide ? 128 : (height - textH) / 2 - 24, "left");
+    // Landscape and Square: the text block sits at the top-left. Square centres gull, pass and
+    // the host beneath it as one group.
+    const groupTop = (height - (gull + passH + 70)) / 2 - 30;
+    drawPosterRows(ctx, rows, margin, wide ? 128 : 64, "left");
+    const passCenter = {
+      x: width - 64 - passW / 2 - (wide ? 14 : 0),
+      y: (wide ? 125 : groupTop + gull) + passH / 2,
+    };
     ctx.save();
-    ctx.translate(
-      width - 64 - passW / 2 - (wide ? 14 : 0),
-      (wide ? 125 : (height - passH) / 2 + gull / 2) + passH / 2,
-    );
+    ctx.translate(passCenter.x, passCenter.y);
     ctx.rotate(3 * (Math.PI / 180));
     ctx.translate(-passW / 2, -passH / 2);
     drawPass(ctx, o, passW);
     drawSeagull(ctx, o, passW, gull, 0.62);
     ctx.restore();
-    drawHost(margin, height - (wide ? 56 : 64), 30, textW, "left");
+    if (wide) drawHost(margin, height - 56, 30, textW, "left");
+    else drawHost(passCenter.x, passCenter.y + passH / 2 + 64, 30, passW, "center");
     return;
   }
 
   const layout = STACK_LAYOUT[o.format];
   const margin = 72;
   const textW = width - margin * 2;
-  const rows = posterRows(ctx, o, textW, layout, o.format === "story" ? 2 : 1, 1);
+  const rows = posterRows(ctx, o, textW, layout, 1, 1);
   const textH = rows.reduce((sum, r) => sum + r.lineHeight, 0);
-  const hostBlock = o.host ? layout.host * 2.4 : 20;
+  const hostBlock = o.host ? layout.host * 2.2 : 20;
+  if (o.format === "story") {
+    // The ticket is anchored at the bottom-right corner and grows to the left
+    // (and up) as far as the text block allows; tilted a little counter-clockwise.
+    const tilt = -3 * (Math.PI / 180);
+    drawPosterRows(ctx, rows, margin, layout.top, "left");
+    const textBottom = layout.top + textH;
+    const bottom = layout.bottom - hostBlock;
+    let w = Math.min(layout.passMax, width - margin * 2);
+    while (
+      w > 300 &&
+      bottom - w * (1165 / 838) * Math.cos(tilt) < textBottom + layout.gull * 0.25
+    ) {
+      w -= 4;
+    }
+    ctx.save();
+    ctx.translate(width - margin, bottom);
+    ctx.rotate(tilt);
+    ctx.translate(-w, -w * (1165 / 838));
+    drawPass(ctx, o, w);
+    drawSeagull(ctx, o, w, layout.gull, 0.8);
+    ctx.restore();
+    drawHost(
+      width - margin - (w * Math.cos(tilt)) / 2,
+      bottom + layout.host * 1.7,
+      layout.host,
+      w,
+      "center",
+    );
+    return;
+  }
   const region = layout.bottom - layout.top;
   const fitPass = (gap: number) =>
     Math.min(layout.passMax, (region - textH - gap - hostBlock) / (1165 / 838));
@@ -712,7 +754,13 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
   drawPass(ctx, o, passW);
   drawSeagull(ctx, o, passW, layout.gull, 0.8);
   ctx.restore();
-  drawHost(margin, passTop + passH + layout.host * 1.7, layout.host, textW, "left");
+  drawHost(
+    width - margin - passW / 2,
+    passTop + passH + layout.host * 1.7,
+    layout.host,
+    passW,
+    "center",
+  );
 }
 
 export function createShareCanvas(format: ShareFormat): HTMLCanvasElement {

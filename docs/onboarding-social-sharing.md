@@ -53,10 +53,11 @@ logo and date in the header, the strip, NAME and ROLE side by side (red mono
 labels, Inter values), and the photo where the QR sits (initials on ink when
 there is no photo). It is drawn slightly tilted on the ink canvas with Emilia
 the seagull perched on it. All text is left-aligned on one margin. Landscape and Square put the text
-column (event line, name as the hero, role, host) on the left and the tilted
-pass on the right. Portrait and Story stack the text on top, anchor the pass to
-the right below it and put the host (the link, larger in Story) under it on the
-left; the column is centred in the format's safe band and the pass is scaled to
+column (Square: at the top-left) (event line, name as the hero, role, host) on the left and the tilted
+pass on the right. Portrait stacks the text on top and anchors the pass to the right below it;
+Story instead anchors the ticket at the bottom-right corner and grows it to the
+left and up as far as the text block allows, and and put the host (the link, larger in Story) centred under it
+(Square too; Landscape keeps it with the text column); the column is centred in the format's safe band and the pass is scaled to
 fill what is left. The pass header shows the supplied date with the year
 (`dateWithYear`: "26 - 28 feb" becomes "26 - 28 feb 2027" unless the label
 already has it); the host line adds the supplied location. Long names shrink
