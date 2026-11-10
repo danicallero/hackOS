@@ -46,7 +46,8 @@ ALTER TABLE public.role_capabilities ADD CONSTRAINT role_capabilities_known_cata
     'judging:export','sponsors:manage','challenges:manage','schedule:read',
     'schedule:manage','announcements:manage','tv:control','notifications:send',
     'audit:read','exports:run','event:manage','venue:manage','wallet:manage',
-    'presence:manage','helpdesk:offer'
+    'presence:manage','helpdesk:offer','helpdesk:request','helpdesk:coverage',
+    'helpdesk:manage'
   ]));
 INSERT INTO public.role_capabilities (role_id, capability, state)
 SELECT id, 'helpdesk:offer', 'allow'::public.permission_state FROM public.roles
