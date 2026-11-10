@@ -284,7 +284,6 @@ export function MentorStep(props: StepProps) {
     <div ref={root} className="space-y-6">
       <MentorProfileEditor
         onDirtyChange={setDirty}
-        alerts={false}
         onSaved={() => props.decide("complete")}
         // When the mentor plans to be at the venue; each change saves on its own (H62).
         extra={

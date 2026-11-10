@@ -37,7 +37,6 @@ export function MentorProfileEditor({
   actions,
   submitLabel,
   extra,
-  alerts = true,
   subjectId,
 }: {
   onSaved?: (profile: MentorProfile) => void;
@@ -48,8 +47,6 @@ export function MentorProfileEditor({
   submitLabel?: string;
   /** More to fill in before the actions (the onboarding step adds the venue plan). */
   extra?: React.ReactNode;
-  /** Show the help desk's challenge alerts (My profile); the journey asks only the essentials. */
-  alerts?: boolean;
   /** User management: edit this person's profile instead of the caller's. */
   subjectId?: number;
 }) {
@@ -157,7 +154,7 @@ export function MentorProfileEditor({
           />
         </div>
       )}
-      {helper && alerts && helper.challengeOptions.length > 0 && (
+      {helper && helper.challengeOptions.length > 0 && (
         <div className="space-y-2">
           <Label htmlFor={`${labelId}-challenges`}>{t("helpDeskChallengeAlerts")}</Label>
           <MultiSelect
