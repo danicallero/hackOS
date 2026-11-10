@@ -4,13 +4,14 @@ import type { FastifyInstance } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { pool } from "../../db/pool.js";
+import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
 import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
 import { getRsvps, submitRsvps, toRsvpItem } from "./service.js";
 import { getRsvpSettings, putRsvpSettings } from "./settings.js";
-import { rsvpSummaries } from "./summary.js";
+import { dietaryOverview, rsvpPeople, rsvpSummaries } from "./summary.js";
 
 const i18nSchema = z.record(z.string(), z.string().max(2000));
 
@@ -21,9 +22,7 @@ export const rsvpItemSchema = z.object({
   date: z.string(),
   closesAt: z.string(),
   location: z.string().nullable(),
-  required: z.boolean(),
   answer: z.enum(["yes", "no", "unsure"]).nullable(),
-  allowsUnsure: z.boolean(),
   locked: z.boolean(),
   isMeal: z.boolean(),
 });
@@ -55,11 +54,11 @@ const kindCounts = z.object({
 });
 export const rsvpSummarySchema = kindCounts.extend({
   activityId: z.number(),
+  scheduleId: z.number(),
   name: z.string(),
   nameI18n: z.record(z.string(), z.string()),
   startsAt: z.string(),
   isMeal: z.boolean(),
-  required: z.boolean(),
   eligible: z.number(),
   byKind: z.partialRecord(z.enum(ATTENDANCE_KINDS), kindCounts),
   intolerances: z.array(
@@ -71,7 +70,6 @@ export const rsvpSummarySchema = kindCounts.extend({
 const settingsBody = z
   .object({
     enabled: z.boolean(),
-    required: z.boolean(),
     kinds: z.array(z.enum(ATTENDANCE_KINDS)).max(4),
     nameI18n: i18nSchema.nullable(),
     descriptionI18n: i18nSchema.nullable(),
@@ -109,7 +107,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         summary: "Get a schedule entry's RSVP settings",
         description:
           "Organizer view of the RSVP configuration of the entry's activity for the current event key: " +
-          "whether it is enabled/required, which attendance kinds are asked, optional name/description/date overrides " +
+          "whether it is enabled, which attendance kinds are asked, optional name/description/date overrides " +
           "and the effective defaults for blank fields. Includes live counts " +
           "(attending, notAttending, unsure, unanswered and by kind) under the same eligibility rule as " +
           "`GET /api/logistics/rsvps`. Requires schedule:manage.",
@@ -130,7 +128,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         summary: "Replace a schedule entry's RSVP settings",
         description:
           "Replaces the RSVP configuration for the current event key, audited in the same transaction. " +
-          "`required` needs `enabled` and an enabled RSVP needs at least one kind. Meal activities can never ask " +
+          "An enabled RSVP needs at least one kind. Meal activities can never ask " +
           "participants (400 `rsvp_participants_excluded`). Stored answers are never changed, and narrowing `kinds` only " +
           "stops asking and counting the excluded kinds. Accepts `Idempotency-Key`. Broadcasts `logistics.rsvp.updated`. Requires schedule:manage.",
         response: { 200: settingsResponse },
@@ -170,8 +168,8 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         body: rsvpAnswersBody,
         summary: "Answer my RSVPs",
         description:
-          "Stores the given answers (yes, no or unsure). Required open items must be answered, either already stored or in the body " +
-          "(400 `rsvp_incomplete`); optional ones may be left out. Changing a locked item is 409 `rsvp_locked`; echoing it " +
+          "Stores the given answers (yes, no or unsure). Any open item may be left out; answers are always optional. " +
+          "Changing a locked item is 409 `rsvp_locked`; echoing it " +
           "unchanged is ignored. A meal answer from a participant is 403 `rsvp_participants_excluded` regardless of settings; " +
           "an item not offered to the caller is 400 `rsvp_not_offered`; items that ended since the list loaded are ignored. " +
           "Concurrent submissions are serialized per user. Accepts `Idempotency-Key`. Broadcasts `logistics.rsvp.updated` " +
@@ -215,7 +213,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         summary: "Correct a user's RSVPs",
         description:
           "Staff correction. Same body, rules and errors as PUT /api/me/rsvps (locked items stay closed, participants never " +
-          "get meals), except that it is partial: required items left out are not enforced. Writes one `rsvp.updated` audit " +
+          "get meals); partial writes leave the omitted items untouched. Writes one `rsvp.updated` audit " +
           "row with the attending activity ids before and after, in the same transaction. Accepts `Idempotency-Key`. " +
           "Requires meal-plans:manage.",
         response: { 200: itemsResponse },
@@ -239,7 +237,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         querystring: z.object({ activityId: z.coerce.number().int().positive().optional() }),
         summary: "RSVP headcounts",
         description:
-          "Per activity with enabled RSVP settings on a shown schedule entry (ended included): attending, notAttending, " +
+          "Per activity asked to at least one kind (enabled RSVP settings on a shown schedule entry, ended included): attending, notAttending, " +
           "unsure and unanswered among eligible people (current attendance kind in the asked kinds, never participants for " +
           "meals), broken down by kind, with the intolerance breakdown and dietary-note count among those attending. " +
           "Aggregates only; excludes inactive and anonymized accounts and honours the review-fixture boundary. " +
@@ -250,5 +248,87 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
     async (req) => ({
       activities: await rsvpSummaries(req.userId as number, { activityId: req.query.activityId }),
     }),
+  );
+
+  api.get(
+    "/api/logistics/rsvps/:activityId/people",
+    {
+      preHandler: requireCapability(CAPABILITIES.LOGISTICS_STATS),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.LOGISTICS_STATS }),
+      schema: {
+        params: z.object({ activityId: z.coerce.number().int().positive() }),
+        summary: "Who answered an RSVP",
+        description:
+          "Per-person list for one activity asking at least one kind (enabled RSVP settings): every eligible person asked (same rule as " +
+          "`GET /api/logistics/rsvps`) with their kind, enterprise and answer (`yes`, `no`, `unsure` or `unanswered`), " +
+          "ordered by surname. No dietary data (that stays in the catering export). 404 when the activity is not asked. " +
+          "Requires logistics statistics access.",
+        response: {
+          200: z.object({
+            people: z.array(
+              z.object({
+                userId: z.number(),
+                name: z.string().nullable(),
+                surname: z.string().nullable(),
+                kind: z.enum(ATTENDANCE_KINDS),
+                enterprise: z.string().nullable(),
+                state: z.enum(["yes", "no", "unsure", "unanswered"]),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => ({ people: await rsvpPeople(req.userId as number, req.params.activityId) }),
+  );
+
+  api.get(
+    "/api/logistics/dietary",
+    {
+      preHandler: requireCapability(CAPABILITIES.MEAL_PLANS_EXPORT),
+      config: routeAccess({ kind: "capability", capability: CAPABILITIES.MEAL_PLANS_EXPORT }),
+      schema: {
+        summary: "All dietary restrictions",
+        description:
+          "Global catering view: every current attendee (active, non-anonymized, with a current attendance kind) who declared " +
+          "food intolerances or dietary notes, with kind, enterprise, intolerance labels and the free-text notes, plus the " +
+          "per-intolerance counts and totals. Carries per-person dietary data, so it needs the meal-plans:export " +
+          "capability and every read writes an audit row (no content). A synthetic review operator only sees test accounts.",
+        response: {
+          200: z.object({
+            people: z.number(),
+            withRestrictions: z.number(),
+            withNotes: z.number(),
+            byIntolerance: z.array(
+              z.object({ id: z.number(), label: z.record(z.string(), z.string()), n: z.number() }),
+            ),
+            entries: z.array(
+              z.object({
+                userId: z.number(),
+                name: z.string().nullable(),
+                surname: z.string().nullable(),
+                kind: z.enum(ATTENDANCE_KINDS),
+                enterprise: z.string().nullable(),
+                intolerances: z.array(
+                  z.object({ id: z.number(), label: z.record(z.string(), z.string()) }),
+                ),
+                notes: z.string().nullable(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (req) => {
+      const actorId = req.userId as number;
+      const overview = await dietaryOverview(actorId);
+      await audit(pool, {
+        actorId,
+        entityType: "dietary_overview",
+        entityId: 1,
+        action: "view",
+      });
+      return overview;
+    },
   );
 }

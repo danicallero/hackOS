@@ -537,8 +537,11 @@ export default function SchedulePage() {
         onOpenChange={setCreateOpen}
         title={t("newScheduleItem")}
         initial={EMPTY_SCHEDULE_FORM}
-        onSubmit={async (values, pendingOwners) => {
-          const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
+        onSubmit={async (values, pendingOwners, rsvp) => {
+          const created = await logisticsApi.createSchedule({
+            ...cleanScheduleForm(values),
+            ...(rsvp ? { rsvp } : {}),
+          });
           await Promise.all(
             pendingOwners.map((owner) =>
               logisticsApi.addScheduleOwner(created.id, pendingOwnerToInput(owner)),
@@ -584,8 +587,11 @@ export default function SchedulePage() {
           }}
           title={t("duplicateScheduleItem")}
           initial={scheduleDuplicateForm(duplicatingItem, language, t)}
-          onSubmit={async (values, pendingOwners) => {
-            const created = await logisticsApi.createSchedule(cleanScheduleForm(values));
+          onSubmit={async (values, pendingOwners, rsvp) => {
+            const created = await logisticsApi.createSchedule({
+              ...cleanScheduleForm(values),
+              ...(rsvp ? { rsvp } : {}),
+            });
             await Promise.all(
               pendingOwners.map((owner) =>
                 logisticsApi.addScheduleOwner(created.id, pendingOwnerToInput(owner)),

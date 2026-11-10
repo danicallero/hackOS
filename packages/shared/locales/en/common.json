@@ -84,7 +84,6 @@
   "apiError_onboarding_step_required": "This onboarding step is required.",
   "apiError_onboarding_fact_incomplete": "Complete this task before marking it done.",
   "apiError_rsvp_locked": "This RSVP is closed.",
-  "apiError_rsvp_incomplete": "Answer every required RSVP.",
   "apiError_rsvp_participants_excluded": "Participants do not RSVP to meals.",
   "apiError_meal_plan_not_eligible": "This meal plan is not available for this account.",
   "apiError_project_frozen": "Withdraw the submission to edit the project.",

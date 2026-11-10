@@ -23,11 +23,11 @@ export interface KindCounts {
 
 export interface RsvpSummary extends KindCounts {
   activityId: number;
+  scheduleId: number;
   name: string;
   nameI18n: Record<string, string>;
   startsAt: string;
   isMeal: boolean;
-  required: boolean;
   eligible: number;
   byKind: Partial<Record<AttendanceKind, KindCounts>>;
   /** Among people attending, one entry per declared intolerance. */
@@ -62,18 +62,18 @@ export async function rsvpSummaries(
   const params = [eventKey, options.activityId ?? null, mealKinds(), options.mealsOnly ?? false];
   const { rows: activities } = await pool.query<{
     id: number;
+    schedule_id: number;
     name: string;
     name_i18n: Record<string, string> | null;
     starts_at: Date;
     is_meal: boolean;
-    required: boolean;
   }>(
-    `SELECT a.id, a.name, a.name_i18n, s.starts_at, (a.category = ANY($3::text[])) AS is_meal,
-            st.required
+    `SELECT a.id, a.schedule_id, a.name, a.name_i18n, s.starts_at,
+            (a.category = ANY($3::text[])) AS is_meal
        FROM activity_rsvp_settings st
        JOIN activities a ON a.id = st.activity_id
        JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
-      WHERE st.event_key = $1 AND st.enabled
+      WHERE st.event_key = $1 AND st.enabled AND cardinality(st.kinds) > 0
         AND ($2::int IS NULL OR a.id = $2)
         AND (NOT $4::boolean OR a.category = ANY($3::text[]))
       ORDER BY s.starts_at, a.id`,
@@ -154,11 +154,11 @@ export async function rsvpSummaries(
     }
     return {
       activityId: activity.id,
+      scheduleId: activity.schedule_id,
       name: activity.name,
       nameI18n: activity.name_i18n ?? {},
       startsAt: activity.starts_at.toISOString(),
       isMeal: activity.is_meal,
-      required: activity.required,
       eligible,
       ...total,
       byKind,
@@ -189,7 +189,7 @@ export async function exportRsvpCsv(
   const { rowCount } = await pool.query(
     `SELECT 1 FROM activity_rsvp_settings st JOIN activities a ON a.id = st.activity_id
        JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
-      WHERE st.event_key = $1 AND st.enabled AND a.id = $2
+      WHERE st.event_key = $1 AND st.enabled AND cardinality(st.kinds) > 0 AND a.id = $2
         AND (NOT $4::boolean OR a.category = ANY($3::text[]))`,
     [eventKey, activityId, mealKinds(), options.mealsOnly ?? false],
   );
@@ -231,4 +231,139 @@ export async function exportRsvpCsv(
       r.kind,
     ]),
   );
+}
+
+export interface RsvpPerson {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  kind: AttendanceKind;
+  enterprise: string | null;
+  state: "yes" | "no" | "unsure" | "unanswered";
+}
+
+/**
+ * Who was asked about one activity and what each person answered: the same
+ * eligible people the counts use, one row each, including the unanswered. No
+ * dietary data (that stays in the catering export).
+ */
+export async function rsvpPeople(actorId: number, activityId: number): Promise<RsvpPerson[]> {
+  const eventKey = await currentEventKey(pool);
+  const people = await peopleSql(actorId, "$1");
+  const { rowCount } = await pool.query(
+    `SELECT 1 FROM activity_rsvp_settings st JOIN activities a ON a.id = st.activity_id
+       JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
+      WHERE st.event_key = $1 AND st.enabled AND cardinality(st.kinds) > 0 AND a.id = $2`,
+    [eventKey, activityId],
+  );
+  if (!rowCount) throw new NotFoundError("Activity not found", { activityId });
+  const { rows } = await pool.query<{
+    id: number;
+    name: string | null;
+    surname: string | null;
+    kind: AttendanceKind;
+    enterprise: string | null;
+    state: RsvpPerson["state"];
+  }>(
+    `WITH ${people}
+     SELECT u.id, u.name, u.surname, p.kind,
+            (SELECT string_agg(DISTINCT e.name, '; ')
+               FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
+              WHERE sp.user_id = p.id) AS enterprise,
+            CASE WHEN r.user_id IS NULL THEN 'unanswered'
+                 WHEN r.attending IS NULL THEN 'unsure'
+                 WHEN r.attending THEN 'yes' ELSE 'no' END AS state
+       FROM activity_rsvp_settings st
+       JOIN activities a ON a.id = st.activity_id
+       ${ELIGIBLE_JOIN}
+       JOIN users u ON u.id = p.id
+       LEFT JOIN activity_rsvps r
+              ON r.activity_id = st.activity_id AND r.user_id = p.id AND r.event_key = st.event_key
+      WHERE st.event_key = $1 AND st.activity_id = $2
+      ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id`,
+    [eventKey, activityId, mealKinds()],
+  );
+  return rows.map((r) => ({
+    userId: r.id,
+    name: r.name,
+    surname: r.surname,
+    kind: r.kind,
+    enterprise: r.enterprise,
+    state: r.state,
+  }));
+}
+
+export interface DietaryOverview {
+  people: number;
+  withRestrictions: number;
+  withNotes: number;
+  byIntolerance: Array<{ id: number; label: Record<string, string>; n: number }>;
+  entries: Array<{
+    userId: number;
+    name: string | null;
+    surname: string | null;
+    kind: AttendanceKind;
+    enterprise: string | null;
+    intolerances: Array<{ id: number; label: Record<string, string> }>;
+    notes: string | null;
+  }>;
+}
+
+/**
+ * Every current attendee's declared food intolerances and free-text notes, for
+ * catering: the same people the RSVP counts consider (active, non-anonymized,
+ * current attendance kind, reviewer-fixture boundary). Only people with
+ * something to report are listed; `people` is everyone considered.
+ */
+export async function dietaryOverview(actorId: number): Promise<DietaryOverview> {
+  const eventKey = await currentEventKey(pool);
+  const people = await peopleSql(actorId, "$1");
+  const { rows } = await pool.query<{
+    id: number;
+    name: string | null;
+    surname: string | null;
+    kind: AttendanceKind;
+    enterprise: string | null;
+    labels: Array<{ id: number; label: Record<string, string> }> | null;
+    notes: string | null;
+  }>(
+    `WITH ${people}
+     SELECT u.id, u.name, u.surname, p.kind,
+            (SELECT string_agg(DISTINCT e.name, '; ')
+               FROM sponsors sp JOIN enterprises e ON e.id = sp.enterprise_id
+              WHERE sp.user_id = p.id) AS enterprise,
+            (SELECT jsonb_agg(jsonb_build_object('id', fi.id, 'label', fi.label) ORDER BY fi.id)
+               FROM food_intolerances fi WHERE fi.id = ANY(p.food_intolerances)) AS labels,
+            nullif(btrim(p.food_intolerance_notes), '') AS notes
+       FROM people p JOIN users u ON u.id = p.id
+      ORDER BY u.surname NULLS LAST, u.name NULLS LAST, u.id`,
+    [eventKey],
+  );
+  const byIntolerance = new Map<number, { id: number; label: Record<string, string>; n: number }>();
+  const entries: DietaryOverview["entries"] = [];
+  for (const row of rows) {
+    const intolerances = row.labels ?? [];
+    if (intolerances.length === 0 && !row.notes) continue;
+    for (const item of intolerances) {
+      const found = byIntolerance.get(item.id) ?? { id: item.id, label: item.label, n: 0 };
+      found.n += 1;
+      byIntolerance.set(item.id, found);
+    }
+    entries.push({
+      userId: row.id,
+      name: row.name,
+      surname: row.surname,
+      kind: row.kind,
+      enterprise: row.enterprise,
+      intolerances,
+      notes: row.notes,
+    });
+  }
+  return {
+    people: rows.length,
+    withRestrictions: entries.filter((e) => e.intolerances.length > 0).length,
+    withNotes: entries.filter((e) => e.notes).length,
+    byIntolerance: [...byIntolerance.values()].sort((a, b) => b.n - a.n || a.id - b.id),
+    entries,
+  };
 }

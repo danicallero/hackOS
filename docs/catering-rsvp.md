@@ -11,7 +11,7 @@ meal-plan routes are facades over it (`identity/meal-plan.ts`,
 ## Data
 
 - `activity_rsvp_settings` — PK `(activity_id, event_key)`: `enabled`,
-  `required`, `kinds`, name/description overrides, `rsvp_date`, `closes_at`.
+  `kinds`, name/description overrides, `rsvp_date`, `closes_at`.
 - `activity_rsvps` — PK `(user_id, activity_id, event_key)`. `attending` is
   `true` (yes), `false` (no) or `NULL` (**unsure, an explicit answer**); no row
   means unanswered.
@@ -26,8 +26,9 @@ the key starts with nothing offered, nothing answered and nothing counted.
 ## Who is asked
 
 An activity is offered to a person when its settings are enabled for the current
-event key, its schedule entry is `shown` and not ended, and the person's
-**derived attendance kind** (`attendanceKind`, participant-first) is in `kinds`.
+event key, it is asked to at least one kind (`kinds` non-empty), its schedule
+entry is `shown` and not ended, and the person's **derived attendance kind**
+(`attendanceKind`, participant-first) is in `kinds`.
 
 - A registered participant is never offered a meal, even sponsors, mentors or
   capability holders who are also registered participants, and even if the
@@ -45,9 +46,8 @@ someone who could not have answered.
 
 `PUT /api/me/rsvps` takes `{ answers: [{ activityId, answer }] }`.
 
-- **Required** items must be answered with yes or no (`400 rsvp_incomplete`
-  when missing; `400 rsvp_unsure_not_allowed`). Optional items can be skipped
-  or answered "not sure".
+- Every answer is optional: any open item may be skipped, answered yes/no, or
+  answered "not sure". There is no required flag and no incomplete-answer error.
 - Closing: `closes_at`, by default `event_config.meal_plan_cutoff_hours` before
   the start. Changing a locked answer is `409 rsvp_locked`; echoing it unchanged
   is accepted. Items that ended, were hidden or switched off since the list
@@ -82,6 +82,26 @@ The facade still requires every open meal in a self submission.
   nothing without open RSVPs. `CateringRsvpForm` is the controlled variant
   (`items`, `save`, `formId`) for a host such as the onboarding flow.
 - `CateringSettingsPanel` (`{ scheduleId, onDirtyChange? }`) owns its Save; it
-  must not live inside the schedule entry's `<form>`.
+  must not live inside the schedule entry's `<form>`. The create form sends
+  `rsvp: { enabled, kinds }` with `POST /api/schedule`, so a new activity can be
+  marked as asked without a second request; the same panel edits it later.
 - Locale strings live in `web.json`; their source fragments and a merge script are in
   `apps/web/locale-fragments/`.
+
+## Organizer overview and dietary view
+
+- **Attendance** (Logistics › Asistencia, `/logistics/rsvps`; `logistics:stats` or
+  `meal-plans:export`): only schedule entries asked to at least one kind, in
+  time order, with the live Sí / No / No lo sé / Sin respuesta counts and,
+  expanded, who answered what (`GET /api/logistics/rsvps/:activityId/people`:
+  name, kind, enterprise, answer, unanswered included; no dietary data). The
+  view is read-only: it never asks, edits or requires anything. An activity
+  that is not asking anyone is marked in Manage Schedule (or while creating
+  it) and only then appears here.
+- **Alimentación** tab (`meal-plans:export`): `GET /api/logistics/dietary` lists
+  every current attendee with intolerances or notes, the per-intolerance counts
+  and totals; the web filters by intolerance and searches names, companies and
+  notes. Every read writes an audit row without content.
+- Attendees change their answers in the onboarding Attendance step (listed only
+  while they still have an open item to answer) and in My profile › Personal
+  details › Attendance (shown while they have open RSVPs).

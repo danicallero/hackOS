@@ -57,7 +57,6 @@ export const ERROR_REASONS = {
   ONBOARDING_STEP_REQUIRED: "onboarding_step_required",
   ONBOARDING_FACT_INCOMPLETE: "onboarding_fact_incomplete",
   RSVP_LOCKED: "rsvp_locked",
-  RSVP_INCOMPLETE: "rsvp_incomplete",
   RSVP_PARTICIPANTS_EXCLUDED: "rsvp_participants_excluded",
   MEAL_PLAN_NOT_ELIGIBLE: "meal_plan_not_eligible",
 } as const;

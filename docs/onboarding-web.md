@@ -17,7 +17,7 @@ persists each answer. Nothing here gates event access.
 | `dietary` | The dietary answer (`PersonalDetails part="dietary"`) | same |
 | `networking` | The public-profile card: **create** (explicit opt-in), **decline**, **later** | complete / decline / defer, three distinct rows |
 | `mentor_profile` | Publication and expertise (`MentorProfileEditor`); only listed when the server says the person holds `helpdesk:offer` | complete, skip, defer |
-| `rsvp` | Per-activity attendance (catering RSVP component); only when the server lists open RSVPs for the person's kind | complete, skip, defer |
+| `rsvp` | Per-activity attendance (catering RSVP component); only while the person has an open item to answer for their kind | complete, skip, defer |
 | `notifications` | First-run email choices (`NotificationChoices`, shared with the entry dialog) | complete, skip, defer |
 | `share` | `SocialSharing` card | complete, skip |
 | `completion` | Confetti (nothing under `prefers-reduced-motion`), steps still open with a Finish action, Wallet passes, a pointer to My profile | complete |

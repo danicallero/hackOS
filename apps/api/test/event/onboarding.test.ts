@@ -110,9 +110,10 @@ describe("HackUDC 2027 onboarding", () => {
     expect(await read()).toEqual({ es: "Hola", gl: "Ola", en: "Hello" });
   });
 
-  it("recognizes existing dietary answers and optional RSVP unsure without a step row", async () => {
+  it("only lists the RSVP step while the person has something left to answer", async () => {
     const app = await getApp();
     const userId = await attendee();
+    await grantAttendeeRole(userId, "participant");
     await pool.query("UPDATE users SET dietary_confirmed_at=now() WHERE id=$1", [userId]);
     const start = new Date(Date.now() + 72 * 3600_000);
     const { rows: schedule } = await pool.query(
@@ -124,43 +125,37 @@ describe("HackUDC 2027 onboarding", () => {
       [schedule[0].id],
     );
     await pool.query(
-      "INSERT INTO activity_rsvp_settings (activity_id,event_key,enabled,required,kinds) VALUES ($1,'default',true,false,ARRAY['staff'])",
+      "INSERT INTO activity_rsvp_settings (activity_id,event_key,enabled,kinds) VALUES ($1,'default',false,ARRAY['staff'])",
       [activity[0].id],
     );
     const get = () =>
       app.inject({ method: "GET", url: "/api/me/onboarding", headers: asUser(userId) });
+    const rsvpStep = (body: { steps: { step: string; status: string }[] }) =>
+      body.steps.find((step) => step.step === "rsvp");
     const firstResponse = await get();
     expect(firstResponse.statusCode, firstResponse.body).toBe(200);
-    const first = firstResponse.json();
-    expect(first.steps.find((step: { step: string }) => step.step === "dietary")?.status).toBe(
-      "completed",
+    expect(
+      firstResponse.json().steps.find((step: { step: string }) => step.step === "dietary")?.status,
+    ).toBe("completed");
+    expect(rsvpStep(firstResponse.json())).toBeUndefined();
+
+    await pool.query(
+      "UPDATE activity_rsvp_settings SET enabled=true,kinds=ARRAY['participant'] WHERE activity_id=$1",
+      [activity[0].id],
     );
-    expect(first.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
-      "pending",
-    );
+    expect(rsvpStep((await get()).json())?.status).toBe("pending");
+
     await pool.query(
       "INSERT INTO activity_rsvps (user_id,activity_id,event_key,attending) VALUES ($1,$2,'default',NULL)",
       [userId, activity[0].id],
     );
-    const answered = (await get()).json();
-    expect(answered.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
-      "completed",
-    );
-    await pool.query("UPDATE activity_rsvp_settings SET required=true WHERE activity_id=$1", [
-      activity[0].id,
-    ]);
-    const nowRequired = (await get()).json();
-    expect(nowRequired.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
-      "pending",
-    );
+    expect(rsvpStep((await get()).json())).toBeUndefined();
+
     await pool.query(
       "UPDATE activity_rsvp_settings SET closes_at=now()-interval '1 hour' WHERE activity_id=$1",
       [activity[0].id],
     );
-    const locked = (await get()).json();
-    expect(locked.steps.find((step: { step: string }) => step.step === "rsvp")?.status).toBe(
-      "completed",
-    );
+    expect(rsvpStep((await get()).json())).toBeUndefined();
   });
 
   it("serializes competing decisions and replays one idempotency key once", async () => {

@@ -65,7 +65,6 @@ async function activity(
     startsInHours?: number;
     hidden?: boolean;
     kinds?: Kind[];
-    required?: boolean;
     enabled?: boolean;
     closesInHours?: number;
   } = {},
@@ -84,12 +83,11 @@ async function activity(
   if (options.kinds) {
     await pool.query(
       `INSERT INTO activity_rsvp_settings
-         (activity_id, event_key, enabled, required, kinds, closes_at)
-       SELECT $1, event_key, $2, $3, $4::text[], $5 FROM event_config WHERE id = 1`,
+         (activity_id, event_key, enabled, kinds, closes_at)
+       SELECT $1, event_key, $2, $3::text[], $4 FROM event_config WHERE id = 1`,
       [
         rows[0].id,
         options.enabled ?? true,
-        options.required ?? false,
         options.kinds,
         options.closesInHours === undefined
           ? null
@@ -220,31 +218,22 @@ describe("answers", () => {
     ]);
   });
 
-  it("requires every required item, but lets optional ones be skipped", async () => {
+  it("accepts unsure and lets every open item stay unanswered", async () => {
     const sponsor = await person("sponsor");
-    const required = await activity({ kinds: ["sponsor"], required: true });
-    const optional = await activity({ kinds: ["sponsor"] });
+    const lunch = await activity({ kinds: ["sponsor"] });
+    const dinner = await activity({ kinds: ["sponsor"] });
 
-    const missing = await putAnswers(sponsor, [{ activityId: optional, answer: "yes" }]);
-    expect(missing.statusCode).toBe(400);
-    expect(missing.json().error.details).toMatchObject({
-      code: "rsvp_incomplete",
-      activityIds: [required],
-    });
-    expect(await stored(sponsor)).toEqual([]);
+    expect((await putAnswers(sponsor, [{ activityId: lunch, answer: "unsure" }])).statusCode).toBe(
+      200,
+    );
+    expect((await stored(sponsor)).map((r) => [r.activity_id, r.attending])).toEqual([
+      [lunch, null],
+    ]);
 
-    const unsure = await putAnswers(sponsor, [{ activityId: required, answer: "unsure" }]);
-    expect(unsure.statusCode).toBe(400);
-    expect(unsure.json().error.details.code).toBe("rsvp_unsure_not_allowed");
-
-    const ok = await putAnswers(sponsor, [{ activityId: required, answer: "no" }]);
-    expect(ok.statusCode).toBe(200);
-    expect((await stored(sponsor)).map((r) => r.activity_id)).toEqual([required]);
-
-    // Once stored, a later optional-only submission needs no repeat of the required answer.
-    expect(
-      (await putAnswers(sponsor, [{ activityId: optional, answer: "unsure" }])).statusCode,
-    ).toBe(200);
+    expect((await putAnswers(sponsor, [{ activityId: dinner, answer: "yes" }])).statusCode).toBe(
+      200,
+    );
+    expect((await stored(sponsor)).map((r) => r.activity_id)).toEqual([lunch, dinner]);
   });
 
   it("rejects the removed option field on an answer", async () => {
@@ -314,12 +303,12 @@ describe("answers", () => {
   it("lets staff correct a user partially and audits attending ids only", async () => {
     const target = await person("sponsor");
     const manager = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_MANAGE]);
-    const required = await activity({ kinds: ["sponsor"], required: true });
+    const meal = await activity({ kinds: ["sponsor"] });
     const res = await app.inject({
       method: "PUT",
       url: `/api/users/${target}/rsvps`,
       headers: asUser(manager),
-      payload: { answers: [{ activityId: required, answer: "yes" }] },
+      payload: { answers: [{ activityId: meal, answer: "yes" }] },
     });
     expect(res.statusCode).toBe(200);
     const { rows } = await (await db()).query(
@@ -330,7 +319,7 @@ describe("answers", () => {
       expect.objectContaining({
         actor_id: manager,
         action: "rsvp.updated",
-        after: { attending: [required] },
+        after: { attending: [meal] },
       }),
     ]);
     const forbidden = await app.inject({
@@ -362,7 +351,6 @@ describe("removed option concept", () => {
       headers: asUser(organizer),
       payload: {
         enabled: true,
-        required: false,
         kinds: ["sponsor"],
         nameI18n: null,
         descriptionI18n: null,
@@ -383,6 +371,83 @@ describe("removed option concept", () => {
       headers: asUser(organizer),
     });
     expect(counts.json().activities[0]).not.toHaveProperty("byOption");
+  });
+});
+
+describe("attendance asked at creation", () => {
+  it("creates the RSVP settings with the schedule item and exposes it in the overview", async () => {
+    const organizer = await createUserWithCapabilities([
+      CAPABILITIES.SCHEDULE_MANAGE,
+      CAPABILITIES.LOGISTICS_STATS,
+    ]);
+    const startsAt = new Date(Date.now() + 48 * HOUR);
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(organizer),
+      payload: {
+        title: "Workshop",
+        startsAt: startsAt.toISOString(),
+        endsAt: new Date(startsAt.getTime() + HOUR).toISOString(),
+        visibility: "shown",
+        audiences: ["participant"],
+        rsvp: { enabled: true, kinds: ["participant"] },
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const { rows } = await (await db()).query(
+      `SELECT st.activity_id, st.enabled, st.kinds
+         FROM activity_rsvp_settings st
+         JOIN activities a ON a.id = st.activity_id
+        WHERE a.schedule_id = $1`,
+      [created.json().id],
+    );
+    expect(rows).toEqual([
+      { activity_id: expect.any(Number), enabled: true, kinds: ["participant"] },
+    ]);
+
+    const overview = await app.inject({
+      method: "GET",
+      url: "/api/logistics/rsvps",
+      headers: asUser(organizer),
+    });
+    expect(overview.json().activities).toEqual([
+      expect.objectContaining({ activityId: rows[0].activity_id, scheduleId: created.json().id }),
+    ]);
+  });
+
+  it("rejects an enabled RSVP without an audience or with participants on a meal", async () => {
+    const organizer = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const startsAt = new Date(Date.now() + 48 * HOUR);
+    const body = {
+      title: "Workshop",
+      startsAt: startsAt.toISOString(),
+      endsAt: new Date(startsAt.getTime() + HOUR).toISOString(),
+      visibility: "shown",
+      audiences: ["participant"],
+      rsvp: { enabled: true, kinds: [] },
+    };
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(organizer),
+      payload: body,
+    });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().error.details.code).toBe("rsvp_kinds_required");
+
+    const meal = await app.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(organizer),
+      payload: {
+        ...body,
+        type: "meal",
+        rsvp: { enabled: true, kinds: ["participant"] },
+      },
+    });
+    expect(meal.statusCode).toBe(400);
+    expect(meal.json().error.details.code).toBe("rsvp_participants_excluded");
   });
 });
 
@@ -422,7 +487,6 @@ describe("organizer settings", () => {
   function payload(overrides: Record<string, unknown> = {}) {
     return {
       enabled: true,
-      required: false,
       kinds: ["sponsor"],
       nameI18n: { es: "Comida", en: "Lunch" },
       descriptionI18n: null,
@@ -456,24 +520,21 @@ describe("organizer settings", () => {
     const food = await send(payload({ kinds: ["participant", "sponsor"] }));
     expect(food.statusCode).toBe(400);
     expect(food.json().error.details.code).toBe("rsvp_participants_excluded");
-    expect((await send(payload({ enabled: false, required: true }))).statusCode).toBe(400);
     expect((await send(payload({ kinds: [] }))).statusCode).toBe(400);
 
     const date = new Date(Date.now() + 100 * HOUR).toISOString();
     const key = crypto.randomUUID();
-    const ok = await send(payload({ rsvpDate: date, required: true }), organizer, key);
+    const ok = await send(payload({ rsvpDate: date }), organizer, key);
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toMatchObject({
       activityId: meal,
       isMeal: true,
       enabled: true,
-      required: true,
       rsvpDate: date,
       counts: { eligible: 0 },
     });
-    expect(
-      (await send(payload({ rsvpDate: date, required: true }), organizer, key)).statusCode,
-    ).toBe(200);
+    expect(ok.json()).not.toHaveProperty("required");
+    expect((await send(payload({ rsvpDate: date }), organizer, key)).statusCode).toBe(200);
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n FROM audit_log WHERE action = 'rsvp_settings.updated'`,
     );
@@ -482,7 +543,7 @@ describe("organizer settings", () => {
     // Names and date overrides reach the attendee; a non-meal activity may ask participants.
     const sponsor = await person("sponsor");
     const [item] = await getItems(sponsor);
-    expect(item).toMatchObject({ name: "Lunch", date, required: true });
+    expect(item).toMatchObject({ name: "Lunch", date });
     const wsUrl = `/api/schedule/${await scheduleOf(workshop)}/rsvp`;
     const ws = await app.inject({
       method: "PUT",
@@ -508,10 +569,120 @@ describe("organizer settings", () => {
   });
 });
 
+describe("GET /api/logistics/dietary", () => {
+  it("lists everyone with intolerances or notes, with counts, and audits the read", async () => {
+    const exporter = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);
+    const pool = await db();
+    const { rows } = await pool.query(
+      `INSERT INTO food_intolerances (label) VALUES ('{"es":"Gluten","en":"Gluten"}'::jsonb) RETURNING id`,
+    );
+    const gluten = rows[0].id as number;
+    const celiac = await person("participant");
+    const noteOnly = await person("sponsor");
+    const clean = await person("mentor");
+    const fixture = await person("staff");
+    await pool.query(`UPDATE users SET is_test_account = true WHERE id = $1`, [fixture]);
+    await pool.query(
+      `UPDATE users SET food_intolerances = ARRAY[$2::int], food_intolerance_notes = 'sin trazas' WHERE id = $1`,
+      [celiac, gluten],
+    );
+    await pool.query(`UPDATE users SET food_intolerance_notes = 'alergia al kiwi' WHERE id = $1`, [
+      noteOnly,
+    ]);
+    await pool.query(
+      `UPDATE users SET food_intolerances = ARRAY[$2::int], food_intolerance_notes = 'oculto' WHERE id = $1`,
+      [fixture, gluten],
+    );
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/logistics/dietary",
+      headers: asUser(exporter),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toMatchObject({ people: 4, withRestrictions: 1, withNotes: 2 });
+    expect(body.byIntolerance).toEqual([
+      { id: gluten, label: { es: "Gluten", en: "Gluten" }, n: 1 },
+    ]);
+    expect(body.entries.map((e: { userId: number }) => e.userId).sort()).toEqual(
+      [celiac, noteOnly].sort(),
+    );
+    expect(JSON.stringify(body)).not.toContain("oculto");
+    expect(body.entries.find((e: { userId: number }) => e.userId === clean)).toBeUndefined();
+
+    const { rows: audited } = await pool.query(
+      `SELECT entity_type, action FROM audit_log WHERE entity_type = 'dietary_overview'`,
+    );
+    expect(audited).toEqual([{ entity_type: "dietary_overview", action: "view" }]);
+    expect(JSON.stringify(audited)).not.toContain("kiwi");
+
+    const denied = await app.inject({
+      method: "GET",
+      url: "/api/logistics/dietary",
+      headers: asUser(await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS])),
+    });
+    expect(denied.statusCode).toBe(403);
+  });
+});
+
+describe("GET /api/logistics/rsvps/:activityId/people", () => {
+  it("lists every eligible person asked with their answer, and nobody else", async () => {
+    const stats = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const meal = await activity({ kinds: ["sponsor", "mentor"] });
+    await activity({ kinds: [] });
+    const yes = await person("sponsor");
+    const silent = await person("mentor");
+    await person("staff"); // not asked
+    await person("participant"); // never asked about a meal
+    await putAnswers(yes, [{ activityId: meal, answer: "yes" }]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/logistics/rsvps/${meal}/people`,
+      headers: asUser(stats),
+    });
+    expect(res.statusCode).toBe(200);
+    const people = res.json().people as { userId: number; state: string; kind: string }[];
+    expect(people.map((p) => [p.userId, p.state, p.kind]).sort()).toEqual(
+      [
+        [yes, "yes", "sponsor"],
+        [silent, "unanswered", "mentor"],
+      ].sort(),
+    );
+    expect(JSON.stringify(res.json())).not.toMatch(/intolerance|notes/i);
+
+    const summary = await app.inject({
+      method: "GET",
+      url: "/api/logistics/rsvps",
+      headers: asUser(stats),
+    });
+    expect(summary.json().activities[0].scheduleId).toEqual(expect.any(Number));
+  });
+
+  it("needs logistics statistics access and an asked activity", async () => {
+    const meal = await activity({ kinds: ["sponsor"] });
+    const denied = await app.inject({
+      method: "GET",
+      url: `/api/logistics/rsvps/${meal}/people`,
+      headers: asUser(await createUser()),
+    });
+    expect(denied.statusCode).toBe(403);
+    const stats = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
+    const missing = await app.inject({
+      method: "GET",
+      url: "/api/logistics/rsvps/999999/people",
+      headers: asUser(stats),
+    });
+    expect(missing.statusCode).toBe(404);
+  });
+});
+
 describe("GET /api/logistics/rsvps", () => {
   it("counts only eligible, real people by kind and answer", async () => {
     const stats = await createUserWithCapabilities([CAPABILITIES.LOGISTICS_STATS]);
     const meal = await activity({ kinds: ["sponsor", "mentor"] });
+    await activity({ kinds: [] });
     const yes = await person("sponsor");
     const no = await person("sponsor");
     const unsure = await person("mentor");

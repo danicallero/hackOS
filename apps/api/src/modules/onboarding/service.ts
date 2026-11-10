@@ -45,18 +45,14 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     [userId, event.event_key],
   );
   const { rows: rsvpRows } = await db.query<{
-    accessible_count: number;
-    required_count: number;
     pending_count: number;
     pending_meal_count: number;
   }>(
     `SELECT
-       count(*) FILTER (WHERE NOT locked OR answered)::int AS accessible_count,
-       count(*) FILTER (WHERE required)::int AS required_count,
-       count(*) FILTER (WHERE NOT locked AND (NOT answered OR (required AND attending IS NULL)))::int AS pending_count,
-       count(*) FILTER (WHERE is_meal AND NOT locked AND (NOT answered OR (required AND attending IS NULL)))::int AS pending_meal_count
+       count(*) FILTER (WHERE NOT locked AND NOT answered)::int AS pending_count,
+       count(*) FILTER (WHERE is_meal AND NOT locked AND NOT answered)::int AS pending_meal_count
      FROM (
-       SELECT s.required, r.user_id IS NOT NULL AS answered, r.attending,
+       SELECT r.user_id IS NOT NULL AS answered, r.attending,
               a.category = ANY($4::text[]) AS is_meal,
               now() >= COALESCE(s.closes_at,sc.starts_at - make_interval(hours =>
                 COALESCE((SELECT meal_plan_cutoff_hours FROM event_config WHERE id=1),24))) AS locked
@@ -70,23 +66,12 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
      ) offers`,
     [userId, event.event_key, kind, [...MEAL_ACTIVITY_KINDS]],
   );
-  const rsvp = rsvpRows[0] ?? {
-    accessible_count: 0,
-    required_count: 0,
-    pending_count: 0,
-    pending_meal_count: 0,
-  };
-  const config: OnboardingConfig = {
-    ...event.onboarding_config,
-    rsvp: {
-      ...event.onboarding_config.rsvp,
-      required: Boolean(event.onboarding_config.rsvp?.required || rsvp.required_count > 0),
-    },
-  };
+  const rsvp = rsvpRows[0] ?? { pending_count: 0, pending_meal_count: 0 };
+  const config: OnboardingConfig = event.onboarding_config;
   const facts: OnboardingFacts = {
     attendanceKind: kind as AttendanceKind | null,
     mentorEligible: eligible,
-    openRsvps: rsvp.accessible_count > 0,
+    openRsvps: rsvp.pending_count > 0,
     complete: {
       profile: Boolean(user?.name && user?.surname),
       dietary: Boolean(user?.dietary_confirmed_at),

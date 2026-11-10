@@ -31,10 +31,7 @@ export interface RsvpItem {
   date: string;
   closesAt: string;
   location: string | null;
-  required: boolean;
   answer: RsvpAnswer | null;
-  /** Unsure is only accepted on optional items; a required item needs yes or no. */
-  allowsUnsure: boolean;
   locked: boolean;
   isMeal: boolean;
 }
@@ -100,7 +97,6 @@ interface OfferedRow {
   starts_at: Date;
   ends_at: Date;
   location: string | null;
-  required: boolean;
   st_name: Record<string, string> | null;
   st_description: Record<string, string> | null;
   rsvp_date: Date | null;
@@ -127,7 +123,7 @@ export async function offeredRsvps(
   const { rows } = await db.query<OfferedRow>(
     `SELECT a.id AS activity_id, a.name, a.name_i18n, a.description, a.description_i18n,
             a.primary_language, s.starts_at, s.ends_at, s.location,
-            st.required, st.name_i18n AS st_name, st.description_i18n AS st_description,
+            st.name_i18n AS st_name, st.description_i18n AS st_description,
             st.rsvp_date,
             COALESCE(st.closes_at, s.starts_at - make_interval(hours => ${CUTOFF_HOURS_SQL})) AS closes_at,
             r.attending, (r.user_id IS NOT NULL) AS answered,
@@ -160,9 +156,7 @@ export async function offeredRsvps(
     date: (row.rsvp_date ?? row.starts_at).toISOString(),
     closesAt: row.closes_at.toISOString(),
     location: row.location,
-    required: row.required,
     answer: answerOf(row.attending, row.answered),
-    allowsUnsure: !row.required,
     locked: row.locked,
     isMeal: row.is_meal,
     nameI18n: row.name_i18n,
@@ -202,7 +196,7 @@ export async function getRsvps(db: Queryable, userId: number): Promise<RsvpItem[
 export async function hasPendingRsvps(
   db: Queryable,
   userId: number,
-  options: { mealsOnly?: boolean; requiredOnly?: boolean } = {},
+  options: { mealsOnly?: boolean } = {},
 ): Promise<boolean> {
   const [eventKey, kind, language] = await Promise.all([
     currentEventKey(db),
@@ -210,12 +204,7 @@ export async function hasPendingRsvps(
     userLanguage(db, userId),
   ]);
   const items = await offeredRsvps(db, userId, kind, eventKey, language, options);
-  return items.some(
-    (i) =>
-      !i.locked &&
-      (i.answer === null || (i.required && i.answer === "unsure")) &&
-      (!options.requiredOnly || i.required),
-  );
+  return items.some((i) => !i.locked && i.answer === null);
 }
 
 export interface RsvpAnswerInput {
@@ -224,7 +213,7 @@ export interface RsvpAnswerInput {
 }
 
 export interface SubmitOptions {
-  /** Staff correction: partial, audited, no required check, no confirmation stamp. */
+  /** Staff correction: partial, audited, no confirmation stamp. */
   actorId?: number;
   /** Legacy meal-plan facade: only meals, every open meal must be answered. */
   mealFacade?: boolean;
@@ -301,12 +290,6 @@ export async function submitRsvps(
         });
       }
 
-      if (input.answer === "unsure" && !item.allowsUnsure) {
-        throw new BadRequestError("A required RSVP needs a yes or no", {
-          code: "rsvp_unsure_not_allowed",
-          activityId: input.activityId,
-        });
-      }
       const attending = attendingOf(input.answer);
       const unchanged =
         item.answered &&
@@ -323,16 +306,13 @@ export async function submitRsvps(
       writes.set(input.activityId, { attending });
     }
 
-    if (!actorId) {
-      const open = before.filter((m) => !m.locked);
-      const missing = open.filter((m) =>
-        mealFacade
-          ? !answers.some((a) => a.activityId === m.activityId)
-          : m.required && (m.answer === null || m.answer === "unsure") && !writes.has(m.activityId),
+    if (!actorId && mealFacade) {
+      const missing = before.filter(
+        (m) => !m.locked && !answers.some((a) => a.activityId === m.activityId),
       );
       if (missing.length > 0) {
-        throw new BadRequestError("Answer every required item", {
-          code: mealFacade ? "meal_plan_incomplete" : "rsvp_incomplete",
+        throw new BadRequestError("Answer every open meal", {
+          code: "meal_plan_incomplete",
           activityIds: missing.map((m) => m.activityId),
         });
       }

@@ -18,7 +18,6 @@ export interface RsvpSettings {
   scheduleId: number;
   isMeal: boolean;
   enabled: boolean;
-  required: boolean;
   kinds: AttendanceKind[];
   nameI18n: Record<string, string> | null;
   descriptionI18n: Record<string, string> | null;
@@ -32,7 +31,6 @@ export interface RsvpSettings {
 
 export interface RsvpSettingsInput {
   enabled: boolean;
-  required: boolean;
   kinds: AttendanceKind[];
   nameI18n: Record<string, string> | null;
   descriptionI18n: Record<string, string> | null;
@@ -49,7 +47,6 @@ interface SettingsRow {
   starts_at: Date;
   default_closes_at: Date;
   enabled: boolean | null;
-  required: boolean | null;
   kinds: string[] | null;
   name_i18n: Record<string, string> | null;
   description_i18n: Record<string, string> | null;
@@ -61,7 +58,7 @@ const SETTINGS_SQL = `
   SELECT a.id AS activity_id, a.schedule_id, (a.category = ANY($3::text[])) AS is_meal,
          a.name, a.description, s.starts_at,
          s.starts_at - make_interval(hours => ${CUTOFF_HOURS_SQL}) AS default_closes_at,
-         st.enabled, st.required, st.kinds, st.name_i18n, st.description_i18n,
+         st.enabled, st.kinds, st.name_i18n, st.description_i18n,
          st.rsvp_date, st.closes_at
     FROM activities a
     JOIN schedule s ON s.id = a.schedule_id
@@ -74,7 +71,6 @@ function shape(row: SettingsRow, counts: RsvpSummary | null): RsvpSettings {
     scheduleId: row.schedule_id,
     isMeal: row.is_meal,
     enabled: row.enabled ?? false,
-    required: row.required ?? false,
     kinds: (row.kinds ?? []) as AttendanceKind[],
     nameI18n: row.name_i18n,
     descriptionI18n: row.description_i18n,
@@ -98,12 +94,7 @@ export async function getRsvpSettings(actorId: number, scheduleId: number): Prom
   return shape(rows[0], counts ?? null);
 }
 
-function validate(input: RsvpSettingsInput, isMeal: boolean): void {
-  if (input.required && !input.enabled) {
-    throw new BadRequestError("A required RSVP must be enabled", {
-      code: "rsvp_required_needs_enabled",
-    });
-  }
+export function validateRsvpSettings(input: RsvpSettingsInput, isMeal: boolean): void {
   if (input.enabled && input.kinds.length === 0) {
     throw new BadRequestError("Choose who is asked", { code: "rsvp_kinds_required" });
   }
@@ -143,16 +134,15 @@ export async function putRsvpSettings(
     );
     const activity = activities[0];
     if (!activity) throw new NotFoundError("Schedule entry has no activity", { scheduleId });
-    validate(input, activity.is_meal);
+    validateRsvpSettings(input, activity.is_meal);
 
     const { rows: previous } = await client.query(
-      `SELECT enabled, required, kinds, name_i18n, description_i18n, rsvp_date, closes_at
+      `SELECT enabled, kinds, name_i18n, description_i18n, rsvp_date, closes_at
          FROM activity_rsvp_settings WHERE activity_id = $1 AND event_key = $2 FOR UPDATE`,
       [activity.id, eventKey],
     );
     const next = {
       enabled: input.enabled,
-      required: input.required,
       kinds: [...input.kinds].sort(),
       name_i18n: clean(input.nameI18n),
       description_i18n: clean(input.descriptionI18n),
@@ -161,11 +151,11 @@ export async function putRsvpSettings(
     };
     await client.query(
       `INSERT INTO activity_rsvp_settings
-         (activity_id, event_key, enabled, required, kinds, name_i18n, description_i18n,
+         (activity_id, event_key, enabled, kinds, name_i18n, description_i18n,
           rsvp_date, closes_at)
-       VALUES ($1, $2, $3, $4, $5::text[], $6, $7, $8, $9)
+       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8)
        ON CONFLICT (activity_id, event_key) DO UPDATE
-         SET enabled = EXCLUDED.enabled, required = EXCLUDED.required, kinds = EXCLUDED.kinds,
+         SET enabled = EXCLUDED.enabled, kinds = EXCLUDED.kinds,
              name_i18n = EXCLUDED.name_i18n, description_i18n = EXCLUDED.description_i18n,
              rsvp_date = EXCLUDED.rsvp_date, closes_at = EXCLUDED.closes_at,
              updated_at = now()`,
@@ -173,7 +163,6 @@ export async function putRsvpSettings(
         activity.id,
         eventKey,
         next.enabled,
-        next.required,
         next.kinds,
         next.name_i18n,
         next.description_i18n,

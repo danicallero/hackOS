@@ -4078,7 +4078,6 @@
   "rsvpYes": "Si",
   "rsvpNo": "Non",
   "rsvpUnsure": "Non o sei",
-  "rsvpRequired": "Obrigatorio",
   "rsvpClosed": "As respostas están pechadas.",
   "rsvpSaved": "Respostas gardadas",
   "toastSaveRsvps": "Gardar respostas",
@@ -4107,5 +4106,17 @@
   "onboardingGreeting": "Ola, {name}",
   "onboardingStatusDone": "completado",
   "rsvpSectionTitle": "Asistencia",
-  "rsvpCustomize": "Personalizar data, textos e peche"
+  "rsvpCustomize": "Personalizar data, textos e peche",
+  "rsvpOverviewTitle": "Asistencia",
+  "rsvpNoAskedActivities": "Ningunha actividade pide asistencia",
+  "rsvpAnswersTitle": "Respostas",
+  "rsvpNobody": "Ninguén nesta lista",
+  "dietarySummary": "{people} persoas · {restrictions} con intolerancias · {notes} con notas",
+  "dietaryFilter": "Intolerancia",
+  "dietaryAll": "Todas",
+  "dietarySearch": "Buscar por nome, empresa ou nota",
+  "dietaryNone": "Ninguén indicou restricións",
+  "couldNotLoadDietary": "Non se puideron cargar as restricións",
+  "rsvpTabActivities": "Actividades",
+  "rsvpTabDietary": "Alimentación"
 }

@@ -17,7 +17,7 @@ import { LANGS, languageName, useLocale } from "@/lib/i18n";
 import {
   askableKinds,
   draftToBody,
-  type RsvpKind,
+  RSVP_KIND_LABEL,
   type RsvpSettings,
   type RsvpSettingsDraft,
   type RsvpSummary,
@@ -28,9 +28,9 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /**
- * Organizer RSVP editor for one schedule entry (schedule:manage): enable and
- * require the RSVP, who is asked, name/description/date overrides and live
- * counts. Meals can never ask participants.
+ * Organizer RSVP editor for one schedule entry (schedule:manage): enable the
+ * RSVP, who is asked, name/description/date overrides and live counts. Answers
+ * are always optional. Meals can never ask participants.
  *
  * Integration point for the schedule editor: render
  * `<CateringSettingsPanel scheduleId={item.id} />` for an existing entry. It owns
@@ -41,9 +41,12 @@ import { cn } from "@/lib/utils";
 export function CateringSettingsPanel({
   scheduleId,
   onDirtyChange,
+  onSaved,
 }: {
   scheduleId: number;
   onDirtyChange?: (dirty: boolean) => void;
+  /** Runs after the settings saved (hosts refresh their own counts). */
+  onSaved?: () => void;
 }) {
   const { settings, loadError, reload, save } = useRsvpSettings(scheduleId);
   const { t } = useLocale();
@@ -53,7 +56,6 @@ export function CateringSettingsPanel({
   if (!settings) return null;
   const version = `${settings.activityId}:${JSON.stringify([
     settings.enabled,
-    settings.required,
     settings.kinds,
     settings.nameI18n,
     settings.descriptionI18n,
@@ -61,7 +63,13 @@ export function CateringSettingsPanel({
     settings.closesAt,
   ])}`;
   return (
-    <SettingsForm key={version} settings={settings} save={save} onDirtyChange={onDirtyChange} />
+    <SettingsForm
+      key={version}
+      settings={settings}
+      save={save}
+      onDirtyChange={onDirtyChange}
+      onSaved={onSaved}
+    />
   );
 }
 
@@ -69,10 +77,12 @@ function SettingsForm({
   settings,
   save,
   onDirtyChange,
+  onSaved,
 }: {
   settings: RsvpSettings;
   save: (body: unknown) => Promise<RsvpSettings>;
   onDirtyChange?: (dirty: boolean) => void;
+  onSaved?: () => void;
 }) {
   const { t } = useLocale();
   const baseId = useId();
@@ -99,6 +109,7 @@ function SettingsForm({
     try {
       await save(draftToBody(draft, fromDatetimeLocal, settings.isMeal));
       toast.success(t("rsvpSettingsSaved"), { compactTitle: t("toastSaveRsvpSettings") });
+      onSaved?.();
     } catch {
       const message = t("couldNotSaveRsvpSettings");
       setSaveError(message);
@@ -116,21 +127,12 @@ function SettingsForm({
         <Switch
           id={`${baseId}-enabled`}
           checked={draft.enabled}
-          onCheckedChange={(enabled) => patch({ enabled, required: enabled && draft.required })}
+          onCheckedChange={(enabled) => patch({ enabled })}
         />
       </div>
 
       {draft.enabled && (
         <>
-          <div className="flex items-center justify-between gap-3">
-            <Label htmlFor={`${baseId}-required`}>{t("rsvpRequired")}</Label>
-            <Switch
-              id={`${baseId}-required`}
-              checked={draft.required}
-              onCheckedChange={(required) => patch({ required })}
-            />
-          </div>
-
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("rsvpAudience")}</legend>
             <div className="flex flex-wrap gap-2">
@@ -154,7 +156,7 @@ function SettingsForm({
                     )}
                   >
                     {on && <CheckIcon aria-hidden weight="bold" className="size-3.5" />}
-                    {t(KIND_LABEL[kind])}
+                    {t(RSVP_KIND_LABEL[kind])}
                   </button>
                 );
               })}
@@ -222,16 +224,6 @@ function SettingsForm({
     </form>
   );
 }
-
-const KIND_LABEL: Record<
-  RsvpKind,
-  "rsvpKindParticipant" | "rsvpKindMentor" | "rsvpKindSponsor" | "rsvpKindStaff"
-> = {
-  participant: "rsvpKindParticipant",
-  mentor: "rsvpKindMentor",
-  sponsor: "rsvpKindSponsor",
-  staff: "rsvpKindStaff",
-};
 
 function LocalizedFields({
   baseId,

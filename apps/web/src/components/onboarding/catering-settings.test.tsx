@@ -47,7 +47,6 @@ function settings(overrides: Partial<RsvpSettings> = {}): RsvpSettings {
     scheduleId: 3,
     isMeal: true,
     enabled: true,
-    required: false,
     kinds: ["sponsor"],
     nameI18n: null,
     descriptionI18n: null,
@@ -56,11 +55,11 @@ function settings(overrides: Partial<RsvpSettings> = {}): RsvpSettings {
     defaults: { name: "Lunch", description: null, date: "2026-10-20T12:00:00.000Z", closesAt: "x" },
     counts: {
       activityId: 7,
+      scheduleId: 3,
       name: "Lunch",
       nameI18n: {},
       startsAt: "x",
       isMeal: true,
-      required: false,
       eligible: 4,
       attending: 2,
       notAttending: 1,
@@ -103,6 +102,7 @@ describe("CateringSettingsPanel", () => {
     render(settings());
     expect(container.textContent).not.toContain("rsvpKindParticipant");
     expect(container.textContent).toContain("rsvpMealsNoParticipants");
+    expect(container.textContent).not.toContain("rsvpRequired");
     act(() => root.unmount());
     root = createRoot(container);
     render(settings({ isMeal: false }));
@@ -115,7 +115,6 @@ describe("CateringSettingsPanel", () => {
     await act(async () => container.querySelector<HTMLButtonElement>("[data-submit]")?.click());
     expect(mocks.save).toHaveBeenCalledWith({
       enabled: true,
-      required: false,
       kinds: ["sponsor"],
       nameI18n: null,
       descriptionI18n: null,

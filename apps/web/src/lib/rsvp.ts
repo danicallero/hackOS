@@ -14,9 +14,7 @@ export interface RsvpItem {
   date: string;
   closesAt: string;
   location: string | null;
-  required: boolean;
   answer: RsvpAnswer | null;
-  allowsUnsure: boolean;
   locked: boolean;
   isMeal: boolean;
 }
@@ -28,29 +26,14 @@ export function draftFromItems(items: readonly RsvpItem[]): RsvpDraft {
   return Object.fromEntries(items.map((item) => [item.activityId, { answer: item.answer }]));
 }
 
-/** An open item still needs the person: no answer yet, or "unsure" on a required item. */
-export function needsAnswer(item: RsvpItem, answer: RsvpAnswer | null): boolean {
-  if (item.locked) return false;
-  return answer === null ? item.required : item.required && answer === "unsure";
-}
-
 export function isItemChanged(item: RsvpItem, draft: RsvpDraft[number]): boolean {
   return draft.answer !== item.answer;
-}
-
-/** True while the draft cannot be submitted: a required item is unanswered. */
-export function draftBlocked(items: readonly RsvpItem[], draft: RsvpDraft): boolean {
-  return items.some((item) => {
-    if (item.locked) return false;
-    const d = draft[item.activityId];
-    return needsAnswer(item, d.answer);
-  });
 }
 
 /**
  * PUT body. Only open, changed items are sent (locked ones never change and an
  * unchanged echo is pointless), so a stale list can't overwrite newer answers.
- * Unanswered optional items are skipped: skipping is a valid state.
+ * Unanswered items are skipped: skipping is always valid.
  */
 export function rsvpBody(items: readonly RsvpItem[], draft: RsvpDraft) {
   return {
@@ -69,7 +52,6 @@ export function rsvpWhen(item: RsvpItem, lang: Language): string {
 /** API error reasons after which the stored list differs from what the caller submitted. */
 export const STALE_RSVP_REASONS = new Set([
   "rsvp_locked",
-  "rsvp_incomplete",
   "rsvp_not_offered",
   "rsvp_participants_excluded",
 ]);
@@ -85,11 +67,11 @@ export interface RsvpKindCounts {
 
 export interface RsvpSummary extends RsvpKindCounts {
   activityId: number;
+  scheduleId: number;
   name: string;
   nameI18n: Record<string, string>;
   startsAt: string;
   isMeal: boolean;
-  required: boolean;
   eligible: number;
   byKind: Partial<Record<RsvpKind, RsvpKindCounts>>;
   intolerances: { id: number; label: Record<string, string>; n: number }[];
@@ -101,7 +83,6 @@ export interface RsvpSettings {
   scheduleId: number;
   isMeal: boolean;
   enabled: boolean;
-  required: boolean;
   kinds: RsvpKind[];
   nameI18n: Record<string, string> | null;
   descriptionI18n: Record<string, string> | null;
@@ -114,7 +95,6 @@ export interface RsvpSettings {
 /** The editable part of the settings, as PUT /api/schedule/:id/rsvp takes it. */
 export interface RsvpSettingsDraft {
   enabled: boolean;
-  required: boolean;
   kinds: RsvpKind[];
   nameI18n: Record<string, string>;
   descriptionI18n: Record<string, string>;
@@ -127,13 +107,23 @@ export function askableKinds(isMeal: boolean): RsvpKind[] {
   return RSVP_KINDS.filter((kind) => !(isMeal && kind === "participant"));
 }
 
+/** Translation key for each attendance kind, shared by every RSVP audience picker. */
+export const RSVP_KIND_LABEL: Record<
+  RsvpKind,
+  "rsvpKindParticipant" | "rsvpKindMentor" | "rsvpKindSponsor" | "rsvpKindStaff"
+> = {
+  participant: "rsvpKindParticipant",
+  mentor: "rsvpKindMentor",
+  sponsor: "rsvpKindSponsor",
+  staff: "rsvpKindStaff",
+};
+
 export function settingsToDraft(
   settings: RsvpSettings,
   toLocal: (iso: string | null) => string,
 ): RsvpSettingsDraft {
   return {
     enabled: settings.enabled,
-    required: settings.required,
     kinds: [...settings.kinds],
     nameI18n: { ...(settings.nameI18n ?? {}) },
     descriptionI18n: { ...(settings.descriptionI18n ?? {}) },
@@ -154,7 +144,6 @@ export function draftToBody(
 ) {
   return {
     enabled: draft.enabled,
-    required: draft.enabled && draft.required,
     kinds: draft.kinds.filter((k) => askableKinds(isMeal).includes(k)),
     nameI18n: nonBlank(draft.nameI18n),
     descriptionI18n: nonBlank(draft.descriptionI18n),
@@ -167,4 +156,14 @@ export function draftToBody(
 export function settingsDraftError(draft: RsvpSettingsDraft): "rsvpKindsRequired" | null {
   if (draft.enabled && draft.kinds.length === 0) return "rsvpKindsRequired";
   return null;
+}
+
+/** GET /api/logistics/rsvps/:activityId/people: everyone asked, with their answer. */
+export interface RsvpPerson {
+  userId: number;
+  name: string | null;
+  surname: string | null;
+  kind: RsvpKind;
+  enterprise: string | null;
+  state: RsvpAnswer | "unanswered";
 }

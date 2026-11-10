@@ -48,9 +48,7 @@ function item(overrides: Partial<RsvpItem>): RsvpItem {
     date: "2026-10-20T12:00:00.000Z",
     closesAt: "2026-10-19T12:00:00.000Z",
     location: null,
-    required: false,
     answer: null,
-    allowsUnsure: true,
     locked: false,
     isMeal: true,
     ...overrides,
@@ -101,7 +99,7 @@ describe("CateringRsvpForm", () => {
     expect(container.textContent).toContain("later");
   });
 
-  it("lets an optional item be skipped and sends only what changed", async () => {
+  it("lets items be skipped and sends only what changed", async () => {
     const save = render([item({ activityId: 1 }), item({ activityId: 2, name: "Dinner" })]);
     click(radio("Dinner", "rsvpUnsure"));
     await act(async () => submit().click());
@@ -111,17 +109,17 @@ describe("CateringRsvpForm", () => {
     expect(draft[2].answer).toBe("unsure");
   });
 
-  it("blocks a required item until answered and hides unsure when not allowed", () => {
-    render([item({ required: true, allowsUnsure: false })]);
-    expect(submit().disabled).toBe(true);
+  it("always offers unsure and never requires an answer", () => {
+    render([item({})]);
+    expect(submit().disabled).toBe(false);
     const labels = [...container.querySelectorAll("[role=radio]")].map((b) => b.textContent);
-    expect(labels).toEqual(["rsvpYes", "rsvpNo"]);
-    click(radio("Lunch", "rsvpNo"));
+    expect(labels).toEqual(["rsvpYes", "rsvpNo", "rsvpUnsure"]);
+    click(radio("Lunch", "rsvpUnsure"));
     expect(submit().disabled).toBe(false);
   });
 
   it("makes a locked item read-only", () => {
-    render([item({ locked: true, required: true, answer: "no" })]);
+    render([item({ locked: true, answer: "no" })]);
     for (const button of container.querySelectorAll<HTMLButtonElement>("[role=radio]")) {
       expect(button.disabled).toBe(true);
     }

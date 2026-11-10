@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicScheduleItem, ScheduleInput } from "@/lib/logistics";
+import type { RsvpKind } from "@/lib/rsvp";
 import {
   cleanScheduleForm,
   EMPTY_SCHEDULE_FORM,
@@ -42,7 +43,15 @@ const base: ScheduleInput = {
 
 let container: HTMLDivElement;
 let root: Root;
-let onSubmit: ReturnType<typeof vi.fn<(values: ScheduleInput) => Promise<{ id: number }>>>;
+let onSubmit: ReturnType<
+  typeof vi.fn<
+    (
+      values: ScheduleInput,
+      owners: unknown[],
+      rsvp?: { enabled: true; kinds: RsvpKind[] },
+    ) => Promise<{ id: number }>
+  >
+>;
 
 async function render(initial: ScheduleInput, scheduleId?: number) {
   await act(async () => {
@@ -66,7 +75,13 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
   onSubmit = vi
-    .fn<(values: ScheduleInput) => Promise<{ id: number }>>()
+    .fn<
+      (
+        values: ScheduleInput,
+        owners: unknown[],
+        rsvp?: { enabled: true; kinds: RsvpKind[] },
+      ) => Promise<{ id: number }>
+    >()
     .mockResolvedValue({ id: 1 });
 });
 
@@ -93,6 +108,23 @@ describe("ScheduleFormModal Live Activity audience switch", () => {
       expect.objectContaining({ liveActivityAudience: true }),
       [],
     );
+  });
+
+  it("marks a new activity as asking attendance to the chosen audience", async () => {
+    const user = userEvent.setup();
+    await render(base);
+    const enabled = document.querySelector<HTMLButtonElement>("#schedule-rsvp-enabled");
+    await act(async () => user.click(enabled as HTMLButtonElement));
+    const sponsor = [...document.querySelectorAll("button")].find(
+      (b) => b.textContent === "rsvpKindSponsor",
+    );
+    await act(async () => user.click(sponsor as HTMLButtonElement));
+    const save = [...document.querySelectorAll("button")].find((b) => b.textContent === "save");
+    await act(async () => user.click(save as HTMLButtonElement));
+    expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [], {
+      enabled: true,
+      kinds: ["sponsor"],
+    });
   });
 
   it("never sends it on for an item without an audience", () => {

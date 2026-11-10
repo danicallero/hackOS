@@ -122,7 +122,6 @@ Table activity_rsvp_settings {
   kinds "text[]" [not null, default: `'{}'::text[]`]
   name_i18n jsonb
   options jsonb [not null, default: `'[]'::jsonb`]
-  required boolean [not null, default: `false`]
   rsvp_date "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
 

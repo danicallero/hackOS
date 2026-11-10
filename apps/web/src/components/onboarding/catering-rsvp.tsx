@@ -8,10 +8,8 @@ import { Button } from "@/components/ui/button";
 import { rsvpSaveErrorKey, useRsvps } from "@/hooks/use-rsvps";
 import { useLocale } from "@/lib/i18n";
 import {
-  draftBlocked,
   draftFromItems,
   isItemChanged,
-  needsAnswer,
   type RsvpAnswer,
   type RsvpDraft,
   type RsvpItem,
@@ -19,12 +17,11 @@ import {
 } from "@/lib/rsvp";
 import { useMe } from "@/lib/session";
 import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 /**
  * Attendee RSVP editor: one row per open RSVP (yes / no / unsure). Used as an
- * editable section of My profile and as the onboarding RSVP step. Skipping an optional item is a valid
- * state; a required one blocks Save until answered. Locked items are read-only.
+ * editable section of My profile and as the onboarding RSVP step. Every answer
+ * is optional; locked items are read-only.
  *
  * Integration points for the host page:
  * - `<CateringRsvpSection userId onDirtyChange onSaved />` fetches and saves on its own;
@@ -124,8 +121,6 @@ export function CateringRsvpForm({
     () => items.some((item) => isItemChanged(item, draft[item.activityId])),
     [items, draft],
   );
-  const blocked = draftBlocked(items, draft);
-
   useEffect(() => {
     onDirtyChange?.(changed);
     return () => onDirtyChange?.(false);
@@ -137,7 +132,7 @@ export function CateringRsvpForm({
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (blocked || pending) return;
+    if (pending) return;
     setSaveError(null);
     setPending(true);
     try {
@@ -164,7 +159,6 @@ export function CateringRsvpForm({
           footer ? (
             <FormActions
               pending={pending}
-              disabled={blocked}
               state={saveError ? "error" : changed ? "unsaved" : "saved"}
               secondaryActions={actions}
             />
@@ -200,23 +194,16 @@ function RsvpRow({
   onAnswer: (answer: RsvpAnswer) => void;
 }) {
   const { t, language } = useLocale();
-  const answers: RsvpAnswer[] = item.allowsUnsure ? ["yes", "no", "unsure"] : ["yes", "no"];
+  const answers: RsvpAnswer[] = ["yes", "no", "unsure"];
   const labels: Record<RsvpAnswer, string> = {
     yes: t("rsvpYes"),
     no: t("rsvpNo"),
     unsure: t("rsvpUnsure"),
   };
-  const missing = needsAnswer(item, draft.answer);
-
   return (
     <li className="space-y-2 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <span className="min-w-0 font-medium text-sm wrap-anywhere">
-          {item.name}
-          {item.required && (
-            <span className="text-muted-foreground font-normal"> · {t("rsvpRequired")}</span>
-          )}
-        </span>
+        <span className="min-w-0 font-medium text-sm wrap-anywhere">{item.name}</span>
         <span className="text-muted-foreground text-sm tabular-nums">
           {rsvpWhen(item, language)}
         </span>
@@ -230,7 +217,6 @@ function RsvpRow({
             key={answer}
             checked={draft.answer === answer}
             disabled={disabled || item.locked}
-            invalid={missing}
             onSelect={() => onAnswer(answer)}
           >
             {labels[answer]}
@@ -245,13 +231,11 @@ function RsvpRow({
 function Choice({
   checked,
   disabled,
-  invalid,
   onSelect,
   children,
 }: {
   checked: boolean;
   disabled: boolean;
-  invalid: boolean;
   onSelect: () => void;
   children: React.ReactNode;
 }) {
@@ -263,7 +247,6 @@ function Choice({
       size="sm"
       variant={checked ? "default" : "outline"}
       disabled={disabled}
-      className={cn(!checked && invalid && "border-destructive/60")}
       onClick={onSelect}
     >
       {children}

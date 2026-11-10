@@ -14,6 +14,7 @@ import {
 } from "@hackos/shared/schedule-form";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
@@ -50,6 +51,7 @@ import {
   type ScheduleOwner,
   type ScheduleTranslations,
 } from "@/lib/logistics";
+import { askableKinds, RSVP_KIND_LABEL, type RsvpKind } from "@/lib/rsvp";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -208,7 +210,11 @@ export function ScheduleFormModal({
    * The resolved id lets the modal persist any staged translations right
    * after creation.
    */
-  onSubmit: (values: ScheduleInput, pendingOwners: PendingOwner[]) => Promise<{ id: number }>;
+  onSubmit: (
+    values: ScheduleInput,
+    pendingOwners: PendingOwner[],
+    rsvp?: { enabled: true; kinds: RsvpKind[] },
+  ) => Promise<{ id: number }>;
   /** Present only when editing an existing item — owner assignment needs a real id. */
   scheduleId?: number;
 }) {
@@ -218,6 +224,9 @@ export function ScheduleFormModal({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [scheduledPublish, setScheduledPublish] = useState(Boolean(initial.publishAt));
   const [pendingOwners, setPendingOwners] = useState<PendingOwner[]>([]);
+  // Create mode only: mark the activity as asking attendance before it exists.
+  const [rsvpEnabled, setRsvpEnabled] = useState(false);
+  const [rsvpKinds, setRsvpKinds] = useState<RsvpKind[]>([]);
   // H50 extension: staged locally so translations can be filled in before
   // the item even exists — persisted right after create/update below.
   const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
@@ -240,6 +249,8 @@ export function ScheduleFormModal({
       setTranslationsOpen(false);
       setScheduledPublish(Boolean(initial.publishAt));
       setPendingOwners([]);
+      setRsvpEnabled(false);
+      setRsvpKinds([]);
       setTranslations(nextTranslations);
     } else if (
       !sameValue(previous.initial, initial) ||
@@ -311,7 +322,11 @@ export function ScheduleFormModal({
     if (!prepared) return;
     setPending(true);
     try {
-      const result = await onSubmit(prepared.values, pendingOwners);
+      const rsvp =
+        !scheduleId && rsvpEnabled ? ({ enabled: true, kinds: rsvpKinds } as const) : undefined;
+      const result = rsvp
+        ? await onSubmit(prepared.values, pendingOwners, rsvp)
+        : await onSubmit(prepared.values, pendingOwners);
       if (Object.keys(prepared.translations).length > 0) {
         await logisticsApi.saveScheduleTranslations(result.id, prepared.translations);
       }
@@ -328,6 +343,8 @@ export function ScheduleFormModal({
     Object.values(translations).some((translation) => translation?.title?.trim());
   const isParticipant = (values.audiences ?? []).includes("participant");
   const isMeal = isMealActivityKind(values.type);
+  const rsvpKindsForType = askableKinds(isMeal);
+  const rsvpInvalid = rsvpEnabled && rsvpKinds.length === 0;
   // An item with no audience tag is staff-only, full stop — visibility/publishAt
   // describe when a *tagged* audience gets to see an item, so they're meaningless
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
@@ -367,7 +384,7 @@ export function ScheduleFormModal({
           <SubmitButton
             pending={pending}
             onClick={submit}
-            disabled={!hasAnyTitle || !values.startsAt || !values.endsAt}
+            disabled={!hasAnyTitle || !values.startsAt || !values.endsAt || rsvpInvalid}
           >
             {t("save")}
           </SubmitButton>
@@ -402,13 +419,16 @@ export function ScheduleFormModal({
         <Field id="schedule-type" label={t("colType")}>
           <Select
             value={values.type ?? "activity"}
-            onValueChange={(type) =>
+            onValueChange={(type) => {
               setValues((v) => ({
                 ...v,
                 type,
                 requiresScan: isMealActivityKind(type) || v.requiresScan,
-              }))
-            }
+              }));
+              setRsvpKinds((kinds) =>
+                isMealActivityKind(type) ? kinds.filter((kind) => kind !== "participant") : kinds,
+              );
+            }}
           >
             <SelectTrigger id="schedule-type" className="w-full">
               <SelectValue />
@@ -533,14 +553,71 @@ export function ScheduleFormModal({
           </Field>
         </div>
 
-        {scheduleId ? (
-          <section aria-labelledby="schedule-rsvp-title" className="space-y-3 border-t pt-5">
-            <h3 id="schedule-rsvp-title" className="type-label text-muted-foreground">
-              {t("rsvpSectionTitle")}
-            </h3>
+        <section aria-labelledby="schedule-rsvp-title" className="space-y-3 border-t pt-5">
+          <h3 id="schedule-rsvp-title" className="type-label text-muted-foreground">
+            {t("rsvpSectionTitle")}
+          </h3>
+          {scheduleId ? (
             <CateringSettingsPanel scheduleId={scheduleId} />
-          </section>
-        ) : null}
+          ) : (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="schedule-rsvp-enabled" className="font-normal">
+                  {t("rsvpEnabled")}
+                </Label>
+                <Switch
+                  id="schedule-rsvp-enabled"
+                  checked={rsvpEnabled}
+                  onCheckedChange={(enabled) => {
+                    setRsvpEnabled(enabled);
+                    if (!enabled) setRsvpKinds([]);
+                  }}
+                />
+              </div>
+              {rsvpEnabled && (
+                <>
+                  <fieldset className="space-y-2">
+                    <legend className="text-sm font-medium">{t("rsvpAudience")}</legend>
+                    <div className="flex flex-wrap gap-2">
+                      {rsvpKindsForType.map((kind) => {
+                        const on = rsvpKinds.includes(kind);
+                        return (
+                          <button
+                            key={kind}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() =>
+                              setRsvpKinds((kinds) =>
+                                on ? kinds.filter((k) => k !== kind) : [...kinds, kind],
+                              )
+                            }
+                            className={cn(
+                              "inline-flex min-h-(--target-min) items-center gap-1.5 rounded-button border px-3 text-sm transition-colors",
+                              on
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-accent",
+                            )}
+                          >
+                            {on && <CheckIcon aria-hidden weight="bold" className="size-3.5" />}
+                            {t(RSVP_KIND_LABEL[kind])}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {isMeal && (
+                      <p className="text-muted-foreground text-xs">
+                        {t("rsvpMealsNoParticipants")}
+                      </p>
+                    )}
+                  </fieldset>
+                  {rsvpInvalid && (
+                    <p className="text-destructive text-sm">{t("rsvpKindsRequired")}</p>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </section>
 
         <Collapsible open={translationsOpen} onOpenChange={setTranslationsOpen}>
           <div className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-3">

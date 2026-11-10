@@ -4078,7 +4078,6 @@
   "rsvpYes": "Yes",
   "rsvpNo": "No",
   "rsvpUnsure": "Not sure",
-  "rsvpRequired": "Required",
   "rsvpClosed": "Answers are closed.",
   "rsvpSaved": "Answers saved",
   "toastSaveRsvps": "Save answers",
@@ -4107,5 +4106,17 @@
   "onboardingGreeting": "Hi, {name}",
   "onboardingStatusDone": "done",
   "rsvpSectionTitle": "Attendance",
-  "rsvpCustomize": "Customize date, texts and close"
+  "rsvpCustomize": "Customize date, texts and close",
+  "rsvpOverviewTitle": "Attendance",
+  "rsvpNoAskedActivities": "No activity is asking for attendance",
+  "rsvpAnswersTitle": "Answers",
+  "rsvpNobody": "Nobody in this list",
+  "dietarySummary": "{people} people · {restrictions} with intolerances · {notes} with notes",
+  "dietaryFilter": "Intolerance",
+  "dietaryAll": "All",
+  "dietarySearch": "Search by name, company or note",
+  "dietaryNone": "Nobody has declared restrictions",
+  "couldNotLoadDietary": "Could not load the restrictions",
+  "rsvpTabActivities": "Activities",
+  "rsvpTabDietary": "Food"
 }

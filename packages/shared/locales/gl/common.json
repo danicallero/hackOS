@@ -84,7 +84,6 @@
   "apiError_onboarding_step_required": "Este paso é obrigatorio.",
   "apiError_onboarding_fact_incomplete": "Completa a tarefa antes de marcala como rematada.",
   "apiError_rsvp_locked": "O prazo para responder rematou.",
-  "apiError_rsvp_incomplete": "Responde a todas as invitacións obrigatorias.",
   "apiError_rsvp_participants_excluded": "As persoas participantes non confirman asistencia ás comidas.",
   "apiError_meal_plan_not_eligible": "Este plan de comidas non está dispoñible para esta conta.",
   "apiError_project_frozen": "Retira a entrega para editar o proxecto.",
