@@ -53,6 +53,12 @@ export const ERROR_REASONS = {
   PROJECT_FROZEN: "project_frozen",
   /** 400: the event requires a linked GitHub repository to submit. */
   PROJECT_GITHUB_REQUIRED: "project_github_required",
+  MENTOR_PROFILE_NOT_ELIGIBLE: "mentor_profile_not_eligible",
+  ONBOARDING_STEP_REQUIRED: "onboarding_step_required",
+  RSVP_LOCKED: "rsvp_locked",
+  RSVP_INCOMPLETE: "rsvp_incomplete",
+  RSVP_PARTICIPANTS_EXCLUDED: "rsvp_participants_excluded",
+  MEAL_PLAN_NOT_ELIGIBLE: "meal_plan_not_eligible",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

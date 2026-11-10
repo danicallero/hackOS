@@ -43,6 +43,7 @@ export const CAPABILITIES = {
   // checks them until the #933 staff export/override routes land.
   MEAL_PLANS_EXPORT: "meal-plans:export",
   MEAL_PLANS_MANAGE: "meal-plans:manage", // edit someone else's meal plan
+  HELPDESK_OFFER: "helpdesk:offer", // publish a helper profile and offer help
 
   // queue & judging (H29-H40)
   QUEUE_STATUS: "queue:status", // view your own queue status
@@ -118,6 +119,7 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "intolerances:manage": "Maintain the food-intolerance dictionary",
   "meal-plans:export": "Export per-person meal plans with dietary data",
   "meal-plans:manage": "Edit anyone's meal plan",
+  "helpdesk:offer": "Publish a helper profile and claim help requests",
   "queue:status": "View your own judging queue and status",
   "queue:operate": "Call, skip, mark no-show, pause, or requeue teams",
   "queue:admin": "Manage rooms, assignments, settings, and disqualifications",
