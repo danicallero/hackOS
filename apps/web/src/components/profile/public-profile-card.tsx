@@ -108,7 +108,8 @@ export function PublicProfileCard({
   onboarding,
   onDirtyChange,
 }: {
-  onboarding?: { onFinished: () => void; onLater: () => void };
+  /** `onFinished` says which explicit choice was saved: create (opt in) or hidden (decline). */
+  onboarding?: { onFinished: (choice: "create" | "hidden") => void; onLater: () => void };
   /** Lets the profile's section list mark a section that holds unsaved edits. */
   onDirtyChange?: (dirty: boolean) => void;
 } = {}) {
@@ -224,7 +225,7 @@ export function PublicProfileCard({
       idempotencyKey.current = null;
       commit(next);
       setEdits(null);
-      if (onboarding) onboarding.onFinished();
+      if (onboarding) onboarding.onFinished(directoryVisible ? "create" : "hidden");
       else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
       setSaveError(apiErrorText(err, t, t("couldNotSavePublicProfile")));

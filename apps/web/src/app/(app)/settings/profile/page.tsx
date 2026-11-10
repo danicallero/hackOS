@@ -17,7 +17,7 @@ import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
 import { MealsSection } from "./meals-section";
 import { PasswordRow } from "./password-card";
-import { PersonalDetails } from "./personal-details";
+import { PersonalDetails } from "@/components/profile/personal-details";
 import { ProfileRoles } from "./profile-roles";
 import {
   type EditableSection,

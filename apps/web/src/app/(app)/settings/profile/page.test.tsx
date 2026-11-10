@@ -33,7 +33,7 @@ vi.mock("@/components/certificates/certificates-panel", () => ({
   CertificatesPanel: () => <p>certificates-body</p>,
 }));
 vi.mock("./wallet-section", () => ({ WalletSection: () => <p>wallet-body</p> }));
-vi.mock("./personal-details", () => ({
+vi.mock("@/components/profile/personal-details", () => ({
   PersonalDetails: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => {
     useEffect(() => onDirtyChange(personal.dirty), [onDirtyChange]);
     return <p>personal-body</p>;

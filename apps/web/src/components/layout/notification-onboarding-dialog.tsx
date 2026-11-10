@@ -4,24 +4,19 @@
 // activity reminders and challenges unless chosen (or there is no mobile app);
 // answering once, on web or mobile, stops it everywhere.
 
-import { channelEnabled, emailLocked } from "@hackos/shared/notification-channels";
 import { useEffect, useState } from "react";
-import { ContextualError } from "@/components/common/contextual-error";
 import { Modal } from "@/components/common/modal";
+import {
+  emailChoiceItems,
+  initialEmailChoices,
+  NotificationChoices,
+} from "@/components/onboarding/notification-choices";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { isProfileTasksDismissed } from "@/lib/meal-plan";
-import {
-  type NotificationChannel,
-  notificationsApi,
-  type PreferencesResponse,
-} from "@/lib/notifications";
+import { notificationsApi, type PreferencesResponse } from "@/lib/notifications";
 import { useSessionContext } from "@/lib/session";
-
-const CATEGORIES = ["queue", "schedule", "challenge"] as const;
 
 export function NotificationOnboardingDialog() {
   const { me, refresh } = useSessionContext();
@@ -45,9 +40,7 @@ export function NotificationOnboardingDialog() {
       .then((loaded) => {
         if (cancelled || !loaded.onboardingRequired) return;
         setPrefs(loaded);
-        setEmail(
-          Object.fromEntries(CATEGORIES.map((c) => [c, channelEnabled(loaded, c, "email")])),
-        );
+        setEmail(initialEmailChoices(loaded));
       })
       // The prompt is optional: if preferences cannot load, skip it; it returns next session.
       .catch(() => undefined);
@@ -63,14 +56,7 @@ export function NotificationOnboardingDialog() {
     setPending(true);
     setError(null);
     try {
-      // Only choices that differ from today's behavior are stored.
-      const items = CATEGORIES.filter(
-        (c) => !emailLocked(state, c) && email[c] !== channelEnabled(state, c, "email"),
-      ).map((category) => ({
-        category,
-        channel: "email" as NotificationChannel,
-        enabled: email[category] === true,
-      }));
+      const items = emailChoiceItems(state, email);
       await notificationsApi.completeOnboarding(items);
       await refresh();
     } catch (err) {
@@ -79,12 +65,6 @@ export function NotificationOnboardingDialog() {
       setPending(false);
     }
   }
-
-  const labels: Record<(typeof CATEGORIES)[number], string> = {
-    queue: t("categoryQueueCalls"),
-    schedule: t("categoryReminderChannels"),
-    challenge: t("challenges"),
-  };
 
   return (
     <Modal
@@ -100,31 +80,13 @@ export function NotificationOnboardingDialog() {
         </Button>
       }
     >
-      <div className="space-y-4 pb-1">
-        <p className="text-muted-foreground text-sm">
-          {state.hasPushDevice
-            ? t("notificationOnboardingWithApp")
-            : t("notificationOnboardingNoApp")}
-        </p>
-        {error && <ContextualError message={error} />}
-        <div className="divide-y divide-border/60">
-          {CATEGORIES.map((category) => (
-            <div key={category} className="flex items-center justify-between gap-3 py-3">
-              <Label htmlFor={`onboarding-email-${category}`} className="font-normal">
-                {labels[category]} · {t("email")}
-              </Label>
-              <Switch
-                id={`onboarding-email-${category}`}
-                checked={email[category] ?? false}
-                disabled={pending || emailLocked(state, category)}
-                onCheckedChange={(checked) =>
-                  setEmail((prev) => ({ ...prev, [category]: checked }))
-                }
-              />
-            </div>
-          ))}
-        </div>
-      </div>
+      <NotificationChoices
+        prefs={state}
+        email={email}
+        onChange={setEmail}
+        pending={pending}
+        error={error}
+      />
     </Modal>
   );
 }
