@@ -1179,3 +1179,45 @@ that repeated autosaves do not create one event per pause in typing.
 ### Exceptions
 A separately authorized content-versioning feature must define its own privacy
 and retention contract before storing private historical content.
+
+## [R034] Derive a new branded surface from the product's own artifacts first
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-10
+
+### Trigger
+Designing a new branded output (share card, poster, certificate, email block)
+for which the product already ships a comparable artifact.
+
+### Mistake
+The share image was composed from designer references in a Downloads/Desktop
+folder (a bold serif headline, gradient sky, decorative building art) and the
+sharing step wrapped it in a form-heavy panel. The user rejected both: the
+product already has a Wallet pass, its fonts, strip, organizer logo and the
+Wallet/QR/Share component conventions, and they expected those to be reused.
+
+### Lesson
+Inventory what the repo already ships (`apps/web/public`, `apps/api/assets`,
+`apps/mobile/assets`, existing pass/badge/email/certificate renderers and their
+UI components) and render it before consulting outside references. New
+surfaces take their proportions, fields, labels, palette and typefaces from the
+closest existing artifact; outside art is an accent, not the base. Titles use
+the edition's actual title weights (Rockwell regular), values use Inter; flat
+colour, no decorative gradients.
+
+### Action
+Look at the real rendered artifact (e.g. screenshot of the Wallet pass), copy
+its structure and proportions, and reuse the shared primitives (Button,
+DropdownMenu, toast, Skeleton) instead of custom panels. Keep one preview, one
+primary action and move secondary actions into a menu. Ship only assets taken
+from the repo (copy them under a namespaced public folder) and say which.
+
+### Validation
+Show before/after screenshots of the real component and an exported image
+beside the existing artifact; confirm every asset has a repo path and no
+outside reference art is bundled.
+
+### Exceptions
+Brand art from outside the repo is fine when the user names it for this surface.

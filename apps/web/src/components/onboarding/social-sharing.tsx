@@ -1,19 +1,26 @@
 "use client";
 
-import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { LinkedinLogoIcon } from "@phosphor-icons/react/dist/csr/LinkedinLogo";
 import { ShareNetworkIcon } from "@phosphor-icons/react/dist/csr/ShareNetwork";
 import { XLogoIcon } from "@phosphor-icons/react/dist/csr/XLogo";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiAssetUrl } from "@/lib/directory";
 import { saveBlob } from "@/lib/download";
 import { useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import copyFragments from "./social-sharing.locales.json";
@@ -33,6 +40,12 @@ export interface SocialSharingEvent {
   /** Shown only when the event provides it; never derived or invented. */
   dateLabel?: string;
   location?: string;
+  /**
+   * Public event page. Added to the caption and shown on the image as its
+   * host. Only http(s) is accepted; query and fragment are dropped so no
+   * token or tracking parameter can travel with it.
+   */
+  url?: string;
   /** Same-origin or CORS-enabled image; the bundled HackUDC wordmark is the fallback. */
   logo?: string;
 }
@@ -62,22 +75,28 @@ export const SHARE_SIZES: Record<ShareFormat, { width: number; height: number }>
 /** Output is drawn at 2× (2400×1260 and 2160×2160). */
 export const SHARE_SCALE = 2;
 
+/** The Wallet pass palette: brand blue body, ink type, red labels, ink canvas (docs/DESIGN.md §2). */
 const COLORS = {
   ink: "#030846",
-  red: "#bf2100",
+  inkSoft: "rgba(3, 8, 70, 0.72)",
+  blue: "#a3d5ff",
   cream: "#fafafa",
-  yellow: "#f5dc8f",
-  skyTop: "#eef7ff",
-  skyBottom: "#a3d5ff",
+  red: "#bf2100",
+  white: "#ffffff",
 };
-const DISPLAY_FONT = `"Rockwell", Georgia, "Times New Roman", serif`;
+const MONO_FONT = `ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
 const FALLBACK_SANS = "system-ui, -apple-system, Segoe UI, sans-serif";
 
+/** The Apple Wallet pass strip (apps/api/assets/apple-wallet/strip@3x.png): lighthouse and HackUDC 2027 wordmark. */
 const ASSETS = {
-  logo: "/onboarding/hackudc-2027-logo.png",
-  gallery: "/onboarding/galeria.png",
-  gull: "/onboarding/gaviota.png",
+  strip: "/onboarding/pass-strip.png",
+  /** The pass's organizer logo (apple-wallet/logo@2x.png), recoloured ink for the blue body. */
+  organizer: "/onboarding/gpul-logo.png",
+  /** Emilia, the seagull of the 404 page: perches on the pass. */
+  seagull: "/onboarding/emilia.png",
 };
+/** Strip proportions; the band is this tall at any card width. */
+const STRIP_RATIO = 294 / 1125;
 
 type Copy = (typeof copyFragments)["es"];
 type CopyKey = keyof Copy;
@@ -91,15 +110,33 @@ function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? "");
 }
 
-/** Caption in the viewer's language; the date and place appear only when the event supplied them. */
+/** A public event URL without query or fragment, or null when it is not plain http(s). */
+export function publicEventUrl(value: string | undefined): URL | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/** Caption in the viewer's language; the date, place and link appear only when the event supplied them. */
 export function buildCaption(
   language: Language,
-  event: Pick<SocialSharingEvent, "name" | "year" | "dateLabel" | "location">,
+  event: Pick<SocialSharingEvent, "name" | "year" | "dateLabel" | "location" | "url">,
 ): string {
   const details = [event.dateLabel, event.location].filter(Boolean).join(" · ");
+  const url = publicEventUrl(event.url);
   return fill(copyFragments[language].caption, {
     event: eventTitle(event),
     details: details ? ` ${details}.` : "",
+    link: url ? `\n${url.href}` : "",
   });
 }
 
@@ -185,10 +222,8 @@ async function loadFonts(): Promise<string> {
     FALLBACK_SANS;
   try {
     await Promise.all([
-      document.fonts.load(`700 48px ${DISPLAY_FONT}`),
       document.fonts.load(`500 24px ${sans}`),
       document.fonts.load(`600 24px ${sans}`),
-      document.fonts.load(`700 24px ${sans}`),
     ]);
   } catch {
     // Missing fonts degrade to the fallback families in the stacks above.
@@ -196,26 +231,33 @@ async function loadFonts(): Promise<string> {
   return sans;
 }
 
-interface CardAssets {
-  logo: Drawable | null;
-  gallery: Drawable | null;
-  gull: Drawable | null;
+async function loadArt() {
+  const seagull = await loadStaticImage(ASSETS.seagull).catch(() => null);
+  return { seagull };
 }
 
-async function loadCardAssets(eventLogo: string | undefined, signal: AbortSignal) {
-  const optional = <T,>(promise: Promise<T>) => promise.catch(() => null);
-  const custom = eventLogo ? await optional(fetchImage(eventLogo, "same-origin", signal)) : null;
-  const [logo, gallery, gull] = await Promise.all([
-    custom ?? optional(loadStaticImage(ASSETS.logo)),
-    optional(loadStaticImage(ASSETS.gallery)),
-    optional(loadStaticImage(ASSETS.gull)),
-  ]);
-  return {
-    assets: { logo, gallery, gull } satisfies CardAssets,
-    usesCustomLogo: Boolean(custom),
-    /** Decoded per render, so the caller releases it once the card is drawn. */
-    customLogo: custom,
-  };
+/** How the top band identifies the event: the pass strip, the event's own logo, or its name as text. */
+export type CardBand =
+  | { kind: "strip"; image: Drawable; organizer: Drawable | null }
+  | { kind: "logo"; image: Drawable }
+  | { kind: "text" };
+
+async function loadBand(
+  event: Pick<SocialSharingEvent, "name" | "logo">,
+  signal: AbortSignal,
+): Promise<{ band: CardBand; customLogo: Drawable | null }> {
+  const custom = event.logo
+    ? await fetchImage(event.logo, "same-origin", signal).catch(() => null)
+    : null;
+  if (custom) return { band: { kind: "logo", image: custom }, customLogo: custom };
+  if (/hackudc/i.test(event.name)) {
+    const [strip, organizer] = await Promise.all([
+      loadStaticImage(ASSETS.strip).catch(() => null),
+      loadStaticImage(ASSETS.organizer).catch(() => null),
+    ]);
+    if (strip) return { band: { kind: "strip", image: strip, organizer }, customLogo: null };
+  }
+  return { band: { kind: "text" }, customLogo: null };
 }
 
 /* --------------------------------------------------------------- drawing */
@@ -223,14 +265,19 @@ async function loadCardAssets(eventLogo: string | undefined, signal: AbortSignal
 export interface DrawCardOptions {
   format: ShareFormat;
   eventName: string;
-  headline: string;
+  /** "Voy a HackUDC 2027": top-left of the pass. */
+  line: string;
   displayName: string;
   roleLabel?: string;
+  /** Date and place exactly as the event supplied them; omitted when it supplied none. */
   details?: string;
+  labels: { name: string; role: string };
   photo: Drawable | null;
-  assets: CardAssets;
-  /** Draw the event name as text instead of the HackUDC wordmark. */
-  textWordmark: boolean;
+  band: CardBand;
+  /** Public event host (e.g. "hackudc.com"), shown on the poster; omitted without an event link. */
+  host?: string;
+  /** Brand artwork around the pass; may be missing. */
+  art: { seagull: Drawable | null };
   sansFont: string;
 }
 
@@ -252,7 +299,7 @@ function wrap(ctx: Ctx, text: string, maxWidth: number): string[] {
   return lines;
 }
 
-/** Largest font size (≥ min) at which `text` fits `maxLines` lines in `maxWidth`. */
+/** Largest font size (>= min) at which `text` fits `maxLines` lines in `maxWidth`. */
 function fitText(
   ctx: Ctx,
   text: string,
@@ -281,199 +328,252 @@ function fitText(
   return { size: min, lines: kept };
 }
 
-function drawCover(ctx: Ctx, image: Drawable, cx: number, cy: number, radius: number) {
-  const side = Math.min(image.width, image.height);
-  const sx = (image.width - side) / 2;
-  const sy = (image.height - side) / 2;
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.drawImage(image, sx, sy, side, side, cx - radius, cy - radius, radius * 2, radius * 2);
-  ctx.restore();
+interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
-function drawAvatar(ctx: Ctx, o: DrawCardOptions, cx: number, cy: number, radius: number) {
+/** The photo tile sits where the Wallet pass puts its QR: a white rounded square. */
+function drawPhotoTile(ctx: Ctx, o: DrawCardOptions, r: Rect) {
+  const pad = 10;
+  ctx.fillStyle = COLORS.white;
+  ctx.beginPath();
+  ctx.roundRect(r.x, r.y, r.w, r.h, 18);
+  ctx.fill();
+  const inner = { x: r.x + pad, y: r.y + pad, w: r.w - pad * 2, h: r.h - pad * 2 };
   ctx.save();
-  ctx.shadowColor = "rgba(3, 8, 70, 0.22)";
-  ctx.shadowBlur = 24;
-  ctx.shadowOffsetY = 10;
-  ctx.fillStyle = COLORS.ink;
   ctx.beginPath();
-  ctx.arc(cx, cy, radius + 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = COLORS.cream;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius + 7, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.roundRect(inner.x, inner.y, inner.w, inner.h, 10);
+  ctx.clip();
   if (o.photo) {
-    drawCover(ctx, o.photo, cx, cy, radius);
+    const side = Math.min(o.photo.width, o.photo.height);
+    const sx = (o.photo.width - side) / 2;
+    const sy = (o.photo.height - side) / 2;
+    ctx.drawImage(o.photo, sx, sy, side, side, inner.x, inner.y, inner.w, inner.h);
+  } else {
+    ctx.fillStyle = COLORS.ink;
+    ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
+    ctx.fillStyle = COLORS.cream;
+    ctx.font = `600 ${Math.round(inner.h * 0.38)}px ${o.sansFont}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(initials(o.displayName), inner.x + inner.w / 2, inner.y + inner.h / 2);
+  }
+  ctx.restore();
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+}
+
+/** The event band: the pass strip, the event's own logo on cream, or its name as text. */
+function drawBand(ctx: Ctx, o: DrawCardOptions, r: Rect) {
+  const { band } = o;
+  if (band.kind === "strip") {
+    // The strip's last pixel columns are a lighter edge; crop them out.
+    const crop = band.image.width * 0.012;
+    ctx.drawImage(band.image, 0, 0, band.image.width - crop, band.image.height, r.x, r.y, r.w, r.h);
     return;
   }
+  ctx.fillStyle = COLORS.cream;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  if (band.kind === "logo") {
+    const scale = Math.min((r.w - 80) / band.image.width, (r.h * 0.6) / band.image.height);
+    const w = band.image.width * scale;
+    const h = band.image.height * scale;
+    ctx.drawImage(band.image, r.x + 40, r.y + (r.h - h) / 2, w, h);
+    return;
+  }
+  const fit = fitText(ctx, o.eventName, (s) => `600 ${s}px ${o.sansFont}`, 64, 28, r.w - 80, 1);
   ctx.fillStyle = COLORS.ink;
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = COLORS.yellow;
-  ctx.font = `700 ${Math.round(radius * 0.86)}px ${DISPLAY_FONT}`;
-  ctx.textAlign = "center";
+  ctx.font = `600 ${fit.size}px ${o.sansFont}`;
   ctx.textBaseline = "middle";
-  ctx.fillText(initials(o.displayName), cx, cy + radius * 0.04);
-  ctx.textAlign = "left";
-}
-
-function drawImageWidth(ctx: Ctx, image: Drawable, x: number, y: number, width: number) {
-  ctx.drawImage(image, x, y, width, (image.height / image.width) * width);
-}
-
-/** Paints the whole card on `ctx` in logical units (the caller applies the 2× scale). */
-export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
-  const { width, height } = SHARE_SIZES[o.format];
-  const sans = (weight: number, size: number) => `${weight} ${size}px ${o.sansFont}`;
-  const display = (size: number) => `700 ${size}px ${DISPLAY_FONT}`;
-  const sky = ctx.createLinearGradient(0, 0, width * 0.35, height);
-  sky.addColorStop(0, COLORS.skyTop);
-  sky.addColorStop(1, COLORS.skyBottom);
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillText(fit.lines[0], r.x + 40, r.y + r.h / 2);
   ctx.textBaseline = "alphabetic";
-  ctx.textAlign = "left";
-
-  const landscape = o.format === "landscape";
-  const left = 72;
-  const textWidth = landscape ? 500 : width - left * 2;
-  const { assets } = o;
-
-  // Artwork first so text and avatar sit on top.
-  if (assets.gallery) {
-    if (landscape) {
-      const w = 640;
-      const h = (assets.gallery.height / assets.gallery.width) * w;
-      ctx.drawImage(assets.gallery, width - w + 40, height - h * 0.82, w, h);
-    } else {
-      drawImageWidth(ctx, assets.gallery, 50, height - 370, width - 100);
-    }
-  }
-  if (assets.gull) {
-    const w = landscape ? 130 : 170;
-    drawImageWidth(ctx, assets.gull, landscape ? width - 190 : width - 250, landscape ? 36 : 56, w);
-  }
-
-  // Wordmark.
-  let y = landscape ? 56 : 64;
-  const logoHeight = landscape ? 56 : 72;
-  if (assets.logo && !o.textWordmark) {
-    const w = (assets.logo.width / assets.logo.height) * logoHeight;
-    ctx.drawImage(
-      assets.logo,
-      left,
-      y,
-      Math.min(w, textWidth),
-      (Math.min(w, textWidth) / w) * logoHeight,
-    );
-  } else {
-    const fit = fitText(ctx, o.eventName, display, logoHeight, 28, textWidth, 1);
-    ctx.fillStyle = COLORS.ink;
-    ctx.font = display(fit.size);
-    ctx.fillText(fit.lines[0], left, y + logoHeight * 0.8);
-  }
-  y += logoHeight + (landscape ? 44 : 52);
-
-  // Headline.
-  const headline = fitText(
-    ctx,
-    o.headline,
-    display,
-    landscape ? 60 : 92,
-    landscape ? 36 : 56,
-    textWidth,
-    2,
-  );
-  ctx.fillStyle = COLORS.ink;
-  ctx.font = display(headline.size);
-  const lineHeight = headline.size * 1.1;
-  for (const line of headline.lines) {
-    y += lineHeight;
-    ctx.fillText(line, left, y - headline.size * 0.1);
-  }
-  y += landscape ? 22 : 34;
-
-  if (landscape) {
-    ctx.fillStyle = COLORS.red;
-    ctx.fillRect(left, y, 72, 5);
-    y += 44;
-    drawIdentity(ctx, o, sans, left, y, textWidth);
-    drawAvatar(ctx, o, 880, 232, 112);
-  } else {
-    const radius = 140;
-    const cy = y + radius + 18;
-    drawAvatar(ctx, o, left + radius + 12, cy, radius);
-    const textLeft = left + radius * 2 + 52;
-    drawIdentity(ctx, o, sans, textLeft, cy - 84, width - textLeft - left);
-  }
 }
 
-function drawIdentity(
+/** Red mono label over an ink value, as in the Wallet pass fields. */
+function drawField(
   ctx: Ctx,
   o: DrawCardOptions,
-  sans: (weight: number, size: number) => string,
-  x: number,
-  top: number,
-  maxWidth: number,
-): void {
-  const landscape = o.format === "landscape";
-  let y = top;
-  const name = fitText(
+  label: string,
+  value: string,
+  at: { x: number; y: number; w: number },
+  size: number,
+  maxLines: number,
+): number {
+  const labelSize = Math.max(11, Math.round(size * 0.5));
+  ctx.fillStyle = COLORS.red;
+  ctx.font = `500 ${labelSize}px ${MONO_FONT}`;
+  ctx.fillText(label, at.x, at.y + labelSize);
+  const fit = fitText(
     ctx,
-    o.displayName,
-    (s) => sans(700, s),
-    landscape ? 40 : 48,
-    24,
-    maxWidth,
-    2,
+    value,
+    (s) => `500 ${s}px ${o.sansFont}`,
+    size,
+    Math.round(size * 0.6),
+    at.w,
+    maxLines,
   );
   ctx.fillStyle = COLORS.ink;
-  ctx.font = sans(700, name.size);
-  for (const line of name.lines) {
-    y += name.size * 1.15;
-    ctx.fillText(line, x, y);
+  ctx.font = `500 ${fit.size}px ${o.sansFont}`;
+  let y = at.y + labelSize + 8;
+  for (const line of fit.lines) {
+    y += fit.size * 1.1;
+    ctx.fillText(line, at.x, y);
   }
-  if (o.roleLabel) {
-    const role = fitText(
-      ctx,
-      o.roleLabel,
-      (s) => sans(500, s),
-      landscape ? 24 : 28,
-      16,
-      maxWidth,
-      1,
-    );
-    ctx.font = sans(500, role.size);
-    ctx.fillStyle = "rgba(3, 8, 70, 0.8)";
-    y += role.size * 1.5;
-    ctx.fillText(role.lines[0], x, y);
+  return y - at.y;
+}
+
+/**
+ * The Wallet pass at its real proportions (838 x 1165): header with the
+ * organizer logo and date, the strip, NAME and ROLE side by side, the photo
+ * where the QR sits, the hackOS mark in the corner. Drawn with its top-left
+ * at the origin; the caller positions and tilts it.
+ */
+function drawPass(ctx: Ctx, o: DrawCardOptions, w: number) {
+  const h = w * (1165 / 838);
+  const pad = w * 0.06;
+  ctx.fillStyle = COLORS.blue;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, w, h, w * 0.04);
+  ctx.fill();
+
+  // Header: organizer logo left, supplied date/place right.
+  const headerH = w * 0.19;
+  if (o.band.kind === "strip" && o.band.organizer) {
+    const logo = o.band.organizer;
+    const lh = headerH * 0.56;
+    ctx.drawImage(logo, pad, (headerH - lh) / 2 + w * 0.01, (logo.width / logo.height) * lh, lh);
   }
   if (o.details) {
-    const detail = fitText(
+    const right = fitText(
       ctx,
       o.details,
-      (s) => sans(600, s),
-      landscape ? 22 : 26,
-      14,
-      maxWidth - 40,
+      (s) => `500 ${s}px ${MONO_FONT}`,
+      w * 0.04,
+      10,
+      w * 0.5,
       1,
     );
-    ctx.font = sans(600, detail.size);
-    const pillWidth = ctx.measureText(detail.lines[0]).width + 40;
-    const pillHeight = detail.size + 22;
-    y += 22;
+    ctx.font = `500 ${right.size}px ${MONO_FONT}`;
     ctx.fillStyle = COLORS.ink;
-    ctx.beginPath();
-    ctx.roundRect(x, y, pillWidth, pillHeight, pillHeight / 2);
-    ctx.fill();
+    ctx.textAlign = "right";
+    ctx.fillText(right.lines[0], w - pad, headerH / 2 + right.size * 0.4);
+    ctx.textAlign = "left";
+  }
+
+  // Strip.
+  const bandH = Math.round(w * STRIP_RATIO);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, headerH, w, bandH);
+  ctx.clip();
+  drawBand(ctx, o, { x: 0, y: headerH, w, h: bandH });
+  ctx.restore();
+
+  // Fields: NAME and ROLE share a row; a missing role leaves the name the full width.
+  const fieldsY = headerH + bandH + w * 0.05;
+  const inner = w - pad * 2;
+  const nameW = o.roleLabel ? inner * 0.58 : inner;
+  drawField(ctx, o, o.labels.name, o.displayName, { x: pad, y: fieldsY, w: nameW }, w * 0.062, 2);
+  if (o.roleLabel) {
+    const roleX = pad + inner * 0.62;
+    drawField(
+      ctx,
+      o,
+      o.labels.role,
+      o.roleLabel,
+      { x: roleX, y: fieldsY, w: inner * 0.38 },
+      w * 0.062,
+      2,
+    );
+  }
+
+  // Photo where the QR sits.
+  const tile = w * 0.5;
+  drawPhotoTile(ctx, o, { x: (w - tile) / 2, y: h - tile - w * 0.1, w: tile, h: tile });
+}
+
+/** Emilia perched on the pass's top edge. */
+function drawSeagull(ctx: Ctx, o: DrawCardOptions, passW: number, height: number, along: number) {
+  const gull = o.art.seagull;
+  if (!gull) return;
+  const w = (gull.width / gull.height) * height;
+  ctx.drawImage(gull, passW * along, -height + 4, w, height);
+}
+
+/** Paints the whole card on `ctx` in logical units (the caller applies the 2x scale). */
+export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
+  const { width, height } = SHARE_SIZES[o.format];
+  ctx.fillStyle = COLORS.ink;
+  ctx.fillRect(0, 0, width, height);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+
+  const landscape = o.format === "landscape";
+  const margin = 72;
+  const sans = (weight: number, size: number) => `${weight} ${size}px ${o.sansFont}`;
+
+  const passW = landscape ? 352 : 570;
+  const passH = passW * (1165 / 838);
+  const center = landscape
+    ? { x: width - 72 - passW / 2 - 6, y: 125 + passH / 2 }
+    : { x: width / 2, y: 185 + passH / 2 };
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate((landscape ? 3 : -2) * (Math.PI / 180));
+  ctx.translate(-passW / 2, -passH / 2);
+  drawPass(ctx, o, passW);
+  drawSeagull(ctx, o, passW, landscape ? 115 : 140, landscape ? 0.62 : 0.8);
+  ctx.restore();
+
+  // Poster text: the event line, and for landscape the name as the hero.
+  const textW = landscape ? center.x - passW / 2 - margin - 40 : width - margin * 2;
+  let y = landscape ? 150 : 60;
+  const kicker = fitText(
+    ctx,
+    o.line,
+    (s) => sans(700, s),
+    landscape ? 36 : 56,
+    24,
+    textW,
+    landscape ? 2 : 1,
+  );
+  ctx.fillStyle = landscape ? COLORS.blue : COLORS.cream;
+  ctx.font = sans(700, kicker.size);
+  for (const line of kicker.lines) {
+    y += kicker.size * 1.1;
+    ctx.fillText(line, margin, y);
+  }
+  if (landscape) {
+    y += 34;
+    const name = fitText(ctx, o.displayName, (s) => sans(700, s), 84, 44, textW, 2);
     ctx.fillStyle = COLORS.cream;
-    ctx.fillText(detail.lines[0], x + 20, y + pillHeight / 2 + detail.size * 0.34);
+    ctx.font = sans(700, name.size);
+    for (const line of name.lines) {
+      y += name.size * 1.08;
+      ctx.fillText(line, margin, y);
+    }
+    if (o.roleLabel) {
+      const role = fitText(ctx, o.roleLabel, (s) => sans(500, s), 36, 20, textW, 1);
+      ctx.fillStyle = COLORS.blue;
+      ctx.font = sans(500, role.size);
+      y += role.size * 1.5;
+      ctx.fillText(role.lines[0], margin, y);
+    }
+  }
+  if (o.host) {
+    const host = fitText(ctx, o.host, (s) => sans(600, s), landscape ? 30 : 32, 18, textW, 1);
+    ctx.fillStyle = COLORS.blue;
+    ctx.font = sans(600, host.size);
+    if (landscape) {
+      ctx.fillText(host.lines[0], margin, height - 56);
+    } else {
+      ctx.textAlign = "center";
+      ctx.fillText(host.lines[0], width / 2, height - 28);
+      ctx.textAlign = "left";
+    }
   }
 }
 
@@ -511,22 +611,25 @@ type RenderState =
   | { status: "error" }
   | { status: "ready"; blob: Blob; url: string; photoFailed: boolean };
 
+/**
+ * The share step: one preview, Download as the primary action, the networks
+ * behind a Share menu. Structure follows the Wallet pass on the profile
+ * (bounded surface, official artwork, quiet secondary actions).
+ */
 export function SocialSharing({ event, attendee, onContinue, className }: SocialSharingProps) {
   const { language } = useLocale();
   const copy = copyFragments[language];
   const text = (key: CopyKey, values: Record<string, string> = {}) => fill(copy[key], values);
   const ids = useId();
   const [format, setFormat] = useState<ShareFormat>("landscape");
-  const [edited, setEdited] = useState<string | null>(null);
   const [render, setRender] = useState<RenderState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState<{ message: string; ok: boolean } | null>(null);
   const [acted, setActed] = useState(false);
   const [canShareFile, setCanShareFile] = useState(false);
 
   const title = eventTitle(event);
   const details = [event.dateLabel, event.location].filter(Boolean).join(" · ");
-  const caption = edited ?? buildCaption(language, event);
+  const caption = buildCaption(language, event);
   const fileName = shareFileName(event, attendee.displayName, format);
 
   // The decoded photo survives format switches; only a changed source reloads
@@ -549,12 +652,12 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
       if (photoCache.current && photoCache.current.url !== attendee.photoUrl) releasePhoto();
       let customLogo: Drawable | null = null;
       try {
-        const [sansFont, loaded] = await Promise.all([
+        const [sansFont, loaded, art] = await Promise.all([
           loadFonts(),
-          loadCardAssets(event.logo, controller.signal),
+          loadBand({ name: event.name, logo: event.logo }, controller.signal),
+          loadArt(),
         ]);
         customLogo = loaded.customLogo;
-        const { assets, usesCustomLogo } = loaded;
         let photo: Drawable | null = null;
         let photoFailed = false;
         if (attendee.photoUrl && photoCache.current?.url === attendee.photoUrl) {
@@ -578,13 +681,18 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
         const blob = await renderShareImage({
           format,
           eventName: title,
-          headline: fill(copyFragments[language].cardHeadline, { event: title }),
+          line: fill(copyFragments[language].cardLine, { event: title }),
+          labels: {
+            name: copyFragments[language].labelName,
+            role: copyFragments[language].labelRole,
+          },
           displayName: attendee.displayName,
           roleLabel: attendee.roleLabel,
           details: details || undefined,
           photo,
-          assets,
-          textWordmark: usesCustomLogo ? false : !/hackudc/i.test(event.name),
+          band: loaded.band,
+          host: publicEventUrl(event.url)?.host,
+          art,
           sansFont,
         });
         if (controller.signal.aborted) return;
@@ -608,6 +716,7 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     details,
     event.name,
     event.logo,
+    event.url,
     attendee.displayName,
     attendee.roleLabel,
     attendee.photoUrl,
@@ -624,27 +733,24 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     setCanShareFile(navigator.canShare({ files: [file] }));
   }, [blob, fileName]);
 
-  const announce = useCallback((message: string) => {
-    setStatus({ message, ok: true });
-    setActed(true);
-  }, []);
-
   const download = () => {
     if (!blob) return;
     try {
       saveBlob(blob, fileName);
-      announce(text("downloaded"));
+      setActed(true);
+      toast.success(copy.downloaded, { compactTitle: copy.download });
     } catch {
-      setStatus({ message: text("downloadFailed"), ok: false });
+      toast.error(copy.downloadFailed, copy.download);
     }
   };
 
   const copyCaption = async () => {
     try {
       await navigator.clipboard.writeText(caption);
-      announce(text("copied"));
+      setActed(true);
+      toast.success(copy.copied, { compactTitle: copy.copy });
     } catch {
-      setStatus({ message: text("copyFailed"), ok: false });
+      toast.error(copy.copyFailed, copy.copy);
     }
   };
 
@@ -659,7 +765,7 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
     } catch (error) {
       // Dismissing the system sheet is not an error.
       if (!(error instanceof DOMException && error.name === "AbortError")) {
-        setStatus({ message: text("downloadFailed"), ok: false });
+        toast.error(copy.downloadFailed, copy.share);
       }
     }
   };
@@ -671,114 +777,96 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
   ];
 
   return (
-    <section aria-labelledby={`${ids}-title`} className={cn("space-y-6", className)}>
+    <section
+      aria-labelledby={`${ids}-title`}
+      className={cn("mx-auto w-full max-w-xl space-y-4", className)}
+    >
       <h2 id={`${ids}-title`} className="type-section-title">
         {copy.title}
       </h2>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] lg:items-start">
-        <div className="min-w-0 space-y-3">
-          <figure
-            className={cn(
-              "relative w-full overflow-hidden rounded-lg border bg-muted",
-              square ? "mx-auto max-w-lg" : "",
-            )}
-            style={{ aspectRatio: square ? "1 / 1" : "1200 / 630" }}
-            aria-busy={render.status === "loading"}
-          >
-            {render.status === "ready" && (
-              // biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset.
-              <img
-                src={render.url}
-                alt={text("previewAlt", { event: title, name: attendee.displayName })}
-                className="size-full object-contain"
-              />
-            )}
-            {render.status === "loading" && (
-              <div
-                role="status"
-                className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground"
-              >
-                <Spinner />
-                {copy.generating}
-              </div>
-            )}
-            {render.status === "error" && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center">
-                <p role="alert" className="text-sm text-destructive">
-                  {copy.renderError}
-                </p>
-                <Button size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
-                  {copy.retry}
-                </Button>
-              </div>
-            )}
-          </figure>
-          {render.status === "ready" && render.photoFailed && (
-            <p role="status" className="text-sm text-muted-foreground">
-              {copy.photoFallback}
+
+      <figure
+        className={cn(
+          "mx-auto w-full overflow-hidden rounded-surface border",
+          square && "max-w-sm",
+        )}
+        style={{ aspectRatio: square ? "1 / 1" : "1200 / 630" }}
+        aria-busy={render.status === "loading"}
+      >
+        {render.status === "ready" && (
+          // biome-ignore lint/performance/noImgElement: a generated blob URL, not an optimisable asset.
+          <img
+            src={render.url}
+            alt={text("previewAlt", { event: title, name: attendee.displayName })}
+            className="size-full object-contain"
+          />
+        )}
+        {render.status === "loading" && (
+          <Skeleton role="status" aria-label={copy.generating} className="size-full rounded-none" />
+        )}
+        {render.status === "error" && (
+          <div className="flex size-full flex-col items-center justify-center gap-3 p-4 text-center">
+            <p role="alert" className="text-destructive text-sm">
+              {copy.renderError}
             </p>
-          )}
-        </div>
-
-        <div className="min-w-0 space-y-4">
-          <fieldset className="space-y-2">
-            <legend className="type-label font-medium">{copy.format}</legend>
-            <div className="flex gap-2">
-              {formats.map(({ value, label }) => (
-                <label
-                  key={value}
-                  className={cn(
-                    "inline-flex h-[var(--control-height-default)] flex-1 cursor-pointer items-center justify-center rounded-button border px-4 text-sm font-semibold transition-colors",
-                    "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
-                    format === value
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name={`${ids}-format`}
-                    value={value}
-                    checked={format === value}
-                    onChange={() => setFormat(value)}
-                    className="sr-only"
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="space-y-2">
-            <label htmlFor={`${ids}-caption`} className="type-label font-medium">
-              {copy.captionLabel}
-            </label>
-            <Textarea
-              id={`${ids}-caption`}
-              value={caption}
-              rows={4}
-              onChange={(e) => setEdited(e.target.value)}
-            />
+            <Button size="sm" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
+              {copy.retry}
+            </Button>
           </div>
+        )}
+      </figure>
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={download} disabled={!blob}>
-              <DownloadSimpleIcon aria-hidden />
-              {copy.download}
-            </Button>
-            <Button variant="outline" onClick={copyCaption}>
-              <CopyIcon aria-hidden />
-              {copy.copy}
-            </Button>
-            {canShareFile && (
-              <Button variant="outline" onClick={nativeShare}>
-                <ShareNetworkIcon aria-hidden />
-                {copy.share}
-              </Button>
+      {render.status === "ready" && render.photoFailed && (
+        <p role="status" className="type-meta">
+          {copy.photoFallback}
+        </p>
+      )}
+
+      <fieldset className="flex justify-center gap-1">
+        <legend className="sr-only">{copy.format}</legend>
+        {formats.map(({ value, label }) => (
+          <label
+            key={value}
+            className={cn(
+              "type-label inline-flex h-[var(--control-height-compact)] cursor-pointer items-center rounded-button px-3 transition-colors",
+              "has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50",
+              format === value
+                ? "bg-secondary text-secondary-foreground"
+                : "text-muted-foreground hover:bg-muted",
             )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" asChild>
+          >
+            <input
+              type="radio"
+              name={`${ids}-format`}
+              value={value}
+              checked={format === value}
+              onChange={() => setFormat(value)}
+              className="sr-only"
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+        {onContinue && (
+          <Button variant={acted ? "default" : "ghost"} onClick={onContinue} className="sm:mr-auto">
+            {acted ? copy.continue : copy.skip}
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" disabled={!blob}>
+              <ShareNetworkIcon aria-hidden />
+              {copy.shareMenu}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel className="text-muted-foreground text-xs font-normal text-pretty">
+              {copy.attachNote}
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
               <a
                 href={linkedInShareUrl(caption)}
                 target="_blank"
@@ -788,8 +876,8 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
                 <LinkedinLogoIcon aria-hidden />
                 {copy.linkedin}
               </a>
-            </Button>
-            <Button variant="outline" asChild>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
               <a
                 href={xShareUrl(caption)}
                 target="_blank"
@@ -799,25 +887,23 @@ export function SocialSharing({ event, attendee, onContinue, className }: Social
                 <XLogoIcon aria-hidden />
                 {copy.x}
               </a>
-            </Button>
-          </div>
-          <p className="text-sm text-muted-foreground">{copy.attachNote}</p>
-          <p role="status" aria-live="polite" className="flex min-h-5 items-center gap-1.5 text-sm">
-            {status && (
-              <>
-                {status.ok && <CheckIcon aria-hidden className="size-4 text-success" />}
-                <span className={status.ok ? undefined : "text-destructive"}>{status.message}</span>
-              </>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void copyCaption()}>
+              <CopyIcon aria-hidden />
+              {copy.copy}
+            </DropdownMenuItem>
+            {canShareFile && (
+              <DropdownMenuItem onSelect={() => void nativeShare()}>
+                <ShareNetworkIcon aria-hidden />
+                {copy.share}
+              </DropdownMenuItem>
             )}
-          </p>
-          {onContinue && (
-            <div className="flex justify-end">
-              <Button variant={acted ? "default" : "ghost"} onClick={onContinue}>
-                {acted ? copy.continue : copy.skip}
-              </Button>
-            </div>
-          )}
-        </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button variant={acted ? "outline" : "default"} onClick={download} disabled={!blob}>
+          <DownloadSimpleIcon aria-hidden />
+          {copy.download}
+        </Button>
       </div>
     </section>
   );

@@ -1,7 +1,7 @@
 # Onboarding social sharing
 
-Reusable web component that lets an attendee share "I'm going" on LinkedIn or X
-with a personalised image. Lives in
+Reusable web component that lets an attendee share "I'm going" with a
+personalised image. It lives in
 `apps/web/src/components/onboarding/social-sharing.tsx`; the embedding flow owns
 placement, routing and the signed-in data.
 
@@ -9,53 +9,86 @@ placement, routing and the signed-in data.
 
 ```tsx
 <SocialSharing
-  event={{ name: "HackUDC", year: 2027, dateLabel?, location?, logo? }}
+  event={{ name: "HackUDC", year: 2027, dateLabel?, location?, url?, logo? }}
   attendee={{ displayName, roleLabel?, photoUrl? }}
   onContinue={() => …}   // optional
 />
 ```
 
-- `dateLabel` and `location` are printed only when supplied; nothing is derived
-  or invented, and the card/caption omit them otherwise.
+- `dateLabel` and `location` are printed exactly as supplied, on the pass
+  header and in the caption. Nothing is derived or invented: without them the
+  header has no date.
+- `url` is the public event page. It goes in the caption and its host on the
+  image. Only http(s) is accepted; username, password, query and fragment are
+  dropped (`publicEventUrl`), so no token or tracking parameter can travel.
 - `photoUrl` is the authenticated `/api/users/:id/photo` path (or a
   `blob:`/`data:image/`/`http(s)` URL). Other schemes are rejected.
-- `logo` is an optional same-origin or CORS-enabled image. Without it the
-  bundled HackUDC wordmark is used when the event name contains "HackUDC";
-  other events get their name drawn as text.
+- `logo` is an optional same-origin or CORS-enabled image for non-HackUDC
+  events; HackUDC uses the pass strip.
 - `onContinue` renders one footer button: **Skip** until the person downloads,
   copies, shares or opens a network link, then **Continue**.
 
-## How the image is made
+## The step
+
+One preview, **Download image** as the primary action, **Share** as a menu
+(LinkedIn, X, Copy text, and "Send image…" where the browser can share files),
+and a quiet Landscape/Square selector. The "LinkedIn and X don't attach the
+image" note lives inside the menu. Feedback uses the shared toast. Structure
+follows the Wallet pass on the profile (bounded surface, official artwork,
+quiet secondary actions), not a custom panel.
+
+## The image
 
 Drawn client-side on a canvas, exported as PNG at 2× (landscape 1200×630 →
 2400×1260, the 1.91:1 link-card ratio; square 1080² → 2160²). No image service.
 
+The pass is the Apple Wallet pass at its real proportions (838×1165): organizer
+logo and date in the header, the strip, NAME and ROLE side by side (red mono
+labels, Inter values), and the photo where the QR sits (initials on ink when
+there is no photo). It is drawn slightly tilted on the ink canvas with Emilia
+the seagull perched on it. Landscape adds the headline, the name large, the role
+and the event host on the left; square puts the headline above and the host
+below. No email, QR, badge or ticket credentials ever appear.
+
+Assets, all copied from the repo into `apps/web/public/onboarding/`:
+
+| File | Source |
+| --- | --- |
+| `pass-strip.png` | `apps/api/assets/apple-wallet/strip@3x.png` (lighthouse + HackUDC 2027) |
+| `gpul-logo.png` | `apps/api/assets/apple-wallet/logo@2x.png`, recoloured ink for the blue body |
+| `emilia.png` | `apps/web/public/errors/emilia-404.png`, trimmed and scaled |
+
+Palette: ink `#030846`, brand blue `#a3d5ff` (the Wallet pass colour), red
+labels `#bf2100`. Inter for values (the page's own stack), a system mono for the
+pass labels and date, matching the pass.
+
 - Photo: read with `fetch(..., { credentials: "include" })` into a blob, then
   `createImageBitmap`, so the private route is authorized by the session cookie
-  and the canvas is never tainted. A failed photo falls back to initials on an ink
-  disc and shows a short note; it is retried on the next render.
-- Fonts: `document.fonts.load` for Rockwell (theme.css `@font-face`) and the
-  page's Inter stack before drawing. A load failure keeps the fallback stack.
-- Brand assets (`apps/web/public/onboarding/`, from the HackUDC 2027 brand
-  files): `hackudc-2027-logo.png` (navy wordmark, same as `public/email`),
-  `galeria.png` (Coruña gallery facade), `gaviota.png` (seagull).
-- Palette is the edition's: ink `#030846`, brand blue `#a3d5ff`, cream, red rule.
-  Long names shrink then truncate with an ellipsis.
+  and the canvas is never tainted. A failed photo falls back to initials and
+  shows a short note; it is retried on the next render. The component owns one
+  decoded photo bitmap and closes it when replaced, removed or unmounted; late
+  decodes and a custom event logo are closed too.
+- Fonts: `document.fonts.load` for the page's Inter stack before drawing; a
+  failure keeps the fallback stack.
 
 ## Sharing behaviour
 
 Every action needs an explicit click; mounting only renders the preview.
 
-- **Download image** saves the generated PNG (`hackudc-2027-<name>-<format>.png`).
-- **Copy text** writes the caption to the clipboard.
-- **Share on LinkedIn / X** open the composer in a new tab (`noopener`) with the
-  caption prefilled (`linkedin.com/feed/?shareActive=true&text=`,
-  `x.com/intent/post?text=`). Links cannot attach an image, so the UI says to
-  attach the downloaded file. No token, user id, tracking parameter or event URL
-  is added.
-- **Share…** appears only where `navigator.canShare({ files })` is true and
-  passes the PNG and caption to the system share sheet.
-- The caption is editable and follows the viewer's language (es/gl/en).
+- **Download image** saves `hackudc-2027-<name>-<format>.png`.
+- **LinkedIn** opens `linkedin.com/feed/?shareActive=true&text=<caption>` and
+  **X** opens `x.com/intent/post?text=<caption>` in a new tab (`noopener`). The
+  caption ends with the event link when `url` is given, which both networks turn
+  into a link preview of the event page. Neither accepts an image through a
+  link: LinkedIn's offsite share takes only a `url` (preview from the page's
+  Open Graph tags) and the text prefill is an undocumented parameter, so the
+  generated PNG has to be uploaded by the person. The `text` prefill was not
+  verified against a signed-in LinkedIn session.
+- **Send image…** appears only where `navigator.canShare({ files })` is true and
+  hands the PNG and caption to the system share sheet, which is the one path
+  that attaches the image to a post.
+- A personalised link preview would need a server-rendered Open Graph image on
+  a per-person URL, which this component does not do (no tokens in shared URLs).
 
 ## Copy
 
@@ -66,15 +99,15 @@ them into the shared catalogue, move the keys into
 
 ## Accessibility
 
-Radio group for the format; labelled caption field; preview `alt` names the
-attendee and event; `role="status"` announces generation, success and failure;
-`role="alert"` on render errors with a retry; the only animation is the shared
-spinner (`motion-safe`). Controls use the shared Button sizes (44 px touch
-targets on coarse pointers).
+Radio group for the format; preview `alt` names the attendee and event;
+the loading skeleton is a labelled status; `role="alert"` with retry on render
+errors; the Share menu is the shared Radix menu; the only animation is the
+shared skeleton/spinner (`motion-safe`). Controls use the shared Button sizes.
 
 ## Tests
 
 `pnpm --filter @hackos/web exec vitest run src/components/onboarding` covers the
-caption/links, drawing (photo crop, initials fallback, truncation, both ratios),
-photo fetching and scheme rejection, and the component's click-only behaviour,
-fallbacks, errors, Skip/Continue and language.
+caption and links (including URL sanitising), drawing (photo tile, initials
+fallback, strip/logo/text bands, seagull, host, truncation, both ratios), photo
+fetching and scheme rejection, the component's click-only behaviour, menu,
+fallbacks, errors, Skip/Continue and language, and the bitmap lifecycle.

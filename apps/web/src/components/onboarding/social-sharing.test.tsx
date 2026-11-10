@@ -13,6 +13,8 @@ vi.mock("@/lib/directory", () => ({
 }));
 const saveBlob = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/download", () => ({ saveBlob }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
+vi.mock("@/lib/toast", () => ({ toast }));
 
 import {
   buildCaption,
@@ -21,6 +23,7 @@ import {
   eventTitle,
   fetchImage,
   linkedInShareUrl,
+  publicEventUrl,
   renderShareImage,
   SHARE_SIZES,
   SocialSharing,
@@ -70,11 +73,12 @@ function options(overrides: Partial<DrawCardOptions> = {}): DrawCardOptions {
   return {
     format: "landscape",
     eventName: "HackUDC 2027",
-    headline: "Voy a HackUDC 2027",
+    line: "Voy a HackUDC 2027",
     displayName: "Ada Lovelace",
+    labels: { name: "Nombre", role: "Rol" },
     photo: null,
-    assets: { logo: image(720, 110), gallery: image(1400, 625), gull: image(520, 478) },
-    textWordmark: false,
+    band: { kind: "strip", image: image(1125, 294), organizer: image(320, 100) },
+    art: { seagull: image(216, 520) },
     sansFont: "Inter, sans-serif",
     ...overrides,
   };
@@ -93,6 +97,16 @@ describe("caption and share links", () => {
     expect(buildCaption("gl", { ...event, location: "A Coruña" })).toBe(
       "Vou a HackUDC 2027! A Coruña. Vémonos alí.",
     );
+  });
+
+  it("adds the event link to the caption, without query, fragment or credentials", () => {
+    expect(
+      buildCaption("es", { ...event, url: "https://user:pw@hackudc.com/path?token=abc#frag" }),
+    ).toBe("¡Voy a HackUDC 2027! Nos vemos allí.\nhttps://hackudc.com/path");
+    expect(publicEventUrl("javascript:alert(1)")).toBeNull();
+    expect(publicEventUrl("not a url")).toBeNull();
+    expect(publicEventUrl(undefined)).toBeNull();
+    expect(buildCaption("en", { ...event, url: "ftp://x.test" })).not.toContain("ftp");
   });
 
   it("does not repeat a year already in the name", () => {
@@ -128,24 +142,39 @@ describe("caption and share links", () => {
 });
 
 describe("drawShareCard", () => {
-  it("draws name, role and the date pill only when supplied", () => {
+  it("draws the pass fields; role and date/place only when supplied", () => {
     const withAll = recordingContext();
-    drawShareCard(withAll.ctx, options({ roleLabel: "Hacker", details: "13–14 Nov · A Coruña" }));
+    drawShareCard(withAll.ctx, options({ roleLabel: "Hacker", details: "Sample date" }));
     expect(texts(withAll.calls)).toEqual(
-      expect.arrayContaining(["Ada Lovelace", "Hacker", "13–14 Nov · A Coruña"]),
+      expect.arrayContaining([
+        "Voy a HackUDC 2027",
+        "Nombre",
+        "Ada Lovelace",
+        "Rol",
+        "Hacker",
+        "Sample date",
+      ]),
     );
     const bare = recordingContext();
     drawShareCard(bare.ctx, options());
-    expect(texts(bare.calls)).toContain("Ada Lovelace");
-    expect(bare.calls.some((c) => c.op === "roundRect")).toBe(false);
+    expect(texts(bare.calls)).toEqual(
+      expect.arrayContaining(["Voy a HackUDC 2027", "Nombre", "Ada Lovelace"]),
+    );
+    expect(texts(bare.calls)).not.toContain("Rol");
   });
 
-  it("clips the photo into the avatar, and draws initials when there is none", () => {
+  it("draws only name, role, event line and given details: no email or contact text", () => {
+    const { ctx, calls } = recordingContext();
+    drawShareCard(ctx, options({ roleLabel: "Hacker" }));
+    expect(texts(calls).some((t) => typeof t === "string" && t.includes("@"))).toBe(false);
+  });
+
+  it("puts the photo in the tile where the Wallet pass has its QR (centred square crop)", () => {
     const photo = image(300, 200);
     const withPhoto = recordingContext();
     drawShareCard(withPhoto.ctx, options({ photo }));
     const drawn = withPhoto.calls.find((c) => c.op === "drawImage" && c.args[0] === photo);
-    expect(drawn?.args.slice(1, 5)).toEqual([50, 0, 200, 200]); // centred square crop
+    expect(drawn?.args.slice(1, 5)).toEqual([50, 0, 200, 200]);
     expect(withPhoto.calls.some((c) => c.op === "clip")).toBe(true);
     expect(texts(withPhoto.calls)).not.toContain("AL");
 
@@ -154,12 +183,54 @@ describe("drawShareCard", () => {
     expect(texts(fallback.calls)).toContain("AL");
   });
 
-  it("draws the event name as text instead of the HackUDC wordmark for other events", () => {
+  it("draws the pass strip for HackUDC and the event name as text otherwise", () => {
+    const strip = image(1125, 294);
+    const withStrip = recordingContext();
+    drawShareCard(
+      withStrip.ctx,
+      options({ band: { kind: "strip", image: strip, organizer: null } }),
+    );
+    expect(withStrip.calls.some((c) => c.op === "drawImage" && c.args[0] === strip)).toBe(true);
+
+    const text = recordingContext();
+    drawShareCard(text.ctx, options({ band: { kind: "text" }, eventName: "Other Hack 2027" }));
+    expect(texts(text.calls)).toContain("Other Hack 2027");
+  });
+
+  it("draws an event's own logo on the band", () => {
+    const logo = image(400, 100);
     const { ctx, calls } = recordingContext();
-    const assets = options().assets;
-    drawShareCard(ctx, options({ textWordmark: true, eventName: "Other Hack 2027" }));
-    expect(texts(calls)).toContain("Other Hack 2027");
-    expect(calls.some((c) => c.op === "drawImage" && c.args[0] === assets.logo)).toBe(false);
+    drawShareCard(ctx, options({ band: { kind: "logo", image: logo } }));
+    expect(calls.some((c) => c.op === "drawImage" && c.args[0] === logo)).toBe(true);
+  });
+
+  it("puts the organizer logo and the seagull on the pass, with no hackOS mark", () => {
+    const o = options();
+    const { ctx, calls } = recordingContext();
+    drawShareCard(ctx, o);
+    const drawn = (img: unknown) => calls.some((c) => c.op === "drawImage" && c.args[0] === img);
+    if (o.band.kind === "strip") expect(drawn(o.band.organizer)).toBe(true);
+    expect(drawn(o.art.seagull)).toBe(true);
+  });
+
+  it("shows the event host on the poster only when given, and keeps the name large in landscape", () => {
+    const withHost = recordingContext();
+    drawShareCard(withHost.ctx, options({ host: "hackudc.com" }));
+    expect(texts(withHost.calls)).toContain("hackudc.com");
+    const without = recordingContext();
+    drawShareCard(without.ctx, options());
+    expect(texts(without.calls)).not.toContain("hackudc.com");
+    // Name appears on the poster and on the pass.
+    expect(texts(without.calls).filter((t) => t === "Ada Lovelace").length).toBeGreaterThanOrEqual(
+      2,
+    );
+  });
+
+  it("lays out the square poster with the pass tilted under the headline", () => {
+    const { ctx, calls } = recordingContext();
+    drawShareCard(ctx, options({ format: "square", roleLabel: "Hacker" }));
+    expect(calls.some((c) => c.op === "rotate")).toBe(true);
+    expect(texts(calls)).toEqual(expect.arrayContaining(["Voy a HackUDC 2027", "Ada Lovelace"]));
   });
 
   it("truncates an over-long name instead of overflowing", () => {
@@ -229,6 +300,8 @@ describe("<SocialSharing />", () => {
   beforeEach(() => {
     language.current = "es";
     saveBlob.mockClear();
+    toast.success.mockClear();
+    toast.error.mockClear();
     canvasSizes = [];
     fetchMock = vi.fn().mockResolvedValue({ ok: true, blob: async () => new Blob(["x"]) });
     vi.stubGlobal("fetch", fetchMock);
@@ -302,9 +375,7 @@ describe("<SocialSharing />", () => {
     const [blob, name] = saveBlob.mock.calls[0];
     expect((blob as Blob).type).toBe("image/png");
     expect(name).toBe("hackudc-2027-ada-lovelace-landscape.png");
-    expect(container.querySelector('[role="status"][aria-live]')?.textContent).toContain(
-      "Imagen descargada",
-    );
+    expect(toast.success).toHaveBeenCalledWith("Imagen descargada", expect.anything());
   });
 
   it("switches to the square format", async () => {
@@ -316,35 +387,50 @@ describe("<SocialSharing />", () => {
     expect(saveBlob.mock.calls[0][1]).toMatch(/-square\.png$/);
   });
 
-  it("prefills LinkedIn and X links with the (edited) caption and warns the image is not attached", async () => {
+  it("keeps one preview, a primary download and the networks behind the Share menu", async () => {
+    await mount({ onContinue: vi.fn() });
+    expect(container.querySelectorAll("figure img")).toHaveLength(1);
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector('a[href*="linkedin.com"]')).toBeNull();
+    expect(document.body.textContent).not.toContain("no adjuntan la imagen");
+    expect(button(/Compartir/)).toBeDefined();
+  });
+
+  async function openShareMenu() {
+    await userEvent.setup().click(button(/Compartir/) as HTMLButtonElement);
+    await vi.waitFor(() => expect(document.body.querySelector('[role="menu"]')).not.toBeNull());
+  }
+  const menuItem = (name: RegExp) =>
+    [...document.body.querySelectorAll('[role="menuitem"]')].find((i) =>
+      name.test(i.textContent ?? ""),
+    );
+
+  it("prefills LinkedIn and X from the Share menu and warns the image is not attached", async () => {
     await mount();
-    const linkedin = container.querySelector('a[href*="linkedin.com"]') as HTMLAnchorElement;
-    const x = container.querySelector('a[href*="x.com"]') as HTMLAnchorElement;
+    await openShareMenu();
+    const linkedin = menuItem(/LinkedIn/) as HTMLAnchorElement;
+    const x = menuItem(/^X$/) as HTMLAnchorElement;
     for (const a of [linkedin, x]) {
       expect(a.target).toBe("_blank");
       expect(a.rel).toContain("noopener");
       expect(a.rel).toContain("noreferrer");
     }
-    expect(new URL(linkedin.href).searchParams.get("text")).toBe(
-      "¡Voy a HackUDC 2027! 13–14 Nov · A Coruña. Nos vemos allí.",
-    );
-    expect(container.textContent).toContain("no adjuntan la imagen");
-
-    const textarea = container.querySelector("textarea") as HTMLTextAreaElement;
-    const user = userEvent.setup();
-    await user.clear(textarea);
-    await user.type(textarea, "Hola");
-    expect(new URL(x.href).searchParams.get("text")).toBe("Hola");
+    const caption = "¡Voy a HackUDC 2027! 13–14 Nov · A Coruña. Nos vemos allí.";
+    expect(new URL(linkedin.href).searchParams.get("text")).toBe(caption);
+    expect(new URL(x.href).searchParams.get("text")).toBe(caption);
+    expect(document.body.textContent).toContain("no adjuntan la imagen");
   });
 
-  it("copies the caption", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  it("copies the caption from the Share menu", async () => {
+    const user = userEvent.setup(); // installs its own clipboard
     await mount();
-    await act(async () => button(/Copiar texto/)?.click());
-    expect(writeText).toHaveBeenCalledWith(
+    await user.click(button(/Compartir/) as HTMLButtonElement);
+    await vi.waitFor(() => expect(menuItem(/Copiar texto/)).toBeDefined());
+    await user.click(menuItem(/Copiar texto/) as Element);
+    expect(await navigator.clipboard.readText()).toBe(
       "¡Voy a HackUDC 2027! 13–14 Nov · A Coruña. Nos vemos allí.",
     );
+    expect(toast.success).toHaveBeenCalledWith("Texto copiado", expect.anything());
   });
 
   it("falls back to initials and says so when the photo cannot be loaded", async () => {
@@ -390,9 +476,7 @@ describe("<SocialSharing />", () => {
     language.current = "gl";
     await mount();
     expect(container.textContent).toContain("Conta o nas redes");
-    expect((container.querySelector("textarea") as HTMLTextAreaElement).value).toContain(
-      "Vémonos alí",
-    );
+    expect(button(/Descargar imaxe/)).toBeDefined();
   });
 
   describe("decoded bitmap lifecycle", () => {
