@@ -21,6 +21,7 @@
     "superadmin:list": "node scripts/list-superadmins.mjs",
     "route-policy:audit": "tsx scripts/route-policy-audit.ts",
     "test": "node scripts/test-integration.mjs",
+    "test:browser:verify-email": "node --test test/browser/verify-email.browser.mjs",
     "test:serial": "vitest run",
     "test:watch": "vitest"
   },
@@ -61,6 +62,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/yauzl": "^3.4.0",
     "pino-pretty": "^13.1.3",
+    "playwright-core": "1.62.1",
     "tsup": "^8.5.1",
     "tsx": "^4.23.0",
     "typescript": "^6.0.3",

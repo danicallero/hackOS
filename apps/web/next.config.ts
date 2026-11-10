@@ -49,7 +49,7 @@ const nextConfig: NextConfig = {
       {
         source: "/verify-email",
         headers: [
-          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Referrer-Policy", value: "strict-origin" },
           { key: "Cache-Control", value: "no-store" },
         ],
       },

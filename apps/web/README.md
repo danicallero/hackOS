@@ -775,8 +775,10 @@ answers through `lib/onboarding.ts`. Reusable pieces that moved out of routes:
 
 Acceptance and verification email links keep bearer tokens in URL fragments.
 Their landing pages clear the fragment and require a deliberate action before
-submitting a token in a request body. These pages send no referrer and are not
-cached. A scanner's GET therefore cannot confirm, decline or verify an account.
+submitting a token in a request body. Confirmation and decline pages send no
+referrer; email verification sends only the web origin so the browser's native
+POST passes the API's Origin check. None are cached. A scanner's GET therefore
+cannot confirm, decline or verify an account.
 
 ## Personal profile layout (H6/H7/H8)
 

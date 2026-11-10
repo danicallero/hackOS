@@ -82,6 +82,12 @@ configured web origin. The API rejects direct verification GETs, and the POST
 invokes Better Auth's supported GET handler internally so its token checks,
 session behavior and redirect remain authoritative (H2). A matching active
 session is refreshed; Better Auth creates a target-account session when needed.
+The landing page uses `Referrer-Policy: strict-origin`: a native form POST then
+sends the site Origin for CSRF validation, while no token or return path leaves
+in a referrer. Run the browser regression with `VERIFY_API_URL`,
+`VERIFY_WEB_URL`, `TEST_DATABASE_URL` (an isolated `_test` database) and
+`pnpm --filter @hackos/api test:browser:verify-email` after starting both apps.
+
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email
