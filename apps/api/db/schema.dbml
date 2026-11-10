@@ -281,7 +281,7 @@ Table applications {
   created_at "timestamp with time zone" [not null, default: `now()`]
   current_form_version integer [not null, default: `1`]
   description text
-  event_key text
+  event_key text [not null]
   id integer [pk, increment, not null]
   name text [not null]
   open_at "timestamp with time zone"
@@ -1435,6 +1435,7 @@ Table user_public_profiles {
 Table user_roles {
   assigned_at "timestamp with time zone" [not null, default: `now()`]
   assigned_by integer
+  event_key text [not null]
   role_id integer [not null]
   source text [not null, default: `'manual'::text`]
   user_id integer [not null]
