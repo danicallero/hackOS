@@ -3569,6 +3569,7 @@
   "publicProfileShowSurname": "Full surname",
   "publicProfileShowPhoto": "Photo",
   "publicProfileShowProject": "Project and challenges",
+  "publicProfileShowGithub": "Show GitHub on profile",
   "publicProfileHeadline": "Headline",
   "publicProfileLocation": "Where to find you",
   "publicProfileLocationPlaceholder": "Room 2.1",

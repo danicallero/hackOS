@@ -183,6 +183,23 @@ describe("bio and social links (#935)", () => {
     expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([
       { kind: "github", url: "https://github.com/ana" },
     ]);
+
+    const hiddenGithub = await putProfile(me, { ...VISIBLE, showGithub: false });
+    expect(hiddenGithub.json()).toMatchObject({
+      showGithub: false,
+      preview: { socials: [] },
+    });
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+    await pool.query(`UPDATE github_accounts SET login = 'new-ana' WHERE user_id = $1`, [me]);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+
+    const shownGithub = await putProfile(me, { ...VISIBLE, showGithub: true });
+    expect(shownGithub.json().preview.socials).toEqual([
+      { kind: "github", url: "https://github.com/new-ana" },
+    ]);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([
+      { kind: "github", url: "https://github.com/new-ana" },
+    ]);
     await pool.query(`DELETE FROM github_accounts WHERE user_id = $1`, [me]);
     expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
   });
@@ -191,12 +208,14 @@ describe("bio and social links (#935)", () => {
     const me = await person();
     await putProfile(me, {
       ...VISIBLE,
+      showGithub: false,
       bio: "Kept",
       socials: [{ kind: "website", url: "https://ana.dev" }],
     });
     const kept = await putProfile(me, { ...VISIBLE, headline: "New" });
     expect(kept.json()).toMatchObject({
       headline: "New",
+      showGithub: false,
       bio: "Kept",
       socials: [{ kind: "website", url: "https://ana.dev/" }],
     });

@@ -3569,6 +3569,7 @@
   "publicProfileShowSurname": "Apellido completo",
   "publicProfileShowPhoto": "Foto",
   "publicProfileShowProject": "Proyecto y retos",
+  "publicProfileShowGithub": "Mostrar GitHub en el perfil",
   "publicProfileHeadline": "Titular",
   "publicProfileLocation": "Dónde encontrarte",
   "publicProfileLocationPlaceholder": "Aula 2.1",

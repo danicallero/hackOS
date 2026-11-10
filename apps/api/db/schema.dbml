@@ -1524,6 +1524,7 @@ Table user_public_profiles {
   location_note text
   onboarding_completed_at "timestamp with time zone"
   share_cv boolean [not null, default: `false`, note: '#935: readers may download cv_key only while this and directory_visible are true.']
+  show_github boolean [not null, default: `true`, note: '#935: expose the linked GitHub account URL to profile readers.']
   show_photo boolean [not null, default: `false`]
   show_project boolean [not null, default: `true`]
   show_surname boolean [not null, default: `false`]

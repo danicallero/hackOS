@@ -80,6 +80,7 @@ function profile(overrides: Record<string, unknown> = {}, preview: Partial<Direc
     showSurname: false,
     showPhoto: false,
     showProject: true,
+    showGithub: true,
     headline: null,
     bio: null,
     locationNote: null,
@@ -160,12 +161,45 @@ describe("PublicProfileCard", () => {
     vi.mocked(api.get).mockImplementation(async (path: string) =>
       path === "/api/me/github"
         ? { configured: true, login: "maria" }
-        : profile({ directoryVisible: true }),
+        : profile(
+            {
+              directoryVisible: true,
+              socials: [{ kind: "linkedin", url: "https://linkedin.com/in/maria" }],
+            },
+            {
+              socials: [
+                { kind: "linkedin", url: "https://linkedin.com/in/maria" },
+                { kind: "github", url: "https://github.com/maria" },
+              ],
+            },
+          ),
     );
     await render(<PublicProfileCard />);
-    expect(container.textContent).toContain("github.com/maria");
+    expect(
+      container.querySelector<HTMLInputElement>(
+        'input[aria-label="publicProfileLinkUrl"][readonly]',
+      )?.value,
+    ).toBe("https://github.com/maria");
     expect(container.textContent).not.toContain("githubLinkAccount");
-    expect(container.querySelectorAll("[aria-label=publicProfileLinkKind]")).toHaveLength(0);
+    expect(container.querySelectorAll("[aria-label=publicProfileLinkKind]")).toHaveLength(1);
+    const links = container.querySelectorAll("fieldset ul");
+    expect(links[0]?.querySelectorAll(":scope > li")).toHaveLength(2);
+    const githubUrl = container.querySelector<HTMLInputElement>(
+      'input[aria-label="publicProfileLinkUrl"][readonly]',
+    );
+    expect(githubUrl?.value).toBe("https://github.com/maria");
+    expect(container.querySelectorAll('a[href="https://github.com/maria"]')).toHaveLength(1);
+
+    const user = userEvent.setup();
+    await act(async () => user.click(byLabel("publicProfileShowGithub") as HTMLButtonElement));
+    expect(container.querySelectorAll('a[href="https://github.com/maria"]')).toHaveLength(0);
+    vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true, showGithub: false }));
+    await save();
+    expect(api.put).toHaveBeenCalledWith(
+      "/api/me/public-profile",
+      expect.objectContaining({ showGithub: false }),
+      expect.anything(),
+    );
   });
 
   it("reveals the fields and a live preview once opted in", async () => {
@@ -203,6 +237,7 @@ describe("PublicProfileCard", () => {
         showSurname: false,
         showPhoto: false,
         showProject: true,
+        showGithub: true,
         headline: "Rust",
         locationNote: null,
         bio: null,
@@ -331,7 +366,7 @@ describe("PublicProfileCard", () => {
     await act(async () => user.click(addLink()));
     await act(async () => user.click(addLink()));
     const urls = container.querySelectorAll<HTMLInputElement>(
-      "input[aria-label=publicProfileLinkUrl]",
+      "input[aria-label=publicProfileLinkUrl]:not([readonly])",
     );
     expect(urls).toHaveLength(2);
     await act(async () => user.type(urls[0] as HTMLInputElement, " github.com/maria "));
@@ -363,7 +398,9 @@ describe("PublicProfileCard", () => {
       "button[aria-label=publicProfileRemoveLink]",
     );
     await act(async () => user.click(removeLink as HTMLButtonElement));
-    expect(container.querySelectorAll("input[aria-label=publicProfileLinkUrl]")).toHaveLength(5);
+    expect(
+      container.querySelectorAll("input[aria-label=publicProfileLinkUrl]:not([readonly])"),
+    ).toHaveLength(5);
     expect(buttons().some((b) => b.textContent === "publicProfileAddLink")).toBe(true);
     expect(submit()?.disabled).toBe(false);
   });

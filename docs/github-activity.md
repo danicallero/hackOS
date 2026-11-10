@@ -72,6 +72,10 @@ login, and the bare GitHub login for anyone who has not linked. This also works
 for teammates who never link a repository. Add the callback URL to the App's
 redirect URIs; it is the same one used for repository linking.
 
+The linked account supplies the GitHub link in the public profile. Its
+visibility can be changed in **My profile → Public profile → Links** without
+unlinking the account.
+
 ## Staff view
 
 Project staff (`projects:read`) see commits and pull requests per team as columns

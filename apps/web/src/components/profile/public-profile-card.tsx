@@ -11,6 +11,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import {
   DirectoryCard,
+  type GithubAccountStatus,
   OWN_CV_PATH,
   ProfileTextFields,
   ProfileVisibilityFields,
@@ -23,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -81,7 +83,14 @@ function previewEntry(
   settings: Settings,
   saved: DirectoryEntry,
   hasCv = false,
+  githubLogin: string | null = null,
 ): DirectoryEntry {
+  const savedGithub = saved.socials?.find((link) => link.kind === "github") ?? null;
+  const github = settings.showGithub
+    ? githubLogin
+      ? { kind: "github" as const, url: `https://github.com/${githubLogin}` }
+      : savedGithub
+    : null;
   return {
     ...saved,
     displayName: displayName(me, settings.showSurname),
@@ -89,7 +98,7 @@ function previewEntry(
     headline: settings.headline.trim() || null,
     bio: settings.bio.trim() || null,
     locationNote: settings.locationNote.trim() || null,
-    socials: savedLinks(settings.socials),
+    socials: [...savedLinks(settings.socials), ...(github ? [github] : [])],
     cvUrl: settings.shareCv && hasCv ? OWN_CV_PATH : null,
     projects: settings.showProject ? saved.projects : [],
     challenges: settings.showProject ? saved.challenges : [],
@@ -157,14 +166,25 @@ export function PublicProfileCard({
     initialSettings && settings && !sameSettings(settings, initialSettings, helperPublished),
   );
   const fieldsOpen = Boolean(settings?.directoryVisible || helperPublished);
+  const githubStatus = useServerResource<GithubAccountStatus>(
+    ["me-github"],
+    (signal) => api.get<GithubAccountStatus>("/api/me/github", { signal }),
+    { enabled: fieldsOpen },
+  );
   useUnsavedChangesGuard(dirty);
 
   const preview = useMemo(() => {
     if (!me || !profile || !settings || !fieldsOpen) return null;
     return dirty
-      ? previewEntry(me, settings, profile.preview, profile.cv !== null)
+      ? previewEntry(
+          me,
+          settings,
+          profile.preview,
+          profile.cv !== null,
+          githubStatus.data?.login ?? null,
+        )
       : profile.preview;
-  }, [me, profile, settings, dirty, fieldsOpen]);
+  }, [me, profile, settings, dirty, fieldsOpen, githubStatus.data?.login]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [onDirtyChange, dirty]);
@@ -226,6 +246,7 @@ export function PublicProfileCard({
           showSurname: body.showSurname,
           showPhoto: body.showPhoto,
           showProject: body.showProject,
+          showGithub: body.showGithub,
           headline: body.headline.trim() || null,
           locationNote: body.locationNote.trim() || null,
           bio: body.bio.trim() || null,
@@ -313,6 +334,7 @@ export function PublicProfileCard({
                 settings={settings}
                 onChange={update}
                 ownAccount
+                githubStatus={githubStatus.data ?? null}
                 className={
                   onboarding
                     ? "grid items-start gap-4 sm:grid-cols-2"

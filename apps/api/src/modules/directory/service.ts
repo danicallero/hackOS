@@ -177,7 +177,7 @@ function entrySql(profiles: string, accountLinks = true): string {
          || COALESCE((SELECT jsonb_build_array(
                         jsonb_build_object('kind', 'github', 'url', 'https://github.com/' || ga.login))
                         FROM github_accounts ga
-                       WHERE ga.user_id = u.id AND ${accountLinks}), '[]'::jsonb) AS socials,
+                       WHERE ga.user_id = u.id AND p.show_github AND ${accountLinks}), '[]'::jsonb) AS socials,
          (p.share_cv AND COALESCE(fcv.key, p.cv_key) IS NOT NULL) AS has_cv,
          COALESCE((
            SELECT jsonb_agg(jsonb_build_object('kind', 'project', 'id', sr.id, 'name', sr.name) ORDER BY sr.id)
@@ -234,7 +234,7 @@ function toEntry(row: EntryRow, cvPath = `/api/directory/${row.user_id}/cv`): Di
  * the expertise; no photo, bio, links, CV or projects.
  */
 const MENTOR_ONLY_PROFILE = `(SELECT user_id, false AS directory_visible, false AS show_surname,
-    false AS show_photo, false AS show_project, NULL::text AS headline, NULL::text AS bio,
+    false AS show_photo, false AS show_project, false AS show_github, NULL::text AS headline, NULL::text AS bio,
     NULL::text AS location_note, '[]'::jsonb AS socials, false AS share_cv, NULL::text AS cv_key
     FROM mentor_profiles WHERE published) p`;
 
@@ -389,6 +389,7 @@ interface ProfileRow {
   show_surname: boolean;
   show_photo: boolean;
   show_project: boolean;
+  show_github: boolean;
   headline: string | null;
   bio: string | null;
   location_note: string | null;
@@ -406,6 +407,7 @@ const DEFAULT_PROFILE: ProfileRow = {
   show_surname: false,
   show_photo: false,
   show_project: true,
+  show_github: true,
   headline: null,
   bio: null,
   location_note: null,
@@ -433,8 +435,9 @@ async function preview(db: Queryable, userId: number, profile: ProfileRow, cvPat
   const { rows } = await db.query<EntryRow>(
     `WITH p AS (
        SELECT $1::int AS user_id, $2::boolean AS show_surname, $3::boolean AS show_photo,
-              $4::boolean AS show_project, $5::text AS headline, $6::text AS location_note,
-              $7::text AS bio, $8::jsonb AS socials, $9::boolean AS share_cv, $10::text AS cv_key
+              $4::boolean AS show_project, $5::boolean AS show_github, $6::text AS headline,
+              $7::text AS location_note, $8::text AS bio, $9::jsonb AS socials,
+              $10::boolean AS share_cv, $11::text AS cv_key
      )
      ${entrySql("p")} WHERE u.id = $1`,
     [
@@ -442,6 +445,7 @@ async function preview(db: Queryable, userId: number, profile: ProfileRow, cvPat
       profile.show_surname,
       profile.show_photo,
       profile.show_project,
+      profile.show_github,
       profile.headline,
       profile.location_note,
       profile.bio,
@@ -466,6 +470,7 @@ async function presentProfile(
     showSurname: profile.show_surname,
     showPhoto: profile.show_photo,
     showProject: profile.show_project,
+    showGithub: profile.show_github,
     headline: profile.headline,
     bio: profile.bio,
     locationNote: profile.location_note,
@@ -492,7 +497,7 @@ async function presentProfile(
   };
 }
 
-const PROFILE_COLUMNS = `directory_visible, show_surname, show_photo, show_project, headline, bio,
+const PROFILE_COLUMNS = `directory_visible, show_surname, show_photo, show_project, show_github, headline, bio,
   location_note, socials, share_cv, cv_key, cv_filename, cv_uploaded_at, consented_at, onboarding_completed_at`;
 
 async function readProfile(db: Queryable, userId: number, lock = false): Promise<ProfileRow> {
@@ -541,6 +546,7 @@ const FIELD_COLUMNS = {
   showSurname: "show_surname",
   showPhoto: "show_photo",
   showProject: "show_project",
+  showGithub: "show_github",
   headline: "headline",
   bio: "bio",
   locationNote: "location_note",
@@ -640,14 +646,15 @@ export async function updatePublicProfile(
     }
     const { rows } = await db.query<ProfileRow>(
       `INSERT INTO user_public_profiles
-         (user_id, directory_visible, show_surname, show_photo, show_project, headline,
+         (user_id, directory_visible, show_surname, show_photo, show_project, show_github, headline,
           location_note, bio, socials, share_cv, consented_at, onboarding_completed_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, CASE WHEN $2 THEN now() END, CASE WHEN $11 THEN now() END)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, CASE WHEN $2 THEN now() END, CASE WHEN $12 THEN now() END)
        ON CONFLICT (user_id) DO UPDATE SET
          directory_visible = EXCLUDED.directory_visible,
          show_surname = EXCLUDED.show_surname,
          show_photo = EXCLUDED.show_photo,
          show_project = EXCLUDED.show_project,
+         show_github = EXCLUDED.show_github,
          headline = EXCLUDED.headline,
          location_note = EXCLUDED.location_note,
          bio = EXCLUDED.bio,
@@ -665,6 +672,7 @@ export async function updatePublicProfile(
         next.showSurname,
         next.showPhoto,
         next.showProject,
+        next.showGithub,
         next.headline,
         next.locationNote,
         next.bio,

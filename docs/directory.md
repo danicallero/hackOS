@@ -12,7 +12,7 @@ shares nothing saves the person one-way, and stands are always one-way
 ([`diary.md`](./diary.md), Mutual scan). The module and routes keep their `directory` names. There is no Hxx
 story; code and commits reference `#934` and `#935`.
 
-People manage their public profile (opt-in, surname/photo/project, headline,
+People manage their public profile (opt-in, surname/photo/project/GitHub, headline,
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded at the top of the Personal details tab, because it
@@ -24,7 +24,7 @@ The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
 only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
-(type + address rows; empty rows are not saved), the CV and a preview card.
+(type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, the CV and a preview card. Hiding that link does not unlink the account.
 The preview is the server's `preview` until something changes; then name
 (surname initial by code point, as the API), photo, text, links and the
 shared CV follow the unsaved edits, while the projects and challenges stay the
@@ -133,10 +133,11 @@ including the account photo, stays in `users` and is projected, never copied.
 | `show_surname` | `false` | Full surname instead of its initial. |
 | `show_photo` | `false` | Expose the account photo (`users.photo_key`). |
 | `show_project` | `true` | Expose the project and its challenges. |
+| `show_github` | `true` | Expose the linked GitHub account URL; hiding it does not unlink the account. |
 | `headline` | `NULL` | Free text, ≤80 characters. |
 | `location_note` | `NULL` | Free text written by the person (for example "Floor 1, table 12"), ≤60 characters. There is no staff-assigned seating and presence (`time_logs`) is never exposed. |
 | `bio` | `NULL` | Free text, ≤500 characters; line breaks kept, other control characters rejected. |
-| `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `x`, `instagram`, `website` or `other`; a submitted `github` entry is dropped, because the GitHub link is the member's linked GitHub account (`POST /api/me/github/authorize`) and readers see `https://github.com/<login>` appended to the stored links while that account is linked, and not at all after unlinking. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
+| `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `x`, `instagram`, `website` or `other`; a submitted `github` entry is dropped, because the GitHub link is the member's linked GitHub account (`POST /api/me/github/authorize`). Readers see `https://github.com/<login>` appended to the stored links only while the account is linked and `show_github` is true. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
 | `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
 | `onboarding_completed_at` | `NULL` | Explicit completion or opt-out of the web profile step (migration `0104`); separate from sharing consent. |
@@ -212,7 +213,7 @@ badge or ticket.
 | `displayName` | `name` + surname initial, or full surname | always |
 | `photoUrl` | `/api/users/:id/photo?v=…` for `users.photo_key` | `show_photo` and a photo exists |
 | `headline`, `bio`, `locationNote` | profile | when set |
-| `socials[]` `{kind, url}` | profile, plus the linked GitHub account | always (may be empty) |
+| `socials[]` `{kind, url}` | profile, plus the linked GitHub account | always (may be empty); the GitHub entry requires `show_github` and a linked account |
 | `cvUrl` | `/api/directory/:userId/cv` (the owner's preview: `/api/me/public-profile/cv`) | `share_cv` and a CV exists |
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |

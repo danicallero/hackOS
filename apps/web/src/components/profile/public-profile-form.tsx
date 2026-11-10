@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import {
@@ -53,6 +52,7 @@ export interface Settings {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
+  showGithub: boolean;
   headline: string;
   locationNote: string;
   bio: string;
@@ -65,6 +65,8 @@ export interface PublicProfile {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
+  /** Missing only in responses from older servers; links stayed visible by default. */
+  showGithub?: boolean;
   headline: string | null;
   bio: string | null;
   locationNote: string | null;
@@ -87,6 +89,7 @@ export function settingsFrom(profile: PublicProfile): Settings {
     showSurname: profile.showSurname,
     showPhoto: profile.showPhoto,
     showProject: profile.showProject,
+    showGithub: profile.showGithub ?? true,
     headline: profile.headline ?? "",
     locationNote: profile.locationNote ?? "",
     bio: profile.bio ?? "",
@@ -138,12 +141,14 @@ export function ProfileTextFields({
   onChange,
   className,
   ownAccount = false,
+  githubStatus,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   className: string;
   /** Own profile only: shows the member's linked GitHub account as their GitHub link. */
   ownAccount?: boolean;
+  githubStatus?: GithubAccountStatus | null;
 }) {
   const { t } = useLocale();
   return (
@@ -168,6 +173,9 @@ export function ProfileTextFields({
         links={settings.socials}
         onChange={(socials) => onChange({ socials })}
         ownAccount={ownAccount}
+        githubStatus={githubStatus}
+        showGithub={settings.showGithub}
+        onShowGithubChange={(showGithub) => onChange({ showGithub })}
       />
     </>
   );
@@ -265,45 +273,77 @@ export function BioField({
   );
 }
 
+export interface GithubAccountStatus {
+  configured: boolean;
+  login: string | null;
+}
+
 /** GitHub comes from the linked GitHub account, not from a typed address. */
 const LINK_KINDS = SOCIAL_KINDS.filter((kind) => kind !== "github");
 
-function GithubAccountRow() {
+function GithubAccountRow({
+  status,
+  showGithub,
+  onShowGithubChange,
+}: {
+  status: GithubAccountStatus | null;
+  showGithub: boolean;
+  onShowGithubChange: (showGithub: boolean) => void;
+}) {
   const { t } = useLocale();
-  const status = useServerResource(["me-github"], (signal) =>
-    api.get<{ configured: boolean; login: string | null }>("/api/me/github", { signal }),
-  );
+  const visibilityId = useId();
   const [busy, setBusy] = useState(false);
-  if (!status.data?.configured) return null;
-  const login = status.data.login;
+  if (!status?.configured) return null;
+  const login = status.login;
+  if (login) {
+    return (
+      <li className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
+        <div className="flex h-10 min-w-0 items-center gap-2 rounded-control border border-input bg-background px-3 text-sm">
+          <SOCIAL_ICON.github
+            aria-hidden="true"
+            className="text-muted-foreground size-4 shrink-0"
+          />
+          <span className="truncate">{t("socialGithub")}</span>
+        </div>
+        <Input
+          className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+          value={`https://github.com/${login}`}
+          readOnly
+          aria-label={t("publicProfileLinkUrl")}
+        />
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          <Label htmlFor={visibilityId} className="min-w-0 text-sm leading-tight">
+            {t("publicProfileShowGithub")}
+          </Label>
+          <Switch id={visibilityId} checked={showGithub} onCheckedChange={onShowGithubChange} />
+        </div>
+      </li>
+    );
+  }
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <li className="flex min-w-0 items-center gap-2">
       <SOCIAL_ICON.github aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
-      {login ? (
-        <span className="min-w-0 truncate text-sm">github.com/{login}</span>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {});
-              window.location.assign(url);
-            } catch (err) {
-              toast.error(apiErrorText(err, t, t("couldNotLoadProject")), {
-                compactTitle: "GitHub",
-              });
-              setBusy(false);
-            }
-          }}
-        >
-          {t("githubLinkAccount")}
-        </Button>
-      )}
-    </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {});
+            window.location.assign(url);
+          } catch (err) {
+            toast.error(apiErrorText(err, t, t("couldNotLoadProject")), {
+              compactTitle: "GitHub",
+            });
+            setBusy(false);
+          }
+        }}
+      >
+        {t("githubLinkAccount")}
+      </Button>
+    </li>
   );
 }
 
@@ -311,10 +351,16 @@ function LinksEditor({
   links,
   onChange,
   ownAccount,
+  githubStatus,
+  showGithub,
+  onShowGithubChange,
 }: {
   links: EditableLink[];
   onChange: (links: EditableLink[]) => void;
   ownAccount: boolean;
+  githubStatus?: GithubAccountStatus | null;
+  showGithub: boolean;
+  onShowGithubChange: (showGithub: boolean) => void;
 }) {
   const { t } = useLocale();
   const headingId = useId();
@@ -325,9 +371,15 @@ function LinksEditor({
       <span id={headingId} className="block text-sm font-medium">
         {t("publicProfileLinks")}
       </span>
-      {ownAccount && <GithubAccountRow />}
-      {links.length > 0 && (
+      {(links.length > 0 || (ownAccount && githubStatus?.configured)) && (
         <ul className="space-y-2">
+          {ownAccount && (
+            <GithubAccountRow
+              status={githubStatus ?? null}
+              showGithub={showGithub}
+              onShowGithubChange={onShowGithubChange}
+            />
+          )}
           {links.map((link) => {
             const Icon = SOCIAL_ICON[link.kind];
             return (
