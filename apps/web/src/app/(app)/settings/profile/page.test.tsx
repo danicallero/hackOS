@@ -61,6 +61,7 @@ const participant = {
   emailVerified: true,
   visibleRoleName: "Hacker",
   hasEventAccess: true,
+  capabilities: [] as string[],
   isSponsorRep: false,
   roles: [{ id: 1, name: "Hacker", isVisible: true }],
 };
