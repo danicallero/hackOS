@@ -4,6 +4,7 @@ import { AppSidebar, NotificationSidebarTrigger } from "@/components/layout/app-
 import { AuthGuard } from "@/components/layout/auth-guard";
 import { MAIN_CONTENT_ID, SkipLink } from "@/components/layout/skip-link";
 import { VerificationBanner } from "@/components/layout/verification-banner";
+import { OnboardingBanner } from "@/components/onboarding/onboarding-banner";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 /**
@@ -23,6 +24,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NotificationSidebarTrigger className="pointer-events-auto bg-background/90 shadow-sm backdrop-blur" />
           </div>
           <VerificationBanner />
+          <OnboardingBanner />
           <CommandPalette />
           <QuickArrival />
           <main

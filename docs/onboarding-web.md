@@ -42,10 +42,17 @@ persists each answer. Nothing here gates event access.
   (`actions`) and whether a step is required come from the response. A required
   step shows Later but never Skip. No role or attendance-kind logic lives in the
   client, so participants, mentors, sponsors and staff share one code path.
-- **Never blocking.** `OnboardingEntry` (in `AuthGuard`) offers the journey once
-  per browser session, only when the person lands on the app home (`/event`), and only when steps
-  are pending; every other route renders immediately and a failed read is
-  ignored. Required steps are completion constraints only.
+- **Never blocking.** `OnboardingEntry` (in `AuthGuard`) offers the journey on
+  the first page of each sign-in session (the flag is cleared on sign-in and
+  sign-out), wherever the person lands, and only when steps are pending. The
+  page they came for travels as `?next=`, so **Later** (and finishing) returns
+  there. Every page renders immediately and a failed read is ignored. Required
+  steps are completion constraints only.
+- **Banner.** While any step is pending or was put off with Later, the app
+  shell shows "Finish setting up your experience" with a Continue link to
+  `/onboarding` (`OnboardingBanner`, under the verification banner). Skipped and
+  declined steps are the person's choice and do not keep it up; it is hidden on
+  the journey itself and for people the journey does not apply to.
 - **Networking consent** is only ever the explicit *create* answer, which saves
   the public profile with `directoryVisible: true`. *Decline* saves it hidden
   (disabling any earlier publication); *later* stores a deferral and touches

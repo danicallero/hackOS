@@ -35,6 +35,7 @@ import {
   pendingSteps,
   readOnboarding,
 } from "@/lib/onboarding";
+import { safeReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -51,6 +52,8 @@ export function OnboardingFlow() {
   const router = useRouter();
   const params = useSearchParams();
   const { me, refresh } = useSessionContext();
+  // Where Later and Finish return: the page the person came for, else the app home.
+  const leaveTo = safeReturnPath(params.get("next"), APP_HOME_PATH);
   const state = useServerResource(["me", "onboarding"], (signal) => readOnboarding(signal));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,16 +74,22 @@ export function OnboardingFlow() {
     started.current = new Set(pendingSteps(data).map((item) => item.step));
   const nothingOpen = data !== null && pendingSteps(data).length === 0 && !requested;
   useEffect(() => {
-    if (nothingOpen) router.replace(APP_HOME_PATH);
-  }, [nothingOpen, router]);
+    if (nothingOpen) router.replace(leaveTo);
+  }, [nothingOpen, router, leaveTo]);
 
   /** One writer for the step in the URL, guarded so an unchanged value never touches history (R003). */
   const show = useCallback(
     (next: OnboardingStep) => {
       moved.current = true;
       setLocal(next);
-      if (new URLSearchParams(window.location.search).get("step") !== next)
-        router.replace(`/onboarding?step=${next}`, { scroll: false });
+      const query = new URLSearchParams(window.location.search);
+      if (query.get("step") !== next) {
+        // Keep `next` (where Later returns) while the step changes.
+        const target = new URLSearchParams({ step: next });
+        const back = query.get("next");
+        if (back) target.set("next", back);
+        router.replace(`/onboarding?${target}`, { scroll: false });
+      }
     },
     [router],
   );
@@ -100,7 +109,7 @@ export function OnboardingFlow() {
           after.find((item) => item.status === "pending") ??
           pendingSteps(fresh)[0] ??
           fresh.steps.find((item) => item.step === "completion");
-        if (from === "completion" || !next) router.push(APP_HOME_PATH);
+        if (from === "completion" || !next) router.push(leaveTo);
         else show(next.step);
       } catch (cause) {
         setError(apiErrorText(cause, t, t("onboardingCouldNotSave")));
@@ -108,7 +117,7 @@ export function OnboardingFlow() {
         setBusy(false);
       }
     },
-    [refresh, router, show, state, t],
+    [refresh, router, show, state, t, leaveTo],
   );
 
   if (state.error)
@@ -141,7 +150,7 @@ export function OnboardingFlow() {
           setIntro(false);
           show(first.step);
         }}
-        onLater={() => router.push(APP_HOME_PATH)}
+        onLater={() => router.push(leaveTo)}
       />
     );
 

@@ -28,6 +28,7 @@ vi.mock("@/components/layout/app-sidebar", () => ({
 vi.mock("@/components/common/command-palette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/common/quick-arrival", () => ({ QuickArrival: () => null }));
 vi.mock("@/components/layout/verification-banner", () => ({ VerificationBanner: () => null }));
+vi.mock("@/components/onboarding/onboarding-banner", () => ({ OnboardingBanner: () => null }));
 
 import { AppShell } from "./app-shell";
 

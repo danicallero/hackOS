@@ -70,13 +70,33 @@ export const FRAME_STEPS: readonly OnboardingStep[] = ["welcome", "completion"];
 
 const SESSION_FLAG = "hackos.onboardingOffered.";
 
-/** The app offers the flow once per browser session, never as a gate. */
+/** The app offers the flow on the first page of each sign-in session, never as a gate. */
 export function wasOnboardingOffered(userId: number): boolean {
   try {
     return window.sessionStorage.getItem(`${SESSION_FLAG}${userId}`) === "1";
   } catch {
     return false;
   }
+}
+
+/** A new sign-in or sign-out starts a new offer: it opens again on the next entry. */
+export function resetOnboardingOffered(): void {
+  try {
+    for (const key of Object.keys(window.sessionStorage))
+      if (key.startsWith(SESSION_FLAG)) window.sessionStorage.removeItem(key);
+  } catch {
+    /* Without storage the flow is simply offered on every load. */
+  }
+}
+
+/** Steps the person still owes an answer to: pending, or put off with Later. Skipped and declined are choices. */
+export function openSteps(state: OnboardingState | null): ResolvedOnboardingStep[] {
+  return (
+    state?.steps.filter(
+      (step) =>
+        step.step !== "completion" && (step.status === "pending" || step.status === "deferred"),
+    ) ?? []
+  );
 }
 
 export function markOnboardingOffered(userId: number): void {
