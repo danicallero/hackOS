@@ -149,7 +149,6 @@ CREATE TABLE public.activity_rsvp_settings (
   activity_id integer NOT NULL REFERENCES public.activities(id) ON DELETE CASCADE,
   event_key text NOT NULL,
   enabled boolean NOT NULL DEFAULT false,
-  required boolean NOT NULL DEFAULT false,
   kinds text[] NOT NULL DEFAULT '{}' CHECK (kinds <@ ARRAY['participant','mentor','sponsor','staff']::text[]),
   name_i18n jsonb,
   description_i18n jsonb,
@@ -157,8 +156,7 @@ CREATE TABLE public.activity_rsvp_settings (
   closes_at timestamptz,
   options jsonb NOT NULL DEFAULT '[]'::jsonb,
   updated_at timestamptz NOT NULL DEFAULT now(),
-  PRIMARY KEY (activity_id,event_key),
-  CHECK (NOT required OR enabled)
+  PRIMARY KEY (activity_id,event_key)
 );
 CREATE TRIGGER activity_rsvp_settings_updated_at BEFORE UPDATE ON public.activity_rsvp_settings
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
