@@ -18,9 +18,7 @@ export function useAudienceRoles() {
   const resource = useServerResource(["schedule", "audience-roles"], (signal) =>
     api.get<AudienceRole[]>("/api/schedule/audience-roles", { signal }),
   );
-  const names = useMemo(
-    () => new Map((resource.data ?? []).map((role) => [role.id, role.name])),
-    [resource.data],
-  );
-  return { roles: resource.data ?? [], names };
+  const roles = Array.isArray(resource.data) ? resource.data : [];
+  const names = useMemo(() => new Map(roles.map((role) => [role.id, role.name])), [roles]);
+  return { roles, names };
 }
