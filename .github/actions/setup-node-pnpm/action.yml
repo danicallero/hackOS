@@ -17,4 +17,6 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: |
+        CI_PROGRESS_LABEL="Install dependencies" CI_PROGRESS_REMAINING="return to calling workflow" \
+          bash scripts/ci-progress.sh <(echo "pnpm install --frozen-lockfile")

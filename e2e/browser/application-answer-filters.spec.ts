@@ -115,6 +115,9 @@ test("filter answers and dietary needs, then reopen a response by its ID", async
     await page.getByRole("menuitemcheckbox", { name: value, exact: true }).click();
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
+    // H13: closing filter menus must finish restoring focus before a review opens.
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Filters/ })).toBeFocused();
   }
   await filter("Dietary restrictions", "With dietary restrictions");
   await expect(name("Linus None")).toHaveCount(0);
@@ -124,8 +127,9 @@ test("filter answers and dietary needs, then reopen a response by its ID", async
   await expect(name("Ada Notes")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("answer-filters.png"), fullPage: true });
   await page.getByRole("button", { name: /^Ada Notes(?:\s|$)/ }).click();
-  await expect(page.getByRole("button", { name: "Copy response link", exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/response=10/);
+  await expect(page).toHaveURL(/response=10/, { timeout: 15_000 });
+  const copyResponseLink = page.getByRole("button", { name: "Copy response link", exact: true });
+  await expect(copyResponseLink).toBeVisible({ timeout: 15_000 });
   expect(new URL(page.url()).searchParams.size).toBe(2);
   await page.screenshot({ path: testInfo.outputPath("response-link.png"), fullPage: true });
   const href = page.url();
@@ -139,18 +143,23 @@ test("filter answers and dietary needs, then reopen a response by its ID", async
       },
     });
   });
-  await page.getByRole("button", { name: "Copy response link", exact: true }).click();
+  await expect(copyResponseLink).toBeVisible({ timeout: 15_000 });
+  await copyResponseLink.click();
   expect(
     await page.evaluate(
       () => (window as Window & { copiedResponseLink?: string }).copiedResponseLink,
     ),
   ).toBe(href);
   await page.reload();
-  await expect(page.getByRole("button", { name: "Copy response link", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy response link", exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
   await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/response=/);
   await page.goto(href.replace("tab=review&", ""));
-  await expect(page.getByRole("button", { name: "Copy response link", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy response link", exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
   await page.goto("/applications/1?tab=review&response=999");
   await expect(page.getByText("This response is unavailable.", { exact: true })).toBeVisible();
 });

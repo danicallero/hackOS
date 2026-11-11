@@ -21,7 +21,7 @@ import {
 import type { ComposeOption, ECElementEvent, EChartsType } from "echarts/core";
 import * as echarts from "echarts/core";
 import { SVGRenderer } from "echarts/renderers";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/lib/i18n";
 
 export type StatsChartType = "bar" | "pie" | "line";
@@ -84,7 +84,10 @@ export function StatsChart({
   const { t } = useLocale();
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const selectedRef = useRef<Record<string, boolean>>({});
-  const legendNames = [...new Set(data.map((row) => chartLegendName(row, type, title)))];
+  const legendNames = useMemo(
+    () => [...new Set(data.map((row) => chartLegendName(row, type, title)))],
+    [data, title, type],
+  );
   const chartElement = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<EChartsType | null>(null);
   const chartHeight =
@@ -115,11 +118,13 @@ export function StatsChart({
 
     const renderChart = () => {
       if (chart.isDisposed()) return;
-      chart.setOption(createStatsChartOption(data, type, title, readChartPalette(element)), {
-        notMerge: true,
-        lazyUpdate: true,
-      });
-      chart.setOption({ legend: { selected: selectedRef.current } }, { silent: true });
+      selectedRef.current = Object.fromEntries(
+        legendNames.map((name) => [name, selectedRef.current[name] ?? true]),
+      );
+      chart.setOption(
+        createStatsChartOption(data, type, title, readChartPalette(element), selectedRef.current),
+        { notMerge: true, lazyUpdate: true },
+      );
     };
     renderChart();
     const onLegendSelect = (event: unknown) => {
@@ -157,12 +162,13 @@ export function StatsChart({
     chart.on("globalout", clearLegend);
     return () => {
       themeObserver.disconnect();
+      if (chart.isDisposed()) return;
       chart.off("legendselectchanged", onLegendSelect);
       chart.off("mouseover", onMouseOver);
       chart.off("mouseout", clearLegend);
       chart.off("globalout", clearLegend);
     };
-  }, [data, title, type]);
+  }, [data, legendNames, title, type]);
 
   return (
     <div className="@container min-w-0">
@@ -229,6 +235,7 @@ function createStatsChartOption(
   type: StatsChartType,
   title: string,
   palette: ChartPalette,
+  selected: Record<string, boolean>,
 ): StatsChartOption {
   const cumulative = data.some((row) => row.daily !== undefined);
   const legendCounts = new Map<string, number>();
@@ -262,6 +269,7 @@ function createStatsChartOption(
     },
     legend: {
       type: "scroll",
+      selected,
       data: [...legendCounts].map(([name, count]) => ({
         name,
         tooltip: { show: true, formatter: String(count) },
@@ -340,6 +348,11 @@ function createStatsChartOption(
     const pieData =
       total === 0
         ? [
+            ...data.map((row, index) => ({
+              name: row.series ? `${row.series}: ${row.label}` : row.label,
+              value: 0,
+              itemStyle: { color: palette.colors[index % palette.colors.length] },
+            })),
             {
               name: title,
               value: 1,

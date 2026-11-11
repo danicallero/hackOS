@@ -87,12 +87,19 @@ mentions, test counts or mock call counts as a replacement for domain outcomes.
   measurements balance the four groups. Each shard receives a separate Valkey
   database derived from the configured base URL, alongside its own Postgres
   database and S3 bucket.
+- CI runs those four API shards as separate matrix jobs, each with its own
+  runner and services. `API_TEST_SHARD=1` through `4` selects one existing
+  partition; omitting it keeps the local four-shard runner. Discovery still
+  validates every test file's ownership before selecting a partition. The
+  migration upgrade check runs on shard 1; the `API integration tests` gate
+  requires every shard to pass.
 - Every API shard uses its own S3 bucket locally as well as in CI. Storage is
   checked/provisioned before suites launch with bounded requests; it is not
   silently skipped when unavailable. Failed runs wait for every shard before
   reporting aggregate errors.
 - Web model suites avoid starting jsdom; browser-state suites keep it. Browser
-  and mobile CI use two workers while preserving file/test isolation and all
+  CI uses three isolated shard jobs with one worker each; mobile CI uses two workers,
+  preserving file/test isolation and all
   current assertions. Native builds compile the host simulator architecture. Device acceptance and
   Android native-module runs stay manual release checks; full CI retains the
   fast mobile Jest suite. Detox limits discovery to its device-test directory
@@ -103,6 +110,39 @@ compilation, competing builds, disk pressure and missing dependencies distort
 comparisons. Keep real-clock tests where server TTL expiry is the behavior
 under test; replacing Valkey expiry with fake JavaScript time would remove the
 integration guarantee. Keep timeouts and coverage intact when tuning workers.
+
+## CI progress logs
+
+Queue-group fixture checks settle all parallel graph reads before returning a
+verdict, including malformed or mixed groups. An early rejection must not leave
+room/enterprise reads running after the request or into the next test's cleanup
+(`TRUNCATE` can otherwise deadlock against those reads).
+
+Long-running command steps in `CI` use `scripts/ci-progress.sh`. Logs include the
+phase name, later phases in that job, start/end timestamps, exit status and
+elapsed time. CPU count is logged at startup; a heartbeat every 30 seconds
+includes runner load and available memory on Linux so a quiet
+compiler or integration test is distinguishable from a finished command.
+Dependency installation uses the same heartbeat. Checkout and other action
+steps expose their own progress in the Actions timeline.
+The aggregate browser gate prints the completed shards' result directly.
+
+Keep each command's `CI_PROGRESS_LABEL` and `CI_PROGRESS_REMAINING` metadata
+aligned with the job's step order when changing the workflow. Remaining phases
+describe the normal path; GitHub marks later steps skipped when a command fails.
+The wrapper preserves the command's failure status and stops its monitor on exit.
+
+API shards already use verbose Vitest output; web Vitest and mobile Jest also
+print individual results in CI. Browser logs additionally show completed and
+remaining tests, active tests and durations, with JSON timings and failure
+diagnostics uploaded afterward; see [UI testing](./ui-testing.md).
+Parallel jobs' overall state remains visible in the workflow's Actions job list.
+
+The web jsdom project loads `apps/web/test/setup.ts`: it enables React's act
+environment before each test and wraps Testing Library DOM events in `act`,
+preserving each event callback's result. Tests must also await asynchronous
+interactions, timers and manually resolved work inside `act` before asserting
+the resulting state. Warnings are not filtered or suppressed.
 
 ## Verification limits
 

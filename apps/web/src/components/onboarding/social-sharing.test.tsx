@@ -461,7 +461,7 @@ describe("<SocialSharing />", () => {
   });
 
   async function openShareMenu() {
-    await userEvent.setup().click(button(/Compartir/) as HTMLButtonElement);
+    await act(async () => userEvent.setup().click(button(/Compartir/) as HTMLButtonElement));
     await vi.waitFor(() => expect(document.body.querySelector('[role="menu"]')).not.toBeNull());
   }
   const menuItem = (name: RegExp) =>
@@ -488,9 +488,9 @@ describe("<SocialSharing />", () => {
   it("copies the caption from the Share menu", async () => {
     const user = userEvent.setup(); // installs its own clipboard
     await mount();
-    await user.click(button(/Compartir/) as HTMLButtonElement);
+    await act(async () => user.click(button(/Compartir/) as HTMLButtonElement));
     await vi.waitFor(() => expect(menuItem(/Copiar texto/)).toBeDefined());
-    await user.click(menuItem(/Copiar texto/) as Element);
+    await act(async () => user.click(menuItem(/Copiar texto/) as Element));
     expect(await navigator.clipboard.readText()).toBe(
       "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.",
     );
@@ -686,7 +686,7 @@ describe("<SocialSharing />", () => {
       });
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
       act(() => root.unmount());
-      open();
+      await act(async () => open());
       await vi.waitFor(() => expect(photo("/7/photo")).toHaveLength(1));
       await vi.waitFor(() => expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1));
       root = createRoot(container);
@@ -702,7 +702,7 @@ describe("<SocialSharing />", () => {
       });
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       await rerender({ attendee: { ...attendee, photoUrl: "/api/users/8/photo" } });
-      open();
+      await act(async () => open());
       await vi.waitFor(() => expect(photo("/8/photo")).toHaveLength(1));
       await settled();
       expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1);

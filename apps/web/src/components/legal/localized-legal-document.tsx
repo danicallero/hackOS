@@ -18,7 +18,7 @@ export function LocalizedLegalDocument({ copy }: { copy: Record<Language, LegalD
 
   return (
     <>
-      <title>{document.title} | hackOS</title>
+      <title>{`${document.title} | hackOS`}</title>
       <LegalPage
         title={document.title}
         description={document.description}
