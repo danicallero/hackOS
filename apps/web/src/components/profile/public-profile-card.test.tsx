@@ -190,11 +190,9 @@ describe("PublicProfileCard", () => {
       'input[aria-label="publicProfileLinkUrl"][readonly]',
     );
     expect(githubUrl?.value).toBe("https://github.com/maria");
-    expect(container.querySelectorAll('a[href="https://github.com/maria"]')).toHaveLength(1);
 
     const user = userEvent.setup();
     await act(async () => user.click(byLabel("publicProfileShowGithub") as HTMLButtonElement));
-    expect(container.querySelectorAll('a[href="https://github.com/maria"]')).toHaveLength(0);
     vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true, showGithub: false }));
     await save();
     expect(api.put).toHaveBeenCalledWith(
@@ -204,17 +202,14 @@ describe("PublicProfileCard", () => {
     );
   });
 
-  it("reveals the fields and a live preview once opted in", async () => {
+  it("enables the fields once opted in", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     await render(<PublicProfileCard />);
     const user = userEvent.setup();
 
     await act(async () => user.click(byLabel("publicProfileVisible") as HTMLButtonElement));
     expect(container.textContent).toContain("publicProfileShowPhoto");
-    expect(container.textContent).toContain("María José F.");
-
-    await act(async () => user.click(byLabel("publicProfileShowSurname") as HTMLButtonElement));
-    expect(container.textContent).toContain("María José Fernández-Villaverde");
+    expect(container.querySelector("fieldset[disabled]")).toBeNull();
   });
 
   it("saves the full settings with an idempotency key and adopts the response", async () => {
@@ -584,18 +579,6 @@ describe("PublicProfileCard", () => {
     );
     expect(apiUpload).not.toHaveBeenCalled();
     expect(container.querySelector("[role=alert]")?.textContent).toBe("cvFileHint");
-  });
-
-  it("previews the server card until something changes", async () => {
-    vi.mocked(api.get).mockResolvedValue(
-      profile({ directoryVisible: true }, { displayName: "Server Card" }),
-    );
-    await render(<PublicProfileCard />);
-    expect(container.textContent).toContain("Server Card");
-
-    const user = userEvent.setup();
-    await act(async () => user.click(byLabel("publicProfileShowSurname") as HTMLButtonElement));
-    expect(container.textContent).toContain("María José Fernández-Villaverde");
   });
 });
 

@@ -226,11 +226,13 @@ export function ShareToggleCard({
   onChange,
   label,
   hint,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   hint: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -246,6 +248,7 @@ export function ShareToggleCard({
       <Switch
         id={id}
         checked={checked}
+        disabled={disabled}
         onCheckedChange={onChange}
         aria-describedby={`${id}-hint`}
       />

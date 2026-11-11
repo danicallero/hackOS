@@ -13,7 +13,7 @@ shares nothing saves the person one-way, and stands are always one-way
 story; code and commits reference `#934` and `#935`.
 
 People manage their public profile (opt-in, surname/photo/project/GitHub, headline,
-location note, bio, links, CV and preview) from My profile
+location note, bio, links and CV) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded at the top of the Personal details section of the Account tab, because it
 is the account's photo everywhere, not only on the public profile; the Public profile tab offers the same upload next to the photo switch. The mobile app
@@ -24,11 +24,9 @@ The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
 only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
-(type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, the CV and a preview card. Hiding that link does not unlink the account.
-The preview is the server's `preview` until something changes; then name
-(surname initial by code point, as the API), photo, text, links and the
-shared CV follow the unsaved edits, while the projects and challenges stay the
-saved ones until saving. While the opt-in is off the hidden fields neither
+(type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
+There is no preview card. While the opt-in is off the fields stay in view,
+disabled, so people see what sharing would show; they neither
 enable Save nor get published: switching it off saves the stored text and
 toggles unchanged. Fields are locked while a save is in flight, and each
 change set saves with one `Idempotency-Key`.
@@ -102,7 +100,7 @@ the step before returning to its ticket; the email token alone never authorizes
 profile access.
 
 The step explains networking during the event and badge-scan visibility, reuses
-the profile editor (photo, sharing choices, bio, links, CV and preview), and offers
+the profile editor (photo, sharing choices, bio, links and CV), and offers
 the actual form immediately, without an intermediate chooser. Its footer offers
 Create profile, Do not create a public profile, or Remind me on next login.
 Create profile saves the filled form and sharing consent in one action. Declining

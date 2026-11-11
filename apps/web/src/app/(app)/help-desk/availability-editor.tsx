@@ -70,7 +70,7 @@ export function AvailabilityEditor({
   return (
     <div className="space-y-3">
       <div className="flex min-h-(--control-height-compact) items-center justify-between gap-3">
-        <h3 className="type-label">{t("helpDeskPlanTitle")}</h3>
+        <h3 className="text-sm font-medium">{t("helpDeskPlanTitle")}</h3>
         <Button
           type="button"
           variant="outline"

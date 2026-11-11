@@ -4,14 +4,13 @@ import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import { ProfilePhoto } from "@/components/profile/profile-photo";
 import {
-  DirectoryCard,
   type GithubAccountStatus,
   OWN_CV_PATH,
   ProfileTextFields,
@@ -30,7 +29,6 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
@@ -74,38 +72,6 @@ export function displayName(me: Pick<Me, "name" | "surname">, showSurname: boole
   const surname = (me.surname ?? "").trim();
   if (!surname) return name;
   return `${name} ${showSurname ? surname : `${Array.from(surname)[0]}.`}`;
-}
-
-/**
- * Unsaved toggles, text and links apply immediately; the project and its
- * challenges come from the saved preview, because the API only projects them
- * for the stored settings (#934, #935).
- */
-function previewEntry(
-  me: Pick<Me, "name" | "surname" | "image">,
-  settings: Settings,
-  saved: DirectoryEntry,
-  hasCv = false,
-  githubLogin: string | null = null,
-): DirectoryEntry {
-  const savedGithub = saved.socials?.find((link) => link.kind === "github") ?? null;
-  const github = settings.showGithub
-    ? githubLogin
-      ? { kind: "github" as const, url: `https://github.com/${githubLogin}` }
-      : savedGithub
-    : null;
-  return {
-    ...saved,
-    displayName: displayName(me, settings.showSurname),
-    photoUrl: settings.showPhoto ? me.image : null,
-    headline: settings.headline.trim() || null,
-    bio: settings.bio.trim() || null,
-    locationNote: settings.locationNote.trim() || null,
-    socials: [...savedLinks(settings.socials), ...(github ? [github] : [])],
-    cvUrl: settings.shareCv && hasCv ? OWN_CV_PATH : null,
-    projects: settings.showProject ? saved.projects : [],
-    challenges: settings.showProject ? saved.challenges : [],
-  };
 }
 
 /**
@@ -181,18 +147,6 @@ export function PublicProfileCard({
   );
   useUnsavedChangesGuard(dirty);
 
-  const preview = useMemo(() => {
-    if (!me || !profile || !settings || !fieldsOpen) return null;
-    return dirty
-      ? previewEntry(
-          me,
-          settings,
-          profile.preview,
-          profile.cv !== null,
-          githubStatus.data?.login ?? null,
-        )
-      : profile.preview;
-  }, [me, profile, settings, dirty, fieldsOpen, githubStatus.data?.login]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [onDirtyChange, dirty]);
@@ -313,7 +267,7 @@ export function PublicProfileCard({
   }
   if (onboarding?.saveDraft) onboarding.saveDraft.current = dirty ? saveDraft : null;
 
-  const hasCv = profile.cv !== null;
+  const _hasCv = profile.cv !== null;
   return (
     <form className="@container min-w-0" onSubmit={onSubmit}>
       <SectionCard
@@ -350,97 +304,67 @@ export function PublicProfileCard({
       >
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
-        <fieldset
-          disabled={pending}
-          className={cn(
-            "min-w-0",
-            onboarding
-              ? "space-y-(--space-within-section)"
-              : "grid gap-(--space-within-section) @3xl:grid-cols-[minmax(0,1fr)_17rem] @3xl:gap-8",
-          )}
-        >
-          <div className="min-w-0 space-y-(--space-within-section)">
-            <div className="flex min-w-0 items-center gap-4">
-              <ProfilePhoto />
-              <div className="min-w-0">
-                <p className="truncate font-medium">
-                  {[me.name, me.surname].filter(Boolean).join(" ")}
-                </p>
-                <p className="text-muted-foreground truncate text-sm">{me.email}</p>
-              </div>
+        <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
+          <div className="flex min-w-0 items-center gap-4">
+            <ProfilePhoto />
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {[me.name, me.surname].filter(Boolean).join(" ")}
+              </p>
+              <p className="text-muted-foreground truncate text-sm">{me.email}</p>
             </div>
-            {onboarding ? (
-              <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
-            ) : (
-              <ShareToggleCard
-                checked={settings.directoryVisible}
-                onChange={(directoryVisible) => update({ directoryVisible })}
-                label={t("publicProfileVisible")}
-                hint={t("publicProfileAudience")}
-              />
-            )}
-            {!settings.directoryVisible && helperPublished && (
-              <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
-            )}
-            {/* What sharing would show stays in view while it is off, but cannot be edited. */}
-            <fieldset
-              disabled={!fieldsOpen}
-              className={cn(
-                "min-w-0 space-y-(--space-within-section) transition-opacity",
-                !fieldsOpen && "opacity-55",
-              )}
-            >
-              <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
-              <ProfileTextFields
-                settings={settings}
-                onChange={update}
-                ownAccount
-                githubStatus={githubStatus.data ?? null}
-                className={
-                  onboarding
-                    ? "grid items-start gap-4 sm:grid-cols-2"
-                    : "grid items-start gap-4 @xl:grid-cols-2"
-                }
-              />
-              {(!onboarding || profile.cv?.source === "application") && (
-                <CvField
-                  cv={profile.cv}
-                  ownerName={displayName(me, true)}
-                  shareCv={settings.shareCv}
-                  onShareChange={(shareCv) => update({ shareCv })}
-                  onSaved={(next) => {
-                    commit(next);
-                    // A removed CV is no longer shared; drop a pending share too.
-                    if (!next.cv) {
-                      setEdits((current) =>
-                        current?.shareCv ? { ...current, shareCv: false } : current,
-                      );
-                    }
-                  }}
-                />
-              )}
-            </fieldset>
           </div>
-          {fieldsOpen && (
-            <section
+          {onboarding ? (
+            <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
+          ) : (
+            <ShareToggleCard
+              checked={settings.directoryVisible}
+              onChange={(directoryVisible) => update({ directoryVisible })}
+              label={t("publicProfileVisible")}
+              hint={t("publicProfileAudience")}
+            />
+          )}
+          {!settings.directoryVisible && helperPublished && (
+            <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
+          )}
+          {/* What sharing would show stays in view while it is off, but cannot be edited. */}
+          <fieldset
+            disabled={!fieldsOpen}
+            className={cn(
+              "min-w-0 space-y-(--space-within-section) transition-opacity",
+              !fieldsOpen && "opacity-55",
+            )}
+          >
+            <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
+            <ProfileTextFields
+              settings={settings}
+              onChange={update}
+              ownAccount
+              githubStatus={githubStatus.data ?? null}
               className={
                 onboarding
-                  ? "space-y-2 border-t border-border/60 pt-4"
-                  : "space-y-2 @3xl:sticky @3xl:top-4 @3xl:self-start"
+                  ? "grid items-start gap-4 sm:grid-cols-2"
+                  : "grid items-start gap-4 @xl:grid-cols-2"
               }
-            >
-              <h3 className="type-label text-muted-foreground">{t("publicProfilePreview")}</h3>
-              {onboarding ? (
-                <DirectoryCard
-                  entry={
-                    dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
+            />
+            {(!onboarding || profile.cv?.source === "application") && (
+              <CvField
+                cv={profile.cv}
+                ownerName={displayName(me, true)}
+                shareCv={settings.shareCv}
+                onShareChange={(shareCv) => update({ shareCv })}
+                onSaved={(next) => {
+                  commit(next);
+                  // A removed CV is no longer shared; drop a pending share too.
+                  if (!next.cv) {
+                    setEdits((current) =>
+                      current?.shareCv ? { ...current, shareCv: false } : current,
+                    );
                   }
-                />
-              ) : (
-                <DirectoryCard entry={preview ?? profile.preview} />
-              )}
-            </section>
-          )}
+                }}
+              />
+            )}
+          </fieldset>
         </fieldset>
       </SectionCard>
     </form>

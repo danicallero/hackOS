@@ -9,7 +9,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { MultiSelect } from "@/components/common/multi-select";
 import { Spinner } from "@/components/common/spinner";
-import { SwitchRow } from "@/components/profile/public-profile-form";
+import { ShareToggleCard } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useHelperProfileOf } from "@/hooks/use-own-helper-profile";
@@ -135,7 +135,7 @@ export function MentorProfileEditor({
 
   return (
     <form onSubmit={save} className="space-y-5" aria-label={t("mentorProfileTitle")}>
-      <SwitchRow
+      <ShareToggleCard
         checked={shownPublished}
         onChange={setPublished}
         label={t("mentorPublish")}
