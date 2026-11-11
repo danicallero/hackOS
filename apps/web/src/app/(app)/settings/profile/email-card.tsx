@@ -1,7 +1,8 @@
 "use client";
 
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
-import { StatusBadge } from "@/components/common/status-badge";
+import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 
@@ -22,9 +23,15 @@ export function EmailRow() {
         </p>
       </div>
       {me.emailVerified ? (
-        <StatusBadge tone="success">{t("verified")}</StatusBadge>
+        <span className="text-success flex items-center gap-1.5 text-sm font-medium">
+          <SealCheckIcon aria-hidden="true" weight="fill" className="size-5" />
+          {t("verified")}
+        </span>
       ) : (
-        <StatusBadge tone="warning">{t("unverified")}</StatusBadge>
+        <span className="text-warning flex items-center gap-1.5 text-sm font-medium">
+          <WarningCircleIcon aria-hidden="true" weight="fill" className="size-5" />
+          {t("unverified")}
+        </span>
       )}
     </li>
   );

@@ -458,9 +458,14 @@ function LinksEditor({
     onChange(links.map((link) => (link.id === id ? { ...link, ...patch } : link)));
   return (
     <fieldset className="min-w-0 space-y-3" aria-labelledby={headingId}>
-      <span id={headingId} className="block text-sm font-medium">
-        {t("publicProfileLinks")}
-      </span>
+      <div className="flex items-baseline justify-between gap-3">
+        <span id={headingId} className="block text-sm font-medium">
+          {t("publicProfileLinks")}
+        </span>
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {links.length}/{SOCIALS_MAX}
+        </span>
+      </div>
       {(links.length > 0 || (ownAccount && githubStatus?.configured)) && (
         <ul className="space-y-2">
           {ownAccount && (

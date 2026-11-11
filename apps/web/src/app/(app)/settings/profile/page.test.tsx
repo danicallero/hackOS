@@ -121,8 +121,8 @@ describe("Profile tabs (H28, #1083)", () => {
     const headings = [...openPanel()[0].querySelectorAll("section > h2")];
     expect(headings.map((h) => [h.textContent, h.className])).toEqual([
       ["wallet", "sr-only"],
-      ["certificates", "type-section-title"],
       ["onboardingStepShare", "type-section-title"],
+      ["certificates", "type-section-title"],
     ]);
     for (const section of openPanel()[0].querySelectorAll("section[aria-labelledby]")) {
       const label = document.getElementById(section.getAttribute("aria-labelledby") ?? "");

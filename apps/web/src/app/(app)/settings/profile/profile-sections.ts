@@ -54,8 +54,8 @@ const TABS: TabDef[] = [
     title: "wallet",
     sections: [
       { id: "passes" },
-      { id: "certificates", title: "certificates" },
       { id: "share", title: "onboardingStepShare" },
+      { id: "certificates", title: "certificates" },
     ],
   },
   {
