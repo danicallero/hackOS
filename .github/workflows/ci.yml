@@ -197,14 +197,16 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Install Chromium
-        # The runner's Ubuntu mirror sometimes fails to resolve; retry before failing the job.
+        timeout-minutes: 12
+        # The runner's Ubuntu mirror sometimes fails to resolve and apt then hangs for
+        # minutes. Bound each attempt, and fall back to the browser download alone:
+        # the runner image already ships most of the system libraries.
         run: |
-          for attempt in 1 2 3; do
-            pnpm exec playwright install --with-deps chromium && exit 0
-            echo "Chromium install failed (attempt $attempt), retrying in 20s"
-            sleep 20
+          for attempt in 1 2; do
+            timeout 240 pnpm exec playwright install --with-deps chromium && exit 0
+            echo "Chromium install with system packages failed (attempt $attempt)"
           done
-          exit 1
+          pnpm exec playwright install chromium
 
       - name: Run deterministic browser smoke
         run: pnpm test:ui:browser --project=chromium

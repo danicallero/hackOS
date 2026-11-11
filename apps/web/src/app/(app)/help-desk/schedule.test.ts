@@ -3,7 +3,7 @@ import { intervalFrom, intervalProblem, scheduleDays } from "./schedule";
 
 const zone = "Europe/Madrid";
 
-describe("stated availability by event day (H62)", () => {
+describe("planned availability by event day (H62)", () => {
   it("groups intervals by the event-zone day they start on, in time order", () => {
     const days = scheduleDays(
       [

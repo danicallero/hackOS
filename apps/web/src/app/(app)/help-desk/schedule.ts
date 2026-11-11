@@ -2,7 +2,7 @@ import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-tim
 import { type AvailabilityInterval, MAX_INTERVAL_MS } from "@hackos/shared/help-desk";
 
 /**
- * Event-day arithmetic for stated availability (H62) and coverage (H67). Every
+ * Event-day arithmetic for planned availability (H62) and coverage (H67). Every
  * day and clock is the EVENT's wall clock, never the browser's (H45/H47).
  */
 

@@ -240,15 +240,19 @@ export function registerGithubRoutes(app: FastifyInstance) {
     {
       ...member,
       schema: {
-        body: z.object({ app: z.boolean().optional() }).optional(),
+        body: z
+          .object({ app: z.boolean().optional(), selectAccount: z.boolean().optional() })
+          .optional(),
         summary: "Start linking my GitHub account",
         description:
-          "Returns the GitHub authorization URL, bound by a signed 15-minute state to the member. The callback stores the GitHub login so commits and pull requests are ranked under the member's name.",
+          "Returns the GitHub authorization URL, bound by a signed 15-minute state to the member. The callback stores the GitHub login so commits and pull requests are ranked under the member's name; linking again replaces the previous login. `selectAccount: true` asks GitHub to let the member pick another account.",
       },
     },
     async (q) => {
       assertGithubConfigured();
-      return { url: authorizeUrl(signState(actor(q.userId), null, q.body?.app)) };
+      return {
+        url: authorizeUrl(signState(actor(q.userId), null, q.body?.app), q.body?.selectAccount),
+      };
     },
   );
 

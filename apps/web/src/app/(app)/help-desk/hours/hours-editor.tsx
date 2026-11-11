@@ -21,7 +21,7 @@ const overlaps = (a: AvailabilityInterval, b: AvailabilityInterval) =>
 /**
  * H64: the windows in which new help requests are accepted. No windows means
  * always open. Each change saves the complete replacement immediately, like
- * stated availability (H62), so there is no draft to lose.
+ * planned availability (H62), so there is no draft to lose.
  */
 export function HoursEditor({
   schedule,

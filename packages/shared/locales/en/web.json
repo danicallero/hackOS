@@ -4132,12 +4132,12 @@
   "helpDeskProfile": "Support profile",
   "helpDeskCoverage": "Coverage",
   "helpDeskKnowledge": "Knowledge",
-  "helpDeskSchedule": "Stated availability",
+  "helpDeskSchedule": "Planned availability",
   "helpDeskPresent": "Inside the venue",
   "helpDeskOutside": "Outside the venue",
   "helpDeskScheduledNow": "Scheduled now",
   "helpDeskNotScheduled": "Not scheduled now",
-  "helpDeskNoSchedule": "No availability stated",
+  "helpDeskNoSchedule": "No planned availability",
   "helpDeskSearch": "Search support team or knowledge",
   "helpDeskNoHelpers": "No published support profiles",
   "helpDeskNoMatches": "No support profiles match these filters",
@@ -4319,5 +4319,10 @@
   "activeDeviceSince": "Active {when}",
   "primaryEmail": "Primary",
   "githubLinkedAs": "Linked as {login}",
-  "githubNotLinked": "Not linked"
+  "githubNotLinked": "Not linked",
+  "toastAvailability": "Availability",
+  "githubLinkAnother": "Link another account",
+  "publicProfileFieldsOffHint": "Turn on sharing to edit these fields.",
+  "helpDeskResizeStart": "Drag to change the start of {interval}",
+  "helpDeskResizeEnd": "Drag to change the end of {interval}"
 }

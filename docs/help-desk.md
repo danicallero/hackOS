@@ -60,9 +60,11 @@ the other.
 
 In My profile → Mentoring the intervals are drawn as one 24-hour line per event
 day: drag across a line to mark a stretch (30-minute steps; an overlap or a
-start before the window is refused), press a marked stretch to edit or remove
+start before the window is refused), drag a marked stretch to move it or either
+of its edges to change its time, press it without dragging to edit or remove
 it, press an empty spot or the day's plus button to add with the dialog. The
-Add availability button is the keyboard route.
+Add availability button and the keyboard-activated stretches are the keyboard
+route. A helper's page shows the same lines read-only.
 
 ## Knowledge catalogue
 

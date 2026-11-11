@@ -25,7 +25,7 @@ export function useIntervalLabel() {
 }
 
 /**
- * Stated availability (H62) as readable rows per event day, each day with a
+ * Planned availability (H62) as readable rows per event day, each day with a
  * 24-hour track that previews when the person is around. With `onRemove`
  * every interval gets its own labelled Remove action.
  */

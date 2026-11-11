@@ -89,7 +89,7 @@ export const ERROR_REASONS = {
   TOPIC_RESERVED: "topic_reserved",
   /** 400: a referenced knowledge topic does not exist. */
   TOPIC_UNKNOWN: "topic_unknown",
-  /** 400: stated availability intervals overlap (H62). */
+  /** 400: planned availability intervals overlap (H62). */
   AVAILABILITY_OVERLAP: "availability_overlap",
   /** 400: an availability interval is empty or longer than 24 hours (H62). */
   AVAILABILITY_INVALID: "availability_invalid",

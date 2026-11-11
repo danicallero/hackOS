@@ -327,6 +327,9 @@ export function PublicProfileCard({
           {!settings.directoryVisible && helperPublished && (
             <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
           )}
+          {!fieldsOpen && (
+            <p className="text-muted-foreground text-sm">{t("publicProfileFieldsOffHint")}</p>
+          )}
           {/* What sharing would show stays in view while it is off, but cannot be edited. */}
           <fieldset
             disabled={!fieldsOpen}

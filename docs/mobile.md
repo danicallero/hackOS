@@ -1683,7 +1683,7 @@ screen and only a user pull spins the refresh control.
 (`helper/[id]`) is `PersonProfileScreen` — the scanned-person profile with the
 avatar that collapses into the Dynamic Island — fed by
 `GET /api/helpdesk/helpers/:id` (`profile` has the directory entry's shape), plus
-one "Stated availability" section: a Now row (scheduled vs inside the venue,
+one "Planned availability" section: a Now row (scheduled vs inside the venue,
 H24) and one row per event day. Editing happens in the same public profile
 editor: `components/help-desk/helper-profile-section.tsx` sits under the card
 for eligible helpers, as a **Help desk** section under the card and its share
