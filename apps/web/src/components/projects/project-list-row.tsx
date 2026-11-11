@@ -6,6 +6,7 @@ import { API_URL } from "@/lib/env";
 import { useLocale } from "@/lib/i18n";
 import type { NativeProject } from "@/lib/native-projects";
 import { projectSummary } from "@/lib/project-text";
+import { cn } from "@/lib/utils";
 
 /** The first photo of the project's first photo field, as a list thumbnail (H16). */
 function coverPhoto(project: NativeProject) {
@@ -20,7 +21,15 @@ function coverPhoto(project: NativeProject) {
 }
 
 /** H20: one project in a participant's list — name, state, a clipped summary and context. */
-export function ProjectListRow({ project, href }: { project: NativeProject; href: string }) {
+export function ProjectListRow({
+  project,
+  href,
+  variant = "surface",
+}: {
+  project: NativeProject;
+  href: string;
+  variant?: "surface" | "plain";
+}) {
   const { t, language } = useLocale();
   const summary = projectSummary(project.description, project.name);
   const cover = coverPhoto(project);
@@ -39,7 +48,10 @@ export function ProjectListRow({ project, href }: { project: NativeProject; href
   return (
     <Link
       href={href}
-      className="hover:bg-muted/50 flex min-w-0 items-start gap-4 rounded-lg border px-4 py-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className={cn(
+        "hover:bg-muted/50 flex min-w-0 items-start gap-4 px-4 py-3 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        variant === "surface" && "rounded-lg border",
+      )}
     >
       {cover && (
         // biome-ignore lint/performance/noImgElement: authenticated API image, not a Next asset

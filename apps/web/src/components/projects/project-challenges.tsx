@@ -77,7 +77,7 @@ export function ProjectChallenges({
       ? challenge.title
       : challenge.title[language] || challenge.title.en;
   return (
-    <SectionCard title={t("challenges")}>
+    <SectionCard title={t("challenges")} variant="plain">
       {Boolean(error || catalogueResource.error) && (
         <ContextualError
           message={error ?? apiErrorText(catalogueResource.error, t, t("couldNotLoadChallenge"))}
@@ -88,7 +88,7 @@ export function ProjectChallenges({
         {challenges.map((challenge) => (
           <li className="space-y-2 py-3" key={challenge.id}>
             <div className="flex items-center justify-between gap-3">
-              <span>{title(challenge)}</span>
+              <span className="min-w-0 flex-1 wrap-anywhere">{title(challenge)}</span>
               {challenge.mandatory && (
                 <span className="text-muted-foreground px-3 text-sm">{t("required")}</span>
               )}

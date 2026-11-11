@@ -4,6 +4,7 @@ import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { ProjectsSectionHeader } from "@/components/common/section-navigation";
@@ -84,7 +85,7 @@ export function MyProjectsView() {
     }
   }
   return (
-    <PageLayout>
+    <PageLayout width="reading">
       <ProjectsSectionHeader
         primaryAction={
           canCreate ? (
@@ -98,7 +99,7 @@ export function MyProjectsView() {
       {error && <ContextualError message={error} onRetry={load} />}
       {!projects && !error && <Spinner />}
       {invites.length > 0 && (
-        <SectionCard title={t("pendingInvitesTitle")}>
+        <SectionCard title={t("pendingInvitesTitle")} variant="plain">
           <ul className="divide-y divide-border/60">
             {invites.map((invite) => (
               <li
@@ -123,9 +124,7 @@ export function MyProjectsView() {
           </ul>
         </SectionCard>
       )}
-      {projects?.length === 0 && (
-        <p className="text-muted-foreground">{t("myProjectsEmptyTitle")}</p>
-      )}
+      {projects?.length === 0 && <EmptyState title={t("myProjectsEmptyTitle")} />}
       {projects && projects.length > 0 && (
         <div className="space-y-2">
           {projects.map((project) => (
@@ -138,9 +137,14 @@ export function MyProjectsView() {
         onOpenChange={(value) => !busy && setOpen(value)}
         title={t("createMyProjectCta")}
         footer={
-          <Button type="submit" form="create-project" loading={busy}>
-            {t("createMyProjectCta")}
-          </Button>
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
+              {t("cancel")}
+            </Button>
+            <Button type="submit" form="create-project" loading={busy} disabled={!name.trim()}>
+              {t("createMyProjectCta")}
+            </Button>
+          </>
         }
       >
         <form id="create-project" onSubmit={create} className="space-y-2">
@@ -148,6 +152,7 @@ export function MyProjectsView() {
           <Input
             id="project-name"
             value={name}
+            maxLength={200}
             onChange={(event) => setName(event.target.value)}
             required
             disabled={busy}
