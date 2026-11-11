@@ -1,5 +1,6 @@
 "use client";
 import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
+import { MAX_INTERVAL_MS } from "@hackos/shared/help-desk";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useRef, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
@@ -64,7 +65,7 @@ export function dragged(
 export function piecesOf(span: Span, rows: number) {
   const pieces: { row: number; start: number; end: number; fromPrev: boolean; toNext: boolean }[] =
     [];
-  for (let row = Math.floor(span.start / DAY_MINUTES); row < rows; row++) {
+  for (let row = Math.max(0, Math.floor(span.start / DAY_MINUTES)); row < rows; row++) {
     const lineStart = row * DAY_MINUTES;
     if (lineStart >= span.end) break;
     pieces.push({
@@ -94,8 +95,11 @@ const clock = (minute: number) =>
  */
 export function AvailabilityTimeline({
   intervals,
+  label,
   days = [],
   notBefore,
+  fixedDays = false,
+  maxDurationMs = MAX_INTERVAL_MS,
   disabled,
   readOnly = false,
   onCreate,
@@ -104,8 +108,13 @@ export function AvailabilityTimeline({
   onEdit,
 }: {
   intervals: AvailabilityInterval[];
+  label?: string;
   /** The event days to draw, each with a line even when empty. */
   days?: string[];
+  /** Personal availability stays within the hacking days; opening hours may extend them. */
+  fixedDays?: boolean;
+  /** null allows opening windows of any duration. */
+  maxDurationMs?: number | null;
   /** Instant before which nothing can be marked (the start of hacking). */
   notBefore?: string | null;
   disabled?: boolean;
@@ -127,14 +136,17 @@ export function AvailabilityTimeline({
   const wall = (iso: string) => instantToWallClock(iso, zone);
   const spanDays = [
     ...days,
-    ...intervals.flatMap((iv) => [wall(iv.startsAt).slice(0, 10), wall(iv.endsAt).slice(0, 10)]),
+    ...intervals.flatMap((iv) => [
+      wall(iv.startsAt).slice(0, 10),
+      wall(new Date(Date.parse(iv.endsAt) - 1).toISOString()).slice(0, 10),
+    ]),
   ].filter(Boolean);
   if (spanDays.length === 0) return null;
   const sorted = [...spanDays].sort((a, b) => a.localeCompare(b));
-  const first = sorted[0];
+  const first = fixedDays && days.length ? [...days].sort()[0] : sorted[0];
   // An interval ending exactly at midnight does not need the next day's line.
   const lastDay = sorted[sorted.length - 1];
-  const rowDays = daysFrom(first, lastDay);
+  const rowDays = fixedDays && days.length ? [...new Set(days)].sort() : daysFrom(first, lastDay);
   const total = rowDays.length * DAY_MINUTES;
 
   const minutesOf = (iso: string) => {
@@ -157,11 +169,11 @@ export function AvailabilityTimeline({
     end: minutesOf(iv.endsAt),
   });
   const lo = notBefore ? Math.max(0, minutesOf(notBefore)) : 0;
-  const labelOf = (iv: AvailabilityInterval) =>
-    intervalLabel({
-      ...iv,
-      nextDay: wall(iv.startsAt).slice(0, 10) !== wall(iv.endsAt).slice(0, 10),
-    });
+  const labelOf = (iv: AvailabilityInterval) => {
+    const days =
+      dayNumber(wall(iv.endsAt).slice(0, 10)) - dayNumber(wall(iv.startsAt).slice(0, 10));
+    return `${intervalLabel({ ...iv, nextDay: false })}${days > 0 ? ` (+${days})` : ""}`;
+  };
 
   /** The line and snapped minute under a pointer. */
   function locate(event: React.PointerEvent) {
@@ -189,14 +201,38 @@ export function AvailabilityTimeline({
     setDrag({ mode, interval, anchor: abs, at: abs });
   }
 
+  /** H62: cap the preview and saved range at 24 actual hours, including DST. */
+  function preview(current: Drag): Span {
+    const span =
+      current.mode === "create"
+        ? {
+            start: Math.max(Math.min(current.anchor, current.at), lo),
+            end: Math.max(current.anchor, current.at),
+          }
+        : dragged(
+            current.mode,
+            spanOf(current.interval as AvailabilityInterval),
+            current.at - current.anchor,
+            lo,
+            total,
+          );
+    const start = Date.parse(instantAt(span.start));
+    const end = Date.parse(instantAt(span.end));
+    if (maxDurationMs === null || end - start <= maxDurationMs) return span;
+    const keepEnd =
+      current.mode === "start" || (current.mode === "create" && current.at < current.anchor);
+    return keepEnd
+      ? { start: minutesOf(new Date(end - maxDurationMs).toISOString()), end: span.end }
+      : { start: span.start, end: minutesOf(new Date(start + maxDurationMs).toISOString()) };
+  }
+
   function finish(event: React.PointerEvent) {
     if (!drag) return;
     (event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
     const done = drag;
     setDrag(null);
     if (done.mode === "create") {
-      const start = Math.max(Math.min(done.anchor, done.at), lo);
-      const end = Math.max(done.anchor, done.at);
+      const { start, end } = preview(done);
       if (end - start >= SNAP_MINUTES) {
         onCreate?.({ startsAt: instantAt(start), endsAt: instantAt(end) });
       } else if (done.anchor === done.at) {
@@ -206,7 +242,7 @@ export function AvailabilityTimeline({
     }
     const interval = done.interval as AvailabilityInterval;
     const span = spanOf(interval);
-    const next = dragged(done.mode, span, done.at - done.anchor, lo, total);
+    const next = preview(done);
     if (next.start === span.start && next.end === span.end) {
       onEdit?.(interval);
       return;
@@ -221,23 +257,20 @@ export function AvailabilityTimeline({
   const shown = intervals.map((iv) => {
     const span = spanOf(iv);
     if (drag && drag.interval === iv && drag.mode !== "create") {
-      return { iv, span: dragged(drag.mode, span, drag.at - drag.anchor, lo, total), live: true };
+      return { iv, span: preview(drag), live: true };
     }
     return { iv, span, live: false };
   });
-  const creating =
-    drag?.mode === "create"
-      ? { start: Math.max(Math.min(drag.anchor, drag.at), lo), end: Math.max(drag.anchor, drag.at) }
-      : null;
-  const liveText = (span: Span) =>
-    `${clock(span.start % DAY_MINUTES)}–${clock(span.end % DAY_MINUTES)}${
-      Math.floor((span.end - 1) / DAY_MINUTES) > Math.floor(span.start / DAY_MINUTES) ? " (+1)" : ""
-    }`;
+  const creating = drag?.mode === "create" ? preview(drag) : null;
+  const liveText = (span: Span) => {
+    const days = Math.floor(span.end / DAY_MINUTES) - Math.floor(span.start / DAY_MINUTES);
+    return `${clock(span.start % DAY_MINUTES)}–${clock(span.end % DAY_MINUTES)}${days > 0 ? ` (+${days})` : ""}`;
+  };
 
   return (
     <TooltipProvider delayDuration={150}>
       <fieldset
-        aria-label={t("helpDeskPlanTitle")}
+        aria-label={label ?? t("helpDeskPlanTitle")}
         className={cn(
           "divide-y divide-border/60 border-y border-border/60 m-0 min-w-0 select-none p-0",
           disabled && !readOnly && "opacity-60",

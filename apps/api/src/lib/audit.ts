@@ -31,11 +31,16 @@ export interface AuditEntry {
 export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
   const requestContext = getRequestContext();
   const actor = resolveAuditActor(entry);
-  // H53: draft autosaves are one bounded edit, never a state-transition log.
+  // H53: draft and availability autosaves are one bounded edit, never a state-transition log.
   if (
     actor.kind === "user" &&
     actor.actorId !== null &&
-    ["save_draft", "review.update"].includes(entry.action)
+    (["save_draft", "review.update"].includes(entry.action) ||
+      (entry.entityType === "helper_profile" && entry.action === "availability_updated") ||
+      (entry.entityType === "helpdesk_schedule" &&
+        entry.action === "replaced" &&
+        entry.changedFields?.length === 1 &&
+        entry.changedFields[0] === "windows"))
   ) {
     const merged = await db.query(
       `UPDATE audit_log SET after = $5::jsonb, last_edited_at = clock_timestamp(),
@@ -46,6 +51,7 @@ export async function audit(db: Queryable, entry: AuditEntry): Promise<void> {
            AND created_at > now() - interval '30 minutes'
            AND COALESCE(last_edited_at, created_at) > now() - interval '2 minutes'
          ORDER BY id DESC LIMIT 1)
+         AND (entity_type <> 'helpdesk_schedule' OR changed_fields = ARRAY['windows']::text[])
        RETURNING id`,
       [
         entry.entityType,

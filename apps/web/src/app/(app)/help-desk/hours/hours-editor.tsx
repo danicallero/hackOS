@@ -12,8 +12,11 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
+import { useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
+import { AvailabilityTimeline } from "../availability-timeline";
 import { IntervalDialog } from "../interval-dialog";
+import { daysFrom, eventDay, intervalFrom, mergeInterval } from "../schedule";
 
 const overlaps = (a: AvailabilityInterval, b: AvailabilityInterval) =>
   Date.parse(a.startsAt) < Date.parse(b.endsAt) && Date.parse(b.startsAt) < Date.parse(a.endsAt);
@@ -31,11 +34,20 @@ export function HoursEditor({
   onSaved: (schedule: HelpdeskSchedule) => void;
 }) {
   const { t, language } = useLocale();
-  const [dialog, setDialog] = useState<{ editing: AvailabilityInterval | null } | null>(null);
+  const [dialog, setDialog] = useState<{
+    editing: AvailabilityInterval | null;
+    suggested?: AvailabilityInterval | null;
+  } | null>(null);
+  const zone = useEventTimeZone();
+  const days = schedule.suggestedInterval
+    ? daysFrom(
+        eventDay(schedule.suggestedInterval.startsAt, zone),
+        eventDay(schedule.suggestedInterval.endsAt, zone),
+      )
+    : [];
+  const [optimistic, setOptimistic] = useState<AvailabilityInterval[] | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const label = (window: AvailabilityInterval) =>
-    `${formatEventDate(window.startsAt, language, "dateTime")} – ${formatEventDate(window.endsAt, language, "dateTime")}`;
 
   async function replace(
     windows: AvailabilityInterval[],
@@ -43,6 +55,7 @@ export function HoursEditor({
   ) {
     setPending(true);
     setError(null);
+    setOptimistic(windows);
     try {
       onSaved(
         await api.put<HelpdeskSchedule>("/api/helpdesk/schedule", { windows, eventAccessOnly }),
@@ -53,6 +66,7 @@ export function HoursEditor({
       return false;
     } finally {
       setPending(false);
+      setOptimistic(null);
     }
   }
 
@@ -91,49 +105,36 @@ export function HoursEditor({
           {t("helpDeskHoursAdd")}
         </Button>
       </div>
-      {schedule.windows.length ? (
-        <ul className="divide-y divide-border/60 border-y border-border/60">
-          {schedule.windows.map((window) => (
-            <li
-              key={window.startsAt}
-              className="flex min-h-(--control-height-compact) items-center justify-between gap-3 py-1.5"
-            >
-              <span className="text-sm tabular-nums">{label(window)}</span>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={pending}
-                  aria-label={t("helpDeskHoursEdit", { window: label(window) })}
-                  onClick={() => {
-                    setError(null);
-                    setDialog({ editing: window });
-                  }}
-                >
-                  {t("edit")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={pending}
-                  aria-label={t("helpDeskHoursRemove", { window: label(window) })}
-                  onClick={() =>
-                    void replace(
-                      schedule.windows.filter((item) => item.startsAt !== window.startsAt),
-                    )
-                  }
-                >
-                  {t("remove")}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : (
+      <AvailabilityTimeline
+        label={t("helpDeskHours")}
+        intervals={optimistic ?? schedule.windows}
+        days={days}
+        maxDurationMs={null}
+        disabled={pending}
+        onCreate={(window) => {
+          if (!pending) void replace(mergeInterval(schedule.windows, window));
+        }}
+        onChange={(window, next) => {
+          if (!pending)
+            void replace(
+              mergeInterval(
+                schedule.windows.filter((item) => item.startsAt !== window.startsAt),
+                next,
+              ),
+            );
+        }}
+        onAddDay={(day) => {
+          setError(null);
+          setDialog({ editing: null, suggested: intervalFrom(day, "09:00", "17:00", zone) });
+        }}
+        onEdit={(window) => {
+          setError(null);
+          setDialog({ editing: window });
+        }}
+      />
+      {!schedule.windows.length ? (
         <p className="text-muted-foreground text-sm text-pretty">{t("helpDeskHoursEmpty")}</p>
-      )}
+      ) : null}
       {error && !dialog ? (
         <ContextualError message={apiErrorText(error, t, t("helpDeskSaveError"))} />
       ) : null}
@@ -141,7 +142,19 @@ export function HoursEditor({
         <WindowDialog
           editing={dialog.editing}
           others={schedule.windows.filter((item) => item.startsAt !== dialog.editing?.startsAt)}
-          suggested={dialog.editing ?? nextFreeWindow(schedule)}
+          suggested={dialog.editing ?? dialog.suggested ?? nextFreeWindow(schedule)}
+          onRemove={
+            dialog.editing
+              ? async () => {
+                  if (
+                    await replace(
+                      schedule.windows.filter((item) => item.startsAt !== dialog.editing?.startsAt),
+                    )
+                  )
+                    setDialog(null);
+                }
+              : undefined
+          }
           pending={pending}
           error={error}
           onClose={() => setDialog(null)}
@@ -168,6 +181,7 @@ function WindowDialog({
   error,
   onClose,
   onSave,
+  onRemove,
 }: {
   editing: AvailabilityInterval | null;
   others: AvailabilityInterval[];
@@ -176,6 +190,7 @@ function WindowDialog({
   error: unknown;
   onClose: () => void;
   onSave: (window: AvailabilityInterval) => void;
+  onRemove?: () => void;
 }) {
   const { t } = useLocale();
   return (
@@ -191,6 +206,7 @@ function WindowDialog({
       error={error}
       onClose={onClose}
       onSave={onSave}
+      onRemove={onRemove}
     />
   );
 }

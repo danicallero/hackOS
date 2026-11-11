@@ -268,7 +268,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: availabilityBody,
         summary: "Set my help availability",
         description:
-          "Replaces the caller's stated availability (H62) with up to 30 dated intervals, each ending after it starts and lasting at most 24 hours, without overlaps, none starting before `suggestedInterval.startsAt` (the hacking time, else the event start; no window, no limit) (400 `availability_invalid` / `availability_overlap` / `availability_before_window`). Being scheduled never marks the person as present: venue presence comes only from door scans (H24). 403 `helper_not_eligible` for non-helpers. Audited with interval counts.",
+          "Replaces the caller's stated availability (H62) with up to 30 dated intervals, each ending after it starts and lasting at most 24 hours, without overlaps, none starting before `suggestedInterval.startsAt` or ending after midnight following the last hacking day in the event timezone (falling back to the event dates; no window, no limit) (400 `availability_invalid` / `availability_overlap` / `availability_before_window`). Being scheduled never marks the person as present: venue presence comes only from door scans (H24). 403 `helper_not_eligible` for non-helpers. Audited with interval counts; successive availability edits coalesce for the same actor and source within two-minute pauses, at most 30 minutes.",
       },
     },
     async (req) => {

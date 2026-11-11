@@ -263,6 +263,51 @@ describe("H61 helper profile", () => {
     expect(denied.json().error.details.code).toBe("helper_not_eligible");
   });
 
+  it("groups availability autosaves and ignores unchanged saves (H53, H62)", async () => {
+    const id = await helper([], { scheduled: false, present: false });
+    const start = Date.now() + hour;
+    const put = (offset: number) =>
+      call("PUT", "/api/me/helper-profile/availability", id, {
+        intervals: [
+          {
+            startsAt: new Date(start + offset).toISOString(),
+            endsAt: new Date(start + hour).toISOString(),
+          },
+        ],
+      });
+    expect((await put(0)).statusCode).toBe(200);
+    expect((await put(15 * 60_000)).statusCode).toBe(200);
+    const read = () =>
+      pool.query(
+        `SELECT * FROM audit_log WHERE entity_type = 'helper_profile' AND entity_id = $1 AND action = 'availability_updated' ORDER BY id`,
+        [String(id)],
+      );
+    let rows = (await read()).rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      before: { intervals: 0 },
+      after: { intervals: 1 },
+      changed_fields: ["intervals"],
+    });
+    expect(rows[0].last_edited_at).not.toBeNull();
+    const editedAt = rows[0].last_edited_at;
+    expect((await put(15 * 60_000)).statusCode).toBe(200);
+    expect((await read()).rows[0].last_edited_at).toEqual(editedAt);
+    await pool.query(
+      `UPDATE audit_log SET last_edited_at = now() - interval '3 minutes' WHERE id = $1`,
+      [rows[0].id],
+    );
+    expect((await put(30 * 60_000)).statusCode).toBe(200);
+    rows = (await read()).rows;
+    expect(rows).toHaveLength(2);
+    await pool.query(
+      `UPDATE audit_log SET created_at = now() - interval '31 minutes' WHERE id = $1`,
+      [rows[1].id],
+    );
+    expect((await put(45 * 60_000)).statusCode).toBe(200);
+    expect((await read()).rows).toHaveLength(3);
+  });
+
   it("rejects overlapping or over-long availability (H62)", async () => {
     const h = await createUserWithCapabilities(helperCaps);
     const base = Date.now();
@@ -1034,6 +1079,9 @@ describe("H61-H62 publishing shares the profile and suggests an interval", () =>
     expect(early.statusCode).toBe(400);
     expect(early.json().error.details.code).toBe("availability_before_window");
     expect((await put("2030-01-01T12:00:00Z", "2030-01-01T14:00:00Z")).statusCode).toBe(200);
+    // Madrid: the final hacking day remains available through local midnight.
+    expect((await put("2030-01-02T18:00:00Z", "2030-01-02T23:00:00Z")).statusCode).toBe(200);
+    expect((await put("2030-01-02T18:00:00Z", "2030-01-02T23:01:00Z")).statusCode).toBe(400);
     // Without hacking bounds the event start is the limit.
     await pool.query(
       `UPDATE event_config SET hacking_starts_at = NULL, hacking_ends_at = NULL WHERE id = 1`,
