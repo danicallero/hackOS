@@ -54,7 +54,11 @@ for (const canExport of [true, false]) {
               {
                 id: 10,
                 name: "Neural Beans",
+                description: "",
                 submissionStatus: "submitted",
+                challenges: [],
+                template: [],
+                responses: {},
                 members: [{ userId: 1, name: "Daniel", status: "active" }],
               },
             ],
@@ -68,7 +72,9 @@ for (const canExport of [true, false]) {
     });
     await page.goto("/projects");
     await expect(page.getByRole("button", { name: "Create project", exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Neural Beans" })).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Neural Beans" }).locator("visible=true").first(),
+    ).toBeVisible();
     const exportLink = page.getByRole("link", { name: "Export CSV" });
     if (canExport) {
       await expect(exportLink).toBeVisible();

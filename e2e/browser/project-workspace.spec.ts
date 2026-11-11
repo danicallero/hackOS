@@ -119,7 +119,7 @@ for (const editable of [true, false]) {
     await expect(page.getByRole("textbox", { name: "What did you build?" })).toHaveCount(0);
     await expect(page.getByText("Updated project description.", { exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Manage projects", exact: true }).first().click();
-    await page.getByRole("link", { name: "Neural Beans", exact: true }).click();
+    await page.getByRole("link", { name: "Neural Beans" }).locator("visible=true").first().click();
     await expect(page.getByText("Updated project description.", { exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Manage projects", exact: true }).first().click();
     await page.getByRole("button", { name: "Create project", exact: true }).click();
