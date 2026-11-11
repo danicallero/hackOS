@@ -1287,12 +1287,16 @@ describe("H8 default seeded role set", () => {
         CAPABILITIES.PRESENCE_SCAN,
         CAPABILITIES.ACTIVITY_SCAN,
         CAPABILITIES.LOGISTICS_STATS,
+        // H61, H67: organizers offer help and see help desk coverage.
+        CAPABILITIES.HELPDESK_OFFER,
+        CAPABILITIES.HELPDESK_COVERAGE,
       ],
       "Day Staff": [
         CAPABILITIES.ACCREDIT_SCAN,
         CAPABILITIES.PRESENCE_SCAN,
         CAPABILITIES.ACTIVITY_SCAN,
         CAPABILITIES.LOGISTICS_STATS,
+        CAPABILITIES.HELPDESK_OFFER,
       ],
       "Applications Team": [CAPABILITIES.APPLICATIONS_MANAGE, CAPABILITIES.APPLICATIONS_REVIEW],
       "Applications Lead": [
@@ -1336,8 +1340,9 @@ describe("H8 default seeded role set", () => {
         CAPABILITIES.USERS_WRITE,
         CAPABILITIES.AUDIT_READ,
       ],
-      Mentor: [],
-      Participant: [CAPABILITIES.QUEUE_STATUS],
+      // H61, H64: mentors offer help; participants request it.
+      Mentor: [CAPABILITIES.HELPDESK_OFFER],
+      Participant: [CAPABILITIES.QUEUE_STATUS, CAPABILITIES.HELPDESK_REQUEST],
     };
     // #935: the retired directory:read grant is absent from seeded roles.
     for (const [name, caps] of Object.entries(expected)) {
@@ -1501,15 +1506,17 @@ describe("H8 default seeded role set", () => {
     );
   });
 
-  it("keeps the existing Sponsor auto-grant role capability-less and positioned below the functional team roles", async () => {
+  it("keeps the Sponsor auto-grant role limited to offering help (H61) and positioned below the functional team roles", async () => {
     const pool = await seededRoles();
     const { rows } = await pool.query(`SELECT id, position FROM roles WHERE name = 'Sponsor'`);
     expect(rows).toHaveLength(1);
     const { rows: capRows } = await pool.query(
-      `SELECT 1 FROM role_capabilities WHERE role_id = $1`,
+      `SELECT capability FROM role_capabilities WHERE role_id = $1`,
       [rows[0].id],
     );
-    expect(capRows).toHaveLength(0);
+    expect(capRows.map((r: { capability: string }) => r.capability)).toEqual([
+      CAPABILITIES.HELPDESK_OFFER,
+    ]);
     const { rows: dayStaffRows } = await pool.query(
       `SELECT position FROM roles WHERE name = 'Day Staff'`,
     );
@@ -1558,7 +1565,7 @@ describe("H8 default seeded role set", () => {
       Object.keys(eventDirector[0].capabilities).map(() => "allow"),
     );
 
-    // Mentor has no seeded directory:read grant (#935).
+    // Mentor has no seeded directory:read grant (#935); it offers help (H61).
     const { rows: mentor } = await pool.query(
       `SELECT rsd.capabilities
          FROM roles r
@@ -1566,7 +1573,7 @@ describe("H8 default seeded role set", () => {
         WHERE r.name = 'Mentor'`,
     );
     expect(mentor).toHaveLength(1);
-    expect(mentor[0].capabilities).toEqual({});
+    expect(mentor[0].capabilities).toEqual({ [CAPABILITIES.HELPDESK_OFFER]: "allow" });
 
     const { rows: participant } = await pool.query(
       `SELECT rsd.capabilities
@@ -1577,6 +1584,7 @@ describe("H8 default seeded role set", () => {
     expect(participant).toHaveLength(1);
     expect(participant[0].capabilities).toEqual({
       [CAPABILITIES.QUEUE_STATUS]: "allow",
+      [CAPABILITIES.HELPDESK_REQUEST]: "allow",
     });
   });
 

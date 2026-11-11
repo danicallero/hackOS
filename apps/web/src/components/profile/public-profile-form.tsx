@@ -3,7 +3,7 @@
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import { SOCIAL_ICON, SocialLinks } from "@/components/profile/social-links";
@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { api } from "@/lib/api";
+import { apiErrorText } from "@/lib/api-error-text";
 import {
   apiAssetUrl,
   type DirectoryEntry,
@@ -31,6 +33,8 @@ import {
 } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
+import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 /**
  * Public profile form pieces and the reader's card (#934, #935), shared by
@@ -49,6 +53,7 @@ export interface Settings {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
+  showGithub: boolean;
   headline: string;
   locationNote: string;
   bio: string;
@@ -61,6 +66,8 @@ export interface PublicProfile {
   showSurname: boolean;
   showPhoto: boolean;
   showProject: boolean;
+  /** Missing only in responses from older servers; links stayed visible by default. */
+  showGithub?: boolean;
   headline: string | null;
   bio: string | null;
   locationNote: string | null;
@@ -83,6 +90,7 @@ export function settingsFrom(profile: PublicProfile): Settings {
     showSurname: profile.showSurname,
     showPhoto: profile.showPhoto,
     showProject: profile.showProject,
+    showGithub: profile.showGithub ?? true,
     headline: profile.headline ?? "",
     locationNote: profile.locationNote ?? "",
     bio: profile.bio ?? "",
@@ -102,30 +110,65 @@ export function ProfileVisibilityFields({
   settings,
   onChange,
   className,
+  rows = false,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   className: string;
+  /** Own profile: a quiet list with the switches on the right, like the account rows. */
+  rows?: boolean;
 }) {
   const { t } = useLocale();
+  const items = [
+    { key: "showSurname", label: t("publicProfileShowSurname") },
+    { key: "showPhoto", label: t("publicProfileShowPhoto") },
+    { key: "showProject", label: t("publicProfileShowProject") },
+  ] as const;
+  if (rows) {
+    return (
+      <ul className={cn("rounded-surface divide-y divide-border/60 border", className)}>
+        {items.map(({ key, label }) => (
+          <ToggleRow
+            key={key}
+            checked={settings[key]}
+            onChange={(value) => onChange({ [key]: value })}
+            label={label}
+          />
+        ))}
+      </ul>
+    );
+  }
   return (
     <div className={className}>
-      <SwitchRow
-        checked={settings.showSurname}
-        onChange={(showSurname) => onChange({ showSurname })}
-        label={t("publicProfileShowSurname")}
-      />
-      <SwitchRow
-        checked={settings.showPhoto}
-        onChange={(showPhoto) => onChange({ showPhoto })}
-        label={t("publicProfileShowPhoto")}
-      />
-      <SwitchRow
-        checked={settings.showProject}
-        onChange={(showProject) => onChange({ showProject })}
-        label={t("publicProfileShowProject")}
-      />
+      {items.map(({ key, label }) => (
+        <SwitchRow
+          key={key}
+          checked={settings[key]}
+          onChange={(value) => onChange({ [key]: value })}
+          label={label}
+        />
+      ))}
     </div>
+  );
+}
+
+function ToggleRow({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  const id = useId();
+  return (
+    <li className="flex min-h-12 items-center justify-between gap-4 px-4 py-2">
+      <Label htmlFor={id} className="font-normal">
+        {label}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </li>
   );
 }
 
@@ -133,10 +176,15 @@ export function ProfileTextFields({
   settings,
   onChange,
   className,
+  ownAccount = false,
+  githubStatus,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   className: string;
+  /** Own profile only: shows the member's linked GitHub account as their GitHub link. */
+  ownAccount?: boolean;
+  githubStatus?: GithubAccountStatus | null;
 }) {
   const { t } = useLocale();
   return (
@@ -157,8 +205,54 @@ export function ProfileTextFields({
         />
       </div>
       <BioField value={settings.bio} onChange={(bio) => onChange({ bio })} />
-      <LinksEditor links={settings.socials} onChange={(socials) => onChange({ socials })} />
+      <LinksEditor
+        links={settings.socials}
+        onChange={(socials) => onChange({ socials })}
+        ownAccount={ownAccount}
+        githubStatus={githubStatus}
+        showGithub={settings.showGithub}
+        onShowGithubChange={(showGithub) => onChange({ showGithub })}
+      />
     </>
+  );
+}
+
+/**
+ * The master consent switch as a bordered row: the switch leads, the audience
+ * sits under the label. Everything it governs follows below.
+ */
+export function ShareToggleCard({
+  checked,
+  onChange,
+  label,
+  hint,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  hint: string;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  return (
+    <div className="rounded-surface flex items-center justify-between gap-4 border p-4">
+      <div className="min-w-0">
+        <Label htmlFor={id} className="text-base">
+          {label}
+        </Label>
+        <p id={`${id}-hint`} className="text-muted-foreground text-sm">
+          {hint}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+        aria-describedby={`${id}-hint`}
+      />
+    </div>
   );
 }
 
@@ -167,11 +261,13 @@ export function SwitchRow({
   onChange,
   label,
   hint,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   hint?: string;
+  disabled?: boolean;
 }) {
   const id = useId();
   return (
@@ -180,6 +276,7 @@ export function SwitchRow({
         id={id}
         className="mt-0.5"
         checked={checked}
+        disabled={disabled}
         onCheckedChange={onChange}
         aria-describedby={hint ? `${id}-hint` : undefined}
       />
@@ -223,7 +320,13 @@ function TextField({
   );
 }
 
-function BioField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function BioField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
   const { t } = useLocale();
   const id = useId();
   return (
@@ -245,12 +348,112 @@ function BioField({ value, onChange }: { value: string; onChange: (value: string
   );
 }
 
+export interface GithubAccountStatus {
+  configured: boolean;
+  login: string | null;
+}
+
+/** GitHub comes from the linked GitHub account, not from a typed address. */
+const LINK_KINDS = SOCIAL_KINDS.filter((kind) => kind !== "github");
+
+function GithubAccountRow({
+  status,
+  showGithub,
+  onShowGithubChange,
+}: {
+  status: GithubAccountStatus | null;
+  showGithub: boolean;
+  onShowGithubChange: (showGithub: boolean) => void;
+}) {
+  const { t } = useLocale();
+  const visibilityId = useId();
+  const [busy, setBusy] = useState(false);
+  if (!status?.configured) return null;
+  const login = status.login;
+  if (login) {
+    return (
+      <li className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
+        <div className="flex h-10 min-w-0 items-center gap-2 rounded-control border border-input bg-background px-3 text-sm">
+          <SOCIAL_ICON.github
+            aria-hidden="true"
+            className="text-muted-foreground size-4 shrink-0"
+          />
+          <span className="truncate">{t("socialGithub")}</span>
+        </div>
+        <Input
+          className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+          value={`https://github.com/${login}`}
+          readOnly
+          aria-label={t("publicProfileLinkUrl")}
+        />
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          <Label htmlFor={visibilityId} className="min-w-0 text-sm leading-tight">
+            {t("publicProfileShowGithub")}
+          </Label>
+          <Switch id={visibilityId} checked={showGithub} onCheckedChange={onShowGithubChange} />
+        </div>
+      </li>
+    );
+  }
+  return (
+    <li className="flex min-w-0 items-center gap-2">
+      <SOCIAL_ICON.github aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {});
+            window.location.assign(url);
+          } catch (err) {
+            toast.error(apiErrorText(err, t, t("couldNotLoadProject")), {
+              compactTitle: "GitHub",
+            });
+            setBusy(false);
+          }
+        }}
+      >
+        {t("githubLinkAccount")}
+      </Button>
+    </li>
+  );
+}
+
+/** Networks whose link is a fixed address plus a handle, so only the handle is typed. */
+const HANDLE_PREFIX: Partial<Record<SocialKind, string>> = {
+  linkedin: "linkedin.com/in/",
+  x: "x.com/",
+  instagram: "instagram.com/",
+};
+
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The handle part of a stored link; a pasted full address is reduced the same way. */
+export function handleOf(url: string, prefix: string): string {
+  const lead = "^(https?://)?(www\\.)?";
+  const value = url.trim();
+  const full = value.replace(new RegExp(`${lead}${escapeRe(prefix)}`, "i"), "");
+  if (full !== value) return full;
+  return value.replace(new RegExp(`${lead}${escapeRe(prefix.split("/")[0])}/?`, "i"), "");
+}
+
 function LinksEditor({
   links,
   onChange,
+  ownAccount,
+  githubStatus,
+  showGithub,
+  onShowGithubChange,
 }: {
   links: EditableLink[];
   onChange: (links: EditableLink[]) => void;
+  ownAccount: boolean;
+  githubStatus?: GithubAccountStatus | null;
+  showGithub: boolean;
+  onShowGithubChange: (showGithub: boolean) => void;
 }) {
   const { t } = useLocale();
   const headingId = useId();
@@ -258,11 +461,23 @@ function LinksEditor({
     onChange(links.map((link) => (link.id === id ? { ...link, ...patch } : link)));
   return (
     <fieldset className="min-w-0 space-y-3" aria-labelledby={headingId}>
-      <span id={headingId} className="block text-sm font-medium">
-        {t("publicProfileLinks")}
-      </span>
-      {links.length > 0 && (
+      <div className="flex items-baseline justify-between gap-3">
+        <span id={headingId} className="block text-sm font-medium">
+          {t("publicProfileLinks")}
+        </span>
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {links.length}/{SOCIALS_MAX}
+        </span>
+      </div>
+      {(links.length > 0 || (ownAccount && githubStatus?.configured)) && (
         <ul className="space-y-2">
+          {ownAccount && (
+            <GithubAccountRow
+              status={githubStatus ?? null}
+              showGithub={showGithub}
+              onShowGithubChange={onShowGithubChange}
+            />
+          )}
           {links.map((link) => {
             const Icon = SOCIAL_ICON[link.kind];
             return (
@@ -279,23 +494,32 @@ function LinksEditor({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SOCIAL_KINDS.map((kind) => (
+                    {LINK_KINDS.map((kind) => (
                       <SelectItem key={kind} value={kind}>
                         {t(SOCIAL_LABEL[kind])}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
-                  inputMode="url"
-                  autoComplete="url"
-                  maxLength={200}
-                  placeholder="https://"
-                  aria-label={t("publicProfileLinkUrl")}
-                  value={link.url}
-                  onChange={(e) => replace(link.id, { url: e.target.value })}
-                />
+                {HANDLE_PREFIX[link.kind] ? (
+                  <HandleInput
+                    prefix={HANDLE_PREFIX[link.kind] as string}
+                    url={link.url}
+                    label={t("publicProfileLinkUrl")}
+                    onChange={(url) => replace(link.id, { url })}
+                  />
+                ) : (
+                  <Input
+                    className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={200}
+                    placeholder="https://"
+                    aria-label={t("publicProfileLinkUrl")}
+                    value={link.url}
+                    onChange={(e) => replace(link.id, { url: e.target.value })}
+                  />
+                )}
                 <IconButton
                   variant="ghost"
                   label={t("publicProfileRemoveLink")}
@@ -325,10 +549,41 @@ function LinksEditor({
   );
 }
 
+function HandleInput({
+  prefix,
+  url,
+  label,
+  onChange,
+}: {
+  prefix: string;
+  url: string;
+  label: string;
+  onChange: (url: string) => void;
+}) {
+  return (
+    <div className="col-span-2 row-start-2 flex min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+      <span className="rounded-l-control text-muted-foreground bg-muted inline-flex w-36 shrink-0 items-center border border-r-0 px-3 text-sm">
+        {prefix}
+      </span>
+      <Input
+        className="min-w-0 flex-1 rounded-l-none"
+        autoComplete="off"
+        maxLength={150}
+        aria-label={label}
+        value={handleOf(url, prefix)}
+        onChange={(e) => {
+          const handle = handleOf(e.target.value, prefix);
+          onChange(handle ? `https://${prefix}${handle}` : "");
+        }}
+      />
+    </div>
+  );
+}
+
 /** The first kind not used yet, so a new row rarely needs a type change. */
 function nextKind(links: EditableLink[]): SocialKind {
   const used = new Set(links.map((link) => link.kind));
-  return SOCIAL_KINDS.find((kind) => !used.has(kind)) ?? "other";
+  return LINK_KINDS.find((kind) => !used.has(kind)) ?? "other";
 }
 
 const PROJECT_KIND: Record<"project" | "workGroup", MessageKey> = {
@@ -372,6 +627,9 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
         {entry.locationNote && (
           <p className="text-muted-foreground text-sm wrap-anywhere">{entry.locationNote}</p>
         )}
+        {entry.helpTopics?.length ? (
+          <p className="pt-1 text-sm">{entry.helpTopics.map((topic) => topic.name).join(" · ")}</p>
+        ) : null}
         {entry.bio && <p className="pt-1 text-sm whitespace-pre-line wrap-anywhere">{entry.bio}</p>}
         {(entry.socials ?? []).length > 0 && <SocialLinks links={entry.socials} className="pt-1" />}
         {entry.cvUrl && (

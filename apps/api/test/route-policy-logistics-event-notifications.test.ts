@@ -43,7 +43,7 @@ describe("logistics, event and notifications route policy ledger", () => {
     // Fastify synthesizes a matching HEAD route for each GET; the 97 explicit
     // declarations below are the reviewable API policy delta.
     const declared = app.routePolicyLedger.filter((row) => row.method !== "HEAD");
-    expect(declared).toHaveLength(97);
+    expect(declared).toHaveLength(98);
     expect(declared).toContainEqual({
       method: "POST",
       url: "/api/me/notifications/:id/unread",
@@ -106,6 +106,11 @@ describe("logistics, event and notifications route policy ledger", () => {
         capability: "announcements:manage",
         emailVerification: "none",
       },
+    });
+    expect(declared).toContainEqual({
+      method: "GET",
+      url: "/api/schedule/audience-roles",
+      policy: { kind: "capability", anyOf: ["schedule:read", "schedule:manage"] },
     });
     expect(declared).toContainEqual({
       method: "POST",

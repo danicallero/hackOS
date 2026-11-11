@@ -28,6 +28,7 @@ describe("operations navigation", () => {
       "/(tabs)/others",
       "/(tabs)/others/wallet",
       "/(tabs)/others/notification-settings",
+      "/(tabs)/others/rsvps",
       "/(tabs)/others/notification-settings/announcements",
       "/(tabs)/others/reminders/schedule",
       "/(tabs)/others/announcements",
@@ -87,11 +88,23 @@ describe("operations navigation", () => {
     }
   });
   it.each([
+    "/others/rsvps",
+    "/(tabs)/others/rsvps",
     "/others/notification-settings/live-activities",
     "/(tabs)/others/notification-settings/live-activities",
     "/others/wallet",
     "/others/storage",
   ])("returns from %s to the Account root when its menu item is selected", (path) => {
     expect(resolveOperationsNavigationAction(path, OVERFLOW_TAB_ROUTE.account)).toBe("replace");
+  });
+
+  it("treats the Help desk overflow route as its own pseudo-tab (H61-H67)", () => {
+    expect(operationsSectionFromPathname("/(tabs)/others/help-desk")).toBe("help-desk");
+    expect(resolveOperationsNavigationAction("/others/help-desk", "/(tabs)/others/help-desk")).toBe(
+      "noop",
+    );
+    expect(resolveOperationsNavigationAction("/others/diary", "/(tabs)/others/help-desk")).toBe(
+      "replace",
+    );
   });
 });

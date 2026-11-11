@@ -40,31 +40,39 @@ export function GithubRow() {
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <GithubLogoIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
-      <p className="min-w-0 flex-1 truncate text-sm font-medium">{login ?? "GitHub"}</p>
-      {login ? (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => run(() => api.delete("/api/me/github"), t("githubRepoUnlinked"))}
-        >
-          {t("githubUnlinkRepo")}
-        </Button>
-      ) : (
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">GitHub</p>
+        <p className="text-muted-foreground truncate text-sm">
+          {login ? t("githubLinkedAs", { login }) : t("githubNotLinked")}
+        </p>
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">
+        {login && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => run(() => api.delete("/api/me/github"), t("githubRepoUnlinked"))}
+          >
+            {t("githubUnlinkRepo")}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
           disabled={busy}
           onClick={() =>
             run(async () => {
-              const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {});
+              const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {
+                selectAccount: true,
+              });
               window.location.assign(url);
             })
           }
         >
-          {t("githubLinkAccount")}
+          {login ? t("githubLinkAnother") : t("githubLinkAccount")}
         </Button>
-      )}
+      </div>
     </li>
   );
 }

@@ -41,6 +41,7 @@ export function ProjectAnswers({
       project.files?.some((file) => file.fieldKey === field.key)
     );
   });
+  if (!visible.length && (description || !project.description)) return null;
   return (
     <div className="min-w-0 space-y-8">
       {!description && project.description && (

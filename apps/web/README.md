@@ -758,11 +758,23 @@ as the new account preference. Dietary restrictions are submitted as dictionary
 IDs, so changing language preserves the selection and other entered data.
 
 The next step after an invited account is created (automatic sign-in), or a spot
-is confirmed (H15), is the networking profile. `NetworkingOnboarding` runs at the
-authenticated boundary once event access exists, before other pending profile
-tasks. It reuses `PublicProfileCard` and the photo editor. The server records
-completion separately from visibility; deferral lasts until the next sign-in.
-Public email confirmation only shows the editor for the token owner's session.
+is confirmed (H15), is the onboarding journey below.
+
+## Onboarding journey
+
+`/onboarding` is the resumable, never-blocking onboarding flow; see
+[`docs/onboarding-web.md`](../../docs/onboarding-web.md). The server resolves
+steps and allowed decisions; web components receive `StepProps` and persist
+answers through `lib/onboarding.ts`. Reusable pieces that moved out of routes:
+`components/profile/personal-details.tsx` (`part` and `onSaved`),
+`components/profile/wallet-section.tsx`, `components/onboarding/notification-choices.tsx`.
+
+Acceptance and verification email links keep bearer tokens in URL fragments.
+Their landing pages clear the fragment and require a deliberate action before
+submitting a token in a request body. Confirmation and decline pages send no
+referrer; email verification sends only the web origin so the browser's native
+POST passes the API's Origin check. None are cached. A scanner's GET therefore
+cannot confirm, decline or verify an account.
 
 ## Personal profile layout (H6/H7/H8)
 
@@ -944,3 +956,19 @@ to the first page;
 200 is the API batch size, not a roster limit. Joined displays date and time
 in the event zone and sorts by the full creation instant. Directory failures remain
 visible and retryable rather than silently leaving role members unresolved.
+
+## Help desk (H61–H67)
+
+`/help-desk` shows one capability- and eligibility-based selector for My requests, Open and My assignments, matching mobile; the published requests/inbox URLs render the same workflow and retain `?tab=` deep links; the
+support directory lives at `/help-desk/helpers`. The section provides helper browsing,
+individual/team requests and coverage. Lists use `ListToolbar`/`FilterMenu`/`DataTable`, like Users. The
+page header and sibling navigation come from `HelpDeskSectionHeader`
+(`components/common/section-navigation.tsx`), rendered by each page, not by a
+layout. A helper record renders the same `PersonProfile` as the people reader,
+fed by the API's `profile`. Helpers edit it in My profile → Help desk
+(`settings/profile/helper-section.tsx`: Available to mentor, then the Mentor
+profile: sponsor challenge limit, knowledge, day-by-day availability); Request help is the header action of every help desk
+page (`RequestHelpAction`); the
+old `/help-desk/profile` route redirects there and stays reachable for accepted
+mentors before confirmation. See [web help desk](../../docs/help-desk-web.md)
+for routes, authorization, save ownership and validation.

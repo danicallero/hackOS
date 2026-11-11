@@ -57,24 +57,40 @@ The current smoke flow deliberately exercises client-side validation, so it
 does not require a seeded account or a live API. Authenticated flows should
 use a dedicated test account and API fixture rather than production data.
 The shared browser fixture models completed networking onboarding. Catch-all
-`**/api/**` mocks must delegate `/api/me/public-profile` with `route.fallback()`
-so they do not replace that state with an empty response and accidentally open
-the onboarding screen. Onboarding scenarios explicitly override the profile
-route to exercise incomplete, hidden, shared and deferred states.
+`**/api/**` mocks must serve `/api/realtime/stream` as a persistent event stream and delegate
+`/api/me/public-profile` with `route.fallback()`. Otherwise, reconnecting SSE
+requests or an empty profile response can disturb the scenario or open the
+onboarding screen. Onboarding scenarios explicitly override the profile route
+to exercise incomplete, hidden, shared and deferred states.
 
 The judging save and alignment specs share `e2e/browser/judging-helpers.ts`: it
 installs the room/project API fixtures, review saves and note leases, and
 returns per-test review state and failure controls. Presentation timing, deck
 visibility and challenge memberships remain scenario-specific (#1135).
 
-The Chromium project is the required pull-request smoke subset. CI uses two
-isolated browser workers so independent scenarios can overlap. It includes
+CI logs report each test's start, result and duration, completed/remaining counts,
+and a heartbeat every 30 seconds listing active tests and their elapsed time.
+The final log ranks the ten slowest tests. The `browser-diagnostics` artifact
+contains JSON timings and retained failure traces, screenshots and videos;
+successful scenarios discard traces/videos. Runner CPU and memory are printed
+before server startup. Other jobs' progress remains visible in the Actions job list.
+
+The Chromium project is the required pull-request smoke subset. CI splits it
+across three shard jobs, each with one worker and its own Next.js server and
+runner, to avoid sharing four CPUs between three browsers and development
+compilation. Every shard uploads separate diagnostics; the aggregate
+`browser critical-flow smoke` check passes only when all shards pass. The config's
+worker default remains overridable with `E2E_WORKERS`; CI sets it to one.
+The subset includes
 the judging-room transition scenario, whose API read model and SSE connection
 are deterministic in-process fixtures. Firefox, WebKit, and mobile Chromium
 remain local/release coverage; scenarios wait for observable UI state rather
 than fixed delays. Invitation-language scenarios seed the language and the
 cookie-notice dismissal preference before hydration; they test onboarding
 language synchronization without racing the unrelated cookie overlay.
+Filter scenarios wait for dismissed menus to unmount and restore trigger focus
+before opening a non-modal response review; delayed menu focus restoration can
+otherwise dismiss the newly opened review.
 
 `accessibility-audit.spec.ts` runs axe on representative public, authentication
 and staff states in both themes, attaches violations and manual-review items,

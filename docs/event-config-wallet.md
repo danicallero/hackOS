@@ -474,3 +474,7 @@ existing resources in sequence; failures remain visible for retry, rather than
 claiming an atomic cross-resource update. Artwork upload/reset and pass delivery
 are immediate operations with their own lifecycle. Nullable runtime overrides
 and deployment fallback resolution remain unchanged.
+
+## Edition-scoped onboarding
+
+`event_config.event_key` identifies the current edition. The first rename from `default` adopts legacy application and role evidence; later renames start fresh onboarding and RSVP state while preserving old rows. `onboarding_config` and `onboarding_revision` are managed by `GET/PUT /api/event/onboarding` under `event:manage`; see [onboarding](./onboarding.md).

@@ -598,3 +598,25 @@ input[type="time"]::-webkit-calendar-picker-indicator:hover {
   outline: 2px solid var(--ring);
   outline-offset: 4px;
 }
+
+/* Onboarding completion burst; the component renders nothing under reduced motion. */
+@keyframes onboarding-confetti-fall {
+  from {
+    translate: 0 -10vh;
+    opacity: 1;
+  }
+  to {
+    translate: 0 110vh;
+    opacity: 0;
+  }
+}
+.onboarding-confetti-piece {
+  animation-name: onboarding-confetti-fall;
+  animation-timing-function: ease-in;
+  animation-fill-mode: forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .onboarding-confetti-piece {
+    animation: none;
+  }
+}

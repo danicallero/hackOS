@@ -5,7 +5,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { SubmitButton } from "@/components/common/submit-button";
@@ -21,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useEmailLinkToken } from "@/hooks/use-email-link-token";
 import { useVerificationResend } from "@/hooks/use-verification-resend";
 import { API_URL } from "@/lib/env";
 import { type Translate, useLocale } from "@/lib/i18n";
@@ -56,7 +57,7 @@ function VerifyEmailInner() {
   const params = useSearchParams();
   const router = useRouter();
   const { t } = useLocale();
-  const { refresh } = useSessionContext();
+  const { me, refresh } = useSessionContext();
   const schema = useMemo(() => verifyEmailSchema(t), [t]);
   // On failure Better Auth appends `error` to the same callback URL (which
   // already carries verified=1), so an error must take precedence.
@@ -68,10 +69,12 @@ function VerifyEmailInner() {
   // originally interrupted from, falling back to the schedule.
   const rawNext = params.get("next");
   const next = safeReturnPath(rawNext, "/event");
-  // The emailed link lands here with the token instead of hitting the API:
-  // link scanners GET every URL in a message, so verification only happens on
-  // an explicit click (a navigation, which scanners never perform).
-  const token = params.get("token");
+  // The emailed link lands here with the token in the fragment. Link scanners
+  // may GET the page, but only the explicit form POST verifies the address.
+  const token = useEmailLinkToken(params.get("token"));
+  // Right after creating an account: a signed-in, unverified person lands here once.
+  const pendingCard =
+    params.get("pending") !== null && !errorInfo && !verified && !params.get("token");
 
   const form = useForm<Values>({
     mode: "onBlur",
@@ -90,13 +93,18 @@ function VerifyEmailInner() {
   useEffect(() => {
     if (verified) void refresh();
   }, [verified, refresh]);
+  // Already verified (for example a trusted address): nothing to confirm here.
+  const alreadyVerified = pendingCard && me?.emailVerified;
+  useEffect(() => {
+    if (alreadyVerified) router.replace(next);
+  }, [alreadyVerified, router, next]);
+
+  if (pendingCard && me && !me.emailVerified) {
+    return <PendingVerification email={me.email} next={next} />;
+  }
 
   if (token && !errorInfo && !verified) {
     const callback = safeReturnPath(params.get("callback"), "/verify-email?verified=1");
-    const confirmUrl = `${API_URL}/api/auth/verify-email?${new URLSearchParams({
-      token,
-      callbackURL: `${window.location.origin}${callback}`,
-    })}`;
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
@@ -106,9 +114,13 @@ function VerifyEmailInner() {
           <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
-          <Button className="w-full" onClick={() => window.location.assign(confirmUrl)}>
-            {t("confirmEmail")}
-          </Button>
+          <form method="post" action={`${API_URL}/api/auth/verify-email/confirm`}>
+            <input type="hidden" name="token" value={token} />
+            <input type="hidden" name="callback" value={callback} />
+            <Button className="w-full" type="submit">
+              {t("confirmEmail")}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     );
@@ -189,6 +201,51 @@ function VerifyEmailInner() {
           {t("backToSignIn")}
         </Link>
       </div>
+    </Card>
+  );
+}
+
+/**
+ * The verification step right after creating an account. The link is sent on
+ * arrival; "Do it later" continues into the app, where the banner keeps asking.
+ * Verifying from the email lands on `next` (the onboarding journey).
+ */
+function PendingVerification({ email, next }: { email: string; next: string }) {
+  const router = useRouter();
+  const { t } = useLocale();
+  const { cooldown, resend, resending } = useVerificationResend(
+    email,
+    `/verify-email?verified=1&next=${encodeURIComponent(next)}`,
+  );
+  const sent = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the link is sent once on arrival.
+  useEffect(() => {
+    if (sent.current) return;
+    sent.current = true;
+    void resend();
+  }, []);
+  return (
+    <Card>
+      <CardHeader className="items-center justify-items-center text-center">
+        <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
+          <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
+        </div>
+        <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+        <CardDescription>{t("verifyPendingBody", { email })}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <Button
+          variant="outline"
+          disabled={cooldown > 0 || resending}
+          loading={resending}
+          onClick={() => void resend()}
+        >
+          {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendVerificationEmail")}
+        </Button>
+        <Button variant="ghost" onClick={() => router.push("/event")}>
+          {t("verifyLater")}
+        </Button>
+      </CardContent>
     </Card>
   );
 }

@@ -2,8 +2,8 @@
 
 An opt-in public profile that an attendee shares with the people who scan
 their badge: name, photo, an optional headline, bio, location note, links and
-CV and, if they choose, their projects and their challenges. There is no
-browsable people directory: the product owner retired it on #935 ("al final
+CV and, if they choose, their projects and their challenges. Published helper profiles are separately browsable at the [help desk](./help-desk-web.md) (H61–H67); that projection exposes help information and creates no scan contact. There is no
+general browsable people directory: the product owner retired it on #935 ("al final
 queremos que sea dinámico"), so a person enters someone's event diary only by
 a scan ([`diary.md`](./diary.md)), and only then can that attendee read their
 profile. A scan is mutual: if the scanner also shares a profile, the scanned
@@ -12,11 +12,11 @@ shares nothing saves the person one-way, and stands are always one-way
 ([`diary.md`](./diary.md), Mutual scan). The module and routes keep their `directory` names. There is no Hxx
 story; code and commits reference `#934` and `#935`.
 
-People manage their public profile (opt-in, surname/photo/project, headline,
-location note, bio, links, CV and preview) from My profile
+People manage their public profile (opt-in, surname/photo/project/GitHub, headline,
+location note, bio, links and CV) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
-is uploaded at the top of the Personal details tab, because it
-is the account's photo everywhere, not only on the public profile. The mobile app
+is uploaded at the top of the Personal details section of the Account tab, because it
+is the account's photo everywhere, not only on the public profile; the Public profile tab offers the same upload next to the photo switch. The mobile app
 edits the same photo from the Account avatar and the networking profile editor
 (`docs/mobile.md`).
 
@@ -24,11 +24,9 @@ The "Public profile" section (`components/profile/public-profile-card.tsx`)
 shows only the opt-in switch ("Share my profile"), with one line saying that
 only people who scan the person's badge will see it, until the person opts in; then it reveals the surname, photo and project switches, the
 headline and location note (placeholder "Room 2.1", so people know which classroom to enter), the bio (with a character count), up to six links
-(type + address rows; empty rows are not saved), the CV and a preview card.
-The preview is the server's `preview` until something changes; then name
-(surname initial by code point, as the API), photo, text, links and the
-shared CV follow the unsaved edits, while the projects and challenges stay the
-saved ones until saving. While the opt-in is off the hidden fields neither
+(type + address rows; empty rows are not saved), the linked GitHub account as a matching link row with its own profile-visibility switch, and the CV. Hiding that link does not unlink the account.
+There is no preview card. While the opt-in is off the fields stay in view,
+disabled, so people see what sharing would show; they neither
 enable Save nor get published: switching it off saves the stored text and
 toggles unchanged. Fields are locked while a save is in flight, and each
 change set saves with one `Idempotency-Key`.
@@ -55,6 +53,32 @@ Module: `apps/api/src/modules/directory/` (the photo routes live in
 Tests: `apps/api/test/directory/api.test.ts` and
 `apps/api/test/directory/profile-files.test.ts`.
 
+## Mentor profile (HackUDC 2027 onboarding)
+
+A person who holds the effective `helpdesk:offer` capability (the wildcard counts;
+no role, attendance kind or networking opt-in is needed) may keep a mentor
+profile: a published flag plus expertise values for the current `event_key`.
+Bio, headline, photo and links stay in the public profile; there is no second copy.
+
+| Route | Access | Behaviour |
+|---|---|---|
+| `GET/PUT /api/me/mentor-profile` | authenticated | `{ eligible, published, expertise: {id,label}[] }`; PUT takes `{ published }` |
+| `GET/PUT /api/users/:id/mentor-profile` | `users:read` / `users:write` | same shape, audited with source `admin` |
+
+- `expertise` is the person's help desk knowledge topics (`helper_topics`, edited with
+  `PUT /api/me/helper-profile`): one catalogue, curated in Libraries › Knowledge areas.
+  The former mentor expertise library was retired (migration `0804`).
+- Without the capability PUT answers 403 `details.code: mentor_profile_not_eligible`.
+  Stored data is never deleted: it is neither listed nor offered while ineligible and
+  returns unchanged when the capability does.
+- `GET /api/directory/:userId` carries `mentor: { expertise: string[] }` only while the
+  profile is published and its owner still eligible. Publishing is independent of the
+  networking opt-in: with the opt-in off a scanner receives only the name (surname
+  initial) and the expertise, 404 when nothing is published.
+- Audit `mentor_profile.updated` records changed field names only, never expertise text.
+
+Tests: `apps/api/test/directory/mentor-profile.test.ts`.
+
 ## Mobile and the confirmation invite
 
 The mobile app edits the same profile from Account ("Edit networking profile",
@@ -76,7 +100,7 @@ the step before returning to its ticket; the email token alone never authorizes
 profile access.
 
 The step explains networking during the event and badge-scan visibility, reuses
-the profile editor (photo, sharing choices, bio, links, CV and preview), and offers
+the profile editor (photo, sharing choices, bio, links and CV), and offers
 the actual form immediately, without an intermediate chooser. Its footer offers
 Create profile, Do not create a public profile, or Remind me on next login.
 Create profile saves the filled form and sharing consent in one action. Declining
@@ -107,10 +131,11 @@ including the account photo, stays in `users` and is projected, never copied.
 | `show_surname` | `false` | Full surname instead of its initial. |
 | `show_photo` | `false` | Expose the account photo (`users.photo_key`). |
 | `show_project` | `true` | Expose the project and its challenges. |
+| `show_github` | `true` | Expose the linked GitHub account URL; hiding it does not unlink the account. |
 | `headline` | `NULL` | Free text, ≤80 characters. |
 | `location_note` | `NULL` | Free text written by the person (for example "Floor 1, table 12"), ≤60 characters. There is no staff-assigned seating and presence (`time_logs`) is never exposed. |
 | `bio` | `NULL` | Free text, ≤500 characters; line breaks kept, other control characters rejected. |
-| `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `github`, `x`, `instagram`, `website` or `other`. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
+| `socials` | `[]` | Up to 6 distinct `{kind, url}`; `kind` is `linkedin`, `x`, `instagram`, `website` or `other`; a submitted `github` entry is dropped, because the GitHub link is the member's linked GitHub account (`POST /api/me/github/authorize`). Readers see `https://github.com/<login>` appended to the stored links only while the account is linked and `show_github` is true. `url` must be https (a bare host gets `https://`; credentials and hosts without a dot are rejected) and is stored in the parsed URL's canonical form. |
 | `share_cv` | `false` | Readers may download the CV. Requires an uploaded or application CV (400 otherwise); removing the CV clears it. |
 | `cv_key`, `cv_filename`, `cv_uploaded_at` | `NULL` | The private CV object, its sanitized original name and upload time; all set or all null. |
 | `onboarding_completed_at` | `NULL` | Explicit completion or opt-out of the web profile step (migration `0104`); separate from sharing consent. |
@@ -186,11 +211,12 @@ badge or ticket.
 | `displayName` | `name` + surname initial, or full surname | always |
 | `photoUrl` | `/api/users/:id/photo?v=…` for `users.photo_key` | `show_photo` and a photo exists |
 | `headline`, `bio`, `locationNote` | profile | when set |
-| `socials[]` `{kind, url}` | profile | always (may be empty) |
+| `socials[]` `{kind, url}` | profile, plus the linked GitHub account | always (may be empty); the GitHub entry requires `show_github` and a linked account |
 | `cvUrl` | `/api/directory/:userId/cv` (the owner's preview: `/api/me/public-profile/cv`) | `share_cv` and a CV exists |
 | `projects[]` `{kind, id, name}` | every active `submissions` → `repos` (`kind: "project"`), then every active, unlinked `planned_work_groups` membership (`kind: "workGroup"`), each by id | `show_project` |
 | `project` | deprecated: the first of `projects` (or `null`), kept for app builds that predate the list | `show_project` |
 | `challenges[]` `{id, name}` | published, non-test challenges of any of those projects (`queue_entries`) or groups (`planned_work_group_challenges`) | `show_project` |
+| `helpTopics[]` `{id, name}` | the person's help desk knowledge (`helper_topics`, H61; [`help-desk.md`](./help-desk.md)) | their helper profile is published (`[]` otherwise) |
 
 Nothing else leaves the module: no email, DNI, badge, intolerances,
 university, size, application state, roles or capabilities, presence, test
@@ -210,7 +236,7 @@ a test account. The same rule decides whether a scan saves the person
 | `GET /api/me/public-profile` | authenticated + event access |
 | `PUT /api/me/public-profile` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/directory/:userId` | event access + the person is in the caller's diary (#935) |
-| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv` |
+| `GET /api/directory/:userId/cv` | as above; visible profile with `share_cv`. Also help desk readers (`helpdesk:request`/`offer`/`coverage`) for a published helper with `share_cv`, no scan needed (H61, H63) |
 | `POST /api/me/public-profile/cv` | authenticated + event access, multipart, `Idempotency-Key` |
 | `DELETE /api/me/public-profile/cv` | authenticated + event access, `Idempotency-Key` |
 | `GET /api/me/public-profile/cv` | authenticated (own CV, shared or not) |
@@ -363,7 +389,16 @@ and H54 removal clears it together with the user's project uploads.
 Public profile is its own tab of My profile (see
 [`navigation.md`](./navigation.md)); switching tabs preserves edits. It has its
 own Save; the live preview sits below the fields, one grid column wide. Personal dietary fields are
-grouped separately in Personal details, and choosing No restrictions hides the
+grouped separately in Personal details (Account tab), and choosing No restrictions hides the
 optional fields while preserving their previous values for restoration when
 unticked. Email, password and GitHub live in Account and security; roles and
 account removal have their own sections.
+
+## Help desk knowledge (H61)
+
+Public profile previews and scanned-person readers show `helpTopics` for published
+helpers. The helper profile is this profile: the bio is edited only here. Publishing a
+helper profile does not change networking opt-in, but it is the consent that
+shows the person's entry (`helperProfileEntry`, same fields and per-field
+switches) in `GET /api/helpdesk/helpers/:userId`, and lets help desk readers
+open that helper's shared CV and photo without a scan.

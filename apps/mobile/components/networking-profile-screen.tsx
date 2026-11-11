@@ -1,10 +1,12 @@
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import Stack from "expo-router/stack";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CvViewer } from "@/components/cv-viewer";
 import { isRealLiquidGlassAvailable } from "@/components/glass-view";
+import { HelperProfileSection } from "@/components/help-desk/helper-profile-section";
+import { HelperCompany, RoleBadge } from "@/components/help-desk/rows";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
@@ -13,7 +15,9 @@ import { QuickAction, VisibilityToggle } from "@/components/profile-parts";
 import { ProfilePhotoMenu } from "@/components/profile-photo-menu";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { alert } from "@/lib/alert";
+import type { DirectoryEntry } from "@/lib/directory";
 import { haptic } from "@/lib/haptics";
+import type { MyHelperProfile } from "@/lib/help-desk";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { createIdempotencyKey } from "@/lib/idempotency-key";
 import { useMeContext } from "@/lib/me-context";
@@ -63,10 +67,13 @@ export default function NetworkingProfileScreen() {
   const { t } = useLocale();
   const gutter = useScreenGutter();
   const { me } = useMeContext();
+  const [helperProfile, setHelperProfile] = useState<MyHelperProfile<DirectoryEntry> | null>(null);
   const [profile, setProfile] = useState<NetworkingProfile | null>(null);
   const [stored, setStored] = useState<NetworkingDraft | null>(null);
   const [draft, setDraft] = useState<NetworkingDraft | null>(null);
   const [editing, setEditing] = useState(false);
+  const editingRef = useRef(false);
+  editingRef.current = editing;
   const [saving, setSaving] = useState(false);
   const [togglingShare, setTogglingShare] = useState(false);
   const [cvBusy, setCvBusy] = useState<"upload" | "remove" | null>(null);
@@ -117,6 +124,17 @@ export default function NetworkingProfileScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Publishing the help desk profile (its own page) also shares this one: re-read on return.
+  const settled = useRef(false);
+  const reload = useCallback(() => {
+    if (!settled.current) {
+      settled.current = true;
+      return;
+    }
+    if (!editingRef.current) void load();
+  }, [load]);
+  useFocusEffect(reload);
 
   function update(patch: Partial<NetworkingDraft>) {
     idempotencyKey.current = null;
@@ -306,10 +324,18 @@ export default function NetworkingProfileScreen() {
     );
 
     if (!editing) {
-      const preview = current.preview;
+      const preview = helperProfile
+        ? { ...current.preview, helpTopics: helperProfile.topics }
+        : current.preview;
       return (
         <ProfileCard
           data={preview}
+          identityAccessory={
+            helperProfile ? <RoleBadge role={helperProfile.preview.visibleRoleName} /> : undefined
+          }
+          beforeKnowledge={
+            helperProfile ? <HelperCompany helper={helperProfile.preview} /> : undefined
+          }
           avatar={
             <PersonAvatar size={AVATAR_SIZE} name={preview.displayName} uri={preview.photoUrl} />
           }
@@ -371,43 +397,6 @@ export default function NetworkingProfileScreen() {
 
   return (
     <>
-      {nativeHeader ? (
-        <>
-          <Stack.Screen
-            options={{
-              headerBackVisible: false,
-              headerLargeTitle: false,
-              headerStyle: { backgroundColor: colors.background },
-              headerShadowVisible: false,
-              title: t("networkingTitle"),
-            }}
-          />
-          <Stack.Toolbar placement="left">
-            <Stack.Toolbar.Button
-              icon="xmark"
-              accessibilityLabel={editing ? t("cancel") : t("back")}
-              disabled={saving}
-              onPress={() => (editing ? stopEditing() : router.back())}
-            />
-          </Stack.Toolbar>
-          <Stack.Toolbar placement="right">
-            <Stack.Toolbar.Button
-              icon={editing ? "checkmark" : "pencil"}
-              accessibilityLabel={editing ? t("save") : t("networkingEdit")}
-              disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
-              onPress={() => (editing ? void save() : startEditing())}
-            />
-          </Stack.Toolbar>
-        </>
-      ) : null}
-      {profile?.cv && cvOpen ? (
-        <CvViewer
-          visible
-          title={fullName}
-          cvPath={editing ? OWN_CV_PATH : (profile.preview.cvUrl ?? OWN_CV_PATH)}
-          onClose={() => setCvOpen(false)}
-        />
-      ) : null}
       <ScrollView
         testID="networking-profile-scroll"
         style={{
@@ -460,9 +449,16 @@ export default function NetworkingProfileScreen() {
               />
             </Section>
             {/* Not shared yet: the card is a preview of what scanners will get. */}
-            <View style={{ gap: 24, opacity: shared ? 1 : 0.5 }}>
+            <View
+              style={{
+                gap: 24,
+                opacity: shared ? 1 : 0.5,
+              }}
+            >
               {renderCard(profile, editing ? draft : stored)}
             </View>
+            {/* H61: helpers extend this same profile; their help desk settings follow it. */}
+            <HelperProfileSection onProfileChange={setHelperProfile} />
           </>
         ) : failure?.message === "networkingLoadError" ? null : (
           <RequestFeedback loading />
@@ -476,6 +472,46 @@ export default function NetworkingProfileScreen() {
           />
         ) : null}
       </ScrollView>
+      {nativeHeader ? (
+        <>
+          <Stack.Screen
+            options={{
+              headerBackVisible: false,
+              headerLargeTitle: false,
+              headerTransparent: true,
+              headerStyle: { backgroundColor: "transparent" },
+              headerBlurEffect: "none",
+              scrollEdgeEffects: { top: "soft" },
+              headerShadowVisible: false,
+              title: t("networkingTitle"),
+            }}
+          />
+          <Stack.Toolbar placement="left">
+            <Stack.Toolbar.Button
+              icon="xmark"
+              accessibilityLabel={editing ? t("cancel") : t("back")}
+              disabled={saving}
+              onPress={() => (editing ? stopEditing() : router.back())}
+            />
+          </Stack.Toolbar>
+          <Stack.Toolbar placement="right">
+            <Stack.Toolbar.Button
+              icon={editing ? "checkmark" : "pencil"}
+              accessibilityLabel={editing ? t("save") : t("networkingEdit")}
+              disabled={editing ? saving || !dirty || cvBusy !== null : !stored || togglingShare}
+              onPress={() => (editing ? void save() : startEditing())}
+            />
+          </Stack.Toolbar>
+        </>
+      ) : null}
+      {profile?.cv && cvOpen ? (
+        <CvViewer
+          visible
+          title={fullName}
+          cvPath={editing ? OWN_CV_PATH : (profile.preview.cvUrl ?? OWN_CV_PATH)}
+          onClose={() => setCvOpen(false)}
+        />
+      ) : null}
 
       {nativeHeader ? null : (
         <>

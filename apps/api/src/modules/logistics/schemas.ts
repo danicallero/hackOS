@@ -1,4 +1,5 @@
 import { ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
+import { ATTENDANCE_KINDS } from "@hackos/shared/onboarding";
 import { z } from "zod";
 import { PERSON_FIELDS } from "./people.js";
 
@@ -313,7 +314,11 @@ export const scheduleIdParam = z.object({ id: z.coerce.number().int().positive()
  * also drives the anonymous public site/TV feed — there's no audience
  * distinct from "what participants see" for anonymous visitors.
  */
-export const scheduleAudience = z.enum(["sponsor", "participant", "mentor"]);
+/** An attendance audience, or a publicly visible role as `role:<id>` (checked against the roles on write). */
+export const scheduleAudience = z.union([
+  z.enum(["sponsor", "participant", "mentor"]),
+  z.string().regex(/^role:[1-9][0-9]{0,8}$/),
+]);
 
 export const scheduleBody = z.object({
   title: z.string().min(1).max(300),
@@ -332,7 +337,7 @@ export const scheduleBody = z.object({
   endsAt: z.coerce.date(),
   visibility: z.enum(["shown", "hidden"]).default("hidden"),
   publishAt: z.coerce.date().nullable().optional(),
-  audiences: z.array(scheduleAudience).max(3).default([]),
+  audiences: z.array(scheduleAudience).max(40).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
   titleLanguage: languageSchema
@@ -348,6 +353,17 @@ export const scheduleBody = z.object({
       "Opt-in (#966): the item's audience gets an attendee Live Activity (countdown from " +
         "the event's Live Activity lead time before the start, then 'now, ends in'). Defaults to false.",
     ),
+  rsvp: z
+    .object({
+      enabled: z.boolean(),
+      kinds: z.array(z.enum(ATTENDANCE_KINDS)).max(ATTENDANCE_KINDS.length).default([]),
+      roleIds: z.array(z.number().int().positive()).max(100).default([]),
+    })
+    .optional()
+    .describe(
+      "Create the activity already asking attendance to these roles (or legacy kinds). Only asked-to-someone " +
+        "activities appear in the logistics attendance overview.",
+    ),
 });
 
 /**
@@ -359,11 +375,11 @@ export const scheduleBody = z.object({
  * their create-time defaults (H59).
  */
 export const schedulePatchBody = scheduleBody
-  .omit({ visibility: true, audiences: true })
+  .omit({ visibility: true, audiences: true, rsvp: true })
   .partial()
   .extend({
     visibility: z.enum(["shown", "hidden"]).optional(),
-    audiences: z.array(scheduleAudience).max(3).optional(),
+    audiences: z.array(scheduleAudience).max(40).optional(),
   });
 
 /**
@@ -443,6 +459,7 @@ export const mealPlanSummariesResponse = z.object({
       startsAt: z.string(),
       attending: z.number(),
       notAttending: z.number(),
+      unsure: z.number(),
       unanswered: z.number(),
       intolerances: z.array(
         z.object({ id: z.number(), label: z.record(z.string(), z.string()), n: z.number() }),

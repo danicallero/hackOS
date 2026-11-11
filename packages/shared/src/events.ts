@@ -40,6 +40,8 @@ export const SSE_TOPICS = {
   EXPORTS: "exports",
   /** audit log changes (H53) */
   AUDIT: "audit",
+  /** help desk helpers, open requests and coverage (H61-H67); payload-free */
+  HELPDESK: "helpdesk",
   /** per-user channel, suffixed with the user id: `user:42` (H31, H38) */
   USER_PREFIX: "user:",
 } as const;
@@ -80,6 +82,7 @@ export const EVENTS = {
   LOGISTICS_MEAL_SCAN_BATCH: "logistics.meal_scan_batch.processed", // H25
   LOGISTICS_WALLET_PASS_UPDATED: "logistics.wallet_pass.updated", // H28
   LOGISTICS_MEAL_PLAN_UPDATED: "logistics.meal_plan.updated", // #933, { activityIds } only
+  LOGISTICS_RSVP_UPDATED: "logistics.rsvp.updated",
   USER_QUEUE_CALLED: "user.queue.called", // H29/H38 "go wait at room X"
   USER_QUEUE_PRECALL: "user.queue.precall", // H38 pre-aviso
   USER_QUEUE_CHANGED: "user.queue.changed", // H38: one of the user's challenge queues changed
@@ -89,6 +92,8 @@ export const EVENTS = {
   USER_NOTIFICATION_PREFERENCES_CHANGED: "user.notification_preferences.changed",
   /** Refresh the current account's session facts (roles, capabilities, affiliations). */
   USER_SESSION_CHANGED: "user.session.changed",
+  /** H64-H66: a help request the user follows or was routed changed; `{ requestId, status }`. */
+  HELPDESK_REQUEST_CHANGED: "helpdesk.request.changed",
   EXPORT_REQUEST_CHANGED: "exports.request.status_changed", // H54
 } as const;
 

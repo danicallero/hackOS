@@ -10,7 +10,7 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { getMealPlan, replaceMealPlan } from "../meal-plan.js";
 
 /**
- * Sponsor meal plan (#933). Self-service is a benign self-edit (no audit
+ * Meal plan (#933), a facade over per-activity RSVPs. Self-service is a benign self-edit (no audit
  * row); the staff correction under meal-plans:manage is audited.
  */
 
@@ -53,11 +53,13 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get my meal plan",
         description:
-          "Sponsor representatives only (403 `not_sponsor` otherwise). Lists the upcoming meals " +
-          "offered to sponsors — meal-kind activities whose shown schedule entry includes the " +
-          "`sponsor` audience (an entry with no audiences is staff-only and never offered) — with the caller's answer (`attending` is null until " +
-          "answered) and whether the meal is `locked` because it starts within the event's change " +
-          "cutoff (`cutoffHours`, 24 by default). `confirmedAt` is when the plan was first submitted.",
+          "Eligible attendees only (403 `meal_plan_not_eligible`: registered participants and " +
+          "unclassified accounts are never offered meals). Compatibility facade over " +
+          "`GET /api/me/rsvps` restricted to meal activities enabled for the caller's attendance " +
+          "kind on a shown, not-ended schedule entry, with the caller's answer (`attending` is " +
+          "null until answered or when unsure) and whether the meal is `locked` (past its RSVP " +
+          "close, by default `cutoffHours` before it starts, 24 by default). `confirmedAt` is when " +
+          "the plan was first submitted.",
         response: { 200: mealPlanResponseSchema },
       },
     },
@@ -73,7 +75,7 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Replace my meal plan",
         description:
-          "Sponsor representatives only (403 `not_sponsor`). The body must answer every offered, " +
+          "Eligible attendees only (403 `meal_plan_not_eligible`). The body must answer every offered, " +
           "unlocked meal (400 `meal_plan_incomplete`). Meals that ended or stopped being offered " +
           "since the list was loaded are ignored; an id that is not a meal activity at all is 400 " +
           "`meal_not_offered`. Changing a locked meal's stored answer is 409 `meal_plan_locked`; " +
@@ -100,8 +102,8 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Get a user's meal plan",
         description:
-          "Staff view of a sponsor representative's meal plan, same shape as GET /api/me/meal-plan. " +
-          "403 `not_sponsor` when the user is not a sponsor representative.",
+          "Staff view of a user's meal plan, same shape as GET /api/me/meal-plan. " +
+          "403 `meal_plan_not_eligible` when the user is a participant or has no attendance kind.",
         response: { 200: mealPlanResponseSchema },
       },
     },
@@ -120,9 +122,9 @@ export function registerMealPlanRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Replace a user's meal plan",
         description:
-          "Staff correction of a sponsor representative's meal plan. Same body, rules and errors as " +
+          "Staff correction of a user's meal plan. Same body, rules and errors as " +
           "PUT /api/me/meal-plan (locked meals stay closed), except that it is partial: only the " +
-          "meals in the body are written, meals left out stay unanswered, and the sponsor's " +
+          "meals in the body are written, meals left out stay unanswered, and the " +
           "`confirmedAt` is not set. Writes one `meal_plan.updated` audit row with the attending " +
           "meal ids before and after, in the same transaction, when any answer changed — also " +
           "when staff correct their own plan here. Accepts `Idempotency-Key`. Requires " +

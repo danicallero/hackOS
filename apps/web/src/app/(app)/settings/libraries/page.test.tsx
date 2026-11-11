@@ -3,11 +3,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LibrariesSettingsPage from "./page";
 
-const capability = vi.hoisted(() => ({ allowed: false }));
+const capability = vi.hoisted(() => ({ allowed: false, knowledge: false }));
 
-vi.mock("@/lib/session", () => ({ useCan: () => capability.allowed }));
+vi.mock("@/lib/session", () => ({
+  useCan: (name: string) =>
+    name === "helpdesk:manage" ? capability.knowledge : capability.allowed,
+}));
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t: (key: string) => key }) }));
-vi.mock("@/lib/url-tab", () => ({ useUrlTab: () => ({ tab: "intolerances", setTab: vi.fn() }) }));
+vi.mock("@/lib/url-tab", () => ({
+  useUrlTab: ({ defaultValue }: { defaultValue: string }) => ({
+    tab: defaultValue,
+    setTab: vi.fn(),
+  }),
+}));
 vi.mock("@/components/common/access-denied", () => ({
   AccessDenied: ({ ask }: { ask: string }) => <div data-testid="access-denied">{ask}</div>,
 }));
@@ -19,6 +27,9 @@ vi.mock("./shirt-sizes-manager", () => ({
 }));
 vi.mock("./universities-manager", () => ({
   UniversitiesManager: () => <div data-testid="universities-manager" />,
+}));
+vi.mock("./knowledge-manager", () => ({
+  KnowledgeManager: () => <div data-testid="knowledge-manager" />,
 }));
 vi.mock("./degrees-manager", () => ({
   DegreesManager: () => <div data-testid="degrees-manager" />,
@@ -36,6 +47,7 @@ async function render() {
 
 beforeEach(() => {
   capability.allowed = false;
+  capability.knowledge = false;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -61,5 +73,13 @@ describe("LibrariesSettingsPage capability guard", () => {
     await render();
 
     expect(container.querySelector("[data-testid=intolerances-manager]")).not.toBeNull();
+  });
+
+  it("gives the knowledge areas to helpdesk:manage alone, without the catalogues", async () => {
+    capability.knowledge = true;
+    await render();
+
+    expect(container.querySelector("[data-testid=knowledge-manager]")).not.toBeNull();
+    expect(container.querySelector("[data-testid=intolerances-manager]")).toBeNull();
   });
 });

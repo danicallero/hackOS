@@ -1,0 +1,482 @@
+"use client";
+
+import type { OnboardingAction, OnboardingStep } from "@hackos/shared/onboarding";
+import Link from "next/link";
+import {
+  createContext,
+  type MutableRefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { AvailabilityEditor } from "@/app/(app)/help-desk/availability-editor";
+import { ContextualError } from "@/components/common/contextual-error";
+import { Spinner } from "@/components/common/spinner";
+import { Confetti } from "@/components/onboarding/confetti";
+import {
+  emailChoiceItems,
+  initialEmailChoices,
+  NotificationChoices,
+} from "@/components/onboarding/notification-choices";
+import { SocialSharing } from "@/components/onboarding/social-sharing";
+import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
+import { PersonalDetails } from "@/components/profile/personal-details";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
+import { PublicProfileCard } from "@/components/profile/public-profile-card";
+import { WalletSection } from "@/components/profile/wallet-section";
+import { Button } from "@/components/ui/button";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
+import { useServerResource } from "@/hooks/use-server-resource";
+import { apiErrorText } from "@/lib/api-error-text";
+import { formatEventDate } from "@/lib/datetime";
+import { EVENT_CITY, EVENT_PUBLIC_URL } from "@/lib/event-brand";
+import { type MessageKey, useLocale } from "@/lib/i18n";
+import { logisticsApi } from "@/lib/logistics";
+import { notificationsApi, type PreferencesResponse } from "@/lib/notifications";
+import type { OnboardingState } from "@/lib/onboarding";
+import { getPublicEvent } from "@/lib/public-content";
+import { useSessionContext } from "@/lib/session";
+import type { PublicEvent } from "@/lib/types";
+
+/** What every step receives: the decision callback and which decisions the server allows. */
+export interface StepProps {
+  allowed: readonly OnboardingAction[];
+  pending: boolean;
+  /** Persist a decision for this step and move on. */
+  decide: (action: OnboardingAction) => void;
+}
+
+/**
+ * What leaving a step through the progress markers needs from it: whether it holds
+ * unsaved edits, and how to save them. `draft` saves without answering the step
+ * (networking, where only the explicit Create is consent); otherwise `submit`
+ * runs the step's own form, so validation and the save are the form's.
+ */
+export interface LeaveHandle {
+  dirty: boolean;
+  submit?: () => void;
+  draft?: () => Promise<boolean>;
+}
+export const LeaveContext = createContext<MutableRefObject<LeaveHandle | null> | null>(null);
+
+/** Registers the step's unsaved-edit handle with the journey while it is shown. */
+export function useLeaveHandle(handle: LeaveHandle) {
+  const ref = useContext(LeaveContext);
+  const { dirty, submit, draft } = handle;
+  useEffect(() => {
+    if (!ref) return;
+    ref.current = { dirty, submit, draft };
+    return () => {
+      ref.current = null;
+    };
+  }, [ref, dirty, submit, draft]);
+}
+
+/** "Later" and "Skip" exactly as the server offers them; a required step shows neither Skip. */
+export function StepAlternatives({ allowed, pending, decide }: StepProps) {
+  const { t } = useLocale();
+  return (
+    <>
+      {allowed.includes("defer") && (
+        <Button type="button" variant="ghost" disabled={pending} onClick={() => decide("defer")}>
+          {t("onboardingLater")}
+        </Button>
+      )}
+      {allowed.includes("skip") && (
+        <Button type="button" variant="ghost" disabled={pending} onClick={() => decide("skip")}>
+          {t("onboardingSkip")}
+        </Button>
+      )}
+    </>
+  );
+}
+
+export const STEP_TITLES: Record<OnboardingStep, MessageKey> = {
+  welcome: "onboardingStepWelcome",
+  profile: "onboardingStepProfile",
+  dietary: "onboardingStepDietary",
+  networking: "onboardingStepNetworking",
+  mentor_profile: "onboardingStepMentor",
+  rsvp: "onboardingStepRsvp",
+  notifications: "onboardingStepNotifications",
+  share: "onboardingStepShare",
+  completion: "onboardingStepCompletion",
+};
+
+/** One line on what each step is for, shown on the intro page. */
+export const STEP_DESCRIPTIONS: Partial<Record<OnboardingStep, MessageKey>> = {
+  profile: "onboardingDescProfile",
+  dietary: "onboardingDescDietary",
+  networking: "onboardingDescNetworking",
+  mentor_profile: "onboardingDescMentor",
+  rsvp: "onboardingDescRsvp",
+  notifications: "onboardingDescNotifications",
+  share: "onboardingDescShare",
+};
+
+/** Steps whose answers live in My profile: say where to change them afterwards. */
+export function ChangeLaterNote({ tab }: { tab: string }) {
+  const { t } = useLocale();
+  return (
+    <p className="text-muted-foreground text-sm text-pretty">
+      {t("onboardingEditLater")}{" "}
+      <Link className="underline underline-offset-4" href={`/settings/profile?tab=${tab}`}>
+        {t("myProfile")}
+      </Link>
+    </p>
+  );
+}
+
+/** The public event feed: name, tagline and dates exactly as the organizer configured them. */
+export function useEventFacts(): PublicEvent | null {
+  const [event, setEvent] = useState<PublicEvent | null>(null);
+  useEffect(() => {
+    let active = true;
+    getPublicEvent()
+      .then((value) => active && setEvent(value))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+  return event;
+}
+
+/** Whole hours of the hacking window ("36 hours of development"); undefined without a window. */
+export function hackingHours(
+  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt"> | null,
+): number | undefined {
+  if (!event?.hackingStartsAt || !event.hackingEndsAt) return undefined;
+  const ms = Date.parse(event.hackingEndsAt) - Date.parse(event.hackingStartsAt);
+  return ms > 0 ? Math.round(ms / 3_600_000) : undefined;
+}
+
+/** "5 Jan 2026" or "5 Jan – 7 Jan 2026", only from configured instants; "" when unset. */
+export function eventDateRange(
+  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt" | "timezone"> | null,
+  language: "es" | "gl" | "en",
+): string {
+  if (!event?.hackingStartsAt) return "";
+  const start = formatEventDate(event.hackingStartsAt, language, "date", event.timezone);
+  const end = event.hackingEndsAt
+    ? formatEventDate(event.hackingEndsAt, language, "date", event.timezone)
+    : "";
+  return end && end !== start ? `${start} – ${end}` : start;
+}
+
+/** Only shown when the organizer wrote a message: a greeting and that message, nothing else. */
+export function WelcomeStep({
+  decide,
+  pending,
+  allowed,
+  message,
+}: StepProps & { message?: string }) {
+  const { t } = useLocale();
+  const { me } = useSessionContext();
+  return (
+    <div className="space-y-6">
+      {me?.name && (
+        <p className="type-section-title">{t("onboardingGreeting", { name: me.name })}</p>
+      )}
+      {message && <p className="whitespace-pre-line text-pretty">{message}</p>}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <StepAlternatives
+          allowed={allowed.filter((a) => a === "skip")}
+          pending={pending}
+          decide={decide}
+        />
+        <Button
+          type="button"
+          disabled={pending}
+          loading={pending}
+          onClick={() => decide("complete")}
+        >
+          {t("onboardingStart")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Continue only while there is nothing to save; with edits the form's Save completes the step. */
+function ContinueWhenClean({
+  dirty,
+  pending,
+  decide,
+}: {
+  dirty: boolean;
+  pending: boolean;
+  decide: StepProps["decide"];
+}) {
+  const { t } = useLocale();
+  if (dirty) return null;
+  return (
+    <Button type="button" variant="outline" disabled={pending} onClick={() => decide("complete")}>
+      {t("onboardingContinue")}
+    </Button>
+  );
+}
+
+/** Submits the step's own form, so leaving with edits validates and saves them. */
+export function useFormSubmit(dirty: boolean) {
+  const root = useRef<HTMLDivElement>(null);
+  const submit = useCallback(() => root.current?.querySelector("form")?.requestSubmit(), []);
+  useLeaveHandle({ dirty, submit });
+  return root;
+}
+
+export function ProfileStep(props: StepProps & { part: "identity" | "dietary" }) {
+  const { part, decide, pending } = props;
+  const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
+  return (
+    <div ref={root}>
+      <PersonalDetails
+        part={part}
+        onDirtyChange={setDirty}
+        onSaved={() => decide("complete")}
+        actions={
+          <>
+            <StepAlternatives {...props} />
+            <ContinueWhenClean dirty={dirty} pending={pending} decide={decide} />
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+/** Create, decline and later are three distinct persisted answers; consent is only the explicit create. */
+export function NetworkingStep({ decide }: StepProps) {
+  const { me } = useSessionContext();
+  // Leaving with edits keeps them as a draft; only the explicit Create is consent.
+  const [dirty, setDirty] = useState(false);
+  const saveDraft = useRef<(() => Promise<boolean>) | null>(null);
+  const draft = useCallback(async () => (await saveDraft.current?.()) ?? true, []);
+  useLeaveHandle({ dirty, draft });
+  return (
+    <div className="space-y-6">
+      <PublicProfileCard
+        onDirtyChange={setDirty}
+        onboarding={{
+          onFinished: (choice) => decide(choice === "create" ? "complete" : "decline"),
+          onLater: () => decide("defer"),
+          saveDraft,
+        }}
+      />
+      <ChangeLaterNote tab="public" />
+    </div>
+  );
+}
+
+export function MentorStep(props: StepProps) {
+  const { t } = useLocale();
+  const own = useOwnHelperProfile();
+  const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
+  return (
+    <div ref={root} className="space-y-6">
+      <MentorProfileEditor
+        onDirtyChange={setDirty}
+        onSaved={() => props.decide("complete")}
+        // When the mentor plans to be at the venue; each change saves on its own (H62).
+        extra={
+          own.data?.eligible ? <AvailabilityEditor profile={own.data} onSaved={own.mutate} /> : null
+        }
+        submitLabel={t("onboardingContinue")}
+        actions={<StepAlternatives {...props} />}
+      />
+      <ChangeLaterNote tab="mentoring" />
+    </div>
+  );
+}
+
+export function NotificationsStep(props: StepProps) {
+  const { t } = useLocale();
+  const { refresh } = useSessionContext();
+  const [prefs, setPrefs] = useState<PreferencesResponse | null>(null);
+  const [email, setEmail] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries the read.
+  useEffect(() => {
+    let active = true;
+    notificationsApi
+      .getPreferences()
+      .then((loaded) => {
+        if (!active) return;
+        setPrefs(loaded);
+        setEmail(initialEmailChoices(loaded));
+        setError(null);
+      })
+      .catch(
+        (cause) => active && setError(apiErrorText(cause, t, t("couldNotLoadPreferencesToast"))),
+      );
+    return () => {
+      active = false;
+    };
+  }, [attempt, t]);
+
+  if (!prefs)
+    return error ? (
+      <ContextualError message={error} onRetry={() => setAttempt((n) => n + 1)} />
+    ) : (
+      <Spinner className="size-5" />
+    );
+
+  async function save() {
+    if (!prefs) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await notificationsApi.completeOnboarding(emailChoiceItems(prefs, email));
+      await refresh();
+      props.decide("complete");
+    } catch (cause) {
+      setError(apiErrorText(cause, t, t("couldNotSavePreference")));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <NotificationChoices
+        prefs={prefs}
+        email={email}
+        onChange={setEmail}
+        pending={busy}
+        error={error}
+      />
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <StepAlternatives {...props} pending={props.pending || busy} />
+        <Button type="button" loading={busy} disabled={props.pending} onClick={() => void save()}>
+          {t("onboardingContinue")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** The share card for the signed-in person; `onContinue`/`onSkip` only inside the journey. */
+export function ShareCard({
+  onContinue,
+  onSkip,
+  hideTitle = false,
+}: {
+  onContinue?: () => void;
+  onSkip?: () => void;
+  hideTitle?: boolean;
+}) {
+  const { me } = useSessionContext();
+  const { language } = useLocale();
+  const event = useEventFacts();
+  if (!me || !event?.name) return <Spinner className="size-5" />;
+  const year = event.hackingStartsAt
+    ? formatEventDate(event.hackingStartsAt, language, "date", event.timezone).slice(-4)
+    : "";
+  return (
+    <div className="space-y-4">
+      <div className="mx-auto flex w-full max-w-xl justify-end">
+        <ProfilePhoto variant="button" />
+      </div>
+      <SocialSharing
+        hideTitle={hideTitle}
+        event={{
+          name: event.name,
+          year: /^\d{4}$/.test(year) ? year : "",
+          dateLabel: eventDateRange(event, language) || undefined,
+          location: EVENT_CITY,
+          url: EVENT_PUBLIC_URL,
+          hours: hackingHours(event),
+          dates:
+            event.hackingStartsAt && event.hackingEndsAt
+              ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
+              : undefined,
+        }}
+        attendee={{
+          displayName: [me.name, me.surname].filter(Boolean).join(" "),
+          roleLabel: me.visibleRoleName ?? undefined,
+          photoUrl: me.image,
+        }}
+        onContinue={onContinue}
+        onSkip={onSkip}
+      />
+    </div>
+  );
+}
+
+export function ShareStep({ decide }: StepProps) {
+  return <ShareCard onContinue={() => decide("complete")} onSkip={() => decide("skip")} />;
+}
+
+/** Where a still-open step can be finished later, so nothing needs to be remembered. */
+export function CompletionStep({
+  state,
+  onOpenStep,
+  decide,
+  pending,
+}: StepProps & { state: OnboardingState; onOpenStep: (step: OnboardingStep) => void }) {
+  const { t } = useLocale();
+  const { me, isPureApplicant } = useSessionContext();
+  // The Wallet block appears only when there is a ticket or badge to add.
+  const ticket = useServerResource(["me-ticket"], () => logisticsApi.myTicket());
+  const hasPass = Boolean(ticket.data?.ticketToken || ticket.data?.badgeId);
+  const open = state.steps.filter(
+    (step) =>
+      step.step !== "completion" &&
+      step.step !== "welcome" &&
+      (step.status === "pending" || step.status === "deferred" || step.status === "skipped"),
+  );
+  return (
+    <div className="space-y-6">
+      <Confetti />
+      <p className="text-lg text-pretty">{t("onboardingCompletionBody")}</p>
+      {open.length > 0 && (
+        <section aria-labelledby="onboarding-open" className="space-y-2">
+          <h2 id="onboarding-open" className="type-label text-muted-foreground">
+            {t("onboardingStillOpen")}
+          </h2>
+          <ul className="divide-y divide-border/60 rounded-surface border">
+            {open.map((step) => (
+              <li key={step.step} className="flex items-center justify-between gap-3 px-4 py-2">
+                <span>{t(STEP_TITLES[step.step])}</span>
+                <Button type="button" variant="ghost" onClick={() => onOpenStep(step.step)}>
+                  {t("onboardingFinishStep")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {me?.hasEventAccess && !isPureApplicant && hasPass && (
+        <section aria-labelledby="onboarding-wallet" className="space-y-3">
+          <h2 id="onboarding-wallet" className="type-section-title">
+            {t("wallet")}
+          </h2>
+          <WalletSection />
+        </section>
+      )}
+      <p className="text-muted-foreground text-sm text-pretty">
+        {t("onboardingEditLater")}{" "}
+        <Link className="underline underline-offset-4" href="/settings/profile">
+          {t("myProfile")}
+        </Link>
+      </p>
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          disabled={pending}
+          loading={pending}
+          onClick={() => decide("complete")}
+        >
+          {t("onboardingDone")}
+        </Button>
+      </div>
+    </div>
+  );
+}

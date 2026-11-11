@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type { I18nText } from "@/lib/i18n";
+import type { RsvpKind } from "@/lib/rsvp";
 import type { Language } from "@/lib/types";
 
 export interface PersonCard {
@@ -133,7 +134,7 @@ export interface TimeLogEntry {
 export interface PresenceTimelineSignal {
   id: number;
   source: "door" | "activity";
-  kind: "in" | "out" | "activity";
+  kind: "in" | "out" | "activity" | "help";
   occurredAt: string;
   activityId: number | null;
   activityName: string | null;
@@ -350,6 +351,8 @@ export interface ScheduleInput {
   notes?: string | null;
   /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
   titleLanguage?: Language;
+  /** Create the item already asking attendance to these kinds. */
+  rsvp?: { enabled: boolean; kinds: RsvpKind[]; roleIds?: number[] };
 }
 
 export type { ScheduleTranslations } from "@hackos/shared/schedule-form";

@@ -2,7 +2,13 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { pool } from "../../src/db/pool.js";
-import { asUser, createUser, createUserWithCapabilities, useTestApp } from "../helpers.js";
+import {
+  asUser,
+  createRole,
+  createUser,
+  createUserWithCapabilities,
+  useTestApp,
+} from "../helpers.js";
 import { admitParticipant } from "../projects/fixtures.js";
 
 /**
@@ -131,29 +137,32 @@ async function cvKey(userId: number): Promise<string | null> {
 describe("bio and social links (#935)", () => {
   it("normalizes links, shows them to readers and audits only field names", async () => {
     const me = await person();
+    await pool.query(
+      `INSERT INTO github_accounts (user_id, github_id, login) VALUES ($1, 41, 'ana')`,
+      [me],
+    );
     const res = await putProfile(me, {
       ...VISIBLE,
       bio: "  Line one\r\nLine two  ",
+      // A typed GitHub address is dropped: that link comes from the linked account.
       socials: [
-        { kind: "github", url: "github.com/ana" },
+        { kind: "github", url: "github.com/someone-else" },
         { kind: "linkedin", url: "https://WWW.LinkedIn.com/in/ana" },
       ],
     });
     expect(res.statusCode).toBe(200);
-    const socials = [
-      { kind: "github", url: "https://github.com/ana" },
-      { kind: "linkedin", url: "https://www.linkedin.com/in/ana" },
-    ];
+    const typed = [{ kind: "linkedin", url: "https://www.linkedin.com/in/ana" }];
+    const shown = [...typed, { kind: "github", url: "https://github.com/ana" }];
     expect(res.json()).toMatchObject({
       bio: "Line one\nLine two",
-      socials,
+      socials: typed,
       shareCv: false,
       cv: null,
-      preview: { bio: "Line one\nLine two", socials, cvUrl: null },
+      preview: { bio: "Line one\nLine two", socials: shown, cvUrl: null },
     });
     await savedByReader(me);
     const entry = await get(`/api/directory/${me}`, reader);
-    expect(entry.json()).toMatchObject({ bio: "Line one\nLine two", socials, cvUrl: null });
+    expect(entry.json()).toMatchObject({ bio: "Line one\nLine two", socials: shown, cvUrl: null });
 
     const { rows } = await pool.query(
       `SELECT after FROM audit_log WHERE action = 'public_profile.updated'`,
@@ -162,16 +171,51 @@ describe("bio and social links (#935)", () => {
     expect(JSON.stringify(rows)).not.toMatch(/github|linkedin|Line one/);
   });
 
+  it("shows no GitHub link without a linked account or while the profile is hidden", async () => {
+    const me = await person();
+    await putProfile(me, { ...VISIBLE, socials: [] });
+    await savedByReader(me);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+    await pool.query(
+      `INSERT INTO github_accounts (user_id, github_id, login) VALUES ($1, 42, 'ana')`,
+      [me],
+    );
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([
+      { kind: "github", url: "https://github.com/ana" },
+    ]);
+
+    const hiddenGithub = await putProfile(me, { ...VISIBLE, showGithub: false });
+    expect(hiddenGithub.json()).toMatchObject({
+      showGithub: false,
+      preview: { socials: [] },
+    });
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+    await pool.query(`UPDATE github_accounts SET login = 'new-ana' WHERE user_id = $1`, [me]);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+
+    const shownGithub = await putProfile(me, { ...VISIBLE, showGithub: true });
+    expect(shownGithub.json().preview.socials).toEqual([
+      { kind: "github", url: "https://github.com/new-ana" },
+    ]);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([
+      { kind: "github", url: "https://github.com/new-ana" },
+    ]);
+    await pool.query(`DELETE FROM github_accounts WHERE user_id = $1`, [me]);
+    expect((await get(`/api/directory/${me}`, reader)).json().socials).toEqual([]);
+  });
+
   it("keeps omitted fields and clears explicit nulls", async () => {
     const me = await person();
     await putProfile(me, {
       ...VISIBLE,
+      showGithub: false,
       bio: "Kept",
       socials: [{ kind: "website", url: "https://ana.dev" }],
     });
     const kept = await putProfile(me, { ...VISIBLE, headline: "New" });
     expect(kept.json()).toMatchObject({
       headline: "New",
+      showGithub: false,
       bio: "Kept",
       socials: [{ kind: "website", url: "https://ana.dev/" }],
     });
@@ -673,7 +717,7 @@ describe("account removal and export (H54)", () => {
     await putProfile(me, {
       ...VISIBLE,
       bio: "Exported",
-      socials: [{ kind: "github", url: "github.com/ana" }],
+      socials: [{ kind: "linkedin", url: "linkedin.com/in/ana" }],
       shareCv: true,
     });
     const photo = await photoKey(me);
@@ -687,7 +731,7 @@ describe("account removal and export (H54)", () => {
     });
     expect(bundle.publicProfile).toMatchObject({
       bio: "Exported",
-      socials: [{ kind: "github", url: "https://github.com/ana" }],
+      socials: [{ kind: "linkedin", url: "https://linkedin.com/in/ana" }],
       share_cv: true,
       cv_filename: "cv.pdf",
     });
@@ -868,5 +912,65 @@ describe("user-management moderation (#935)", () => {
       payload: { reason: "Moderation" },
     });
     expect(legacy.statusCode).toBe(404);
+  });
+});
+
+describe("helper profile files for help desk readers (H61, H63)", () => {
+  async function publishedHelper(shareCv: boolean) {
+    const me = await person("Hana", "Helper");
+    await pool.query(`UPDATE users SET account_state = 'active' WHERE id = $1`, [me]);
+    const role = await createRole([CAPABILITIES.HELPDESK_OFFER]);
+    await pool.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)`, [me, role]);
+    expect(
+      (await upload("/api/me/public-profile/cv", me, PDF, "cv.pdf", "application/pdf")).statusCode,
+    ).toBe(200);
+    expect((await upload("/api/me/photo", me, PNG, "me.png", "image/png")).statusCode).toBe(200);
+    // Hidden from badge scans: helper publication alone is the consent.
+    const saved = await putProfile(me, {
+      ...VISIBLE,
+      directoryVisible: false,
+      showPhoto: true,
+      shareCv,
+    });
+    expect(saved.statusCode).toBe(200);
+    const t = await pool.query(
+      `INSERT INTO help_topics (name, name_key) VALUES ('Go', 'go') RETURNING id`,
+    );
+    await pool.query(
+      `INSERT INTO helper_profiles (user_id, published, published_at) VALUES ($1, true, now())`,
+      [me],
+    );
+    await pool.query(`INSERT INTO helper_topics (user_id, topic_id) VALUES ($1, $2)`, [
+      me,
+      t.rows[0].id,
+    ]);
+    return me;
+  }
+
+  it("serves a published helper's shared CV and photo to help desk readers without a scan", async () => {
+    const me = await publishedHelper(true);
+    const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    const cv = await get(`/api/directory/${me}/cv`, desk);
+    expect(cv.statusCode).toBe(200);
+    expect(cv.rawPayload.equals(PDF)).toBe(true);
+    expect((await get(`/api/users/${me}/photo`, desk)).statusCode).toBe(200);
+  });
+
+  it("keeps everything else scan-gated", async () => {
+    const me = await publishedHelper(true);
+    const noCap = await createUserWithCapabilities([]);
+    expect((await get(`/api/directory/${me}/cv`, noCap)).statusCode).toBe(404);
+    expect((await get(`/api/users/${me}/photo`, noCap)).statusCode).toBe(404);
+
+    const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    await pool.query(`UPDATE helper_profiles SET published = false WHERE user_id = $1`, [me]);
+    expect((await get(`/api/directory/${me}/cv`, desk)).statusCode).toBe(404);
+    expect((await get(`/api/users/${me}/photo`, desk)).statusCode).toBe(404);
+  });
+
+  it("honours the helper's own CV switch", async () => {
+    const me = await publishedHelper(false);
+    const desk = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    expect((await get(`/api/directory/${me}/cv`, desk)).statusCode).toBe(404);
   });
 });

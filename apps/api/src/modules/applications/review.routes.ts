@@ -20,6 +20,7 @@ import {
   decideSchema,
   idParamSchema,
   listResponsesQuerySchema,
+  rejectionReasonSchema,
   responseIdParamSchema,
   returnToDraftSchema,
   revertDecisionSchema,
@@ -48,6 +49,7 @@ import {
   revokeSpot,
   sendDecision,
   sendDecisionsBatch,
+  setRejectionReason,
   setStaffNotes,
   upsertReview,
 } from "./service.js";
@@ -108,9 +110,9 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       const { rows } = await pool.query(
         `SELECT r.id, r.user_id, NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
                 u.name AS first_name, u.surname AS last_name,
-                u.email, u.shirt_size,
+                u.email, u.language AS user_language, u.shirt_size,
                 u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
-                r.status, r.responses,
+                r.status, r.responses, r.rejection_reason,
                 u.notes AS staff_notes, r.submitted_at, r.decision_sent_at,
                 r.confirmed_at, r.declined_at, t.expires_at AS confirmation_expires_at,
                 COALESCE(avg(ar.score), NULL) AS avg_score,
@@ -132,7 +134,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
          WHERE u.account_state = 'active' AND u.anonymized_at IS NULL
            AND u.is_test_account = false
            AND ${filters.join(" AND ")}
-         GROUP BY r.id, u.name, u.surname, u.email, u.shirt_size, u.food_intolerances,
+         GROUP BY r.id, u.name, u.surname, u.email, u.language, u.shirt_size, u.food_intolerances,
                   u.food_intolerance_notes, u.dietary_data_state, u.notes,
                   t.expires_at
          ORDER BY r.id`,
@@ -207,6 +209,24 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => decide(req.userId as number, req.params.responseId, req.body.decision),
+  );
+
+  // ── H14: optional rejection reason ──────────────────────────────────────────
+  r.patch(
+    "/api/responses/:responseId/rejection-reason",
+    {
+      preHandler: requireCapability(CAPABILITIES.APPLICATIONS_DECIDE),
+      config: capability(CAPABILITIES.APPLICATIONS_DECIDE),
+      schema: {
+        summary: "Set the rejection reason",
+        description:
+          "Adds, changes or clears (null/blank) the optional reason of an unsent internal rejection (H14). Reviewers see it immediately; the applicant only once the rejection is sent, when it is included in the rejection email. 409 unless the response is an unsent internal rejection. Without a reason the email is unchanged.",
+        params: responseIdParamSchema,
+        body: rejectionReasonSchema,
+      },
+    },
+    async (req) =>
+      setRejectionReason(req.userId as number, req.params.responseId, req.body.reason ?? null),
   );
 
   // ── H14: send an individual decision ────────────────────────────────────────
@@ -373,7 +393,7 @@ export function registerReviewRoutes(app: FastifyInstance): void {
       const link = await getConfirmLink(req.params.responseId);
       if (!link) return { confirm_url: null };
       return {
-        confirm_url: `/applications/confirm?token=${link.token}`,
+        confirm_url: `/applications/confirm#token=${link.token}`,
         expires_at: link.expiresAt,
       };
     },

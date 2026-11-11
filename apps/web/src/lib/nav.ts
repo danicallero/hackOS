@@ -3,6 +3,7 @@ import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
 import { BellIcon } from "@phosphor-icons/react/dist/ssr/Bell";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
+import { BrainIcon } from "@phosphor-icons/react/dist/ssr/Brain";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
@@ -308,7 +309,6 @@ const EVENT_SETTINGS_SUBITEMS: NavItem[] = [
 
 const profileTab = (id: string) => PROFILE_TABS.find((i) => i.href.endsWith(`tab=${id}`));
 const PROFILE_TABS: NavItem[] = [
-  sub("personalDetails", "/settings/profile?tab=personal", UserIcon),
   sub("publicProfileTitle", "/settings/profile?tab=public", UserIcon, {
     hideForPureApplicant: true,
   }),
@@ -328,8 +328,8 @@ const PROFILE_SUBITEMS: NavItem[] = [
 
 /**
  * Stable personal area (audit §3.1): always available to authenticated
- * accounts, independent of any work capability. Order is time-critical work
- * first, configuration-ish personal items last.
+ * accounts, independent of any work capability. Order: Home, Help desk,
+ * Projects, Contacts, My applications, then Profile and account.
  */
 export const PERSONAL_NAV: NavItem[] = [
   {
@@ -338,8 +338,16 @@ export const PERSONAL_NAV: NavItem[] = [
     icon: HouseIcon,
     activePaths: ["/timetable", "/inbox", "/challenge"],
   },
-  // Participant-facing: everyone can apply (H12-H15). No capability gate.
-  { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
+  {
+    title: "helpDeskTitle",
+    href: "/help-desk",
+    icon: QuestionIcon,
+    anyCapability: [
+      CAPABILITIES.HELPDESK_REQUEST,
+      CAPABILITIES.HELPDESK_OFFER,
+      CAPABILITIES.HELPDESK_COVERAGE,
+    ],
+  },
   // H19: admitted participants create and manage their own project drafts.
   {
     title: "projects",
@@ -350,6 +358,8 @@ export const PERSONAL_NAV: NavItem[] = [
   // Event diary (#935): people saved by scanning their badge and sponsor
   // stands. Like the API, it needs current event access only.
   { title: "diary", href: "/people", icon: AddressBookIcon, hideForPureApplicant: true },
+  // Participant-facing: everyone can apply (H12-H15). No capability gate.
+  { title: "myApplications", href: "/my-applications", icon: FileTextIcon },
   {
     title: "myProfile",
     href: "/settings/profile",
@@ -487,6 +497,12 @@ export const WORKSPACES: Workspace[] = [
         capability: CAPABILITIES.ACTIVITY_SCAN,
       },
       {
+        title: "rsvpOverviewTitle",
+        href: "/logistics/rsvps",
+        icon: UserCheckIcon,
+        anyCapability: [CAPABILITIES.LOGISTICS_STATS, CAPABILITIES.MEAL_PLANS_EXPORT],
+      },
+      {
         title: "logisticsStats",
         href: "/logistics/stats",
         icon: ChartBarIcon,
@@ -581,12 +597,23 @@ export const WORKSPACES: Workspace[] = [
         title: "libraries",
         href: "/settings/libraries",
         icon: BooksIcon,
-        capability: CAPABILITIES.INTOLERANCES_MANAGE,
+        anyCapability: [CAPABILITIES.INTOLERANCES_MANAGE, CAPABILITIES.HELPDESK_MANAGE],
         subItems: [
-          sub("foodIntolerances", "/settings/libraries?tab=intolerances", BooksIcon),
-          sub("shirtSizesGroup", "/settings/libraries?tab=shirt-sizes", BooksIcon),
-          sub("universitiesTab", "/settings/libraries?tab=universities", BooksIcon),
-          sub("degreesTab", "/settings/libraries?tab=degrees", BooksIcon),
+          sub("foodIntolerances", "/settings/libraries?tab=intolerances", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("shirtSizesGroup", "/settings/libraries?tab=shirt-sizes", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("universitiesTab", "/settings/libraries?tab=universities", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("degreesTab", "/settings/libraries?tab=degrees", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("knowledgeTab", "/settings/libraries?tab=knowledge", BrainIcon, {
+            capability: CAPABILITIES.HELPDESK_MANAGE,
+          }),
         ],
       },
     ],

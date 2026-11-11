@@ -52,8 +52,9 @@ nav gated on `role` instead. The mobile My Projects tab needs only event access 
 
 ### Stable personal area (`PERSONAL_NAV`)
 
-The personal sidebar exposes **Home**, **My applications**, **Projects**,
-**Contacts** and **My profile**. Home opens Event (`/event`) and groups Schedule (`/timetable`)
+The personal sidebar exposes, in this order, **Home**, **Help desk** (with a help desk
+capability), **Projects**, **Contacts**, **My applications** and **My profile**.
+The **Workspaces** group (label and divider) only renders when at least one workspace has a visible item. Home opens Event (`/event`) and groups Schedule (`/timetable`)
 and Inbox (`/inbox`) in a shared internal navigation row.
 Projects groups My projects (`/my-project`), Gallery (`/gallery`) and, for authorized staff, Manage projects (`/projects`). All record routes share the reading presentation and expose editing explicitly. The sidebar
 keeps the parent selected on every grouped route, including records, and Home
@@ -76,10 +77,10 @@ where each person decides whether to share a public profile with the people
 who scan their badge. See [`diary.md`](./diary.md).
 
 **My profile** (`/settings/profile`, H28, #1083) holds the Wallet, as the
-mobile Account tab does. Four tabs, selected by `?tab=` through `useUrlTab`:
-`personal` (Personal details, Meals), `public` (Public profile), `wallet`
-(ticket and badge, Certificates) and `account` (Account and security, Roles,
-Danger zone).
+mobile Account tab does. Tabs selected by `?tab=` through `useUrlTab`: `public` (Public profile),
+`mentoring`, `attendance` (RSVPs to meals and activities; always available with event access, with an explicit empty state), `wallet` (ticket and badge, Certificates), `preferences` (language, shirt size, dietary) and `account`
+(identity, Account and security, Active devices, Roles, Danger zone). `?tab=personal`
+opens `account`.
 Each section shows only when its API serves the account: passes unless a pure
 applicant, Certificates and Public profile with current event access, Meals
 for sponsor representatives, Roles with at least one role; a tab left empty
@@ -119,7 +120,7 @@ workspace never over-grants access.
 | Logistics | Accreditation and presence, Meals and activities (tabs: Activities · Meals), Logistics stats | `accredit:scan` or `presence:scan` (Accreditation and presence — a single unified scan/people-finder/hours station), `activity:scan` (Meals and activities — one unified scan station), `logistics:stats` (each item its own capability — H22-H27 per-station gating) |
 | Programme | Manage schedule, TV control, Announcements | `schedule:read` (view-only schedule), `schedule:manage`, `tv:control`, or `announcements:manage` |
 | Sponsors | Enterprises, Challenges, Company tags (`/company-tags`), Sponsor FAQ | `sponsors:manage`, `queue:admin`, or a sponsor-rep association (Company tags: `sponsors:manage` only — reps see their company's tags on its Tags tab, #935; Sponsor FAQ: `sponsors:manage` only, plus sponsor-rep read access enforced server-side) |
-| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours), `projects:edit` (project form) (each section within it individually gated by its own capability — H8); Libraries: `intolerances:manage` |
+| Event setup (`Configuración` in es/gl) | Event settings, Libraries | Event settings: any of `event:manage`, `venue:manage`, `wallet:manage`, `presence:manage`, `invites:manage`, `queue:admin` (judging hours), `projects:edit` (project form) (each section within it individually gated by its own capability — H8); Libraries: `intolerances:manage` for the catalogues, `helpdesk:manage` for the Knowledge areas tab |
 | Access and audit | Users, Permissions, Reports, Audit log | `users:read`, `permissions:manage`, `users:write` or `projects:edit` (Reports), `audit:read` |
 
 The web navigation uses Phosphor concept icons: `Package` for the Logistics
@@ -293,7 +294,7 @@ keyboard shortcuts.
 
 Section classification covers the whole Others stack: `queue`, `diary` and
 `operations` own their route (plus `others/team/*`, opened from queue
-operations), and every other `others/*` page (Wallet, notification settings,
+operations), and every other `others/*` page (Wallet, RSVPs, notification settings,
 reminders, announcements, Storage, Statistics, Company tags, Legal, Delete
 account, scan log, sync queue, people and person details) is an Account
 subpage. The Others circle therefore stays on Account — and navigating
@@ -452,3 +453,55 @@ Audit response links (H53) resolve into Review for reviewers, or the matching
 Outbox/Sent decision workspace for decision-only staff. They preserve the
 response query parameter through client navigation and reload, including when
 the viewer can also manage the form builder.
+
+## Help desk (H61–H67)
+
+The web personal sidebar adds **Help desk** (`/help-desk`) for any of
+`HELPDESK_REQUEST`, `HELPDESK_OFFER` or `HELPDESK_COVERAGE`. Its entry shares
+one selector: My requests with request capability, Open and My assignments with
+offer capability plus server eligibility. The Support team directory remains
+one labelled sibling link with the live count of available people. Opening hours
+(`/help-desk/hours`, `HELPDESK_MANAGE`), Coverage
+(`HELPDESK_COVERAGE`) and My support profile (server eligibility, including
+accepted mentors before confirmation) stay in the header menu. The latter
+opens `/settings/profile?tab=public` (the help desk settings sit under the public profile editor; `?tab=help-desk` still resolves there); `/help-desk/profile` still redirects.
+
+Published `/help-desk/requests` and `/help-desk/inbox` entries render the same
+selector. `?tab=mine|open|claims` restores selection; request-row links preserve
+the originating list URL for the labelled return action. The inbox URL defaults
+to Open, other entries to the first authorized view. Numeric notification links
+at `/help-desk/requests/:id` remain readable under API authorization. Published
+helpers use `/help-desk/helpers/:userId`, rendering the shared public profile.
+
+Mobile exposes **Help desk** as a direct tab during the event for
+`HELPDESK_REQUEST` or `HELPDESK_OFFER`. Participants land on their own/team
+requests; helpers land on their inbox. The browsable helper directory and
+other authorized views remain reachable alongside, including both request
+and helper views for an account holding both capabilities. Contacts/Diary
+moves to overflow when the tab budget is tight; Scanner stays direct for
+staff. Coverage-only accounts retain an entry to coverage without gaining
+request or helper actions.
+
+The tab implementation must keep the exhaustive route/overflow registry,
+selection and return behavior, and notification deep links consistent.
+The tab key is `help-desk`, with the `lifepreserver` icon and `helpDesk`
+label. Its native Stack is `/(tabs)/help-desk`; the overflow pseudo-tab is
+`/(tabs)/others/help-desk`, first in overflow order. It is offered for any of
+`HELPDESK_REQUEST`, `HELPDESK_OFFER` or `HELPDESK_COVERAGE` and promoted ahead
+of Projects and Contacts when direct space is available. The home selects
+participant requests, helper inbox or the dual-capability view as appropriate.
+The root `/helper-profile` editor and `/help-topics` modal remain separately
+routable. Coverage requires `HELPDESK_COVERAGE`; request actions follow the
+server's viewer permissions.
+
+The mobile helper profile is the root `/helper-profile` route, with access
+resolved by `GET /api/me/helper-profile` eligibility. An eligible accepted
+mentor without event access can sign in to prepare that profile while the
+event tabs remain guarded. Publication/profile fields and availability have
+separate saves. Explicit help desk publication makes the helper and stated
+schedule browsable without creating a diary contact or changing networking
+sharing consent (H61–H63).
+
+The Logistics `/logistics/rsvps` destination is labelled **RSVP** in both the sidebar and page header (H59).
+
+At the end of Event data, Mobile Account shows RSVP only when the API offers an activity to the person’s roles. It opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).

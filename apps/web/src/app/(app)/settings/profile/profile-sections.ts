@@ -1,20 +1,25 @@
 import type { MessageKey } from "@/lib/i18n";
+import { canOfferHelp } from "@/lib/mentor-profile";
 import type { Me } from "@/lib/types";
 
-type ProfileTabId = "personal" | "public" | "wallet" | "account";
+type ProfileTabId = "attendance" | "preferences" | "public" | "mentoring" | "wallet" | "account";
 
 export type ProfileSectionId =
   | "personal"
+  | "prefs"
   | "public"
-  | "meals"
+  | "mentor"
+  | "share"
+  | "rsvp"
   | "passes"
   | "certificates"
   | "security"
+  | "devices"
   | "roles"
   | "danger";
 
 /** Sections with their own Save; their tab is marked while one holds unsaved edits. */
-export type EditableSection = "personal" | "public" | "meals";
+export type EditableSection = "personal" | "prefs" | "public" | "mentor" | "rsvp";
 
 export interface SectionDef {
   id: ProfileSectionId;
@@ -30,21 +35,41 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   {
-    id: "personal",
-    title: "personalDetails",
-    sections: [{ id: "personal" }, { id: "meals", title: "meals" }],
+    id: "public",
+    title: "publicProfileTitle",
+    sections: [{ id: "public" }],
   },
-  { id: "public", title: "publicProfileTitle", sections: [{ id: "public" }] },
+  {
+    id: "mentoring",
+    title: "profileMentoringTitle",
+    sections: [{ id: "mentor", title: "mentorProfileTitle" }],
+  },
+  {
+    id: "attendance",
+    title: "profileRsvpTitle",
+    sections: [{ id: "rsvp" }],
+  },
   {
     id: "wallet",
     title: "wallet",
-    sections: [{ id: "passes" }, { id: "certificates", title: "certificates" }],
+    sections: [
+      { id: "passes" },
+      { id: "share", title: "onboardingStepShare" },
+      { id: "certificates", title: "certificates" },
+    ],
+  },
+  {
+    id: "preferences",
+    title: "preferences",
+    sections: [{ id: "prefs" }],
   },
   {
     id: "account",
     title: "accountTitle",
     sections: [
+      { id: "personal" },
       { id: "security", title: "profileAccountSecurity" },
+      { id: "devices", title: "activeDevicesTitle" },
       { id: "roles", title: "rolesTitle" },
       { id: "danger", title: "dangerZone" },
     ],
@@ -55,9 +80,15 @@ const TABS: TabDef[] = [
  * The tabs and sections this account has. Passes follow the personal nav's
  * rule (hidden for pure applicants); certificates and the public profile need
  * current event access, as their APIs do (#934, #1083). A tab with no
- * section left is dropped.
+ * section left is dropped. The help desk section follows the API's helper
+ * eligibility, so an accepted mentor can prepare it before confirmation,
+ * without event access (H61).
  */
-export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
+export function visibleProfileTabs(
+  me: Me,
+  isPureApplicant: boolean,
+  helperEligible = false,
+): TabDef[] {
   const visible = (id: ProfileSectionId) => {
     switch (id) {
       case "passes":
@@ -65,8 +96,12 @@ export function visibleProfileTabs(me: Me, isPureApplicant: boolean): TabDef[] {
       case "certificates":
       case "public":
         return me.hasEventAccess;
-      case "meals":
-        return me.isSponsorRep;
+      case "mentor":
+        return (me.hasEventAccess && canOfferHelp(me)) || helperEligible;
+      case "share":
+        return me.hasEventAccess;
+      case "rsvp":
+        return me.hasEventAccess;
       case "roles":
         return me.roles.length > 0;
       default:

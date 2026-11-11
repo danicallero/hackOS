@@ -8,6 +8,7 @@ import { audit } from "../../lib/audit.js";
 import { requireAnyCapability, requireCapability } from "../../lib/capabilities.js";
 import { BadRequestError, ConflictError, NotFoundError } from "../../lib/errors.js";
 import { routeAccessConfig as routeAccess } from "../../lib/route-policy.js";
+import { currentEventKey } from "../event/context.js";
 import { syncFieldLibraries } from "../form-libraries/service.js";
 import {
   lockRoleGraph,
@@ -136,6 +137,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
   const GRANTED_ROLE_NAME_EXPR = grantedRoleNameSql("applications", "granted_role_name");
   const COLUMNS = `id, name, template, sections, description, open_at, close_at,
                    capacity, confirmation_window_hours, ask_shirt_size, ask_food_intolerances,
+                   event_key, attendance_kind,
                    review_hidden_fields, current_form_version, created_at, ${GRANTS_ROLE_IDS_EXPR},
                    ${HAS_CONFIRMED_RESPONSES_EXPR}, ${GRANTED_ROLE_NAME_EXPR}`;
 
@@ -153,7 +155,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications`);
+      const { rows } = await pool.query(
+        `SELECT ${COLUMNS} FROM applications WHERE event_key=COALESCE((SELECT event_key FROM event_config WHERE id=1),'default')`,
+      );
       const invited = req.userId ? await isInvitedParticipant(pool, req.userId) : false;
       // One lookup for every closed form instead of one per form.
       const returnedDraftIds = new Set<number>();
@@ -188,9 +192,10 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       },
     },
     async (req) => {
-      const { rows } = await pool.query(`SELECT ${COLUMNS} FROM applications WHERE id = $1`, [
-        req.params.id,
-      ]);
+      const { rows } = await pool.query(
+        `SELECT ${COLUMNS} FROM applications WHERE id = $1 AND event_key=COALESCE((SELECT event_key FROM event_config WHERE id=1),'default')`,
+        [req.params.id],
+      );
       const found = rows[0];
       if (!found) throw new NotFoundError("Application not open");
       if (!isWindowOpen(found)) {
@@ -215,7 +220,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "List every application form",
         description:
-          "Staff read of all application forms regardless of window state (H11), open or closed, for management/review/decision workflows.",
+          "Staff read of all application forms regardless of window state (H11), including edition key and attendance classification, for management/review/decision workflows.",
       },
     },
     async () => {
@@ -235,7 +240,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Get one application form",
         description:
-          "Staff read of a single form regardless of window state (H11). Includes `has_confirmed_responses` (H8) — true once any response reached confirmed, meaning further `grants_role_ids` edits only affect future confirmations, not past ones.",
+          "Staff read of a single form regardless of window state (H11), including its edition key and attendance classification. Includes `has_confirmed_responses` (H8) — true once any response reached confirmed, meaning further `grants_role_ids` edits only affect future confirmations, not past ones.",
         params: idParamSchema,
       },
     },
@@ -256,7 +261,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Create an application form",
         description:
-          "Defines a new application form (H11): its template, optional named sections that group template fields under a title/description, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`, and both must reference a defined section), open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
+          "Defines a current-edition application form (H11): its attendance_kind (participant, mentor or staff), template, optional named sections that group template fields under a title/description, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`, and both must reference a defined section), open/close window, capacity, confirmation window, whether it asks for a shirt size and/or dietary restrictions (H12, both off by default), and an optional `grants_role_ids` (H8) list of roles granted alongside ticket issuance when a response is confirmed. `grants_role_ids` is also the answer to 'what kind of application is this' — the legacy static `type` classification is retired; a returned form instead carries `granted_role_name`, derived live from the name of its highest-position granted role. Configuring a role into `grants_role_ids` is gated exactly like directly assigning that role (H8): the actor's highest assigned-role position must sit strictly above every requested role's position, and (unless they hold the wildcard) they must already possess every capability that role's own rows explicitly allow.",
         body: createApplicationSchema,
       },
     },
@@ -273,8 +278,9 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         const { rows } = await client.query(
           `INSERT INTO applications
              (name, template, sections, description, open_at, close_at, capacity,
-              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version)
-           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, 1)
+              confirmation_window_hours, ask_shirt_size, ask_food_intolerances, current_form_version,
+              event_key, attendance_kind)
+           VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, 1, $11, $12)
            RETURNING id`,
           [
             b.name,
@@ -287,6 +293,8 @@ export function registerAdminRoutes(app: FastifyInstance): void {
             b.confirmation_window_hours,
             b.ask_shirt_size,
             b.ask_food_intolerances,
+            await currentEventKey(client),
+            b.attendance_kind,
           ],
         );
         const applicationId = rows[0].id as number;
@@ -333,7 +341,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update an application form",
         description:
-          "Partial update of a form's template (library fields receive owned catalogue IDs; removing one requires its UUID in library_deletions and cascades its values), named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), the standard review view's hidden answers (`review_hidden_fields`, H13), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
+          "Partial update of a form's template (library fields receive owned catalogue IDs; removing one requires its UUID in library_deletions and cascades its values), named sections grouping template fields, ungrouped fields positioned after a section with `after_section_key` (mutually exclusive with `section_key`; references are validated against the merged template and sections even for partial updates), window, capacity, shirt-size/dietary-restriction toggles (H11, H12), attendance_kind (locked once a response is confirmed), the standard review view's hidden answers (`review_hidden_fields`, H13), or the roles granted on confirmation (`grants_role_ids`, H8). When a template field key changes, `field_renames` can explicitly map the old key to the new key; existing response values and file-sharing consent are copied to the new key only when the field kind is unchanged, while the old keys remain available to historical form versions. Fields omitted from the body are left unchanged; passing `grants_role_ids` replaces the full set of granted roles for the form (an empty array clears every grant). Adding a role to `grants_role_ids` requires the same role-mutation authority (position hierarchy + capability possession, H8) as assigning that role directly.",
         params: idParamSchema,
         body: updateApplicationSchema,
       },
@@ -347,6 +355,13 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         );
         const current = currentRows[0];
         if (!current) throw new NotFoundError("Application not found");
+        if (
+          b.attendance_kind !== undefined &&
+          b.attendance_kind !== current.attendance_kind &&
+          current.has_confirmed_responses
+        ) {
+          throw new ConflictError("Attendance kind is locked after the first confirmation");
+        }
 
         const schemaChanged = b.template !== undefined || b.sections !== undefined;
         if (!schemaChanged && b.field_renames?.length) {
@@ -393,6 +408,7 @@ export function registerAdminRoutes(app: FastifyInstance): void {
         if (b.ask_shirt_size !== undefined) put("ask_shirt_size", b.ask_shirt_size);
         if (b.ask_food_intolerances !== undefined)
           put("ask_food_intolerances", b.ask_food_intolerances);
+        if (b.attendance_kind !== undefined) put("attendance_kind", b.attendance_kind);
         if (b.review_hidden_fields !== undefined)
           put("review_hidden_fields", [...new Set(b.review_hidden_fields)], "::text[]");
 

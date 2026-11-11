@@ -1,7 +1,7 @@
 import "./env.js";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   assignRole,
   asUser,
@@ -10,10 +10,15 @@ import {
   createUserWithCapabilities,
   useTestApp,
 } from "../helpers.js";
+import { seedEventConfig } from "../rsvp-helpers.js";
 
 /** #933: sponsor meal plans, explicit dietary confirmation and pendingProfileTasks. */
 
 const getApp = useTestApp();
+
+beforeEach(async () => {
+  await seedEventConfig(await db());
+});
 
 async function db() {
   return (await import("../../src/db/pool.js")).pool;
@@ -48,6 +53,7 @@ async function meal(
   } = {},
 ): Promise<number> {
   const pool = await db();
+  await seedEventConfig(pool);
   const startsAt = new Date(Date.now() + (options.startsInHours ?? 72) * HOUR);
   const audiences = options.audiences ?? ["sponsor"];
   const { rows: schedule } = await pool.query(
@@ -64,6 +70,13 @@ async function meal(
   const { rows } = await pool.query(
     `INSERT INTO activities (name, category, schedule_id) VALUES ($1, $2, $3) RETURNING id`,
     [options.name ?? "Lunch", options.category ?? "meal", schedule[0].id],
+  );
+  // Meals are asked of sponsors through per-activity RSVP settings.
+  // An entry that no longer lists sponsors models a switched-off RSVP.
+  await pool.query(
+    `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
+     SELECT $1, event_key, $2, ARRAY['sponsor'] FROM event_config WHERE id = 1`,
+    [rows[0].id, audiences.includes("sponsor") || audiences.length === 0],
   );
   return rows[0].id;
 }
@@ -103,7 +116,10 @@ async function logisticsEvents(
   const events: { type: string; data: unknown }[] = [];
   sub.on("message", (_channel: string, message: string) => {
     const line = message.split("\n").find((l) => l.startsWith("data: "));
-    if (line) events.push(JSON.parse(line.slice("data: ".length)));
+    if (!line) return;
+    const event = JSON.parse(line.slice("data: ".length));
+    // The RSVP event is covered by the rsvps suite; this one pins the legacy meal event.
+    if (event.type === EVENTS.LOGISTICS_MEAL_PLAN_UPDATED) events.push(event);
   });
   await sub.subscribe(`sse:${config.SSE_NAMESPACE}:${SSE_TOPICS.LOGISTICS}`);
   try {
@@ -117,14 +133,14 @@ async function logisticsEvents(
 
 async function storedPlan(userId: number): Promise<Record<number, boolean>> {
   const { rows } = await (await db()).query(
-    `SELECT activity_id, attending FROM meal_attendance_plans WHERE user_id = $1`,
+    `SELECT activity_id, attending FROM activity_rsvps WHERE user_id = $1`,
     [userId],
   );
   return Object.fromEntries(rows.map((r) => [r.activity_id, r.attending]));
 }
 
 describe("GET /api/me/meal-plan (#933)", () => {
-  it("lists upcoming sponsor meals only, flagging locked ones", async () => {
+  it("lists sponsor meals only, flagging locked ones", async () => {
     const sponsor = await attendee({ sponsor: true });
     const sponsorMeal = await meal({ name: "Sponsor lunch" });
     const sharedMeal = await meal({ name: "Dinner", audiences: ["participant", "sponsor"] });
@@ -134,7 +150,7 @@ describe("GET /api/me/meal-plan (#933)", () => {
     await meal({ name: "Participant lunch", audiences: ["participant"] });
     await meal({ name: "Unpublished", visibility: "hidden" });
     await meal({ name: "Workshop", category: "activity" });
-    await meal({ name: "Past", startsInHours: -5 });
+    const pastMeal = await meal({ name: "Past", startsInHours: -5 });
 
     const res = await (await getApp()).inject({
       method: "GET",
@@ -152,6 +168,7 @@ describe("GET /api/me/meal-plan (#933)", () => {
         m.attending,
       ]),
     ).toEqual([
+      [pastMeal, true, null],
       [soonMeal, true, null],
       [sponsorMeal, false, null],
       [sharedMeal, false, null],
@@ -159,14 +176,14 @@ describe("GET /api/me/meal-plan (#933)", () => {
   });
 
   it("rejects a caller who is not a sponsor representative", async () => {
-    const userId = await attendee();
+    const userId = await createUser();
     const res = await (await getApp()).inject({
       method: "GET",
       url: "/api/me/meal-plan",
       headers: asUser(userId),
     });
     expect(res.statusCode).toBe(403);
-    expect(res.json().error.details.code).toBe("not_sponsor");
+    expect(res.json().error.details.code).toBe("meal_plan_not_eligible");
   });
 });
 
@@ -193,7 +210,7 @@ describe("PUT /api/me/meal-plan (#933)", () => {
   });
 
   it("refuses non-sponsors, non-meal ids, incomplete payloads and locked changes", async () => {
-    const outsider = await attendee();
+    const outsider = await createUser();
     const sponsor = await attendee({ sponsor: true });
     const lunch = await meal();
     const soon = await meal({ startsInHours: 1 });
@@ -201,7 +218,7 @@ describe("PUT /api/me/meal-plan (#933)", () => {
 
     const forbidden = await putPlan(outsider, [{ activityId: lunch, attending: true }]);
     expect(forbidden.statusCode).toBe(403);
-    expect(forbidden.json().error.details.code).toBe("not_sponsor");
+    expect(forbidden.json().error.details.code).toBe("meal_plan_not_eligible");
 
     for (const notOffered of [workshop, 999_999]) {
       const res = await putPlan(sponsor, [
@@ -243,16 +260,14 @@ describe("PUT /api/me/meal-plan (#933)", () => {
     expect(await storedPlan(sponsor)).toEqual({ [lunch]: false });
   });
 
-  it("ignores meals that ended or stopped being offered since the list was loaded", async () => {
+  it("ignores meals that stopped being offered since the list was loaded", async () => {
     const sponsor = await attendee({ sponsor: true });
     const lunch = await meal();
-    const ended = await meal({ startsInHours: -5 });
     const withdrawn = await meal({ audiences: ["participant"] });
     const staffOnly = await meal({ audiences: [] });
 
     const res = await putPlan(sponsor, [
       { activityId: lunch, attending: true },
-      { activityId: ended, attending: true },
       { activityId: withdrawn, attending: true },
       { activityId: staffOnly, attending: false },
     ]);
@@ -322,22 +337,22 @@ describe("PUT /api/me/meal-plan (#933)", () => {
     const first = await putPlan(sponsor, [{ activityId: lunch, attending: true }], key);
     expect(first.statusCode).toBe(200);
     const { rows: before } = await (await db()).query(
-      `SELECT updated_at FROM meal_attendance_plans WHERE user_id = $1`,
+      `SELECT updated_at FROM activity_rsvps WHERE user_id = $1`,
       [sponsor],
     );
     const replay = await putPlan(sponsor, [{ activityId: lunch, attending: true }], key);
     expect(replay.statusCode).toBe(200);
     expect(replay.json()).toEqual(first.json());
     const { rows: after } = await (await db()).query(
-      `SELECT updated_at FROM meal_attendance_plans WHERE user_id = $1`,
+      `SELECT updated_at FROM activity_rsvps WHERE user_id = $1`,
       [sponsor],
     );
     expect(after).toEqual(before);
 
-    // The logistics topic sequence advanced exactly once for the two calls.
+    // The logistics topic sequence advanced once per event (RSVP + meal plan) for the first call only.
     const { broadcast } = await import("../../src/lib/sse.js");
     const probe = await broadcast(SSE_TOPICS.LOGISTICS, "test.probe", {});
-    expect(Number(probe?.id)).toBe(2);
+    expect(Number(probe?.id)).toBe(3);
   });
 });
 
@@ -621,6 +636,6 @@ describe("meal plan privacy (#933, H54)", () => {
         requestedAction: "anonymize",
       }),
     ).resolves.toMatchObject({ status: "completed", anonymized: true });
-    expect((await pool.query(`SELECT 1 FROM meal_attendance_plans`)).rowCount).toBe(0);
+    expect((await pool.query(`SELECT 1 FROM activity_rsvps`)).rowCount).toBe(0);
   });
 });

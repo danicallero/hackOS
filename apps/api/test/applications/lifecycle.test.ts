@@ -553,6 +553,99 @@ describe("review + decide (H13, H14)", () => {
     expect(reverted.confirmation_token_id).toBeNull();
   });
 
+  it("rejection reason: hidden from the applicant until sent, then in the email (H14)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await submittedApplicant(appId);
+
+    const decide = await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    expect(decide.statusCode).toBe(200);
+    expect((await getResponse(responseId)).rejection_reason).toBeNull();
+
+    const setReason = (reason: string | null) =>
+      a.inject({
+        method: "PATCH",
+        url: `/api/responses/${responseId}/rejection-reason`,
+        headers: asUser(decider),
+        payload: { reason },
+      });
+    expect((await setReason("  First draft  ")).statusCode).toBe(200);
+    expect((await setReason("  Incomplete answers  ")).statusCode).toBe(200);
+    expect((await getResponse(responseId)).rejection_reason).toBe("Incomplete answers");
+    const unauthorized = await a.inject({
+      method: "PATCH",
+      url: `/api/responses/${responseId}/rejection-reason`,
+      headers: asUser(reviewer),
+      payload: { reason: "nope" },
+    });
+    expect(unauthorized.statusCode).toBe(403);
+
+    const mine = async () =>
+      (
+        await a.inject({
+          method: "GET",
+          url: `/api/applications/${appId}/response`,
+          headers: asUser(userId),
+        })
+      ).json();
+    const before = await mine();
+    expect(before.status).toBe("review");
+    expect(before.rejection_reason).toBeNull();
+
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    const after = await mine();
+    expect(after.status).toBe("rejected");
+    expect(after.rejection_reason).toBe("Incomplete answers");
+
+    const { rows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].payload.vars.rejectionDetails).toContain("Incomplete answers");
+    // Once sent, the reason can no longer be edited.
+    expect((await setReason("late edit")).statusCode).toBe(409);
+
+    // Going back to review drops the reason.
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/revert-decision`,
+      headers: asUser(decider),
+      payload: { decision: "review" },
+    });
+    expect((await getResponse(responseId)).rejection_reason).toBeNull();
+  });
+
+  it("rejection without a reason sends the plain rejection email (H14)", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const { userId, responseId } = await submittedApplicant(appId);
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/decide`,
+      headers: asUser(decider),
+      payload: { decision: "rejected" },
+    });
+    await a.inject({
+      method: "POST",
+      url: `/api/responses/${responseId}/send-decision`,
+      headers: asUser(decider),
+    });
+    const { rows } = await pool.query(
+      `SELECT payload FROM notification_outbox WHERE user_id = $1`,
+      [userId],
+    );
+    expect(rows[0].payload.vars.rejectionDetails).toBe("");
+  });
+
   it("capacity guard: accepting past capacity is a 409", async () => {
     const a = await getApp();
     const appId = await createApplication({ capacity: 1 });
@@ -677,7 +770,7 @@ describe("confirm / decline (H15)", () => {
     expect(rows).toHaveLength(0);
   });
 
-  it("confirms via the public token, issues a permanent ticket, double-confirm is idempotent", async () => {
+  it("confirms via the public token, issues a permanent ticket, same-key retry is idempotent", async () => {
     const a = await getApp();
     const appId = await createApplication();
     const { userId, responseId } = await toAcceptedSent(appId);
@@ -686,6 +779,7 @@ describe("confirm / decline (H15)", () => {
     const first = await a.inject({
       method: "POST",
       url: "/api/applications/confirm",
+      headers: { "idempotency-key": "confirm-once" },
       payload: { token },
     });
     expect(first.statusCode).toBe(200);
@@ -703,11 +797,21 @@ describe("confirm / decline (H15)", () => {
     const second = await a.inject({
       method: "POST",
       url: "/api/applications/confirm",
+      headers: { "idempotency-key": "confirm-once" },
       payload: { token },
     });
     expect(second.statusCode).toBe(200);
-    expect(second.json().already_confirmed).toBe(true);
+    expect(second.json().already_confirmed).toBe(false);
+    expect(second.headers["idempotency-replayed"]).toBe("true");
     expect(second.json().ticket_token).toBe(first.json().ticket_token);
+
+    const used = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token },
+    });
+    expect(used.statusCode).toBe(409);
+    expect(used.json().error.details.code).toBe("confirmation_used");
   });
 
   it("hands the email-link confirm a scoped wallet credential, not a session (issue #369)", async () => {
@@ -738,13 +842,81 @@ describe("confirm / decline (H15)", () => {
     );
     expect(rows[0]).toMatchObject({ user_id: userId, purpose: "ticket" });
 
-    // A second click mints a fresh one rather than reviving the first.
+    // Replaying the bearer token cannot mint another wallet credential.
     const again = await a.inject({
       method: "POST",
       url: "/api/applications/confirm",
       payload: { token },
     });
-    expect(again.json().wallet_token).not.toBe(body.wallet_token);
+    expect(again.statusCode).toBe(409);
+    expect(again.json().error.details.code).toBe("confirmation_used");
+  });
+
+  it("rejects email mismatch and prevents either link action reversing the other", async () => {
+    const a = await getApp();
+    const appId = await createApplication();
+    const first = await toAcceptedSent(appId);
+    const firstToken = await latestConfirmationToken(first.userId);
+    await pool.query(
+      "UPDATE email_verification_tokens SET type = 'primary_email' WHERE token = $1",
+      [firstToken],
+    );
+    const wrongPurpose = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: firstToken },
+    });
+    expect(wrongPurpose.statusCode).toBe(404);
+    await pool.query(
+      "UPDATE email_verification_tokens SET type = 'spot_confirmation' WHERE token = $1",
+      [firstToken],
+    );
+    await pool.query(
+      "UPDATE email_verification_tokens SET email = 'other@example.org' WHERE token = $1",
+      [firstToken],
+    );
+    const mismatch = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: firstToken },
+    });
+    expect(mismatch.statusCode).toBe(404);
+    expect((await getResponse(first.responseId)).status).toBe("accepted");
+    await pool.query(
+      "UPDATE email_verification_tokens SET email = (SELECT email FROM users WHERE id = $1) WHERE token = $2",
+      [first.userId, firstToken],
+    );
+    const confirmed = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: firstToken },
+    });
+    expect(confirmed.statusCode).toBe(200);
+    const reverse = await a.inject({
+      method: "POST",
+      url: "/api/applications/decline",
+      payload: { token: firstToken },
+    });
+    expect(reverse.statusCode).toBe(409);
+    expect(reverse.json().error.details.code).toBe("confirmation_used");
+    expect((await getResponse(first.responseId)).status).toBe("confirmed");
+
+    const second = await toAcceptedSent(appId);
+    const secondToken = await latestConfirmationToken(second.userId);
+    const declined = await a.inject({
+      method: "POST",
+      url: "/api/applications/decline",
+      payload: { token: secondToken },
+    });
+    expect(declined.statusCode).toBe(200);
+    const confirmAfterDecline = await a.inject({
+      method: "POST",
+      url: "/api/applications/confirm",
+      payload: { token: secondToken },
+    });
+    expect(confirmAfterDecline.statusCode).toBe(409);
+    expect(confirmAfterDecline.json().error.details.code).toBe("confirmation_used");
+    expect((await getResponse(second.responseId)).status).toBe("declined");
   });
 
   it("confirms via authenticated owner (web), and blocks confirming someone else's", async () => {
@@ -919,7 +1091,7 @@ describe("confirm / decline (H15)", () => {
       headers: asUser(decider),
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json().confirm_url).toMatch(/^\/applications\/confirm\?token=/);
+    expect(res.json().confirm_url).toMatch(/^\/applications\/confirm#token=/);
     expect(typeof res.json().expires_at).toBe("string");
   });
 
@@ -933,8 +1105,8 @@ describe("confirm / decline (H15)", () => {
     );
     expect(outbox).toHaveLength(1);
     const details = outbox[0].payload.vars.decisionDetails;
-    expect(details).toMatch(/http:\/\/localhost:3001\/applications\/confirm\?token=/);
-    expect(details).toMatch(/http:\/\/localhost:3001\/applications\/decline\?token=/);
+    expect(details).toMatch(/http:\/\/localhost:3001\/applications\/confirm#token=/);
+    expect(details).toMatch(/http:\/\/localhost:3001\/applications\/decline#token=/);
     expect(details).toMatch(/please let us know/);
   });
 
@@ -970,7 +1142,7 @@ describe("confirm / decline (H15)", () => {
   it("parallel confirms of the same response settle to one confirmed ticket", async () => {
     const a = await getApp();
     const appId = await createApplication();
-    const { userId } = await toAcceptedSent(appId);
+    const { userId, responseId } = await toAcceptedSent(appId);
     const token = await latestConfirmationToken(userId);
 
     const results = await Promise.all(
@@ -978,11 +1150,17 @@ describe("confirm / decline (H15)", () => {
         a.inject({ method: "POST", url: "/api/applications/confirm", payload: { token } }),
       ),
     );
-    expect(results.every((r) => r.statusCode === 200)).toBe(true);
+    expect(results.filter((r) => r.statusCode === 200)).toHaveLength(1);
+    expect(results.filter((r) => r.statusCode === 409)).toHaveLength(4);
     const { rows } = await pool.query(`SELECT count(*)::int AS n FROM tickets WHERE user_id = $1`, [
       userId,
     ]);
     expect(rows[0].n).toBe(1);
+    const auditRows = await pool.query(
+      "SELECT count(*)::int AS n FROM audit_log WHERE entity_type = 'application_response' AND entity_id = $1 AND action = 'confirmed'",
+      [responseId],
+    );
+    expect(auditRows.rows[0].n).toBe(1);
   });
 
   it("decline via public token transitions from accepted and preserves ticket", async () => {
@@ -1037,8 +1215,8 @@ describe("confirm / decline (H15)", () => {
       url: "/api/applications/decline",
       payload: { token },
     });
-    expect(r2.statusCode).toBe(200);
-    expect(r2.json().already_declined).toBe(true);
+    expect(r2.statusCode).toBe(409);
+    expect(r2.json().error.details.code).toBe("confirmation_used");
   });
 });
 
@@ -1180,7 +1358,7 @@ describe("re-accept (admin)", () => {
       true,
     );
     const email = outbox.slice(-3).find((row) => row.channel === "email");
-    expect(email?.payload.vars.decisionDetails).toContain("/applications/confirm?token=");
+    expect(email?.payload.vars.decisionDetails).toContain("/applications/confirm#token=");
 
     const inbox = await a.inject({
       method: "GET",
@@ -1705,8 +1883,8 @@ describe("email confirmation deadline", () => {
     expect(rendered.text).toContain(formattedDeadline);
     expect(rendered.text).toContain(action);
     expect(rendered.text).not.toContain("{{");
-    expect(rendered.html).toContain("/applications/confirm?token=");
-    expect(rendered.html).toContain("/applications/decline?token=");
+    expect(rendered.html).toContain("/applications/confirm#token=");
+    expect(rendered.html).toContain("/applications/decline#token=");
     expect(rendered.text.indexOf(deadline)).toBeLessThan(rendered.text.indexOf(action));
     if (language !== "en") {
       expect(rendered.text).not.toContain("accepted");

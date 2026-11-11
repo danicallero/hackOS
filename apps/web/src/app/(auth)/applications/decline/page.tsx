@@ -1,9 +1,8 @@
 "use client";
 
 // Public spot-decline landing page (H15). The acceptance email links here with
-// ?token=… (service.ts builds ${WEB_URL}/applications/decline?token=…) so an
-// applicant who can't make it frees their spot in one click — no sign-in
-// required. A second click is idempotent (already_declined).
+// #token=… so a link scanner's GET cannot release a place. The visitor must
+// press the button; the bearer token is sent in the POST body.
 
 import { CalendarXIcon } from "@phosphor-icons/react/dist/csr/CalendarX";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
@@ -13,6 +12,7 @@ import { Suspense } from "react";
 import { Spinner } from "@/components/common/spinner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEmailLinkToken } from "@/hooks/use-email-link-token";
 import { useLocale } from "@/lib/i18n";
 import { isDeclineExpiredError, useTokenAction } from "../lib";
 
@@ -22,7 +22,7 @@ interface DeclineResult {
 }
 
 function DeclineInner() {
-  const token = useSearchParams().get("token");
+  const token = useEmailLinkToken(useSearchParams().get("token"));
   const { t } = useLocale();
   const {
     state,
@@ -37,6 +37,34 @@ function DeclineInner() {
     invalidLinkMessage: t("confirmationLinkInvalidDesc"),
     fallbackMessage: t("declineFailed"),
   });
+
+  if (state === "ready" || state === "used") {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {state === "used" ? t("confirmationLinkUsedTitle") : t("releaseYourPlace")}
+          </CardTitle>
+          <CardDescription>
+            {state === "used" ? t("confirmationLinkUsedDesc") : t("releaseEmailPlaceDesc")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {state === "ready" && (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!token}
+              onClick={() => void submit()}
+            >
+              {t("yesReleaseMyPlace")}
+            </Button>
+          )}
+          {!token && <p role="alert">{t("confirmationLinkInvalidDesc")}</p>}
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (state === "loading") {
     return (

@@ -405,6 +405,11 @@ surfaces — never from stacking rounded rectangles around every region.
   their content width and parent header/navigation tracks. Route-specific titles
   and controls sit below them. The app reserves its scrollbar gutter so a long
   list does not shift the shared header horizontally.
+- **Shell notices are inline, not strips.** Verify-email and finish-onboarding
+  notices (`ShellBanner`) open the content canvas as a bordered notice on the
+  page gutters, level with the floating sidebar's top edge; the page continues
+  below. They are never a full-bleed band glued to the viewport edge, which the
+  rounded floating sidebar would visibly cut off.
 - **Curvature follows ownership.** Fields use the 6 px control radius and
   buttons use the pill radius; inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
   12 px; overlays use their token-backed 8 px radius. A rounded edge signals a
@@ -608,9 +613,9 @@ canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
 or a side editor. Libraries and Profile and account (`/settings/profile`) use the 896 px reading canvas;
 project details and event settings use the 1280 px content canvas. Profile and account
-(H28, #1083) is four content-width tabs: Personal details (photo, fields, meals), Public
-profile, Wallet (ticket and badge, certificates) and Account (email/password/GitHub rows,
-roles, danger zone). Each is a run of open sections divided by hairlines; a section the tab
+(H28, #1083) is content-width tabs: Public profile, Mentoring, Attendance (RSVPs), Wallet (ticket and badge,
+certificates) and Account (personal details with photo and meals, email/password/GitHub rows,
+roles, danger zone). A single-line control is never paired in a row with a `Textarea` (its 64 px minimum is a separate token, so the two edges never line up): the dietary select and notes stack. Account is identity and sign-in (photo, names, email, security, active devices, roles, danger zone); Preferences holds language, shirt size and dietary answers. Account and Public profile lead with the same identity row (photo, name, email). Public profile keeps its fields in view while sharing is off, disabled, so people see what sharing would show; the master switch is a bordered row and the visibility switches a quiet divided list. Each is a run of open sections divided by hairlines; a section the tab
 label already names has no heading of its own; never a second navigation rail beside the app sidebar. Ticket and badge are the
 only bounded objects. Each editable section owns its `FormActions` (sticky only for the long
 public profile); tabs stay mounted while hidden, so switching keeps drafts, and a tab with

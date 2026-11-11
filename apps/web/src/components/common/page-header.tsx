@@ -61,7 +61,8 @@ export function PageHeader({
       <div
         className={cn(
           "flex min-w-0 items-start gap-(--space-related) md:pl-0",
-          reserveNavigation && "pl-12",
+          // The sidebar control sits beside a shell notice when one is shown, not over the title.
+          reserveNavigation && "pl-12 group-has-[[data-shell-notice]]/shell:pl-0 md:pl-0",
         )}
       >
         {leading && <div className="shrink-0">{leading}</div>}

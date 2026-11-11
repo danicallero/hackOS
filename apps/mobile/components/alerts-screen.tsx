@@ -200,6 +200,7 @@ export default function AlertsScreen() {
 const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: boolean }) {
   const { t, language } = useLocale();
   const readable = useParticipantLayout("list");
+  const router = useRouter();
   const { me } = useMeContext();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [actionError, setActionError] = useState<Error | null>(null);
@@ -349,7 +350,18 @@ const MessagesView = memo(function MessagesView({ unreadOnly }: { unreadOnly: bo
     else void markRead(item);
   }
 
+  // H64-H66: a help desk notification opens its request instead of expanding.
+  function openHelpRequest(item: InboxItem) {
+    const requestId = Number((item.payload as Record<string, unknown> | null)?.requestId);
+    if (!Number.isSafeInteger(requestId) || requestId <= 0) return false;
+    if (!item.read_at) void markRead(item);
+    router.dismiss();
+    router.navigate({ pathname: "/(tabs)/help-desk/request/[id]", params: { id: requestId } });
+    return true;
+  }
+
   function toggleExpanded(item: InboxItem) {
+    if (item.category === "helpdesk" && openHelpRequest(item)) return;
     const wasExpanded = expanded.has(item.id);
     setExpanded((current) => {
       const next = new Set(current);
@@ -888,7 +900,7 @@ function NotificationRow({
   const { t } = useLocale();
   const subject = payloadField(item.payload, "subject") ?? categoryLabel(item.category, t);
   const body = payloadField(item.payload, "body");
-  const details = payloadDetails(item.payload, t);
+  const details = item.category === "helpdesk" ? [] : payloadDetails(item.payload, t);
   const unread = !item.read_at;
   // The swipe gesture and the row's own tap-to-expand Pressable both listen
   // on the same touch: without this guard, releasing a swipe (even one that
@@ -1115,5 +1127,6 @@ function payloadDetailLabel(key: string, t: ReturnType<typeof useLocale>["t"]): 
 function categoryLabel(category: string, t: ReturnType<typeof useLocale>["t"]) {
   if (category === "announcements") return t("notificationsAnnouncements");
   if (category === "schedule") return t("notificationsActivityReminders");
+  if (category === "helpdesk") return t("helpDesk");
   return t("notificationsApplications");
 }

@@ -5,6 +5,7 @@ import {
   OVERFLOW_TAB_LABEL_KEY,
   OVERFLOW_TAB_ROUTE,
 } from "./overflow-tabs";
+import { tabPresentation } from "./tab-presentation";
 import {
   canManageSchedule,
   canManageStands,
@@ -189,5 +190,29 @@ describe("schedule read/manage split (H48, H59)", () => {
 
   it("does not add a tab for a read-only holder; the schedule tab is already public", () => {
     expect(visibleTabs([CAPABILITIES.SCHEDULE_READ])).toEqual(visibleTabs([]));
+  });
+
+  it("gives any help desk capability a direct tab ahead of Contacts (H61-H67)", () => {
+    for (const capability of [
+      CAPABILITIES.HELPDESK_REQUEST,
+      CAPABILITIES.HELPDESK_OFFER,
+      CAPABILITIES.HELPDESK_COVERAGE,
+    ]) {
+      expect(visibleTabs([capability])).toEqual([
+        "schedule",
+        "queue",
+        "help-desk",
+        "diary",
+        "account",
+      ]);
+    }
+    expect(visibleTabs([CAPABILITIES.HELPDESK_MANAGE])).not.toContain("help-desk");
+  });
+  it("keeps the scanner direct and moves Contacts behind Others when the bar is tight", () => {
+    const capabilities = [CAPABILITIES.ACCREDIT_SCAN, CAPABILITIES.HELPDESK_OFFER];
+    const result = tabPresentation(capabilities, { hasQueueItems: false }, 4, 5);
+    expect(result.visible).toEqual(["schedule", "scan", "help-desk", "queue"]);
+    expect(result.visible).toContain("scan");
+    expect(result.overflow).toContain("diary");
   });
 });

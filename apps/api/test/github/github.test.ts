@@ -306,6 +306,26 @@ describe("account link", () => {
     });
   });
 
+  it("asks GitHub to let the member pick another account when relinking", async () => {
+    const server = await getApp();
+    const userId = await createUser();
+    const authorize = async (payload: object) =>
+      new URL(
+        (
+          await server.inject({
+            method: "POST",
+            url: "/api/me/github/authorize",
+            headers: { ...asUser(userId), "idempotency-key": crypto.randomUUID() },
+            payload,
+          })
+        ).json().url,
+      );
+    expect((await authorize({})).searchParams.get("prompt")).toBeNull();
+    expect((await authorize({ selectAccount: true })).searchParams.get("prompt")).toBe(
+      "select_account",
+    );
+  });
+
   it("shows the linked status and unlinks with audit", async () => {
     const server = await getApp();
     const userId = await createUser();

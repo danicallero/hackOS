@@ -24,10 +24,11 @@ import { getEventTimezone } from "../../event/service.js";
 import { languageSchema } from "../../logistics/schemas.js";
 import { reconcileTicketAccess } from "../../logistics/tickets.js";
 import { enqueueWalletSync } from "../../logistics/wallet-sync.js";
+import { readOnboarding } from "../../onboarding/service.js";
 import { canCreateMyProject, hasMyProject, myProjects } from "../../projects/service.js";
 import { hasMyQueueItems } from "../../queue/reads.js";
+import { attendanceKind } from "../attendance.js";
 import { getBetterAuthSessionToken } from "../auth.js";
-import { hasPendingMealPlan } from "../meal-plan.js";
 import {
   cancelPendingAccountRemoval,
   getAccountRemovalEligibility,
@@ -458,10 +459,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "accounts (H55), whether they currently hold role-derived event access, whether they have a project/queue entry of their own " +
           "(drives hiding the My project/My queue nav items, issue #424), mobile " +
           "entry eligibility, and the caller's complete assigned-role set (H8) alongside " +
-          "the single highest-visible `visibleRoleName` shown elsewhere. `pendingProfileTasks` " +
+          "the single highest-visible `visibleRoleName` shown elsewhere. `attendanceKind` is derived from current-edition evidence, with participant confirmation taking precedence over mentor, sponsor and staff. `pendingProfileTasks` " +
           "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
           "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
-          "has an open offered meal without an answer. `eventTimezone` (H45/H47) is the event's IANA timezone: web and mobile show and accept every date and time in that zone, not the device's. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "has an open offered meal without an answer. `pendingRsvps` is true for any unanswered, unlocked offered activity or meal and drives the general RSVP prompt on current clients. `eventTimezone` (H45/H47) is the event's IANA timezone: web and mobile show and accept every date and time in that zone, not the device's. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -508,6 +509,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             hasStatisticsPanels: z.boolean(),
             // #933: profile data the client should ask for on next entry.
             pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
+            pendingRsvps: z.boolean(),
             // H51: people with event access are asked once, on web and mobile,
             // which channels reach them (email is opt-in for queue, reminders
             // and challenges); false once answered on any device.
@@ -516,6 +518,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             // show or accept is this wall clock, never the device's; readable by
             // any signed-in account (no capability), unlike GET /api/event.
             eventTimezone: z.string(),
+            attendanceKind: z.enum(["participant", "mentor", "sponsor", "staff"]).nullable(),
           }),
         },
       },
@@ -537,6 +540,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           roles,
           eventAccess,
           eventTimezone,
+          currentAttendanceKind,
         ] = await Promise.all([
           getEffectiveCapabilities(createAuthorizationContext(userId, client)),
           computeMembershipFlags(client, userId),
@@ -571,6 +575,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           getAssignedRoles(client, userId),
           hasEventAccess(client, userId),
           getEventTimezone(client),
+          attendanceKind(client, userId),
         ]);
         const pendingProfileTasks: (typeof PENDING_PROFILE_TASKS)[number][] = [];
         // H7: after acceptance dietary data may be written once; any recorded answer
@@ -578,10 +583,15 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         const dietaryLocked =
           profileLocked &&
           (row.dietary_confirmed_at !== null || row.dietary_data_state === "present");
-        if (eventAccess && !dietaryLocked && row.dietary_confirmed_at === null) {
+        const onboarding = await readOnboarding(client, userId);
+        if (
+          eventAccess &&
+          !dietaryLocked &&
+          onboarding.steps.some((step) => step.step === "dietary" && step.status === "pending")
+        ) {
           pendingProfileTasks.push("dietary");
         }
-        if (membership.isSponsorRep && (await hasPendingMealPlan(client, userId))) {
+        if (eventAccess && membership.isSponsorRep && onboarding.pendingMealRsvps) {
           pendingProfileTasks.push("meal_plan");
         }
         return {
@@ -598,8 +608,10 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           dietaryLocked,
           hasStatisticsPanels,
           pendingProfileTasks,
+          pendingRsvps: eventAccess && onboarding.facts.openRsvps,
           notificationOnboardingRequired: eventAccess && row.notification_onboarded_at === null,
           eventTimezone,
+          attendanceKind: currentAttendanceKind,
         };
       });
       return profile;
@@ -1005,6 +1017,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             isSponsorRep: z.boolean(),
             capabilities: z.array(z.string()),
             roles: z.array(assignedRoleSchema),
+            attendanceKind: z.enum(["participant", "mentor", "sponsor", "staff"]).nullable(),
           }),
         },
       },
@@ -1012,14 +1025,21 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     async (req) => {
       await assertProfileSubjectScope(req.userId as number, req.params.id);
       const row = await fetchUser(pool, req.params.id);
-      const [visibleRoleName, capabilities, allRoles, canSeeSuperadmin, membership] =
-        await Promise.all([
-          getHighestVisibleRoleName(pool, req.params.id),
-          getEffectiveCapabilities(createAuthorizationContext(req.params.id)),
-          getAssignedRoles(pool, req.params.id),
-          userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.PERMISSIONS_MANAGE),
-          computeMembershipFlags(pool, req.params.id),
-        ]);
+      const [
+        visibleRoleName,
+        capabilities,
+        allRoles,
+        canSeeSuperadmin,
+        membership,
+        currentAttendanceKind,
+      ] = await Promise.all([
+        getHighestVisibleRoleName(pool, req.params.id),
+        getEffectiveCapabilities(createAuthorizationContext(req.params.id)),
+        getAssignedRoles(pool, req.params.id),
+        userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.PERMISSIONS_MANAGE),
+        computeMembershipFlags(pool, req.params.id),
+        attendanceKind(pool, req.params.id),
+      ]);
       // H8: system:superadmin is CLI-only and never advertised to a staff
       // viewer browsing someone else's profile unless they themselves manage
       // permissions — it carries no operational meaning to an ordinary
@@ -1033,6 +1053,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
         visibleRoleName,
         capabilities: [...capabilities],
         roles,
+        attendanceKind: currentAttendanceKind,
       };
     },
   );

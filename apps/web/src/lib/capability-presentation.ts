@@ -1,4 +1,4 @@
-import { ALL_CAPABILITIES } from "@hackos/shared/capabilities";
+import { ALL_CAPABILITIES, CAPABILITIES } from "@hackos/shared/capabilities";
 import type { MessageKey, Translate } from "@/lib/i18n";
 import { normalizeSearchText } from "./search-text";
 
@@ -29,6 +29,10 @@ export function prettifyCapability(cap: string, t: Translate): string {
  * same content under these keys (see `packages/shared/locales/*\/web.json`).
  */
 const CAPABILITY_DESCRIPTION_KEYS: Partial<Record<string, MessageKey>> = {
+  [CAPABILITIES.HELPDESK_OFFER]: "capabilityDescriptionHelpdeskOffer",
+  [CAPABILITIES.HELPDESK_REQUEST]: "capabilityDescriptionHelpdeskRequest",
+  [CAPABILITIES.HELPDESK_COVERAGE]: "capabilityDescriptionHelpdeskCoverage",
+  [CAPABILITIES.HELPDESK_MANAGE]: "capabilityDescriptionHelpdeskManage",
   "*": "capabilityDescriptionAdminAll",
   "users:read": "capabilityDescriptionUsersRead",
   "users:write": "capabilityDescriptionUsersWrite",

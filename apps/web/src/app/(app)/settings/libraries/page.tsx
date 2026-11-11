@@ -17,23 +17,34 @@ import { useCan } from "@/lib/session";
 import { useUrlTab } from "@/lib/url-tab";
 import { DegreesManager } from "./degrees-manager";
 import { IntolerancesManager } from "./intolerances-manager";
+import { KnowledgeManager } from "./knowledge-manager";
 import { ShirtSizesManager } from "./shirt-sizes-manager";
 import { UniversitiesManager } from "./universities-manager";
 
 export default function LibrariesSettingsPage() {
   const { t } = useLocale();
   const canManage = useCan(CAPABILITIES.INTOLERANCES_MANAGE);
+  const canManageKnowledge = useCan(CAPABILITIES.HELPDESK_MANAGE);
 
-  if (!canManage) return <AccessDenied ask={t("noLibrariesAccessDesc")} />;
+  if (!canManage && !canManageKnowledge) return <AccessDenied ask={t("noLibrariesAccessDesc")} />;
 
-  return <LibrariesSettingsContent />;
+  return <LibrariesSettingsContent catalogues={canManage} knowledge={canManageKnowledge} />;
 }
 
-function LibrariesSettingsContent() {
+function LibrariesSettingsContent({
+  catalogues,
+  knowledge,
+}: {
+  catalogues: boolean;
+  knowledge: boolean;
+}) {
   const { t } = useLocale();
   const { tab, setTab } = useUrlTab({
-    values: ["intolerances", "shirt-sizes", "universities", "degrees"] as const,
-    defaultValue: "intolerances",
+    values: [
+      ...(catalogues ? (["intolerances", "shirt-sizes", "universities", "degrees"] as const) : []),
+      ...(knowledge ? (["knowledge"] as const) : []),
+    ],
+    defaultValue: catalogues ? "intolerances" : "knowledge",
   });
   return (
     <PageLayout width="reading">
@@ -41,23 +52,37 @@ function LibrariesSettingsContent() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabBar>
-          <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
-          <TabsTrigger value="shirt-sizes">{t("shirtSizesGroup")}</TabsTrigger>
-          <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
-          <TabsTrigger value="degrees">{t("degreesTab")}</TabsTrigger>
+          {catalogues && (
+            <>
+              <TabsTrigger value="intolerances">{t("foodIntolerances")}</TabsTrigger>
+              <TabsTrigger value="shirt-sizes">{t("shirtSizesGroup")}</TabsTrigger>
+              <TabsTrigger value="universities">{t("universitiesTab")}</TabsTrigger>
+              <TabsTrigger value="degrees">{t("degreesTab")}</TabsTrigger>
+            </>
+          )}
+          {knowledge && <TabsTrigger value="knowledge">{t("knowledgeTab")}</TabsTrigger>}
         </TabBar>
-        <TabsContent value="intolerances" className="pt-2">
-          <IntolerancesManager />
-        </TabsContent>
-        <TabsContent value="shirt-sizes" className="pt-2">
-          <ShirtSizesManager />
-        </TabsContent>
-        <TabsContent value="universities" className="pt-2">
-          <UniversitiesManager />
-        </TabsContent>
-        <TabsContent value="degrees" className="pt-2">
-          <DegreesManager />
-        </TabsContent>
+        {catalogues && (
+          <>
+            <TabsContent value="intolerances" className="pt-2">
+              <IntolerancesManager />
+            </TabsContent>
+            <TabsContent value="shirt-sizes" className="pt-2">
+              <ShirtSizesManager />
+            </TabsContent>
+            <TabsContent value="universities" className="pt-2">
+              <UniversitiesManager />
+            </TabsContent>
+            <TabsContent value="degrees" className="pt-2">
+              <DegreesManager />
+            </TabsContent>
+          </>
+        )}
+        {knowledge && (
+          <TabsContent value="knowledge" className="pt-2">
+            <KnowledgeManager />
+          </TabsContent>
+        )}
       </Tabs>
     </PageLayout>
   );

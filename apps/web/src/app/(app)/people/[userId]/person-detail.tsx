@@ -8,9 +8,10 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { UserAvatar } from "@/components/common/user-avatar";
 import { CvViewer } from "@/components/profile/cv-viewer";
 import { SocialLinks } from "@/components/profile/social-links";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
@@ -18,7 +19,6 @@ import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { apiAssetUrl, type DirectoryEntry } from "@/lib/directory";
 import { type MessageKey, useLocale } from "@/lib/i18n";
-import { initials } from "@/lib/initials";
 import { useChallengeNames } from "../person-row";
 
 /** Singular and plural row labels per project kind. */
@@ -38,7 +38,6 @@ export function PersonDetail({ userId }: { userId: number }) {
 
 function PersonReader({ userId }: { userId: number }) {
   const { t } = useLocale();
-  const { nameOf } = useChallengeNames();
   const validId = Number.isSafeInteger(userId) && userId > 0;
   const {
     data: entry,
@@ -53,15 +52,7 @@ function PersonReader({ userId }: { userId: number }) {
   // Hidden and missing profiles share the 404, so both read as "not found".
   const missing = !validId || isNotFoundError(error);
 
-  const back = (
-    <Link
-      href="/people"
-      className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
-      {t("backToPeople")}
-    </Link>
-  );
+  const back = <ProfileBackLink href="/people" label={t("backToPeople")} />;
 
   if (!entry || missing) {
     return (
@@ -92,7 +83,71 @@ function PersonReader({ userId }: { userId: number }) {
     );
   }
 
+  return <PersonProfile entry={entry} context={back} />;
+}
+
+/** The labelled return link above a profile's name. */
+export function ProfileBackLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+      {label}
+    </Link>
+  );
+}
+
+/**
+ * A person's public profile as the people allowed to read it see it: the
+ * scanned-person page and the help desk's helper page (H63) render the same
+ * component, with their own context link and any extra sections as children.
+ */
+export function PersonProfile({
+  entry,
+  context,
+  children,
+  visibleRole,
+  company,
+  present,
+}: {
+  visibleRole?: string | null;
+  company?: { name: string; logoUrl: string | null };
+  present?: boolean;
+  entry: DirectoryEntry;
+  context: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const { nameOf } = useChallengeNames();
   const rows: { id: string; label: string; value: React.ReactNode }[] = [];
+  if (company)
+    rows.push({
+      id: "company",
+      label: t("helpDeskCompany"),
+      value: (
+        <div className="flex min-w-0 items-center gap-3">
+          {company.logoUrl ? (
+            // biome-ignore lint/performance/noImgElement: authenticated enterprise logo URL.
+            <img
+              src={apiAssetUrl(company.logoUrl)}
+              alt=""
+              className="size-10 shrink-0 object-contain"
+            />
+          ) : null}
+          <span className="wrap-anywhere">{company.name}</span>
+        </div>
+      ),
+    });
+  if (entry.helpTopics?.length)
+    rows.push({
+      id: "knowledge",
+      label: t("helpDeskKnowledge"),
+      value: (
+        <p className="wrap-anywhere">{entry.helpTopics.map((topic) => topic.name).join(" · ")}</p>
+      ),
+    });
   if (entry.socials.length > 0) {
     rows.push({
       id: "links",
@@ -141,20 +196,26 @@ function PersonReader({ userId }: { userId: number }) {
   return (
     <PageLayout width="reading">
       <PageHeader
-        context={back}
+        context={context}
         leading={
-          <Avatar className="size-16">
-            {entry.photoUrl && (
-              <AvatarImage src={apiAssetUrl(entry.photoUrl)} alt={entry.displayName} />
-            )}
-            <AvatarFallback className="text-lg">{initials(entry.displayName)}</AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            name={entry.displayName}
+            image={entry.photoUrl}
+            className="size-16"
+            fallbackClassName="text-lg"
+            showInitials
+            decorative
+            presenceLabel={present ? t("helpDeskPresent") : undefined}
+          />
         }
         title={entry.displayName}
         meta={
           entry.headline ? (
             <span className="text-muted-foreground wrap-anywhere text-sm">{entry.headline}</span>
           ) : undefined
+        }
+        secondaryActions={
+          visibleRole ? <Badge variant="secondary">{visibleRole}</Badge> : undefined
         }
         primaryAction={
           entry.cvUrl ? (
@@ -187,6 +248,7 @@ function PersonReader({ userId }: { userId: number }) {
           ))}
         </dl>
       )}
+      {children}
     </PageLayout>
   );
 }

@@ -51,7 +51,9 @@ export async function queueGroupFixtureMarker(
   );
   const enterpriseQuery = inspectFixtureEnterpriseScopeOfQueueGroup(client, queueGroupId);
   const roomsQuery = inspectFixtureRoomScopesOfQueueGroup(client, queueGroupId);
-  for (const pending of [markerQuery, enterpriseQuery, roomsQuery]) pending.catch(() => undefined);
+  // H53: rejected graph checks must not leave sibling reads running after the
+  // request ends (or into the next integration test's TRUNCATE).
+  await Promise.allSettled([markerQuery, enterpriseQuery, roomsQuery]);
 
   const { rows } = await markerQuery;
   const marker = rows[0];

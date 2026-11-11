@@ -1,7 +1,11 @@
 "use client";
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { capabilitiesByDomain, prettifyCapability } from "@/lib/capability-presentation";
+import {
+  capabilitiesByDomain,
+  capabilityDescription,
+  prettifyCapability,
+} from "@/lib/capability-presentation";
 import { type MessageKey, type Translate, useLocale } from "@/lib/i18n";
 import type { Me } from "@/lib/types";
 
@@ -48,23 +52,18 @@ export function ProfileRoles({ me }: { me: Me }) {
     .map((group) => ({
       ...group,
       capabilities: group.capabilities.filter(
-        (capability) =>
-          capability !== CAPABILITIES.ADMIN_ALL &&
-          (hasAllCapabilities || effectiveSet.has(capability)),
+        (capability) => capability !== CAPABILITIES.ADMIN_ALL && effectiveSet.has(capability),
       ),
     }))
     .filter((group) => group.capabilities.length > 0);
 
   return (
-    <div className="space-y-8">
+    <div className="@container space-y-6">
       <section className="space-y-2">
         <h3 className="type-label text-muted-foreground">{t("assignedRoles")}</h3>
-        <ul className="divide-y divide-border/60">
+        <ul className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
           {me.roles.map((role) => (
-            <li
-              key={role.id}
-              className="flex min-w-0 flex-wrap items-center gap-2 py-2.5 text-sm first:pt-0"
-            >
+            <li key={role.id} className="flex min-w-0 items-baseline gap-2">
               <span className="min-w-0 wrap-anywhere font-medium">{role.name}</span>
               {role.id === visibleRoleId && (
                 <span className="text-muted-foreground text-xs">{t("visibleRole")}</span>
@@ -75,20 +74,22 @@ export function ProfileRoles({ me }: { me: Me }) {
       </section>
       <section className="space-y-3">
         <h3 className="type-label text-muted-foreground">{t("effectiveCapabilities")}</h3>
-        {capabilityGroups.length === 0 ? (
+        {hasAllCapabilities ? (
+          <p className="text-sm">
+            <span className="font-medium">{t("allPermissionsLabel")}</span>
+            <span className="text-muted-foreground"> · {capabilityDescription("*", t)}</span>
+          </p>
+        ) : capabilityGroups.length === 0 ? (
           <p className="text-muted-foreground text-sm">{t("noCapabilities")}</p>
         ) : (
-          <dl className="divide-y divide-border/60">
+          <dl className="grid gap-x-8 gap-y-4 @xl:grid-cols-2">
             {capabilityGroups.map((group) => (
-              <div
-                key={group.domain}
-                className="grid gap-2 py-3 first:pt-0 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4"
-              >
+              <div key={group.domain} className="min-w-0 space-y-0.5">
                 <dt className="text-sm font-medium">{capabilityDomainLabel(group.domain, t)}</dt>
                 <dd>
-                  <ul className="space-y-1 text-sm">
+                  <ul className="text-muted-foreground space-y-0.5 text-sm text-pretty">
                     {group.capabilities.map((capability) => (
-                      <li key={capability}>{prettifyCapability(capability, t)}</li>
+                      <li key={capability}>{capabilityDescription(capability, t)}</li>
                     ))}
                   </ul>
                 </dd>

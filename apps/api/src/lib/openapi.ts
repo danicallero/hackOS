@@ -28,6 +28,7 @@ const TAG_DESCRIPTIONS: Record<string, string> = {
   exports: "Application and operational data exports (H54, H56).",
   directory: "Opt-in public participant profiles and their shared details (#934).",
   diary: "The attendee's saved people and sponsor stands (#935).",
+  helpdesk: "Helper profiles, knowledge topics, help requests and coverage (H61–H67).",
   reports: "Attendee content reports and the organiser moderation inbox (H18).",
   certificates:
     "Attendance certificates, their policy, issue, revocation and verification (#1083).",
@@ -57,6 +58,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   )
     return "certificates";
   if (pathMatchesPrefix(url, "/api/me/diary")) return "diary";
+  if (pathMatchesPrefix(url, "/api/me/helper-profile")) return "helpdesk";
   if (pathMatchesPrefix(url, "/api/me/live-activities")) return "live-activities";
   if (pathMatchesPrefix(url, "/api/me/projects")) return "projects";
   if (
@@ -140,6 +142,7 @@ function docsTagFor(url: string): keyof typeof TAG_DESCRIPTIONS {
   if (pathMatchesPrefix(url, "/api/enterprises")) return "enterprises";
   if (pathMatchesPrefix(url, "/api/sponsor-faq")) return "sponsors";
   if (pathMatchesPrefix(url, "/api/diary")) return "diary";
+  if (pathMatchesPrefix(url, "/api/helpdesk")) return "helpdesk";
   if (pathMatchesPrefix(url, "/api/event")) return "event";
   if (pathMatchesPrefix(url, "/api/exports")) return "exports";
   if (pathMatchesPrefix(url, "/api/directory")) return "directory";
@@ -225,6 +228,40 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
     security: [{ sessionToken: [] }, { bearerToken: [] }],
   });
 
+  addAuthOperation(paths, "/api/auth/list-sessions", "get", {
+    tags: ["auth"],
+    summary: "List my signed-in devices",
+    description:
+      "Every active session of the authenticated user (token, user agent, last activity), for the Active devices list in Profile and account.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+  });
+
+  addAuthOperation(paths, "/api/auth/revoke-session", "post", {
+    tags: ["auth"],
+    summary: "Sign out one device",
+    description: "Revokes one of the authenticated user's sessions, identified by its `token`.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["token"],
+            properties: { token: { type: "string" } },
+          },
+        },
+      },
+    },
+  });
+
+  addAuthOperation(paths, "/api/auth/revoke-other-sessions", "post", {
+    tags: ["auth"],
+    summary: "Sign out every other device",
+    description: "Revokes all of the authenticated user's sessions except the current one.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+  });
+
   addAuthOperation(paths, "/api/auth/request-password-reset", "post", {
     tags: ["auth"],
     summary: "Request password reset",
@@ -293,7 +330,8 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
   addAuthOperation(paths, "/api/auth/verify-email", "get", {
     tags: ["auth"],
     summary: "Verify email",
-    description: "Confirm email ownership with verification token.",
+    description:
+      "Read-only scanner-safe endpoint; returns 405. The web verification page submits the token deliberately to POST /api/auth/verify-email/confirm.",
     security: [],
     parameters: [
       {
@@ -303,6 +341,14 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
         schema: { type: "string" },
       },
     ],
+  });
+
+  addAuthOperation(paths, "/api/auth/verify-email/confirm", "post", {
+    tags: ["auth"],
+    summary: "Confirm email after user action",
+    description:
+      "Accepts the verification page's form POST from the configured web origin, invokes Better Auth's verification handler, and redirects to the safe callback. The token is sent in the body, never in the request URL.",
+    security: [],
   });
 
   openapiObject.paths = paths;

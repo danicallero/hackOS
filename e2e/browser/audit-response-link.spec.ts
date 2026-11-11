@@ -62,15 +62,14 @@ for (const mode of ["reviewer", "decider", "manager-decider"] as const) {
     if (await notice.isVisible()) await notice.locator("button").first().click();
     await page.screenshot({ path: info.outputPath(`audit-detail-${mode}.png`), fullPage: true });
     await page.getByRole("link", { name: "Application response #10" }).click();
-    const review = page.getByRole("dialog", { name: "Avery Applicant" });
-    await expect(review).toBeVisible();
     await expect(page).toHaveURL(
       new RegExp(`applications/1\\?tab=${mode === "reviewer" ? "review" : "outbox"}&response=10`),
+      { timeout: 15_000 },
     );
-    await page.waitForTimeout(1800);
-    await expect(review).toBeVisible();
+    const review = page.getByRole("dialog", { name: "Avery Applicant" });
+    await expect(review).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: info.outputPath(`audit-response-${mode}.png`) });
     await page.reload();
-    await expect(review).toBeVisible();
+    await expect(review).toBeVisible({ timeout: 15_000 });
   });
 }

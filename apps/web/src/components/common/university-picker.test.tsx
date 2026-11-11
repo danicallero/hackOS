@@ -123,10 +123,12 @@ describe("UniversityPicker proposals", () => {
     const user = await openAndSearch("New University");
     mockPost.mockRejectedValue(new ApiError(401, "unauthorized", "Unauthorized"));
 
-    await user.click(
-      [...container.querySelectorAll("button")].find((button) =>
-        button.textContent?.includes("addQuotedInline"),
-      ) as HTMLButtonElement,
+    await act(async () =>
+      user.click(
+        [...container.querySelectorAll("button")].find((button) =>
+          button.textContent?.includes("addQuotedInline"),
+        ) as HTMLButtonElement,
+      ),
     );
 
     expect(mockPost).toHaveBeenCalledWith("/api/public/universities/propose", {

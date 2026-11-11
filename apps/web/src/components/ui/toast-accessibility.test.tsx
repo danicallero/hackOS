@@ -28,7 +28,7 @@ it("mounts a stable live region before feedback and exposes an independent dismi
   await waitFor(() => expect(getByRole(node, "button", { name: "close" })).toBeTruthy());
   const close = getByRole(node, "button", { name: "close" });
   expect(close.tagName).toBe("BUTTON");
-  close.focus();
+  act(() => close.focus());
   await act(async () => userEvent.keyboard("{Enter}"));
   expect(node.dataset.exiting).toBe("true");
 });
@@ -51,7 +51,7 @@ it("uses a native action button rather than a nested anchor", async () => {
   expect(action.closest("button button")).toBeNull();
   await act(async () => { getByRole(node, "button", { name: "Result ready", expanded: false }).focus(); });
   await waitFor(() => expect(node.dataset.expanded).toBe("true"));
-  action.focus();
+  act(() => action.focus());
   await act(async () => userEvent.keyboard("{Enter}"));
   expect(onClick).toHaveBeenCalledOnce();
 });

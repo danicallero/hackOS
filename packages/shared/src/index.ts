@@ -3,6 +3,7 @@ export * from "./applications.js";
 export * from "./capabilities.js";
 export * from "./events.js";
 export * from "./forms.js";
+export * from "./onboarding.js";
 export * from "./projects.js";
 export * from "./questions.js";
 export * from "./role-grant-triggers.js";

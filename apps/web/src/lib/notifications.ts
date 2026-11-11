@@ -68,7 +68,13 @@ export interface PreferencesResponse {
 }
 
 /** Categories every user sees in the matrix even with zero override rows (mirrors service.ts STATIC_CATEGORIES). "schedule" is the shared channel config for all activity reminders (H51 rework). */
-export const STATIC_CATEGORIES = ["announcements", "application", "challenge", "schedule"];
+export const STATIC_CATEGORIES = [
+  "announcements",
+  "application",
+  "challenge",
+  "schedule",
+  "helpdesk",
+];
 
 export interface AuditRow {
   id: number;

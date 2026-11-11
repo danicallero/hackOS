@@ -107,7 +107,7 @@ application response; consolidation is required instead (H12/H54).
    a rejected privacy request.
 3. For a finalizable request, sessions, Better Auth accounts, push tokens,
    dietary values, dietary/meal-plan confirmation timestamps and sponsor meal
-   plans (`meal_attendance_plans`, #933) are removed in preparation. For `pending_exit`, those
+   plans (`activity_rsvps`, #933) are removed in preparation. For `pending_exit`, those
    identity and catering rows remain only for the fixed recovery window so the
    participant can cancel or staff can record the exit; `account_state` blocks
    normal participant activity. Wallet rows are marked `voided` during removal
@@ -277,7 +277,7 @@ provider copies, backups and logs are separate controls (A07–A09, A17).
 
 During the event, `users.food_intolerances`,
 `users.food_intolerance_notes`, the derived `dietary_data_state`, and sponsor
-meal plans (`meal_attendance_plans`, #933) are available to authorized
+meal plans (`activity_rsvps`, #933) are available to authorized
 logistics paths. Meal plans are personal (not special-category) data; they are
 deleted with the account and never copied to anonymous audit data. Native scanner snapshots include only
 what a staff scanner needs at the point of service; meal inbox rows use the
@@ -552,7 +552,7 @@ synthetic identity-shaped `users` row.
 | `users`: id, email, verification, image, photo key, name, surname, DNI, language, UI prefs, timestamps | Full account data | Active profile/service identity | Delete | No | Direct identity/auth profile. |
 | `users`: badge_id, badge_id_history | Credential before use | Active badge operations | Delete; permanent unlinked keyed-digest non-reuse tombstone | No | Credential is not audit data; the digest tombstone exists only to reject arbitrarily late offline replay. |
 | `users`: food_intolerances, food_intolerance_notes, dietary_data_state, shirt_size | May be edited | Operational catering/badge data | Keep dietary values only during reversible `pending_exit`; clear them during finalization, then delete the remaining user row | No | Dietary data supports active/in-flight catering only and is never part of the permanent anonymous audit dataset. |
-| `users`: dietary_confirmed_at, meal_plan_confirmed_at; `meal_attendance_plans` (#933) | May be edited | Sponsor meal planning and the dietary re-ask | Clear the timestamps and delete plan rows with the dietary values; the user FK cascades at final deletion | No | Planned attendance supports catering headcounts only; aggregates never identify the person. |
+| `users`: dietary_confirmed_at, meal_plan_confirmed_at; `activity_rsvps` (#933) | May be edited | Sponsor meal planning and the dietary re-ask | Clear the timestamps and delete plan rows with the dietary values; the user FK cascades at final deletion | No | Planned attendance supports catering headcounts only; aggregates never identify the person. |
 | University answer on `application_responses` / `universities.name` | Profile dimension | May support services | Deleted with the response; catalog survives | Only an application field explicitly configured for anonymous audit may retain a university value | Profile data is not copied merely because the shared university catalog exists. |
 | `accounts`: provider/account IDs, access/refresh/ID tokens, password | Auth credential | Auth credential | Delete | No | Credentials and provider identifiers must not survive. |
 | `sessions`: token, IP, user agent, expiry | Login session | Login/session | Delete during preparation for finalizable paths; keep existing rows while reversible `pending_exit` is active, with new/refresh sessions capped at the fixed recovery deadline, then delete at finalization | No | Pending recovery needs authenticated status/cancel/exit guidance; session metadata is never anonymous audit data. |
@@ -603,7 +603,10 @@ synthetic identity-shaped `users` row.
 | `user_invite_link_redemptions`: user/email/name/IP/user-agent | Invite history | Access provisioning | Delete by FK and normalized email | No | Denormalized invitee identity and claim provenance. |
 | `enterprise_invite_links` / `user_invite_links`: creator/token | Shared invite config | Provisioning | Null subject creator; expire/revoke shared token as normal | No | Shared link survives; subject authorship does not. |
 | `repos`: creator/name/description/URLs | Project/team | Judging/project service | Null creator; delete solo orphan; preserve shared repo for remaining members | No | Shared project is not anonymous demographic audit. |
+| `onboarding_step_states`, `mentor_profiles`, `user_role_event_evidence` | Event onboarding and helper publication | Resumable choices, public helper profile and role-assignment evidence | Delete before anonymizing a retained user; cascade on final deletion | No | The evidence and publication history are edition-scoped; audit retains only safe state metadata. |
 | `user_public_profiles`: visibility/headline/location note/bio/links/CV key | Public profile | Public profile (#934) | Delete in the removal transaction; cascades on user delete; H54 trigger rejects pending writes | No | Opt-in public profile is identity-bearing; included in the personal export bundle as `publicProfile`. |
+| `helper_profiles`, `helper_topics`, `helper_availability`, `help_request_recipients` | Help desk | Helper profile and routing (H61-H65) | Delete in the removal transaction; cascade on user delete; H54 trigger rejects pending writes | No | The helper card and stated schedule; exported as `helperProfile`. |
+| `help_requests`: requester/claimer, description, location | Help desk | Help requests (H64-H66) | Requester and claimer set to NULL in the removal transaction; individual requests lose description/location and are cancelled if active; team requests keep their text for the team; a claim held by the subject returns to open; H54 triggers reject pending writes | No | Requests the subject opened are exported as `helpRequests`. `help_topics.proposed_by` is cleared. |
 | `diary_entries`: owner/target/note | Event diary | People diary (#935) | Delete rows owned by or pointing at the subject in the removal transaction; both FKs cascade on user delete; H54 trigger rejects pending writes | No | Private social graph and notes; the owner's own entries are exported as `diary` (saved people by user id only). Other attendees' entries about the subject are their private data and are not exported. |
 | `content_reports`: reporter/target/reason/details/status | Content moderation | Reports (H18) | Delete rows filed by or about the subject in the removal transaction; user FKs cascade on delete; H54 trigger rejects new reports by or about a pending account | No | A report is moderation context, not a participation record; the reported content is read live and never copied, so nothing else retains it. |
 | `project_files`: repo/uploader/object key/thumbnail key | Native project uploads | Projects (H54) | Original and thumbnail objects uploaded by the subject are inventoried and deleted from storage in the removal flow; rows for the subject's solo projects cascade | No | Uploaded files can carry identity. |

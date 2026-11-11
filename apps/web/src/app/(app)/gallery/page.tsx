@@ -111,13 +111,7 @@ export default async function GalleryPage({
       />
       <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {result.items.map((project) => (
-          <GalleryProjectCard
-            key={project.id}
-            project={project}
-            showCover={result.items.some((item) =>
-              item.files?.some((file) => file.mimeType.startsWith("image/")),
-            )}
-          />
+          <GalleryProjectCard key={project.id} project={project} />
         ))}
       </div>
       {result.total > result.pageSize && (

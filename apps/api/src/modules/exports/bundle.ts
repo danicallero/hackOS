@@ -124,6 +124,34 @@ export async function buildExportBundle(
       [subjectUserId],
     )
   ).rows;
+  // H61-H64: the help desk card (knowledge and stated schedule) and the help
+  // requests the subject opened, without other people's identities.
+  const helperProfile =
+    (
+      await db.query(
+        `SELECT hp.published, hp.published_at, hp.created_at, hp.updated_at,
+                COALESCE((SELECT jsonb_agg(t.name ORDER BY t.name)
+                            FROM helper_topics ht JOIN help_topics t ON t.id = ht.topic_id
+                           WHERE ht.user_id = hp.user_id), '[]'::jsonb) AS topics,
+                COALESCE((SELECT jsonb_agg(jsonb_build_object('startsAt', ha.starts_at, 'endsAt', ha.ends_at)
+                                           ORDER BY ha.starts_at)
+                            FROM helper_availability ha WHERE ha.user_id = hp.user_id), '[]'::jsonb) AS availability
+           FROM helper_profiles hp WHERE hp.user_id = $1`,
+        [subjectUserId],
+      )
+    ).rows[0] ?? null;
+  const helpRequests = (
+    await db.query(
+      `SELECT hr.id, hr.status, hr.description, hr.location, hr.other, hr.repo_id,
+              hr.meeting_mode, hr.meeting_location, hr.created_at, hr.claimed_at,
+              hr.resolved_at, hr.cancelled_at,
+              COALESCE((SELECT jsonb_agg(t.name ORDER BY t.name)
+                          FROM help_request_topics rt JOIN help_topics t ON t.id = rt.topic_id
+                         WHERE rt.request_id = hr.id), '[]'::jsonb) AS topics
+         FROM help_requests hr WHERE hr.requester_id = $1 ORDER BY hr.created_at`,
+      [subjectUserId],
+    )
+  ).rows;
   // #934: the opt-in directory profile, including its consent timestamp.
   const publicProfile =
     (
@@ -231,6 +259,8 @@ export async function buildExportBundle(
     applications,
     projects: { submissions },
     publicProfile,
+    helperProfile,
+    helpRequests,
     diary,
     judgingParticipation,
     presence: { activityLogs, checkInLogs, timeLogs },

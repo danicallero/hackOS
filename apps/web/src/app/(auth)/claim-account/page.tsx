@@ -37,7 +37,7 @@ import { ApiError, api } from "@/lib/api";
 import { signIn } from "@/lib/auth-client";
 import { languageName, pickText, type Translate, useLocale } from "@/lib/i18n";
 import { destinationForKind } from "@/lib/invite-destination";
-import { resetNetworkingOnboardingDeferrals } from "@/lib/networking-onboarding";
+import { ONBOARDING_PATH } from "@/lib/onboarding";
 import { passwordSchema } from "@/lib/password-schema";
 import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
@@ -172,11 +172,9 @@ function ClaimInner() {
       try {
         const result = await signIn.email({ email: account.email, password: values.password });
         if (!result.error) {
-          resetNetworkingOnboardingDeferrals();
           await refresh();
-          router.push(
-            destinationForKind(lookup && lookup !== "error" ? lookup.kind : "participant"),
-          );
+          // The address still needs verifying; the verification page continues into onboarding.
+          router.push(`/verify-email?pending=1&next=${encodeURIComponent(ONBOARDING_PATH)}`);
           return;
         }
       } catch {
@@ -270,7 +268,7 @@ function ClaimInner() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             {form.formState.errors.root && (
               <Alert variant="destructive">
                 <AlertDescription>{form.formState.errors.root.message}</AlertDescription>
@@ -322,86 +320,57 @@ function ClaimInner() {
                 )}
               />
             </div>
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("password")}</FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="new-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="confirmPassword"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("confirmPassword")}</FormLabel>
-                  <FormControl>
-                    <PasswordInput autoComplete="new-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="language"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t("language")}</FormLabel>
-                  <Select
-                    onValueChange={(value) => {
-                      field.onChange(value);
-                      setLanguage(value as Language);
-                    }}
-                    value={language}
-                  >
-                    <FormControl>
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {(["es", "gl", "en"] as Language[]).map((language) => (
-                        <SelectItem key={language} value={language}>
-                          {languageName(language)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {lookup.requireShirtSize && (
+            <div className="grid gap-3 sm:grid-cols-2">
               <FormField
                 control={form.control}
-                name="shirtSize"
+                name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>{t("shirtSize")}</FormLabel>
-                    {shirtSizesError ? (
-                      <ContextualError
-                        message={t("couldNotLoadDictionary")}
-                        onRetry={reloadShirtSizes}
-                      />
-                    ) : null}
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormLabel>{t("password")}</FormLabel>
+                    <FormControl>
+                      <PasswordInput autoComplete="new-password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="confirmPassword"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("confirmPassword")}</FormLabel>
+                    <FormControl>
+                      <PasswordInput autoComplete="new-password" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="grid items-start gap-3 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="language"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t("language")}</FormLabel>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        setLanguage(value as Language);
+                      }}
+                      value={language}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder={t("notSet")} />
+                          <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value={NONE}>{t("notSet")}</SelectItem>
-                        {shirtSizes.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s}
+                        {(["es", "gl", "en"] as Language[]).map((language) => (
+                          <SelectItem key={language} value={language}>
+                            {languageName(language)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -410,9 +379,45 @@ function ClaimInner() {
                   </FormItem>
                 )}
               />
-            )}
+              {lookup.requireShirtSize && (
+                <FormField
+                  control={form.control}
+                  name="shirtSize"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t("shirtSize")}</FormLabel>
+                      {shirtSizesError ? (
+                        <ContextualError
+                          message={t("couldNotLoadDictionary")}
+                          onRetry={reloadShirtSizes}
+                        />
+                      ) : null}
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={t("notSet")} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={NONE}>{t("notSet")}</SelectItem>
+                          {shirtSizes.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+            </div>
             {lookup.requireDietary && (
-              <>
+              <fieldset className="border-border/60 space-y-4 border-t pt-6">
+                <legend className="type-label text-muted-foreground pr-2">
+                  {t("dietaryRestrictions")}
+                </legend>
                 <FormField
                   control={form.control}
                   name="foodIntolerances"
@@ -455,7 +460,7 @@ function ClaimInner() {
                     </FormItem>
                   )}
                 />
-              </>
+              </fieldset>
             )}
             <SubmitButton className="w-full" pending={form.formState.isSubmitting}>
               {t("createAccount")}

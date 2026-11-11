@@ -64,9 +64,18 @@ Architecture & modules:
 - [Native projects](./projects.md) — drafts, autosave, form snapshots,
   phases, gallery/consent, uploads, invitations, queue eligibility and winner
   publication.
+- [HackUDC 2027 onboarding](./onboarding.md) — edition identity, attendance evidence, resumable steps, RSVP answers and mentor publication.
 - [Public profile (#934)](./directory.md) — the opt-in profile shown to the
   people who scan you, what they can see, access, moderation and
   account-removal coverage.
+- [Onboarding, web](./onboarding-web.md) — the resumable `/onboarding` journey,
+  mentor profile section and organizer onboarding settings.
+- [Onboarding social sharing](./onboarding-social-sharing.md) — the share
+  step's card component.
+- [Help desk (H61-H67)](./help-desk.md) — helper profiles sharing the public
+  bio, knowledge catalogue, planned availability versus presence, request
+  routing, atomic claims and coverage; client contract in
+  [`help-desk-contract.md`](./help-desk-contract.md).
 - [Content reports (H18)](./content-reports.md) — attendee reports of projects and
   public profiles, and the organiser inbox that closes them.
 - [Event diary (#935)](./diary.md) — saving people and sponsor stands by
@@ -128,6 +137,8 @@ Architecture & modules:
 
 Frontend (web & mobile):
 
+- [Web help desk](./help-desk-web.md) — published helpers, shared bio and knowledge, dated availability, team requests, helper inbox and coverage (H61–H67).
+
 - [Design system, UI & UX](./DESIGN.md) — the consolidated design rulebook,
   indexed and summarized per section: principles, tokens (with intent and
   boundaries), the landing-derived edition theme and `/design-system` preview,
@@ -148,6 +159,8 @@ Frontend (web & mobile):
   public API, Liquid Glass and opaque fallback behaviour, scrub interaction,
   overflow-menu contract, safe-area geometry, testing, and the publishing
   checklist for a future package.
+- [Catering and activity RSVPs](./catering-rsvp.md) — per-activity yes/no/unsure answers,
+  options, participant exclusion, edition history and headcounts.
 - [Mobile app](./mobile.md) — the Expo Router app (`apps/mobile`): Better Auth
   Expo integration, capability-driven tabs, offline scanners, and participant
   screens, with the per-story status registry.

@@ -66,12 +66,28 @@ other module's exported function instead), and, if it does background work, a
 
 ## Modules
 
+### onboarding (HackUDC 2027 onboarding)
+
+Resolves current-edition participant steps from attendance and profile facts, and persists audited, idempotent decisions. See [onboarding](./onboarding.md).
+
 ### identity (H1–H10)
 Better Auth session lifecycle (`/api/auth/*`, pass-through, exempt from the
 route-policy ledger by design), the caller's own profile (`GET/PATCH
 /api/me`), authenticated password change (`POST /api/auth/change-password`),
 staff user management, and invitations including reusable enterprise and
 account links (H9/H10/H43).
+Email verification links open the web page with a fragment token. The page
+requires an explicit form POST to `/api/auth/verify-email/confirm` from the
+configured web origin. The API rejects direct verification GETs, and the POST
+invokes Better Auth's supported GET handler internally so its token checks,
+session behavior and redirect remain authoritative (H2). A matching active
+session is refreshed; Better Auth creates a target-account session when needed.
+The landing page uses `Referrer-Policy: strict-origin`: a native form POST then
+sends the site Origin for CSRF validation, while no token or return path leaves
+in a referrer. Run the browser regression with `VERIFY_API_URL`,
+`VERIFY_WEB_URL`, `TEST_DATABASE_URL` (an isolated `_test` database) and
+`pnpm --filter @hackos/api test:browser:verify-email` after starting both apps.
+
 Changing a password verifies the current credential in Better Auth, then revokes
 all existing sessions and creates a replacement for the browser making the
 request; the password and its hash are never included in audit data. Email
@@ -125,10 +141,9 @@ count; never once dietary data is locked, H7: after an accepted application
 it takes one first answer, then only staff change it, and `/api/me` reports
 `dietaryLocked`), and
 `meal_plan` while a sponsor representative has an open offered
-meal without an answer. Sponsors read and replace their plan through `GET`/`PUT
-/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics
-and its shown schedule entry includes the `sponsor` audience (an entry without
-audiences is staff-only), and it locks `event_config.meal_plan_cutoff_hours`
+meal without an answer. The meal plan is a facade over per-activity RSVPs ([`catering-rsvp.md`](./catering-rsvp.md)): eligible attendees (never registered participants) read and replace it through `GET`/`PUT
+/api/me/meal-plan`; a meal is offered when its activity kind has meal semantics,
+its RSVP settings are enabled for the current event key and ask the caller's attendance kind, and it locks `event_config.meal_plan_cutoff_hours`
 (24 by default, set through `PUT /api/event` `mealPlanCutoffHours`) before it
 starts; responses carry it as `cutoffHours`. `PUT` ignores meals that ended or stopped being offered since the list
 was loaded, and locked meals that were never answered. Staff read a sponsor's plan through `GET
@@ -139,7 +154,7 @@ unanswered and the sponsor's `confirmedAt` is not set; always audited as
 CSV under `/api/logistics/meal-plans` (see `docs/statistics-dashboard.md`). The
 staff profile response includes `isSponsorRep` so the web overview only loads a
 meal plan for sponsor representatives, rather than probing non-sponsors and
-receiving the expected `403 not_sponsor`.
+receiving the expected `403 meal_plan_not_eligible`.
 
 On the web, the `(app)` layout shows a dismissable dialog with one step per
 pending task ("Later" hides it for the browser session via `sessionStorage`),
@@ -198,6 +213,17 @@ submission with a fresh confirmation email. Form deletion removes its responses,
 versions, grants and confirmation tokens transactionally; anonymous-retention
 records remain a deliberate deletion boundary. The confirmation-window expirer (`applications/expirer.ts`)
 is a background tick, not a request path.
+
+Acceptance email links carry their bearer token in a URL fragment so the web
+server, referrer and request logs do not receive it. Landing pages do not act on
+load: a deliberate button submits the token in a body to the public confirmation
+or decline route. Each route checks purpose, unused state, expiry, association
+with the response, owner and current email while holding user, response and
+token locks. Successful use consumes the token. A repeated request with the same
+idempotency key replays its response; another use reports `confirmation_used`
+without issuing another Wallet credential. Expired and invalid links have
+separate errors. An authenticated owner may still decline through their own
+response route after confirming.
 
 The review modal opens on a standard view: `applications.review_hidden_fields` lists the answer keys
 hidden by default (set with `PATCH /api/applications/:id`, `applications:manage`, no form-version
@@ -262,6 +288,14 @@ moderation. The account photo (`/api/me/photo`, staff edits through
 `POST`/`DELETE /api/users/:id/photo`, read through `GET /api/users/:id/photo`)
 lives in identity but follows the profile's photo switch. Full detail:
 [`directory.md`](./directory.md).
+
+### helpdesk (H61–H67)
+Help desk: helper profiles (`/api/me/helper-profile`, projected from the
+public profile so the bio is shared), the self-service knowledge catalogue,
+planned availability, browsing helpers, help requests with H65 routing to
+available present helpers (with admin-set opening hours for new requests), single-winner claims and organizer coverage under
+`/api/helpdesk`. Full detail: [`help-desk.md`](./help-desk.md); client
+contract: [`help-desk-contract.md`](./help-desk-contract.md).
 
 ### challenges (H44)
 Sponsor-owned challenge templates bound to an enterprise: draft/published
@@ -332,12 +366,25 @@ scanning, the pre-event schedule, cross-station people search, and Apple/Google
 Wallet pass issuance + the Apple PassKit web-service protocol. Ticket
 eligibility is read from the identity role graph's `event_access` bit, so
 losing one of several event-bearing roles keeps access while losing the last
-one stops live ticket exposure and voids active wallet passes. Scanner
+one stops live ticket exposure and voids active wallet passes. Presence has three
+signal sources: door `in`/`out`, activity scans, and resolved help requests
+(H66, `kind: "help"`, `source: "help"`, category `helpdesk`; cancelled requests
+count for nothing). A resolved request is an in-person checkpoint at
+`resolved_at` for the claimer and the requester: it can secure and renew a
+certainty window that a door entry or activity opened, but with no live window
+it is ignored, it never opens presence by itself, and it does not change the
+door in/out state or the in→in conflict check. Staff cannot edit or delete these
+signals; they follow the help request. Scanner
 mutation routes carry `idempotencyGuard` so an offline device's queued retries
 never double-apply.
 
 Schedule items (H48) carry an optional `audiences` set
-(`sponsor`/`participant`/`mentor`). Staff always sees every item
+(`sponsor`/`participant`/`mentor`, plus publicly visible roles as `role:<id>`:
+whoever holds at least one of the named roles sees the item, and is asked for
+an RSVP when the activity asks attendance, besides the configured kinds;
+`GET /api/schedule/audience-roles` lists the roles that can be named and writes
+naming any other role fail with `schedule_audience_role_invalid`; migration
+`0804`). Staff always sees every item
 unconditionally and is never a stored audience value; an empty `audiences`
 array means "staff-only" — and a staff-only item has no meaningful
 `visibility` at all, since `visibility`/`publishAt` only describe *when a
@@ -591,6 +638,7 @@ code when there is no reason.
 | `schedule_ends_before_starts` | 400 | Schedule item ends at or before it starts |
 | `schedule_scan_needs_participants` | 400 | A scan-required item must be participant-visible |
 | `schedule_item_not_found` | 404 | Schedule item does not exist |
+| `helper_not_eligible`, `helpdesk_closed`, `help_request_*`, `topic_*`, `availability_*` | 400/403/409 | Help desk reasons (H61-H66); full table in [`help-desk-contract.md`](./help-desk-contract.md) |
 
 Application response validation (`400`, "Response fails template validation")
 returns `details.fieldReasons` (field key → `FIELD_ERROR_REASONS` value such as

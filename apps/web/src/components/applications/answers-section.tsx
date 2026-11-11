@@ -5,6 +5,7 @@
 import { sponsorShareKey } from "@hackos/shared/applications";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
@@ -173,6 +174,62 @@ export function AnswersSection({
       ) : (
         <p className="text-muted-foreground text-sm">{t("noAnswersRecorded")}</p>
       )}
+    </div>
+  );
+}
+
+const LANGUAGE_TAGS = { es: "spanishTag", gl: "galicianTag", en: "englishTag" } as const;
+
+/** Optional rejection reason, written in the applicant's language (H14). */
+export function RejectionReasonCard({
+  reason,
+  editable,
+  language,
+  saving,
+  onSave,
+}: {
+  reason: string;
+  editable: boolean;
+  language?: string | null;
+  saving: boolean;
+  onSave: (value: string) => Promise<void>;
+}) {
+  const { t } = useLocale();
+  const [value, setValue] = useState(reason);
+  useEffect(() => setValue(reason), [reason]);
+  const tag = LANGUAGE_TAGS[(language ?? "en") as keyof typeof LANGUAGE_TAGS] ?? "englishTag";
+  if (!editable) {
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{t("rejectionReason")}</p>
+        <p className="whitespace-pre-line text-sm text-muted-foreground">{reason}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="rejection-reason" className="text-sm font-medium">
+        {t("rejectionReason")}
+      </Label>
+      <Textarea
+        id="rejection-reason"
+        rows={2}
+        maxLength={1000}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={t("rejectionReasonPlaceholder", { language: t(tag) })}
+      />
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={saving || value.trim() === reason.trim()}
+          onClick={() => onSave(value)}
+          loading={saving}
+        >
+          {t("saveReason")}
+        </Button>
+      </div>
     </div>
   );
 }

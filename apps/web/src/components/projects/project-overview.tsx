@@ -35,11 +35,11 @@ export function ProjectOverview({
   assetUrl: (path: string) => string;
   review?: React.ReactNode;
   showQueue?: boolean;
-  /** Extra card in the right column, after the team. */
+  /** Extra content after the team. */
   asideExtra?: React.ReactNode;
 }) {
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+    <div className="grid w-full items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
       <div className="min-w-0 space-y-6">
         {review}
         {project.winners?.map((winner) => (
@@ -55,43 +55,45 @@ export function ProjectOverview({
           assetUrl={assetUrl}
         />
       </div>
-      <aside className="min-w-0 space-y-6 lg:sticky lg:top-6">
-        {(project.members.length === 0 ||
-          project.members.some((member) => member.status !== "declined" && member.name)) && (
-          <SectionCard title={labels.team} variant="plain">
-            {project.members.length === 0 && (
-              <p className="text-sm text-muted-foreground">{labels.noMembers}</p>
-            )}
-            <ul className="divide-y divide-border/60">
-              {project.members
-                .filter((member) => member.status !== "declined" && member.name)
-                .map((member) => (
-                  <li key={member.userId} className="flex items-center gap-3 py-3">
-                    {member.photoUrl && (
-                      <UserAvatar
-                        name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
-                        image={assetUrl(member.photoUrl)}
-                        className="size-10"
-                        decorative
-                      />
-                    )}
-                    <span className="min-w-0 flex-1 wrap-anywhere">
-                      {`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
-                    </span>
-                    {member.status === "invited" && (
-                      <span className="text-sm text-muted-foreground">{labels.pending}</span>
-                    )}
-                  </li>
-                ))}
-            </ul>
-          </SectionCard>
-        )}
-        {asideExtra}
-        {((!asideExtra && project.githubUrl) || project.demoUrl) && (
-          <ProjectDescriptionLinks
-            links={{ githubUrl: asideExtra ? null : project.githubUrl, demoUrl: project.demoUrl }}
-          />
-        )}
+      <aside className="min-w-0 space-y-8">
+        <div className="min-w-0 space-y-6">
+          {(project.members.length === 0 ||
+            project.members.some((member) => member.status !== "declined" && member.name)) && (
+            <SectionCard title={labels.team} variant="plain">
+              {project.members.length === 0 && (
+                <p className="text-sm text-muted-foreground">{labels.noMembers}</p>
+              )}
+              <ul className="divide-y divide-border/60">
+                {project.members
+                  .filter((member) => member.status !== "declined" && member.name)
+                  .map((member) => (
+                    <li key={member.userId} className="flex items-center gap-3 py-3">
+                      {member.photoUrl && (
+                        <UserAvatar
+                          name={`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
+                          image={assetUrl(member.photoUrl)}
+                          className="size-10"
+                          decorative
+                        />
+                      )}
+                      <span className="min-w-0 flex-1 wrap-anywhere">
+                        {`${member.name ?? ""} ${member.surname ?? ""}`.trim()}
+                      </span>
+                      {member.status === "invited" && (
+                        <span className="text-sm text-muted-foreground">{labels.pending}</span>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            </SectionCard>
+          )}
+          {asideExtra}
+          {((!asideExtra && project.githubUrl) || project.demoUrl) && (
+            <ProjectDescriptionLinks
+              links={{ githubUrl: asideExtra ? null : project.githubUrl, demoUrl: project.demoUrl }}
+            />
+          )}
+        </div>
         <SectionCard title={labels.challenges} variant="plain">
           {project.challenges.length === 0 && (
             <p className="text-sm text-muted-foreground">{labels.noChallenges}</p>

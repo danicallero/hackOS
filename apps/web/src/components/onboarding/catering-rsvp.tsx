@@ -1,0 +1,258 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { ContextualError } from "@/components/common/contextual-error";
+import { EmptyState } from "@/components/common/empty-state";
+import { FormActions } from "@/components/common/form-actions";
+import { SectionCard } from "@/components/common/section-card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { rsvpSaveErrorKey, useRsvps } from "@/hooks/use-rsvps";
+import { useLocale } from "@/lib/i18n";
+import {
+  draftFromItems,
+  isItemChanged,
+  type RsvpAnswer,
+  type RsvpDraft,
+  type RsvpItem,
+  rsvpWhen,
+} from "@/lib/rsvp";
+import { useMe } from "@/lib/session";
+import { toast } from "@/lib/toast";
+
+/**
+ * Attendee RSVP editor: one row per open RSVP (yes / no / unsure). Used as an
+ * editable section of My profile and as the onboarding RSVP step. Every answer
+ * is optional; locked items are read-only.
+ *
+ * Integration points for the host page:
+ * - `<CateringRsvpSection userId onDirtyChange onSaved />` fetches and saves on its own;
+ *   show an explicit empty state when no activity is offered.
+ * - `onSaved` runs after a successful save (refresh the session so
+ *   `pendingProfileTasks` / the onboarding step re-evaluate).
+ * - `<CateringRsvpForm items save .../>` is the controlled form for hosts that
+ *   already hold the items (e.g. the onboarding flow).
+ */
+export function CateringRsvpSection({
+  userId,
+  onDirtyChange,
+  onSaved,
+  footer = true,
+  actions,
+}: {
+  userId: number;
+  actions?: React.ReactNode;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSaved?: () => void | Promise<void>;
+  /** Hosts that supply their own Save/Skip controls pass false and use `formId`. */
+  footer?: boolean;
+}) {
+  const { items, loadError, reload, save } = useRsvps(userId);
+  const { t } = useLocale();
+
+  if (loadError && !items) {
+    return <ContextualError message={t("couldNotLoadRsvps")} onRetry={reload} />;
+  }
+  if (!items) return <Skeleton className="h-24 w-full" />;
+  if (items.length === 0) return <EmptyState title={t("rsvpNoItems")} />;
+  // Remount on every stored list so the draft restarts from the stored answers.
+  const version = items.map((i) => `${i.activityId}:${i.answer}:${i.locked}`).join(",");
+  return (
+    <CateringRsvpForm
+      key={version}
+      items={items}
+      save={save}
+      onDirtyChange={onDirtyChange}
+      onSaved={onSaved}
+      footer={footer}
+      actions={actions}
+    />
+  );
+}
+
+/**
+ * Self-contained variant for the onboarding step and My profile: reads the
+ * signed-in user, fetches and saves `/api/me/rsvps`, renders its own Save with
+ * the host's `actions` beside it, and shows an empty state without offered RSVPs.
+ */
+export function CateringRsvp({
+  actions,
+  onSaved,
+  onDirtyChange,
+}: {
+  actions?: React.ReactNode;
+  onSaved?: () => void | Promise<void>;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
+  const me = useMe();
+  if (!me) return null;
+  return (
+    <CateringRsvpSection
+      userId={me.id}
+      actions={actions}
+      onSaved={onSaved}
+      onDirtyChange={onDirtyChange}
+    />
+  );
+}
+
+export default CateringRsvp;
+
+export function CateringRsvpForm({
+  items,
+  save,
+  onDirtyChange,
+  onSaved,
+  footer = true,
+  formId,
+  actions,
+}: {
+  items: readonly RsvpItem[];
+  save: (items: readonly RsvpItem[], draft: RsvpDraft) => Promise<unknown>;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSaved?: () => void | Promise<void>;
+  footer?: boolean;
+  formId?: string;
+  /** Host buttons (Later / Skip / Continue) shown beside Save. */
+  actions?: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const [draft, setDraft] = useState<RsvpDraft>(() => draftFromItems(items));
+  const [pending, setPending] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const changed = useMemo(
+    () => items.some((item) => isItemChanged(item, draft[item.activityId])),
+    [items, draft],
+  );
+  useEffect(() => {
+    onDirtyChange?.(changed);
+    return () => onDirtyChange?.(false);
+  }, [changed, onDirtyChange]);
+
+  function setAnswer(item: RsvpItem, answer: RsvpAnswer) {
+    setDraft((current) => ({ ...current, [item.activityId]: { answer } }));
+  }
+
+  async function onSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (pending) return;
+    setSaveError(null);
+    setPending(true);
+    try {
+      await save(items, draft);
+      await onSaved?.();
+      toast.success(t("rsvpSaved"), { compactTitle: t("toastSaveRsvps") });
+    } catch (err) {
+      // A stale-list error has already refreshed the shared list, remounting this form.
+      const message = t(rsvpSaveErrorKey(err));
+      setSaveError(message);
+      toast.error(message, t("toastSaveRsvps"));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form id={formId} className="min-w-0" onSubmit={onSubmit} noValidate>
+      <SectionCard
+        footerClassName="justify-start"
+        variant="plain"
+        bodyClassName="pt-0"
+        footer={
+          footer ? (
+            <FormActions
+              pending={pending}
+              state={saveError ? "error" : changed ? "unsaved" : "saved"}
+              secondaryActions={actions}
+            />
+          ) : undefined
+        }
+      >
+        {saveError && <ContextualError message={saveError} />}
+        <ul className="divide-y divide-border/60">
+          {items.map((item) => (
+            <RsvpRow
+              key={item.activityId}
+              item={item}
+              draft={draft[item.activityId]}
+              disabled={pending}
+              onAnswer={(answer) => setAnswer(item, answer)}
+            />
+          ))}
+        </ul>
+      </SectionCard>
+    </form>
+  );
+}
+
+function RsvpRow({
+  item,
+  draft,
+  disabled,
+  onAnswer,
+}: {
+  item: RsvpItem;
+  draft: RsvpDraft[number];
+  disabled: boolean;
+  onAnswer: (answer: RsvpAnswer) => void;
+}) {
+  const { t, language } = useLocale();
+  const answers: RsvpAnswer[] = ["yes", "no", "unsure"];
+  const labels: Record<RsvpAnswer, string> = {
+    yes: t("rsvpYes"),
+    no: t("rsvpNo"),
+    unsure: t("rsvpUnsure"),
+  };
+  return (
+    <li className="space-y-2 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <span className="min-w-0 font-medium text-sm wrap-anywhere">{item.name}</span>
+        <span className="text-muted-foreground text-sm tabular-nums">
+          {rsvpWhen(item, language)}
+        </span>
+      </div>
+      {item.description && (
+        <p className="text-muted-foreground text-sm wrap-anywhere">{item.description}</p>
+      )}
+      <div role="radiogroup" aria-label={item.name} className="flex flex-wrap gap-2">
+        {answers.map((answer) => (
+          <Choice
+            key={answer}
+            checked={draft.answer === answer}
+            disabled={disabled || item.locked}
+            onSelect={() => onAnswer(answer)}
+          >
+            {labels[answer]}
+          </Choice>
+        ))}
+      </div>
+      {item.locked && <p className="text-muted-foreground text-xs">{t("rsvpClosed")}</p>}
+    </li>
+  );
+}
+
+function Choice({
+  checked,
+  disabled,
+  onSelect,
+  children,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      role="radio"
+      aria-checked={checked}
+      size="sm"
+      variant={checked ? "default" : "outline"}
+      disabled={disabled}
+      onClick={onSelect}
+    >
+      {children}
+    </Button>
+  );
+}

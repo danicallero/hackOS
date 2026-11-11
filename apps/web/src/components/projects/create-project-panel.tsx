@@ -3,8 +3,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { LinkifiedText } from "@/components/common/linkified-text";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
+import { Spinner } from "@/components/common/spinner";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { type UserOption, UserPicker, userOptionLabel } from "@/components/common/user-picker";
 import { Button } from "@/components/ui/button";
@@ -14,8 +16,9 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
+import { groupApplicationFields } from "@/lib/application-field-groups";
 import { validateFieldOnBlur } from "@/lib/application-validation";
-import { useLocale } from "@/lib/i18n";
+import { pickText, useLocale } from "@/lib/i18n";
 import {
   invalidateProjectReads,
   type NativeProject,
@@ -127,23 +130,29 @@ export function CreateProjectPanel({
   return (
     <SidePanelEditor
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => !busy && onOpenChange(next)}
+      size="expanded"
       className="bg-popover"
       title={t("staffCreateProject")}
       description={t("staffCreateProjectNotice")}
       footer={
-        <Button
-          form="staff-create-project"
-          type="submit"
-          loading={busy}
-          disabled={
-            definition.loading ||
-            challenges.loading ||
-            Boolean(definition.error || challenges.error)
-          }
-        >
-          {t("staffCreateProject")}
-        </Button>
+        <>
+          <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            {t("cancel")}
+          </Button>
+          <Button
+            form="staff-create-project"
+            type="submit"
+            loading={busy}
+            disabled={
+              definition.loading ||
+              challenges.loading ||
+              Boolean(definition.error || challenges.error)
+            }
+          >
+            {t("staffCreateProject")}
+          </Button>
+        </>
       }
     >
       {Boolean(error || definition.error || challenges.error || existing.error) && (
@@ -163,149 +172,179 @@ export function CreateProjectPanel({
           }}
         />
       )}
-      <form id="staff-create-project" onSubmit={create} className="space-y-6" noValidate>
-        <div className="space-y-2">
-          <Label htmlFor="staff-project-name">{t("projectNameLabel")}</Label>
-          <Input
-            id="staff-project-name"
-            value={name}
-            maxLength={200}
-            disabled={busy}
-            onChange={(event) => setName(event.target.value)}
-            onBlur={() =>
-              setMetadataErrors((previous) => ({
-                ...previous,
-                name: name.trim() ? undefined : t("fieldRequired"),
-              }))
-            }
-            aria-invalid={Boolean(metadataErrors.name)}
-            aria-describedby={metadataErrors.name ? "staff-project-name-error" : undefined}
-          />
-          {metadataErrors.name && (
-            <p id="staff-project-name-error" role="alert" className="text-sm text-destructive">
-              {metadataErrors.name}
-            </p>
-          )}
-        </div>
-        <section className="space-y-3">
-          <Label htmlFor="staff-project-member">{t("surfaceTeam")}</Label>
-          <ul className="divide-y divide-border/60">
-            {members.map((member) => (
-              <li key={member.id} className="flex items-center justify-between gap-3 py-2">
-                <div className="min-w-0 space-y-1">
-                  <span className="wrap-anywhere text-sm">{userOptionLabel(member)}</span>
-                  {(existing.data?.repos ?? [])
-                    .filter((project) =>
-                      project.members?.some(
-                        (entry) => entry.userId === member.id && entry.status === "active",
-                      ),
-                    )
-                    .map((project) => (
-                      <Button
-                        key={project.id}
-                        asChild
-                        variant="link"
-                        size="sm"
-                        className="block h-auto px-0 text-left"
-                      >
-                        <Link href={`/projects/${project.id}`}>{project.name}</Link>
-                      </Button>
-                    ))}
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    setMembers((current) => current.filter((item) => item.id !== member.id))
-                  }
-                >
-                  {t("remove")}
-                </Button>
-              </li>
-            ))}
-          </ul>
-          <UserPicker
-            key={members.map((member) => member.id).join(",")}
-            id="staff-project-member"
-            aria-invalid={Boolean(metadataErrors.members)}
-            onBlur={() =>
-              setMetadataErrors((previous) => ({
-                ...previous,
-                members: members.length ? undefined : t("projectTeamRequired"),
-              }))
-            }
-            value=""
-            onChange={(_, user) => {
-              if (user)
-                setMembers((current) =>
-                  current.some((member) => member.id === user.id) ? current : [...current, user],
-                );
-              setMetadataErrors((previous) => ({ ...previous, members: undefined }));
-            }}
-            search={async (q) =>
-              (
-                await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
-                  query: { q },
-                })
-              ).users.filter((user) => !members.some((member) => member.id === user.id))
-            }
-            minQueryLength={2}
-            disabled={busy}
-            inDialog
-            aria-describedby={metadataErrors.members ? "staff-project-team-error" : undefined}
-          />
-          {metadataErrors.members && (
-            <p id="staff-project-team-error" role="alert" className="text-sm text-destructive">
-              {metadataErrors.members}
-            </p>
-          )}
-        </section>
-        <div className="space-y-2">
-          <Label htmlFor="staff-project-challenges">{t("challenges")}</Label>
-          <MultiSelect
-            id="staff-project-challenges"
-            inDialog
-            options={(challenges.data ?? [])
-              .filter((challenge) => !challenge.mandatory)
-              .map((challenge) => ({
-                value: String(challenge.challengeId),
-                label: challengeTitle(challenge),
-              }))}
-            value={selectedChallenges}
-            onChange={setSelectedChallenges}
-            disabled={busy}
-          />
-          {(challenges.data ?? [])
-            .filter((challenge) => challenge.mandatory)
-            .map((challenge) => (
-              <p key={challenge.challengeId} className="text-sm text-muted-foreground">
-                {challengeTitle(challenge)} · {t("required")}
+      <form
+        id="staff-create-project"
+        onSubmit={create}
+        className="grid items-start gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]"
+        noValidate
+      >
+        <div className="min-w-0 space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="staff-project-name">{t("projectNameLabel")}</Label>
+            <Input
+              id="staff-project-name"
+              value={name}
+              maxLength={200}
+              disabled={busy}
+              onChange={(event) => setName(event.target.value)}
+              onBlur={() =>
+                setMetadataErrors((previous) => ({
+                  ...previous,
+                  name: name.trim() ? undefined : t("fieldRequired"),
+                }))
+              }
+              aria-invalid={Boolean(metadataErrors.name)}
+              aria-describedby={metadataErrors.name ? "staff-project-name-error" : undefined}
+            />
+            {metadataErrors.name && (
+              <p id="staff-project-name-error" role="alert" className="text-sm text-destructive">
+                {metadataErrors.name}
               </p>
-            ))}
+            )}
+          </div>
+          {definition.loading && <Spinner />}
+          {groupApplicationFields(fields, definition.data?.sections ?? []).map((group, index) => (
+            <section
+              key={group.section?.key ?? index}
+              className="space-y-5 border-t border-border/60 pt-6"
+            >
+              {group.section && (
+                <h2 className="type-section-title text-balance">
+                  {pickText(group.section.title, language)}
+                </h2>
+              )}
+              {group.section?.description && pickText(group.section.description, language) && (
+                <LinkifiedText
+                  text={pickText(group.section.description, language)}
+                  className="block text-sm text-muted-foreground"
+                />
+              )}
+              {group.fields.map((field) => (
+                <TemplateFieldControl
+                  key={field.key}
+                  field={{ ...field, required: false }}
+                  value={responses[field.key] as FieldValue}
+                  lang={language}
+                  inDialog
+                  disabled={busy}
+                  error={errors[field.key]}
+                  onChange={(value) =>
+                    setResponses((previous) => ({ ...previous, [field.key]: value }))
+                  }
+                  onBlur={(value) =>
+                    setFieldError(
+                      field.key,
+                      validateFieldOnBlur({ ...field, required: false }, value, t, language),
+                    )
+                  }
+                />
+              ))}
+            </section>
+          ))}
+          {definition.data?.template.some(
+            (field) => field.kind === "file" || field.kind === "images",
+          ) && <p className="text-sm text-muted-foreground">{t("projectFilesAfterCreation")}</p>}
         </div>
-        {fields.map((field) => (
-          <TemplateFieldControl
-            key={field.key}
-            field={{ ...field, required: false }}
-            value={responses[field.key] as FieldValue}
-            lang={language}
-            inDialog
-            disabled={busy}
-            error={errors[field.key]}
-            onChange={(value) => setResponses((previous) => ({ ...previous, [field.key]: value }))}
-            onBlur={(value) =>
-              setFieldError(
-                field.key,
-                validateFieldOnBlur({ ...field, required: false }, value, t, language),
-              )
-            }
-          />
-        ))}
-        {definition.data?.template.some(
-          (field) => field.kind === "file" || field.kind === "images",
-        ) && <p className="text-sm text-muted-foreground">{t("projectFilesAfterCreation")}</p>}
+        <div className="min-w-0 space-y-8">
+          <section className="space-y-3">
+            <Label htmlFor="staff-project-member">{t("surfaceTeam")}</Label>
+            <ul className="divide-y divide-border/60">
+              {members.map((member) => (
+                <li key={member.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0 space-y-1">
+                    <span className="wrap-anywhere text-sm">{userOptionLabel(member)}</span>
+                    {(existing.data?.repos ?? [])
+                      .filter((project) =>
+                        project.members?.some(
+                          (entry) => entry.userId === member.id && entry.status === "active",
+                        ),
+                      )
+                      .map((project) => (
+                        <Button
+                          key={project.id}
+                          asChild
+                          variant="link"
+                          size="sm"
+                          className="block h-auto px-0 text-left"
+                        >
+                          <Link href={`/projects/${project.id}`}>{project.name}</Link>
+                        </Button>
+                      ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() =>
+                      setMembers((current) => current.filter((item) => item.id !== member.id))
+                    }
+                  >
+                    {t("remove")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+            <UserPicker
+              key={members.map((member) => member.id).join(",")}
+              id="staff-project-member"
+              aria-invalid={Boolean(metadataErrors.members)}
+              onBlur={() =>
+                setMetadataErrors((previous) => ({
+                  ...previous,
+                  members: members.length ? undefined : t("projectTeamRequired"),
+                }))
+              }
+              value=""
+              onChange={(_, user) => {
+                if (user)
+                  setMembers((current) =>
+                    current.some((member) => member.id === user.id) ? current : [...current, user],
+                  );
+                setMetadataErrors((previous) => ({ ...previous, members: undefined }));
+              }}
+              search={async (q) =>
+                (
+                  await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
+                    query: { q },
+                  })
+                ).users.filter((user) => !members.some((member) => member.id === user.id))
+              }
+              minQueryLength={2}
+              disabled={busy}
+              inDialog
+              aria-describedby={metadataErrors.members ? "staff-project-team-error" : undefined}
+            />
+            {metadataErrors.members && (
+              <p id="staff-project-team-error" role="alert" className="text-sm text-destructive">
+                {metadataErrors.members}
+              </p>
+            )}
+          </section>
+          <div className="space-y-2">
+            <Label htmlFor="staff-project-challenges">{t("challenges")}</Label>
+            <MultiSelect
+              id="staff-project-challenges"
+              inDialog
+              options={(challenges.data ?? [])
+                .filter((challenge) => !challenge.mandatory)
+                .map((challenge) => ({
+                  value: String(challenge.challengeId),
+                  label: challengeTitle(challenge),
+                }))}
+              value={selectedChallenges}
+              onChange={setSelectedChallenges}
+              disabled={busy}
+            />
+            {(challenges.data ?? [])
+              .filter((challenge) => challenge.mandatory)
+              .map((challenge) => (
+                <p key={challenge.challengeId} className="text-sm text-muted-foreground">
+                  {challengeTitle(challenge)} · {t("required")}
+                </p>
+              ))}
+          </div>
+        </div>
       </form>
     </SidePanelEditor>
   );

@@ -268,6 +268,11 @@ export function OfflineNotice({
   return view ? <StatusNotice {...view} onAction={view.action} /> : null;
 }
 
+/** A neutral, action-less line for a state the person cannot change (never red, never retried). */
+export function InfoNotice({ icon, text }: { icon: SymbolViewProps["name"]; text: string }) {
+  return <StatusNotice tone="offline" icon={icon} text={text} actionLabel="" />;
+}
+
 /** A real failure (the server answered, or the request could not be served). */
 export function ErrorNotice({ message, onRetry }: { message: string; onRetry?: Action }) {
   const { t } = useLocale();

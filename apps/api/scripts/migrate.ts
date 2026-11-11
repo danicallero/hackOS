@@ -11,8 +11,12 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { DEFAULT_DATABASE_URL } from "./default-database-url.js";
 
-const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
+// HACKOS_MIGRATIONS_DIR lets CI replay another release's migration set (upgrade-path check).
+const MIGRATIONS_DIR =
+  process.env.HACKOS_MIGRATIONS_DIR ??
+  join(dirname(fileURLToPath(import.meta.url)), "..", "db", "migrations");
 const ADVISORY_LOCK_KEY = 815_001;
+const BASELINE_MIGRATION = "0001_hackos_baseline.sql";
 
 type MigrationFile = {
   name: string;
@@ -84,9 +88,14 @@ async function prepareMigrationLedger(
       )
     ).rows;
     const done = new Set<string>();
+    const sameLineage = records.some((record) => record.name === BASELINE_MIGRATION);
     for (const record of records) {
       const migration = files.get(record.name);
       if (!migration) {
+        // A newer release already applied this one: an older image rolled back to
+        // by the deploy script must still start. A ledger without the baseline
+        // belongs to a retired lineage and is still rejected below.
+        if (sameLineage) continue;
         throw new Error(
           `Migration ledger contains "${record.name}", but this deployment has no matching ` +
             "migration file. Recreate the database from the consolidated baseline.",
@@ -149,9 +158,4 @@ export async function migrate(databaseUrl?: string): Promise<string[]> {
     await client.end();
   }
   return applied;
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-  const applied = await migrate();
-  console.log(applied.length ? `Applied: ${applied.join(", ")}` : "Already up to date");
 }

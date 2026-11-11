@@ -41,7 +41,21 @@ async function latestVerificationToken(email: string): Promise<string> {
      ORDER BY o.id DESC LIMIT 1`,
     [email],
   );
-  return new URL(rows[0].payload.vars.verifyUrl as string).searchParams.get("token") as string;
+  return new URLSearchParams(new URL(rows[0].payload.vars.verifyUrl as string).hash.slice(1)).get(
+    "token",
+  ) as string;
+}
+
+async function verifyEmail(a: App, token: string) {
+  return a.inject({
+    method: "POST",
+    url: "/api/auth/verify-email/confirm",
+    headers: {
+      origin: "http://localhost:3001",
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    payload: new URLSearchParams({ token, callback: "/verify-email?verified=1" }).toString(),
+  });
 }
 
 function sessionCookie(res: { headers: Record<string, unknown> }): string {
@@ -103,7 +117,7 @@ describe("H1 sign-up", () => {
     expect(rows[0].payload.template).toBe("auth.verify");
     // The link opens a web confirmation page; it must not hit the API directly,
     // or link scanners would verify the account on their own.
-    expect(rows[0].payload.vars.verifyUrl).toContain("/verify-email?token=");
+    expect(rows[0].payload.vars.verifyUrl).toContain("#token=");
     expect(rows[0].payload.vars.verifyUrl).not.toContain("/api/auth/");
   });
 
@@ -226,10 +240,18 @@ describe("H1 verified-email transaction boundary", () => {
     expect(blocked.json().error.details.code).toBe("email_not_verified");
 
     const verify = await a.inject({
-      method: "GET",
-      url: `/api/auth/verify-email?token=${await latestVerificationToken(email)}`,
+      method: "POST",
+      url: "/api/auth/verify-email/confirm",
+      headers: {
+        origin: "http://localhost:3001",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: new URLSearchParams({
+        token: await latestVerificationToken(email),
+        callback: "/verify-email?verified=1",
+      }).toString(),
     });
-    expect(verify.statusCode).toBe(200);
+    expect(verify.statusCode).toBe(302);
 
     const afterVerification = await a.inject({
       method: "GET",
@@ -315,8 +337,16 @@ describe("H1 verified-email transaction boundary", () => {
     ]);
 
     await a.inject({
-      method: "GET",
-      url: `/api/auth/verify-email?token=${await latestVerificationToken(email)}`,
+      method: "POST",
+      url: "/api/auth/verify-email/confirm",
+      headers: {
+        origin: "http://localhost:3001",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: new URLSearchParams({
+        token: await latestVerificationToken(email),
+        callback: "/verify-email?verified=1",
+      }).toString(),
     });
     const confirmed = await a.inject({
       method: "POST",
@@ -337,15 +367,15 @@ describe("H2 verify email", () => {
       [email],
     );
     const url = rows[0].payload.vars.verifyUrl as string;
-    return new URL(url).searchParams.get("token") as string;
+    return new URLSearchParams(new URL(url).hash.slice(1)).get("token") as string;
   }
 
   it("verifies via the emailed link and flips users.email_verified", async () => {
     const a = await getApp();
     await signUp(a);
     const token = await extractVerifyToken(SIGNUP.email);
-    const res = await a.inject({ method: "GET", url: `/api/auth/verify-email?token=${token}` });
-    expect(res.statusCode).toBe(200);
+    const res = await verifyEmail(a, token);
+    expect(res.statusCode).toBe(302);
 
     const { pool } = await import("../../src/db/pool.js");
     const { rows } = await pool.query(`SELECT email_verified FROM users WHERE email = $1`, [
@@ -354,14 +384,39 @@ describe("H2 verify email", () => {
     expect(rows[0].email_verified).toBe(true);
   });
 
+  it("never verifies on a scanner GET or a cross-origin POST", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const token = await extractVerifyToken(SIGNUP.email);
+    const get = await a.inject({ method: "GET", url: `/api/auth/verify-email?token=${token}` });
+    expect(get.statusCode).toBe(405);
+    const head = await a.inject({ method: "HEAD", url: `/api/auth/verify-email?token=${token}` });
+    expect([404, 405]).toContain(head.statusCode);
+    const forged = await a.inject({
+      method: "POST",
+      url: "/api/auth/verify-email/confirm",
+      headers: {
+        origin: "https://evil.example",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: new URLSearchParams({ token, callback: "/verify-email?verified=1" }).toString(),
+    });
+    expect(forged.statusCode).toBe(403);
+    const { pool } = await import("../../src/db/pool.js");
+    const { rows } = await pool.query("SELECT email_verified FROM users WHERE email = $1", [
+      SIGNUP.email,
+    ]);
+    expect(rows[0].email_verified).toBe(false);
+  });
+
   it("an already-used link answers 'already verified' instead of erroring (H2)", async () => {
     const a = await getApp();
     await signUp(a);
     const token = await extractVerifyToken(SIGNUP.email);
-    await a.inject({ method: "GET", url: `/api/auth/verify-email?token=${token}` });
-    const again = await a.inject({ method: "GET", url: `/api/auth/verify-email?token=${token}` });
-    expect(again.statusCode).toBe(200);
-    expect(again.json().status).toBe(true);
+    await verifyEmail(a, token);
+    const again = await verifyEmail(a, token);
+    expect(again.statusCode).toBe(302);
+    expect(again.headers.location).toContain("verified=1");
   });
 });
 
@@ -805,11 +860,16 @@ describe("#188 return-path continuity", () => {
 
   it("distinguishes an expired token from an invalid one via the redirect's `error` code (H2)", async () => {
     const a = await getApp();
-    const callbackURL = encodeURIComponent("/verify-email?verified=1");
+    const callback = "/verify-email?verified=1";
 
     const invalid = await a.inject({
-      method: "GET",
-      url: `/api/auth/verify-email?token=not-a-real-token&callbackURL=${callbackURL}`,
+      method: "POST",
+      url: "/api/auth/verify-email/confirm",
+      headers: {
+        origin: "http://localhost:3001",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: new URLSearchParams({ token: "not-a-real-token", callback }).toString(),
     });
     expect(invalid.statusCode).toBe(302);
     const invalidLocation = new URL(invalid.headers.location as string, "http://x");
@@ -827,8 +887,13 @@ describe("#188 return-path continuity", () => {
     );
 
     const expired = await a.inject({
-      method: "GET",
-      url: `/api/auth/verify-email?token=${expiredToken}&callbackURL=${callbackURL}`,
+      method: "POST",
+      url: "/api/auth/verify-email/confirm",
+      headers: {
+        origin: "http://localhost:3001",
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      payload: new URLSearchParams({ token: expiredToken, callback }).toString(),
     });
     expect(expired.statusCode).toBe(302);
     const expiredLocation = new URL(expired.headers.location as string, "http://x");
@@ -947,5 +1012,60 @@ describe("#538/#559 distributed rate limiting on Better Auth paths", () => {
       await replicaA.close();
       await replicaB.close();
     }
+  });
+});
+
+describe("Active devices (H28)", () => {
+  it("lists the caller's sessions, closes one, then every other", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const here = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const second = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const third = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/auth/list-sessions",
+      headers: { cookie: here },
+    });
+    expect(list.statusCode).toBe(200);
+    const sessions = list.json() as { token: string }[];
+    expect(sessions).toHaveLength(3);
+
+    const current = await a.inject({
+      method: "GET",
+      url: "/api/auth/get-session",
+      headers: { cookie: here },
+    });
+    const currentToken = (current.json() as { session: { token: string } }).session.token;
+    const other = sessions.find((s) => s.token !== currentToken) as { token: string };
+    const revoked = await a.inject({
+      method: "POST",
+      url: "/api/auth/revoke-session",
+      headers: { cookie: here },
+      payload: { token: other.token },
+    });
+    expect(revoked.statusCode).toBe(200);
+
+    const rest = await a.inject({
+      method: "POST",
+      url: "/api/auth/revoke-other-sessions",
+      headers: { cookie: here },
+      payload: {},
+    });
+    expect(rest.statusCode).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: { cookie: here } })).statusCode,
+    ).toBe(200);
+    for (const cookie of [second, third]) {
+      const me = await a.inject({ method: "GET", url: "/api/me", headers: { cookie } });
+      expect(me.statusCode).toBe(401);
+    }
+    const after = await a.inject({
+      method: "GET",
+      url: "/api/auth/list-sessions",
+      headers: { cookie: here },
+    });
+    expect(after.json()).toHaveLength(1);
   });
 });

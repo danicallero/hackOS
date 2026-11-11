@@ -4,32 +4,36 @@ import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { CvViewer } from "@/components/profile/cv-viewer";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
 import {
-  DirectoryCard,
+  type GithubAccountStatus,
   OWN_CV_PATH,
   ProfileTextFields,
   ProfileVisibilityFields,
   type PublicProfile,
   type Settings,
+  ShareToggleCard,
   SwitchRow,
   savedLinks,
   settingsFrom,
 } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-live-query";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
+import { useServerResource } from "@/hooks/use-server-resource";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Me } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export { DirectoryCard } from "@/components/profile/public-profile-form";
 export type { DirectoryEntry } from "@/lib/directory";
@@ -44,10 +48,11 @@ const CV_MAX_BYTES = 5 * 1024 * 1024;
 
 /**
  * While the opt-in is off only the opt-in itself counts: hidden fields can
- * neither enable Save nor be published by it (#934).
+ * neither enable Save nor be published by it (#934). A published helper
+ * profile shows the fields on the help desk (H61), so they stay editable.
  */
-function sameSettings(a: Settings, b: Settings): boolean {
-  if (!a.directoryVisible && !b.directoryVisible) return true;
+function sameSettings(a: Settings, b: Settings, helperPublished = false): boolean {
+  if (!helperPublished && !a.directoryVisible && !b.directoryVisible) return true;
   return (Object.keys(a) as (keyof Settings)[]).every((key) => {
     if (key === "socials") {
       return JSON.stringify(savedLinks(a.socials)) === JSON.stringify(savedLinks(b.socials));
@@ -70,31 +75,6 @@ export function displayName(me: Pick<Me, "name" | "surname">, showSurname: boole
 }
 
 /**
- * Unsaved toggles, text and links apply immediately; the project and its
- * challenges come from the saved preview, because the API only projects them
- * for the stored settings (#934, #935).
- */
-function previewEntry(
-  me: Pick<Me, "name" | "surname" | "image">,
-  settings: Settings,
-  saved: DirectoryEntry,
-  hasCv = false,
-): DirectoryEntry {
-  return {
-    ...saved,
-    displayName: displayName(me, settings.showSurname),
-    photoUrl: settings.showPhoto ? me.image : null,
-    headline: settings.headline.trim() || null,
-    bio: settings.bio.trim() || null,
-    locationNote: settings.locationNote.trim() || null,
-    socials: savedLinks(settings.socials),
-    cvUrl: settings.shareCv && hasCv ? OWN_CV_PATH : null,
-    projects: settings.showProject ? saved.projects : [],
-    challenges: settings.showProject ? saved.challenges : [],
-  };
-}
-
-/**
  * Public profile opt-in and card (#934, #935), managed from My profile: what
  * the people who scan the owner's badge see.
  * Without event access the API answers 403 and the section stays hidden.
@@ -107,15 +87,26 @@ function previewEntry(
 export function PublicProfileCard({
   onboarding,
   onDirtyChange,
+  onSaved,
 }: {
-  onboarding?: { onFinished: () => void; onLater: () => void };
+  /** `onFinished` says which explicit choice was saved: create (opt in) or hidden (decline). */
+  onboarding?: {
+    onFinished: (choice: "create" | "hidden") => void;
+    onLater: () => void;
+    /** Filled with a draft save while there are edits: keeps them without opting in or answering the step. */
+    saveDraft?: React.MutableRefObject<(() => Promise<boolean>) | null>;
+  };
   /** Lets the profile's section list mark a section that holds unsaved edits. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Called after a successful save, so another mounted copy of the editor can reload. */
+  onSaved?: () => void;
 } = {}) {
   const { me } = useSessionContext();
   const { t } = useLocale();
   // Bumped by every successful save; a GET that started earlier is stale.
   const generation = useRef(0);
+  // H61: the same fields are what help desk users see while the helper profile is published.
+  const helperPublished = useOwnHelperProfile().data?.published === true;
   const { data, error, refetch } = useLiveQuery<Snapshot>(
     async () => {
       const startedAt = generation.current;
@@ -127,8 +118,8 @@ export function PublicProfileCard({
     REALTIME_SCOPES.PERSONAL,
     [EVENTS.USER_SESSION_CHANGED],
     {
-      queryKey: [me?.name, me?.surname, me?.image],
-      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image],
+      queryKey: [me?.name, me?.surname, me?.image, helperPublished],
+      resourceKey: ["me", "public-profile", me?.name, me?.surname, me?.image, helperPublished],
     },
   );
   const [saved, setSaved] = useState<Snapshot | null>(null);
@@ -145,15 +136,17 @@ export function PublicProfileCard({
   const stored = profile ? settingsFrom(profile) : null;
   const initialSettings = onboarding && stored ? { ...stored, directoryVisible: true } : stored;
   const settings = edits ?? initialSettings;
-  const dirty = Boolean(initialSettings && settings && !sameSettings(settings, initialSettings));
+  const dirty = Boolean(
+    initialSettings && settings && !sameSettings(settings, initialSettings, helperPublished),
+  );
+  const fieldsOpen = Boolean(settings?.directoryVisible || helperPublished);
+  const githubStatus = useServerResource<GithubAccountStatus>(
+    ["me-github"],
+    (signal) => api.get<GithubAccountStatus>("/api/me/github", { signal }),
+    { enabled: fieldsOpen },
+  );
   useUnsavedChangesGuard(dirty);
 
-  const preview = useMemo(() => {
-    if (!me || !profile || !settings?.directoryVisible) return null;
-    return dirty
-      ? previewEntry(me, settings, profile.preview, profile.cv !== null)
-      : profile.preview;
-  }, [me, profile, settings, dirty]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [onDirtyChange, dirty]);
@@ -176,7 +169,7 @@ export function PublicProfileCard({
     setEdits((current) => {
       const next = { ...(current ?? (initialSettings as Settings)), ...patch };
       // Back to the stored settings (hidden edits are discarded): follow refreshes again.
-      return sameSettings(next, initialSettings as Settings) ? null : next;
+      return sameSettings(next, initialSettings as Settings, helperPublished) ? null : next;
     });
   }
 
@@ -189,10 +182,12 @@ export function PublicProfileCard({
   async function onSubmit(event: React.FormEvent, directoryVisible = settings?.directoryVisible) {
     event.preventDefault();
     if (!settings || !stored) return;
-    // Turning the opt-in off keeps the stored public fields: nothing hidden is published.
-    const body = directoryVisible
-      ? { ...settings, directoryVisible: true }
-      : { ...stored, directoryVisible: false };
+    // Turning the opt-in off keeps the stored public fields: nothing hidden is
+    // published. A published helper still edits them for the help desk (H61).
+    const body =
+      directoryVisible || helperPublished
+        ? { ...settings, directoryVisible: Boolean(directoryVisible) }
+        : { ...stored, directoryVisible: false };
     setSavingChoice(directoryVisible ? "create" : "hidden");
     setSaveError(null);
     if (
@@ -213,6 +208,7 @@ export function PublicProfileCard({
           showSurname: body.showSurname,
           showPhoto: body.showPhoto,
           showProject: body.showProject,
+          showGithub: body.showGithub,
           headline: body.headline.trim() || null,
           locationNote: body.locationNote.trim() || null,
           bio: body.bio.trim() || null,
@@ -224,7 +220,8 @@ export function PublicProfileCard({
       idempotencyKey.current = null;
       commit(next);
       setEdits(null);
-      if (onboarding) onboarding.onFinished();
+      onSaved?.();
+      if (onboarding) onboarding.onFinished(directoryVisible ? "create" : "hidden");
       else toast.success(t("publicProfileSaved"), { compactTitle: t("toastSavePublicProfile") });
     } catch (err) {
       setSaveError(apiErrorText(err, t, t("couldNotSavePublicProfile")));
@@ -237,7 +234,40 @@ export function PublicProfileCard({
     }
   }
 
-  const hasCv = profile.cv !== null;
+  /** Journey only: store the edited fields as they are, hidden and unanswered. Consent stays the explicit Create. */
+  async function saveDraft(): Promise<boolean> {
+    if (!settings || !stored) return true;
+    try {
+      const next = await api.put<PublicProfile>(
+        "/api/me/public-profile",
+        {
+          directoryVisible: stored.directoryVisible,
+          showSurname: settings.showSurname,
+          showPhoto: settings.showPhoto,
+          showProject: settings.showProject,
+          headline: settings.headline.trim() || null,
+          locationNote: settings.locationNote.trim() || null,
+          bio: settings.bio.trim() || null,
+          socials: savedLinks(settings.socials),
+          shareCv: settings.shareCv,
+        },
+        { headers: { "Idempotency-Key": crypto.randomUUID() } },
+      );
+      commit(next);
+      setEdits(null);
+      onSaved?.();
+      return true;
+    } catch (err) {
+      showErrorToast(
+        err instanceof ApiError ? err : new Error(t("couldNotSavePublicProfile")),
+        t("toastSavePublicProfile"),
+      );
+      return false;
+    }
+  }
+  if (onboarding?.saveDraft) onboarding.saveDraft.current = dirty ? saveDraft : null;
+
+  const _hasCv = profile.cv !== null;
   return (
     <form className="@container min-w-0" onSubmit={onSubmit}>
       <SectionCard
@@ -275,79 +305,69 @@ export function PublicProfileCard({
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
         <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
+          <div className="flex min-w-0 items-center gap-4">
+            <ProfilePhoto />
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {[me.name, me.surname].filter(Boolean).join(" ")}
+              </p>
+              <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+            </div>
+          </div>
           {onboarding ? (
             <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
           ) : (
-            <SwitchRow
+            <ShareToggleCard
               checked={settings.directoryVisible}
               onChange={(directoryVisible) => update({ directoryVisible })}
               label={t("publicProfileVisible")}
               hint={t("publicProfileAudience")}
             />
           )}
-          {settings.directoryVisible && (
-            <>
-              <ProfileVisibilityFields
-                settings={settings}
-                onChange={update}
-                className="flex flex-wrap gap-x-8 gap-y-3"
-              />
-              <ProfileTextFields
-                settings={settings}
-                onChange={update}
-                className={
-                  onboarding
-                    ? "grid items-start gap-4 sm:grid-cols-2"
-                    : "grid items-start gap-4 @xl:grid-cols-2"
-                }
-              />
-              {(!onboarding || profile.cv?.source === "application") && (
-                <CvField
-                  cv={profile.cv}
-                  ownerName={displayName(me, true)}
-                  shareCv={settings.shareCv}
-                  onShareChange={(shareCv) => update({ shareCv })}
-                  onSaved={(next) => {
-                    commit(next);
-                    // A removed CV is no longer shared; drop a pending share too.
-                    if (!next.cv) {
-                      setEdits((current) =>
-                        current?.shareCv ? { ...current, shareCv: false } : current,
-                      );
-                    }
-                  }}
-                />
-              )}
-              <section
-                className={
-                  onboarding
-                    ? "space-y-2 border-t border-border/60 pt-4"
-                    : "grid gap-x-4 gap-y-2 @xl:grid-cols-2"
-                }
-              >
-                <h3
-                  className={
-                    onboarding
-                      ? "type-label text-muted-foreground"
-                      : "type-label text-muted-foreground @xl:col-span-2"
-                  }
-                >
-                  {t("publicProfilePreview")}
-                </h3>
-                {onboarding ? (
-                  <DirectoryCard
-                    entry={
-                      dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
-                    }
-                  />
-                ) : (
-                  <div className="@xl:col-start-1">
-                    <DirectoryCard entry={preview ?? profile.preview} />
-                  </div>
-                )}
-              </section>
-            </>
+          {!settings.directoryVisible && helperPublished && (
+            <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
           )}
+          {!fieldsOpen && (
+            <p className="text-muted-foreground text-sm">{t("publicProfileFieldsOffHint")}</p>
+          )}
+          {/* What sharing would show stays in view while it is off, but cannot be edited. */}
+          <fieldset
+            disabled={!fieldsOpen}
+            className={cn(
+              "min-w-0 space-y-(--space-within-section) transition-opacity",
+              !fieldsOpen && "opacity-55",
+            )}
+          >
+            <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
+            <ProfileTextFields
+              settings={settings}
+              onChange={update}
+              ownAccount
+              githubStatus={githubStatus.data ?? null}
+              className={
+                onboarding
+                  ? "grid items-start gap-4 sm:grid-cols-2"
+                  : "grid items-start gap-4 @xl:grid-cols-2"
+              }
+            />
+            {(!onboarding || profile.cv?.source === "application") && (
+              <CvField
+                cv={profile.cv}
+                ownerName={displayName(me, true)}
+                shareCv={settings.shareCv}
+                onShareChange={(shareCv) => update({ shareCv })}
+                onSaved={(next) => {
+                  commit(next);
+                  // A removed CV is no longer shared; drop a pending share too.
+                  if (!next.cv) {
+                    setEdits((current) =>
+                      current?.shareCv ? { ...current, shareCv: false } : current,
+                    );
+                  }
+                }}
+              />
+            )}
+          </fieldset>
         </fieldset>
       </SectionCard>
     </form>

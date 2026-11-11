@@ -17,6 +17,8 @@ export const ERROR_REASONS = {
   BADGE_REVOKED: "badge_revoked",
   /** 409: an offline scan expected one person but the badge belongs to another. */
   BADGE_OWNER_MISMATCH: "badge_owner_mismatch",
+  /** 400: an availability interval starts before the hacking time (H62). */
+  AVAILABILITY_BEFORE_WINDOW: "availability_before_window",
   /** 409: the scanned ticket was revoked. */
   TICKET_REVOKED: "ticket_revoked",
   /** 409: a team member is busy in another judging room. */
@@ -53,6 +55,46 @@ export const ERROR_REASONS = {
   PROJECT_FROZEN: "project_frozen",
   /** 400: the event requires a linked GitHub repository to submit. */
   PROJECT_GITHUB_REQUIRED: "project_github_required",
+  /** 400: a schedule audience names a role that is not an existing publicly visible role (H59). */
+  SCHEDULE_AUDIENCE_ROLE_INVALID: "schedule_audience_role_invalid",
+  /** 400: an RSVP is asked of a role that is not an existing publicly visible one (H59). */
+  RSVP_ROLE_INVALID: "rsvp_role_invalid",
+  MENTOR_PROFILE_NOT_ELIGIBLE: "mentor_profile_not_eligible",
+  ONBOARDING_STEP_REQUIRED: "onboarding_step_required",
+  ONBOARDING_FACT_INCOMPLETE: "onboarding_fact_incomplete",
+  RSVP_LOCKED: "rsvp_locked",
+  RSVP_PARTICIPANTS_EXCLUDED: "rsvp_participants_excluded",
+  MEAL_PLAN_NOT_ELIGIBLE: "meal_plan_not_eligible",
+  /** 403: help desk actions need `helpdesk:offer` or an accepted helper application (H61). */
+  HELPER_NOT_ELIGIBLE: "helper_not_eligible",
+  /** 409: a knowledge topic in use cannot be deleted; merge it instead (H61). */
+  TOPIC_IN_USE: "topic_in_use",
+  /** 403: user management cannot publish a person's help desk profile; publishing is their own consent (H61). */
+  HELPER_PUBLISH_OWN_CONSENT: "helper_publish_own_consent",
+  /** 409: the person or team already has an open or claimed help request (H64). */
+  HELP_REQUEST_ACTIVE: "help_request_active",
+  /** 409: new help requests are only accepted inside the configured opening windows (H64). */
+  HELPDESK_CLOSED: "helpdesk_closed",
+  /** 409: another helper won the claim (H66). */
+  HELP_REQUEST_ALREADY_CLAIMED: "help_request_already_claimed",
+  /** 409: the help request is resolved or cancelled. */
+  HELP_REQUEST_CLOSED: "help_request_closed",
+  /** 409: helpers cannot claim their own or their team's request. */
+  HELP_REQUEST_NOT_CLAIMABLE: "help_request_not_claimable",
+  /** 409: only the claiming helper can release a request. */
+  HELP_REQUEST_NOT_CLAIMER: "help_request_not_claimer",
+  /** 409: resolve needs a claimed request. */
+  HELP_REQUEST_NOT_CLAIMED: "help_request_not_claimed",
+  /** 409: a topic rename collides with another topic; merge instead (H61). */
+  TOPIC_NAME_TAKEN: "topic_name_taken",
+  /** 400: "Other" is a request flag, not a catalogue topic (H61, H64). */
+  TOPIC_RESERVED: "topic_reserved",
+  /** 400: a referenced knowledge topic does not exist. */
+  TOPIC_UNKNOWN: "topic_unknown",
+  /** 400: planned availability intervals overlap (H62). */
+  AVAILABILITY_OVERLAP: "availability_overlap",
+  /** 400: an availability interval is empty or longer than 24 hours (H62). */
+  AVAILABILITY_INVALID: "availability_invalid",
 } as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[keyof typeof ERROR_REASONS];

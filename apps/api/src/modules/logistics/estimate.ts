@@ -11,9 +11,15 @@
  * marked `conflict` and credits zero hours until staff insert the missing
  * exit/activity. The scan endpoint rejects this sequence at write time; it can
  * only appear through manual log edits.
+ *
+ * `help` (H66, H24): a help request resolved in person is a checkpoint, like
+ * an activity, but weaker: it can only secure (and renew) a window a door
+ * entry or activity already opened, up to its own time. With no live window it
+ * is ignored, it never opens presence on its own, and it does not count as a
+ * door signal (it neither resets nor causes the in→in conflict).
  */
 
-export type PresenceEventKind = "in" | "out" | "activity";
+export type PresenceEventKind = "in" | "out" | "activity" | "help";
 
 export interface PresenceEvent {
   /** epoch milliseconds */
@@ -53,7 +59,7 @@ export interface CertaintyWindow {
   deadline: number;
   securedUntil: number | null;
   status: "secured" | "provisional" | "invalid";
-  openedBy: "in" | "activity";
+  openedBy: "in" | "activity" | "help";
   /** Name of the activity that opened this window, when openedBy === "activity". */
   openedByActivity: string | null;
   closedBy: PresenceEventKind | null;
@@ -66,7 +72,7 @@ export interface CertaintyWindow {
 // Default policy; event_config can override it.
 export const DEFAULT_SUSPICIOUS_GAP_MS = 12 * 60 * 60_000; // 12h
 
-const KIND_ORDER: Record<PresenceEventKind, number> = { in: 0, activity: 1, out: 2 };
+const KIND_ORDER: Record<PresenceEventKind, number> = { in: 0, activity: 1, help: 1, out: 2 };
 
 /** Explain the rolling certainty policy one window at a time for admin UI. */
 export function buildCertaintyWindows(
@@ -97,6 +103,30 @@ export function buildCertaintyWindows(
       }
       active = null;
       prevKind = "out";
+      continue;
+    }
+
+    if (event.kind === "help") {
+      // A checkpoint without a live window proves nothing: skip it entirely.
+      if (!active || event.t > active.deadline) continue;
+      active.securedUntil = event.t;
+      active.closedBy = "help";
+      active.closedByActivity = null;
+      active.status = "secured";
+      // Renew like an activity, but keep the last door/activity kind.
+      const renewed: CertaintyWindow = {
+        start: event.t,
+        deadline: event.t + gap,
+        securedUntil: null,
+        status: event.t + gap < cutoff ? "invalid" : "provisional",
+        openedBy: "help",
+        openedByActivity: null,
+        closedBy: null,
+        closedByActivity: null,
+        conflict: false,
+      };
+      windows.push(renewed);
+      active = renewed;
       continue;
     }
 

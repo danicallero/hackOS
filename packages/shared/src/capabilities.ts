@@ -78,6 +78,12 @@ export const CAPABILITIES = {
   WALLET_MANAGE: "wallet:manage", // Apple Wallet pass fields/labels
   PRESENCE_MANAGE: "presence:manage", // H24 automatic-presence policy
 
+  // help desk (H61-H67)
+  HELPDESK_OFFER: "helpdesk:offer", // own helper profile/availability, helper inbox, claim requests
+  HELPDESK_REQUEST: "helpdesk:request", // browse helpers, request help for yourself or your team
+  HELPDESK_COVERAGE: "helpdesk:coverage", // organizer coverage view (H67)
+  HELPDESK_MANAGE: "helpdesk:manage", // rename and merge knowledge topics
+
   // comms & admin (H50-H54)
   NOTIFICATIONS_SEND: "notifications:send",
   AUDIT_READ: "audit:read",
@@ -134,6 +140,10 @@ export const CAPABILITY_DESCRIPTIONS: Record<Capability, string> = {
   "venue:manage": "Edit venue location and Wi-Fi credentials",
   "wallet:manage": "Edit Apple Wallet pass fields and labels",
   "presence:manage": "Configure automatic-presence policy",
+  "helpdesk:offer": "Publish a helper profile and claim help requests",
+  "helpdesk:request": "Browse helpers and request help",
+  "helpdesk:coverage": "View help desk coverage across the event",
+  "helpdesk:manage": "Rename and merge help desk knowledge topics",
   "notifications:send": "Send notifications to users",
   "audit:read": "Read the audit log",
   "exports:run": "Run data exports",

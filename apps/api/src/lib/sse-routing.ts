@@ -71,6 +71,13 @@ export function mutationDomainForPath(url: string): string | null {
     return SSE_TOPICS.LOGISTICS;
   }
 
+  // H61-H67: help desk writes, including the helper profile under /api/me
+  // (matched before the identity fallback), refresh helper, inbox and
+  // coverage views. Per-request changes also go to each party's user topic.
+  if (matches("/api/helpdesk") || matches("/api/me/helper-profile")) {
+    return SSE_TOPICS.HELPDESK;
+  }
+
   // The event diary is private to its owner and wakes no shared read model;
   // without this, `/api/me` below would refresh every identity view (#935).
   if (matches("/api/me/diary")) return null;
@@ -139,6 +146,8 @@ export function directoryMutationForPath(url: string): boolean {
   return (
     path === "/api/me" ||
     path === "/api/me/photo" ||
+    // H61: the helper profile edits the shared bio and the card's knowledge.
+    path === "/api/me/helper-profile" ||
     /^\/api\/users\/[^/]+$/.test(path) ||
     mutationDomainForPath(path) === SSE_TOPICS.PROJECTS ||
     path === "/api/challenges/visibility" ||

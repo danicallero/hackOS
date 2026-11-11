@@ -49,6 +49,7 @@ import { type EventReminder, readEventReminder, saveEventReminder } from "./remi
 /** Every writable field's owning capability (H8) — one entry per `eventConfigBody` key. */
 const EVENT_SETTINGS_CAPABILITIES: Record<string, Capability> = {
   name: CAPABILITIES.EVENT_MANAGE,
+  eventKey: CAPABILITIES.EVENT_MANAGE,
   projectDraftsOpenAt: CAPABILITIES.EVENT_MANAGE,
   projectSubmissionsCloseAt: CAPABILITIES.EVENT_MANAGE,
   projectDraftVisibility: CAPABILITIES.EVENT_MANAGE,
@@ -133,6 +134,10 @@ const passFieldVisibilitySchema = z
 const eventConfigBody = z
   .object({
     name: z.string().nullable().optional(),
+    eventKey: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,39}$/)
+      .optional(),
     eventReminderScheduledAt: z.coerce.date().nullable().optional(),
     tagline: z.string().nullable().optional(),
     timezone: z.string().min(1).optional(),
@@ -183,6 +188,7 @@ const eventConfigBody = z
   .strict();
 
 const DEFAULTS = {
+  event_key: "default",
   name: null,
   tagline: null,
   timezone: "Europe/Madrid",
@@ -217,6 +223,7 @@ const DEFAULTS = {
 } as const;
 
 interface EventConfigRow {
+  event_key: string;
   project_drafts_open_at: string | null;
   project_submissions_close_at: string | null;
   project_draft_visibility: string;
@@ -253,7 +260,7 @@ interface EventConfigRow {
 
 async function readConfig(db: Queryable = pool): Promise<EventConfigRow> {
   const { rows } = await db.query(
-    `SELECT name, tagline, timezone, event_starts_at, event_ends_at,
+    `SELECT event_key, name, tagline, timezone, event_starts_at, event_ends_at,
             hacking_starts_at, hacking_ends_at,
             show_start_countdown,
             presence_auto_entry_at, presence_certainty_window_minutes,
@@ -292,6 +299,7 @@ function toPublic(
   judging: { judging_starts_at: string | null; judging_ends_at: string | null },
 ) {
   return {
+    eventKey: row.event_key,
     name: row.name,
     tagline: row.tagline,
     timezone: row.timezone,
@@ -410,7 +418,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Update event config",
         description:
-          "Atomically saves an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), the shirt-size options offered by every picker in the app (H12), and `mealPlanCutoffHours` (0–168, #933): how many hours before each meal sponsor meal plans lock. Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes and mealPlanCutoffHours) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets. A change to the event start, the hacking window or the timezone also runs the Live Activity worker early, so running deadline and accreditation Live Activities follow it within seconds.",
+          "Atomically saves the edition eventKey (first rename adopts legacy evidence; later changes preserve history) and an optional eventReminderScheduledAt (null cancels a pending pre-event email) alongside the event settings. The reminder requires event:manage and a future send before doors open. Updates name/tagline/timezone, event start (doors open — the time shown on the Wallet pass), hacking window, venue (name + GPS), the Wallet pass back-field list, field-label overrides, per-field show/hide toggles, whether participants may create their own project (H19), presence-detection policy, whether invited sponsors/staff must supply a shirt size and/or see dietary-restriction fields when claiming their account (H10), the shirt-size options offered by every picker in the app (H12), and `mealPlanCutoffHours` (0–168, #933): how many hours before each meal sponsor meal plans lock. Fields omitted from the body are left unchanged. Each field is additionally gated by its own owning capability (EVENT_MANAGE for identity/timing, VENUE_MANAGE, WALLET_MANAGE, PRESENCE_MANAGE, INVITES_MANAGE for the sponsor/staff requirements, INTOLERANCES_MANAGE for shirtSizes and mealPlanCutoffHours) — a 403 names exactly which field(s) the caller lacks rights to. When the saved config actually changes, Apple Wallet devices are pushed and the shared Google Wallet event-ticket class is refreshed for saved tickets. A change to the event start, the hacking window or the timezone also runs the Live Activity worker early, so running deadline and accreditation Live Activities follow it within seconds.",
         body: eventConfigBody,
       },
     },
@@ -422,6 +430,7 @@ export function registerEventRoutes(app: FastifyInstance): void {
         await client.query("SELECT pg_advisory_xact_lock(603, 1)");
         const current = await readConfig(client);
         const next = {
+          event_key: b.eventKey ?? current.event_key,
           name: b.name === undefined ? current.name : b.name,
           tagline: b.tagline === undefined ? current.tagline : b.tagline,
           timezone: b.timezone ?? current.timezone,
@@ -612,6 +621,23 @@ export function registerEventRoutes(app: FastifyInstance): void {
           await client.query("UPDATE event_config SET project_github_required=$1 WHERE id=1", [
             b.projectGithubRequired,
           ]);
+        if (b.eventKey !== undefined) {
+          if (current.event_key !== "default" && b.eventKey === "default") {
+            throw new BadRequestError("The legacy default event key cannot be reused");
+          }
+          // The first rename adopts the legacy default edition. Later edition
+          // changes leave every application and role assignment in history.
+          if (current.event_key === "default" && b.eventKey !== "default") {
+            await client.query("UPDATE applications SET event_key=$1 WHERE event_key='default'", [
+              b.eventKey,
+            ]);
+            await client.query(
+              "UPDATE user_role_event_evidence SET event_key=$1 WHERE event_key='default'",
+              [b.eventKey],
+            );
+          }
+          await client.query("UPDATE event_config SET event_key=$1 WHERE id=1", [b.eventKey]);
+        }
         const phaseCheck = await client.query(
           `SELECT COALESCE(project_submissions_close_at,hacking_ends_at) < COALESCE(project_drafts_open_at,hacking_starts_at) AS invalid FROM event_config WHERE id=1`,
         );

@@ -59,7 +59,10 @@ export function CertificatesPanel({
   const canExport = useCan(CAPABILITIES.LOGISTICS_STATS);
   const [data, setData] = useState<CertificateOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [locale, setLocale] = useState<Language>(language);
+  // Follows the interface language until the person picks one, since the
+  // language can resolve after this panel mounts.
+  const [picked, setLocale] = useState<Language | null>(null);
+  const locale = picked ?? language;
   const [certifiedHours, setCertifiedHours] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState<string | null>(null);

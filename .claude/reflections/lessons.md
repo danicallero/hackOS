@@ -1077,7 +1077,7 @@ Date: 2026-11-08
 Adding a new family of native pages or sheets with a shared page wrapper.
 
 ### Mistake
-A new family of pages shared a wrapper that set `headerTransparent: false` with an opaque
+The help desk wrapper set `headerTransparent: false` with an opaque
 `headerStyle` colour (and sheets `headerBlurEffect: "none"`), so every new page
 and modal painted a grey band and clipped content instead of scrolling under
 the native scroll-edge blur. The first fix made sheets transparent but left
@@ -1179,3 +1179,81 @@ that repeated autosaves do not create one event per pause in typing.
 ### Exceptions
 A separately authorized content-versioning feature must define its own privacy
 and retention contract before storing private historical content.
+
+## [R034] A person shown in a new feature uses the existing profile surface
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-08
+
+### Trigger
+A feature shows or edits a person (helper, mentor, sponsor, staff) who already
+has a public profile elsewhere in the product.
+
+### Mistake
+The help desk built its own helper card and a separate helper editor, with a
+double title, pills and chips, so the same person looked and was edited
+differently depending on where they were opened.
+
+### Lesson
+Users expect one profile per person. "Similar" is not enough: the feature must
+render the same profile component with the same fields, and edit it in the same
+editor, adding only the feature's own sections.
+
+### Action
+Feed the existing profile screen/editor from the feature's API (same entry
+shape) and append feature-specific sections below it. Keep the feature's
+consent (e.g. publication) as its own explicit control in that editor. Delete
+the parallel card/editor in the same change.
+
+### Validation
+Open the person from the feature and from the original entry point and compare
+screenshots: same layout, fields and header behaviour; editing from either
+place changes both.
+
+### Exceptions
+A deliberately reduced view required by privacy (fields the viewer may not
+see) hides those fields, but keeps the same component and layout.
+
+## [R035] Derive a new branded surface from the product's own artifacts first
+
+Status: active
+Scope: repository
+Source: user-correction
+Date: 2026-11-10
+
+### Trigger
+Designing a new branded output (share card, poster, certificate, email block)
+for which the product already ships a comparable artifact.
+
+### Mistake
+The share image was composed from designer references in a Downloads/Desktop
+folder (a bold serif headline, gradient sky, decorative building art) and the
+sharing step wrapped it in a form-heavy panel. The user rejected both: the
+product already has a Wallet pass, its fonts, strip, organizer logo and the
+Wallet/QR/Share component conventions, and they expected those to be reused.
+
+### Lesson
+Inventory what the repo already ships (`apps/web/public`, `apps/api/assets`,
+`apps/mobile/assets`, existing pass/badge/email/certificate renderers and their
+UI components) and render it before consulting outside references. New
+surfaces take their proportions, fields, labels, palette and typefaces from the
+closest existing artifact; outside art is an accent, not the base. Titles use
+the edition's actual title weights (Rockwell regular), values use Inter; flat
+colour, no decorative gradients.
+
+### Action
+Look at the real rendered artifact (e.g. screenshot of the Wallet pass), copy
+its structure and proportions, and reuse the shared primitives (Button,
+DropdownMenu, toast, Skeleton) instead of custom panels. Keep one preview, one
+primary action and move secondary actions into a menu. Ship only assets taken
+from the repo (copy them under a namespaced public folder) and say which.
+
+### Validation
+Show before/after screenshots of the real component and an exported image
+beside the existing artifact; confirm every asset has a repo path and no
+outside reference art is bundled.
+
+### Exceptions
+Brand art from outside the repo is fine when the user names it for this surface.

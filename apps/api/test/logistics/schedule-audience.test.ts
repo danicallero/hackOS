@@ -3,7 +3,9 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { describe, expect, it } from "vitest";
 import { pool } from "../../src/db/pool.js";
 import {
+  assignRole,
   asUser,
+  createRole,
   createUser,
   createUserWithCapabilities,
   grantAttendeeRole,
@@ -669,5 +671,57 @@ describe("visibility requires an audience (H59 follow-up)", () => {
     const item = res.json().items.find((i: { id: number }) => i.id === staffOnlyId);
     expect(item).toBeDefined();
     expect(item.visibility).toBe("hidden");
+  });
+});
+
+describe("role audiences (H59)", () => {
+  it("shows an item to whoever holds at least one of its roles, and lists the visible roles", async () => {
+    const a = await getApp();
+    const visible = await createRole([], { name: "Speaker" });
+    const other = await createRole([], { name: "Photographer" });
+    await createRole([], { name: "Hidden role", isVisible: false });
+    const holder = await createUser();
+    await assignRole(holder, visible);
+    const outsider = await createUser();
+    await assignRole(outsider, other);
+    const id = await createItem({ title: "Speaker dinner", audiences: [`role:${visible}`] });
+
+    const seen = async (userId: number) =>
+      (await a.inject({ method: "GET", url: "/api/public/activities", headers: asUser(userId) }))
+        .json()
+        .items.map((i: { id: number }) => i.id);
+    expect(await seen(holder)).toEqual([id]);
+    expect(await seen(outsider)).toEqual([]);
+
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const roles = await a.inject({
+      method: "GET",
+      url: "/api/schedule/audience-roles",
+      headers: asUser(manager),
+    });
+    expect(roles.json().map((r: { name: string }) => r.name)).toEqual(
+      expect.arrayContaining(["Speaker", "Photographer"]),
+    );
+    expect(roles.json().map((r: { name: string }) => r.name)).not.toContain("Hidden role");
+  });
+
+  it("refuses an audience role that is not a publicly visible role", async () => {
+    const a = await getApp();
+    const manager = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const hidden = await createRole([], { isVisible: false });
+    const res = await a.inject({
+      method: "POST",
+      url: "/api/schedule",
+      headers: asUser(manager),
+      payload: {
+        title: "Closed door",
+        startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+        endsAt: new Date(Date.now() + 7_200_000).toISOString(),
+        visibility: "shown",
+        audiences: [`role:${hidden}`],
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.details.code).toBe("schedule_audience_role_invalid");
   });
 });

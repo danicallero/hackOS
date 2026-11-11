@@ -222,7 +222,8 @@ export function installUrl(state: string): string {
 }
 
 /** Account-only linking: GitHub asks the user to authorize the App, no repository involved. */
-export function authorizeUrl(state: string): string {
+/** `selectAccount` makes GitHub ask which account to use even when one is already signed in. */
+export function authorizeUrl(state: string, selectAccount = false): string {
   const redirect = `${config.BETTER_AUTH_URL}/api/github/callback`;
-  return `https://github.com/login/oauth/authorize?client_id=${config.GITHUB_APP_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&state=${encodeURIComponent(state)}`;
+  return `https://github.com/login/oauth/authorize?client_id=${config.GITHUB_APP_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&state=${encodeURIComponent(state)}${selectAccount ? "&prompt=select_account" : ""}`;
 }

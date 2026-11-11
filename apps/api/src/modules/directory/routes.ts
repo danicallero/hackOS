@@ -17,7 +17,10 @@ import {
   uploadOperation,
 } from "../../lib/profile-files.js";
 import { putObject } from "../../lib/storage.js";
+import { mayOpenHelper, mayOpenRequester } from "../helpdesk/helpers.js";
+import { getMentorProfile, writeMentorProfile } from "./mentor.js";
 import {
+  mentorProfileBody,
   moderationBody,
   moderationParams,
   ownPublicProfileBody,
@@ -27,8 +30,10 @@ import {
 import {
   getDirectoryCv,
   getDirectoryEntry,
+  getHelperCv,
   getMyCv,
   getMyPublicProfile,
+  getRequesterCv,
   getStaffPublicProfile,
   moderatePublicProfile,
   removeCv,
@@ -76,7 +81,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Read my public profile",
         description:
-          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when the person's latest submitted application has a PDF in the file question marked as the profile CV or, failing that, in a file question named CV/curriculum/resume, which then wins over any upload and is read-only here; otherwise `upload`), the switches `showSurname`, `showPhoto`, `showProject` and `shareCv` that decide what scanners receive (hidden data is omitted from the response, not just from the UI), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). `onboardingCompletedAt` records completion or an explicit opt-out independently of visibility. Without a saved profile the defaults apply (hidden, surname initial, no photo, project shown, no CV shared) (#934, #935).",
+          "Public profile opt-in settings shown on My profile for an event attendee, including bio, social links, `shareCv` and the CV (`cv.source`: `application` when the person's latest submitted application has a PDF in the file question marked as the profile CV or, failing that, in a file question named CV/curriculum/resume, which then wins over any upload and is read-only here; otherwise `upload`), the switches `showSurname`, `showPhoto`, `showProject`, `showGithub` and `shareCv` that decide what scanners receive (hidden data is omitted from the response, not just from the UI), with `preview`: the card exactly as people who scan the owner would see it if visible (its `cvUrl` points at the owner's own CV route). `onboardingCompletedAt` records completion or an explicit opt-out independently of visibility. Without a saved profile the defaults apply (hidden, surname initial, no photo, project and linked GitHub shown, no CV shared) (#934, #935).",
       },
     },
     async (req) => getMyPublicProfile(req.userId as number),
@@ -90,7 +95,7 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         body: ownPublicProfileBody,
         summary: "Update my public profile",
         description:
-          "Replaces the caller's public profile settings. `completeOnboarding: true` records completion, including an explicit hidden-profile choice, without implying consent to sharing. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials`, and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
+          "Replaces the caller's public profile settings. A submitted `github` link is dropped: that link is the linked GitHub account, shown only while `showGithub` is true and the account remains linked. `showGithub` may be omitted to keep its stored value; older clients may omit it. `completeOnboarding: true` records completion, including an explicit hidden-profile choice, without implying consent to sharing. Text is trimmed and empty text clears the field; headline ≤80, locationNote ≤60 and bio ≤500 characters, no control characters (the bio keeps line breaks). `socials` is up to 6 distinct {kind, url} links (kind: linkedin, github, x, instagram, website, other); URLs must be https (a bare host gets https://) and are stored normalized. `shareCv` needs an uploaded or application CV (400 otherwise). `bio`, `socials`, and `shareCv` may be omitted to keep their stored values. consentedAt is stamped on each hidden→visible transition. Audited with the changed field names only, never text or links; repeating the stored settings writes nothing and wakes no client; 403 without event access. Accounts being removed (H54) are refused (#934, #935).",
       },
     },
     async (req) => {
@@ -290,16 +295,96 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
         params: userParams,
         summary: "Download a shared CV",
         description:
-          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Only for attendees who saved this person; the access check runs on every request and the reader must also have event access (#935).",
+          "Streams the CV of an opted-in person who shares it: their application CV when there is one, otherwise their upload. A hidden profile, an unshared CV and a missing CV all answer 404. Readable by attendees who saved this person (the access check runs on every request and the reader must also have event access, #935), and by help desk readers (`helpdesk:request`, `helpdesk:offer` or `helpdesk:coverage`) when the person has a published helper profile and shares their CV, without a badge scan (H61, H63), and by the requester and team members of a request that helper claimed (H64, H66), and by the helpers a help request reached or claimed, for the requester's CV while their public profile and CV are shared (H64, H66).",
       },
     },
     async (req, reply) => {
-      const cv = await getDirectoryCv(req.userId as number, req.params.userId);
+      const { userId } = req.params;
+      // H61, H63: help desk readers may open a published helper's shared CV.
+      // H64, H66: a requester's shared CV, for the helpers their request reached.
+      const cv = (await mayOpenHelper(req, pool, userId))
+        ? await getHelperCv(userId)
+        : (await mayOpenRequester(req, pool, userId))
+          ? await getRequesterCv(userId)
+          : await getDirectoryCv(req.userId as number, userId);
       return sendProfileObject(reply, cv.key, {
         contentType: "application/pdf",
         cacheControl: PDF_CACHE,
         filename: cv.filename,
       });
+    },
+  );
+
+  const mentorNote =
+    "`expertise` is the person's help desk knowledge topics (edited with the helper profile, `PUT /api/me/helper-profile`), the one shared catalogue. `eligible` is true only for an effective holder of `helpdesk:offer` (the wildcard counts); no role, attendance or networking opt-in is needed. A person who loses the capability keeps their stored data, which is neither listed nor offered while ineligible and reappears unchanged if the capability returns.";
+  const mentorPut =
+    "Sets `published` for the current event; the areas are the helper profile's knowledge topics. Publication is independent of the directory opt-in and exposes only the expertise to people who scanned the owner. 403 `details.code: mentor_profile_not_eligible` without the capability, leaving stored data untouched; accounts being removed (H54) answer 409. Audited as `mentor_profile.updated` with the changed field names only; repeating the stored profile writes nothing (#1011).";
+  r.get(
+    "/api/me/mentor-profile",
+    {
+      config: authenticated,
+      preHandler: requireAuth,
+      schema: {
+        summary: "Read my mentor profile",
+        description: `The caller's mentor profile for the current event. ${mentorNote}`,
+      },
+    },
+    async (req) => getMentorProfile(req.userId as number),
+  );
+  r.put(
+    "/api/me/mentor-profile",
+    {
+      config: authenticated,
+      preHandler: [requireAuth, idempotencyGuard],
+      schema: {
+        body: mentorProfileBody,
+        summary: "Update my mentor profile",
+        description: mentorPut,
+      },
+    },
+    async (req) => {
+      const userId = req.userId as number;
+      const { changed, profile } = await writeMentorProfile(userId, req.body, {
+        actorId: userId,
+        source: "web",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+  r.get(
+    "/api/users/:id/mentor-profile",
+    {
+      config: usersReader,
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: moderationParams,
+        summary: "Read a person's mentor profile",
+        description: `User management: anyone's mentor profile in the shape of GET /api/me/mentor-profile. ${mentorNote} 404 for an unknown or out-of-scope account.`,
+      },
+    },
+    async (req) => getMentorProfile(await staffSubject(req)),
+  );
+  r.put(
+    "/api/users/:id/mentor-profile",
+    {
+      config: usersWriter,
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: moderationParams,
+        body: mentorProfileBody,
+        summary: "Edit a person's mentor profile",
+        description: `User management: same body and rules as PUT /api/me/mentor-profile, audited with source \`admin\`. ${mentorPut}`,
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await writeMentorProfile(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
     },
   );
 }

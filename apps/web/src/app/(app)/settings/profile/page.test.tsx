@@ -32,8 +32,8 @@ vi.mock("@/components/common/page-header", () => ({
 vi.mock("@/components/certificates/certificates-panel", () => ({
   CertificatesPanel: () => <p>certificates-body</p>,
 }));
-vi.mock("./wallet-section", () => ({ WalletSection: () => <p>wallet-body</p> }));
-vi.mock("./personal-details", () => ({
+vi.mock("@/components/profile/wallet-section", () => ({ WalletSection: () => <p>wallet-body</p> }));
+vi.mock("@/components/profile/personal-details", () => ({
   PersonalDetails: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => {
     useEffect(() => onDirtyChange(personal.dirty), [onDirtyChange]);
     return <p>personal-body</p>;
@@ -42,7 +42,17 @@ vi.mock("./personal-details", () => ({
 vi.mock("@/components/profile/public-profile-card", () => ({
   PublicProfileCard: () => <p>public-body</p>,
 }));
-vi.mock("./meals-section", () => ({ MealsSection: () => <p>meals-body</p> }));
+const rsvps = vi.hoisted(() => ({ items: [] as unknown[] }));
+vi.mock("@/hooks/use-rsvps", () => ({ useRsvps: () => ({ items: rsvps.items }) }));
+vi.mock("@/components/onboarding/catering-rsvp", () => ({
+  CateringRsvpSection: () => <p>rsvp-body</p>,
+}));
+vi.mock("@/components/onboarding/onboarding-steps", () => ({ ShareCard: () => <p>share-body</p> }));
+vi.mock("./mentoring-section", () => ({ MentoringSection: () => <p>mentor-body</p> }));
+vi.mock("@/hooks/use-own-helper-profile", () => ({
+  useOwnHelperProfile: () => ({ data: { eligible: helper.eligible } }),
+}));
+vi.mock("./active-devices", () => ({ ActiveDevices: () => <p>devices-body</p> }));
 vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));
 vi.mock("./password-card", () => ({ PasswordRow: () => null }));
@@ -50,6 +60,7 @@ vi.mock("./github-row", () => ({ GithubRow: () => null }));
 vi.mock("./profile-roles", () => ({ ProfileRoles: () => <p>roles-body</p> }));
 
 const personal = { dirty: false };
+const helper = { eligible: false };
 
 import ProfileSettingsPage from "./page";
 
@@ -61,6 +72,7 @@ const participant = {
   emailVerified: true,
   visibleRoleName: "Hacker",
   hasEventAccess: true,
+  capabilities: [] as string[],
   isSponsorRep: false,
   roles: [{ id: 1, name: "Hacker", isVisible: true }],
 };
@@ -72,6 +84,7 @@ describe("Profile tabs (H28, #1083)", () => {
   beforeEach(() => {
     nav.search = "";
     personal.dirty = false;
+    helper.eligible = false;
     session.me = { ...participant };
     session.isPureApplicant = false;
     container = document.createElement("div");
@@ -94,12 +107,18 @@ describe("Profile tabs (H28, #1083)", () => {
       (panel) => !panel.hidden,
     );
 
-  it("gives the participant Personal details, Public profile, Wallet and Account", async () => {
+  it("gives the participant Public profile, Wallet and Account", async () => {
     await render();
-    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "wallet", "accountTitle"]);
+    expect(tabs()).toEqual([
+      "publicProfileTitle",
+      "profileRsvpTitle",
+      "wallet",
+      "preferences",
+      "accountTitle",
+    ]);
     expect(openPanel()).toHaveLength(1);
-    expect(openPanel()[0].textContent).toContain("personal-body");
-    expect(openPanel()[0].textContent).not.toContain("public-body");
+    expect(openPanel()[0].textContent).toContain("public-body");
+    expect(openPanel()[0].textContent).not.toContain("personal-body");
   });
 
   it("names every section with an h2 so its h3s never skip a level (#1176)", async () => {
@@ -108,6 +127,7 @@ describe("Profile tabs (H28, #1083)", () => {
     const headings = [...openPanel()[0].querySelectorAll("section > h2")];
     expect(headings.map((h) => [h.textContent, h.className])).toEqual([
       ["wallet", "sr-only"],
+      ["onboardingStepShare", "type-section-title"],
       ["certificates", "type-section-title"],
     ]);
     for (const section of openPanel()[0].querySelectorAll("section[aria-labelledby]")) {
@@ -120,7 +140,19 @@ describe("Profile tabs (H28, #1083)", () => {
     nav.search = "tab=public";
     await render();
     expect(openPanel()[0].textContent).toContain("public-body");
-    expect(openPanel()[0].textContent).not.toContain("personal-body");
+    expect(openPanel()[0].textContent).not.toContain("danger-body");
+  });
+
+  it("puts the personal details first in Account", async () => {
+    nav.search = "tab=account";
+    await render();
+    expect(openPanel()[0].textContent).toContain("personal-body");
+  });
+
+  it("opens Account for the old ?tab=personal link", async () => {
+    nav.search = "tab=personal";
+    await render();
+    expect(openPanel()[0].textContent).toContain("personal-body");
   });
 
   it("keeps the passes and certificates together in Wallet", async () => {
@@ -134,15 +166,66 @@ describe("Profile tabs (H28, #1083)", () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     await render();
-    expect(tabs()).toEqual(["personalDetails", "accountTitle"]);
+    expect(tabs()).toEqual(["preferences", "accountTitle"]);
     expect(container.textContent).not.toContain("public-body");
     expect(container.textContent).not.toContain("roles-body");
   });
 
-  it("adds Meals to Personal details for a sponsor representative", async () => {
-    session.me = { ...participant, isSponsorRep: true };
+  it("puts an eligible helper's help desk settings in the Mentoring tab (H61)", async () => {
+    helper.eligible = true;
+    nav.search = "tab=mentoring";
     await render();
-    expect(openPanel()[0].textContent).toContain("meals-body");
+    expect(tabs()).toContain("profileMentoringTitle");
+    expect(openPanel()[0].textContent).toContain("mentor-body");
+    expect(openPanel()[0].textContent).not.toContain("public-body");
+  });
+
+  it("opens the Mentoring tab for the old ?tab=help-desk link (H61)", async () => {
+    helper.eligible = true;
+    nav.search = "tab=help-desk";
+    await render();
+    expect(openPanel()[0].textContent).toContain("mentor-body");
+  });
+
+  it("lets an accepted mentor without event access prepare their mentoring (H61)", async () => {
+    session.me = { ...participant, hasEventAccess: false, roles: [] };
+    session.isPureApplicant = true;
+    helper.eligible = true;
+    nav.search = "tab=mentoring";
+    await render();
+    expect(tabs()).toEqual(["profileMentoringTitle", "preferences", "accountTitle"]);
+    expect(openPanel()[0].textContent).toContain("mentor-body");
+  });
+
+  it("keeps the RSVP tab reachable when there are no offered activities", async () => {
+    rsvps.items = [{ activityId: 1 }];
+    nav.search = "tab=attendance";
+    await render();
+    expect(tabs()).toContain("profileRsvpTitle");
+    expect(openPanel()[0].textContent).toContain("rsvp-body");
+    rsvps.items = [];
+    await render();
+    expect(tabs()).toContain("profileRsvpTitle");
+  });
+
+  it("lets the person revisit the share card from the Wallet tab", async () => {
+    nav.search = "tab=wallet";
+    await render();
+    expect(container.textContent).toContain("share-body");
+  });
+
+  it("adds the Mentoring tab only for holders of the capability", async () => {
+    session.me = { ...participant, capabilities: ["helpdesk:offer"] };
+    nav.search = "tab=mentoring";
+    await render();
+    expect(container.textContent).toContain("mentor-body");
+    session.me = { ...participant, capabilities: ["*"] };
+    await render();
+    expect(container.textContent).toContain("mentor-body");
+    session.me = participant;
+    await render();
+    expect(tabs()).not.toContain("profileMentoringTitle");
+    expect(container.textContent).not.toContain("mentor-body");
   });
 
   const openTab = async (index: number) => {
@@ -155,23 +238,24 @@ describe("Profile tabs (H28, #1083)", () => {
 
   it("mounts a tab only once it is opened, then keeps it so a hidden draft survives (#1227)", async () => {
     await render();
-    expect(container.textContent).toContain("personal-body");
+    expect(container.textContent).toContain("public-body");
     expect(container.textContent).not.toContain("danger-body");
-    await openTab(3);
+    await openTab(4);
     expect(openPanel()[0].textContent).toContain("danger-body");
-    expect(container.textContent).toContain("personal-body");
+    expect(container.textContent).toContain("public-body");
   });
 
   it("marks a tab holding unsaved edits", async () => {
     personal.dirty = true;
     await render();
-    await openTab(2);
-    const profileTab = [...container.querySelectorAll("[role=tab]")][0];
+    await openTab(4);
+    await openTab(0);
+    const profileTab = [...container.querySelectorAll("[role=tab]")][4];
     expect(profileTab.textContent).toContain("unsavedChanges");
   });
 
   it("writes no URL when the open tab is selected again (R003)", async () => {
-    nav.search = "tab=personal";
+    nav.search = "tab=public";
     await render();
     const current = container.querySelector("[role=tab][data-state=active]") as HTMLElement;
     act(() => {

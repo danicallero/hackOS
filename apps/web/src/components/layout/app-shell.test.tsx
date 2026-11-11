@@ -28,10 +28,7 @@ vi.mock("@/components/layout/app-sidebar", () => ({
 vi.mock("@/components/common/command-palette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/common/quick-arrival", () => ({ QuickArrival: () => null }));
 vi.mock("@/components/layout/verification-banner", () => ({ VerificationBanner: () => null }));
-vi.mock("@/components/layout/profile-tasks-dialog", () => ({ ProfileTasksDialog: () => null }));
-vi.mock("@/components/layout/notification-onboarding-dialog", () => ({
-  NotificationOnboardingDialog: () => null,
-}));
+vi.mock("@/components/onboarding/onboarding-banner", () => ({ OnboardingBanner: () => null }));
 
 import { AppShell } from "./app-shell";
 

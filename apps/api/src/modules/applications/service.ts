@@ -59,6 +59,7 @@ export interface ResponseRow {
   confirmed_at: Date | null;
   declined_at: Date | null;
   decision_sent_at: Date | null;
+  rejection_reason: string | null;
   submitted_at: Date | null;
   allow_resubmit_after_close: boolean;
   auto_accept_on_resubmit: boolean;
@@ -671,7 +672,7 @@ export async function returnToDraft(
       `UPDATE application_responses
           SET status = 'draft', decision_sent_at = NULL, confirmation_token_id = NULL,
               confirmed_at = NULL, declined_at = NULL, submitted_at = NULL,
-              draft_reminders_sent = 0, draft_reminded_at = NULL,
+              rejection_reason = NULL, draft_reminders_sent = 0, draft_reminded_at = NULL,
               allow_resubmit_after_close = $2, auto_accept_on_resubmit = $3
         WHERE id = $1 RETURNING *`,
       [responseId, input.allow_resubmit_after_close, input.auto_accept_on_resubmit],
@@ -835,11 +836,25 @@ async function lockVerifiedResponseByToken(
   token: string,
   action: "confirmation" | "decline",
 ): Promise<ResponseRow> {
+  const { rows: tokenRows } = await client.query(
+    `SELECT used_at, expires_at FROM email_verification_tokens
+     WHERE token = $1 AND type = 'spot_confirmation'`,
+    [token],
+  );
+  if (!tokenRows[0]) throw new NotFoundError(`Invalid ${action} token`);
+  if (tokenRows[0].used_at) {
+    throw new ConflictError("This confirmation link has already been used", {
+      code: "confirmation_used",
+    });
+  }
+  if (new Date(tokenRows[0].expires_at).getTime() <= Date.now()) {
+    throw new ConflictError("This confirmation link has expired", { code: "confirmation_expired" });
+  }
   const { rows: targetRows } = await client.query(
     `SELECT r.id, r.user_id FROM email_verification_tokens t
      JOIN application_responses r ON r.id =
        (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
-     WHERE t.token = $1 AND t.type = 'spot_confirmation'`,
+     WHERE t.token = $1 AND t.type = 'spot_confirmation' AND t.user_id = r.user_id`,
     [token],
   );
   const target = targetRows[0] as { id: number; user_id: number } | undefined;
@@ -847,14 +862,29 @@ async function lockVerifiedResponseByToken(
   await assertVerifiedPrimaryEmail(client, target.user_id, { forUpdate: true });
 
   const { rows } = await client.query(
-    `SELECT r.* FROM email_verification_tokens t
+    `SELECT r.*, t.used_at AS token_used_at, t.expires_at AS token_expires_at,
+            t.email AS token_email, u.email AS current_email
+     FROM email_verification_tokens t
      JOIN application_responses r ON r.id =
        (SELECT id FROM application_responses WHERE confirmation_token_id = t.id)
+     JOIN users u ON u.id = r.user_id
      WHERE t.token = $1 AND t.type = 'spot_confirmation' AND r.id = $2
-     FOR UPDATE OF r`,
+       AND t.user_id = r.user_id
+     FOR UPDATE OF r, t`,
     [token, target.id],
   );
   if (!rows[0]) throw new NotFoundError(`Invalid ${action} token`);
+  if (rows[0].token_email.toLowerCase() !== rows[0].current_email.toLowerCase()) {
+    throw new NotFoundError(`Invalid ${action} token`);
+  }
+  if (rows[0].token_used_at) {
+    throw new ConflictError("This confirmation link has already been used", {
+      code: "confirmation_used",
+    });
+  }
+  if (new Date(rows[0].token_expires_at).getTime() <= Date.now()) {
+    throw new ConflictError("This confirmation link has expired", { code: "confirmation_expired" });
+  }
   return rows[0];
 }
 
@@ -942,6 +972,36 @@ export async function decide(
   });
 }
 
+/** Add, change or clear the reason of an unsent internal rejection (H14). */
+export async function setRejectionReason(
+  actorId: number,
+  responseId: number,
+  reason: string | null,
+): Promise<ResponseRow> {
+  const next = reason?.trim() || null;
+  return withTransaction(async (client) => {
+    const resp = await lockResponse(client, responseId, actorId);
+    if (resp.status !== "rejected_internal") {
+      throw new ConflictError("Only an unsent internal rejection can have its reason edited", {
+        status: resp.status,
+      });
+    }
+    const updated = await client.query(
+      `UPDATE application_responses SET rejection_reason = $2 WHERE id = $1 RETURNING *`,
+      [responseId, next],
+    );
+    await audit(client, {
+      actorId,
+      entityType: "application_response",
+      entityId: responseId,
+      action: "rejection_reason_updated",
+      before: { rejection_reason: resp.rejection_reason },
+      after: { rejection_reason: next },
+    });
+    return updated.rows[0];
+  });
+}
+
 /**
  * Revert a decision — flip between accepted_internal and
  * rejected_internal, or send it back to review for re-review.
@@ -973,7 +1033,7 @@ export async function revertDecision(
       const updated = await client.query(
         `UPDATE application_responses
          SET status = 'review', decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
          WHERE id = $1 RETURNING *`,
         [responseId],
       );
@@ -1025,7 +1085,7 @@ export async function revertDecision(
     const updated = await client.query(
       `UPDATE application_responses
          SET status = $2, decision_sent_at = NULL, confirmation_token_id = NULL,
-             confirmed_at = NULL, declined_at = NULL
+             confirmed_at = NULL, declined_at = NULL, rejection_reason = NULL
        WHERE id = $1 RETURNING *`,
       [responseId, newInternalStatus],
     );
@@ -1066,6 +1126,7 @@ async function sendOne(
     app,
     sentStatus as "accepted" | "rejected",
     token,
+    resp.rejection_reason,
   );
   await audit(client, {
     actorId,
@@ -1166,7 +1227,15 @@ export async function resendDecision(
         `UPDATE application_responses SET decision_sent_at = now() WHERE id = $1`,
         [resp.id],
       );
-      await enqueueDecisionEmailRow(client, resp.user_id, user, app, "rejected", null);
+      await enqueueDecisionEmailRow(
+        client,
+        resp.user_id,
+        user,
+        app,
+        "rejected",
+        null,
+        resp.rejection_reason,
+      );
       await audit(client, {
         actorId,
         entityType: "application_response",
@@ -1235,7 +1304,8 @@ export async function reAccept(
 
     await client.query(
       `UPDATE application_responses
-       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL
+       SET status = 'accepted', decision_sent_at = now(), confirmed_at = NULL, declined_at = NULL,
+           rejection_reason = NULL
        WHERE id = $1`,
       [resp.id],
     );
@@ -1571,9 +1641,11 @@ export async function getConfirmLink(
      FROM application_responses r
      JOIN email_verification_tokens t ON t.id = r.confirmation_token_id
      WHERE r.id = $1 AND r.status = 'accepted' AND t.type = 'spot_confirmation'
+       AND t.used_at IS NULL AND t.expires_at > now() AND t.user_id = r.user_id
        AND EXISTS (
          SELECT 1 FROM users u
           WHERE u.id = r.user_id AND u.is_test_account = false
+            AND lower(u.email) = lower(t.email)
        )
      ORDER BY t.id DESC LIMIT 1`,
     [responseId],
@@ -1589,8 +1661,16 @@ async function enqueueDecisionEmailRow(
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
+  rejectionReason: string | null = null,
 ): Promise<void> {
-  const payload = await decisionNotificationPayload(client, user, app, decision, confirmToken);
+  const payload = await decisionNotificationPayload(
+    client,
+    user,
+    app,
+    decision,
+    confirmToken,
+    rejectionReason,
+  );
   await client.query(
     `INSERT INTO notification_outbox (user_id, category, channel, payload)
      VALUES ($1, 'application', 'email', $2::jsonb)`,
@@ -1626,6 +1706,7 @@ async function decisionNotificationPayload(
   app: ApplicationRow,
   decision: "accepted" | "rejected",
   confirmToken: string | null,
+  rejectionReason: string | null = null,
 ): Promise<EmailPayload> {
   const language = normalizeLanguage(user.language);
   const eventName = await getEventName(client);
@@ -1651,13 +1732,19 @@ async function decisionNotificationPayload(
       timeZoneName: "short",
     }).format(rows[0].expires_at);
     decisionDetails = translateEmail("mail.application.decision.confirmationDetails", language, {
-      confirmUrl: `${config.WEB_URL}/applications/confirm?token=${confirmToken}`,
-      declineUrl: `${config.WEB_URL}/applications/decline?token=${confirmToken}`,
+      confirmUrl: `${config.WEB_URL}/applications/confirm#token=${confirmToken}`,
+      declineUrl: `${config.WEB_URL}/applications/decline#token=${confirmToken}`,
       deadlineNotice: translateEmail("mail.application.decision.confirmationDeadline", language, {
         deadline,
       }),
     });
   }
+  const rejectionDetails =
+    decision === "rejected" && rejectionReason
+      ? translateEmail("mail.application.decision.rejectionDetails", language, {
+          reason: rejectionReason,
+        })
+      : "";
   return {
     template: "application.decision",
     recipient: user.email,
@@ -1668,6 +1755,7 @@ async function decisionNotificationPayload(
       eventName,
       decision,
       decisionDetails,
+      rejectionDetails,
       confirmationExpiresAt,
       confirmationTimeZone,
     },
@@ -1679,6 +1767,8 @@ interface ResponseDetail {
   user: {
     name: string | null;
     email: string;
+    /** Applicant language: the rejection reason should be written in it. */
+    language: string | null;
     shirt_size: string | null;
     food_intolerances: number[];
     food_intolerance_notes: string | null;
@@ -1743,7 +1833,7 @@ export async function getResponseDetail(
   canViewAllReviews: boolean,
 ): Promise<ResponseDetail> {
   const { rows } = await pool.query(
-    `SELECT r.*, u.notes AS staff_notes,
+    `SELECT r.*, u.notes AS staff_notes, u.language AS user_language,
             NULLIF(concat_ws(' ', u.name, u.surname), '') AS name,
             u.name AS first_name, u.surname AS last_name, u.email, u.shirt_size,
             u.food_intolerances, u.food_intolerance_notes, u.dietary_data_state,
@@ -1763,6 +1853,7 @@ export async function getResponseDetail(
   const {
     name,
     email,
+    user_language,
     shirt_size,
     food_intolerances,
     food_intolerance_notes,
@@ -1808,6 +1899,7 @@ export async function getResponseDetail(
     user: {
       name,
       email,
+      language: user_language ?? null,
       shirt_size,
       food_intolerances,
       food_intolerance_notes,
@@ -2042,6 +2134,11 @@ export async function confirmByToken(token: string): Promise<EmailConfirmResult>
   return withTransaction(async (client) => {
     await lockRoleGraph(client);
     const resp = await lockVerifiedResponseByToken(client, token, "confirmation");
+    if (resp.status !== "accepted") {
+      throw new ConflictError("This confirmation link has already been used", {
+        code: "confirmation_used",
+      });
+    }
     const result = await doConfirm(client, resp, "email_link", resp.user_id);
     const grant = result.ticketToken
       ? await issueWalletAccessToken(client, resp.user_id, "ticket")
@@ -2093,6 +2190,11 @@ export async function declineByToken(token: string): Promise<{
   const result = await withTransaction(async (client) => {
     await lockRoleGraph(client);
     const resp = await lockVerifiedResponseByToken(client, token, "decline");
+    if (resp.status !== "accepted") {
+      throw new ConflictError("This confirmation link has already been used", {
+        code: "confirmation_used",
+      });
+    }
     const decline = await doDecline(client, resp, "email_link", resp.user_id);
     return { ...decline, userId: resp.user_id };
   });
@@ -2197,6 +2299,20 @@ export async function expireDueConfirmations(): Promise<{ expired: number }> {
 export function maskStatus(status: string): string {
   if (status === "accepted_internal" || status === "rejected_internal") return "review";
   return status;
+}
+
+/**
+ * Applicant-facing copy of a response row: masked status, and the rejection
+ * reason only once the rejection has been sent (H14).
+ */
+export function maskResponse<T extends { status: string; rejection_reason?: string | null }>(
+  row: T,
+): T {
+  return {
+    ...row,
+    status: maskStatus(row.status),
+    rejection_reason: row.status === "rejected" ? (row.rejection_reason ?? null) : null,
+  };
 }
 
 /**

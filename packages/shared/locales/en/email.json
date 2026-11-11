@@ -92,8 +92,9 @@
         },
         "rejected": {
           "subject": "About your application for {{applicationName}} at {{eventName}}",
-          "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
+          "body": "Hi {{name}},\n\nUnfortunately, your application for {{applicationName}} at {{eventName}} hasn’t been selected this time. We know this isn’t the news you were hoping for.{{rejectionDetails}}\n\nThank you for your interest and for the time you put into your application. We hope to see you at a future edition.\n\nBest wishes,\nThe organizing team"
         },
+        "rejectionDetails": "\n\nReason: {{reason}}",
         "confirmationDetails": "\n\n{{deadlineNotice}}\n\n[Confirm my spot]({{confirmUrl}})\n\nIf it turns out you can’t make it, please let us know so someone else can take your spot:\n\n[Decline my spot]({{declineUrl}})\n\nIf the deadline passes without your confirmation, the spot will be released automatically.",
         "confirmationDeadline": "Confirm your spot before {{deadline}}."
       },
@@ -114,6 +115,36 @@
       "reminder": {
         "subject": "Reminder: {{title}}",
         "body": "Hi,\n\n{{title}} starts at {{startsAtLabel}}.{{locationLine}}\n\nSee you there!"
+      }
+    },
+    "helpdesk": {
+      "request": {
+        "subject": "Help requested: {{topics}}",
+        "body": "Someone needs help with {{topics}} at {{location}}. Open the help desk to take it."
+      },
+      "requestOther": {
+        "subject": "Help requested",
+        "body": "Someone needs help at {{location}}. Open the help desk to take it."
+      },
+      "onMyWay": {
+        "subject": "{{helperName}} is on the way",
+        "body": "{{helperName}} took your help request and is heading to {{location}}."
+      },
+      "meetAt": {
+        "subject": "Meet {{helperName}} at {{meetingLocation}}",
+        "body": "{{helperName}} took your help request and will meet you at {{meetingLocation}}."
+      },
+      "released": {
+        "subject": "Your help request is open again",
+        "body": "The person who took it can no longer come. Others can still take it."
+      },
+      "cancelled": {
+        "subject": "Help request cancelled",
+        "body": "The person or team who asked for help no longer needs it."
+      },
+      "resolved": {
+        "subject": "Help request resolved",
+        "body": "{{actorName}} marked this help request as resolved."
       }
     }
   },
@@ -150,6 +181,36 @@
       "reminder": {
         "title": "{{title}}",
         "body": "Starts at {{startsAtLabel}}{{locationSuffix}}"
+      }
+    },
+    "helpdesk": {
+      "request": {
+        "title": "Help needed: {{topics}}",
+        "body": "At {{location}}. Open the help desk to take it."
+      },
+      "requestOther": {
+        "title": "Help needed",
+        "body": "At {{location}}. Open the help desk to take it."
+      },
+      "onMyWay": {
+        "title": "{{helperName}} is on the way",
+        "body": "Heading to {{location}}."
+      },
+      "meetAt": {
+        "title": "Meet {{helperName}} at {{meetingLocation}}",
+        "body": "They took your help request."
+      },
+      "released": {
+        "title": "Help request open again",
+        "body": "The person who took it can no longer come."
+      },
+      "cancelled": {
+        "title": "Help request cancelled",
+        "body": "They no longer need help."
+      },
+      "resolved": {
+        "title": "Help request resolved",
+        "body": "{{actorName}} marked this help request as resolved."
       }
     }
   }

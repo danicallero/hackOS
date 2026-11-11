@@ -1,6 +1,9 @@
 import type { Language } from "./locale.js";
 export const SCHEDULE_AUDIENCES = ["sponsor", "participant", "mentor"] as const;
-export type ScheduleAudience = (typeof SCHEDULE_AUDIENCES)[number];
+/** An attendance audience, or a publicly visible role as `role:<id>` (H59). */
+export type ScheduleAudience = (typeof SCHEDULE_AUDIENCES)[number] | `role:${number}`;
+export const roleAudienceId = (audience: string): number | null =>
+  /^role:[1-9][0-9]*$/.test(audience) ? Number(audience.slice(5)) : null;
 const LANGUAGES: Language[] = ["es", "gl", "en"];
 export interface ScheduleInput {
   title: string;

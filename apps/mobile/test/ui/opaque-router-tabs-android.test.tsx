@@ -194,7 +194,7 @@ jest.mock("@/theme/colors", () => ({
 
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import * as Native from "react-native";
-import { OpaqueRouterTabs } from "@/components/opaque-router-tabs";
+import { OpaqueRouterTabs, reselectHelpDesk } from "@/components/opaque-router-tabs";
 
 const DEFAULT_PROPS = {
   capabilities: [],
@@ -425,5 +425,30 @@ describe("Account tab return destination (H55)", () => {
     await render(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
     await fireEvent.press(screen.getByTestId("opaque-tab-account"));
     expect(navigate).toHaveBeenCalledWith("/(tabs)/others/account");
+  });
+});
+
+describe("Help desk tab reselect (H61-H67)", () => {
+  it("pops to the root once and does nothing at the root or when switching tabs", () => {
+    const router = { canDismiss: jest.fn(() => true), dismissAll: jest.fn() };
+    reselectHelpDesk(router, true);
+    expect(router.dismissAll).toHaveBeenCalledTimes(1);
+    reselectHelpDesk(router, false);
+    router.canDismiss.mockReturnValue(false);
+    reselectHelpDesk(router, true);
+    expect(router.dismissAll).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Help desk tab entry (H61-H67)", () => {
+  it("opens its root instead of restoring coverage when coming from another tab", async () => {
+    const replace = jest.fn();
+    mockUseRouter.mockReturnValue({ replace, navigate: jest.fn() });
+    mockUsePathname.mockReturnValue("/schedule");
+    mockPrimaryTabs.mockReturnValue(["schedule", "help-desk"]);
+    mockOverflowTabs.mockReturnValue([]);
+    await render(<OpaqueRouterTabs {...DEFAULT_PROPS} />);
+    await fireEvent.press(screen.getByTestId("opaque-tab-help-desk"));
+    expect(replace).toHaveBeenCalledWith("/(tabs)/help-desk");
   });
 });

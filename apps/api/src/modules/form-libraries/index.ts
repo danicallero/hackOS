@@ -5,9 +5,10 @@ import { z } from "zod";
 import { pool, withTransaction } from "../../db/pool.js";
 import { audit } from "../../lib/audit.js";
 import { requireAuth, requireCapability } from "../../lib/capabilities.js";
-import { BadRequestError, NotFoundError } from "../../lib/errors.js";
+import { BadRequestError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { routeAccessOption } from "../../lib/route-policy.js";
+import { isMentorEligible, MENTOR_NOT_ELIGIBLE } from "../directory/mentor.js";
 import { replaceLibraryAnswers } from "./service.js";
 
 const params = z.object({ id: z.uuid() });
@@ -62,15 +63,21 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
         body: z.object({ name }),
         summary: "Propose a question library value",
         description:
-          "Creates or reuses a case-insensitive normalized value in this question only. No quota on how many values a participant may propose. Audited atomically (H11/H16/H53).",
+          "Creates or reuses a case-insensitive normalized value in this question only. In the profile-scope mentor expertise library only effective holders of `helpdesk:offer` may propose (403 `mentor_profile_not_eligible`). No quota on how many values a participant may propose. Audited atomically (H11/H16/H53).",
       },
     },
     async (q) =>
       withTransaction(async (db) => {
-        const locked = await db.query(`SELECT id FROM form_libraries WHERE id=$1 FOR UPDATE`, [
-          q.params.id,
-        ]);
+        const locked = await db.query(
+          `SELECT id,profile FROM form_libraries WHERE id=$1 FOR UPDATE`,
+          [q.params.id],
+        );
         if (!locked.rowCount) throw new NotFoundError("Field library not found");
+        // Profile-scope catalogues (mentor expertise) are extended by eligible holders only.
+        if (locked.rows[0].profile && !(await isMentorEligible(db, q.userId as number)))
+          throw new ForbiddenError("The mentor profile needs the permission to offer help", {
+            code: MENTOR_NOT_ELIGIBLE,
+          });
         const { rows } = await db.query(
           `INSERT INTO form_library_values(library_id,name,is_test_account) SELECT $1,$2,is_test_account FROM users WHERE id=$3 ON CONFLICT(library_id,lower(name),is_test_account) DO UPDATE SET name=form_library_values.name RETURNING id,name`,
           [q.params.id, q.body.name, q.userId],
@@ -83,6 +90,76 @@ export function registerFormLibrariesModule(app: FastifyInstance) {
           after: { id: rows[0].id, name: rows[0].name },
         });
         return rows[0];
+      }),
+  );
+  r.post(
+    "/api/profile/libraries/:id/manage",
+    {
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      ...routeAccessOption({ kind: "capability", capability: CAPABILITIES.USERS_WRITE }),
+      schema: {
+        params,
+        body,
+        summary: "Curate the mentor expertise library",
+        description:
+          "User management: renames, deletes or merges values of the profile-scope expertise library, inside the caller's fixture boundary. Merging moves every mentor's chosen expertise to the retained value; deleting removes it from mentor profiles. Audited in one transaction with the value names only (H53, onboarding).",
+      },
+    },
+    async (q) =>
+      withTransaction(async (db) => {
+        const { rows } = await db.query(
+          `SELECT id FROM form_libraries WHERE id=$1 AND profile FOR UPDATE`,
+          [q.params.id],
+        );
+        if (!rows[0]) throw new NotFoundError("Field library not found");
+        const values = await db.query(
+          `SELECT id,name FROM form_library_values WHERE library_id=$1 AND is_test_account=(SELECT is_test_account FROM users WHERE id=$2) FOR UPDATE`,
+          [q.params.id, q.userId],
+        );
+        const ids = [
+          ...q.body.renames.map((item) => item.id),
+          ...q.body.deleteIds,
+          ...(q.body.merge ? [q.body.merge.targetId, ...q.body.merge.sourceIds] : []),
+        ];
+        if (ids.some((id) => !values.rows.some((item) => item.id === id)))
+          throw new NotFoundError("Library value not found");
+        const before = structuredClone(values.rows.filter((row) => ids.includes(row.id)));
+        for (const item of q.body.renames) {
+          if (
+            values.rows.some(
+              (other) =>
+                other.id !== item.id &&
+                other.name.toLocaleLowerCase() === item.name.toLocaleLowerCase(),
+            )
+          )
+            throw new BadRequestError(
+              "Merge duplicate library values instead of renaming them to the same name",
+            );
+          await db.query(`UPDATE form_library_values SET name=$2 WHERE id=$1`, [
+            item.id,
+            item.name,
+          ]);
+        }
+        const deleting = new Set(q.body.deleteIds);
+        if (q.body.merge) {
+          const { sourceIds, targetId } = q.body.merge;
+          if (sourceIds.includes(targetId) || deleting.has(targetId))
+            throw new BadRequestError("Choose a retained value for merging");
+          for (const id of sourceIds) deleting.add(id);
+        }
+        if (deleting.size)
+          await db.query(`DELETE FROM form_library_values WHERE id=ANY($1::int[])`, [
+            [...deleting],
+          ]);
+        await audit(db, {
+          actorId: q.userId,
+          entityType: "form_library",
+          entityId: q.params.id,
+          action: "curate",
+          before,
+          after: q.body,
+        });
+        return { ok: true };
       }),
   );
   for (const project of [true, false]) {

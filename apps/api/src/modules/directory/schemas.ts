@@ -15,7 +15,7 @@ function publicText(max: number) {
 }
 
 // #935: a bio keeps its line breaks; every other control character is refused.
-const bioText = z
+export const bioText = z
   .string()
   .transform((value) => value.replace(/\r\n?/g, "\n").trim())
   .refine((value) => value.length <= 500, { message: "Must be at most 500 characters" })
@@ -61,18 +61,23 @@ const socialUrl = z
 export const socialLink = z.object({ kind: z.enum(SOCIAL_KINDS), url: socialUrl });
 export type SocialLink = z.infer<typeof socialLink>;
 
+// The GitHub link comes from the linked GitHub account (POST /api/me/github/authorize),
+// so a typed `github` entry is dropped instead of stored.
 const socials = z
   .array(socialLink)
   .max(SOCIALS_MAX)
   .refine((links) => new Set(links.map((link) => link.url)).size === links.length, {
     message: "Each link may appear only once",
-  });
+  })
+  .transform((links) => links.filter((link) => link.kind !== "github"));
 
 export const publicProfileBody = z.object({
   directoryVisible: z.boolean(),
   showSurname: z.boolean(),
   showPhoto: z.boolean(),
   showProject: z.boolean(),
+  // Omitted by older clients: keep the stored setting. New profiles default to visible.
+  showGithub: z.boolean().optional(),
   headline: publicText(80),
   locationNote: publicText(60),
   // #935: omitted keeps the stored value, so older clients replace only what they know.
@@ -89,3 +94,6 @@ export type PublicProfileInput = z.infer<typeof publicProfileBody>;
 export const userParams = z.object({ userId: z.coerce.number().int().positive() });
 export const moderationParams = z.object({ id: z.coerce.number().int().positive() });
 export const moderationBody = z.object({ reason: z.string().trim().min(1).max(500) });
+
+// `expertiseIds` of the retired mentor library is ignored: the areas are the help desk topics.
+export const mentorProfileBody = z.object({ published: z.boolean() });
