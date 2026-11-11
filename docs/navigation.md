@@ -294,7 +294,7 @@ keyboard shortcuts.
 
 Section classification covers the whole Others stack: `queue`, `diary` and
 `operations` own their route (plus `others/team/*`, opened from queue
-operations), and every other `others/*` page (Wallet, notification settings,
+operations), and every other `others/*` page (Wallet, RSVPs, notification settings,
 reminders, announcements, Storage, Statistics, Company tags, Legal, Delete
 account, scan log, sync queue, people and person details) is an Account
 subpage. The Others circle therefore stays on Account — and navigating
@@ -503,3 +503,5 @@ schedule browsable without creating a diary contact or changing networking
 sharing consent (H61–H63).
 
 The Logistics `/logistics/rsvps` destination is labelled **RSVP** in both the sidebar and page header (H59).
+
+Mobile Account opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).

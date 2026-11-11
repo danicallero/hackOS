@@ -237,6 +237,7 @@ jest.mock("@/lib/use-retry-on-reconnect", () => ({ useRetryOnReconnect: jest.fn(
 
 import AccountScreen from "@/components/account-screen";
 import ProfileTasksScreen from "@/components/profile-tasks-screen";
+import RsvpsScreen from "@/components/rsvps-screen";
 import { renderMobile } from "./render";
 
 const lunch = {
@@ -283,10 +284,20 @@ beforeEach(() => {
   routeApi();
 });
 
-describe("Account RSVP section (H59)", () => {
+describe("Account RSVP subpage (H59)", () => {
+  it("opens RSVP from Account without rendering the editor inline", async () => {
+    await renderMobile(<AccountScreen />);
+    expect(screen.queryByText("Workshop")).toBeNull();
+    await act(async () =>
+      fireEvent.press(screen.getByRole("button", { name: "profileRsvpTitle" })),
+    );
+    expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/rsvps");
+    expect(mockApiFetch).not.toHaveBeenCalledWith("/api/me/rsvps", expect.anything());
+  });
+
   it("offers activities to non-sponsors and saves only explicitly changed answers", async () => {
     mockMeContext.me = { ...baseMe, isSponsorRep: false };
-    await renderMobile(<AccountScreen />);
+    await renderMobile(<RsvpsScreen />);
     await screen.findByText("Workshop");
     expect(screen.queryByLabelText("Dinner: rsvpNo")).toBeNull();
     expect(bodyOf("PUT", "/api/me/rsvps")).toBeUndefined();
@@ -304,7 +315,7 @@ describe("Account RSVP section (H59)", () => {
         throw new Error("rsvp_locked");
       },
     });
-    await renderMobile(<AccountScreen />);
+    await renderMobile(<RsvpsScreen />);
     await act(async () => fireEvent.press(await screen.findByLabelText("Lunch: rsvpYes")));
     await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
     expect(await screen.findByText("couldNotSaveRsvps")).toBeTruthy();
@@ -318,14 +329,14 @@ describe("Account RSVP section (H59)", () => {
         throw new Error("offline");
       },
     });
-    await renderMobile(<AccountScreen />);
+    await renderMobile(<RsvpsScreen />);
     await screen.findByText("Workshop");
     expect(screen.queryByLabelText("Workshop: rsvpYes")).toBeNull();
   });
 
   it("shows an empty RSVP section instead of making the destination disappear", async () => {
     routeApi({ "GET /api/me/rsvps": () => ({ items: [] }) });
-    await renderMobile(<AccountScreen />);
+    await renderMobile(<RsvpsScreen />);
     expect(await screen.findByText("rsvpNoItems")).toBeTruthy();
   });
 });

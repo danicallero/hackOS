@@ -2953,7 +2953,9 @@ request notifies the other participants once, with a deep link to the request.
 
 ## Personal RSVP answers (H59)
 
-Account shows an RSVP section for every account with event access. It reads
+Account shows an RSVP navigation row for every account with event access.
+It pushes `/(tabs)/others/rsvps`, a subpage in the same native stack as
+notification preferences, with its own large title and native Back item. It reads
 `GET /api/me/rsvps`, including non-meal activities and role-targeted offers,
 with explicit Yes / No / Not sure choices. Closed or cached offline answers
 are read-only. An empty offer list has an explicit empty state; read errors
