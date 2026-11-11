@@ -50,7 +50,7 @@ export function AvailabilityTimeline({
   const dayLabel = useDayLabel();
   const intervalLabel = useIntervalLabel();
   const byDay = new Map(scheduleDays(intervals, zone).map((entry) => [entry.day, entry.intervals]));
-  const allDays = [...new Set([...days, ...byDay.keys()])].sort();
+  const allDays = [...new Set([...days, ...byDay.keys()])].sort((a, b) => a.localeCompare(b));
   if (allDays.length === 0) return null;
   return (
     <div className="divide-y divide-border/60 border-y border-border/60">
