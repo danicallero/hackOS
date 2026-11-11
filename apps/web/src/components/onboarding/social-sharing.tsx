@@ -1059,7 +1059,7 @@ export function SocialSharing({
         </p>
       )}
 
-      <fieldset className="flex flex-wrap justify-center gap-1">
+      <fieldset className="flex flex-wrap justify-center gap-1 pt-2">
         <legend className="sr-only">{copy.format}</legend>
         {formats.map(({ value, label }) => (
           <label
