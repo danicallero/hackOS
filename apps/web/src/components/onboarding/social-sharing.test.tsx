@@ -686,7 +686,7 @@ describe("<SocialSharing />", () => {
       });
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
       act(() => root.unmount());
-      open();
+      await act(async () => open());
       await vi.waitFor(() => expect(photo("/7/photo")).toHaveLength(1));
       await vi.waitFor(() => expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1));
       root = createRoot(container);
@@ -702,7 +702,7 @@ describe("<SocialSharing />", () => {
       });
       await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       await rerender({ attendee: { ...attendee, photoUrl: "/api/users/8/photo" } });
-      open();
+      await act(async () => open());
       await vi.waitFor(() => expect(photo("/8/photo")).toHaveLength(1));
       await settled();
       expect(photo("/7/photo")[0].close).toHaveBeenCalledTimes(1);

@@ -87,6 +87,12 @@ mentions, test counts or mock call counts as a replacement for domain outcomes.
   measurements balance the four groups. Each shard receives a separate Valkey
   database derived from the configured base URL, alongside its own Postgres
   database and S3 bucket.
+- CI runs those four API shards as separate matrix jobs, each with its own
+  runner and services. `API_TEST_SHARD=1` through `4` selects one existing
+  partition; omitting it keeps the local four-shard runner. Discovery still
+  validates every test file's ownership before selecting a partition. The
+  migration upgrade check runs on shard 1; the `API integration tests` gate
+  requires every shard to pass.
 - Every API shard uses its own S3 bucket locally as well as in CI. Storage is
   checked/provisioned before suites launch with bounded requests; it is not
   silently skipped when unavailable. Failed runs wait for every shard before
@@ -131,6 +137,12 @@ print individual results in CI. Browser logs additionally show completed and
 remaining tests, active tests and durations, with JSON timings and failure
 diagnostics uploaded afterward; see [UI testing](./ui-testing.md).
 Parallel jobs' overall state remains visible in the workflow's Actions job list.
+
+The web jsdom project loads `apps/web/test/setup.ts`: it enables React's act
+environment before each test and wraps Testing Library DOM events in `act`,
+preserving each event callback's result. Tests must also await asynchronous
+interactions, timers and manually resolved work inside `act` before asserting
+the resulting state. Warnings are not filtered or suppressed.
 
 ## Verification limits
 

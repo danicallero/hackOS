@@ -90,11 +90,16 @@ jobs:
         run: pnpm --parallel --filter @hackos/api --filter @hackos/web --filter @hackos/mobile typecheck
 
   api-test:
-    name: API integration tests
+    name: API integration shard ${{ matrix.shard }}/4
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       CI: true
+      API_TEST_SHARD: ${{ matrix.shard }}
       NODE_ENV: test
       TEST_DATABASE_URL: postgres://hackos:hackos@localhost:5432/hackos_test
       S3_ENDPOINT: http://localhost:9000
@@ -145,7 +150,7 @@ jobs:
       - name: Start S3Mock
         env:
           CI_PROGRESS_LABEL: "Start S3Mock"
-          CI_PROGRESS_REMAINING: "Set up workspace -> Wait for S3Mock -> Run API integration tests -> Check the migration upgrade path from the base branch -> Stop S3Mock"
+          CI_PROGRESS_REMAINING: ${{ matrix.shard == 1 && 'Set up workspace -> Wait for S3Mock -> Run API integration tests -> Check the migration upgrade path from the base branch -> Stop S3Mock' || 'Set up workspace -> Wait for S3Mock -> Run API integration tests -> Stop S3Mock' }}
         run: |
           docker run --detach --name hackos-ci-s3mock \
             --publish 9000:9090 \
@@ -157,7 +162,7 @@ jobs:
       - name: Wait for S3Mock
         env:
           CI_PROGRESS_LABEL: "Wait for S3Mock"
-          CI_PROGRESS_REMAINING: "Run API integration tests -> Check the migration upgrade path from the base branch -> Stop S3Mock"
+          CI_PROGRESS_REMAINING: ${{ matrix.shard == 1 && 'Run API integration tests -> Check the migration upgrade path from the base branch -> Stop S3Mock' || 'Run API integration tests -> Stop S3Mock' }}
         run: |
           set -euo pipefail
           for attempt in {1..60}; do
@@ -172,7 +177,7 @@ jobs:
       - name: Run API integration tests
         env:
           CI_PROGRESS_LABEL: "Run API integration tests"
-          CI_PROGRESS_REMAINING: "Check the migration upgrade path from the base branch -> Stop S3Mock"
+          CI_PROGRESS_REMAINING: ${{ matrix.shard == 1 && 'Check the migration upgrade path from the base branch -> Stop S3Mock' || 'Stop S3Mock' }}
         run: pnpm --filter @hackos/api test
 
       # #1276: a database already at the base branch's migrations must upgrade to
@@ -180,6 +185,7 @@ jobs:
       # deploy runs). Fresh-database tests cannot see ordering conflicts such as
       # a lower-numbered migration landing after a higher one was applied.
       - name: Check the migration upgrade path from the base branch
+        if: matrix.shard == 1
         env:
           CI_PROGRESS_LABEL: "Check the migration upgrade path from the base branch"
           CI_PROGRESS_REMAINING: "Stop S3Mock"
@@ -206,6 +212,20 @@ jobs:
           CI_PROGRESS_REMAINING: "job cleanup"
         if: always()
         run: docker rm --force hackos-ci-s3mock || true
+
+  api-test-summary:
+    name: API integration tests
+    needs: api-test
+    if: always() && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every API shard to pass
+        shell: bash
+        env:
+          SHARD_RESULT: ${{ needs.api-test.result }}
+        run: |
+          echo "All API shards finished: $SHARD_RESULT; remaining: job cleanup"
+          test "$SHARD_RESULT" = success
 
   web-test:
     name: web unit tests
