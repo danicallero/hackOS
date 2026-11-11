@@ -71,6 +71,7 @@ const settingsBody = z
   .object({
     enabled: z.boolean(),
     kinds: z.array(z.enum(ATTENDANCE_KINDS)).max(4),
+    roleIds: z.array(z.number().int().positive()).max(100).default([]),
     nameI18n: i18nSchema.nullable(),
     descriptionI18n: i18nSchema.nullable(),
     rsvpDate: z.string().datetime({ offset: true }).nullable(),
@@ -107,7 +108,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         summary: "Get a schedule entry's RSVP settings",
         description:
           "Organizer view of the RSVP configuration of the entry's activity for the current event key: " +
-          "whether it is enabled, which attendance kinds are asked, optional name/description/date overrides " +
+          "whether it is enabled, which roles (`roleIds`, publicly visible ones; and legacy attendance `kinds`) are asked, optional name/description/date overrides " +
           "and the effective defaults for blank fields. Includes live counts " +
           "(attending, notAttending, unsure, unanswered and by kind) under the same eligibility rule as " +
           "`GET /api/logistics/rsvps`. Requires schedule:manage.",
@@ -130,7 +131,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
           "Replaces the RSVP configuration for the current event key, audited in the same transaction. " +
           "An enabled RSVP needs at least one kind. Meal activities can never ask " +
           "participants (400 `rsvp_participants_excluded`). Stored answers are never changed, and narrowing `kinds` only " +
-          "stops asking and counting the excluded kinds. Accepts `Idempotency-Key`. Broadcasts `logistics.rsvp.updated`. Requires schedule:manage.",
+          "stops asking and counting the excluded kinds. `roleIds` must be existing publicly visible roles (400 `rsvp_role_invalid`); holding any of them is enough, and someone with no attendance classification is never asked. Enabled settings need `kinds` or `roleIds` (400 `rsvp_kinds_required`). Accepts `Idempotency-Key`. Broadcasts `logistics.rsvp.updated`. Requires schedule:manage.",
         response: { 200: settingsResponse },
       },
     },
@@ -138,6 +139,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
       putRsvpSettings(req.userId as number, req.params.id, {
         ...req.body,
         kinds: req.body.kinds,
+        roleIds: req.body.roleIds,
       }),
   );
 
@@ -238,7 +240,7 @@ export function registerRsvpRoutes(app: FastifyInstance): void {
         summary: "RSVP headcounts",
         description:
           "Per activity asked to at least one kind (enabled RSVP settings on a shown schedule entry, ended included): attending, notAttending, " +
-          "unsure and unanswered among eligible people (current attendance kind in the asked kinds, never participants for " +
+          "unsure and unanswered among eligible people (holding an asked role or in the asked kinds, never participants for " +
           "meals), broken down by kind, with the intolerance breakdown and dietary-note count among those attending. " +
           "Aggregates only; excludes inactive and anonymized accounts and honours the review-fixture boundary. " +
           "`activityId` narrows to one activity. Requires logistics statistics access.",

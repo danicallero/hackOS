@@ -61,7 +61,7 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
        JOIN schedule sc ON sc.id=a.schedule_id
        LEFT JOIN activity_rsvps r ON r.activity_id=a.id AND r.event_key=s.event_key AND r.user_id=$1
        WHERE s.event_key=$2 AND s.enabled AND sc.visibility='shown' AND sc.ends_at>now()
-         AND $3::text = ANY(s.kinds)
+         AND ($3::text = ANY(s.kinds) OR s.role_ids && ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL WHERE ur.user_id = $1))
          AND NOT ($3='participant' AND a.category = ANY($4::text[]))
      ) offers`,
     [userId, event.event_key, kind, [...MEAL_ACTIVITY_KINDS]],

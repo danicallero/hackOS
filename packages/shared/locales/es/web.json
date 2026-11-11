@@ -4324,5 +4324,6 @@
   "githubLinkAnother": "Vincular otra cuenta",
   "publicProfileFieldsOffHint": "Activa el compartir para editar estos campos.",
   "helpDeskResizeStart": "Arrastra para cambiar el inicio de {interval}",
-  "helpDeskResizeEnd": "Arrastra para cambiar el final de {interval}"
+  "helpDeskResizeEnd": "Arrastra para cambiar el final de {interval}",
+  "rsvpAudiencePlaceholder": "Selecciona roles…"
 }

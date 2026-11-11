@@ -48,6 +48,7 @@ describe("settings helpers", () => {
   const draft = (overrides: Partial<RsvpSettingsDraft> = {}): RsvpSettingsDraft => ({
     enabled: true,
     kinds: ["sponsor", "participant"],
+    roleIds: [],
     nameI18n: { es: "Comida", en: " ", gl: "" },
     descriptionI18n: {},
     rsvpDate: "",
