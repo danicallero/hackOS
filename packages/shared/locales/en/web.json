@@ -4230,7 +4230,7 @@
   "helpDeskChallengeAlertsNote": "Only requests about the selected challenges alert you. Select none to get every request.",
   "helpDeskIntervalBeforeHacking": "You can't be available before the hacking time.",
   "helpDeskOtherHint": "Reaches all available support",
-  "helpDeskPlanTitle": "When do you plan to be at the venue?",
+  "helpDeskPlanTitle": "When do you plan to offer help?",
   "helpDeskPlanNote": "This is only for logistics and coverage planning. You will only receive help requests while you are inside the venue when they are made.",
   "helpDeskIntervalOrder": "The end must be after the start.",
   "helpDeskOptions": "Help desk options",
