@@ -12,8 +12,8 @@ export default defineConfig({
   outputDir: resolve(repositoryRoot, "artifacts/playwright"),
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  retries: process.env.CI ? 1 : 0,
+  workers: process.env.CI ? Number(process.env.E2E_WORKERS ?? 3) : undefined,
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL,
