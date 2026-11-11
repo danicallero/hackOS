@@ -58,13 +58,16 @@ Availability is a set of dated intervals, replaced as a whole (≤30, each
 from H24 door scans (`time_logs`, latest scan is `in`), and neither creates
 the other.
 
-In My profile → Mentoring the intervals are drawn as one 24-hour line per event
-day: drag across a line to mark a stretch (30-minute steps; an overlap or a
-start before the window is refused), drag a marked stretch to move it or either
-of its edges to change its time, press it without dragging to edit or remove
-it, press an empty spot or the day's plus button to add with the dialog. The
-Add availability button and the keyboard-activated stretches are the keyboard
-route. A helper's page shows the same lines read-only.
+In My profile → Mentoring the intervals are drawn as one line per event day, one
+under the other, on a continuous time axis. Drag across a line to mark a stretch
+(30-minute steps) and carry on to the next line to cross midnight (21:00 to 03:00
+shows on both days); drag a marked stretch to move it or either edge to change its
+time; press it without dragging to edit or remove it; press an empty spot or the
+day's plus button to add with the dialog. The time before hacking starts is
+hatched and cannot be marked. A stretch drawn over existing ones absorbs them (a
+19:00–21:00 over 08:00–20:00 leaves 08:00–21:00) as long as the result stays within
+24 hours. The Add availability button and the keyboard-activated stretches are the
+keyboard route. A helper's page shows the same lines read-only.
 
 ## Knowledge catalogue
 

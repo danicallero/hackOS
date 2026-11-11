@@ -14,7 +14,7 @@ import { toast } from "@/lib/toast";
 import { AvailabilityTimeline } from "./availability-timeline";
 import { IntervalDialog } from "./interval-dialog";
 import type { AvailabilityInterval, MyHelperProfile } from "./model";
-import { durationMinutes, eventDay, intervalFrom, intervalProblem, nextDayOf } from "./schedule";
+import { durationMinutes, eventDay, intervalProblem, mergeInterval, nextDayOf } from "./schedule";
 
 /**
  * Planned availability (H62): the saved intervals as rows per event day, an
@@ -64,6 +64,20 @@ export function AvailabilityEditor({
   const startsAllowed = (interval: AvailabilityInterval) =>
     !window || Date.parse(interval.startsAt) >= Date.parse(window.startsAt);
   const plannedDays = window ? hackingDays(window, zone) : [];
+  /** A drawn stretch joins what it overlaps, so the result covers both. */
+  function place(interval: AvailabilityInterval, others: AvailabilityInterval[]) {
+    if (!startsAllowed(interval)) return rejectDrag(t("helpDeskIntervalBeforeHacking"));
+    const merged = mergeInterval(others, interval);
+    const touched = merged.find(
+      (item) =>
+        Date.parse(item.startsAt) <= Date.parse(interval.startsAt) &&
+        Date.parse(item.endsAt) >= Date.parse(interval.endsAt),
+    );
+    if (touched && intervalProblem(touched, []) === "tooLong") {
+      return rejectDrag(t("helpDeskIntervalTooLong"));
+    }
+    void replace(merged);
+  }
   function prefillFor(day: string): AvailabilityInterval | null {
     if (!window) return null;
     const clock = instantToWallClock(window.startsAt, zone).slice(10, 16);
@@ -100,19 +114,16 @@ export function AvailabilityEditor({
       <AvailabilityTimeline
         intervals={optimistic ?? profile.availability}
         days={plannedDays}
-        onDrag={(day, startMinute, endMinute) => {
+        notBefore={window?.startsAt}
+        onCreate={(interval) => {
+          if (!pending) place(interval, profile.availability);
+        }}
+        onChange={(interval, next) => {
           if (pending) return;
-          const clock = (minute: number) =>
-            `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
-          const interval = intervalFrom(day, clock(startMinute), clock(endMinute), zone);
-          if (!interval) return;
-          const problem = !startsAllowed(interval)
-            ? t("helpDeskIntervalBeforeHacking")
-            : intervalProblem(interval, profile.availability) === "overlap"
-              ? t("helpDeskIntervalOverlap")
-              : null;
-          if (problem) rejectDrag(problem);
-          else void replace([...profile.availability, interval]);
+          place(
+            next,
+            profile.availability.filter((item) => item.startsAt !== interval.startsAt),
+          );
         }}
         onAddDay={(day) => {
           setError(null);
@@ -124,21 +135,6 @@ export function AvailabilityEditor({
           setError(null);
           setEditing(interval);
           setAdding(true);
-        }}
-        onAdjust={(interval, startDelta, endDelta) => {
-          if (pending) return;
-          const moved = {
-            startsAt: new Date(Date.parse(interval.startsAt) + startDelta * 60_000).toISOString(),
-            endsAt: new Date(Date.parse(interval.endsAt) + endDelta * 60_000).toISOString(),
-          };
-          const others = profile.availability.filter((item) => item.startsAt !== interval.startsAt);
-          const problem = !startsAllowed(moved)
-            ? t("helpDeskIntervalBeforeHacking")
-            : intervalProblem(moved, others) === "overlap"
-              ? t("helpDeskIntervalOverlap")
-              : null;
-          if (problem) rejectDrag(problem);
-          else void replace([...others, moved]);
         }}
       />
       <p className="text-muted-foreground text-sm text-pretty">{t("helpDeskPlanNote")}</p>

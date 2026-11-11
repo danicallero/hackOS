@@ -122,56 +122,101 @@ describe("availability replacement (H62)", () => {
     );
   });
 
-  /** A day line 2400 px wide (100 px per hour) whose pointer events are fired by the test. */
-  function dayLine(index: number) {
-    const track = container.querySelectorAll<HTMLElement>(
-      "fieldset[aria-label^=helpDeskAddIntervalOn]",
-    )[index];
-    track.getBoundingClientRect = () =>
-      ({
-        left: 0,
-        width: 2400,
-        top: 0,
-        height: 40,
-        right: 2400,
-        bottom: 40,
-        x: 0,
-        y: 0,
-      }) as DOMRect;
-    track.setPointerCapture = () => undefined;
-    track.releasePointerCapture = () => undefined;
-    return (type: string, clientX: number) =>
+  /** Day lines 2400 px wide (100 px per hour), 60 px apart; the test fires their pointer events. */
+  function timeline() {
+    const tracks = [...container.querySelectorAll<HTMLElement>("[data-track]")];
+    for (const [row, track] of tracks.entries()) {
+      track.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          width: 2400,
+          top: row * 60,
+          height: 40,
+          right: 2400,
+          bottom: row * 60 + 40,
+          x: 0,
+          y: row * 60,
+        }) as DOMRect;
+    }
+    const lines = container.querySelector("fieldset") as HTMLFieldSetElement;
+    lines.setPointerCapture = () => undefined;
+    lines.releasePointerCapture = () => undefined;
+    const fire = (target: Element, type: string, row: number, x: number) =>
       act(async () => {
-        track.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, button: 0 }));
+        target.dispatchEvent(
+          new MouseEvent(type, { bubbles: true, clientX: x, clientY: row * 60 + 20, button: 0 }),
+        );
       });
+    return {
+      tracks,
+      press: (row: number, x: number) => fire(tracks[row], "pointerdown", row, x),
+      move: (row: number, x: number) => fire(lines, "pointermove", row, x),
+      release: (row: number, x: number) => fire(lines, "pointerup", row, x),
+    };
   }
   const window = { startsAt: "2027-02-26T09:00:00.000Z", endsAt: "2027-02-28T15:00:00.000Z" };
   const withWindow = (availability: unknown[]) =>
     ({ availability, suggestedInterval: window }) as unknown as MyHelperProfile;
+  const iso = (day: number, hour: number, minute = 0) =>
+    `2027-02-${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`;
+  const expectSaved = (intervals: { startsAt: string; endsAt: string }[]) =>
+    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", { intervals });
 
   it("marks a stretch by dragging across a day line and saves the replacement", async () => {
     vi.mocked(api.put).mockResolvedValue(withWindow([]));
     await act(async () => root.render(<Editor initial={withWindow([])} />));
-    const fire = dayLine(1);
-    await fire("pointerdown", 1000);
-    await fire("pointermove", 1250);
-    await fire("pointerup", 1250);
-    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
-      intervals: [{ startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T12:30:00.000Z" }],
-    });
+    const lines = timeline();
+    await lines.press(1, 1000);
+    await lines.move(1, 1250);
+    await lines.release(1, 1250);
+    expectSaved([{ startsAt: iso(27, 10), endsAt: iso(27, 12, 30) }]);
+  });
+
+  it("marks a stretch across midnight by dragging onto the next day line", async () => {
+    vi.mocked(api.put).mockResolvedValue(
+      withWindow([{ startsAt: iso(27, 21), endsAt: iso(28, 3) }]),
+    );
+    await act(async () => root.render(<Editor initial={withWindow([])} />));
+    const lines = timeline();
+    await lines.press(1, 2100);
+    await lines.move(2, 300);
+    await lines.release(2, 300);
+    expectSaved([{ startsAt: iso(27, 21), endsAt: iso(28, 3) }]);
+    expect(container.textContent).toContain("09:00 PM–03:00 AM");
+  });
+
+  it("keeps a new stretch from starting before hacking does", async () => {
+    vi.mocked(api.put).mockResolvedValue(withWindow([]));
+    await act(async () => root.render(<Editor initial={withWindow([])} />));
+    const lines = timeline();
+    await lines.press(0, 300);
+    await lines.move(0, 1200);
+    await lines.release(0, 1200);
+    expectSaved([{ startsAt: iso(26, 9), endsAt: iso(26, 12) }]);
+  });
+
+  it("extends an overlapped stretch to cover the new one", async () => {
+    const evening = { startsAt: iso(27, 8), endsAt: iso(27, 20) };
+    vi.mocked(api.put).mockResolvedValue(withWindow([evening]));
+    await act(async () => root.render(<Editor initial={withWindow([evening])} />));
+    const lines = timeline();
+    await lines.press(1, 1900);
+    await lines.move(1, 2100);
+    await lines.release(1, 2100);
+    expectSaved([{ startsAt: iso(27, 8), endsAt: iso(27, 21) }]);
   });
 
   it("opens the add dialog for a plain press on an empty line", async () => {
     await act(async () => root.render(<Editor initial={withWindow([first])} />));
-    const fire = dayLine(0);
-    await fire("pointerdown", 300);
-    await fire("pointerup", 300);
+    const lines = timeline();
+    await lines.press(0, 300);
+    await lines.release(0, 300);
     expect(dialog()).toBeTruthy();
   });
 
-  /** Drags a marked stretch (10:00-12:00 at 1000-1200 px) from `from` to `to` px. */
-  async function dragSegment(from: number, to: number) {
-    const fire = dayLine(1);
+  /** Drags the marked stretch (10:00-12:00, 1000-1200 px on the second line) from `from` to `to` px. */
+  async function dragSegment(from: number, to: number, toRow = 1) {
+    const lines = timeline();
     const segment = container.querySelector<HTMLElement>(
       'button[aria-label^="helpDeskEditInterval "]',
     ) as HTMLElement;
@@ -179,38 +224,34 @@ describe("availability replacement (H62)", () => {
       ({
         left: 1000,
         width: 200,
-        top: 0,
+        top: 60,
         height: 40,
         right: 1200,
-        bottom: 40,
+        bottom: 100,
         x: 1000,
-        y: 0,
+        y: 60,
       }) as DOMRect;
     await act(async () => {
       segment.dispatchEvent(
-        new MouseEvent("pointerdown", { bubbles: true, clientX: from, button: 0 }),
+        new MouseEvent("pointerdown", { bubbles: true, clientX: from, clientY: 80, button: 0 }),
       );
     });
-    await fire("pointermove", to);
-    await fire("pointerup", to);
+    await lines.move(toRow, to);
+    await lines.release(toRow, to);
   }
 
   it("changes the end of a stretch by dragging its right edge", async () => {
     vi.mocked(api.put).mockResolvedValue(withWindow([first]));
     await act(async () => root.render(<Editor initial={withWindow([first])} />));
     await dragSegment(1195, 1300);
-    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
-      intervals: [{ startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T13:00:00.000Z" }],
-    });
+    expectSaved([{ startsAt: iso(27, 10), endsAt: iso(27, 13) }]);
   });
 
-  it("moves a whole stretch by dragging its middle", async () => {
+  it("moves a whole stretch by dragging its middle, onto the next day if dropped there", async () => {
     vi.mocked(api.put).mockResolvedValue(withWindow([first]));
     await act(async () => root.render(<Editor initial={withWindow([first])} />));
     await dragSegment(1100, 1200);
-    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
-      intervals: [{ startsAt: "2027-02-27T11:00:00.000Z", endsAt: "2027-02-27T13:00:00.000Z" }],
-    });
+    expectSaved([{ startsAt: iso(27, 11), endsAt: iso(27, 13) }]);
   });
 
   it("opens the edit dialog when a stretch is pressed without dragging", async () => {

@@ -195,11 +195,11 @@ describe("Profile tabs (H28, #1083)", () => {
     rsvps.items = [{ activityId: 1 }];
     nav.search = "tab=attendance";
     await render();
-    expect(tabs()).toContain("onboardingStepRsvp");
+    expect(tabs()).toContain("profileRsvpTitle");
     expect(openPanel()[0].textContent).toContain("rsvp-body");
     rsvps.items = [];
     await render();
-    expect(tabs()).not.toContain("onboardingStepRsvp");
+    expect(tabs()).not.toContain("profileRsvpTitle");
   });
 
   it("lets the person revisit the share card from the Wallet tab", async () => {
