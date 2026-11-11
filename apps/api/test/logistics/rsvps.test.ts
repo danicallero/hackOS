@@ -172,13 +172,13 @@ describe("eligibility", () => {
     expect(refused.statusCode).toBe(400);
   });
 
-  it("skips disabled, hidden and ended activities", async () => {
+  it("skips disabled and hidden activities but keeps ended ones", async () => {
     const sponsor = await person("sponsor");
     await activity({ kinds: ["sponsor"], enabled: false });
     await activity({ kinds: ["sponsor"], hidden: true });
-    await activity({ kinds: ["sponsor"], startsInHours: -5 });
+    const ended = await activity({ kinds: ["sponsor"], startsInHours: -5 });
     const open = await activity({ kinds: ["sponsor"] });
-    expect((await getItems(sponsor)).map((i) => i.activityId)).toEqual([open]);
+    expect((await getItems(sponsor)).map((i) => i.activityId).sort()).toEqual([ended, open].sort());
   });
 
   it("keeps the meal-plan facade closed to participants and unclassified accounts", async () => {

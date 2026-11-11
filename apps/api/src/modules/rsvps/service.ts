@@ -12,7 +12,7 @@ import { roleAudienceTagsForUsers } from "../logistics/role-audiences.js";
 /**
  * Per-activity RSVPs (generalises the sponsor meal plans of #933). An activity
  * is offered to a person when it has enabled RSVP settings for the CURRENT
- * event key, its schedule entry is shown and not ended, and the person's
+ * event key, its schedule entry is shown, and the person's
  * attendance kind (derived, participant-first) is in the settings' `kinds`.
  * Meals are never offered to a registered participant, and a person with no
  * classification is never offered anything, whatever the settings say.
@@ -136,7 +136,7 @@ export async function offeredRsvps(
        LEFT JOIN activity_rsvps r
               ON r.activity_id = a.id AND r.user_id = $1 AND r.event_key = st.event_key
       WHERE st.event_key = $2 AND st.enabled
-        AND s.visibility = 'shown' AND s.ends_at > now()
+        AND s.visibility = 'shown'
         AND ($3::text = ANY(st.kinds) OR st.role_ids && ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL WHERE ur.user_id = $1) OR s.audiences && $6::text[])
         AND NOT (a.category = ANY($4::text[]) AND $3::text = 'participant')
         AND (NOT $5::boolean OR a.category = ANY($4::text[]))
@@ -281,7 +281,7 @@ export async function submitRsvps(
       const item = offered.get(input.activityId);
       if (!item) {
         const { rows } = await client.query<{ gone: boolean }>(
-          `SELECT (NOT st.enabled OR s.ends_at <= now() OR s.visibility <> 'shown') AS gone
+          `SELECT (NOT st.enabled OR s.visibility <> 'shown') AS gone
              FROM activity_rsvp_settings st
              JOIN activities a ON a.id = st.activity_id
              JOIN schedule s ON s.id = a.schedule_id
