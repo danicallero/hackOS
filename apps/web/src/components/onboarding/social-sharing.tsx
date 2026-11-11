@@ -966,16 +966,56 @@ export function SocialSharing({
     setCanShareFile(navigator.canShare({ files: [file] }));
   }, [blob, fileName]);
 
-  const download = () => {
-    if (!blob) return;
+  /** A phone offers "save image" in its share sheet, which puts it in the gallery. */
+  const prefersGallery = () =>
+    canShareFile &&
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(pointer: coarse)").matches === true;
+
+  const saveAsFile = () => {
+    if (!blob) return false;
     try {
       saveBlob(blob, fileName);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const download = async () => {
+    if (!blob) return;
+    if (prefersGallery()) {
+      try {
+        await navigator.share({ files: [new File([blob], fileName, { type: "image/png" })] });
+        setActed(true);
+        return;
+      } catch (error) {
+        // Dismissing the sheet is a choice, not a failure; anything else falls back to a file.
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    if (saveAsFile()) {
       setActed(true);
       toast.success(copy.downloaded, { compactTitle: copy.download });
-    } catch {
+    } else {
       toast.error(copy.downloadFailed, copy.download);
     }
   };
+
+  /** LinkedIn and X cannot receive the image from a link: save it and copy the text first, then open the network. */
+  const shareOnNetwork =
+    (target: string, network: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      // The text is copied while this page still has focus, then the image is saved.
+      void navigator.clipboard?.writeText(caption).catch(() => undefined);
+      const saved = saveAsFile();
+      setActed(true);
+      toast.success(saved ? text("networkReady", { network }) : copy.copied, {
+        compactTitle: network,
+      });
+      // The tab is opened inside the click so a pop-up blocker allows it.
+      if (!window.open(target, "_blank", "noopener,noreferrer")) window.location.assign(target);
+    };
 
   const copyCaption = async () => {
     try {
@@ -1059,7 +1099,7 @@ export function SocialSharing({
         </p>
       )}
 
-      <fieldset className="flex flex-wrap justify-center gap-1">
+      <fieldset className="flex flex-wrap justify-center gap-1 pt-2">
         <legend className="sr-only">{copy.format}</legend>
         {formats.map(({ value, label }) => (
           <label
@@ -1112,7 +1152,7 @@ export function SocialSharing({
                 href={linkedInShareUrl(caption)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setActed(true)}
+                onClick={shareOnNetwork(linkedInShareUrl(caption), copy.linkedin)}
               >
                 <LinkedinLogoIcon aria-hidden />
                 {copy.linkedin}
@@ -1123,7 +1163,7 @@ export function SocialSharing({
                 href={xShareUrl(caption)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setActed(true)}
+                onClick={shareOnNetwork(xShareUrl(caption), copy.x)}
               >
                 <XLogoIcon aria-hidden />
                 {copy.x}
@@ -1141,7 +1181,11 @@ export function SocialSharing({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button variant={acted ? "outline" : "default"} onClick={download} disabled={!blob}>
+        <Button
+          variant={acted ? "outline" : "default"}
+          onClick={() => void download()}
+          disabled={!blob}
+        >
           <DownloadSimpleIcon aria-hidden />
           {copy.download}
         </Button>

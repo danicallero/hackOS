@@ -219,4 +219,14 @@ describe("availability replacement (H62)", () => {
     expect(dialog()).toBeTruthy();
     expect(api.put).not.toHaveBeenCalled();
   });
+
+  it("shows a dropped stretch at once and puts it back if saving fails", async () => {
+    let fail: (reason: Error) => void = () => undefined;
+    vi.mocked(api.put).mockReturnValue(new Promise((_, reject) => (fail = reject)));
+    await act(async () => root.render(<Editor initial={withWindow([first])} />));
+    await dragSegment(1195, 1300);
+    expect(container.textContent).toContain("10:00 AM–01:00 PM");
+    await act(async () => fail(new Error("Offline")));
+    expect(container.textContent).toContain("10:00 AM–12:00 PM");
+  });
 });

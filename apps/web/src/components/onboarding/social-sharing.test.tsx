@@ -497,6 +497,61 @@ describe("<SocialSharing />", () => {
     expect(toast.success).toHaveBeenCalledWith("Texto copiado", expect.anything());
   });
 
+  describe("on a phone", () => {
+    const phone = (share: (data: ShareData) => Promise<void>) => {
+      vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("coarse") }));
+      Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+      Object.defineProperty(navigator, "share", { configurable: true, value: share });
+    };
+
+    it("offers the image to the share sheet, which can save it to the gallery", async () => {
+      const share = vi.fn().mockResolvedValue(undefined);
+      phone(share);
+      await mount();
+      await vi.waitFor(() => expect(button(/Descargar imagen/)?.disabled).toBe(false));
+      await act(async () => button(/Descargar imagen/)?.click());
+      expect(share).toHaveBeenCalledTimes(1);
+      expect(share.mock.calls[0][0].files).toHaveLength(1);
+      expect(share.mock.calls[0][0].text).toBeUndefined();
+      expect(saveBlob).not.toHaveBeenCalled();
+    });
+
+    it("saves a file when the share sheet fails, and does nothing when it is dismissed", async () => {
+      const share = vi
+        .fn()
+        .mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"))
+        .mockRejectedValueOnce(new DOMException("closed", "AbortError"));
+      phone(share);
+      await mount();
+      await act(async () => button(/Descargar imagen/)?.click());
+      expect(saveBlob).toHaveBeenCalledTimes(1);
+      await act(async () => button(/Descargar imagen/)?.click());
+      expect(saveBlob).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it.each([
+    ["LinkedIn", /LinkedIn/, "linkedin.com", "Pégalo en LinkedIn."],
+    ["X", /^X$/, "x.com", "Pégalo en X."],
+  ])("downloads the image and copies the text before opening %s", async (_name, label, host, tail) => {
+    const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
+    await mount();
+    await openShareMenu();
+    await act(async () => (menuItem(label) as HTMLElement).click());
+    const caption = "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.";
+    expect(await navigator.clipboard.readText()).toBe(caption);
+    expect(saveBlob).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining(host),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(toast.success).toHaveBeenCalledWith(
+      `Imagen descargada y texto copiado. ${tail}`,
+      expect.anything(),
+    );
+  });
+
   it("falls back to initials and says so when the photo cannot be loaded", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 404 });
     await mount();
