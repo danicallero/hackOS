@@ -98,10 +98,10 @@ describe("Reports inbox (H18)", () => {
   it("closes an open report as handled or dismissed", async () => {
     const user = userEvent.setup();
     await render();
-    await user.click(button("reportMarkHandled"));
+    await act(async () => user.click(button("reportMarkHandled")));
     expect(api.patch).toHaveBeenCalledWith("/api/content-reports/4", { status: "actioned" });
     expect(resource.reload).toHaveBeenCalled();
-    await user.click(button("dismiss"));
+    await act(async () => user.click(button("dismiss")));
     expect(api.patch).toHaveBeenLastCalledWith("/api/content-reports/4", { status: "dismissed" });
   });
 

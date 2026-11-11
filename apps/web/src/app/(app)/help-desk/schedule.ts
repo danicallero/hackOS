@@ -108,3 +108,45 @@ export function intervalProblem(
 export function durationMinutes(interval: AvailabilityInterval): number {
   return Math.round((Date.parse(interval.endsAt) - Date.parse(interval.startsAt)) / 60_000);
 }
+
+/**
+ * `candidate` added to `existing`: every stretch it overlaps or touches is
+ * absorbed, so the result covers the union (a new 19:00-21:00 over an existing
+ * 08:00-20:00 leaves one 08:00-21:00). Sorted by start.
+ */
+export function mergeInterval(
+  existing: AvailabilityInterval[],
+  candidate: AvailabilityInterval,
+): AvailabilityInterval[] {
+  let start = Date.parse(candidate.startsAt);
+  let end = Date.parse(candidate.endsAt);
+  let kept = existing;
+  for (let changed = true; changed; ) {
+    changed = false;
+    const rest: AvailabilityInterval[] = [];
+    for (const other of kept) {
+      const otherStart = Date.parse(other.startsAt);
+      const otherEnd = Date.parse(other.endsAt);
+      if (otherStart <= end && start <= otherEnd) {
+        start = Math.min(start, otherStart);
+        end = Math.max(end, otherEnd);
+        changed = true;
+      } else {
+        rest.push(other);
+      }
+    }
+    kept = rest;
+  }
+  return [
+    ...kept,
+    { startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() },
+  ].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+}
+
+/** `yyyy-MM-dd` days from `first` to `last` inclusive. */
+export function daysFrom(first: string, last: string): string[] {
+  const days: string[] = [];
+  for (let day = first; day && day <= last && days.length < 60; day = nextDayOf(day))
+    days.push(day);
+  return days;
+}

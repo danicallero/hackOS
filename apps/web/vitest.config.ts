@@ -26,7 +26,12 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: "browser", environment: "jsdom", include: browserTests },
+        test: {
+          name: "browser",
+          environment: "jsdom",
+          include: browserTests,
+          setupFiles: ["./test/setup.ts"],
+        },
       },
     ],
   },

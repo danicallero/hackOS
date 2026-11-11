@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adjustment, minuteAt } from "./availability-timeline";
+import { dragged, minuteAt, piecesOf } from "./availability-timeline";
 
 const block = { start: 600, end: 720 };
 
@@ -11,16 +11,28 @@ describe("availability timeline drag math", () => {
     expect(minuteAt(5000, 0, 2400)).toBe(1440);
   });
 
-  it("moves a block without leaving the day", () => {
-    expect(adjustment("move", block, 60)).toEqual({ startDelta: 60, endDelta: 60 });
-    expect(adjustment("move", block, -900)).toEqual({ startDelta: -600, endDelta: -600 });
-    expect(adjustment("move", block, 2000)).toEqual({ startDelta: 720, endDelta: 720 });
+  it("moves a stretch within the usable range", () => {
+    expect(dragged("move", block, 60, 0, 4320)).toEqual({ start: 660, end: 780 });
+    expect(dragged("move", block, -900, 0, 4320)).toEqual({ start: 0, end: 120 });
+    expect(dragged("move", block, -900, 480, 4320)).toEqual({ start: 480, end: 600 });
+    expect(dragged("move", block, 9000, 0, 1440)).toEqual({ start: 1320, end: 1440 });
   });
 
-  it("resizes an edge but keeps at least one step of length", () => {
-    expect(adjustment("end", block, 60)).toEqual({ startDelta: 0, endDelta: 60 });
-    expect(adjustment("end", block, -600)).toEqual({ startDelta: 0, endDelta: -90 });
-    expect(adjustment("start", block, -60)).toEqual({ startDelta: -60, endDelta: 0 });
-    expect(adjustment("start", block, 600)).toEqual({ startDelta: 90, endDelta: 0 });
+  it("resizes an edge, keeping at least one step of length and never before the lower bound", () => {
+    expect(dragged("end", block, 60, 0, 4320)).toEqual({ start: 600, end: 780 });
+    expect(dragged("end", block, -600, 0, 4320)).toEqual({ start: 600, end: 630 });
+    expect(dragged("start", block, -60, 0, 4320)).toEqual({ start: 540, end: 720 });
+    expect(dragged("start", block, -600, 540, 4320)).toEqual({ start: 540, end: 720 });
+    expect(dragged("start", block, 600, 0, 4320)).toEqual({ start: 690, end: 720 });
+  });
+
+  it("splits a stretch across the day lines it crosses", () => {
+    expect(piecesOf({ start: 1260, end: 1620 }, 3)).toEqual([
+      { row: 0, start: 1260, end: 1440, fromPrev: false, toNext: true },
+      { row: 1, start: 0, end: 180, fromPrev: true, toNext: false },
+    ]);
+    expect(piecesOf({ start: 600, end: 1440 }, 2)).toEqual([
+      { row: 0, start: 600, end: 1440, fromPrev: false, toNext: false },
+    ]);
   });
 });

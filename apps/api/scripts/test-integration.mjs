@@ -49,6 +49,18 @@ if (invalid.length > 0) {
   );
 }
 
+const requestedShard = process.env.API_TEST_SHARD;
+const shardNumber = requestedShard === undefined ? null : Number(requestedShard);
+if (
+  shardNumber !== null &&
+  (!Number.isInteger(shardNumber) || shardNumber < 1 || shardNumber > shards.length)
+) {
+  throw new Error(`API_TEST_SHARD must be an integer from 1 to ${shards.length}`);
+}
+const selectedShards = shards
+  .map((paths, index) => ({ paths, index }))
+  .filter(({ index }) => shardNumber === null || index === shardNumber - 1);
+
 // H54: local shards need the same storage isolation as CI. User/project IDs
 // restart in each database, so a removal must never delete a sibling's files.
 const storage = new S3Client({
@@ -63,7 +75,7 @@ const storage = new S3Client({
 });
 try {
   await Promise.all(
-    shards.map(async (_, index) => {
+    selectedShards.map(async ({ index }) => {
       const Bucket = bucketFor(index);
       try {
         await storage.send(new HeadBucketCommand({ Bucket }), {
@@ -104,6 +116,8 @@ function valkeyUrlFor(shardNumber) {
 }
 
 function runShard(paths, shardNumber) {
+  const started = Date.now();
+  console.log(`[api shard ${shardNumber + 1}/${shards.length}] START ${paths.length} test files`);
   return new Promise((resolve, reject) => {
     const child = spawn("pnpm", ["exec", "vitest", "run", "--reporter=verbose"], {
       env: {
@@ -119,6 +133,9 @@ function runShard(paths, shardNumber) {
     });
     child.once("error", reject);
     child.once("exit", (code, signal) => {
+      console.log(
+        `[api shard ${shardNumber + 1}/${shards.length}] END ${signal ?? `exit ${code}`}; elapsed=${((Date.now() - started) / 1000).toFixed(1)}s`,
+      );
       if (code === 0) resolve();
       else reject(new Error(`API test shard ${shardNumber} failed (${signal ?? `exit ${code}`})`));
     });
@@ -126,7 +143,9 @@ function runShard(paths, shardNumber) {
 }
 
 // H53: collect every shard's result before exiting, including after a failure.
-const results = await Promise.allSettled(shards.map((paths, index) => runShard(paths, index)));
+const results = await Promise.allSettled(
+  selectedShards.map(({ paths, index }) => runShard(paths, index)),
+);
 const failures = results.filter((result) => result.status === "rejected");
 if (failures.length > 0) {
   throw new AggregateError(

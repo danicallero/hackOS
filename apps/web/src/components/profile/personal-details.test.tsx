@@ -114,14 +114,14 @@ describe("My profile dietary answer (#933)", () => {
   it("refuses an empty answer that is not No restrictions", async () => {
     const user = userEvent.setup();
     await render();
-    await user.click(picker());
-    await user.clear(notes());
-    await user.click(save());
+    await act(async () => user.click(picker()));
+    await act(async () => user.clear(notes()));
+    await act(async () => user.click(save()));
     expect(container.textContent).toContain("dietaryAnswerRequired");
     expect(api.patch).not.toHaveBeenCalled();
 
-    await user.click(noneBox());
-    await user.click(save());
+    await act(async () => user.click(noneBox()));
+    await act(async () => user.click(save()));
     expect(api.patch).toHaveBeenCalledWith(
       "/api/me",
       expect.objectContaining({ foodIntolerances: [], foodIntoleranceNotes: null }),
@@ -145,11 +145,11 @@ describe("My profile dietary answer (#933)", () => {
   it("restores the previous answer when No restrictions is unticked", async () => {
     const user = userEvent.setup();
     await render();
-    await user.click(noneBox());
+    await act(async () => user.click(noneBox()));
     expect(picker()).toBeNull();
     expect(notes()).toBeNull();
 
-    await user.click(noneBox());
+    await act(async () => user.click(noneBox()));
     expect(picker().dataset.value).toBe("3");
     expect(notes().value).toBe("No nuts");
   });
