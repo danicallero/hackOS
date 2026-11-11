@@ -18,6 +18,7 @@ import {
   ProfileVisibilityFields,
   type PublicProfile,
   type Settings,
+  ShareToggleCard,
   SwitchRow,
   savedLinks,
   settingsFrom,
@@ -34,6 +35,7 @@ import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Me } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export { DirectoryCard } from "@/components/profile/public-profile-form";
 export type { DirectoryEntry } from "@/lib/directory";
@@ -349,11 +351,19 @@ export function PublicProfileCard({
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
         <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
-          <ProfilePhoto />
+          <div className="flex min-w-0 items-center gap-4">
+            <ProfilePhoto />
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {[me.name, me.surname].filter(Boolean).join(" ")}
+              </p>
+              <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+            </div>
+          </div>
           {onboarding ? (
             <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
           ) : (
-            <SwitchRow
+            <ShareToggleCard
               checked={settings.directoryVisible}
               onChange={(directoryVisible) => update({ directoryVisible })}
               label={t("publicProfileVisible")}
@@ -363,70 +373,73 @@ export function PublicProfileCard({
           {!settings.directoryVisible && helperPublished && (
             <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
           )}
+          {/* What sharing would show stays in view while it is off, but cannot be edited. */}
+          <fieldset
+            disabled={!fieldsOpen}
+            className={cn(
+              "min-w-0 space-y-(--space-within-section) transition-opacity",
+              !fieldsOpen && "opacity-55",
+            )}
+          >
+            <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
+            <ProfileTextFields
+              settings={settings}
+              onChange={update}
+              ownAccount
+              githubStatus={githubStatus.data ?? null}
+              className={
+                onboarding
+                  ? "grid items-start gap-4 sm:grid-cols-2"
+                  : "grid items-start gap-4 @xl:grid-cols-2"
+              }
+            />
+            {(!onboarding || profile.cv?.source === "application") && (
+              <CvField
+                cv={profile.cv}
+                ownerName={displayName(me, true)}
+                shareCv={settings.shareCv}
+                onShareChange={(shareCv) => update({ shareCv })}
+                onSaved={(next) => {
+                  commit(next);
+                  // A removed CV is no longer shared; drop a pending share too.
+                  if (!next.cv) {
+                    setEdits((current) =>
+                      current?.shareCv ? { ...current, shareCv: false } : current,
+                    );
+                  }
+                }}
+              />
+            )}
+          </fieldset>
           {fieldsOpen && (
-            <>
-              <ProfileVisibilityFields
-                settings={settings}
-                onChange={update}
-                className="flex flex-wrap gap-x-8 gap-y-3"
-              />
-              <ProfileTextFields
-                settings={settings}
-                onChange={update}
-                ownAccount
-                githubStatus={githubStatus.data ?? null}
+            <section
+              className={
+                onboarding
+                  ? "space-y-2 border-t border-border/60 pt-4"
+                  : "grid gap-x-4 gap-y-2 @xl:grid-cols-2"
+              }
+            >
+              <h3
                 className={
                   onboarding
-                    ? "grid items-start gap-4 sm:grid-cols-2"
-                    : "grid items-start gap-4 @xl:grid-cols-2"
-                }
-              />
-              {(!onboarding || profile.cv?.source === "application") && (
-                <CvField
-                  cv={profile.cv}
-                  ownerName={displayName(me, true)}
-                  shareCv={settings.shareCv}
-                  onShareChange={(shareCv) => update({ shareCv })}
-                  onSaved={(next) => {
-                    commit(next);
-                    // A removed CV is no longer shared; drop a pending share too.
-                    if (!next.cv) {
-                      setEdits((current) =>
-                        current?.shareCv ? { ...current, shareCv: false } : current,
-                      );
-                    }
-                  }}
-                />
-              )}
-              <section
-                className={
-                  onboarding
-                    ? "space-y-2 border-t border-border/60 pt-4"
-                    : "grid gap-x-4 gap-y-2 @xl:grid-cols-2"
+                    ? "type-label text-muted-foreground"
+                    : "type-label text-muted-foreground @xl:col-span-2"
                 }
               >
-                <h3
-                  className={
-                    onboarding
-                      ? "type-label text-muted-foreground"
-                      : "type-label text-muted-foreground @xl:col-span-2"
+                {t("publicProfilePreview")}
+              </h3>
+              {onboarding ? (
+                <DirectoryCard
+                  entry={
+                    dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
                   }
-                >
-                  {t("publicProfilePreview")}
-                </h3>
-                {onboarding ? (
-                  <DirectoryCard
-                    entry={
-                      dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
-                    }
-                  />
-                ) : (
-                  <div className="@xl:col-start-1">
-                    <DirectoryCard entry={preview ?? profile.preview} />
-                  </div>
-                )}
-              </section>
-            </>
+                />
+              ) : (
+                <div className="@xl:col-start-1">
+                  <DirectoryCard entry={preview ?? profile.preview} />
+                </div>
+              )}
+            </section>
           )}
         </fieldset>
       </SectionCard>

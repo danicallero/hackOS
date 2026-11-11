@@ -34,6 +34,7 @@ import {
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 /**
  * Public profile form pieces and the reader's card (#934, #935), shared by
@@ -109,30 +110,65 @@ export function ProfileVisibilityFields({
   settings,
   onChange,
   className,
+  rows = false,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   className: string;
+  /** Own profile: a quiet list with the switches on the right, like the account rows. */
+  rows?: boolean;
 }) {
   const { t } = useLocale();
+  const items = [
+    { key: "showSurname", label: t("publicProfileShowSurname") },
+    { key: "showPhoto", label: t("publicProfileShowPhoto") },
+    { key: "showProject", label: t("publicProfileShowProject") },
+  ] as const;
+  if (rows) {
+    return (
+      <ul className={cn("rounded-surface divide-y divide-border/60 border", className)}>
+        {items.map(({ key, label }) => (
+          <ToggleRow
+            key={key}
+            checked={settings[key]}
+            onChange={(value) => onChange({ [key]: value })}
+            label={label}
+          />
+        ))}
+      </ul>
+    );
+  }
   return (
     <div className={className}>
-      <SwitchRow
-        checked={settings.showSurname}
-        onChange={(showSurname) => onChange({ showSurname })}
-        label={t("publicProfileShowSurname")}
-      />
-      <SwitchRow
-        checked={settings.showPhoto}
-        onChange={(showPhoto) => onChange({ showPhoto })}
-        label={t("publicProfileShowPhoto")}
-      />
-      <SwitchRow
-        checked={settings.showProject}
-        onChange={(showProject) => onChange({ showProject })}
-        label={t("publicProfileShowProject")}
-      />
+      {items.map(({ key, label }) => (
+        <SwitchRow
+          key={key}
+          checked={settings[key]}
+          onChange={(value) => onChange({ [key]: value })}
+          label={label}
+        />
+      ))}
     </div>
+  );
+}
+
+function ToggleRow({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  const id = useId();
+  return (
+    <li className="flex min-h-12 items-center justify-between gap-4 px-4 py-2">
+      <Label htmlFor={id} className="font-normal">
+        {label}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </li>
   );
 }
 
@@ -178,6 +214,42 @@ export function ProfileTextFields({
         onShowGithubChange={(showGithub) => onChange({ showGithub })}
       />
     </>
+  );
+}
+
+/**
+ * The master consent switch as a bordered row: the switch leads, the audience
+ * sits under the label. Everything it governs follows below.
+ */
+export function ShareToggleCard({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  hint: string;
+}) {
+  const id = useId();
+  return (
+    <div className="rounded-surface flex items-center justify-between gap-4 border p-4">
+      <div className="min-w-0">
+        <Label htmlFor={id} className="text-base">
+          {label}
+        </Label>
+        <p id={`${id}-hint`} className="text-muted-foreground text-sm">
+          {hint}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        onCheckedChange={onChange}
+        aria-describedby={`${id}-hint`}
+      />
+    </div>
   );
 }
 

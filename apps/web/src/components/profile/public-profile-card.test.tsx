@@ -147,14 +147,15 @@ describe("PublicProfileCard", () => {
     return id ? document.getElementById(id) : null;
   };
 
-  it("hides the dependent fields and preview while the opt-in is off", async () => {
+  it("shows the dependent fields disabled, without the preview, while the opt-in is off", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     await render(<PublicProfileCard />);
 
     expect(container.textContent).toContain("publicProfileVisible");
     expect(container.textContent).toContain("publicProfileAudience");
-    expect(container.textContent).not.toContain("publicProfileShowSurname");
-    expect(container.textContent).not.toContain("publicProfileHeadline");
+    expect(container.textContent).toContain("publicProfileShowSurname");
+    expect(container.textContent).toContain("publicProfileHeadline");
+    expect(container.querySelector<HTMLFieldSetElement>("fieldset[disabled]")).not.toBeNull();
     expect(container.textContent).not.toContain("publicProfilePreview");
   });
 
@@ -183,7 +184,7 @@ describe("PublicProfileCard", () => {
     ).toBe("https://github.com/maria");
     expect(container.textContent).not.toContain("githubLinkAccount");
     expect(container.querySelectorAll("[aria-label=publicProfileLinkKind]")).toHaveLength(1);
-    const links = container.querySelectorAll("fieldset ul");
+    const links = container.querySelectorAll("fieldset ul:not(.divide-y)");
     expect(links[0]?.querySelectorAll(":scope > li")).toHaveLength(2);
     const githubUrl = container.querySelector<HTMLInputElement>(
       'input[aria-label="publicProfileLinkUrl"][readonly]',

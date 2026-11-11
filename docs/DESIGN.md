@@ -615,7 +615,7 @@ or a side editor. Libraries and Profile and account (`/settings/profile`) use th
 project details and event settings use the 1280 px content canvas. Profile and account
 (H28, #1083) is content-width tabs: Public profile, Mentoring, Attendance (RSVPs), Wallet (ticket and badge,
 certificates) and Account (personal details with photo and meals, email/password/GitHub rows,
-roles, danger zone). No header repeats the name and email the sidebar and Account already show. Each is a run of open sections divided by hairlines; a section the tab
+roles, danger zone). Account and Public profile lead with the same identity row (photo, name, email). Public profile keeps its fields in view while sharing is off, disabled, so people see what sharing would show; the master switch is a bordered row and the visibility switches a quiet divided list. Each is a run of open sections divided by hairlines; a section the tab
 label already names has no heading of its own; never a second navigation rail beside the app sidebar. Ticket and badge are the
 only bounded objects. Each editable section owns its `FormActions` (sticky only for the long
 public profile); tabs stay mounted while hidden, so switching keeps drafts, and a tab with

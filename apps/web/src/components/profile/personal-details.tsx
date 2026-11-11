@@ -207,11 +207,9 @@ function PersonalDetailsForm({
               <div className="flex min-w-0 items-center gap-4">
                 <ProfilePhoto />
                 <div className="min-w-0">
-                  {locked && (
-                    <p className="truncate font-medium">
-                      {[me.name, me.surname].filter(Boolean).join(" ")}
-                    </p>
-                  )}
+                  <p className="truncate font-medium">
+                    {[me.name, me.surname].filter(Boolean).join(" ")}
+                  </p>
                   <p className="text-muted-foreground truncate text-sm">{me.email}</p>
                   {locked && (
                     <p className="text-muted-foreground mt-1 flex items-start gap-1.5 text-pretty text-sm">
