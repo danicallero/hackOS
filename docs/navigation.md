@@ -504,4 +504,4 @@ sharing consent (H61–H63).
 
 The Logistics `/logistics/rsvps` destination is labelled **RSVP** in both the sidebar and page header (H59).
 
-Mobile Account opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).
+At the end of Event data, Mobile Account shows RSVP only when the API offers an activity to the person’s roles. It opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).
