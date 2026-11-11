@@ -67,9 +67,6 @@ test("filter answers and dietary needs, then reopen a response by its ID", async
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/me/public-profile") return route.fallback();
-    if (path === "/api/events/stream") {
-      return route.fulfill({ contentType: "text/event-stream", body: ": ready\n\n" });
-    }
     const data =
       path === "/api/me"
         ? {
@@ -118,6 +115,9 @@ test("filter answers and dietary needs, then reopen a response by its ID", async
     await page.getByRole("menuitemcheckbox", { name: value, exact: true }).click();
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
+    // H13: closing filter menus must finish restoring focus before a review opens.
+    await expect(page.locator('[role="menu"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Filters/ })).toBeFocused();
   }
   await filter("Dietary restrictions", "With dietary restrictions");
   await expect(name("Linus None")).toHaveCount(0);

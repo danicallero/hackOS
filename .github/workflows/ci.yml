@@ -227,12 +227,17 @@ jobs:
         run: pnpm --filter @hackos/web test --reporter=verbose
 
   browser-smoke:
-    name: browser critical-flow smoke
+    name: browser smoke shard ${{ matrix.shard }}/3
     timeout-minutes: 30
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       CI: true
+      E2E_WORKERS: 1
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -263,18 +268,32 @@ jobs:
           echo "Browser phase: start Next.js, execute Chromium tests, then upload diagnostics."
           echo "Runner CPU count: $(nproc)"
           free -m
-          pnpm test:ui:browser --project=chromium
+          pnpm test:ui:browser --project=chromium --shard=${{ matrix.shard }}/3
 
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: browser-diagnostics-${{ github.run_attempt }}
+          name: browser-diagnostics-${{ matrix.shard }}-${{ github.run_attempt }}
           path: |
             artifacts/browser-results.json
             artifacts/playwright/
           if-no-files-found: ignore
           retention-days: 7
+
+  browser-smoke-summary:
+    name: browser critical-flow smoke
+    needs: browser-smoke
+    if: always() && github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every browser shard to pass
+        shell: bash
+        env:
+          SHARD_RESULT: ${{ needs.browser-smoke.result }}
+        run: |
+          echo "All browser shards finished: $SHARD_RESULT; remaining: job cleanup"
+          test "$SHARD_RESULT" = success
 
   mobile-test:
     name: mobile unit tests

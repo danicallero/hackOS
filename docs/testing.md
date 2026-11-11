@@ -92,7 +92,8 @@ mentions, test counts or mock call counts as a replacement for domain outcomes.
   silently skipped when unavailable. Failed runs wait for every shard before
   reporting aggregate errors.
 - Web model suites avoid starting jsdom; browser-state suites keep it. Browser
-  CI uses three workers and mobile CI uses two, preserving file/test isolation and all
+  CI uses three isolated shard jobs with one worker each; mobile CI uses two workers,
+  preserving file/test isolation and all
   current assertions. Native builds compile the host simulator architecture. Device acceptance and
   Android native-module runs stay manual release checks; full CI retains the
   fast mobile Jest suite. Detox limits discovery to its device-test directory
@@ -106,13 +107,19 @@ integration guarantee. Keep timeouts and coverage intact when tuning workers.
 
 ## CI progress logs
 
-Every command step in `CI` uses `scripts/ci-progress.sh`. Logs include the
+Queue-group fixture checks settle all parallel graph reads before returning a
+verdict, including malformed or mixed groups. An early rejection must not leave
+room/enterprise reads running after the request or into the next test's cleanup
+(`TRUNCATE` can otherwise deadlock against those reads).
+
+Long-running command steps in `CI` use `scripts/ci-progress.sh`. Logs include the
 phase name, later phases in that job, start/end timestamps, exit status and
 elapsed time. CPU count is logged at startup; a heartbeat every 30 seconds
 includes runner load and available memory on Linux so a quiet
 compiler or integration test is distinguishable from a finished command.
 Dependency installation uses the same heartbeat. Checkout and other action
 steps expose their own progress in the Actions timeline.
+The aggregate browser gate prints the completed shards' result directly.
 
 Keep each command's `CI_PROGRESS_LABEL` and `CI_PROGRESS_REMAINING` metadata
 aligned with the job's step order when changing the workflow. Remaining phases

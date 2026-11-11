@@ -1,6 +1,6 @@
 import "./env.js";
-import { beforeEach, describe, expect, it } from "vitest";
-import { pool } from "../../src/db/pool.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { pool, type Queryable } from "../../src/db/pool.js";
 import {
   assertFixtureEnterpriseScope,
   assertFixtureEnterpriseScopes,
@@ -8,6 +8,7 @@ import {
   assertFixtureQueueScopes,
 } from "../../src/lib/fixture-queue-scope.js";
 import { queueEntryFixtureMarkers, queueFixtureMarker } from "../../src/modules/queue/broadcast.js";
+import { queueGroupFixtureMarker } from "../../src/modules/queue/fixture-scope.js";
 import { createUser, truncateAll } from "../helpers.js";
 import {
   assignChallengeToRoom,
@@ -38,6 +39,39 @@ async function outcome(run: () => Promise<unknown>): Promise<unknown> {
 describe("batch fixture helpers match their per-item counterparts", () => {
   beforeEach(async () => {
     await truncateAll();
+  });
+
+  it("finishes sibling graph reads before rejecting a mixed queue group (H53)", async () => {
+    let finishEnterprise!: () => void;
+    let finishRooms!: () => void;
+    const enterprise = new Promise<{ rows: never[] }>((resolve) => {
+      finishEnterprise = () => resolve({ rows: [] });
+    });
+    const rooms = new Promise<{ rows: never[] }>((resolve) => {
+      finishRooms = () => resolve({ rows: [] });
+    });
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [{ has_synthetic: true, has_real: true }] })
+      .mockReturnValueOnce(enterprise)
+      .mockReturnValueOnce(rooms);
+    let finished = false;
+    const result = queueGroupFixtureMarker({ query } as unknown as Queryable, 1).then(
+      () => {
+        finished = true;
+        return null;
+      },
+      (error: unknown) => {
+        finished = true;
+        return error;
+      },
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const finishedBeforeReads = finished;
+    finishEnterprise();
+    finishRooms();
+    expect(await result).toMatchObject({ statusCode: 409 });
+    expect(finishedBeforeReads).toBe(false);
   });
 
   it("queueEntryFixtureMarkers equals queueFixtureMarker for real, synthetic, mismatched and missing entries", async () => {
