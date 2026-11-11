@@ -168,4 +168,55 @@ describe("availability replacement (H62)", () => {
     await fire("pointerup", 300);
     expect(dialog()).toBeTruthy();
   });
+
+  /** Drags a marked stretch (10:00-12:00 at 1000-1200 px) from `from` to `to` px. */
+  async function dragSegment(from: number, to: number) {
+    const fire = dayLine(1);
+    const segment = container.querySelector<HTMLElement>(
+      'button[aria-label^="helpDeskEditInterval "]',
+    ) as HTMLElement;
+    segment.getBoundingClientRect = () =>
+      ({
+        left: 1000,
+        width: 200,
+        top: 0,
+        height: 40,
+        right: 1200,
+        bottom: 40,
+        x: 1000,
+        y: 0,
+      }) as DOMRect;
+    await act(async () => {
+      segment.dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, clientX: from, button: 0 }),
+      );
+    });
+    await fire("pointermove", to);
+    await fire("pointerup", to);
+  }
+
+  it("changes the end of a stretch by dragging its right edge", async () => {
+    vi.mocked(api.put).mockResolvedValue(withWindow([first]));
+    await act(async () => root.render(<Editor initial={withWindow([first])} />));
+    await dragSegment(1195, 1300);
+    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
+      intervals: [{ startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T13:00:00.000Z" }],
+    });
+  });
+
+  it("moves a whole stretch by dragging its middle", async () => {
+    vi.mocked(api.put).mockResolvedValue(withWindow([first]));
+    await act(async () => root.render(<Editor initial={withWindow([first])} />));
+    await dragSegment(1100, 1200);
+    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
+      intervals: [{ startsAt: "2027-02-27T11:00:00.000Z", endsAt: "2027-02-27T13:00:00.000Z" }],
+    });
+  });
+
+  it("opens the edit dialog when a stretch is pressed without dragging", async () => {
+    await act(async () => root.render(<Editor initial={withWindow([first])} />));
+    await dragSegment(1100, 1100);
+    expect(dialog()).toBeTruthy();
+    expect(api.put).not.toHaveBeenCalled();
+  });
 });

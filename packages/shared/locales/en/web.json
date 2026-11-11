@@ -4319,5 +4319,10 @@
   "activeDeviceSince": "Active {when}",
   "primaryEmail": "Primary",
   "githubLinkedAs": "Linked as {login}",
-  "githubNotLinked": "Not linked"
+  "githubNotLinked": "Not linked",
+  "toastAvailability": "Availability",
+  "githubLinkAnother": "Link another account",
+  "publicProfileFieldsOffHint": "Turn on sharing to edit these fields.",
+  "helpDeskResizeStart": "Drag to change the start of {interval}",
+  "helpDeskResizeEnd": "Drag to change the end of {interval}"
 }
