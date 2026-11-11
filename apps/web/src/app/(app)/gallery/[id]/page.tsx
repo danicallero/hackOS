@@ -53,7 +53,7 @@ export default async function ProjectGalleryPage({ params }: { params: Promise<{
   }
   const { project, copy, language } = data;
   return (
-    <PageLayout>
+    <PageLayout className="max-w-6xl">
       <GalleryRefresh />
       <ProjectsSectionHeader
         recordName={project.name}

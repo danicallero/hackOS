@@ -39,6 +39,7 @@ import { API_URL } from "@/lib/env";
 import { pickText, useLocale } from "@/lib/i18n";
 import { invalidateProjectReads, type NativeProject, nativeProjects } from "@/lib/native-projects";
 import { useSessionContext } from "@/lib/session";
+import { DeleteProjectAction } from "./delete-project-action";
 import { GithubActivity } from "./github-activity";
 import { GithubLink } from "./github-link";
 import { ProjectChallenges } from "./project-challenges";
@@ -287,7 +288,7 @@ export function ProjectEditor({
     </Button>
   ) : undefined;
   return (
-    <PageLayout>
+    <PageLayout className="max-w-6xl">
       <AlertModal
         open={returnOpen}
         onOpenChange={setReturnOpen}
@@ -320,12 +321,15 @@ export function ProjectEditor({
         open={leaveOpen}
         onOpenChange={setLeaveOpen}
         title={t("leaveProjectTitle")}
+        destructive
         description={t("leaveProjectDesc")}
         cancelLabel={t("cancel")}
         confirmLabel={t("leaveProjectCta")}
         pending={busy}
         onConfirm={() => void leave()}
-      />
+      >
+        <p className="wrap-anywhere text-sm font-medium">{project.name}</p>
+      </AlertModal>
       <AlertModal
         open={removeUser !== null}
         onOpenChange={(open) => !open && setRemoveUser(null)}
@@ -336,7 +340,11 @@ export function ProjectEditor({
         destructive
         pending={busy}
         onConfirm={() => void changeMember(removeUser!)}
-      />
+      >
+        <p className="wrap-anywhere text-sm font-medium">
+          {members.find((member) => member.userId === removeUser)?.name}
+        </p>
+      </AlertModal>
       <ProjectsSectionHeader
         management={staff}
         recordName={name || project.name}
@@ -358,38 +366,11 @@ export function ProjectEditor({
         }
       />
       {editing ? (
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <div className="space-y-6">
+        <div className="grid items-start gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+          <div className="min-w-0 space-y-6">
             <SectionCard
               title={project.sections.length ? undefined : t("projectDetailsTitle")}
-              stickyFooter
-              footer={
-                <>
-                  <SaveStatus
-                    state={draft.state}
-                    showIcon={draft.state !== "saving"}
-                    className="mr-auto"
-                  />
-                  <Button
-                    variant="outline"
-                    disabled={!project.canEdit || busy || draft.state === "saving"}
-                    onClick={() => void draft.save()}
-                  >
-                    {t("saveDraft")}
-                  </Button>
-                  {!staff && (
-                    <Button
-                      loading={busy}
-                      disabled={
-                        !(project.canSubmit ?? project.canEdit) || busy || draft.state === "saving"
-                      }
-                      onClick={() => void submit()}
-                    >
-                      {t("projectSubmitCta")}
-                    </Button>
-                  )}
-                </>
-              }
+              variant="plain"
             >
               {draft.error && (
                 <ContextualError message={draft.error} onRetry={() => void draft.save()} />
@@ -402,6 +383,7 @@ export function ProjectEditor({
                     <Input
                       id="project-edit-name"
                       value={name}
+                      maxLength={200}
                       disabled={busy}
                       aria-invalid={nameError ? true : undefined}
                       onChange={(event) => {
@@ -482,112 +464,123 @@ export function ProjectEditor({
               </div>
             </SectionCard>
           </div>
-          <div className="min-w-0 space-y-6">
-            <SectionCard
-              title={t("surfaceTeam")}
-              action={
-                !staff &&
-                editing && (
-                  <Button variant="outline" disabled={busy} onClick={() => setLeaveOpen(true)}>
-                    {t("leaveProjectCta")}
-                  </Button>
-                )
-              }
-            >
-              <ul className="divide-y divide-border/60">
-                {members
-                  .filter((member) => member.status !== "declined")
-                  .map((member) => (
-                    <li className="flex items-center gap-3 py-3" key={member.userId}>
-                      {member.photoUrl && (
-                        <UserAvatar
-                          name={member.name ?? ""}
-                          image={member.photoUrl}
-                          className="size-8"
-                          decorative
-                        />
-                      )}
-                      <span className="mr-auto">{member.name}</span>
-                      {staff && project.canEdit && editing && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => setRemoveUser(member.userId)}
-                        >
-                          {t("remove")}
-                        </Button>
-                      )}
-                      {member.status === "invited" && (
-                        <span className="text-muted-foreground text-sm">
-                          {t("pendingInvitesTitle")}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-              </ul>
-              {staff && project.canEdit && editing && (
-                <div className="mt-4 space-y-2">
-                  <Label htmlFor="staff-project-member">{t("addMemberLabel")}</Label>
-                  <UserPicker
-                    id="staff-project-member"
-                    value={selectedUser}
-                    onChange={setSelectedUser}
-                    minQueryLength={2}
-                    search={async (q) =>
-                      (
-                        await api.get<{ users: UserOption[] }>("/api/projects/member-candidates", {
-                          query: { q },
-                        })
-                      ).users
-                    }
-                    disabled={busy}
-                  />
-                  <Button
-                    variant="outline"
-                    disabled={busy || !selectedUser}
-                    onClick={() => void changeMember()}
-                  >
-                    {t("addMemberLabel")}
-                  </Button>
-                </div>
-              )}
-              {!staff && editing && (project.canInvite ?? project.canEdit) && (
-                <form className="mt-4 space-y-2" onSubmit={invite}>
-                  <Label htmlFor="invite-email">{t("email")}</Label>
-                  <div className="flex flex-wrap gap-2">
-                    <Input
-                      id="invite-email"
-                      className="min-w-0 flex-1 basis-40"
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      required
+          <div className="min-w-0 space-y-8">
+            <div className="min-w-0 space-y-8">
+              <SectionCard
+                title={t("surfaceTeam")}
+                variant="plain"
+                action={
+                  !staff &&
+                  members.filter((member) => member.status === "active").length > 1 &&
+                  editing && (
+                    <Button variant="outline" disabled={busy} onClick={() => setLeaveOpen(true)}>
+                      {t("leaveProjectCta")}
+                    </Button>
+                  )
+                }
+              >
+                <ul className="divide-y divide-border/60">
+                  {members
+                    .filter((member) => member.status !== "declined")
+                    .map((member) => (
+                      <li className="flex items-center gap-3 py-3" key={member.userId}>
+                        {member.photoUrl && (
+                          <UserAvatar
+                            name={member.name ?? ""}
+                            image={member.photoUrl}
+                            className="size-8"
+                            decorative
+                          />
+                        )}
+                        <span className="mr-auto min-w-0 flex-1 wrap-anywhere">{member.name}</span>
+                        {staff && project.canEdit && editing && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => setRemoveUser(member.userId)}
+                          >
+                            {t("remove")}
+                          </Button>
+                        )}
+                        {member.status === "invited" && (
+                          <span className="text-muted-foreground text-sm">
+                            {t("pendingInvitesTitle")}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+                {staff && project.canEdit && editing && (
+                  <div className="mt-4 space-y-2">
+                    <Label htmlFor="staff-project-member">{t("addMemberLabel")}</Label>
+                    <UserPicker
+                      id="staff-project-member"
+                      value={selectedUser}
+                      onChange={setSelectedUser}
+                      minQueryLength={2}
+                      search={async (q) =>
+                        (
+                          await api.get<{ users: UserOption[] }>(
+                            "/api/projects/member-candidates",
+                            {
+                              query: { q },
+                            },
+                          )
+                        ).users
+                      }
                       disabled={busy}
                     />
-                    <Button type="submit" variant="outline" disabled={busy}>
-                      {t("inviteMemberCta")}
+                    <Button
+                      variant="outline"
+                      disabled={busy || !selectedUser}
+                      onClick={() => void changeMember()}
+                    >
+                      {t("addMemberLabel")}
                     </Button>
                   </div>
-                </form>
+                )}
+                {!staff && editing && (project.canInvite ?? project.canEdit) && (
+                  <form className="mt-4 space-y-2" onSubmit={invite}>
+                    <Label htmlFor="invite-email">{t("email")}</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Input
+                        id="invite-email"
+                        className="min-w-0 flex-1 basis-40"
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        required
+                        disabled={busy}
+                      />
+                      <Button type="submit" variant="outline" disabled={busy}>
+                        {t("inviteMemberCta")}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </SectionCard>
+              {staff && project.canEdit && (
+                <div className="space-y-2">
+                  <Label htmlFor="staff-project-repo">{t("projectGithubUrlField")}</Label>
+                  <Input
+                    id="staff-project-repo"
+                    type="url"
+                    value={repoUrl}
+                    disabled={busy}
+                    onChange={(event) => setRepoUrl(event.target.value)}
+                    onBlur={() => void saveRepoUrl()}
+                  />
+                </div>
               )}
-            </SectionCard>
-            {staff && project.canEdit && (
-              <div className="space-y-2">
-                <Label htmlFor="staff-project-repo">{t("projectGithubUrlField")}</Label>
-                <Input
-                  id="staff-project-repo"
-                  type="url"
-                  value={repoUrl}
-                  disabled={busy}
-                  onChange={(event) => setRepoUrl(event.target.value)}
-                  onBlur={() => void saveRepoUrl()}
+              {!staff && project.isMember && (
+                <GithubLink
+                  projectId={project.id}
+                  variant="plain"
+                  locked={status === "submitted"}
                 />
-              </div>
-            )}
-            {!staff && project.isMember && (
-              <GithubLink projectId={project.id} locked={status === "submitted"} />
-            )}
+              )}
+            </div>
             <ProjectChallenges
               project={{ ...project, challenges, canEdit: project.canEdit && editing }}
               onChange={setChallenges}
@@ -616,6 +609,34 @@ export function ProjectEditor({
                 </div>
               )}
             </ProjectChallenges>
+          </div>
+          <div
+            className="form-action-footer flex flex-wrap items-center justify-end gap-2 border-t border-border/60 lg:col-span-2"
+            data-surface="plain"
+          >
+            <SaveStatus
+              state={draft.state}
+              showIcon={draft.state !== "saving"}
+              className="mr-auto"
+            />
+            <Button
+              variant="outline"
+              disabled={!project.canEdit || busy || draft.state === "saving"}
+              onClick={() => void draft.save()}
+            >
+              {t("saveDraft")}
+            </Button>
+            {!staff && (
+              <Button
+                loading={busy}
+                disabled={
+                  !(project.canSubmit ?? project.canEdit) || busy || draft.state === "saving"
+                }
+                onClick={() => void submit()}
+              >
+                {t("projectSubmitCta")}
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -668,6 +689,12 @@ export function ProjectEditor({
           assetUrl={(path) => new URL(path, API_URL).toString()}
         />
       )}
+      <DeleteProjectAction
+        project={{ ...project, name: name || project.name, members }}
+        staff={staff}
+        canManage={can(CAPABILITIES.PROJECTS_EDIT)}
+        disabled={busy || draft.state === "saving"}
+      />
     </PageLayout>
   );
 }

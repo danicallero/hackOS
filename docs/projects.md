@@ -268,3 +268,29 @@ authorized management inspection retain their intended challenge lineup. Public
 readers see consented active members only. Team file access accepts both their
 working-copy and submitted-gallery attachments, while nonmembers remain limited
 to the submitted projection.
+
+## Project surfaces
+
+Creation, editing and reading share a bounded desktop layout: the organizer's
+configured fields occupy the left column, while team and challenge blocks stay
+stacked in the right column. On narrow screens the same reading order stacks
+vertically. Authored sections retain their configured order and descriptions;
+unanswered optional fields produce no invented content or empty cards. Team and
+challenge controls use open sections, and the editor's persistent save/submit
+row follows both columns.
+
+Staff creation uses the same two-column grouping in an expanded side panel.
+Both creation panels have an explicit cancel action and keep closing disabled
+during creation. The management table keeps the content canvas and
+shows the same draft/submitted states as project records. Gallery cards link
+the project name, show actual cover images and team names, and disclose the
+complete challenge list only when it exceeds the visible preview.
+
+Deletion is available from the record to staff with `projects:edit`, or to a sole
+active participant member while the API permits editing or submission withdrawal.
+It uses the existing audited DELETE endpoints; the server retains its phase,
+lock and membership checks. A destructive confirmation names the project and
+explains removal of answers, files, roster, queues and judging data. A rejected
+deletion keeps the dialog open with its error. Team removal and leaving likewise
+identify the affected person/project in their confirmations; a sole member sees
+deletion instead of an impossible leave action.

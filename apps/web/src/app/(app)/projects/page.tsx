@@ -2,15 +2,15 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
-import { ContextualError } from "@/components/common/contextual-error";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageLayout } from "@/components/common/page-layout";
 import { ProjectsSectionHeader } from "@/components/common/section-navigation";
+import { StatusBadge } from "@/components/common/status-badge";
 import { CreateProjectPanel } from "@/components/projects/create-project-panel";
+import { ProjectListRow } from "@/components/projects/project-list-row";
 import { Button } from "@/components/ui/button";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
@@ -22,7 +22,6 @@ import { useSessionContext } from "@/lib/session";
 
 export default function ProjectsPage() {
   const { t } = useLocale();
-  const router = useRouter();
   const { can, canAny, me } = useSessionContext();
   const canEdit = can(CAPABILITIES.PROJECTS_EDIT);
   const allowed =
@@ -50,7 +49,7 @@ export default function ProjectsPage() {
       id: "name",
       header: t("projectNameLabel"),
       cell: (project) => (
-        <Link href={`/projects/${project.id}`} className="font-medium">
+        <Link href={`/projects/${project.id}`} className="wrap-anywhere font-medium">
           {project.name}
         </Link>
       ),
@@ -67,8 +66,14 @@ export default function ProjectsPage() {
     {
       id: "status",
       header: t("inviteStatus"),
-      cell: (project) =>
-        t(project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft"),
+      cell: (project) => (
+        <StatusBadge
+          tone={project.submissionStatus === "submitted" ? "success" : "neutral"}
+          dot={false}
+        >
+          {t(project.submissionStatus === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
+        </StatusBadge>
+      ),
     },
     ...(activity.data
       ? [
@@ -113,12 +118,6 @@ export default function ProjectsPage() {
           placeholder: t("projectNameLabel"),
         }}
       />
-      {Boolean(resource.error) && (
-        <ContextualError
-          message={apiErrorText(resource.error, t, t("couldNotLoadProjects"))}
-          onRetry={resource.reload}
-        />
-      )}
       <DataTable
         columns={columns}
         data={projects.filter((project) =>
@@ -126,7 +125,37 @@ export default function ProjectsPage() {
         )}
         getRowId={(project) => String(project.id)}
         loading={resource.loading}
-        onRowClick={(project) => router.push(`/projects/${project.id}`)}
+        error={
+          resource.error
+            ? {
+                message: apiErrorText(resource.error, t, t("couldNotLoadProjects")),
+                onRetry: resource.reload,
+              }
+            : undefined
+        }
+        empty={{ title: t("noProjectsYet") }}
+        filteredEmpty={{ active: Boolean(search.trim()), onClear: () => setSearch("") }}
+        renderMobileRow={(project) => (
+          <>
+            <ProjectListRow project={project} href={`/projects/${project.id}`} variant="plain" />
+            {activity.data && (
+              <dl className="flex flex-wrap gap-x-6 gap-y-2 px-4 pb-3 text-sm">
+                <div className="flex items-baseline gap-2">
+                  <dt className="text-muted-foreground">{t("githubCommits")}</dt>
+                  <dd className="tabular-nums">{activityOf.get(project.id)?.commits ?? "–"}</dd>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <dt className="text-muted-foreground">{t("githubPullRequests")}</dt>
+                  <dd className="tabular-nums">
+                    {activityOf.get(project.id)?.pullRequests ?? "–"}
+                  </dd>
+                </div>
+              </dl>
+            )}
+          </>
+        )}
+        getRowHref={(project) => `/projects/${project.id}`}
+        getRowLabel={(project) => project.name}
       />
       <CreateProjectPanel open={createOpen} onOpenChange={setCreateOpen} />
     </PageLayout>
