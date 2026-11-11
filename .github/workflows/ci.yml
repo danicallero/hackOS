@@ -16,6 +16,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash scripts/ci-progress.sh {0}
+
 jobs:
   lint:
     name: lint
@@ -28,24 +32,45 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run lint
+        env:
+          CI_PROGRESS_LABEL: "Run lint"
+          CI_PROGRESS_REMAINING: "Run shared contract tests -> Test memory collector -> Test deployment script release-tag handling -> Validate deployment shell syntax -> Validate combined production environment contract -> Test deployment rollback and failed-migration handling"
         run: pnpm lint
 
       - name: Run shared contract tests
+        env:
+          CI_PROGRESS_LABEL: "Run shared contract tests"
+          CI_PROGRESS_REMAINING: "Test memory collector -> Test deployment script release-tag handling -> Validate deployment shell syntax -> Validate combined production environment contract -> Test deployment rollback and failed-migration handling"
         run: pnpm --filter @hackos/shared test
 
       - name: Test memory collector
+        env:
+          CI_PROGRESS_LABEL: "Test memory collector"
+          CI_PROGRESS_REMAINING: "Test deployment script release-tag handling -> Validate deployment shell syntax -> Validate combined production environment contract -> Test deployment rollback and failed-migration handling"
         run: go test deploy/metrics/main.go deploy/metrics/main_test.go
 
       - name: Test deployment script release-tag handling
+        env:
+          CI_PROGRESS_LABEL: "Test deployment script release-tag handling"
+          CI_PROGRESS_REMAINING: "Validate deployment shell syntax -> Validate combined production environment contract -> Test deployment rollback and failed-migration handling"
         run: bash deploy/test-services-image-tags.sh
 
       - name: Validate deployment shell syntax
+        env:
+          CI_PROGRESS_LABEL: "Validate deployment shell syntax"
+          CI_PROGRESS_REMAINING: "Validate combined production environment contract -> Test deployment rollback and failed-migration handling"
         run: bash deploy/test-shell-syntax.sh
 
       - name: Validate combined production environment contract
+        env:
+          CI_PROGRESS_LABEL: "Validate combined production environment contract"
+          CI_PROGRESS_REMAINING: "Test deployment rollback and failed-migration handling"
         run: bash deploy/test-combined-env.sh
 
       - name: Test deployment rollback and failed-migration handling
+        env:
+          CI_PROGRESS_LABEL: "Test deployment rollback and failed-migration handling"
+          CI_PROGRESS_REMAINING: "job cleanup"
         run: bash deploy/test-deploy-rollback.sh
 
   typecheck:
@@ -59,6 +84,9 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Type-check every workspace
+        env:
+          CI_PROGRESS_LABEL: "Type-check every workspace"
+          CI_PROGRESS_REMAINING: "job cleanup"
         run: pnpm --parallel --filter @hackos/api --filter @hackos/web --filter @hackos/mobile typecheck
 
   api-test:
@@ -115,6 +143,9 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Start S3Mock
+        env:
+          CI_PROGRESS_LABEL: "Start S3Mock"
+          CI_PROGRESS_REMAINING: "Set up workspace -> Wait for S3Mock -> Run API integration tests -> Check the migration upgrade path from the base branch -> Stop S3Mock"
         run: |
           docker run --detach --name hackos-ci-s3mock \
             --publish 9000:9090 \
@@ -124,7 +155,9 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Wait for S3Mock
-        shell: bash
+        env:
+          CI_PROGRESS_LABEL: "Wait for S3Mock"
+          CI_PROGRESS_REMAINING: "Run API integration tests -> Check the migration upgrade path from the base branch -> Stop S3Mock"
         run: |
           set -euo pipefail
           for attempt in {1..60}; do
@@ -137,6 +170,9 @@ jobs:
           exit 1
 
       - name: Run API integration tests
+        env:
+          CI_PROGRESS_LABEL: "Run API integration tests"
+          CI_PROGRESS_REMAINING: "Check the migration upgrade path from the base branch -> Stop S3Mock"
         run: pnpm --filter @hackos/api test
 
       # #1276: a database already at the base branch's migrations must upgrade to
@@ -145,6 +181,8 @@ jobs:
       # a lower-numbered migration landing after a higher one was applied.
       - name: Check the migration upgrade path from the base branch
         env:
+          CI_PROGRESS_LABEL: "Check the migration upgrade path from the base branch"
+          CI_PROGRESS_REMAINING: "Stop S3Mock"
           BASE_REF: ${{ github.base_ref }}
           PGPASSWORD: hackos
         run: |
@@ -163,6 +201,9 @@ jobs:
           test "$applied" -ge "$expected" || { echo "ledger has $applied of $expected migrations"; exit 1; }
 
       - name: Stop S3Mock
+        env:
+          CI_PROGRESS_LABEL: "Stop S3Mock"
+          CI_PROGRESS_REMAINING: "job cleanup"
         if: always()
         run: docker rm --force hackos-ci-s3mock || true
 
@@ -180,7 +221,10 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run web unit tests
-        run: pnpm --filter @hackos/web test
+        env:
+          CI_PROGRESS_LABEL: "Run web unit tests"
+          CI_PROGRESS_REMAINING: "job cleanup"
+        run: pnpm --filter @hackos/web test --reporter=verbose
 
   browser-smoke:
     name: browser critical-flow smoke
@@ -197,6 +241,9 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Install Chromium
+        env:
+          CI_PROGRESS_LABEL: "Install Chromium"
+          CI_PROGRESS_REMAINING: "Run deterministic browser smoke -> Upload browser diagnostics"
         timeout-minutes: 12
         # The runner's Ubuntu mirror sometimes fails to resolve and apt then hangs for
         # minutes. Bound each attempt, and fall back to the browser download alone:
@@ -209,6 +256,9 @@ jobs:
           pnpm exec playwright install chromium
 
       - name: Run deterministic browser smoke
+        env:
+          CI_PROGRESS_LABEL: "Run deterministic browser smoke"
+          CI_PROGRESS_REMAINING: "Upload browser diagnostics"
         run: |
           echo "Browser phase: start Next.js, execute Chromium tests, then upload diagnostics."
           echo "Runner CPU count: $(nproc)"
@@ -240,7 +290,10 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mobile unit tests
-        run: pnpm --filter @hackos/mobile exec jest --maxWorkers=2
+        env:
+          CI_PROGRESS_LABEL: "Run mobile unit tests"
+          CI_PROGRESS_REMAINING: "job cleanup"
+        run: pnpm --filter @hackos/mobile exec jest --maxWorkers=2 --verbose
 
   container-test:
     name: memory collector container runtime
@@ -251,4 +304,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Verify real cgroup limits and collector privileges
+        env:
+          CI_PROGRESS_LABEL: "Verify real cgroup limits and collector privileges"
+          CI_PROGRESS_REMAINING: "job cleanup"
         run: bash deploy/metrics/test-runtime.sh

@@ -92,7 +92,7 @@ mentions, test counts or mock call counts as a replacement for domain outcomes.
   silently skipped when unavailable. Failed runs wait for every shard before
   reporting aggregate errors.
 - Web model suites avoid starting jsdom; browser-state suites keep it. Browser
-  and mobile CI use two workers while preserving file/test isolation and all
+  CI uses three workers and mobile CI uses two, preserving file/test isolation and all
   current assertions. Native builds compile the host simulator architecture. Device acceptance and
   Android native-module runs stay manual release checks; full CI retains the
   fast mobile Jest suite. Detox limits discovery to its device-test directory
@@ -103,6 +103,27 @@ compilation, competing builds, disk pressure and missing dependencies distort
 comparisons. Keep real-clock tests where server TTL expiry is the behavior
 under test; replacing Valkey expiry with fake JavaScript time would remove the
 integration guarantee. Keep timeouts and coverage intact when tuning workers.
+
+## CI progress logs
+
+Every command step in `CI` uses `scripts/ci-progress.sh`. Logs include the
+phase name, later phases in that job, start/end timestamps, exit status and
+elapsed time. CPU count is logged at startup; a heartbeat every 30 seconds
+includes runner load and available memory on Linux so a quiet
+compiler or integration test is distinguishable from a finished command.
+Dependency installation uses the same heartbeat. Checkout and other action
+steps expose their own progress in the Actions timeline.
+
+Keep each command's `CI_PROGRESS_LABEL` and `CI_PROGRESS_REMAINING` metadata
+aligned with the job's step order when changing the workflow. Remaining phases
+describe the normal path; GitHub marks later steps skipped when a command fails.
+The wrapper preserves the command's failure status and stops its monitor on exit.
+
+API shards already use verbose Vitest output; web Vitest and mobile Jest also
+print individual results in CI. Browser logs additionally show completed and
+remaining tests, active tests and durations, with JSON timings and failure
+diagnostics uploaded afterward; see [UI testing](./ui-testing.md).
+Parallel jobs' overall state remains visible in the workflow's Actions job list.
 
 ## Verification limits
 
