@@ -6,7 +6,7 @@ import {
   useRouter,
   useScrollToTop,
 } from "expo-router";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
   Platform,
@@ -62,6 +62,7 @@ import { NETWORKING_PROFILE_PATH } from "@/lib/networking-profile";
 import { PROFILE_TASKS_PATH } from "@/lib/profile-tasks";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
+import { useRsvps } from "@/lib/rsvps";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import { useSideRegion } from "@/lib/side-region";
 import { canManageStands, canViewStaffStatistics, isPadIdiom } from "@/lib/tabs";
@@ -121,6 +122,13 @@ export default function AccountScreen() {
     error: intolerancesError,
     loading: intolerancesLoading,
   } = useFoodIntolerances(Boolean(me));
+  const rsvps = useRsvps(me?.hasEventAccess ? me.id : null);
+  const loadRsvps = rsvps.load;
+  useFocusEffect(
+    useCallback(() => {
+      void loadRsvps();
+    }, [loadRsvps]),
+  );
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
@@ -140,7 +148,7 @@ export default function AccountScreen() {
     if (refreshingAccount) return;
     setRefreshingAccount(true);
     try {
-      await Promise.all([refetch(), loadSupportingData()]);
+      await Promise.all([refetch(), loadSupportingData(), loadRsvps()]);
     } finally {
       setRefreshingAccount(false);
     }
@@ -436,6 +444,16 @@ export default function AccountScreen() {
               </View>
             </>
           ) : null}
+          {rsvps.items.length > 0 ? (
+            <>
+              <Separator inset={48} />
+              <AccountSubpageRow
+                label={t("profileRsvpTitle")}
+                icon="calendar.badge.checkmark"
+                onPress={() => router.push("/(tabs)/others/rsvps")}
+              />
+            </>
+          ) : null}
         </Section>
 
         {/* H51: every notification setting lives here; the Schedule bell only shows the inbox. */}
@@ -465,16 +483,6 @@ export default function AccountScreen() {
             </View>
           </Section>
         </View>
-
-        {me.hasEventAccess ? (
-          <Section>
-            <AccountSubpageRow
-              label={t("profileRsvpTitle")}
-              icon="calendar.badge.checkmark"
-              onPress={() => router.push("/(tabs)/others/rsvps")}
-            />
-          </Section>
-        ) : null}
 
         {canViewStaffStatistics(me.capabilities) || canManageStands(me.capabilities) ? (
           <Section title={t("accountStaff")}>

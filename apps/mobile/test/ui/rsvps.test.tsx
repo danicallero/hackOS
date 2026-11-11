@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 
 // H59: general RSVP answers in Account and next-entry onboarding.
 
@@ -289,10 +289,19 @@ describe("Account RSVP subpage (H59)", () => {
     await renderMobile(<AccountScreen />);
     expect(screen.queryByText("Workshop")).toBeNull();
     await act(async () =>
-      fireEvent.press(screen.getByRole("button", { name: "profileRsvpTitle" })),
+      fireEvent.press(await screen.findByRole("button", { name: "profileRsvpTitle" })),
     );
     expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/rsvps");
-    expect(mockApiFetch).not.toHaveBeenCalledWith("/api/me/rsvps", expect.anything());
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/me/rsvps", expect.anything());
+  });
+
+  it("hides the Account link when no activity is offered to this person's roles", async () => {
+    routeApi({ "GET /api/me/rsvps": () => ({ items: [] }) });
+    await renderMobile(<AccountScreen />);
+    await waitFor(() =>
+      expect(mockApiFetch).toHaveBeenCalledWith("/api/me/rsvps", expect.anything()),
+    );
+    expect(screen.queryByRole("button", { name: "profileRsvpTitle" })).toBeNull();
   });
 
   it("offers activities to non-sponsors and saves only explicitly changed answers", async () => {

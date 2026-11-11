@@ -2953,7 +2953,9 @@ request notifies the other participants once, with a deep link to the request.
 
 ## Personal RSVP answers (H59)
 
-Account shows an RSVP navigation row for every account with event access.
+Account shows an RSVP navigation row at the end of Event data only when
+`GET /api/me/rsvps` offers the person at least one activity. Role targeting is
+resolved by the API; event access alone does not show the row.
 It pushes `/(tabs)/others/rsvps`, a subpage in the same native stack as
 notification preferences, with its own large title and native Back item. It reads
 `GET /api/me/rsvps`, including non-meal activities and role-targeted offers,
