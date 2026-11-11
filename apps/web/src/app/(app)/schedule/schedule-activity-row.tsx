@@ -16,6 +16,7 @@ import { useCallback } from "react";
 import { IconButton } from "@/components/common/icon-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
+import { useAudienceRoles } from "@/hooks/use-audience-roles";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatScheduledDateTime } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
@@ -81,6 +82,7 @@ export function ActivityRow({
   onDelete: () => void;
 }) {
   const { t, language } = useLocale();
+  const audienceRoles = useAudienceRoles();
 
   async function saveTime(field: "startsAt" | "endsAt", hhmm: string): Promise<boolean> {
     // Both ends go up together: an end of 00:00 on a 23:00 item means midnight
@@ -316,8 +318,11 @@ export function ActivityRow({
             onSave={saveAudiences}
           />
         ) : (
-          <span className="block truncate" title={audienceSummary(item.audiences ?? [], t)}>
-            {audienceSummary(item.audiences ?? [], t)}
+          <span
+            className="block truncate"
+            title={audienceSummary(item.audiences ?? [], t, audienceRoles.names)}
+          >
+            {audienceSummary(item.audiences ?? [], t, audienceRoles.names)}
           </span>
         );
       case "scannable":

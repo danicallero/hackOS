@@ -314,7 +314,11 @@ export const scheduleIdParam = z.object({ id: z.coerce.number().int().positive()
  * also drives the anonymous public site/TV feed — there's no audience
  * distinct from "what participants see" for anonymous visitors.
  */
-export const scheduleAudience = z.enum(["sponsor", "participant", "mentor"]);
+/** An attendance audience, or a publicly visible role as `role:<id>` (checked against the roles on write). */
+export const scheduleAudience = z.union([
+  z.enum(["sponsor", "participant", "mentor"]),
+  z.string().regex(/^role:[1-9][0-9]{0,8}$/),
+]);
 
 export const scheduleBody = z.object({
   title: z.string().min(1).max(300),
@@ -333,7 +337,7 @@ export const scheduleBody = z.object({
   endsAt: z.coerce.date(),
   visibility: z.enum(["shown", "hidden"]).default("hidden"),
   publishAt: z.coerce.date().nullable().optional(),
-  audiences: z.array(scheduleAudience).max(3).default([]),
+  audiences: z.array(scheduleAudience).max(40).default([]),
   contactNote: z.string().max(300).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
   titleLanguage: languageSchema
@@ -374,7 +378,7 @@ export const schedulePatchBody = scheduleBody
   .partial()
   .extend({
     visibility: z.enum(["shown", "hidden"]).optional(),
-    audiences: z.array(scheduleAudience).max(3).optional(),
+    audiences: z.array(scheduleAudience).max(40).optional(),
   });
 
 /**

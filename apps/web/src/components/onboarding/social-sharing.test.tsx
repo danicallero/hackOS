@@ -90,20 +90,49 @@ const texts = (calls: Call[]) => calls.filter((c) => c.op === "fillText").map((c
 describe("caption and share links", () => {
   const event = { name: "HackUDC", year: 2027 };
 
-  it("builds the caption per language and only includes supplied details", () => {
-    expect(buildCaption("es", event)).toBe("¡Voy a HackUDC 2027! Nos vemos allí.");
-    expect(buildCaption("en", { ...event, dateLabel: "13–14 Nov", location: "A Coruña" })).toBe(
-      "I'm going to HackUDC 2027! 13–14 Nov 2027 · A Coruña. See you there.",
+  const window = {
+    hours: 36,
+    location: "A Coruña",
+    dates: {
+      start: "2026-10-28T08:00:00Z",
+      end: "2026-10-29T20:00:00Z",
+      timezone: "Europe/Madrid",
+    },
+  };
+
+  it("words the caption per language and only includes supplied details", () => {
+    expect(buildCaption("es", event)).toBe("¡Voy a HackUDC 2027! Nos vemos ahí.");
+    expect(buildCaption("es", { ...event, ...window, url: "https://hackudc.com" })).toBe(
+      "¡Voy a HackUDC 2027! 36 horas de desarrollo en A Coruña del 28 al 29 de octubre. Nos vemos ahí.\n\nhttps://hackudc.com/",
+    );
+    expect(buildCaption("en", { ...event, ...window })).toBe(
+      "I'm going to HackUDC 2027! 36 hours of development in A Coruña from 28 to 29 October. See you there.",
+    );
+    expect(buildCaption("gl", { ...event, ...window })).toBe(
+      "Vou a HackUDC 2027! 36 horas de desenvolvemento en A Coruña do 28 ao 29 de outubro. Vémonos aí.",
     );
     expect(buildCaption("gl", { ...event, location: "A Coruña" })).toBe(
-      "Vou a HackUDC 2027! A Coruña. Vémonos alí.",
+      "Vou a HackUDC 2027! En A Coruña. Vémonos aí.",
     );
   });
 
-  it("adds the event link to the caption, without query, fragment or credentials", () => {
+  it("words a window across two months", () => {
+    expect(
+      buildCaption("es", {
+        ...event,
+        dates: {
+          start: "2026-10-30T08:00:00Z",
+          end: "2026-11-01T20:00:00Z",
+          timezone: "Europe/Madrid",
+        },
+      }),
+    ).toBe("¡Voy a HackUDC 2027! Del 30 de octubre al 1 de noviembre. Nos vemos ahí.");
+  });
+
+  it("adds the event link on its own line, without query, fragment or credentials", () => {
     expect(
       buildCaption("es", { ...event, url: "https://user:pw@hackudc.com/path?token=abc#frag" }),
-    ).toBe("¡Voy a HackUDC 2027! Nos vemos allí.\nhttps://hackudc.com/path");
+    ).toBe("¡Voy a HackUDC 2027! Nos vemos ahí.\n\nhttps://hackudc.com/path");
     expect(publicEventUrl("javascript:alert(1)")).toBeNull();
     expect(publicEventUrl("not a url")).toBeNull();
     expect(publicEventUrl(undefined)).toBeNull();
@@ -118,6 +147,11 @@ describe("caption and share links", () => {
 
   it("does not repeat a year already in the name", () => {
     expect(eventTitle({ name: "HackUDC 2027", year: 2027 })).toBe("HackUDC 2027");
+    // The dates can fall in another year than the edition named in the title.
+    expect(eventTitle({ name: "HackUDC 2027 development", year: 2026 })).toBe(
+      "HackUDC 2027 development",
+    );
+    expect(eventTitle({ name: "HackUDC", year: 2027 })).toBe("HackUDC 2027");
   });
 
   it("encodes the caption in LinkedIn and X links without image or tracking parameters", () => {
@@ -445,7 +479,7 @@ describe("<SocialSharing />", () => {
       expect(a.rel).toContain("noopener");
       expect(a.rel).toContain("noreferrer");
     }
-    const caption = "¡Voy a HackUDC 2027! 13–14 Nov 2027 · A Coruña. Nos vemos allí.";
+    const caption = "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.";
     expect(new URL(linkedin.href).searchParams.get("text")).toBe(caption);
     expect(new URL(x.href).searchParams.get("text")).toBe(caption);
     expect(document.body.textContent).toContain("no adjuntan la imagen");
@@ -458,7 +492,7 @@ describe("<SocialSharing />", () => {
     await vi.waitFor(() => expect(menuItem(/Copiar texto/)).toBeDefined());
     await user.click(menuItem(/Copiar texto/) as Element);
     expect(await navigator.clipboard.readText()).toBe(
-      "¡Voy a HackUDC 2027! 13–14 Nov 2027 · A Coruña. Nos vemos allí.",
+      "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.",
     );
     expect(toast.success).toHaveBeenCalledWith("Texto copiado", expect.anything());
   });

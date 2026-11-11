@@ -55,6 +55,8 @@ export const ERROR_REASONS = {
   PROJECT_FROZEN: "project_frozen",
   /** 400: the event requires a linked GitHub repository to submit. */
   PROJECT_GITHUB_REQUIRED: "project_github_required",
+  /** 400: a schedule audience names a role that is not an existing publicly visible role (H59). */
+  SCHEDULE_AUDIENCE_ROLE_INVALID: "schedule_audience_role_invalid",
   MENTOR_PROFILE_NOT_ELIGIBLE: "mentor_profile_not_eligible",
   ONBOARDING_STEP_REQUIRED: "onboarding_step_required",
   ONBOARDING_FACT_INCOMPLETE: "onboarding_fact_incomplete",
@@ -63,6 +65,10 @@ export const ERROR_REASONS = {
   MEAL_PLAN_NOT_ELIGIBLE: "meal_plan_not_eligible",
   /** 403: help desk actions need `helpdesk:offer` or an accepted helper application (H61). */
   HELPER_NOT_ELIGIBLE: "helper_not_eligible",
+  /** 409: a knowledge topic in use cannot be deleted; merge it instead (H61). */
+  TOPIC_IN_USE: "topic_in_use",
+  /** 403: user management cannot publish a person's help desk profile; publishing is their own consent (H61). */
+  HELPER_PUBLISH_OWN_CONSENT: "helper_publish_own_consent",
   /** 409: the person or team already has an open or claimed help request (H64). */
   HELP_REQUEST_ACTIVE: "help_request_active",
   /** 409: new help requests are only accepted inside the configured opening windows (H64). */

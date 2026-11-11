@@ -405,6 +405,11 @@ surfaces — never from stacking rounded rectangles around every region.
   their content width and parent header/navigation tracks. Route-specific titles
   and controls sit below them. The app reserves its scrollbar gutter so a long
   list does not shift the shared header horizontally.
+- **Shell notices are inline, not strips.** Verify-email and finish-onboarding
+  notices (`ShellBanner`) open the content canvas as a bordered notice on the
+  page gutters, level with the floating sidebar's top edge; the page continues
+  below. They are never a full-bleed band glued to the viewport edge, which the
+  rounded floating sidebar would visibly cut off.
 - **Curvature follows ownership.** Fields use the 6 px control radius and
   buttons use the pill radius; inline `Surface`/`SectionCard` groupings use 8 px; the floating sidebar uses
   12 px; overlays use their token-backed 8 px radius. A rounded edge signals a

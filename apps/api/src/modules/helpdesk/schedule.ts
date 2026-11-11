@@ -40,16 +40,26 @@ function nextChange(rows: Row[], now: Date): Date | null {
   return end;
 }
 
+/** Whether requests are limited to people with event access (default: yes). */
+export async function eventAccessOnly(db: Queryable = pool): Promise<boolean> {
+  const { rows } = await db.query<{ only: boolean }>(
+    "SELECT helpdesk_event_access_only AS only FROM event_config WHERE id = 1",
+  );
+  return rows[0]?.only ?? true;
+}
+
 export async function getSchedule(db: Queryable = pool): Promise<HelpdeskSchedule> {
-  const [{ rows, now }, suggestedInterval] = await Promise.all([
+  const [{ rows, now }, suggestedInterval, accessOnly] = await Promise.all([
     readWindows(db),
     suggestedAvailability(db),
+    eventAccessOnly(db),
   ]);
   const windows: AvailabilityInterval[] = rows.map((r) => ({
     startsAt: r.starts_at.toISOString(),
     endsAt: r.ends_at.toISOString(),
   }));
   return {
+    eventAccessOnly: accessOnly,
     configured: rows.length > 0,
     open: isOpen(rows, now),
     windows,
@@ -92,7 +102,17 @@ export async function replaceSchedule(
     const key = (list: { startsAt: Date; endsAt: Date }[]) =>
       list.map((i) => `${i.startsAt.toISOString()}/${i.endsAt.toISOString()}`).join(",");
     const before = rows.map((r) => ({ startsAt: r.starts_at, endsAt: r.ends_at }));
-    if (key(before) === key(windows)) return false;
+    const accessBefore = await eventAccessOnly(client);
+    const accessAfter = input.eventAccessOnly ?? accessBefore;
+    const accessChanged = accessAfter !== accessBefore;
+    if (key(before) === key(windows) && !accessChanged) return false;
+    if (accessChanged) {
+      await client.query(
+        `INSERT INTO event_config (id, helpdesk_event_access_only) VALUES (1, $1)
+         ON CONFLICT (id) DO UPDATE SET helpdesk_event_access_only = EXCLUDED.helpdesk_event_access_only`,
+        [accessAfter],
+      );
+    }
     await client.query("DELETE FROM helpdesk_open_windows");
     if (windows.length > 0) {
       await client.query(
@@ -106,8 +126,14 @@ export async function replaceSchedule(
       entityType: "helpdesk_schedule",
       entityId: 1,
       action: "replaced",
-      before: { windows: before.map((w) => ({ startsAt: w.startsAt, endsAt: w.endsAt })) },
-      after: { windows: windows.map((w) => ({ startsAt: w.startsAt, endsAt: w.endsAt })) },
+      before: {
+        windows: before.map((w) => ({ startsAt: w.startsAt, endsAt: w.endsAt })),
+        eventAccessOnly: accessBefore,
+      },
+      after: {
+        windows: windows.map((w) => ({ startsAt: w.startsAt, endsAt: w.endsAt })),
+        eventAccessOnly: accessAfter,
+      },
     });
     return true;
   });

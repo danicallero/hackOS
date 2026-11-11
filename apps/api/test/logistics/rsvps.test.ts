@@ -569,6 +569,23 @@ describe("organizer settings", () => {
   });
 });
 
+describe("role audiences ask the people holding them (H59)", () => {
+  it("asks anyone with at least one of the item's roles, besides the configured kinds", async () => {
+    const speaker = await createRole([], { name: "Speaker", eventAccess: true });
+    const holder = await person("mentor");
+    await assignRole(holder, speaker);
+    const outsider = await person("mentor");
+    const pool = await db();
+    const id = await activity({ category: "workshop", kinds: ["sponsor"] });
+    await pool.query(
+      `UPDATE schedule SET audiences = ARRAY['role:${speaker}'] WHERE id = (SELECT schedule_id FROM activities WHERE id = $1)`,
+      [id],
+    );
+    expect((await getItems(holder)).map((item) => item.activityId)).toEqual([id]);
+    expect(await getItems(outsider)).toEqual([]);
+  });
+});
+
 describe("GET /api/logistics/dietary", () => {
   it("lists everyone with intolerances or notes, with counts, and audits the read", async () => {
     const exporter = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);

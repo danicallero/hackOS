@@ -600,6 +600,7 @@ Table event_config {
   event_starts_at "timestamp with time zone"
   hacking_ends_at "timestamp with time zone"
   hacking_starts_at "timestamp with time zone"
+  helpdesk_event_access_only boolean [not null, default: `true`]
   id integer [pk, not null]
   meal_plan_cutoff_hours integer [not null, default: `24`, note: '#933: meal plans lock this many hours before each meal starts.']
   name text
@@ -965,16 +966,6 @@ Table meal_scan_batches {
   status text [not null, default: `'pending'::text`]
   submitted_by integer
   updated_at "timestamp with time zone" [not null, default: `now()`]
-}
-
-Table mentor_profile_expertise {
-  event_key text [not null]
-  library_value_id integer [not null]
-  user_id integer [not null]
-
-  indexes {
-  (user_id, event_key, library_value_id) [pk]
-  }
 }
 
 Table mentor_profiles {
@@ -1804,9 +1795,6 @@ Ref: meal_scan_batch_items.activity_id > activities.id
 Ref: meal_scan_batch_items.batch_id > meal_scan_batches.id
 Ref: meal_scan_batches.activity_id > activities.id
 Ref: meal_scan_batches.submitted_by > users.id
-Ref: mentor_profile_expertise.event_key > mentor_profiles.event_key
-Ref: mentor_profile_expertise.library_value_id > form_library_values.id
-Ref: mentor_profile_expertise.user_id > mentor_profiles.user_id
 Ref: mentor_profiles.user_id > users.id
 Ref: notification_outbox.user_id > users.id
 Ref: notification_preferences.user_id > users.id

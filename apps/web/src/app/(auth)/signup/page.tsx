@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useVerificationResend } from "@/hooks/use-verification-resend";
-import { signUp } from "@/lib/auth-client";
+import { signIn, signUp } from "@/lib/auth-client";
 import { LANGS, languageName, type Translate, useLocale } from "@/lib/i18n";
 import { passwordSchema } from "@/lib/password-schema";
 import { safeReturnPath, withReturnPath } from "@/lib/return-path";
@@ -77,7 +77,7 @@ function localizedSignUpError(error: AuthError, t: Translate): string {
 
 function SignUpInner() {
   const router = useRouter();
-  const { status } = useSessionContext();
+  const { status, refresh } = useSessionContext();
   const { t, language, setLanguage } = useLocale();
   // The application (or other same-origin destination) the visitor was
   // trying to reach — carried through verification so they land back there
@@ -85,6 +85,9 @@ function SignUpInner() {
   const rawNext = useSearchParams().get("next");
   const next = safeReturnPath(rawNext, "");
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  // Kept in memory only, to sign the person in if they choose to verify later.
+  const submittedPassword = useRef("");
+  const [continuing, setContinuing] = useState(false);
   const confirmationHeading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (submittedEmail) confirmationHeading.current?.focus();
@@ -146,7 +149,25 @@ function SignUpInner() {
       form.setError("root", { message: localizedSignUpError(error, t) });
       return;
     }
+    submittedPassword.current = values.password;
     setSubmittedEmail(values.email);
+  }
+
+  /** Verify later: sign in unverified and continue into the app, where the banner keeps asking. */
+  async function continueUnverified() {
+    if (!submittedEmail) return;
+    setContinuing(true);
+    try {
+      const result = await signIn.email({
+        email: submittedEmail,
+        password: submittedPassword.current,
+      });
+      if (result.error) throw new Error(result.error.message);
+      await refresh();
+      router.push(next || "/event");
+    } catch {
+      router.push(withReturnPath("/login", next));
+    }
   }
 
   if (submittedEmail) {
@@ -177,6 +198,15 @@ function SignUpInner() {
               {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendVerification")}
             </Button>
           </p>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={continuing}
+            loading={continuing}
+            onClick={() => void continueUnverified()}
+          >
+            {t("verifyLater")}
+          </Button>
         </CardContent>
       </Card>
     );

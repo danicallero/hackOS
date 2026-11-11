@@ -2,7 +2,16 @@
 
 import type { OnboardingAction, OnboardingStep } from "@hackos/shared/onboarding";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  type MutableRefObject,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { AvailabilityEditor } from "@/app/(app)/help-desk/availability-editor";
 import { ContextualError } from "@/components/common/contextual-error";
 import { Spinner } from "@/components/common/spinner";
 import { Confetti } from "@/components/onboarding/confetti";
@@ -18,9 +27,11 @@ import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Button } from "@/components/ui/button";
+import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
 import { useServerResource } from "@/hooks/use-server-resource";
 import { apiErrorText } from "@/lib/api-error-text";
 import { formatEventDate } from "@/lib/datetime";
+import { EVENT_CITY, EVENT_PUBLIC_URL } from "@/lib/event-brand";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { logisticsApi } from "@/lib/logistics";
 import { notificationsApi, type PreferencesResponse } from "@/lib/notifications";
@@ -35,6 +46,32 @@ export interface StepProps {
   pending: boolean;
   /** Persist a decision for this step and move on. */
   decide: (action: OnboardingAction) => void;
+}
+
+/**
+ * What leaving a step through the progress markers needs from it: whether it holds
+ * unsaved edits, and how to save them. `draft` saves without answering the step
+ * (networking, where only the explicit Create is consent); otherwise `submit`
+ * runs the step's own form, so validation and the save are the form's.
+ */
+export interface LeaveHandle {
+  dirty: boolean;
+  submit?: () => void;
+  draft?: () => Promise<boolean>;
+}
+export const LeaveContext = createContext<MutableRefObject<LeaveHandle | null> | null>(null);
+
+/** Registers the step's unsaved-edit handle with the journey while it is shown. */
+export function useLeaveHandle(handle: LeaveHandle) {
+  const ref = useContext(LeaveContext);
+  const { dirty, submit, draft } = handle;
+  useEffect(() => {
+    if (!ref) return;
+    ref.current = { dirty, submit, draft };
+    return () => {
+      ref.current = null;
+    };
+  }, [ref, dirty, submit, draft]);
 }
 
 /** "Later" and "Skip" exactly as the server offers them; a required step shows neither Skip. */
@@ -68,6 +105,30 @@ export const STEP_TITLES: Record<OnboardingStep, MessageKey> = {
   completion: "onboardingStepCompletion",
 };
 
+/** One line on what each step is for, shown on the intro page. */
+export const STEP_DESCRIPTIONS: Partial<Record<OnboardingStep, MessageKey>> = {
+  profile: "onboardingDescProfile",
+  dietary: "onboardingDescDietary",
+  networking: "onboardingDescNetworking",
+  mentor_profile: "onboardingDescMentor",
+  rsvp: "onboardingDescRsvp",
+  notifications: "onboardingDescNotifications",
+  share: "onboardingDescShare",
+};
+
+/** Steps whose answers live in My profile: say where to change them afterwards. */
+export function ChangeLaterNote({ tab }: { tab: string }) {
+  const { t } = useLocale();
+  return (
+    <p className="text-muted-foreground text-sm text-pretty">
+      {t("onboardingEditLater")}{" "}
+      <Link className="underline underline-offset-4" href={`/settings/profile?tab=${tab}`}>
+        {t("myProfile")}
+      </Link>
+    </p>
+  );
+}
+
 /** The public event feed: name, tagline and dates exactly as the organizer configured them. */
 export function useEventFacts(): PublicEvent | null {
   const [event, setEvent] = useState<PublicEvent | null>(null);
@@ -81,6 +142,15 @@ export function useEventFacts(): PublicEvent | null {
     };
   }, []);
   return event;
+}
+
+/** Whole hours of the hacking window ("36 hours of development"); undefined without a window. */
+export function hackingHours(
+  event: Pick<PublicEvent, "hackingStartsAt" | "hackingEndsAt"> | null,
+): number | undefined {
+  if (!event?.hackingStartsAt || !event.hackingEndsAt) return undefined;
+  const ms = Date.parse(event.hackingEndsAt) - Date.parse(event.hackingStartsAt);
+  return ms > 0 ? Math.round(ms / 3_600_000) : undefined;
 }
 
 /** "5 Jan 2026" or "5 Jan – 7 Jan 2026", only from configured instants; "" when unset. */
@@ -149,27 +219,43 @@ function ContinueWhenClean({
   );
 }
 
+/** Submits the step's own form, so leaving with edits validates and saves them. */
+export function useFormSubmit(dirty: boolean) {
+  const root = useRef<HTMLDivElement>(null);
+  const submit = useCallback(() => root.current?.querySelector("form")?.requestSubmit(), []);
+  useLeaveHandle({ dirty, submit });
+  return root;
+}
+
 export function ProfileStep(props: StepProps & { part: "identity" | "dietary" }) {
   const { part, decide, pending } = props;
   const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
   return (
-    <PersonalDetails
-      part={part}
-      onDirtyChange={setDirty}
-      onSaved={() => decide("complete")}
-      actions={
-        <>
-          <StepAlternatives {...props} />
-          <ContinueWhenClean dirty={dirty} pending={pending} decide={decide} />
-        </>
-      }
-    />
+    <div ref={root}>
+      <PersonalDetails
+        part={part}
+        onDirtyChange={setDirty}
+        onSaved={() => decide("complete")}
+        actions={
+          <>
+            <StepAlternatives {...props} />
+            <ContinueWhenClean dirty={dirty} pending={pending} decide={decide} />
+          </>
+        }
+      />
+    </div>
   );
 }
 
 /** Create, decline and later are three distinct persisted answers; consent is only the explicit create. */
 export function NetworkingStep({ decide }: StepProps) {
   const { me } = useSessionContext();
+  // Leaving with edits keeps them as a draft; only the explicit Create is consent.
+  const [dirty, setDirty] = useState(false);
+  const saveDraft = useRef<(() => Promise<boolean>) | null>(null);
+  const draft = useCallback(async () => (await saveDraft.current?.()) ?? true, []);
+  useLeaveHandle({ dirty, draft });
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
@@ -177,28 +263,37 @@ export function NetworkingStep({ decide }: StepProps) {
         <p className="font-medium">{[me?.name, me?.surname].filter(Boolean).join(" ")}</p>
       </div>
       <PublicProfileCard
+        onDirtyChange={setDirty}
         onboarding={{
           onFinished: (choice) => decide(choice === "create" ? "complete" : "decline"),
           onLater: () => decide("defer"),
+          saveDraft,
         }}
       />
+      <ChangeLaterNote tab="public" />
     </div>
   );
 }
 
 export function MentorStep(props: StepProps) {
+  const { t } = useLocale();
+  const own = useOwnHelperProfile();
   const [dirty, setDirty] = useState(false);
+  const root = useFormSubmit(dirty);
   return (
-    <MentorProfileEditor
-      onSaved={() => props.decide("complete")}
-      onDirtyChange={setDirty}
-      actions={
-        <>
-          <StepAlternatives {...props} />
-          <ContinueWhenClean dirty={dirty} pending={props.pending} decide={props.decide} />
-        </>
-      }
-    />
+    <div ref={root} className="space-y-6">
+      <MentorProfileEditor
+        onDirtyChange={setDirty}
+        onSaved={() => props.decide("complete")}
+        // When the mentor plans to be at the venue; each change saves on its own (H62).
+        extra={
+          own.data?.eligible ? <AvailabilityEditor profile={own.data} onSaved={own.mutate} /> : null
+        }
+        submitLabel={t("onboardingContinue")}
+        actions={<StepAlternatives {...props} />}
+      />
+      <ChangeLaterNote tab="mentoring" />
+    </div>
   );
 }
 
@@ -292,6 +387,13 @@ export function ShareCard({
         name: event.name,
         year: /^\d{4}$/.test(year) ? year : "",
         dateLabel: eventDateRange(event, language) || undefined,
+        location: EVENT_CITY,
+        url: EVENT_PUBLIC_URL,
+        hours: hackingHours(event),
+        dates:
+          event.hackingStartsAt && event.hackingEndsAt
+            ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
+            : undefined,
       }}
       attendee={{
         displayName: [me.name, me.surname].filter(Boolean).join(" "),

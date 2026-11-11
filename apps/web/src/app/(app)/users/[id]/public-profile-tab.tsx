@@ -27,6 +27,7 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import type { UserDetail } from "@/lib/types";
+import { StaffMentoring } from "./staff-mentoring";
 
 /** Staff moderation uses the existing user permissions; consent stays with the owner (#935). */
 export function PublicProfileTab({
@@ -132,96 +133,99 @@ export function PublicProfileTab({
   }
 
   return (
-    <form
-      className="max-w-4xl"
-      onSubmit={(event) => {
-        event.preventDefault();
-        // mutate() already surfaces the failure in the form error.
-        void mutate("save").catch(() => {});
-      }}
-    >
-      <SectionCard
-        variant="plain"
-        footer={
-          canEdit ? (
-            <FormActions
-              pending={pending}
-              disabled={!dirty}
-              state={error ? "error" : dirty ? "unsaved" : "saved"}
-            />
-          ) : undefined
-        }
+    <>
+      <form
+        className="max-w-4xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          // mutate() already surfaces the failure in the form error.
+          void mutate("save").catch(() => {});
+        }}
       >
-        <p className="text-muted-foreground text-sm">
-          {t(profile.directoryVisible ? "publicProfileShared" : "publicProfileNotShared")}
-        </p>
-        {error && <ContextualError message={error} />}
-        <DirectoryCard entry={profile.preview} />
-        {profile.cv && (
-          <CvViewer
-            path={`${path}/cv`}
-            name={profile.preview.displayName}
-            trigger={
-              <Button type="button" variant="outline" size="sm">
-                {t("viewCv")}
-              </Button>
-            }
-          />
-        )}
-        {canEdit && (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {profile.directoryVisible && (
-                <ModerationAction
-                  title={t("publicProfileStopSharingConfirm")}
-                  description={t("publicProfileStopSharingDesc")}
-                  label={t("publicProfileStopSharing")}
-                  pending={pending}
-                  onConfirm={() => mutate("sharing")}
-                />
-              )}
-              {user.image && (
-                <ModerationAction
-                  title={t("publicProfileRemovePhotoConfirm")}
-                  description={t("publicProfileRemovePhotoDesc")}
-                  label={t("removePhoto")}
-                  pending={pending}
-                  onConfirm={() => mutate("photo")}
-                />
-              )}
-              {profile.cv?.source === "upload" && (
-                <ModerationAction
-                  title={t("publicProfileRemoveCvConfirm")}
-                  description={t("publicProfileRemoveCvDesc")}
-                  label={t("removeCv")}
-                  pending={pending}
-                  onConfirm={() => mutate("cv")}
-                />
-              )}
-            </div>
-            <fieldset disabled={pending} className="min-w-0 space-y-4">
-              <ProfileVisibilityFields
-                settings={settings}
-                onChange={update}
-                className="grid items-start gap-4 sm:grid-cols-3"
+        <SectionCard
+          variant="plain"
+          footer={
+            canEdit ? (
+              <FormActions
+                pending={pending}
+                disabled={!dirty}
+                state={error ? "error" : dirty ? "unsaved" : "saved"}
               />
-              <ProfileTextFields
-                settings={settings}
-                onChange={update}
-                className="grid items-start gap-4 sm:grid-cols-2"
-              />
-              {profile.cv && (
-                <SwitchRow
-                  checked={settings.shareCv}
-                  onChange={(shareCv) => update({ shareCv })}
-                  label={t("publicProfileShareCv")}
+            ) : undefined
+          }
+        >
+          <p className="text-muted-foreground text-sm">
+            {t(profile.directoryVisible ? "publicProfileShared" : "publicProfileNotShared")}
+          </p>
+          {error && <ContextualError message={error} />}
+          <DirectoryCard entry={profile.preview} />
+          {profile.cv && (
+            <CvViewer
+              path={`${path}/cv`}
+              name={profile.preview.displayName}
+              trigger={
+                <Button type="button" variant="outline" size="sm">
+                  {t("viewCv")}
+                </Button>
+              }
+            />
+          )}
+          {canEdit && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                {profile.directoryVisible && (
+                  <ModerationAction
+                    title={t("publicProfileStopSharingConfirm")}
+                    description={t("publicProfileStopSharingDesc")}
+                    label={t("publicProfileStopSharing")}
+                    pending={pending}
+                    onConfirm={() => mutate("sharing")}
+                  />
+                )}
+                {user.image && (
+                  <ModerationAction
+                    title={t("publicProfileRemovePhotoConfirm")}
+                    description={t("publicProfileRemovePhotoDesc")}
+                    label={t("removePhoto")}
+                    pending={pending}
+                    onConfirm={() => mutate("photo")}
+                  />
+                )}
+                {profile.cv?.source === "upload" && (
+                  <ModerationAction
+                    title={t("publicProfileRemoveCvConfirm")}
+                    description={t("publicProfileRemoveCvDesc")}
+                    label={t("removeCv")}
+                    pending={pending}
+                    onConfirm={() => mutate("cv")}
+                  />
+                )}
+              </div>
+              <fieldset disabled={pending} className="min-w-0 space-y-4">
+                <ProfileVisibilityFields
+                  settings={settings}
+                  onChange={update}
+                  className="grid items-start gap-4 sm:grid-cols-3"
                 />
-              )}
-            </fieldset>
-          </>
-        )}
-      </SectionCard>
-    </form>
+                <ProfileTextFields
+                  settings={settings}
+                  onChange={update}
+                  className="grid items-start gap-4 sm:grid-cols-2"
+                />
+                {profile.cv && (
+                  <SwitchRow
+                    checked={settings.shareCv}
+                    onChange={(shareCv) => update({ shareCv })}
+                    label={t("publicProfileShareCv")}
+                  />
+                )}
+              </fieldset>
+            </>
+          )}
+        </SectionCard>
+      </form>
+      {canEdit && <StaffMentoring userId={user.id} />}
+    </>
   );
 }
 

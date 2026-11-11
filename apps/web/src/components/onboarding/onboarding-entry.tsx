@@ -3,20 +3,22 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
-  APP_HOME_PATH,
   forPerson,
   hasPendingOnboarding,
+  markOnboardingOffered,
   ONBOARDING_PATH,
   readOnboarding,
   wasOnboardingOffered,
 } from "@/lib/onboarding";
+import { withReturnPath } from "@/lib/return-path";
 import { useSessionContext } from "@/lib/session";
 
 /**
- * Offers the onboarding journey once per browser session, only when the person
- * lands on the app home. It is a redirect, never a gate: every other route
- * renders immediately, a failed read is ignored, and /onboarding stays
- * reachable (My profile, the completion step) whenever steps are still open.
+ * Offers the onboarding journey on the first page of each sign-in session,
+ * wherever the person lands (the page they came for is carried as `next`, so
+ * Later returns there). It is a redirect, never a gate: pages render
+ * immediately, a failed read is ignored, and /onboarding stays reachable
+ * (My profile, the completion step) whenever steps are still open.
  */
 export function OnboardingEntry({ children }: { children: React.ReactNode }) {
   const { me } = useSessionContext();
@@ -28,16 +30,22 @@ export function OnboardingEntry({ children }: { children: React.ReactNode }) {
   const userId = me?.id ?? null;
 
   useEffect(() => {
-    if (!eligible || userId === null || pathname !== APP_HOME_PATH || wasOnboardingOffered(userId))
+    if (
+      !eligible ||
+      userId === null ||
+      pathname.startsWith(ONBOARDING_PATH) ||
+      wasOnboardingOffered(userId)
+    )
       return;
     const controller = new AbortController();
     readOnboarding(controller.signal)
       .then((state) => {
+        if (!controller.signal.aborted) markOnboardingOffered(userId);
         if (
           !controller.signal.aborted &&
           hasPendingOnboarding(forPerson(state, { profileLocked, dietaryLocked }))
         )
-          router.replace(ONBOARDING_PATH);
+          router.replace(withReturnPath(ONBOARDING_PATH, pathname));
       })
       .catch(() => undefined);
     return () => controller.abort();

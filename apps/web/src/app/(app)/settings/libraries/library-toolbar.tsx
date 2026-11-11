@@ -20,8 +20,9 @@ export function LibraryToolbar({
   onSearchChange: (value: string) => void;
   searchLabel: string;
   count: number;
-  addLabel: string;
-  onAdd: () => void;
+  /** Omitted when the catalogue is not created here (knowledge areas are added by helpers). */
+  addLabel?: string;
+  onAdd?: () => void;
 }) {
   const { t } = useLocale();
   const id = useId();
@@ -69,9 +70,11 @@ export function LibraryToolbar({
       >
         {t("tableResultCount", { count })}
       </span>
-      <div className="ml-auto shrink-0">
-        <LibraryAddButton label={addLabel} onClick={onAdd} />
-      </div>
+      {addLabel && onAdd && (
+        <div className="ml-auto shrink-0">
+          <LibraryAddButton label={addLabel} onClick={onAdd} />
+        </div>
+      )}
     </div>
   );
 }

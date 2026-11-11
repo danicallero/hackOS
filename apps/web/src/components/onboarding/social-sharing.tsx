@@ -40,6 +40,10 @@ export interface SocialSharingEvent {
   /** Shown only when the event provides it; never derived or invented. */
   dateLabel?: string;
   location?: string;
+  /** Length of the hacking window in hours, when the event has one (the caption says "36 hours of development"). */
+  hours?: number;
+  /** The hacking window's first and last instant; the caption words them as "from 28 to 29 October". */
+  dates?: { start: string; end: string; timezone: string };
   /**
    * Public event page. Added to the caption and shown on the image as its
    * host. Only http(s) is accepted; query and fragment are dropped so no
@@ -112,9 +116,10 @@ const STRIP_RATIO = 294 / 1125;
 type Copy = (typeof copyFragments)["es"];
 type CopyKey = keyof Copy;
 
+/** The name as configured; the year is added only when the name carries none (the edition year can differ from the event dates). */
 export function eventTitle(event: Pick<SocialSharingEvent, "name" | "year">): string {
   const year = String(event.year);
-  return event.name.includes(year) ? event.name : `${event.name} ${year}`;
+  return !year || /\b\d{4}\b/.test(event.name) ? event.name : `${event.name} ${year}`;
 }
 
 function fill(template: string, values: Record<string, string>): string {
@@ -146,17 +151,48 @@ export function publicEventUrl(value: string | undefined): URL | null {
   }
 }
 
-/** Caption in the viewer's language; the date, place and link appear only when the event supplied them. */
+/** "28 to 29 October", worded per language from the event's own time zone. */
+function captionDates(
+  language: Language,
+  dates: NonNullable<SocialSharingEvent["dates"]>,
+): string | null {
+  const start = new Date(dates.start);
+  const end = new Date(dates.end);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  const part = (date: Date, options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(language, { ...options, timeZone: dates.timezone }).format(date);
+  const copy = copyFragments[language];
+  const startMonth = part(start, { month: "long" });
+  const endMonth = part(end, { month: "long" });
+  const startDay = part(start, { day: "numeric" });
+  const endDay = part(end, { day: "numeric" });
+  if (startMonth === endMonth && startDay === endDay) return null;
+  return startMonth === endMonth
+    ? fill(copy.captionDatesSame, { start: startDay, end: endDay, month: startMonth })
+    : fill(copy.captionDatesDiff, { start: startDay, startMonth, end: endDay, endMonth });
+}
+
+/**
+ * Caption in the viewer's language, e.g. "¡Voy a HackUDC! 36 horas de desarrollo en A
+ * Coruña del 28 al 29 de octubre. Nos vemos ahí." and the event page on its own line.
+ * Hours, place, dates and link appear only when the event supplied them.
+ */
 export function buildCaption(
   language: Language,
-  event: Pick<SocialSharingEvent, "name" | "year" | "dateLabel" | "location" | "url">,
+  event: Pick<SocialSharingEvent, "name" | "year" | "location" | "url" | "hours" | "dates">,
 ): string {
-  const details = [dateWithYear(event), event.location].filter(Boolean).join(" · ");
+  const copy = copyFragments[language];
+  const parts = [
+    event.hours && event.hours > 0 ? fill(copy.captionHours, { hours: String(event.hours) }) : null,
+    event.location ? fill(copy.captionIn, { place: event.location }) : null,
+    event.dates ? captionDates(language, event.dates) : null,
+  ].filter((part): part is string => Boolean(part));
+  const details = parts.join(" ");
   const url = publicEventUrl(event.url);
-  return fill(copyFragments[language].caption, {
+  return fill(copy.caption, {
     event: eventTitle(event),
-    details: details ? ` ${details}.` : "",
-    link: url ? `\n${url.href}` : "",
+    details: details ? ` ${details.charAt(0).toLocaleUpperCase(language)}${details.slice(1)}.` : "",
+    link: url ? `\n\n${url.href}` : "",
   });
 }
 

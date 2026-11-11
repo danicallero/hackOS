@@ -19,6 +19,8 @@ export function LibraryPicker({
   disabled,
   id,
   inDialog = false,
+  placeholder,
+  searchPlaceholder,
   ...aria
 }: {
   libraryId?: string;
@@ -28,6 +30,8 @@ export function LibraryPicker({
   disabled?: boolean;
   id?: string;
   inDialog?: boolean;
+  placeholder?: string;
+  searchPlaceholder?: string;
   "aria-labelledby"?: string;
   "aria-describedby"?: string;
   "aria-invalid"?: boolean;
@@ -71,6 +75,8 @@ export function LibraryPicker({
         onBlur={onBlur}
         disabled={disabled || busy || !libraryId}
         inDialog={inDialog}
+        placeholder={placeholder}
+        searchPlaceholder={searchPlaceholder ?? placeholder}
         searchQuery={query}
         onSearchChange={setQuery}
         onCreateOption={libraryId ? (name) => void propose(name) : undefined}

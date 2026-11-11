@@ -10,7 +10,7 @@
     "retry": "Reintentar",
     "photoFallback": "No se pudo cargar tu foto; la imagen usa tus iniciales.",
     "cardLine": "Voy a {event}",
-    "caption": "¡Voy a {event}!{details} Nos vemos allí.{link}",
+    "caption": "¡Voy a {event}!{details} Nos vemos ahí.{link}",
     "download": "Descargar imagen",
     "downloaded": "Imagen descargada",
     "downloadFailed": "No se pudo descargar la imagen.",
@@ -27,7 +27,11 @@
     "labelName": "Nombre",
     "labelRole": "Rol",
     "formatPortrait": "Vertical",
-    "formatStory": "Historia"
+    "formatStory": "Historia",
+    "captionHours": "{hours} horas de desarrollo",
+    "captionIn": "en {place}",
+    "captionDatesSame": "del {start} al {end} de {month}",
+    "captionDatesDiff": "del {start} de {startMonth} al {end} de {endMonth}"
   },
   "gl": {
     "title": "Conta o nas redes",
@@ -40,7 +44,7 @@
     "retry": "Tentar de novo",
     "photoFallback": "Non se puido cargar a túa foto; a imaxe usa as túas iniciais.",
     "cardLine": "Vou a {event}",
-    "caption": "Vou a {event}!{details} Vémonos alí.{link}",
+    "caption": "Vou a {event}!{details} Vémonos aí.{link}",
     "download": "Descargar imaxe",
     "downloaded": "Imaxe descargada",
     "downloadFailed": "Non se puido descargar a imaxe.",
@@ -57,7 +61,11 @@
     "labelName": "Nome",
     "labelRole": "Rol",
     "formatPortrait": "Vertical",
-    "formatStory": "Historia"
+    "formatStory": "Historia",
+    "captionHours": "{hours} horas de desenvolvemento",
+    "captionIn": "en {place}",
+    "captionDatesSame": "do {start} ao {end} de {month}",
+    "captionDatesDiff": "do {start} de {startMonth} ao {end} de {endMonth}"
   },
   "en": {
     "title": "Share it",
@@ -87,6 +95,10 @@
     "labelName": "Name",
     "labelRole": "Role",
     "formatPortrait": "Portrait",
-    "formatStory": "Story"
+    "formatStory": "Story",
+    "captionHours": "{hours} hours of development",
+    "captionIn": "in {place}",
+    "captionDatesSame": "from {start} to {end} {month}",
+    "captionDatesDiff": "from {start} {startMonth} to {end} {endMonth}"
   }
 }

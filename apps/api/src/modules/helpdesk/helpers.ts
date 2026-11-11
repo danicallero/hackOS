@@ -332,16 +332,31 @@ async function ensureProfileRow(db: Queryable, userId: number) {
  * H61: publish/unpublish and choose topics. The bio is edited only in the
  * public profile editor.
  */
+/** Who writes a helper profile: the person, or user management editing it for them. */
+export interface HelperActor {
+  actorId: number;
+  source: "web" | "admin";
+}
+
 export async function updateMyHelperProfile(
   userId: number,
   input: HelperProfileInput,
+  actorOrSelf?: HelperActor,
 ): Promise<{ changed: boolean; profile: MyHelperProfile }> {
+  const actor: HelperActor = actorOrSelf ?? { actorId: userId, source: "web" };
   const changed = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
     await assertEligible(client, userId);
     const topicIds = [...new Set(input.topicIds)].sort((a, b) => a - b);
     await assertTopicsExist(client, topicIds);
     const current = await ensureProfileRow(client, userId);
+    // Publishing is the person's own consent (it shares their public profile with
+    // help desk readers): user management can edit and unpublish, never publish.
+    if (actor.source === "admin" && input.published && !current.published) {
+      throw new ForbiddenError("Only the person can publish their help desk profile", {
+        code: ERROR_REASONS.HELPER_PUBLISH_OWN_CONSENT,
+      });
+    }
     const { rows: topicRows } = await client.query<{ topic_id: number }>(
       "SELECT topic_id FROM helper_topics WHERE user_id = $1 ORDER BY topic_id",
       [userId],
@@ -415,7 +430,8 @@ export async function updateMyHelperProfile(
     }
     // H53: field names, topic ids and challenge ids only.
     await audit(client, {
-      actorId: userId,
+      actorId: actor.actorId,
+      source: actor.source,
       entityType: "helper_profile",
       entityId: userId,
       action: "updated",
@@ -437,7 +453,9 @@ const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export async function replaceMyAvailability(
   userId: number,
   input: AvailabilityInput,
+  actorOrSelf?: HelperActor,
 ): Promise<{ changed: boolean; profile: MyHelperProfile }> {
+  const actor: HelperActor = actorOrSelf ?? { actorId: userId, source: "web" };
   const intervals = input.intervals
     .map((i) => ({ startsAt: new Date(i.startsAt), endsAt: new Date(i.endsAt) }))
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
@@ -492,7 +510,8 @@ export async function replaceMyAvailability(
       userId,
     ]);
     await audit(client, {
-      actorId: userId,
+      actorId: actor.actorId,
+      source: actor.source,
       entityType: "helper_profile",
       entityId: userId,
       action: "availability_updated",

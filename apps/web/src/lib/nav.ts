@@ -3,6 +3,7 @@ import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { AddressBookIcon } from "@phosphor-icons/react/dist/ssr/AddressBook";
 import { BellIcon } from "@phosphor-icons/react/dist/ssr/Bell";
 import { BooksIcon } from "@phosphor-icons/react/dist/ssr/Books";
+import { BrainIcon } from "@phosphor-icons/react/dist/ssr/Brain";
 import { CalendarDotsIcon } from "@phosphor-icons/react/dist/ssr/CalendarDots";
 import { ChartBarIcon } from "@phosphor-icons/react/dist/ssr/ChartBar";
 import { ClipboardTextIcon } from "@phosphor-icons/react/dist/ssr/ClipboardText";
@@ -597,12 +598,23 @@ export const WORKSPACES: Workspace[] = [
         title: "libraries",
         href: "/settings/libraries",
         icon: BooksIcon,
-        capability: CAPABILITIES.INTOLERANCES_MANAGE,
+        anyCapability: [CAPABILITIES.INTOLERANCES_MANAGE, CAPABILITIES.HELPDESK_MANAGE],
         subItems: [
-          sub("foodIntolerances", "/settings/libraries?tab=intolerances", BooksIcon),
-          sub("shirtSizesGroup", "/settings/libraries?tab=shirt-sizes", BooksIcon),
-          sub("universitiesTab", "/settings/libraries?tab=universities", BooksIcon),
-          sub("degreesTab", "/settings/libraries?tab=degrees", BooksIcon),
+          sub("foodIntolerances", "/settings/libraries?tab=intolerances", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("shirtSizesGroup", "/settings/libraries?tab=shirt-sizes", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("universitiesTab", "/settings/libraries?tab=universities", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("degreesTab", "/settings/libraries?tab=degrees", BooksIcon, {
+            capability: CAPABILITIES.INTOLERANCES_MANAGE,
+          }),
+          sub("knowledgeTab", "/settings/libraries?tab=knowledge", BrainIcon, {
+            capability: CAPABILITIES.HELPDESK_MANAGE,
+          }),
         ],
       },
     ],

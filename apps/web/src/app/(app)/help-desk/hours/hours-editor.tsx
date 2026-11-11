@@ -7,6 +7,7 @@ import {
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { SwitchRow } from "@/components/profile/public-profile-form";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -36,11 +37,16 @@ export function HoursEditor({
   const label = (window: AvailabilityInterval) =>
     `${formatEventDate(window.startsAt, language, "dateTime")} – ${formatEventDate(window.endsAt, language, "dateTime")}`;
 
-  async function replace(windows: AvailabilityInterval[]) {
+  async function replace(
+    windows: AvailabilityInterval[],
+    eventAccessOnly: boolean = schedule.eventAccessOnly,
+  ) {
     setPending(true);
     setError(null);
     try {
-      onSaved(await api.put<HelpdeskSchedule>("/api/helpdesk/schedule", { windows }));
+      onSaved(
+        await api.put<HelpdeskSchedule>("/api/helpdesk/schedule", { windows, eventAccessOnly }),
+      );
       return true;
     } catch (err) {
       setError(err);
@@ -58,6 +64,12 @@ export function HoursEditor({
     : null;
   return (
     <div className="space-y-3">
+      <SwitchRow
+        checked={schedule.eventAccessOnly}
+        disabled={pending}
+        onChange={(only) => void replace(schedule.windows, only)}
+        label={t("helpDeskEventAccessOnly")}
+      />
       <div className="flex min-h-(--control-height-compact) items-center justify-between gap-3">
         <p className="text-sm">
           <span className="font-medium">{status}</span>

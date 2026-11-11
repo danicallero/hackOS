@@ -316,9 +316,9 @@ export function registerDirectoryRoutes(app: FastifyInstance): void {
   );
 
   const mentorNote =
-    "`expertise` is the person's chosen values of the profile-scope expertise library (`libraryId`, read and extended through /api/form-libraries/:id); the library is shared by every eligible person and values are never per-user. `eligible` is true only for an effective holder of `helpdesk:offer` (the wildcard counts); no role, attendance or networking opt-in is needed. A person who loses the capability keeps their stored data, which is neither listed nor offered while ineligible and reappears unchanged if the capability returns.";
+    "`expertise` is the person's help desk knowledge topics (edited with the helper profile, `PUT /api/me/helper-profile`), the one shared catalogue. `eligible` is true only for an effective holder of `helpdesk:offer` (the wildcard counts); no role, attendance or networking opt-in is needed. A person who loses the capability keeps their stored data, which is neither listed nor offered while ineligible and reappears unchanged if the capability returns.";
   const mentorPut =
-    "Replaces the profile for the current event: `published` and the full `expertiseIds` list (≤30 values of the expertise library; unknown ids answer 400). Publication is independent of the directory opt-in and exposes only the expertise to people who scanned the owner. 403 `details.code: mentor_profile_not_eligible` without the capability, leaving stored data untouched; accounts being removed (H54) answer 409. Audited as `mentor_profile.updated` with the changed field names only; repeating the stored profile writes nothing (#1011).";
+    "Sets `published` for the current event; the areas are the helper profile's knowledge topics. Publication is independent of the directory opt-in and exposes only the expertise to people who scanned the owner. 403 `details.code: mentor_profile_not_eligible` without the capability, leaving stored data untouched; accounts being removed (H54) answer 409. Audited as `mentor_profile.updated` with the changed field names only; repeating the stored profile writes nothing (#1011).";
   r.get(
     "/api/me/mentor-profile",
     {

@@ -54,15 +54,22 @@ describe("OnboardingEntry never gates the app", () => {
     expect(container.textContent).toBe("app");
   });
 
-  it("offers the journey on the app home when steps are pending", async () => {
+  it("offers the journey when steps are pending", async () => {
     mocks.read.mockResolvedValue(pending);
     await mount();
-    expect(mocks.replace).toHaveBeenCalledWith("/onboarding");
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?next=%2Fevent");
   });
 
-  it("does not redirect deep links, nothing pending, an unverified email or no event access", async () => {
+  it("offers on whatever page the person lands on, carrying it as `next` for Later", async () => {
     mocks.read.mockResolvedValue(pending);
     mocks.path = "/schedule";
+    await mount();
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?next=%2Fschedule");
+  });
+
+  it("does not redirect from the journey itself, nothing pending, an unverified email or no event access", async () => {
+    mocks.read.mockResolvedValue(pending);
+    mocks.path = "/onboarding";
     await mount();
     mocks.path = "/event";
     mocks.me = { id: 7, hasEventAccess: true, emailVerified: false };
@@ -73,6 +80,13 @@ describe("OnboardingEntry never gates the app", () => {
     mocks.read.mockResolvedValue({ ...pending, steps: [{ step: "profile", status: "completed" }] });
     await mount();
     expect(mocks.replace).not.toHaveBeenCalled();
+  });
+
+  it("reads once per session even when nothing is pending", async () => {
+    mocks.read.mockResolvedValue({ ...pending, steps: [{ step: "profile", status: "completed" }] });
+    await mount();
+    await mount();
+    expect(mocks.read).toHaveBeenCalledTimes(1);
   });
 
   it("offers once per browser session", async () => {

@@ -6,7 +6,7 @@ import { setEventTimeZone } from "@/lib/event-time";
 import { HelpdeskClosedNotice } from "./closed-notice";
 import { RequestHelpAction } from "./request-help-action";
 
-let schedule: { open: boolean; nextChangeAt: string | null } | null = null;
+let schedule: { eventAccessOnly: true; open: boolean; nextChangeAt: string | null } | null = null;
 vi.mock("@/hooks/use-helpdesk-schedule", () => ({
   useHelpdeskSchedule: () => ({ data: schedule, closed: schedule?.open === false }),
 }));
@@ -37,12 +37,12 @@ afterEach(async () => {
 });
 describe("help desk closed state (H64)", () => {
   it("disables Request help only when the schedule says closed", async () => {
-    schedule = { open: false, nextChangeAt: "2027-02-27T10:00:00.000Z" };
+    schedule = { eventAccessOnly: true, open: false, nextChangeAt: "2027-02-27T10:00:00.000Z" };
     await act(async () => root.render(<RequestHelpAction />));
     expect(
       getByRole(container, "button", { name: "helpDeskRequestHelp" }).hasAttribute("disabled"),
     ).toBe(true);
-    schedule = { open: true, nextChangeAt: null };
+    schedule = { eventAccessOnly: true, open: true, nextChangeAt: null };
     await act(async () => root.render(<RequestHelpAction />));
     expect(
       getByRole(container, "button", { name: "helpDeskRequestHelp" }).hasAttribute("disabled"),
@@ -54,7 +54,13 @@ describe("help desk closed state (H64)", () => {
     ).toBe(false);
   });
   it("says when it opens, or just that it is closed", async () => {
-    const closed = { configured: true, open: false, windows: [], suggestedInterval: null };
+    const closed = {
+      eventAccessOnly: true,
+      configured: true,
+      open: false,
+      windows: [],
+      suggestedInterval: null,
+    };
     await act(async () =>
       root.render(
         <HelpdeskClosedNotice schedule={{ ...closed, nextChangeAt: "2027-02-27T10:00:00.000Z" }} />,

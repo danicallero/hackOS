@@ -24,7 +24,7 @@ import {
   presentSql,
   toCard,
 } from "./helpers.js";
-import { assertHelpdeskOpen } from "./schedule.js";
+import { assertHelpdeskOpen, eventAccessOnly } from "./schedule.js";
 import type { ClaimInput, CreateRequestInput, EditRequestInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
 
@@ -380,17 +380,6 @@ export async function listRequestChallenges(
   return rows.map((r) => ({ id: Number(r.id), name: r.title, mine: r.mine }));
 }
 
-/** The caller's active project teams, the targets of a team request. */
-export async function listMyProjects(userId: number): Promise<{ id: number; name: string }[]> {
-  const { rows } = await pool.query<{ id: number; name: string }>(
-    `SELECT r.id, r.name FROM submissions s JOIN repos r ON r.id = s.repo_id
-      WHERE s.user_id = $1 AND s.status = 'active'
-      ORDER BY lower(r.name), r.id`,
-    [userId],
-  );
-  return rows.map((r) => ({ id: Number(r.id), name: r.name }));
-}
-
 async function lockActiveUser(db: Queryable, userId: number): Promise<void> {
   const { rows } = await db.query(
     `SELECT 1 FROM users WHERE id = $1 AND account_state = 'active' AND anonymized_at IS NULL
@@ -513,22 +502,12 @@ export async function createRequest(
   const topicIds = [...new Set(input.topicIds)].sort((a, b) => a - b);
   const result = await withTransaction(async (client) => {
     await lockActiveUser(client, userId);
-    if (!(await hasEventAccess(client, userId))) {
+    if ((await eventAccessOnly(client)) && !(await hasEventAccess(client, userId))) {
       throw new ForbiddenError("The help desk is only available to event attendees");
     }
     await assertHelpdeskOpen(client);
-    const repoId = input.projectId ?? null;
-    if (repoId != null) {
-      // Lock the project so two members cannot open simultaneous requests.
-      const { rows } = await client.query(
-        `SELECT 1 FROM repos r
-          WHERE r.id = $1 AND EXISTS (SELECT 1 FROM submissions s WHERE s.repo_id = r.id
-             AND s.user_id = $2 AND s.status = 'active')
-          FOR UPDATE OF r`,
-        [repoId, userId],
-      );
-      if (!rows[0]) throw new ForbiddenError("You are not a member of this project");
-    }
+    // Always for the caller: a person's request, never a team's.
+    const repoId = null;
     await assertTopicsExist(client, topicIds);
     const challengeId = input.challengeId ?? null;
     if (challengeId != null) {

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
+  dirty: false,
+  toastError: vi.fn(),
   role: "Participant" as string | null,
   locks: { profileLocked: false, dietaryLocked: false },
 }));
@@ -26,6 +28,7 @@ vi.mock("@/lib/i18n", () => ({
   }),
   pickText: () => "",
 }));
+vi.mock("@/lib/toast", () => ({ toast: { error: mocks.toastError } }));
 vi.mock("@/lib/session", () => ({
   useSessionContext: () => ({
     me: { id: 7, visibleRoleName: mocks.role, hasEventAccess: true, ...mocks.locks },
@@ -55,51 +58,67 @@ vi.mock("@/hooks/use-server-resource", () => ({
   },
 }));
 // Step bodies are exercised in their own tests; here each exposes the decision callbacks.
-vi.mock("@/components/onboarding/onboarding-steps", () => ({
-  STEP_TITLES: new Proxy({}, { get: (_t, name) => `title:${String(name)}` }),
-  WelcomeStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
-    <button type="button" onClick={() => decide("complete")}>
-      welcome-start
-    </button>
-  ),
-  ProfileStep: ({
-    allowed,
-    decide,
-  }: {
-    allowed: string[];
-    decide: (a: OnboardingAction) => void;
-  }) => (
-    <div>
-      {allowed.includes("skip") && (
-        <button type="button" onClick={() => decide("skip")}>
-          skip
+vi.mock("@/components/onboarding/onboarding-steps", async () => {
+  const React = await import("react");
+  const LeaveContext = React.createContext<{ current: unknown } | null>(null);
+  return {
+    LeaveContext,
+    STEP_TITLES: new Proxy({}, { get: (_t, name) => `title:${String(name)}` }),
+    STEP_DESCRIPTIONS: new Proxy({}, { get: (_t, name) => `desc:${String(name)}` }),
+    WelcomeStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
+      <button type="button" onClick={() => decide("complete")}>
+        welcome-start
+      </button>
+    ),
+    ProfileStep: function ProfileStep({
+      allowed,
+      decide,
+    }: {
+      allowed: string[];
+      decide: (a: OnboardingAction) => void;
+    }) {
+      const leave = React.useContext(LeaveContext);
+      React.useEffect(() => {
+        if (!leave) return;
+        leave.current = { dirty: mocks.dirty, submit: () => decide("complete") };
+        return () => {
+          leave.current = null;
+        };
+      }, [leave, decide]);
+      return (
+        <div>
+          {allowed.includes("skip") && (
+            <button type="button" onClick={() => decide("skip")}>
+              skip
+            </button>
+          )}
+          {allowed.includes("defer") && (
+            <button type="button" onClick={() => decide("defer")}>
+              later
+            </button>
+          )}
+        </div>
+      );
+    },
+    NetworkingStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
+      <div>
+        <button type="button" onClick={() => decide("complete")}>
+          create
         </button>
-      )}
-      {allowed.includes("defer") && (
+        <button type="button" onClick={() => decide("decline")}>
+          decline
+        </button>
         <button type="button" onClick={() => decide("defer")}>
           later
         </button>
-      )}
-    </div>
-  ),
-  NetworkingStep: ({ decide }: { decide: (a: OnboardingAction) => void }) => (
-    <div>
-      <button type="button" onClick={() => decide("complete")}>
-        create
-      </button>
-      <button type="button" onClick={() => decide("decline")}>
-        decline
-      </button>
-      <button type="button" onClick={() => decide("defer")}>
-        later
-      </button>
-    </div>
-  ),
-  MentorStep: () => <p>mentor-body</p>,
-  NotificationsStep: () => <p>notifications-body</p>,
-  ShareStep: () => <p>share-body</p>,
-  CompletionStep: () => <p>completion-body</p>,
-}));
+      </div>
+    ),
+    MentorStep: () => <p>mentor-body</p>,
+    NotificationsStep: () => <p>notifications-body</p>,
+    ShareStep: () => <p>share-body</p>,
+    CompletionStep: () => <p>completion-body</p>,
+  };
+});
 vi.mock("@/components/onboarding/rsvp-step", () => ({ RsvpStep: () => <p>rsvp-body</p> }));
 
 import { OnboardingFlow } from "@/components/onboarding/onboarding-flow";
@@ -135,9 +154,15 @@ const journey = (
 let container: HTMLDivElement;
 let root: Root;
 
-async function mount() {
+/** Renders the entry page (no `?step=`). */
+async function mountIntro() {
   await act(async () => root.render(<OnboardingFlow />));
   await act(async () => undefined);
+}
+/** Renders and leaves the entry page through its Start button. */
+async function mount() {
+  await mountIntro();
+  if (container.textContent?.includes("onboardingIntroTitle")) await click("onboardingStart");
 }
 const click = async (label: string) => {
   const button = [...container.querySelectorAll("button")].find((b) => b.textContent === label);
@@ -146,6 +171,7 @@ const click = async (label: string) => {
 };
 
 beforeEach(() => {
+  mocks.dirty = false;
   for (const mock of Object.values(mocks)) if (typeof mock === "function") mock.mockReset();
   mocks.role = "Participant";
   mocks.locks = { profileLocked: false, dietaryLocked: false };
@@ -168,8 +194,9 @@ describe("OnboardingFlow", () => {
     expect(container.querySelector("h1")?.textContent).toBe("title:networking");
     const current = container.querySelector('[aria-current="step"]');
     expect(current?.getAttribute("aria-label")).toBe("title:networking");
-    // The welcome step has no organizer message, so it is not part of the journey.
-    expect(container.querySelectorAll("ol button").length).toBe(4);
+    // Only what was still open when the journey started is listed: not the finished
+    // profile step, not the welcome or completion steps.
+    expect(container.querySelectorAll("ol button").length).toBe(2);
     expect(container.textContent).toContain("create");
   });
 
@@ -241,17 +268,64 @@ describe("OnboardingFlow", () => {
     await mount();
     await click("create");
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("onboardingCouldNotSave");
+    expect(mocks.toastError).toHaveBeenCalledWith("onboardingCouldNotSave", {
+      compactTitle: "title:networking",
+    });
+    expect(container.querySelector("h1")?.textContent).toBe("title:networking");
+  });
+
+  it("moves on without writing when a step that was already answered is decided again", async () => {
+    window.history.replaceState(null, "", "/onboarding?step=profile");
+    mocks.read.mockResolvedValue(journey({ profile: step("profile", "completed", ["skip"]) }));
+    await mount();
+    expect(container.textContent).toContain("skip");
+    await click("skip");
+    expect(mocks.decide).not.toHaveBeenCalled();
     expect(container.querySelector("h1")?.textContent).toBe("title:networking");
   });
 
   it("marks completed steps with a done label", async () => {
+    mocks.read
+      .mockResolvedValueOnce(journey())
+      .mockResolvedValueOnce(journey({ networking: step("networking", "completed") }));
     await mount();
+    await click("create");
     const labels = [...container.querySelectorAll("ol button")].map((b) =>
       b.getAttribute("aria-label"),
     );
-    expect(labels[0]).toBe("title:profile · onboardingStatusDone");
-    expect(labels[1]).toBe("title:networking");
+    expect(labels[0]).toBe("title:networking · onboardingStatusDone");
+    expect(labels[1]).toBe("title:mentor_profile");
+  });
+
+  it("opens on an intro that lists only the open steps and starts at the first", async () => {
+    await mountIntro();
+    expect(container.querySelector("h1")?.textContent).toBe("onboardingIntroTitle");
+    const items = [...container.querySelectorAll("li")].map((li) => li.textContent);
+    expect(items).toEqual([
+      "1title:networkingdesc:networking",
+      "2title:mentor_profiledesc:mentor_profile",
+    ]);
+    await click("onboardingStart");
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?step=networking", { scroll: false });
+    expect(container.querySelector("h1")?.textContent).toBe("title:networking");
+  });
+
+  it("lets the person leave the intro for the app", async () => {
+    await mountIntro();
+    await click("onboardingLater");
+    expect(mocks.push).toHaveBeenCalledWith("/event");
+  });
+
+  it("goes straight home when nothing is left to answer", async () => {
+    mocks.read.mockResolvedValue(
+      journey({
+        networking: step("networking", "completed"),
+        mentor_profile: step("mentor_profile", "completed"),
+        completion: step("completion", "completed"),
+      }),
+    );
+    await mountIntro();
+    expect(mocks.replace).toHaveBeenCalledWith("/event");
   });
 
   it("hides the profile and dietary steps from someone who can no longer change them", async () => {
@@ -281,5 +355,35 @@ describe("OnboardingFlow", () => {
     mocks.read.mockResolvedValue(journey({ networking: step("networking", "completed") }));
     await mount();
     expect(container.textContent).toContain("completion-body");
+  });
+
+  it("saves a step's edits before moving to the marker the person chose", async () => {
+    window.history.replaceState(null, "", "/onboarding?step=profile");
+    mocks.read.mockResolvedValue(
+      journey({ profile: step("profile", "pending", ["complete", "skip"]) }),
+    );
+    mocks.dirty = true;
+    await mount();
+    const markers = [...container.querySelectorAll("ol button")];
+    // Markers: profile, networking, mentor_profile; head for the last one.
+    await act(async () => (markers[2] as HTMLButtonElement).click());
+    expect(mocks.decide).toHaveBeenCalledWith("profile", "complete", undefined);
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?step=mentor_profile", {
+      scroll: false,
+    });
+  });
+
+  it("moves straight to the marker when the step has no unsaved edits", async () => {
+    window.history.replaceState(null, "", "/onboarding?step=profile");
+    mocks.read.mockResolvedValue(
+      journey({ profile: step("profile", "pending", ["complete", "skip"]) }),
+    );
+    await mount();
+    const markers = [...container.querySelectorAll("ol button")];
+    await act(async () => (markers[2] as HTMLButtonElement).click());
+    expect(mocks.decide).not.toHaveBeenCalled();
+    expect(mocks.replace).toHaveBeenCalledWith("/onboarding?step=mentor_profile", {
+      scroll: false,
+    });
   });
 });

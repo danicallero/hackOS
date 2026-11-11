@@ -189,10 +189,30 @@ describe("HackUDC 2027 onboarding", () => {
       method: "PUT",
       url: "/api/me/onboarding/welcome",
       headers: { ...asUser(competing), "idempotency-key": "two" },
-      payload: { action: "defer", deferUntil: new Date(Date.now() + 60_000).toISOString() },
+      payload: { action: "complete" },
     });
     const responses = await Promise.all([one, two]);
     expect(responses.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+  });
+
+  it("lets a step put off with Later be answered or put off again, but not a decided one", async () => {
+    const app = await getApp();
+    const userId = await attendee();
+    const put = (payload: Record<string, unknown>) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/me/onboarding/welcome",
+        headers: asUser(userId),
+        payload,
+      });
+    const later = () => ({
+      action: "defer",
+      deferUntil: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    expect((await put(later())).statusCode).toBe(200);
+    expect((await put(later())).statusCode).toBe(200);
+    expect((await put({ action: "skip" })).statusCode).toBe(200);
+    expect((await put(later())).statusCode).toBe(409);
   });
 
   it("keeps participant precedence in the adopted edition and records a repeated role grant in a new edition", async () => {

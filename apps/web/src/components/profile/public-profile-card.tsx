@@ -121,7 +121,12 @@ export function PublicProfileCard({
   onSaved,
 }: {
   /** `onFinished` says which explicit choice was saved: create (opt in) or hidden (decline). */
-  onboarding?: { onFinished: (choice: "create" | "hidden") => void; onLater: () => void };
+  onboarding?: {
+    onFinished: (choice: "create" | "hidden") => void;
+    onLater: () => void;
+    /** Filled with a draft save while there are edits: keeps them without opting in or answering the step. */
+    saveDraft?: React.MutableRefObject<(() => Promise<boolean>) | null>;
+  };
   /** Lets the profile's section list mark a section that holds unsaved edits. */
   onDirtyChange?: (dirty: boolean) => void;
   /** Called after a successful save, so another mounted copy of the editor can reload. */
@@ -271,6 +276,39 @@ export function PublicProfileCard({
       setSavingChoice(null);
     }
   }
+
+  /** Journey only: store the edited fields as they are, hidden and unanswered. Consent stays the explicit Create. */
+  async function saveDraft(): Promise<boolean> {
+    if (!settings || !stored) return true;
+    try {
+      const next = await api.put<PublicProfile>(
+        "/api/me/public-profile",
+        {
+          directoryVisible: stored.directoryVisible,
+          showSurname: settings.showSurname,
+          showPhoto: settings.showPhoto,
+          showProject: settings.showProject,
+          headline: settings.headline.trim() || null,
+          locationNote: settings.locationNote.trim() || null,
+          bio: settings.bio.trim() || null,
+          socials: savedLinks(settings.socials),
+          shareCv: settings.shareCv,
+        },
+        { headers: { "Idempotency-Key": crypto.randomUUID() } },
+      );
+      commit(next);
+      setEdits(null);
+      onSaved?.();
+      return true;
+    } catch (err) {
+      showErrorToast(
+        err instanceof ApiError ? err : new Error(t("couldNotSavePublicProfile")),
+        t("toastSavePublicProfile"),
+      );
+      return false;
+    }
+  }
+  if (onboarding?.saveDraft) onboarding.saveDraft.current = dirty ? saveDraft : null;
 
   const hasCv = profile.cv !== null;
   return (

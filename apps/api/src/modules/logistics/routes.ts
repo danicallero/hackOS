@@ -62,6 +62,7 @@ import {
   callerScheduleAudiences,
   createScheduleItem,
   deleteScheduleItem,
+  listAudienceRoles,
   listSchedule,
   listScheduleForAudiences,
   listScheduleOwnerCandidates,
@@ -883,6 +884,23 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       },
     },
     async () => listSchedule(),
+  );
+
+  typed.get(
+    "/api/schedule/audience-roles",
+    {
+      ...routeAccess(access.scheduleRead),
+      preHandler: scheduleRead,
+      schema: {
+        summary: "List the roles a schedule item can be addressed to",
+        description:
+          "The roles marked as publicly visible, for the audience picker (H59). An item " +
+          "names them as `role:<id>` in `audiences`; whoever holds at least one sees it " +
+          "and, when attendance is asked, is asked.",
+        response: { 200: z.array(z.object({ id: z.number().int(), name: z.string() })) },
+      },
+    },
+    async () => listAudienceRoles(),
   );
 
   typed.post(

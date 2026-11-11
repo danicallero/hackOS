@@ -16,6 +16,7 @@ import { normalizeLanguage } from "../notifications/templates.js";
 import type { Language } from "../notifications/translate/index.js";
 import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
 import { validateRsvpSettings } from "../rsvps/settings.js";
+import { roleAudienceTagsForUsers } from "./role-audiences.js";
 
 const SCHEDULE_COLUMNS =
   "id, title, description, location, type, requires_scan, starts_at, ends_at, visibility, publish_at, reminded_at, audiences, contact_note, notes, primary_language, title_i18n, description_i18n, live_activity_audience, created_at, updated_at";
@@ -59,7 +60,29 @@ function toActivityCategory(type: string | null): string {
  * site/TV feed (H59) — there's no audience distinct from "what participants
  * see" for an anonymous visitor.
  */
-export type ScheduleAudience = "sponsor" | "participant" | "mentor";
+export type ScheduleAudience = "sponsor" | "participant" | "mentor" | `role:${number}`;
+
+/** The roles an item can be addressed to: those marked as publicly visible. */
+export async function listAudienceRoles(db: Queryable = pool) {
+  const { rows } = await db.query<{ id: number; name: string }>(
+    `SELECT id, name FROM roles WHERE is_visible AND deleted_at IS NULL ORDER BY position DESC, name, id`,
+  );
+  return rows.map((row) => ({ id: Number(row.id), name: row.name }));
+}
+
+/** Every `role:<id>` an item names must be an existing publicly visible role. */
+async function assertAudienceRoles(db: Queryable, audiences: readonly string[]) {
+  const ids = audiences.flatMap((tag) => (tag.startsWith("role:") ? [Number(tag.slice(5))] : []));
+  if (ids.length === 0) return;
+  const { rows } = await db.query<{ id: number }>(
+    `SELECT id FROM roles WHERE id = ANY($1::int[]) AND is_visible AND deleted_at IS NULL`,
+    [ids],
+  );
+  if (rows.length !== new Set(ids).size)
+    throw new BadRequestError("Audience roles must be existing publicly visible roles", {
+      code: ERROR_REASONS.SCHEDULE_AUDIENCE_ROLE_INVALID,
+    });
+}
 
 export interface ScheduleInput {
   title: string;
@@ -71,7 +94,7 @@ export interface ScheduleInput {
   endsAt: Date;
   visibility: "shown" | "hidden";
   publishAt?: Date | null;
-  audiences?: ScheduleAudience[];
+  audiences?: string[];
   contactNote?: string | null;
   notes?: string | null;
   /** #966: the item's audience gets an attendee Live Activity. */
@@ -92,7 +115,7 @@ export interface SchedulePatch {
   endsAt?: Date;
   visibility?: "shown" | "hidden";
   publishAt?: Date | null;
-  audiences?: ScheduleAudience[];
+  audiences?: string[];
   contactNote?: string | null;
   notes?: string | null;
   liveActivityAudience?: boolean;
@@ -269,6 +292,7 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
   const requiresScan = isMealActivityKind(input.type) || input.requiresScan === true;
   const audiences = input.audiences ?? [];
   assertScanRequiresParticipantAudience(requiresScan, audiences);
+  await assertAudienceRoles(pool, audiences);
   const { visibility, publishAt } = normalizeVisibilityForAudiences(
     { visibility: input.visibility, publishAt: input.publishAt ?? null },
     audiences,
@@ -430,6 +454,7 @@ export async function updateScheduleItem(actorId: number | null, id: number, pat
     const nextAudiences = patch.audiences ?? (current.rows[0].audiences as string[]);
     assertWindow(nextStartsAt, nextEndsAt);
     assertScanRequiresParticipantAudience(nextRequiresScan, nextAudiences);
+    if (patch.audiences) await assertAudienceRoles(client, patch.audiences);
     const { visibility: nextVisibility, publishAt: nextPublishAt } = clearSpentPublishAt(
       normalizeVisibilityForAudiences(
         {
@@ -947,10 +972,11 @@ export async function callerScheduleAudiences(
 ): Promise<CallerScheduleAudience> {
   const userId = context.userId;
   if (userId == null) return { isStaff: false, audiences: new Set(["participant"]) };
-  const [capabilities, { isSponsorRep }, attendeeType] = await Promise.all([
+  const [capabilities, { isSponsorRep }, attendeeType, roleTags] = await Promise.all([
     getEffectiveCapabilities(context),
     computeMembershipFlags(pool, userId),
     mentorOrParticipantType(pool, userId),
+    roleAudienceTagsForUsers([userId]),
   ]);
   if (capabilities.size > 0) return { isStaff: true, audiences: new Set() };
   const audiences = new Set<ScheduleAudience>(["participant"]);
@@ -958,6 +984,7 @@ export async function callerScheduleAudiences(
   // never narrower views (H59).
   if (isSponsorRep) audiences.add("sponsor");
   if (attendeeType === "mentor") audiences.add("mentor");
+  for (const tag of roleTags.get(userId) ?? []) audiences.add(tag);
   return { isStaff: false, audiences };
 }
 
@@ -986,10 +1013,12 @@ export async function attendeeScheduleAudiencesForUsers(
       WHERE u.id = ANY($1::int[]) AND u.account_state = 'active' AND u.anonymized_at IS NULL`,
     [userIds],
   );
+  const roleTags = await roleAudienceTagsForUsers(userIds, db);
   for (const row of rows) {
     const audiences = new Set<ScheduleAudience>(["participant"]);
     if (row.is_sponsor_rep) audiences.add("sponsor");
     if (row.is_mentor) audiences.add("mentor");
+    for (const tag of roleTags.get(row.id) ?? []) audiences.add(tag);
     result.set(row.id, audiences);
   }
   return result;

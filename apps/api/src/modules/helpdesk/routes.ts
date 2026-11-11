@@ -12,6 +12,7 @@ import {
   userHasCapability,
 } from "../../lib/capabilities.js";
 import { ForbiddenError, NotFoundError } from "../../lib/errors.js";
+import { assertFixtureSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { idempotencyGuard } from "../../lib/idempotency.js";
 import { keyByUser, rateLimitGuard } from "../../lib/rate-limit.js";
 import { coverageReport } from "./coverage.js";
@@ -20,9 +21,11 @@ import {
   getMyHelperProfile,
   HELPDESK_BROWSE,
   isEligibleHelper,
+  LISTED_HELPER_WHERE,
   listHelpers,
   mayBrowseHelpers,
   mayOpenHelper,
+  presentSql,
   replaceMyAvailability,
   updateMyHelperProfile,
 } from "./helpers.js";
@@ -33,7 +36,6 @@ import {
   editRequest,
   getRequest,
   listInbox,
-  listMyProjects,
   listMyRequests,
   listRequestChallenges,
   releaseRequest,
@@ -56,7 +58,14 @@ import {
   topicQuery,
   userParams,
 } from "./schemas.js";
-import { createTopic, mergeTopic, renameTopic, searchTopics } from "./topics.js";
+import {
+  createTopic,
+  deleteTopic,
+  listManagedTopics,
+  mergeTopic,
+  renameTopic,
+  searchTopics,
+} from "./topics.js";
 
 const BROWSE = HELPDESK_BROWSE;
 
@@ -89,12 +98,10 @@ async function requireCatalogueAccess(req: FastifyRequest): Promise<void> {
   });
 }
 
-/** Adding topics is for people who can hold a helper profile, or `helpdesk:manage` (H61). */
+/** Only people who can hold a helper profile add knowledge areas (H61). */
 async function requireTopicProposer(req: FastifyRequest): Promise<void> {
   await assertActiveAuthenticatedUser(req);
   if (await isEligibleHelper(pool, req.userId as number)) return;
-  if (await userHasCapability(getRequestAuthorizationContext(req), CAPABILITIES.HELPDESK_MANAGE))
-    return;
   throw new ForbiddenError("Only people who can offer help may add topics", {
     code: ERROR_REASONS.HELPER_NOT_ELIGIBLE,
   });
@@ -119,10 +126,27 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         querystring: topicQuery,
         summary: "Search help desk topics",
         description:
-          "The shared knowledge catalogue used by helper profiles and help requests (H61). `q` matches anywhere in the name, ignoring case and accents; exact and prefix matches come first. Other is not a topic: requests carry `other`. Readable with any help desk capability or by an eligible helper (accepted mentor) preparing a profile.",
+          "The shared knowledge catalogue used by helper profiles and help requests (H61). Requesters, and any call with `available=1`, get only the topics offered by published helpers who are in the venue now (H24); eligible helpers and `helpdesk:manage` holders otherwise get the whole catalogue. `q` matches anywhere in the name, ignoring case and accents; exact and prefix matches come first. Other is not a topic: requests carry `other`. Readable with any help desk capability or by an eligible helper (accepted mentor) preparing a profile.",
       },
     },
-    async (req) => ({ topics: await searchTopics(req.query.q, req.query.limit) }),
+    async (req) => {
+      // Requesters (and any request form) see only what someone in the venue can help with;
+      // helpers preparing a profile and managers see the whole catalogue.
+      const wholeCatalogue =
+        !req.query.available &&
+        ((await isEligibleHelper(pool, req.userId as number)) ||
+          (await userHasCapability(
+            getRequestAuthorizationContext(req),
+            CAPABILITIES.HELPDESK_MANAGE,
+          )));
+      return {
+        topics: await searchTopics(
+          req.query.q,
+          req.query.limit,
+          wholeCatalogue ? undefined : `${LISTED_HELPER_WHERE} AND ${presentSql("u.id")}`,
+        ),
+      };
+    },
   );
   r.post(
     "/api/helpdesk/topics",
@@ -133,13 +157,43 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: topicBody,
         summary: "Add a help desk topic",
         description:
-          'Adds a missing topic to the shared catalogue (H61), like the university picker. An equivalent name (case, accents and spacing ignored) returns the existing topic with `created: false` and status 200; a new one answers 201. "Other" and its translations are reserved (400 `topic_reserved`). Only people who can have a helper profile (the `eligible` flag of GET /api/me/helper-profile, accepted mentors preparing a profile included) or hold `helpdesk:manage` may add topics; everyone else, requesters included, gets 403 `helper_not_eligible`. Audited; 20 proposals per hour per person.',
+          'Adds a missing topic to the shared catalogue (H61), like the university picker. An equivalent name (case, accents and spacing ignored) returns the existing topic with `created: false` and status 200; a new one answers 201. "Other" and its translations are reserved (400 `topic_reserved`). Only people who can have a helper profile (the `eligible` flag of GET /api/me/helper-profile, accepted mentors preparing a profile included) may add topics; everyone else, requesters and managers who are not helpers included, gets 403 `helper_not_eligible`. Audited; 20 proposals per hour per person.',
       },
     },
     async (req, reply) => {
       const result = await createTopic(req.userId as number, req.body.name);
       req.domainUnchanged = !result.created;
       return reply.code(result.created ? 201 : 200).send(result);
+    },
+  );
+  r.get(
+    "/api/helpdesk/topics/manage",
+    {
+      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      preHandler: requireCapability(CAPABILITIES.HELPDESK_MANAGE),
+      schema: {
+        summary: "List the knowledge catalogue with its usage",
+        description:
+          "Every help desk topic with `helpers` (profiles that list it) and `requests` (requests about it), for the knowledge areas manager in Libraries (H61). Requires `helpdesk:manage`.",
+      },
+    },
+    async () => ({ topics: await listManagedTopics() }),
+  );
+  r.delete(
+    "/api/helpdesk/topics/:id",
+    {
+      config: cap(CAPABILITIES.HELPDESK_MANAGE),
+      preHandler: [requireCapability(CAPABILITIES.HELPDESK_MANAGE), idempotencyGuard],
+      schema: {
+        params: idParams,
+        summary: "Delete an unused help desk topic",
+        description:
+          "Deletes a topic that no helper profile and no request uses (H61); one in use answers 409 `topic_in_use`: merge it into another topic instead. Audited.",
+      },
+    },
+    async (req, reply) => {
+      await deleteTopic(req.userId as number, req.params.id);
+      return reply.code(204).send();
     },
   );
   r.patch(
@@ -224,6 +278,72 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
     },
   );
 
+  // ── User management: edit a person's helper profile ───────────────────
+  const staffSubject = async (req: FastifyRequest<{ Params: { id: number } }>) => {
+    await assertFixtureSubjectScope(pool, req.userId as number, req.params.id);
+    return req.params.id;
+  };
+  r.get(
+    "/api/users/:id/helper-profile",
+    {
+      config: cap(CAPABILITIES.USERS_READ),
+      preHandler: requireCapability(CAPABILITIES.USERS_READ),
+      schema: {
+        params: idParams,
+        summary: "Read a person's helper profile",
+        description:
+          "User management: anyone's help desk profile in the shape of GET /api/me/helper-profile, shared or not. Not audited, like every user-management read. 404 for an unknown or out-of-scope account (H61, H8).",
+      },
+    },
+    async (req) => getMyHelperProfile(await staffSubject(req)),
+  );
+  r.put(
+    "/api/users/:id/helper-profile",
+    {
+      config: cap(CAPABILITIES.USERS_WRITE),
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: idParams,
+        body: helperProfileBody,
+        summary: "Edit a person's helper profile",
+        description:
+          "User management: same body and rules as PUT /api/me/helper-profile (publication, topics, challenge alerts), audited with the acting staff member and source `admin`. 403 `helper_not_eligible` when the person cannot have a helper profile (H61).",
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await updateMyHelperProfile(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+  r.put(
+    "/api/users/:id/helper-profile/availability",
+    {
+      config: cap(CAPABILITIES.USERS_WRITE),
+      preHandler: [requireCapability(CAPABILITIES.USERS_WRITE), idempotencyGuard],
+      schema: {
+        params: idParams,
+        body: availabilityBody,
+        summary: "Set a person's help availability",
+        description:
+          "User management: same body and rules as PUT /api/me/helper-profile/availability, audited with the acting staff member and source `admin` (H62).",
+      },
+    },
+    async (req) => {
+      const userId = await staffSubject(req);
+      const { changed, profile } = await replaceMyAvailability(userId, req.body, {
+        actorId: req.userId as number,
+        source: "admin",
+      });
+      req.domainUnchanged = !changed;
+      return profile;
+    },
+  );
+
   // ── H64 opening hours ──────────────────────────────────────────────────
   r.get(
     "/api/helpdesk/schedule",
@@ -247,7 +367,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: scheduleBody,
         summary: "Set the help desk opening hours",
         description:
-          "Replaces every opening window (H64) with up to 30 `{ startsAt, endsAt }` instants, each ending after it starts and none overlapping (400); an empty list clears the schedule and the help desk is always open. Outside the windows, creating a request answers 409 `helpdesk_closed`; claims, resolution, browsing helpers, helper settings and existing requests are unaffected. Returns the new schedule as GET /api/helpdesk/schedule. Audited with the old and new windows; repeating the stored windows writes nothing.",
+          "Replaces every opening window (H64), and optionally `eventAccessOnly` (omitted keeps it; default true: only people with event access may open a request, false lets any account holding `helpdesk:request` do so), with up to 30 `{ startsAt, endsAt }` instants, each ending after it starts and none overlapping (400); an empty list clears the schedule and the help desk is always open. Outside the windows, creating a request answers 409 `helpdesk_closed`; claims, resolution, browsing helpers, helper settings and existing requests are unaffected. Returns the new schedule as GET /api/helpdesk/schedule. Audited with the old and new windows; repeating the stored windows writes nothing.",
       },
     },
     async (req) => {
@@ -294,19 +414,6 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
 
   // ── H64 requests (participant side) ────────────────────────────────────
   r.get(
-    "/api/helpdesk/projects",
-    {
-      config: cap(CAPABILITIES.HELPDESK_REQUEST),
-      preHandler: requireCapability(CAPABILITIES.HELPDESK_REQUEST),
-      schema: {
-        summary: "List my help request teams",
-        description:
-          "The caller's active projects, which a help request may target so the whole team follows it (H64).",
-      },
-    },
-    async (req) => ({ projects: await listMyProjects(req.userId as number) }),
-  );
-  r.get(
     "/api/helpdesk/challenges",
     {
       config: cap(CAPABILITIES.HELPDESK_REQUEST),
@@ -328,7 +435,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: createRequestBody,
         summary: "Request help",
         description:
-          "Opens a help request for the caller or, with `projectId`, for their project team (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per team, or per person for individual requests (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access or project membership. Audited.",
+          "Opens a help request for the caller (H64), always for them personally: a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per person (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access. Audited.",
       },
     },
     async (req, reply) => reply.code(201).send(await createRequest(req.userId as number, req.body)),

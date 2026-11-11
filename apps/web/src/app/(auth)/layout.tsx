@@ -10,7 +10,9 @@ import { cn } from "@/lib/utils";
  * under the shared public top bar. Every auth screen renders inside it.
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
-  const confirmation = usePathname() === "/applications/confirm";
+  const pathname = usePathname();
+  const confirmation = pathname === "/applications/confirm";
+  const claim = pathname === "/claim-account";
   return (
     <div className="relative flex min-h-dvh flex-col overflow-hidden">
       <PublicTopBar access={false} />
@@ -19,7 +21,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         tabIndex={-1}
         className="outline-none flex flex-1 items-center justify-center px-4 py-10"
       >
-        <div className={cn("w-full", confirmation ? "max-w-3xl" : "max-w-md")}>{children}</div>
+        <div className={cn("w-full", confirmation ? "max-w-3xl" : claim ? "max-w-xl" : "max-w-md")}>
+          {children}
+        </div>
       </main>
       <PublicFooter />
     </div>
