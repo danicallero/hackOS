@@ -28,7 +28,7 @@ the key starts with nothing offered, nothing answered and nothing counted.
 
 An activity is offered to a person when its settings are enabled for the current
 event key, it is asked to at least one role (`role_ids` non-empty) or legacy kind (`kinds`), its schedule
-entry is `shown` and not ended, and the person has a **derived attendance kind**
+entry is `shown` (an ended entry is still offered), and the person has a **derived attendance kind**
 (`attendanceKind`, participant-first) that is in `kinds` or they hold at least one
 of the roles in `role_ids` or the schedule entry’s explicit `role:<id>`
 audiences. The same offer query drives web onboarding and next-entry mobile
@@ -58,7 +58,7 @@ someone who could not have answered.
   answered "not sure". There is no required flag and no incomplete-answer error.
 - Closing: `closes_at`, by default `event_config.meal_plan_cutoff_hours` before
   the start. Changing a locked answer is `409 rsvp_locked`; echoing it unchanged
-  is accepted. Items that ended, were hidden or switched off since the list
+  is accepted. Items hidden or switched off since the list
   loaded are ignored; others not offered are `400 rsvp_not_offered`.
 - Submissions are serialized per user (user row `FOR UPDATE`), accept
   `Idempotency-Key`, and broadcast `logistics.rsvp.updated` with the ids whose

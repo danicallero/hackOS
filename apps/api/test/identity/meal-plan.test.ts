@@ -140,7 +140,7 @@ async function storedPlan(userId: number): Promise<Record<number, boolean>> {
 }
 
 describe("GET /api/me/meal-plan (#933)", () => {
-  it("lists upcoming sponsor meals only, flagging locked ones", async () => {
+  it("lists sponsor meals only, flagging locked ones", async () => {
     const sponsor = await attendee({ sponsor: true });
     const sponsorMeal = await meal({ name: "Sponsor lunch" });
     const sharedMeal = await meal({ name: "Dinner", audiences: ["participant", "sponsor"] });
@@ -150,7 +150,7 @@ describe("GET /api/me/meal-plan (#933)", () => {
     await meal({ name: "Participant lunch", audiences: ["participant"] });
     await meal({ name: "Unpublished", visibility: "hidden" });
     await meal({ name: "Workshop", category: "activity" });
-    await meal({ name: "Past", startsInHours: -5 });
+    const pastMeal = await meal({ name: "Past", startsInHours: -5 });
 
     const res = await (await getApp()).inject({
       method: "GET",
@@ -168,6 +168,7 @@ describe("GET /api/me/meal-plan (#933)", () => {
         m.attending,
       ]),
     ).toEqual([
+      [pastMeal, true, null],
       [soonMeal, true, null],
       [sponsorMeal, false, null],
       [sharedMeal, false, null],
@@ -259,16 +260,14 @@ describe("PUT /api/me/meal-plan (#933)", () => {
     expect(await storedPlan(sponsor)).toEqual({ [lunch]: false });
   });
 
-  it("ignores meals that ended or stopped being offered since the list was loaded", async () => {
+  it("ignores meals that stopped being offered since the list was loaded", async () => {
     const sponsor = await attendee({ sponsor: true });
     const lunch = await meal();
-    const ended = await meal({ startsInHours: -5 });
     const withdrawn = await meal({ audiences: ["participant"] });
     const staffOnly = await meal({ audiences: [] });
 
     const res = await putPlan(sponsor, [
       { activityId: lunch, attending: true },
-      { activityId: ended, attending: true },
       { activityId: withdrawn, attending: true },
       { activityId: staffOnly, attending: false },
     ]);
