@@ -4067,7 +4067,7 @@
   "mentorProfileTitle": "Mentor profile",
   "mentorExpertise": "Areas you can help with",
   "mentorPublish": "Appear as a mentor",
-  "mentorPublishHint": "People who scan your badge see what you can help with, and the company you represent if you are a sponsor, even if you do not share your public profile.",
+  "mentorPublishHint": "People who scan your badge see what you can help with, even if you do not share your public profile. On the help desk, sponsors also show the company they represent.",
   "mentorProfileSaved": "Mentor profile saved",
   "couldNotLoadMentorProfile": "Could not load the mentor profile.",
   "couldNotSaveMentorProfile": "Could not save the mentor profile.",

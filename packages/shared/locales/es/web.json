@@ -4067,7 +4067,7 @@
   "mentorProfileTitle": "Perfil de mentor",
   "mentorExpertise": "Áreas en las que puedes ayudar",
   "mentorPublish": "Aparecer como mentor",
-  "mentorPublishHint": "Quien escanee tu acreditación verá en qué puedes ayudar y, si eres sponsor, la empresa a la que representas, aunque no compartas tu perfil público.",
+  "mentorPublishHint": "Quien escanee tu acreditación verá en qué puedes ayudar, aunque no compartas tu perfil público. En el help desk, los sponsors también muestran la empresa a la que representan.",
   "mentorProfileSaved": "Perfil de mentor guardado",
   "couldNotLoadMentorProfile": "No se pudo cargar el perfil de mentor.",
   "couldNotSaveMentorProfile": "No se pudo guardar el perfil de mentor.",
