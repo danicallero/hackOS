@@ -143,10 +143,14 @@ export function AvailabilityTimeline({
   ].filter(Boolean);
   if (spanDays.length === 0) return null;
   const sorted = [...spanDays].sort((a, b) => a.localeCompare(b));
-  const first = fixedDays && days.length ? [...days].sort()[0] : sorted[0];
+  const first =
+    fixedDays && days.length ? [...days].sort((a, b) => a.localeCompare(b))[0] : sorted[0];
   // An interval ending exactly at midnight does not need the next day's line.
   const lastDay = sorted[sorted.length - 1];
-  const rowDays = fixedDays && days.length ? [...new Set(days)].sort() : daysFrom(first, lastDay);
+  const rowDays =
+    fixedDays && days.length
+      ? [...new Set(days)].sort((a, b) => a.localeCompare(b))
+      : daysFrom(first, lastDay);
   const total = rowDays.length * DAY_MINUTES;
 
   const minutesOf = (iso: string) => {
