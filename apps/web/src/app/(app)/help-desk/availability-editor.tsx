@@ -53,6 +53,9 @@ export function AvailabilityEditor({
     }
   }
 
+  /** A refused drag is a quick notice, not a failure that needs dismissing. */
+  const rejectDrag = (problem: string) =>
+    toast.warning(problem, { compactTitle: t("toastAvailability"), duration: 5_000 });
   const window = profile.suggestedInterval;
   const startsAllowed = (interval: AvailabilityInterval) =>
     !window || Date.parse(interval.startsAt) >= Date.parse(window.startsAt);
@@ -104,7 +107,7 @@ export function AvailabilityEditor({
             : intervalProblem(interval, profile.availability) === "overlap"
               ? t("helpDeskIntervalOverlap")
               : null;
-          if (problem) toast.error(problem, t("helpDeskPlanTitle"));
+          if (problem) rejectDrag(problem);
           else void replace([...profile.availability, interval]);
         }}
         onAddDay={(day) => {
@@ -117,6 +120,20 @@ export function AvailabilityEditor({
           setError(null);
           setEditing(interval);
           setAdding(true);
+        }}
+        onAdjust={(interval, startDelta, endDelta) => {
+          const moved = {
+            startsAt: new Date(Date.parse(interval.startsAt) + startDelta * 60_000).toISOString(),
+            endsAt: new Date(Date.parse(interval.endsAt) + endDelta * 60_000).toISOString(),
+          };
+          const others = profile.availability.filter((item) => item.startsAt !== interval.startsAt);
+          const problem = !startsAllowed(moved)
+            ? t("helpDeskIntervalBeforeHacking")
+            : intervalProblem(moved, others) === "overlap"
+              ? t("helpDeskIntervalOverlap")
+              : null;
+          if (problem) rejectDrag(problem);
+          else void replace([...others, moved]);
         }}
       />
       <p className="text-muted-foreground text-sm text-pretty">{t("helpDeskPlanNote")}</p>

@@ -4319,5 +4319,10 @@
   "activeDeviceSince": "Activo {when}",
   "primaryEmail": "Principal",
   "githubLinkedAs": "Vinculada como {login}",
-  "githubNotLinked": "Sen vincular"
+  "githubNotLinked": "Sen vincular",
+  "toastAvailability": "Dispoñibilidade",
+  "githubLinkAnother": "Vincular outra conta",
+  "publicProfileFieldsOffHint": "Activa o compartir para editar estes campos.",
+  "helpDeskResizeStart": "Arrastra para cambiar o inicio de {interval}",
+  "helpDeskResizeEnd": "Arrastra para cambiar o final de {interval}"
 }

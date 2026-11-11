@@ -8,9 +8,9 @@ import { isNotFoundError } from "@/lib/api";
 import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { PersonProfile, ProfileBackLink } from "../../../people/[userId]/person-detail";
+import { AvailabilityTimeline } from "../../availability-timeline";
 import type { HelperDetail } from "../../model";
 import { requestListSource } from "../../navigation";
-import { ScheduleDays } from "../../schedule-view";
 import { HelpdeskError, HelpdeskLoading, useHelpdesk } from "../../shared";
 
 /**
@@ -77,7 +77,7 @@ export default function HelperPage() {
         </SectionCard>
       ) : null}
       <SectionCard variant="plain" title={t("helpDeskSchedule")}>
-        <ScheduleDays intervals={helper.availability} />
+        <AvailabilityTimeline intervals={helper.availability} readOnly />
       </SectionCard>
     </PersonProfile>
   );

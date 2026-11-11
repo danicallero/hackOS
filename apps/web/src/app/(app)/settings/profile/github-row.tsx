@@ -46,30 +46,33 @@ export function GithubRow() {
           {login ? t("githubLinkedAs", { login }) : t("githubNotLinked")}
         </p>
       </div>
-      {login ? (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => run(() => api.delete("/api/me/github"), t("githubRepoUnlinked"))}
-        >
-          {t("githubUnlinkRepo")}
-        </Button>
-      ) : (
+      <div className="flex flex-wrap justify-end gap-2">
+        {login && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => run(() => api.delete("/api/me/github"), t("githubRepoUnlinked"))}
+          >
+            {t("githubUnlinkRepo")}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
           disabled={busy}
           onClick={() =>
             run(async () => {
-              const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {});
+              const { url } = await api.post<{ url: string }>("/api/me/github/authorize", {
+                selectAccount: true,
+              });
               window.location.assign(url);
             })
           }
         >
-          {t("githubLinkAccount")}
+          {login ? t("githubLinkAnother") : t("githubLinkAccount")}
         </Button>
-      )}
+      </div>
     </li>
   );
 }
