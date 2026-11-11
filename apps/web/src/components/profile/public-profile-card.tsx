@@ -9,6 +9,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { CvViewer } from "@/components/profile/cv-viewer";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
 import {
   DirectoryCard,
   type GithubAccountStatus,
@@ -348,6 +349,7 @@ export function PublicProfileCard({
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
         <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
+          <ProfilePhoto />
           {onboarding ? (
             <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
           ) : (

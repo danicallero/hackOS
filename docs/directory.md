@@ -16,7 +16,7 @@ People manage their public profile (opt-in, surname/photo/project/GitHub, headli
 location note, bio, links, CV and preview) from My profile
 (`/settings/profile`); there is no separate settings page. The account photo
 is uploaded at the top of the Personal details section of the Account tab, because it
-is the account's photo everywhere, not only on the public profile. The mobile app
+is the account's photo everywhere, not only on the public profile; the Public profile tab offers the same upload next to the photo switch. The mobile app
 edits the same photo from the Account avatar and the networking profile editor
 (`docs/mobile.md`).
 

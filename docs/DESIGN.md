@@ -613,7 +613,7 @@ canvas as Users. A full route page does not mean unlimited
 width: user detail needs its own route, header and tabs, not a stretched canvas
 or a side editor. Libraries and Profile and account (`/settings/profile`) use the 896 px reading canvas;
 project details and event settings use the 1280 px content canvas. Profile and account
-(H28, #1083) is content-width tabs: Public profile, Mentoring, Wallet (ticket and badge, attendance,
+(H28, #1083) is content-width tabs: Public profile, Mentoring, Attendance (RSVPs), Wallet (ticket and badge,
 certificates) and Account (personal details with photo and meals, email/password/GitHub rows,
 roles, danger zone). No header repeats the name and email the sidebar and Account already show. Each is a run of open sections divided by hairlines; a section the tab
 label already names has no heading of its own; never a second navigation rail beside the app sidebar. Ticket and badge are the

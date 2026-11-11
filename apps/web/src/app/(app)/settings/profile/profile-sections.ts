@@ -2,7 +2,7 @@ import type { MessageKey } from "@/lib/i18n";
 import { canOfferHelp } from "@/lib/mentor-profile";
 import type { Me } from "@/lib/types";
 
-type ProfileTabId = "public" | "mentoring" | "wallet" | "account";
+type ProfileTabId = "attendance" | "public" | "mentoring" | "wallet" | "account";
 
 export type ProfileSectionId =
   | "personal"
@@ -43,11 +43,15 @@ const TABS: TabDef[] = [
     sections: [{ id: "mentor", title: "mentorProfileTitle" }],
   },
   {
+    id: "attendance",
+    title: "onboardingStepRsvp",
+    sections: [{ id: "rsvp" }],
+  },
+  {
     id: "wallet",
     title: "wallet",
     sections: [
       { id: "passes" },
-      { id: "rsvp", title: "onboardingStepRsvp" },
       { id: "certificates", title: "certificates" },
       { id: "share", title: "onboardingStepShare" },
     ],

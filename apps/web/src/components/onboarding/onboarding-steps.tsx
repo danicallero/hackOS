@@ -23,7 +23,6 @@ import {
 import { SocialSharing } from "@/components/onboarding/social-sharing";
 import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
 import { PersonalDetails } from "@/components/profile/personal-details";
-import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Button } from "@/components/ui/button";
@@ -258,10 +257,6 @@ export function NetworkingStep({ decide }: StepProps) {
   useLeaveHandle({ dirty, draft });
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <ProfilePhoto />
-        <p className="font-medium">{[me?.name, me?.surname].filter(Boolean).join(" ")}</p>
-      </div>
       <PublicProfileCard
         onDirtyChange={setDirty}
         onboarding={{

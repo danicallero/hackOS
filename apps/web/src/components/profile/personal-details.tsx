@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { LockSimpleIcon } from "@phosphor-icons/react/dist/csr/LockSimple";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -199,41 +200,58 @@ function PersonalDetailsForm({
     <Form {...form}>
       <form className="@container min-w-0" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="min-w-0 space-y-6">
-          {locked && (
-            <p className="text-muted-foreground text-pretty text-sm">{t("profileLockedNotice")}</p>
-          )}
           {saveError && <ContextualError message={saveError} />}
           {part !== "dietary" && (
             <>
               {/* The account photo saves on its own and leads the details it belongs to (#934). */}
-              <ProfilePhoto />
+              <div className="flex min-w-0 items-center gap-4">
+                <ProfilePhoto />
+                <div className="min-w-0">
+                  {locked && (
+                    <p className="truncate font-medium">
+                      {[me.name, me.surname].filter(Boolean).join(" ")}
+                    </p>
+                  )}
+                  <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+                  {locked && (
+                    <p className="text-muted-foreground mt-1 flex items-start gap-1.5 text-pretty text-sm">
+                      <LockSimpleIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                      {t("profileLockedNotice")}
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="grid min-w-0 items-start gap-4 @xl:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("firstName")}</FormLabel>
-                      <FormControl>
-                        <Input autoComplete="given-name" disabled={locked} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="surname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("lastName")}</FormLabel>
-                      <FormControl>
-                        <Input autoComplete="family-name" disabled={locked} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {!locked && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("firstName")}</FormLabel>
+                          <FormControl>
+                            <Input autoComplete="given-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="surname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("lastName")}</FormLabel>
+                          <FormControl>
+                            <Input autoComplete="family-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
                 <FormField
                   control={form.control}
                   name="language"

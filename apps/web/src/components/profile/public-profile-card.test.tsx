@@ -11,6 +11,7 @@ globalThis.ResizeObserver ??= class {
 
 const me = { id: 7, name: "María José", surname: "Fernández-Villaverde", image: null };
 
+vi.mock("@/components/profile/profile-photo", () => ({ ProfilePhoto: () => null }));
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
     constructor(

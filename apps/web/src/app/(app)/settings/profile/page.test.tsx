@@ -190,14 +190,15 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).toContain("mentor-body");
   });
 
-  it("adds the RSVP section to Wallet only while the person has open RSVPs", async () => {
+  it("adds the Attendance tab only while the person has open RSVPs", async () => {
     rsvps.items = [{ activityId: 1 }];
-    nav.search = "tab=wallet";
+    nav.search = "tab=attendance";
     await render();
+    expect(tabs()).toContain("onboardingStepRsvp");
     expect(openPanel()[0].textContent).toContain("rsvp-body");
     rsvps.items = [];
     await render();
-    expect(openPanel()[0].textContent).not.toContain("rsvp-body");
+    expect(tabs()).not.toContain("onboardingStepRsvp");
   });
 
   it("lets the person revisit the share card from the Wallet tab", async () => {
