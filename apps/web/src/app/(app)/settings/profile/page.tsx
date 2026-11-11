@@ -13,7 +13,6 @@ import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Tabs, TabsContent, TabsTrigger } from "@/components/ui/tabs";
 import { useOwnHelperProfile } from "@/hooks/use-own-helper-profile";
-import { useRsvps } from "@/hooks/use-rsvps";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
@@ -46,14 +45,8 @@ export default function ProfileSettingsPage() {
  */
 function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boolean }) {
   const { t } = useLocale();
-  const rsvps = useRsvps(me.hasEventAccess ? me.id : null);
   const helper = useOwnHelperProfile();
-  const tabs = visibleProfileTabs(
-    me,
-    isPureApplicant,
-    (rsvps.items?.length ?? 0) > 0,
-    helper.data?.eligible === true,
-  );
+  const tabs = visibleProfileTabs(me, isPureApplicant, helper.data?.eligible === true);
   const { tab, setTab } = useUrlTab({
     values: tabs.map((item) => item.id),
     defaultValue: tabs[0].id,

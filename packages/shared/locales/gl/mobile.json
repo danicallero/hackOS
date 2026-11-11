@@ -1111,5 +1111,13 @@
   "offlineModeUpdated": "Modo sen conexión · Actualizado {updatedAt}",
   "offlineReconnect": "Reconectar",
   "helpClosed": "O servizo de axuda está pechado.",
-  "helpClosedOpens": "O servizo de axuda está pechado. Abre {date}"
+  "helpClosedOpens": "O servizo de axuda está pechado. Abre {date}",
+  "profileRsvpTitle": "RSVP",
+  "rsvpYes": "Si",
+  "rsvpNo": "Non",
+  "rsvpUnsure": "Non o sei",
+  "rsvpUnanswered": "Sen resposta",
+  "couldNotSaveRsvps": "Non se puideron gardar as túas respostas",
+  "rsvpClosed": "Pechado",
+  "rsvpNoItems": "Non hai actividades que che pidan RSVP."
 }

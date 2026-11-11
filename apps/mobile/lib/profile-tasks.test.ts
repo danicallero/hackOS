@@ -3,7 +3,6 @@ jest.mock("./api", () => ({ apiFetch: jest.fn() }));
 import {
   isScannerPath,
   markProfileTasksHandled,
-  mealPlanAnswers,
   parseProfileTasks,
   promptableProfileTasks,
   resetProfileTasksHandled,
@@ -68,6 +67,15 @@ describe("shouldPresentProfileTasks", () => {
     expect(promptableProfileTasks(sponsor)).toEqual(["meal_plan"]);
   });
 
+  it("prompts non-sponsors for the general RSVP flag without duplicating legacy meal tasks", () => {
+    const attendee = { ...me, pendingProfileTasks: [], pendingRsvps: true } as Me;
+    expect(promptableProfileTasks(attendee)).toEqual(["rsvp"]);
+    expect(shouldPresentProfileTasks({ ...ready, me: attendee })).toBe(true);
+    expect(promptableProfileTasks({ ...attendee, pendingProfileTasks: ["meal_plan"] })).toEqual([
+      "meal_plan",
+    ]);
+  });
+
   it("waits for the initial session and the root redirect", () => {
     expect(shouldPresentProfileTasks({ ...ready, sessionPending: true })).toBe(false);
     expect(shouldPresentProfileTasks({ ...ready, pathname: "/" })).toBe(false);
@@ -98,33 +106,8 @@ describe("helpers", () => {
     });
   });
 
-  it("answers every unlocked meal and skips locked ones", () => {
-    const meal = {
-      activityId: 1,
-      name: "Lunch",
-      nameI18n: null,
-      startsAt: "2026-10-17T11:30:00.000Z",
-      endsAt: "2026-10-17T13:00:00.000Z",
-      location: null,
-      attending: null,
-      locked: false,
-    };
-    const plan = {
-      confirmedAt: null,
-      meals: [
-        meal,
-        { ...meal, activityId: 2, attending: true },
-        { ...meal, activityId: 3, locked: true },
-      ],
-    };
-    expect(mealPlanAnswers(plan, { 2: false })).toEqual([
-      { activityId: 1, attending: false },
-      { activityId: 2, attending: false },
-    ]);
-  });
-
   it("parses only known tasks", () => {
-    expect(parseProfileTasks("meal_plan,bogus")).toEqual(["meal_plan"]);
+    expect(parseProfileTasks("meal_plan,rsvp,bogus")).toEqual(["meal_plan", "rsvp"]);
     expect(parseProfileTasks(undefined)).toEqual([]);
   });
 });

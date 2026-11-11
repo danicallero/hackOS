@@ -109,7 +109,13 @@ describe("Profile tabs (H28, #1083)", () => {
 
   it("gives the participant Public profile, Wallet and Account", async () => {
     await render();
-    expect(tabs()).toEqual(["publicProfileTitle", "wallet", "preferences", "accountTitle"]);
+    expect(tabs()).toEqual([
+      "publicProfileTitle",
+      "profileRsvpTitle",
+      "wallet",
+      "preferences",
+      "accountTitle",
+    ]);
     expect(openPanel()).toHaveLength(1);
     expect(openPanel()[0].textContent).toContain("public-body");
     expect(openPanel()[0].textContent).not.toContain("personal-body");
@@ -191,7 +197,7 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).toContain("mentor-body");
   });
 
-  it("adds the Attendance tab only while the person has open RSVPs", async () => {
+  it("keeps the RSVP tab reachable when there are no offered activities", async () => {
     rsvps.items = [{ activityId: 1 }];
     nav.search = "tab=attendance";
     await render();
@@ -199,7 +205,7 @@ describe("Profile tabs (H28, #1083)", () => {
     expect(openPanel()[0].textContent).toContain("rsvp-body");
     rsvps.items = [];
     await render();
-    expect(tabs()).not.toContain("profileRsvpTitle");
+    expect(tabs()).toContain("profileRsvpTitle");
   });
 
   it("lets the person revisit the share card from the Wallet tab", async () => {
@@ -234,7 +240,7 @@ describe("Profile tabs (H28, #1083)", () => {
     await render();
     expect(container.textContent).toContain("public-body");
     expect(container.textContent).not.toContain("danger-body");
-    await openTab(3);
+    await openTab(4);
     expect(openPanel()[0].textContent).toContain("danger-body");
     expect(container.textContent).toContain("public-body");
   });
@@ -242,9 +248,9 @@ describe("Profile tabs (H28, #1083)", () => {
   it("marks a tab holding unsaved edits", async () => {
     personal.dirty = true;
     await render();
-    await openTab(3);
+    await openTab(4);
     await openTab(0);
-    const profileTab = [...container.querySelectorAll("[role=tab]")][3];
+    const profileTab = [...container.querySelectorAll("[role=tab]")][4];
     expect(profileTab.textContent).toContain("unsavedChanges");
   });
 

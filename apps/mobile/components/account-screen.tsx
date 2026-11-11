@@ -6,7 +6,7 @@ import {
   useRouter,
   useScrollToTop,
 } from "expo-router";
-import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import {
   type LayoutChangeEvent,
   Platform,
@@ -25,6 +25,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
+import { AccountRsvps } from "@/components/account-rsvps";
 import {
   AccountWalletButton,
   AccountWalletOverlay,
@@ -40,7 +41,6 @@ import {
   Section,
   Separator,
   StatusPill,
-  ToggleRow,
 } from "@/components/native-ui";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import {
@@ -60,21 +60,13 @@ import { haptic } from "@/lib/haptics";
 import { type Lang, useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import { NETWORKING_PROFILE_PATH } from "@/lib/networking-profile";
-import {
-  fetchMealPlan,
-  mealLabel,
-  mealPlanCacheKey,
-  PROFILE_TASKS_PATH,
-  saveMealPlan,
-} from "@/lib/profile-tasks";
+import { PROFILE_TASKS_PATH } from "@/lib/profile-tasks";
 import { roleDisplayName } from "@/lib/role-filters";
 import { useRouterTabBarScrollBottomInset } from "@/lib/router-tabs-inset";
 import { wipeAttendanceRoster } from "@/lib/scanner-db";
 import { useSideRegion } from "@/lib/side-region";
 import { canManageStands, canViewStaffStatistics, isPadIdiom } from "@/lib/tabs";
-import type { MealPlan } from "@/lib/types";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
-import { useCachedApi } from "@/lib/use-cached-api";
 import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
@@ -130,21 +122,6 @@ export default function AccountScreen() {
     error: intolerancesError,
     loading: intolerancesLoading,
   } = useFoodIntolerances(Boolean(me));
-  const isSponsorRep = Boolean(me?.isSponsorRep);
-  const mealPlanKey = me ? mealPlanCacheKey(me.id) : "meal-plan:none";
-  const mealPlan = useCachedApi<MealPlan>(mealPlanKey, fetchMealPlan, { enabled: isSponsorRep });
-  // Local answers until Save; a toggle alone never submits the plan.
-  const [mealAnswers, setMealAnswers] = useState<Record<number, boolean>>({});
-  const [savingMeals, setSavingMeals] = useState(false);
-  const [mealPlanError, setMealPlanError] = useState<Error | null>(null);
-  const loadMealPlan = mealPlan.load;
-
-  // Load on every focus, so a plan answered from the next-entry sheet shows here.
-  useFocusEffect(
-    useCallback(() => {
-      if (isSponsorRep) void loadMealPlan();
-    }, [isSponsorRep, loadMealPlan]),
-  );
   const [savingLanguage, setSavingLanguage] = useState(false);
   const [languageError, setLanguageError] = useState<Error | null>(null);
   const [languageRetry, setLanguageRetry] = useState<Lang | null>(null);
@@ -164,11 +141,7 @@ export default function AccountScreen() {
     if (refreshingAccount) return;
     setRefreshingAccount(true);
     try {
-      await Promise.all([
-        refetch(),
-        loadSupportingData(),
-        isSponsorRep ? mealPlan.load() : Promise.resolve(),
-      ]);
+      await Promise.all([refetch(), loadSupportingData()]);
     } finally {
       setRefreshingAccount(false);
     }
@@ -192,26 +165,6 @@ export default function AccountScreen() {
       setLanguageError(cause instanceof Error ? cause : new Error(t("accountLanguageError")));
     } finally {
       setSavingLanguage(false);
-    }
-  }
-
-  // #933: Save submits the whole plan as shown (PUT replace semantics), the
-  // same explicit-submit model as the web checklist.
-  async function saveMeals() {
-    const plan = mealPlan.data;
-    if (!plan || offline || savingMeals) return;
-    setSavingMeals(true);
-    setMealPlanError(null);
-    try {
-      mealPlan.setData(await saveMealPlan(plan, mealAnswers));
-      setMealAnswers({});
-      void refetch();
-    } catch (cause) {
-      setMealPlanError(cause instanceof Error ? cause : new Error(t("mealPlanSaveError")));
-      // A meal may have locked since the list loaded; show the server's state.
-      void mealPlan.load();
-    } finally {
-      setSavingMeals(false);
     }
   }
 
@@ -297,15 +250,6 @@ export default function AccountScreen() {
   const dietaryLabels = me.foodIntolerances
     .map((id) => intolerances.find((item) => item.id === id)?.label[language] ?? String(id))
     .join(", ");
-  // An open meal without an answer still needs a submit, even with nothing ticked.
-  const mealsUnsaved = Boolean(
-    mealPlan.data?.meals.some(
-      (meal) =>
-        !meal.locked &&
-        (meal.attending === null ||
-          (mealAnswers[meal.activityId] ?? meal.attending) !== meal.attending),
-    ),
-  );
   const dietaryValue =
     dietaryLabels || (me.dietaryConfirmedAt ? t("noRestrictions") : t("accountNoneDeclared"));
 
@@ -523,36 +467,8 @@ export default function AccountScreen() {
           </Section>
         </View>
 
-        {isSponsorRep && mealPlan.data && mealPlan.data.meals.length > 0 ? (
-          <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
-            {mealPlanError ? (
-              <RequestFeedback error={mealPlanError} message={t("mealPlanSaveError")} />
-            ) : null}
-            {mealPlan.data.meals.map((meal, index) => (
-              <View key={meal.activityId}>
-                {index > 0 ? <Separator /> : null}
-                <ToggleRow
-                  label={mealLabel(meal, language)}
-                  value={mealAnswers[meal.activityId] ?? meal.attending ?? false}
-                  // Offline the cached plan stays visible but read-only.
-                  disabled={offline || meal.locked || savingMeals}
-                  onChange={(on) =>
-                    setMealAnswers((current) => ({ ...current, [meal.activityId]: on }))
-                  }
-                />
-              </View>
-            ))}
-            {offline || !mealsUnsaved ? null : (
-              <>
-                <Separator />
-                <ActionButton
-                  label={t("save")}
-                  busy={savingMeals}
-                  onPress={() => void saveMeals()}
-                />
-              </>
-            )}
-          </Section>
+        {me.hasEventAccess ? (
+          <AccountRsvps userId={me.id} offline={Boolean(offline)} onSaved={refetch} />
         ) : null}
 
         {canViewStaffStatistics(me.capabilities) || canManageStands(me.capabilities) ? (

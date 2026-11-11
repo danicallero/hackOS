@@ -1,4 +1,3 @@
-import { MEAL_ACTIVITY_KINDS } from "@hackos/shared/activity-kinds";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import {
   type AttendanceKind,
@@ -10,6 +9,7 @@ import {
 import { pool, type Queryable } from "../../db/pool.js";
 import { createAuthorizationContext, userHasCapability } from "../../lib/capabilities.js";
 import { attendanceKind } from "../identity/attendance.js";
+import { offeredRsvps } from "../rsvps/service.js";
 
 export async function readOnboarding(db: Queryable = pool, userId: number) {
   const { rows: configs } = await db.query<{
@@ -44,40 +44,20 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     "SELECT published FROM mentor_profiles WHERE user_id=$1 AND event_key=$2",
     [userId, event.event_key],
   );
-  const { rows: rsvpRows } = await db.query<{
-    pending_count: number;
-    pending_meal_count: number;
-  }>(
-    `SELECT
-       count(*) FILTER (WHERE NOT locked AND NOT answered)::int AS pending_count,
-       count(*) FILTER (WHERE is_meal AND NOT locked AND NOT answered)::int AS pending_meal_count
-     FROM (
-       SELECT r.user_id IS NOT NULL AS answered, r.attending,
-              a.category = ANY($4::text[]) AS is_meal,
-              now() >= COALESCE(s.closes_at,sc.starts_at - make_interval(hours =>
-                COALESCE((SELECT meal_plan_cutoff_hours FROM event_config WHERE id=1),24))) AS locked
-       FROM activity_rsvp_settings s
-       JOIN activities a ON a.id=s.activity_id
-       JOIN schedule sc ON sc.id=a.schedule_id
-       LEFT JOIN activity_rsvps r ON r.activity_id=a.id AND r.event_key=s.event_key AND r.user_id=$1
-       WHERE s.event_key=$2 AND s.enabled AND sc.visibility='shown' AND sc.ends_at>now()
-         AND ($3::text = ANY(s.kinds) OR s.role_ids && ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL WHERE ur.user_id = $1))
-         AND NOT ($3='participant' AND a.category = ANY($4::text[]))
-     ) offers`,
-    [userId, event.event_key, kind, [...MEAL_ACTIVITY_KINDS]],
-  );
-  const rsvp = rsvpRows[0] ?? { pending_count: 0, pending_meal_count: 0 };
+  // H59: onboarding uses exactly the same offers as the profile RSVP editor.
+  const offered = await offeredRsvps(db, userId, kind, event.event_key, "en");
+  const pending = offered.filter((item) => !item.locked && !item.answered);
   const config: OnboardingConfig = event.onboarding_config;
   const facts: OnboardingFacts = {
     attendanceKind: kind as AttendanceKind | null,
     mentorEligible: eligible,
-    openRsvps: rsvp.pending_count > 0,
+    openRsvps: pending.length > 0,
     complete: {
       profile: Boolean(user?.name && user?.surname),
       dietary: Boolean(user?.dietary_confirmed_at),
       networking: Boolean(profileRows[0]?.directory_visible),
       mentor_profile: Boolean(mentorRows[0]?.published),
-      rsvp: rsvp.pending_count === 0,
+      rsvp: pending.length === 0,
       notifications: Boolean(user?.notification_onboarded_at),
     },
   };
@@ -103,6 +83,6 @@ export async function readOnboarding(db: Queryable = pool, userId: number) {
     // The organizer's localized welcome text, for the welcome step only.
     welcomeMessage: event.onboarding_config.welcome?.message ?? null,
     facts,
-    pendingMealRsvps: rsvp.pending_meal_count > 0,
+    pendingMealRsvps: pending.some((item) => item.isMeal),
   };
 }
