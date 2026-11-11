@@ -146,3 +146,11 @@ caption and links (including URL sanitising), drawing (photo tile, initials
 fallback, strip/logo/text bands, seagull, host, truncation, both ratios), photo
 fetching and scheme rejection, the component's click-only behaviour, menu,
 fallbacks, errors, Skip/Continue and language, and the bitmap lifecycle.
+
+In Wallet, the surrounding section supplies the visible heading; the share
+component keeps its own heading screen-reader-only. The shared profile-photo
+upload/change/remove control is available here and in the onboarding share
+step. Saving a photo refreshes the session and regenerates the preview.
+Captions separate the opening line, event details and link with blank lines;
+English dates use month-first ordinal days and the closing says “See you
+there!!”. Event identity, duration and dates remain dynamic.

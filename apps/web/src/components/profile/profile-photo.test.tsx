@@ -61,6 +61,21 @@ describe("ProfilePhoto (#934)", () => {
     expect(session.refresh).toHaveBeenCalled();
   });
 
+  it("offers photo upload as a labelled button beside the share card", async () => {
+    vi.mocked(apiUpload).mockResolvedValue({ image: "/api/users/7/photo?v=shared" });
+    await act(async () => root.render(<ProfilePhoto variant="button" />));
+    expect(buttons()).toEqual(["uploadPhoto"]);
+    const user = userEvent.setup();
+    await act(async () =>
+      user.upload(
+        container.querySelector("input[type=file]") as HTMLInputElement,
+        new File(["png"], "me.png", { type: "image/png" }),
+      ),
+    );
+    expect(apiUpload).toHaveBeenCalledWith("/api/me/photo", expect.any(FormData));
+    expect(session.refresh).toHaveBeenCalled();
+  });
+
   it("refuses unsupported or oversize files before uploading", async () => {
     await act(async () => root.render(<ProfilePhoto />));
     const user = userEvent.setup({ applyAccept: false });

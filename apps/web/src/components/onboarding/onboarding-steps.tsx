@@ -23,6 +23,7 @@ import {
 import { SocialSharing } from "@/components/onboarding/social-sharing";
 import { MentorProfileEditor } from "@/components/profile/mentor-profile-editor";
 import { PersonalDetails } from "@/components/profile/personal-details";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
 import { PublicProfileCard } from "@/components/profile/public-profile-card";
 import { WalletSection } from "@/components/profile/wallet-section";
 import { Button } from "@/components/ui/button";
@@ -365,9 +366,11 @@ export function NotificationsStep(props: StepProps) {
 export function ShareCard({
   onContinue,
   onSkip,
+  hideTitle = false,
 }: {
   onContinue?: () => void;
   onSkip?: () => void;
+  hideTitle?: boolean;
 }) {
   const { me } = useSessionContext();
   const { language } = useLocale();
@@ -377,27 +380,33 @@ export function ShareCard({
     ? formatEventDate(event.hackingStartsAt, language, "date", event.timezone).slice(-4)
     : "";
   return (
-    <SocialSharing
-      event={{
-        name: event.name,
-        year: /^\d{4}$/.test(year) ? year : "",
-        dateLabel: eventDateRange(event, language) || undefined,
-        location: EVENT_CITY,
-        url: EVENT_PUBLIC_URL,
-        hours: hackingHours(event),
-        dates:
-          event.hackingStartsAt && event.hackingEndsAt
-            ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
-            : undefined,
-      }}
-      attendee={{
-        displayName: [me.name, me.surname].filter(Boolean).join(" "),
-        roleLabel: me.visibleRoleName ?? undefined,
-        photoUrl: me.image,
-      }}
-      onContinue={onContinue}
-      onSkip={onSkip}
-    />
+    <div className="space-y-4">
+      <div className="mx-auto flex w-full max-w-xl justify-end">
+        <ProfilePhoto variant="button" />
+      </div>
+      <SocialSharing
+        hideTitle={hideTitle}
+        event={{
+          name: event.name,
+          year: /^\d{4}$/.test(year) ? year : "",
+          dateLabel: eventDateRange(event, language) || undefined,
+          location: EVENT_CITY,
+          url: EVENT_PUBLIC_URL,
+          hours: hackingHours(event),
+          dates:
+            event.hackingStartsAt && event.hackingEndsAt
+              ? { start: event.hackingStartsAt, end: event.hackingEndsAt, timezone: event.timezone }
+              : undefined,
+        }}
+        attendee={{
+          displayName: [me.name, me.surname].filter(Boolean).join(" "),
+          roleLabel: me.visibleRoleName ?? undefined,
+          photoUrl: me.image,
+        }}
+        onContinue={onContinue}
+        onSkip={onSkip}
+      />
+    </div>
   );
 }
 

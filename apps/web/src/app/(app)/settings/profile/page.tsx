@@ -81,7 +81,7 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
       case "mentor":
         return <MentoringSection onDirtyChange={onMentorDirty} />;
       case "share":
-        return <ShareCard />;
+        return <ShareCard hideTitle />;
       case "rsvp":
         return <CateringRsvpSection userId={me.id} onDirtyChange={onRsvpDirty} />;
       case "passes":
