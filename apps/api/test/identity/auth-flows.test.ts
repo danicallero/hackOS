@@ -1014,3 +1014,58 @@ describe("#538/#559 distributed rate limiting on Better Auth paths", () => {
     }
   });
 });
+
+describe("Active devices (H28)", () => {
+  it("lists the caller's sessions, closes one, then every other", async () => {
+    const a = await getApp();
+    await signUp(a);
+    const here = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const second = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+    const third = sessionCookie(await signIn(a, SIGNUP.email, SIGNUP.password));
+
+    const list = await a.inject({
+      method: "GET",
+      url: "/api/auth/list-sessions",
+      headers: { cookie: here },
+    });
+    expect(list.statusCode).toBe(200);
+    const sessions = list.json() as { token: string }[];
+    expect(sessions).toHaveLength(3);
+
+    const current = await a.inject({
+      method: "GET",
+      url: "/api/auth/get-session",
+      headers: { cookie: here },
+    });
+    const currentToken = (current.json() as { session: { token: string } }).session.token;
+    const other = sessions.find((s) => s.token !== currentToken) as { token: string };
+    const revoked = await a.inject({
+      method: "POST",
+      url: "/api/auth/revoke-session",
+      headers: { cookie: here },
+      payload: { token: other.token },
+    });
+    expect(revoked.statusCode).toBe(200);
+
+    const rest = await a.inject({
+      method: "POST",
+      url: "/api/auth/revoke-other-sessions",
+      headers: { cookie: here },
+      payload: {},
+    });
+    expect(rest.statusCode).toBe(200);
+    expect(
+      (await a.inject({ method: "GET", url: "/api/me", headers: { cookie: here } })).statusCode,
+    ).toBe(200);
+    for (const cookie of [second, third]) {
+      const me = await a.inject({ method: "GET", url: "/api/me", headers: { cookie } });
+      expect(me.statusCode).toBe(401);
+    }
+    const after = await a.inject({
+      method: "GET",
+      url: "/api/auth/list-sessions",
+      headers: { cookie: here },
+    });
+    expect(after.json()).toHaveLength(1);
+  });
+});

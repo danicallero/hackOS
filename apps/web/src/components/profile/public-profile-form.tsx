@@ -34,6 +34,7 @@ import {
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { initials } from "@/lib/initials";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 
 /**
  * Public profile form pieces and the reader's card (#934, #935), shared by
@@ -109,30 +110,65 @@ export function ProfileVisibilityFields({
   settings,
   onChange,
   className,
+  rows = false,
 }: {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
   className: string;
+  /** Own profile: a quiet list with the switches on the right, like the account rows. */
+  rows?: boolean;
 }) {
   const { t } = useLocale();
+  const items = [
+    { key: "showSurname", label: t("publicProfileShowSurname") },
+    { key: "showPhoto", label: t("publicProfileShowPhoto") },
+    { key: "showProject", label: t("publicProfileShowProject") },
+  ] as const;
+  if (rows) {
+    return (
+      <ul className={cn("rounded-surface divide-y divide-border/60 border", className)}>
+        {items.map(({ key, label }) => (
+          <ToggleRow
+            key={key}
+            checked={settings[key]}
+            onChange={(value) => onChange({ [key]: value })}
+            label={label}
+          />
+        ))}
+      </ul>
+    );
+  }
   return (
     <div className={className}>
-      <SwitchRow
-        checked={settings.showSurname}
-        onChange={(showSurname) => onChange({ showSurname })}
-        label={t("publicProfileShowSurname")}
-      />
-      <SwitchRow
-        checked={settings.showPhoto}
-        onChange={(showPhoto) => onChange({ showPhoto })}
-        label={t("publicProfileShowPhoto")}
-      />
-      <SwitchRow
-        checked={settings.showProject}
-        onChange={(showProject) => onChange({ showProject })}
-        label={t("publicProfileShowProject")}
-      />
+      {items.map(({ key, label }) => (
+        <SwitchRow
+          key={key}
+          checked={settings[key]}
+          onChange={(value) => onChange({ [key]: value })}
+          label={label}
+        />
+      ))}
     </div>
+  );
+}
+
+function ToggleRow({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+}) {
+  const id = useId();
+  return (
+    <li className="flex min-h-12 items-center justify-between gap-4 px-4 py-2">
+      <Label htmlFor={id} className="font-normal">
+        {label}
+      </Label>
+      <Switch id={id} checked={checked} onCheckedChange={onChange} />
+    </li>
   );
 }
 
@@ -178,6 +214,45 @@ export function ProfileTextFields({
         onShowGithubChange={(showGithub) => onChange({ showGithub })}
       />
     </>
+  );
+}
+
+/**
+ * The master consent switch as a bordered row: the switch leads, the audience
+ * sits under the label. Everything it governs follows below.
+ */
+export function ShareToggleCard({
+  checked,
+  onChange,
+  label,
+  hint,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  hint: string;
+  disabled?: boolean;
+}) {
+  const id = useId();
+  return (
+    <div className="rounded-surface flex items-center justify-between gap-4 border p-4">
+      <div className="min-w-0">
+        <Label htmlFor={id} className="text-base">
+          {label}
+        </Label>
+        <p id={`${id}-hint`} className="text-muted-foreground text-sm">
+          {hint}
+        </p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onChange}
+        aria-describedby={`${id}-hint`}
+      />
+    </div>
   );
 }
 
@@ -347,6 +422,24 @@ function GithubAccountRow({
   );
 }
 
+/** Networks whose link is a fixed address plus a handle, so only the handle is typed. */
+const HANDLE_PREFIX: Partial<Record<SocialKind, string>> = {
+  linkedin: "linkedin.com/in/",
+  x: "x.com/",
+  instagram: "instagram.com/",
+};
+
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The handle part of a stored link; a pasted full address is reduced the same way. */
+export function handleOf(url: string, prefix: string): string {
+  const lead = "^(https?://)?(www\\.)?";
+  const value = url.trim();
+  const full = value.replace(new RegExp(`${lead}${escapeRe(prefix)}`, "i"), "");
+  if (full !== value) return full;
+  return value.replace(new RegExp(`${lead}${escapeRe(prefix.split("/")[0])}/?`, "i"), "");
+}
+
 function LinksEditor({
   links,
   onChange,
@@ -368,9 +461,14 @@ function LinksEditor({
     onChange(links.map((link) => (link.id === id ? { ...link, ...patch } : link)));
   return (
     <fieldset className="min-w-0 space-y-3" aria-labelledby={headingId}>
-      <span id={headingId} className="block text-sm font-medium">
-        {t("publicProfileLinks")}
-      </span>
+      <div className="flex items-baseline justify-between gap-3">
+        <span id={headingId} className="block text-sm font-medium">
+          {t("publicProfileLinks")}
+        </span>
+        <span className="text-muted-foreground text-xs tabular-nums">
+          {links.length}/{SOCIALS_MAX}
+        </span>
+      </div>
       {(links.length > 0 || (ownAccount && githubStatus?.configured)) && (
         <ul className="space-y-2">
           {ownAccount && (
@@ -403,16 +501,25 @@ function LinksEditor({
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
-                  inputMode="url"
-                  autoComplete="url"
-                  maxLength={200}
-                  placeholder="https://"
-                  aria-label={t("publicProfileLinkUrl")}
-                  value={link.url}
-                  onChange={(e) => replace(link.id, { url: e.target.value })}
-                />
+                {HANDLE_PREFIX[link.kind] ? (
+                  <HandleInput
+                    prefix={HANDLE_PREFIX[link.kind] as string}
+                    url={link.url}
+                    label={t("publicProfileLinkUrl")}
+                    onChange={(url) => replace(link.id, { url })}
+                  />
+                ) : (
+                  <Input
+                    className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={200}
+                    placeholder="https://"
+                    aria-label={t("publicProfileLinkUrl")}
+                    value={link.url}
+                    onChange={(e) => replace(link.id, { url: e.target.value })}
+                  />
+                )}
                 <IconButton
                   variant="ghost"
                   label={t("publicProfileRemoveLink")}
@@ -439,6 +546,37 @@ function LinksEditor({
         </Button>
       )}
     </fieldset>
+  );
+}
+
+function HandleInput({
+  prefix,
+  url,
+  label,
+  onChange,
+}: {
+  prefix: string;
+  url: string;
+  label: string;
+  onChange: (url: string) => void;
+}) {
+  return (
+    <div className="col-span-2 row-start-2 flex min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+      <span className="rounded-l-control text-muted-foreground bg-muted inline-flex w-36 shrink-0 items-center border border-r-0 px-3 text-sm">
+        {prefix}
+      </span>
+      <Input
+        className="min-w-0 flex-1 rounded-l-none"
+        autoComplete="off"
+        maxLength={150}
+        aria-label={label}
+        value={handleOf(url, prefix)}
+        onChange={(e) => {
+          const handle = handleOf(e.target.value, prefix);
+          onChange(handle ? `https://${prefix}${handle}` : "");
+        }}
+      />
+    </div>
   );
 }
 

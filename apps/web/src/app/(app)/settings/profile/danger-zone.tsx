@@ -240,11 +240,6 @@ export function DangerZone() {
               {t("accountRemovalExitRequired")}
             </p>
           )}
-          <p className="text-muted-foreground text-sm">
-            <Link href="/privacy" className="underline underline-offset-2">
-              {t("privacyPolicy")}
-            </Link>
-          </p>
           <Button
             type="button"
             variant="outline"
@@ -270,11 +265,6 @@ export function DangerZone() {
               {t("accountAnonymizeExitRequired")}
             </p>
           )}
-          <p className="text-muted-foreground text-sm">
-            <Link href="/privacy" className="underline underline-offset-2">
-              {t("privacyPolicy")}
-            </Link>
-          </p>
           <Button
             type="button"
             variant="outline"

@@ -112,10 +112,9 @@ next-entry popups (dietary, meals, notifications) are gone; the journey and the
 completion list replace them. Confetti on the completion step is decorative
 (`aria-hidden`) and not rendered at all under reduced motion.
 
-My profile keeps everything reachable afterwards, in tabs: Personal details
-(with Attendance), Public profile, Mentoring (Mentor profile and Help desk, only
-for people who can offer help), Wallet (passes, certificates and the share
-image) and Account. `?tab=help-desk` still opens Mentoring.
+My profile keeps everything reachable afterwards, in tabs: Public profile, Mentoring (Mentor profile and Help desk, only
+for people who can offer help), Attendance (the meals and activities they were asked about, viewable and editable until each closes), Wallet (passes, certificates and the share
+image) and Preferences (language, shirt size, dietary) and Account (identity, sign-in, active devices, roles). `?tab=personal` opens Account. `?tab=help-desk` still opens Mentoring.
 
 ## Tests
 

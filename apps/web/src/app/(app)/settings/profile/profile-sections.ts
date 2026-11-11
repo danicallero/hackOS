@@ -2,10 +2,11 @@ import type { MessageKey } from "@/lib/i18n";
 import { canOfferHelp } from "@/lib/mentor-profile";
 import type { Me } from "@/lib/types";
 
-type ProfileTabId = "personal" | "public" | "mentoring" | "wallet" | "account";
+type ProfileTabId = "attendance" | "preferences" | "public" | "mentoring" | "wallet" | "account";
 
 export type ProfileSectionId =
   | "personal"
+  | "prefs"
   | "public"
   | "mentor"
   | "share"
@@ -13,11 +14,12 @@ export type ProfileSectionId =
   | "passes"
   | "certificates"
   | "security"
+  | "devices"
   | "roles"
   | "danger";
 
 /** Sections with their own Save; their tab is marked while one holds unsaved edits. */
-export type EditableSection = "personal" | "public" | "mentor" | "rsvp";
+export type EditableSection = "personal" | "prefs" | "public" | "mentor" | "rsvp";
 
 export interface SectionDef {
   id: ProfileSectionId;
@@ -33,11 +35,6 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   {
-    id: "personal",
-    title: "personalDetails",
-    sections: [{ id: "personal" }, { id: "rsvp", title: "onboardingStepRsvp" }],
-  },
-  {
     id: "public",
     title: "publicProfileTitle",
     sections: [{ id: "public" }],
@@ -48,19 +45,31 @@ const TABS: TabDef[] = [
     sections: [{ id: "mentor", title: "mentorProfileTitle" }],
   },
   {
+    id: "attendance",
+    title: "onboardingStepRsvp",
+    sections: [{ id: "rsvp" }],
+  },
+  {
     id: "wallet",
     title: "wallet",
     sections: [
       { id: "passes" },
-      { id: "certificates", title: "certificates" },
       { id: "share", title: "onboardingStepShare" },
+      { id: "certificates", title: "certificates" },
     ],
+  },
+  {
+    id: "preferences",
+    title: "preferences",
+    sections: [{ id: "prefs" }],
   },
   {
     id: "account",
     title: "accountTitle",
     sections: [
+      { id: "personal" },
       { id: "security", title: "profileAccountSecurity" },
+      { id: "devices", title: "activeDevicesTitle" },
       { id: "roles", title: "rolesTitle" },
       { id: "danger", title: "dangerZone" },
     ],

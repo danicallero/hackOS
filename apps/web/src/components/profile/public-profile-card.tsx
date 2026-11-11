@@ -4,19 +4,20 @@ import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { CvViewer } from "@/components/profile/cv-viewer";
+import { ProfilePhoto } from "@/components/profile/profile-photo";
 import {
-  DirectoryCard,
   type GithubAccountStatus,
   OWN_CV_PATH,
   ProfileTextFields,
   ProfileVisibilityFields,
   type PublicProfile,
   type Settings,
+  ShareToggleCard,
   SwitchRow,
   savedLinks,
   settingsFrom,
@@ -28,11 +29,11 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { useUnsavedChangesGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api, apiUpload } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import type { DirectoryEntry } from "@/lib/directory";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { showErrorToast, toast } from "@/lib/toast";
 import type { Me } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export { DirectoryCard } from "@/components/profile/public-profile-form";
 export type { DirectoryEntry } from "@/lib/directory";
@@ -71,38 +72,6 @@ export function displayName(me: Pick<Me, "name" | "surname">, showSurname: boole
   const surname = (me.surname ?? "").trim();
   if (!surname) return name;
   return `${name} ${showSurname ? surname : `${Array.from(surname)[0]}.`}`;
-}
-
-/**
- * Unsaved toggles, text and links apply immediately; the project and its
- * challenges come from the saved preview, because the API only projects them
- * for the stored settings (#934, #935).
- */
-function previewEntry(
-  me: Pick<Me, "name" | "surname" | "image">,
-  settings: Settings,
-  saved: DirectoryEntry,
-  hasCv = false,
-  githubLogin: string | null = null,
-): DirectoryEntry {
-  const savedGithub = saved.socials?.find((link) => link.kind === "github") ?? null;
-  const github = settings.showGithub
-    ? githubLogin
-      ? { kind: "github" as const, url: `https://github.com/${githubLogin}` }
-      : savedGithub
-    : null;
-  return {
-    ...saved,
-    displayName: displayName(me, settings.showSurname),
-    photoUrl: settings.showPhoto ? me.image : null,
-    headline: settings.headline.trim() || null,
-    bio: settings.bio.trim() || null,
-    locationNote: settings.locationNote.trim() || null,
-    socials: [...savedLinks(settings.socials), ...(github ? [github] : [])],
-    cvUrl: settings.shareCv && hasCv ? OWN_CV_PATH : null,
-    projects: settings.showProject ? saved.projects : [],
-    challenges: settings.showProject ? saved.challenges : [],
-  };
 }
 
 /**
@@ -178,18 +147,6 @@ export function PublicProfileCard({
   );
   useUnsavedChangesGuard(dirty);
 
-  const preview = useMemo(() => {
-    if (!me || !profile || !settings || !fieldsOpen) return null;
-    return dirty
-      ? previewEntry(
-          me,
-          settings,
-          profile.preview,
-          profile.cv !== null,
-          githubStatus.data?.login ?? null,
-        )
-      : profile.preview;
-  }, [me, profile, settings, dirty, fieldsOpen, githubStatus.data?.login]);
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [onDirtyChange, dirty]);
@@ -310,7 +267,7 @@ export function PublicProfileCard({
   }
   if (onboarding?.saveDraft) onboarding.saveDraft.current = dirty ? saveDraft : null;
 
-  const hasCv = profile.cv !== null;
+  const _hasCv = profile.cv !== null;
   return (
     <form className="@container min-w-0" onSubmit={onSubmit}>
       <SectionCard
@@ -348,10 +305,19 @@ export function PublicProfileCard({
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
         <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
+          <div className="flex min-w-0 items-center gap-4">
+            <ProfilePhoto />
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {[me.name, me.surname].filter(Boolean).join(" ")}
+              </p>
+              <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+            </div>
+          </div>
           {onboarding ? (
             <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
           ) : (
-            <SwitchRow
+            <ShareToggleCard
               checked={settings.directoryVisible}
               onChange={(directoryVisible) => update({ directoryVisible })}
               label={t("publicProfileVisible")}
@@ -361,71 +327,44 @@ export function PublicProfileCard({
           {!settings.directoryVisible && helperPublished && (
             <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
           )}
-          {fieldsOpen && (
-            <>
-              <ProfileVisibilityFields
-                settings={settings}
-                onChange={update}
-                className="flex flex-wrap gap-x-8 gap-y-3"
-              />
-              <ProfileTextFields
-                settings={settings}
-                onChange={update}
-                ownAccount
-                githubStatus={githubStatus.data ?? null}
-                className={
-                  onboarding
-                    ? "grid items-start gap-4 sm:grid-cols-2"
-                    : "grid items-start gap-4 @xl:grid-cols-2"
-                }
-              />
-              {(!onboarding || profile.cv?.source === "application") && (
-                <CvField
-                  cv={profile.cv}
-                  ownerName={displayName(me, true)}
-                  shareCv={settings.shareCv}
-                  onShareChange={(shareCv) => update({ shareCv })}
-                  onSaved={(next) => {
-                    commit(next);
-                    // A removed CV is no longer shared; drop a pending share too.
-                    if (!next.cv) {
-                      setEdits((current) =>
-                        current?.shareCv ? { ...current, shareCv: false } : current,
-                      );
-                    }
-                  }}
-                />
-              )}
-              <section
-                className={
-                  onboarding
-                    ? "space-y-2 border-t border-border/60 pt-4"
-                    : "grid gap-x-4 gap-y-2 @xl:grid-cols-2"
-                }
-              >
-                <h3
-                  className={
-                    onboarding
-                      ? "type-label text-muted-foreground"
-                      : "type-label text-muted-foreground @xl:col-span-2"
+          {/* What sharing would show stays in view while it is off, but cannot be edited. */}
+          <fieldset
+            disabled={!fieldsOpen}
+            className={cn(
+              "min-w-0 space-y-(--space-within-section) transition-opacity",
+              !fieldsOpen && "opacity-55",
+            )}
+          >
+            <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
+            <ProfileTextFields
+              settings={settings}
+              onChange={update}
+              ownAccount
+              githubStatus={githubStatus.data ?? null}
+              className={
+                onboarding
+                  ? "grid items-start gap-4 sm:grid-cols-2"
+                  : "grid items-start gap-4 @xl:grid-cols-2"
+              }
+            />
+            {(!onboarding || profile.cv?.source === "application") && (
+              <CvField
+                cv={profile.cv}
+                ownerName={displayName(me, true)}
+                shareCv={settings.shareCv}
+                onShareChange={(shareCv) => update({ shareCv })}
+                onSaved={(next) => {
+                  commit(next);
+                  // A removed CV is no longer shared; drop a pending share too.
+                  if (!next.cv) {
+                    setEdits((current) =>
+                      current?.shareCv ? { ...current, shareCv: false } : current,
+                    );
                   }
-                >
-                  {t("publicProfilePreview")}
-                </h3>
-                {onboarding ? (
-                  <DirectoryCard
-                    entry={
-                      dirty ? previewEntry(me, settings, profile.preview, hasCv) : profile.preview
-                    }
-                  />
-                ) : (
-                  <div className="@xl:col-start-1">
-                    <DirectoryCard entry={preview ?? profile.preview} />
-                  </div>
-                )}
-              </section>
-            </>
-          )}
+                }}
+              />
+            )}
+          </fieldset>
         </fieldset>
       </SectionCard>
     </form>

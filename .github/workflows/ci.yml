@@ -197,7 +197,14 @@ jobs:
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        # The runner's Ubuntu mirror sometimes fails to resolve; retry before failing the job.
+        run: |
+          for attempt in 1 2 3; do
+            pnpm exec playwright install --with-deps chromium && exit 0
+            echo "Chromium install failed (attempt $attempt), retrying in 20s"
+            sleep 20
+          done
+          exit 1
 
       - name: Run deterministic browser smoke
         run: pnpm test:ui:browser --project=chromium

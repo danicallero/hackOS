@@ -228,6 +228,40 @@ function withAuthDocs(openapiObject: Record<string, unknown>): Record<string, un
     security: [{ sessionToken: [] }, { bearerToken: [] }],
   });
 
+  addAuthOperation(paths, "/api/auth/list-sessions", "get", {
+    tags: ["auth"],
+    summary: "List my signed-in devices",
+    description:
+      "Every active session of the authenticated user (token, user agent, last activity), for the Active devices list in Profile and account.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+  });
+
+  addAuthOperation(paths, "/api/auth/revoke-session", "post", {
+    tags: ["auth"],
+    summary: "Sign out one device",
+    description: "Revokes one of the authenticated user's sessions, identified by its `token`.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["token"],
+            properties: { token: { type: "string" } },
+          },
+        },
+      },
+    },
+  });
+
+  addAuthOperation(paths, "/api/auth/revoke-other-sessions", "post", {
+    tags: ["auth"],
+    summary: "Sign out every other device",
+    description: "Revokes all of the authenticated user's sessions except the current one.",
+    security: [{ sessionToken: [] }, { bearerToken: [] }],
+  });
+
   addAuthOperation(paths, "/api/auth/request-password-reset", "post", {
     tags: ["auth"],
     summary: "Request password reset",

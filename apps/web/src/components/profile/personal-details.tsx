@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { LockSimpleIcon } from "@phosphor-icons/react/dist/csr/LockSimple";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -79,7 +80,16 @@ function valuesFromMe(me: Me): Values {
  * silently clobbered back to "" by Radix's hidden native-select sync.
  */
 /** Onboarding shows the identity fields and the dietary answer as separate steps. */
-export type PersonalDetailsPart = "all" | "identity" | "dietary";
+export type PersonalDetailsPart = "all" | "identity" | "dietary" | "account" | "preferences";
+
+/** Which blocks a part shows: the photo and names, language and shirt size, the dietary answer. */
+const SHOWS = {
+  all: { who: true, prefs: true, dietary: true },
+  identity: { who: true, prefs: true, dietary: false },
+  dietary: { who: false, prefs: false, dietary: true },
+  account: { who: true, prefs: false, dietary: false },
+  preferences: { who: false, prefs: true, dietary: true },
+} as const;
 
 export function PersonalDetails({
   onDirtyChange,
@@ -199,41 +209,62 @@ function PersonalDetailsForm({
     <Form {...form}>
       <form className="@container min-w-0" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="min-w-0 space-y-6">
-          {locked && (
-            <p className="text-muted-foreground text-pretty text-sm">{t("profileLockedNotice")}</p>
-          )}
           {saveError && <ContextualError message={saveError} />}
-          {part !== "dietary" && (
+          {SHOWS[part].who && (
             <>
               {/* The account photo saves on its own and leads the details it belongs to (#934). */}
-              <ProfilePhoto />
+              <div className="flex min-w-0 items-center gap-4">
+                <ProfilePhoto />
+                <div className="min-w-0">
+                  <p className="truncate font-medium">
+                    {[me.name, me.surname].filter(Boolean).join(" ")}
+                  </p>
+                  <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+                  {locked && (
+                    <p className="text-muted-foreground mt-1 flex items-start gap-1.5 text-pretty text-sm">
+                      <LockSimpleIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                      {t("profileLockedNotice")}
+                    </p>
+                  )}
+                </div>
+              </div>
               <div className="grid min-w-0 items-start gap-4 @xl:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("firstName")}</FormLabel>
-                      <FormControl>
-                        <Input autoComplete="given-name" disabled={locked} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="surname"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t("lastName")}</FormLabel>
-                      <FormControl>
-                        <Input autoComplete="family-name" disabled={locked} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {!locked && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("firstName")}</FormLabel>
+                          <FormControl>
+                            <Input autoComplete="given-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="surname"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t("lastName")}</FormLabel>
+                          <FormControl>
+                            <Input autoComplete="family-name" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          )}
+          {SHOWS[part].prefs && (
+            <>
+              <div className="grid min-w-0 items-start gap-4 @xl:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="language"
@@ -292,7 +323,7 @@ function PersonalDetailsForm({
               </div>
             </>
           )}
-          {part !== "identity" && (
+          {SHOWS[part].dietary && (
             <section className="space-y-4 pt-2">
               <h3 className="type-label text-muted-foreground">{t("dietaryRestrictions")}</h3>
               <FormField
@@ -334,7 +365,7 @@ function PersonalDetailsForm({
                 )}
               />
               {!noRestrictions && (
-                <div className="grid items-start gap-4 @xl:grid-cols-2">
+                <div className="space-y-4">
                   <FormField
                     control={form.control}
                     name="foodIntolerances"

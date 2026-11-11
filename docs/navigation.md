@@ -77,10 +77,10 @@ where each person decides whether to share a public profile with the people
 who scan their badge. See [`diary.md`](./diary.md).
 
 **My profile** (`/settings/profile`, H28, #1083) holds the Wallet, as the
-mobile Account tab does. Four tabs, selected by `?tab=` through `useUrlTab`:
-`personal` (Personal details, Meals), `public` (Public profile), `wallet`
-(ticket and badge, Certificates) and `account` (Account and security, Roles,
-Danger zone).
+mobile Account tab does. Tabs selected by `?tab=` through `useUrlTab`: `public` (Public profile),
+`mentoring`, `attendance` (RSVPs to meals and activities, while any is open), `wallet` (ticket and badge, Certificates), `preferences` (language, shirt size, dietary) and `account`
+(identity, Account and security, Active devices, Roles, Danger zone). `?tab=personal`
+opens `account`.
 Each section shows only when its API serves the account: passes unless a pure
 applicant, Certificates and Public profile with current event access, Meals
 for sponsor representatives, Roles with at least one role; a tab left empty

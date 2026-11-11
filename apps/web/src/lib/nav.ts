@@ -309,7 +309,6 @@ const EVENT_SETTINGS_SUBITEMS: NavItem[] = [
 
 const profileTab = (id: string) => PROFILE_TABS.find((i) => i.href.endsWith(`tab=${id}`));
 const PROFILE_TABS: NavItem[] = [
-  sub("personalDetails", "/settings/profile?tab=personal", UserIcon),
   sub("publicProfileTitle", "/settings/profile?tab=public", UserIcon, {
     hideForPureApplicant: true,
   }),

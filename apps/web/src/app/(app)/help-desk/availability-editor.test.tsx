@@ -14,7 +14,10 @@ vi.mock(
   "@/components/common/datetime-input",
   async () => (await import("./dialog-test-utils")).dateTimeInputMock,
 );
-const profile = { availability: [first, second], suggestedInterval: null } as MyHelperProfile;
+const profile = {
+  availability: [first, second],
+  suggestedInterval: null,
+} as unknown as MyHelperProfile;
 let root: Root, container: HTMLDivElement;
 const saved = vi.fn();
 function Editor({ initial = profile }: { initial?: MyHelperProfile }) {
@@ -103,7 +106,9 @@ describe("availability replacement (H62)", () => {
     await act(async () => {
       root.render(
         <Editor
-          initial={{ availability: [first], suggestedInterval: window } as MyHelperProfile}
+          initial={
+            { availability: [first], suggestedInterval: window } as unknown as MyHelperProfile
+          }
         />,
       );
     });
@@ -115,5 +120,52 @@ describe("availability replacement (H62)", () => {
     expect((getByLabelText(dialog(), "helpDeskFrom") as HTMLInputElement).value).toBe(
       "2027-02-28T09:00",
     );
+  });
+
+  /** A day line 2400 px wide (100 px per hour) whose pointer events are fired by the test. */
+  function dayLine(index: number) {
+    const track = container.querySelectorAll<HTMLElement>(
+      "fieldset[aria-label^=helpDeskAddIntervalOn]",
+    )[index];
+    track.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        width: 2400,
+        top: 0,
+        height: 40,
+        right: 2400,
+        bottom: 40,
+        x: 0,
+        y: 0,
+      }) as DOMRect;
+    track.setPointerCapture = () => undefined;
+    track.releasePointerCapture = () => undefined;
+    return (type: string, clientX: number) =>
+      act(async () => {
+        track.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, button: 0 }));
+      });
+  }
+  const window = { startsAt: "2027-02-26T09:00:00.000Z", endsAt: "2027-02-28T15:00:00.000Z" };
+  const withWindow = (availability: unknown[]) =>
+    ({ availability, suggestedInterval: window }) as unknown as MyHelperProfile;
+
+  it("marks a stretch by dragging across a day line and saves the replacement", async () => {
+    vi.mocked(api.put).mockResolvedValue(withWindow([]));
+    await act(async () => root.render(<Editor initial={withWindow([])} />));
+    const fire = dayLine(1);
+    await fire("pointerdown", 1000);
+    await fire("pointermove", 1250);
+    await fire("pointerup", 1250);
+    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
+      intervals: [{ startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T12:30:00.000Z" }],
+    });
+  });
+
+  it("opens the add dialog for a plain press on an empty line", async () => {
+    await act(async () => root.render(<Editor initial={withWindow([first])} />));
+    const fire = dayLine(0);
+    await fire("pointerdown", 300);
+    await fire("pointerup", 300);
+    expect(dialog()).toBeTruthy();
   });
 });

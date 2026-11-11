@@ -11,6 +11,7 @@ globalThis.ResizeObserver ??= class {
 
 const me = { id: 7, name: "María José", surname: "Fernández-Villaverde", image: null };
 
+vi.mock("@/components/profile/profile-photo", () => ({ ProfilePhoto: () => null }));
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {
     constructor(
@@ -146,14 +147,15 @@ describe("PublicProfileCard", () => {
     return id ? document.getElementById(id) : null;
   };
 
-  it("hides the dependent fields and preview while the opt-in is off", async () => {
+  it("shows the dependent fields disabled, without the preview, while the opt-in is off", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     await render(<PublicProfileCard />);
 
     expect(container.textContent).toContain("publicProfileVisible");
     expect(container.textContent).toContain("publicProfileAudience");
-    expect(container.textContent).not.toContain("publicProfileShowSurname");
-    expect(container.textContent).not.toContain("publicProfileHeadline");
+    expect(container.textContent).toContain("publicProfileShowSurname");
+    expect(container.textContent).toContain("publicProfileHeadline");
+    expect(container.querySelector<HTMLFieldSetElement>("fieldset[disabled]")).not.toBeNull();
     expect(container.textContent).not.toContain("publicProfilePreview");
   });
 
@@ -182,17 +184,15 @@ describe("PublicProfileCard", () => {
     ).toBe("https://github.com/maria");
     expect(container.textContent).not.toContain("githubLinkAccount");
     expect(container.querySelectorAll("[aria-label=publicProfileLinkKind]")).toHaveLength(1);
-    const links = container.querySelectorAll("fieldset ul");
+    const links = container.querySelectorAll("fieldset ul:not(.divide-y)");
     expect(links[0]?.querySelectorAll(":scope > li")).toHaveLength(2);
     const githubUrl = container.querySelector<HTMLInputElement>(
       'input[aria-label="publicProfileLinkUrl"][readonly]',
     );
     expect(githubUrl?.value).toBe("https://github.com/maria");
-    expect(container.querySelectorAll('a[href="https://github.com/maria"]')).toHaveLength(1);
 
     const user = userEvent.setup();
     await act(async () => user.click(byLabel("publicProfileShowGithub") as HTMLButtonElement));
-    expect(container.querySelectorAll('a[href="https://github.com/maria"]')).toHaveLength(0);
     vi.mocked(api.put).mockResolvedValue(profile({ directoryVisible: true, showGithub: false }));
     await save();
     expect(api.put).toHaveBeenCalledWith(
@@ -202,17 +202,14 @@ describe("PublicProfileCard", () => {
     );
   });
 
-  it("reveals the fields and a live preview once opted in", async () => {
+  it("enables the fields once opted in", async () => {
     vi.mocked(api.get).mockResolvedValue(profile());
     await render(<PublicProfileCard />);
     const user = userEvent.setup();
 
     await act(async () => user.click(byLabel("publicProfileVisible") as HTMLButtonElement));
     expect(container.textContent).toContain("publicProfileShowPhoto");
-    expect(container.textContent).toContain("María José F.");
-
-    await act(async () => user.click(byLabel("publicProfileShowSurname") as HTMLButtonElement));
-    expect(container.textContent).toContain("María José Fernández-Villaverde");
+    expect(container.querySelector("fieldset[disabled]")).toBeNull();
   });
 
   it("saves the full settings with an idempotency key and adopts the response", async () => {
@@ -369,15 +366,15 @@ describe("PublicProfileCard", () => {
       "input[aria-label=publicProfileLinkUrl]:not([readonly])",
     );
     expect(urls).toHaveLength(2);
-    await act(async () => user.type(urls[0] as HTMLInputElement, " github.com/maria "));
-    expect(container.textContent).toContain("github.com/maria");
+    await act(async () => user.type(urls[0] as HTMLInputElement, " maria "));
+    expect((urls[0] as HTMLInputElement).value).toBe("maria");
     await save();
 
     expect(api.put).toHaveBeenCalledWith(
       "/api/me/public-profile",
       expect.objectContaining({
         bio: "Hi",
-        socials: [{ kind: "linkedin", url: "github.com/maria" }],
+        socials: [{ kind: "linkedin", url: "https://linkedin.com/in/maria" }],
       }),
       expect.anything(),
     );
@@ -582,18 +579,6 @@ describe("PublicProfileCard", () => {
     );
     expect(apiUpload).not.toHaveBeenCalled();
     expect(container.querySelector("[role=alert]")?.textContent).toBe("cvFileHint");
-  });
-
-  it("previews the server card until something changes", async () => {
-    vi.mocked(api.get).mockResolvedValue(
-      profile({ directoryVisible: true }, { displayName: "Server Card" }),
-    );
-    await render(<PublicProfileCard />);
-    expect(container.textContent).toContain("Server Card");
-
-    const user = userEvent.setup();
-    await act(async () => user.click(byLabel("publicProfileShowSurname") as HTMLButtonElement));
-    expect(container.textContent).toContain("María José Fernández-Villaverde");
   });
 });
 
