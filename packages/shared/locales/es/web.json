@@ -4327,5 +4327,6 @@
   "helpDeskResizeEnd": "Arrastra para cambiar el final de {interval}",
   "rsvpAudiencePlaceholder": "Selecciona roles…",
   "profileRsvpTitle": "RSVP",
-  "rsvpNoItems": "No hay actividades que te pidan RSVP."
+  "rsvpNoItems": "No hay actividades que te pidan RSVP.",
+  "helpDeskIntervalAfterLastDay": "La disponibilidad debe terminar al finalizar el último día de hacking."
 }

@@ -1,5 +1,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { ERROR_REASONS } from "@hackos/shared/error-reasons";
+import { endOfEventDay } from "@hackos/shared/event-time";
 import type {
   AvailabilityInterval,
   HelperCard,
@@ -15,6 +16,7 @@ import { getRequestAuthorizationContext, userHasCapability } from "../../lib/cap
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from "../../lib/errors.js";
 import { photoUrl } from "../../lib/profile-files.js";
 import { type DirectoryEntry, helperProfileEntry, OWN_CV_PATH } from "../directory/service.js";
+import { getEventTimezone } from "../event/service.js";
 import { highestVisibleRoleNameSql } from "../identity/role.js";
 import type { AvailabilityInput, HelperProfileInput } from "./schemas.js";
 import { assertTopicsExist } from "./topics.js";
@@ -489,6 +491,15 @@ export async function replaceMyAvailability(
         windowStartsAt: window.startsAt,
       });
     }
+    if (window && intervals.length) {
+      const endsAt = endOfEventDay(window.endsAt, await getEventTimezone(client));
+      if (endsAt && intervals.some((interval) => interval.endsAt > new Date(endsAt))) {
+        throw new BadRequestError("Availability must end by midnight after the last hacking day", {
+          code: ERROR_REASONS.AVAILABILITY_INVALID,
+          windowEndsAt: endsAt,
+        });
+      }
+    }
     await ensureProfileRow(client, userId);
     const { rows } = await client.query<{ starts_at: Date; ends_at: Date }>(
       "SELECT starts_at, ends_at FROM helper_availability WHERE user_id = $1 ORDER BY starts_at, id",
@@ -515,6 +526,7 @@ export async function replaceMyAvailability(
       entityType: "helper_profile",
       entityId: userId,
       action: "availability_updated",
+      changedFields: ["intervals"],
       before: { intervals: before.length },
       after: { intervals: intervals.length },
     });

@@ -1,5 +1,5 @@
 "use client";
-import { instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
+import { endOfEventDay, instantToWallClock, wallClockToInstant } from "@hackos/shared/event-time";
 import { MAX_AVAILABILITY_INTERVALS, MAX_INTERVAL_MS } from "@hackos/shared/help-desk";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useState } from "react";
@@ -14,7 +14,7 @@ import { toast } from "@/lib/toast";
 import { AvailabilityTimeline } from "./availability-timeline";
 import { IntervalDialog } from "./interval-dialog";
 import type { AvailabilityInterval, MyHelperProfile } from "./model";
-import { durationMinutes, eventDay, intervalProblem, mergeInterval, nextDayOf } from "./schedule";
+import { daysFrom, durationMinutes, eventDay, intervalProblem, mergeInterval } from "./schedule";
 
 /**
  * Planned availability (H62): the saved intervals as rows per event day, an
@@ -63,10 +63,14 @@ export function AvailabilityEditor({
   const window = profile.suggestedInterval;
   const startsAllowed = (interval: AvailabilityInterval) =>
     !window || Date.parse(interval.startsAt) >= Date.parse(window.startsAt);
+  const notAfter = window ? endOfEventDay(window.endsAt, zone) : null;
+  const endsAllowed = (interval: AvailabilityInterval) =>
+    !notAfter || Date.parse(interval.endsAt) <= Date.parse(notAfter);
   const plannedDays = window ? hackingDays(window, zone) : [];
   /** A drawn stretch joins what it overlaps, so the result covers both. */
   function place(interval: AvailabilityInterval, others: AvailabilityInterval[]) {
     if (!startsAllowed(interval)) return rejectDrag(t("helpDeskIntervalBeforeHacking"));
+    if (!endsAllowed(interval)) return rejectDrag(t("helpDeskIntervalAfterLastDay"));
     const merged = mergeInterval(others, interval);
     const touched = merged.find(
       (item) =>
@@ -84,9 +88,9 @@ export function AvailabilityEditor({
     const startsAt = wallClockToInstant(`${day}${clock}`, zone);
     if (!startsAt) return null;
     const start = Date.parse(startsAt);
-    const end = Math.max(
-      start + 3_600_000,
-      Math.min(start + 2 * 3_600_000, Date.parse(window.endsAt)),
+    const end = Math.min(
+      Date.parse(notAfter ?? window.endsAt),
+      Math.max(start + 3_600_000, Math.min(start + 2 * 3_600_000, Date.parse(window.endsAt))),
     );
     return { startsAt, endsAt: new Date(end).toISOString() };
   }
@@ -114,6 +118,7 @@ export function AvailabilityEditor({
       <AvailabilityTimeline
         intervals={optimistic ?? profile.availability}
         days={plannedDays}
+        fixedDays={Boolean(window)}
         notBefore={window?.startsAt}
         onCreate={(interval) => {
           if (!pending) place(interval, profile.availability);
@@ -147,6 +152,7 @@ export function AvailabilityEditor({
           suggested={editing ?? dayPrefill ?? profile.suggestedInterval}
           editing={!!editing}
           notBefore={window?.startsAt}
+          notAfter={notAfter}
           pending={pending}
           error={error}
           onClose={() => setAdding(false)}
@@ -180,15 +186,9 @@ export function AvailabilityEditor({
   );
 }
 
-/** Every event day of the hacking (else event) window, at most two weeks. */
+/** One line for each hacking day; stored out-of-window intervals cannot add lines. */
 function hackingDays(window: AvailabilityInterval, zone: string): string[] {
-  const last = eventDay(window.endsAt, zone);
-  const days: string[] = [];
-  for (let day = eventDay(window.startsAt, zone); day && day <= last && days.length < 14; ) {
-    days.push(day);
-    day = nextDayOf(day);
-  }
-  return days;
+  return daysFrom(eventDay(window.startsAt, zone), eventDay(window.endsAt, zone));
 }
 
 function AddIntervalDialog({
@@ -196,6 +196,7 @@ function AddIntervalDialog({
   suggested,
   editing,
   notBefore,
+  notAfter,
   pending,
   error,
   onClose,
@@ -204,6 +205,7 @@ function AddIntervalDialog({
 }: {
   /** Nobody is available before the hacking time (H62). */
   notBefore?: string;
+  notAfter?: string | null;
   existing: AvailabilityInterval[];
   editing: boolean;
   suggested: AvailabilityInterval | null | undefined;
@@ -233,6 +235,8 @@ function AddIntervalDialog({
         if (notBefore && Date.parse(interval.startsAt) < Date.parse(notBefore)) {
           return t("helpDeskIntervalBeforeHacking");
         }
+        if (notAfter && Date.parse(interval.endsAt) > Date.parse(notAfter))
+          return t("helpDeskIntervalAfterLastDay");
         const problem = intervalProblem(interval, existing);
         return problem === "overlap"
           ? t("helpDeskIntervalOverlap")

@@ -4,6 +4,7 @@ import { act, useState } from "react";
 import type { Root } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
+import { setEventTimeZone } from "@/lib/event-time";
 import { AvailabilityEditor } from "./availability-editor";
 import { dialog, first, second, setupMountedRoot, typeInto } from "./dialog-test-utils";
 import type { MyHelperProfile } from "./model";
@@ -161,6 +162,58 @@ describe("availability replacement (H62)", () => {
     `2027-02-${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00.000Z`;
   const expectSaved = (intervals: { startsAt: string; endsAt: string }[]) =>
     expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", { intervals });
+
+  it("draws only hacking days even when an old interval lies outside them", async () => {
+    await act(async () =>
+      root.render(
+        <Editor initial={withWindow([{ startsAt: iso(25, 10), endsAt: iso(25, 12) }])} />,
+      ),
+    );
+    expect(container.querySelectorAll("[data-track]")).toHaveLength(3);
+  });
+
+  it("clamps creation and resizing to 24 actual hours before saving", async () => {
+    vi.mocked(api.put).mockResolvedValue(withWindow([]));
+    await act(async () => root.render(<Editor initial={withWindow([])} />));
+    const lines = timeline();
+    await lines.press(0, 1000);
+    await lines.move(2, 1000);
+    await lines.release(2, 1000);
+    expectSaved([{ startsAt: iso(26, 10), endsAt: iso(27, 10) }]);
+    vi.mocked(api.put).mockClear();
+    await act(async () => root.render(<Editor key="resize-limit" initial={withWindow([first])} />));
+    await dragSegment(1195, 2300, 2);
+    expectSaved([{ startsAt: iso(27, 10), endsAt: iso(28, 10) }]);
+  });
+
+  it("caps a drag at 24 real hours when the clock goes back", async () => {
+    setEventTimeZone("Europe/Madrid");
+    const initial = {
+      availability: [],
+      suggestedInterval: { startsAt: "2027-10-30T08:00:00Z", endsAt: "2027-11-01T16:00:00Z" },
+    } as unknown as MyHelperProfile;
+    vi.mocked(api.put).mockResolvedValue(initial);
+    await act(async () => root.render(<Editor initial={initial} />));
+    const lines = timeline();
+    await lines.press(0, 1000);
+    await lines.move(2, 1000);
+    await lines.release(2, 1000);
+    expectSaved([{ startsAt: "2027-10-30T08:00:00.000Z", endsAt: "2027-10-31T08:00:00.000Z" }]);
+  });
+
+  it("allows the last hacking day through midnight but rejects later dates in the dialog", async () => {
+    await act(async () => root.render(<Editor initial={withWindow([])} />));
+    await act(async () =>
+      userEvent.click(getByRole(container, "button", { name: "helpDeskAddInterval" })),
+    );
+    await typeInto("helpDeskFrom", "2027-02-28T18:00");
+    await typeInto("helpDeskTo", "2027-03-01T00:00");
+    expect(
+      getByRole(dialog(), "button", { name: "helpDeskAddInterval" }).hasAttribute("disabled"),
+    ).toBe(false);
+    await typeInto("helpDeskTo", "2027-03-01T00:30");
+    expect(dialog().textContent).toContain("helpDeskIntervalAfterLastDay");
+  });
 
   it("marks a stretch by dragging across a day line and saves the replacement", async () => {
     vi.mocked(api.put).mockResolvedValue(withWindow([]));

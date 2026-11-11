@@ -153,3 +153,12 @@ export function zoneAbbreviation(
     return "";
   }
 }
+
+/** H62: exclusive midnight after an instant's local calendar day, across DST. */
+export function endOfEventDay(instant: string, timeZone: string): string | null {
+  const day = instantToWallClock(instant, timeZone).slice(0, 10);
+  if (!day) return null;
+  const next = new Date(`${day}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return wallClockToInstant(`${next.toISOString().slice(0, 10)}T00:00`, timeZone);
+}

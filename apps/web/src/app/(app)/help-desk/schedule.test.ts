@@ -1,3 +1,4 @@
+import { endOfEventDay } from "@hackos/shared/event-time";
 import { describe, expect, it } from "vitest";
 import { intervalFrom, intervalProblem, mergeInterval, scheduleDays } from "./schedule";
 
@@ -79,4 +80,9 @@ describe("mergeInterval", () => {
   it("adds a separate stretch in order", () => {
     expect(mergeInterval([span(8, 10)], span(12, 14))).toEqual([span(8, 10), span(12, 14)]);
   });
+});
+
+it("ends the last hacking day at local midnight across DST (H62)", () => {
+  expect(endOfEventDay("2027-10-31T12:00:00Z", "Europe/Madrid")).toBe("2027-10-31T23:00:00.000Z");
+  expect(endOfEventDay("2027-03-28T12:00:00Z", "Europe/Madrid")).toBe("2027-03-28T22:00:00.000Z");
 });

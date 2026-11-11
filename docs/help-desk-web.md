@@ -145,3 +145,16 @@ identity and state timestamps, plus atomic interval editing with failure/retry
 and a 36-hour suggested window. API tests remain the owner of FIFO/routing,
 sponsor scope, concurrency and notification delivery; this web-only change does
 not modify those contracts. The web editor renders project/challenge lookup failures in place and only opens edits from a loaded request; mobile-side fixes are reviewed separately.
+
+### Daily time sliders (H62, H64)
+
+Personal availability shows exactly the hacking calendar days (event dates as
+fallback), even if a stored interval lies outside that window. Time before
+hacking is hatched. Drag creation and resizing stop at 24 actual hours; the
+last day stays available through its local midnight. The add/edit dialog and
+API enforce the same date bounds.
+
+Opening hours reuse this daily timeline for creation, moving, resizing and
+editing. They have no 24-hour duration cap and may span several days. Touching
+or overlapping dragged windows merge; removing the last window means always
+open. The date-time dialog remains the keyboard alternative.
