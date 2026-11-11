@@ -14,7 +14,10 @@ vi.mock(
   "@/components/common/datetime-input",
   async () => (await import("./dialog-test-utils")).dateTimeInputMock,
 );
-const profile = { availability: [first, second], suggestedInterval: null } as MyHelperProfile;
+const profile = {
+  availability: [first, second],
+  suggestedInterval: null,
+} as unknown as MyHelperProfile;
 let root: Root, container: HTMLDivElement;
 const saved = vi.fn();
 function Editor({ initial = profile }: { initial?: MyHelperProfile }) {
@@ -103,7 +106,9 @@ describe("availability replacement (H62)", () => {
     await act(async () => {
       root.render(
         <Editor
-          initial={{ availability: [first], suggestedInterval: window } as MyHelperProfile}
+          initial={
+            { availability: [first], suggestedInterval: window } as unknown as MyHelperProfile
+          }
         />,
       );
     });
@@ -115,5 +120,83 @@ describe("availability replacement (H62)", () => {
     expect((getByLabelText(dialog(), "helpDeskFrom") as HTMLInputElement).value).toBe(
       "2027-02-28T09:00",
     );
+  });
+
+  it("marks a stretch by dragging across a day line and saves the replacement", async () => {
+    const window = { startsAt: "2027-02-26T09:00:00.000Z", endsAt: "2027-02-28T15:00:00.000Z" };
+    vi.mocked(api.put).mockResolvedValue({
+      availability: [],
+      suggestedInterval: window,
+    } as unknown as unknown as MyHelperProfile);
+    await act(async () => {
+      root.render(
+        <Editor
+          initial={{ availability: [], suggestedInterval: window } as unknown as MyHelperProfile}
+        />,
+      );
+    });
+    const track = container.querySelectorAll<HTMLElement>(
+      "fieldset[aria-label^=helpDeskAddIntervalOn]",
+    )[1];
+    track.getBoundingClientRect = () => ({
+      left: 0,
+      width: 2400,
+      top: 0,
+      height: 40,
+      right: 2400,
+      bottom: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    track.setPointerCapture = () => undefined;
+    track.releasePointerCapture = () => undefined;
+    const fire = (type: string, clientX: number) =>
+      act(async () => {
+        track.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, button: 0 }));
+      });
+    // 100 px per hour: 10:00 to 12:30 on the second day.
+    await fire("pointerdown", 1000);
+    await fire("pointermove", 1250);
+    await fire("pointerup", 1250);
+    expect(api.put).toHaveBeenCalledWith("/api/me/helper-profile/availability", {
+      intervals: [{ startsAt: "2027-02-27T10:00:00.000Z", endsAt: "2027-02-27T12:30:00.000Z" }],
+    });
+  });
+
+  it("opens the add dialog for a plain press on an empty line", async () => {
+    const window = { startsAt: "2027-02-26T09:00:00.000Z", endsAt: "2027-02-28T15:00:00.000Z" };
+    await act(async () => {
+      root.render(
+        <Editor
+          initial={
+            { availability: [first], suggestedInterval: window } as unknown as MyHelperProfile
+          }
+        />,
+      );
+    });
+    const track = container.querySelectorAll<HTMLElement>(
+      "fieldset[aria-label^=helpDeskAddIntervalOn]",
+    )[0];
+    track.getBoundingClientRect = () => ({
+      left: 0,
+      width: 2400,
+      top: 0,
+      height: 40,
+      right: 2400,
+      bottom: 40,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    track.setPointerCapture = () => undefined;
+    track.releasePointerCapture = () => undefined;
+    const fire = (type: string, clientX: number) =>
+      act(async () => {
+        track.dispatchEvent(new MouseEvent(type, { bubbles: true, clientX, button: 0 }));
+      });
+    await fire("pointerdown", 300);
+    await fire("pointerup", 300);
+    expect(dialog()).toBeTruthy();
   });
 });

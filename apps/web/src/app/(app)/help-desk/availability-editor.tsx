@@ -10,10 +10,11 @@ import { apiErrorText } from "@/lib/api-error-text";
 import { formatDurationMinutes } from "@/lib/datetime";
 import { useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
+import { toast } from "@/lib/toast";
+import { AvailabilityTimeline } from "./availability-timeline";
 import { IntervalDialog } from "./interval-dialog";
 import type { AvailabilityInterval, MyHelperProfile } from "./model";
-import { durationMinutes, eventDay, intervalProblem, nextDayOf } from "./schedule";
-import { ScheduleDays } from "./schedule-view";
+import { durationMinutes, eventDay, intervalFrom, intervalProblem, nextDayOf } from "./schedule";
 
 /**
  * Stated availability (H62): the saved intervals as rows per event day, an
@@ -53,6 +54,8 @@ export function AvailabilityEditor({
   }
 
   const window = profile.suggestedInterval;
+  const startsAllowed = (interval: AvailabilityInterval) =>
+    !window || Date.parse(interval.startsAt) >= Date.parse(window.startsAt);
   const plannedDays = window ? hackingDays(window, zone) : [];
   function prefillFor(day: string): AvailabilityInterval | null {
     if (!window) return null;
@@ -87,10 +90,23 @@ export function AvailabilityEditor({
           {t("helpDeskAddInterval")}
         </Button>
       </div>
-      <ScheduleDays
+      <AvailabilityTimeline
         intervals={profile.availability}
+        days={plannedDays}
         disabled={pending}
-        plannedDays={plannedDays}
+        onDrag={(day, startMinute, endMinute) => {
+          const clock = (minute: number) =>
+            `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+          const interval = intervalFrom(day, clock(startMinute), clock(endMinute), zone);
+          if (!interval) return;
+          const problem = !startsAllowed(interval)
+            ? t("helpDeskIntervalBeforeHacking")
+            : intervalProblem(interval, profile.availability) === "overlap"
+              ? t("helpDeskIntervalOverlap")
+              : null;
+          if (problem) toast.error(problem, t("helpDeskPlanTitle"));
+          else void replace([...profile.availability, interval]);
+        }}
         onAddDay={(day) => {
           setError(null);
           setEditing(null);
@@ -102,9 +118,6 @@ export function AvailabilityEditor({
           setEditing(interval);
           setAdding(true);
         }}
-        onRemove={(removed) =>
-          void replace(profile.availability.filter((item) => item.startsAt !== removed.startsAt))
-        }
       />
       <p className="text-muted-foreground text-sm text-pretty">{t("helpDeskPlanNote")}</p>
       {error && !adding ? (
@@ -119,6 +132,18 @@ export function AvailabilityEditor({
           pending={pending}
           error={error}
           onClose={() => setAdding(false)}
+          onRemove={
+            editing
+              ? async () => {
+                  if (
+                    await replace(
+                      profile.availability.filter((item) => item.startsAt !== editing.startsAt),
+                    )
+                  )
+                    setAdding(false);
+                }
+              : undefined
+          }
           onAdd={async (interval) => {
             if (
               await replace(
@@ -157,6 +182,7 @@ function AddIntervalDialog({
   error,
   onClose,
   onAdd,
+  onRemove,
 }: {
   /** Nobody is available before the hacking time (H62). */
   notBefore?: string;
@@ -167,6 +193,7 @@ function AddIntervalDialog({
   error: unknown;
   onClose: () => void;
   onAdd: (interval: AvailabilityInterval) => void;
+  onRemove?: () => void;
 }) {
   const { t } = useLocale();
   // Prefilled with the event's hacking window, at most one interval long.
@@ -200,6 +227,7 @@ function AddIntervalDialog({
       error={error}
       onClose={onClose}
       onSave={onAdd}
+      onRemove={onRemove}
     />
   );
 }

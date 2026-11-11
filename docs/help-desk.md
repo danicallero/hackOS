@@ -58,6 +58,12 @@ Availability is a set of dated intervals, replaced as a whole (≤30, each
 from H24 door scans (`time_logs`, latest scan is `in`), and neither creates
 the other.
 
+In My profile → Mentoring the intervals are drawn as one 24-hour line per event
+day: drag across a line to mark a stretch (30-minute steps; an overlap or a
+start before the window is refused), press a marked stretch to edit or remove
+it, press an empty spot or the day's plus button to add with the dialog. The
+Add availability button is the keyboard route.
+
 ## Knowledge catalogue
 
 `help_topics` is one self-service list shared by profiles and requests, like

@@ -28,6 +28,7 @@ export function IntervalDialog({
   error,
   onClose,
   onSave,
+  onRemove,
 }: {
   title: string;
   submitLabel: string;
@@ -39,6 +40,8 @@ export function IntervalDialog({
   error: unknown;
   onClose: () => void;
   onSave: (interval: AvailabilityInterval) => void;
+  /** Editing only: removes the interval being edited. */
+  onRemove?: () => void;
 }) {
   const { t, language } = useLocale();
   const id = useId();
@@ -116,6 +119,17 @@ export function IntervalDialog({
           <ContextualError message={apiErrorText(error, t, t("helpDeskSaveError"))} />
         ) : null}
         <div className="flex justify-end gap-2">
+          {onRemove ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive mr-auto"
+              onClick={onRemove}
+              disabled={pending}
+            >
+              {t("remove")}
+            </Button>
+          ) : null}
           <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
             {t("cancel")}
           </Button>
