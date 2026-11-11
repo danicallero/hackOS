@@ -19,8 +19,11 @@ export const ONBOARDING_PATH = "/onboarding";
 /** The signed-in home (nav "Inicio"); `/` is the public landing page. */
 export const APP_HOME_PATH = "/event";
 
-export const readOnboarding = (signal?: AbortSignal) =>
-  api.get<OnboardingState>("/api/me/onboarding", { signal });
+export const readOnboarding = async (signal?: AbortSignal): Promise<OnboardingState> => {
+  const state = await api.get<OnboardingState>("/api/me/onboarding", { signal });
+  // An unexpected body (no journey) reads as an empty one rather than crashing the shell.
+  return { ...state, steps: Array.isArray(state?.steps) ? state.steps : [] };
+};
 
 export const decideStep = (step: OnboardingStep, action: OnboardingAction, deferUntil?: string) =>
   api.put<OnboardingState | undefined>(`/api/me/onboarding/${step}`, {
