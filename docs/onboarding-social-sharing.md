@@ -104,9 +104,15 @@ numbers as conservative defaults:
 
 Every action needs an explicit click; mounting only renders the preview.
 
-- **Download image** saves `hackudc-2027-<name>-<format>.png`.
-- **LinkedIn** opens `linkedin.com/feed/?shareActive=true&text=<caption>` and
-  **X** opens `x.com/intent/post?text=<caption>` in a new tab (`noopener`). The
+- **Download image** saves `hackudc-2027-<name>-<format>.png`. On a phone
+  (coarse pointer and `navigator.canShare({ files })`) it first offers the PNG,
+  without text, to the system share sheet, whose "Save image" puts it in the
+  gallery; if the sheet fails it saves a file, and dismissing it does nothing.
+- **LinkedIn** and **X** first download the PNG and copy the caption to the
+  clipboard (inside the click, so both are allowed), then open the composer in
+  a new tab and show "Image downloaded and text copied. Paste it in <network>".
+  LinkedIn opens
+  `linkedin.com/feed/?shareActive=true&text=<caption>`; X opens `x.com/intent/post?text=<caption>` in a new tab (`noopener`). The
   caption ends with the event link when `url` is given, which both networks turn
   into a link preview of the event page. Neither accepts an image through a
   link: LinkedIn's offsite share takes only a `url` (preview from the page's

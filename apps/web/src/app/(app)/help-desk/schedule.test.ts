@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { intervalFrom, intervalProblem, scheduleDays } from "./schedule";
+import { intervalFrom, intervalProblem, mergeInterval, scheduleDays } from "./schedule";
 
 const zone = "Europe/Madrid";
 
@@ -58,5 +58,25 @@ describe("planned availability by event day (H62)", () => {
     // 10:00 to 10:00 across the October clock change lasts 25 hours.
     const dst = intervalFrom("2027-10-30", "10:00", "10:00", zone)!;
     expect(intervalProblem(dst, [])).toBe("tooLong");
+  });
+});
+
+describe("mergeInterval", () => {
+  const at = (h: number) => new Date(Date.UTC(2027, 1, 27, h)).toISOString();
+  const span = (from: number, to: number) => ({ startsAt: at(from), endsAt: at(to) });
+
+  it("extends an overlapped stretch to cover the new one", () => {
+    expect(mergeInterval([span(8, 20)], span(19, 21))).toEqual([span(8, 21)]);
+  });
+
+  it("absorbs every stretch it touches and keeps the others", () => {
+    expect(mergeInterval([span(1, 2), span(8, 10), span(12, 14)], span(9, 12))).toEqual([
+      span(1, 2),
+      span(8, 14),
+    ]);
+  });
+
+  it("adds a separate stretch in order", () => {
+    expect(mergeInterval([span(8, 10)], span(12, 14))).toEqual([span(8, 10), span(12, 14)]);
   });
 });
