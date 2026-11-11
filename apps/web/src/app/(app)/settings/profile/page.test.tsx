@@ -106,12 +106,12 @@ describe("Profile tabs (H28, #1083)", () => {
       (panel) => !panel.hidden,
     );
 
-  it("gives the participant Personal details, Public profile, Wallet and Account", async () => {
+  it("gives the participant Public profile, Wallet and Account", async () => {
     await render();
-    expect(tabs()).toEqual(["personalDetails", "publicProfileTitle", "wallet", "accountTitle"]);
+    expect(tabs()).toEqual(["publicProfileTitle", "wallet", "accountTitle"]);
     expect(openPanel()).toHaveLength(1);
-    expect(openPanel()[0].textContent).toContain("personal-body");
-    expect(openPanel()[0].textContent).not.toContain("public-body");
+    expect(openPanel()[0].textContent).toContain("public-body");
+    expect(openPanel()[0].textContent).not.toContain("personal-body");
   });
 
   it("names every section with an h2 so its h3s never skip a level (#1176)", async () => {
@@ -133,7 +133,19 @@ describe("Profile tabs (H28, #1083)", () => {
     nav.search = "tab=public";
     await render();
     expect(openPanel()[0].textContent).toContain("public-body");
-    expect(openPanel()[0].textContent).not.toContain("personal-body");
+    expect(openPanel()[0].textContent).not.toContain("danger-body");
+  });
+
+  it("puts the personal details first in Account", async () => {
+    nav.search = "tab=account";
+    await render();
+    expect(openPanel()[0].textContent).toContain("personal-body");
+  });
+
+  it("opens Account for the old ?tab=personal link", async () => {
+    nav.search = "tab=personal";
+    await render();
+    expect(openPanel()[0].textContent).toContain("personal-body");
   });
 
   it("keeps the passes and certificates together in Wallet", async () => {
@@ -147,7 +159,7 @@ describe("Profile tabs (H28, #1083)", () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     await render();
-    expect(tabs()).toEqual(["personalDetails", "accountTitle"]);
+    expect(tabs()).toEqual(["accountTitle"]);
     expect(container.textContent).not.toContain("public-body");
     expect(container.textContent).not.toContain("roles-body");
   });
@@ -174,12 +186,13 @@ describe("Profile tabs (H28, #1083)", () => {
     helper.eligible = true;
     nav.search = "tab=mentoring";
     await render();
-    expect(tabs()).toEqual(["personalDetails", "profileMentoringTitle", "accountTitle"]);
+    expect(tabs()).toEqual(["profileMentoringTitle", "accountTitle"]);
     expect(openPanel()[0].textContent).toContain("mentor-body");
   });
 
-  it("adds the RSVP section to Personal details only while the person has open RSVPs", async () => {
+  it("adds the RSVP section to Wallet only while the person has open RSVPs", async () => {
     rsvps.items = [{ activityId: 1 }];
+    nav.search = "tab=wallet";
     await render();
     expect(openPanel()[0].textContent).toContain("rsvp-body");
     rsvps.items = [];
@@ -217,23 +230,24 @@ describe("Profile tabs (H28, #1083)", () => {
 
   it("mounts a tab only once it is opened, then keeps it so a hidden draft survives (#1227)", async () => {
     await render();
-    expect(container.textContent).toContain("personal-body");
+    expect(container.textContent).toContain("public-body");
     expect(container.textContent).not.toContain("danger-body");
-    await openTab(3);
+    await openTab(2);
     expect(openPanel()[0].textContent).toContain("danger-body");
-    expect(container.textContent).toContain("personal-body");
+    expect(container.textContent).toContain("public-body");
   });
 
   it("marks a tab holding unsaved edits", async () => {
     personal.dirty = true;
     await render();
     await openTab(2);
-    const profileTab = [...container.querySelectorAll("[role=tab]")][0];
+    await openTab(0);
+    const profileTab = [...container.querySelectorAll("[role=tab]")][2];
     expect(profileTab.textContent).toContain("unsavedChanges");
   });
 
   it("writes no URL when the open tab is selected again (R003)", async () => {
-    nav.search = "tab=personal";
+    nav.search = "tab=public";
     await render();
     const current = container.querySelector("[role=tab][data-state=active]") as HTMLElement;
     act(() => {
