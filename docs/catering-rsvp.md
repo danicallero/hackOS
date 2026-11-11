@@ -11,7 +11,8 @@ meal-plan routes are facades over it (`identity/meal-plan.ts`,
 ## Data
 
 - `activity_rsvp_settings` — PK `(activity_id, event_key)`: `enabled`,
-  `kinds`, name/description overrides, `rsvp_date`, `closes_at`.
+  `role_ids` (the roles asked), legacy `kinds`, name/description overrides,
+  `rsvp_date`, `closes_at`.
 - `activity_rsvps` — PK `(user_id, activity_id, event_key)`. `attending` is
   `true` (yes), `false` (no) or `NULL` (**unsure, an explicit answer**); no row
   means unanswered.
@@ -26,9 +27,14 @@ the key starts with nothing offered, nothing answered and nothing counted.
 ## Who is asked
 
 An activity is offered to a person when its settings are enabled for the current
-event key, it is asked to at least one kind (`kinds` non-empty), its schedule
-entry is `shown` and not ended, and the person's **derived attendance kind**
-(`attendanceKind`, participant-first) is in `kinds`.
+event key, it is asked to at least one role (`role_ids` non-empty) or legacy kind (`kinds`), its schedule
+entry is `shown` and not ended, and the person has a **derived attendance kind**
+(`attendanceKind`, participant-first) that is in `kinds` or they hold at least one
+of the roles in `role_ids`. The editor picks `role_ids` from the publicly visible
+roles (the same dropdown as the schedule audience; the API refuses others with
+`400 rsvp_role_invalid`). Migration 0805 moved existing `kinds` to the seeded roles
+they stood for (Participant, Mentor, Sponsor, and the seeded roles with event
+access for staff).
 
 - A registered participant is never offered a meal, even sponsors, mentors or
   capability holders who are also registered participants, and even if the
@@ -83,7 +89,7 @@ The facade still requires every open meal in a self submission.
   (`items`, `save`, `formId`) for a host such as the onboarding flow.
 - `CateringSettingsPanel` (`{ scheduleId, onDirtyChange? }`) owns its Save; it
   must not live inside the schedule entry's `<form>`. The create form sends
-  `rsvp: { enabled, kinds }` with `POST /api/schedule`, so a new activity can be
+  `rsvp: { enabled, kinds, roleIds }` with `POST /api/schedule`, so a new activity can be
   marked as asked without a second request; the same panel edits it later.
 - Locale strings live in `web.json`; their source fragments and a merge script are in
   `apps/web/locale-fragments/`.

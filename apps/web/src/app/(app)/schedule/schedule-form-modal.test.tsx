@@ -20,6 +20,19 @@ vi.mock("@/lib/logistics", () => ({
     saveScheduleTranslations: vi.fn(),
   },
 }));
+vi.mock("@/hooks/use-audience-roles", () => ({
+  useAudienceRoles: () => ({
+    roles: [{ id: 5, name: "Speaker" }],
+    names: new Map([[5, "Speaker"]]),
+  }),
+}));
+vi.mock("@/components/common/rsvp-audience-select", () => ({
+  RsvpAudienceSelect: ({ id, onChange }: { id: string; onChange: (roleIds: number[]) => void }) => (
+    <button type="button" id={id} onClick={() => onChange([5])}>
+      pick-role
+    </button>
+  ),
+}));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 const t = (key: string) => key;
 vi.mock("@/lib/i18n", () => ({ useLocale: () => ({ t, language: "en" }) }));
@@ -110,20 +123,18 @@ describe("ScheduleFormModal Live Activity audience switch", () => {
     );
   });
 
-  it("marks a new activity as asking attendance to the chosen audience", async () => {
+  it("marks a new activity as asking attendance to the chosen roles", async () => {
     const user = userEvent.setup();
     await render(base);
     const enabled = document.querySelector<HTMLButtonElement>("#schedule-rsvp-enabled");
     await act(async () => user.click(enabled as HTMLButtonElement));
-    const sponsor = [...document.querySelectorAll("button")].find(
-      (b) => b.textContent === "rsvpKindSponsor",
-    );
-    await act(async () => user.click(sponsor as HTMLButtonElement));
+    await act(async () => user.click(document.querySelector("#schedule-rsvp-audience") as Element));
     const save = [...document.querySelectorAll("button")].find((b) => b.textContent === "save");
     await act(async () => user.click(save as HTMLButtonElement));
     expect(onSubmit).toHaveBeenCalledWith(expect.anything(), [], {
       enabled: true,
-      kinds: ["sponsor"],
+      kinds: [],
+      roleIds: [5],
     });
   });
 

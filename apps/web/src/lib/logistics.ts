@@ -352,7 +352,7 @@ export interface ScheduleInput {
   /** Language `title`/`description` are written in, when it isn't the editor's own (single-language entry). */
   titleLanguage?: Language;
   /** Create the item already asking attendance to these kinds. */
-  rsvp?: { enabled: boolean; kinds: RsvpKind[] };
+  rsvp?: { enabled: boolean; kinds: RsvpKind[]; roleIds?: number[] };
 }
 
 export type { ScheduleTranslations } from "@hackos/shared/schedule-form";

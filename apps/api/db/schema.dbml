@@ -122,6 +122,7 @@ Table activity_rsvp_settings {
   kinds "text[]" [not null, default: `'{}'::text[]`]
   name_i18n jsonb
   options jsonb [not null, default: `'[]'::jsonb`]
+  role_ids "integer[]" [not null, default: `'{}'::integer[]`, note: 'H59: roles an RSVP is asked of; holding any of them is enough. Ids are checked in the API (existing, publicly visible roles).']
   rsvp_date "timestamp with time zone"
   updated_at "timestamp with time zone" [not null, default: `now()`]
 

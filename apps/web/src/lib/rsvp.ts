@@ -84,6 +84,8 @@ export interface RsvpSettings {
   isMeal: boolean;
   enabled: boolean;
   kinds: RsvpKind[];
+  /** The roles asked: holding any of them is enough. */
+  roleIds: number[];
   nameI18n: Record<string, string> | null;
   descriptionI18n: Record<string, string> | null;
   rsvpDate: string | null;
@@ -96,6 +98,7 @@ export interface RsvpSettings {
 export interface RsvpSettingsDraft {
   enabled: boolean;
   kinds: RsvpKind[];
+  roleIds: number[];
   nameI18n: Record<string, string>;
   descriptionI18n: Record<string, string>;
   rsvpDate: string;
@@ -107,17 +110,6 @@ export function askableKinds(isMeal: boolean): RsvpKind[] {
   return RSVP_KINDS.filter((kind) => !(isMeal && kind === "participant"));
 }
 
-/** Translation key for each attendance kind, shared by every RSVP audience picker. */
-export const RSVP_KIND_LABEL: Record<
-  RsvpKind,
-  "rsvpKindParticipant" | "rsvpKindMentor" | "rsvpKindSponsor" | "rsvpKindStaff"
-> = {
-  participant: "rsvpKindParticipant",
-  mentor: "rsvpKindMentor",
-  sponsor: "rsvpKindSponsor",
-  staff: "rsvpKindStaff",
-};
-
 export function settingsToDraft(
   settings: RsvpSettings,
   toLocal: (iso: string | null) => string,
@@ -125,6 +117,7 @@ export function settingsToDraft(
   return {
     enabled: settings.enabled,
     kinds: [...settings.kinds],
+    roleIds: [...(settings.roleIds ?? [])],
     nameI18n: { ...(settings.nameI18n ?? {}) },
     descriptionI18n: { ...(settings.descriptionI18n ?? {}) },
     rsvpDate: toLocal(settings.rsvpDate),
@@ -145,6 +138,7 @@ export function draftToBody(
   return {
     enabled: draft.enabled,
     kinds: draft.kinds.filter((k) => askableKinds(isMeal).includes(k)),
+    roleIds: draft.roleIds,
     nameI18n: nonBlank(draft.nameI18n),
     descriptionI18n: nonBlank(draft.descriptionI18n),
     rsvpDate: toIso(draft.rsvpDate),
@@ -154,7 +148,8 @@ export function draftToBody(
 
 /** Why the draft can't be saved, as a message key, or null. */
 export function settingsDraftError(draft: RsvpSettingsDraft): "rsvpKindsRequired" | null {
-  if (draft.enabled && draft.kinds.length === 0) return "rsvpKindsRequired";
+  if (draft.enabled && draft.kinds.length === 0 && draft.roleIds.length === 0)
+    return "rsvpKindsRequired";
   return null;
 }
 

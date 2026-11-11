@@ -9,7 +9,7 @@ import { mealKinds } from "./service.js";
 /**
  * Logistics read side of RSVPs. Counted people are active, non-anonymized
  * accounts on the reader's side of the review-fixture boundary, whose derived
- * attendance kind is in the activity's `kinds` (meals never count a
+ * attendance kind is in the activity's `kinds` or who hold one of its `role_ids` (meals never count a
  * participant): the same rule that decides who is offered the RSVP. Answers
  * from people no longer eligible, and from earlier editions, are not counted.
  */
@@ -43,7 +43,9 @@ async function peopleSql(actorId: number, eventKeyParam: string): Promise<string
   const fixtureFilter = await fixtureReadFilter(pool, actorId, "u");
   return `
   people AS (
-    SELECT u.id, k.kind, u.food_intolerances, u.food_intolerance_notes
+    SELECT u.id, k.kind, u.food_intolerances, u.food_intolerance_notes,
+           ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL
+                  WHERE ur.user_id = u.id) AS role_ids
       FROM users u
       JOIN event_attendance_kinds k ON k.user_id = u.id AND k.event_key = ${eventKeyParam}
      WHERE u.account_state = 'active' AND u.anonymized_at IS NULL${fixtureFilter}
@@ -51,7 +53,7 @@ async function peopleSql(actorId: number, eventKeyParam: string): Promise<string
 }
 
 const ELIGIBLE_JOIN = `
-  JOIN people p ON p.kind = ANY(st.kinds)
+  JOIN people p ON (p.kind = ANY(st.kinds) OR p.role_ids && st.role_ids)
                AND NOT (a.category = ANY($3::text[]) AND p.kind = 'participant')`;
 
 export async function rsvpSummaries(
@@ -73,7 +75,7 @@ export async function rsvpSummaries(
        FROM activity_rsvp_settings st
        JOIN activities a ON a.id = st.activity_id
        JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
-      WHERE st.event_key = $1 AND st.enabled AND cardinality(st.kinds) > 0
+      WHERE st.event_key = $1 AND st.enabled AND (cardinality(st.kinds) > 0 OR cardinality(st.role_ids) > 0)
         AND ($2::int IS NULL OR a.id = $2)
         AND (NOT $4::boolean OR a.category = ANY($3::text[]))
       ORDER BY s.starts_at, a.id`,
@@ -189,7 +191,7 @@ export async function exportRsvpCsv(
   const { rowCount } = await pool.query(
     `SELECT 1 FROM activity_rsvp_settings st JOIN activities a ON a.id = st.activity_id
        JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
-      WHERE st.event_key = $1 AND st.enabled AND cardinality(st.kinds) > 0 AND a.id = $2
+      WHERE st.event_key = $1 AND st.enabled AND (cardinality(st.kinds) > 0 OR cardinality(st.role_ids) > 0) AND a.id = $2
         AND (NOT $4::boolean OR a.category = ANY($3::text[]))`,
     [eventKey, activityId, mealKinds(), options.mealsOnly ?? false],
   );
@@ -253,7 +255,7 @@ export async function rsvpPeople(actorId: number, activityId: number): Promise<R
   const { rowCount } = await pool.query(
     `SELECT 1 FROM activity_rsvp_settings st JOIN activities a ON a.id = st.activity_id
        JOIN schedule s ON s.id = a.schedule_id AND s.visibility = 'shown'
-      WHERE st.event_key = $1 AND st.enabled AND cardinality(st.kinds) > 0 AND a.id = $2`,
+      WHERE st.event_key = $1 AND st.enabled AND (cardinality(st.kinds) > 0 OR cardinality(st.role_ids) > 0) AND a.id = $2`,
     [eventKey, activityId],
   );
   if (!rowCount) throw new NotFoundError("Activity not found", { activityId });

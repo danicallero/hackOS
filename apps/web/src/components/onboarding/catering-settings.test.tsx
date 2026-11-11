@@ -26,6 +26,11 @@ vi.mock("@/lib/datetime", () => ({
   toDatetimeLocal: (iso: string | null) => (iso ? iso.slice(0, 16) : ""),
   fromDatetimeLocal: (v: string) => (v ? `${v}:00.000Z` : null),
 }));
+vi.mock("@/components/common/rsvp-audience-select", () => ({
+  RsvpAudienceSelect: ({ value }: { value: number[] }) => (
+    <div data-testid="audience">{value.join(",")}</div>
+  ),
+}));
 vi.mock("@/lib/toast", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/common/datetime-input", () => ({
   DateTimeInput: ({ value }: { value: string }) => <input readOnly value={value} />,
@@ -48,6 +53,7 @@ function settings(overrides: Partial<RsvpSettings> = {}): RsvpSettings {
     isMeal: true,
     enabled: true,
     kinds: ["sponsor"],
+    roleIds: [],
     nameI18n: null,
     descriptionI18n: null,
     rsvpDate: null,
@@ -98,15 +104,15 @@ function render(s: RsvpSettings) {
 }
 
 describe("CateringSettingsPanel", () => {
-  it("never offers participants for a meal, but does for other activities", () => {
-    render(settings());
-    expect(container.textContent).not.toContain("rsvpKindParticipant");
+  it("asks who is asked with the roles dropdown and notes meals skip participants", () => {
+    render(settings({ roleIds: [4, 9] }));
+    expect(container.querySelector('[data-testid="audience"]')?.textContent).toBe("4,9");
     expect(container.textContent).toContain("rsvpMealsNoParticipants");
     expect(container.textContent).not.toContain("rsvpRequired");
     act(() => root.unmount());
     root = createRoot(container);
     render(settings({ isMeal: false }));
-    expect(container.textContent).toContain("rsvpKindParticipant");
+    expect(container.textContent).not.toContain("rsvpMealsNoParticipants");
   });
 
   it("shows counts and saves the draft body", async () => {
@@ -116,6 +122,7 @@ describe("CateringSettingsPanel", () => {
     expect(mocks.save).toHaveBeenCalledWith({
       enabled: true,
       kinds: ["sponsor"],
+      roleIds: [],
       nameI18n: null,
       descriptionI18n: null,
       rsvpDate: null,
@@ -124,7 +131,7 @@ describe("CateringSettingsPanel", () => {
   });
 
   it("blocks saving an enabled RSVP that asks nobody", () => {
-    render(settings({ kinds: [] }));
+    render(settings({ kinds: [], roleIds: [] }));
     expect(container.querySelector<HTMLButtonElement>("[data-submit]")?.disabled).toBe(true);
     expect(container.textContent).toContain("rsvpKindsRequired");
   });

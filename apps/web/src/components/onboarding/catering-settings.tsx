@@ -5,6 +5,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { FormActions } from "@/components/common/form-actions";
+import { RsvpAudienceSelect } from "@/components/common/rsvp-audience-select";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
@@ -15,9 +16,7 @@ import { useRsvpSettings } from "@/hooks/use-rsvp-settings";
 import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import { LANGS, languageName, useLocale } from "@/lib/i18n";
 import {
-  askableKinds,
   draftToBody,
-  RSVP_KIND_LABEL,
   type RsvpSettings,
   type RsvpSettingsDraft,
   type RsvpSummary,
@@ -92,7 +91,6 @@ function SettingsForm({
   const [saveError, setSaveError] = useState<string | null>(null);
   const changed = JSON.stringify(draft) !== JSON.stringify(initial);
   const invalid = settingsDraftError(draft);
-  const kinds = askableKinds(settings.isMeal);
 
   useEffect(() => {
     onDirtyChange?.(changed);
@@ -135,32 +133,12 @@ function SettingsForm({
         <>
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">{t("rsvpAudience")}</legend>
-            <div className="flex flex-wrap gap-2">
-              {kinds.map((kind) => {
-                const on = draft.kinds.includes(kind);
-                return (
-                  <button
-                    key={kind}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() =>
-                      patch({
-                        kinds: on ? draft.kinds.filter((k) => k !== kind) : [...draft.kinds, kind],
-                      })
-                    }
-                    className={cn(
-                      "inline-flex min-h-(--target-min) items-center gap-1.5 rounded-button border px-3 text-sm transition-colors",
-                      on
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent",
-                    )}
-                  >
-                    {on && <CheckIcon aria-hidden weight="bold" className="size-3.5" />}
-                    {t(RSVP_KIND_LABEL[kind])}
-                  </button>
-                );
-              })}
-            </div>
+            <RsvpAudienceSelect
+              id={`${baseId}-audience`}
+              value={draft.roleIds}
+              onChange={(roleIds) => patch({ roleIds })}
+              inDialog
+            />
             {settings.isMeal && (
               <p className="text-muted-foreground text-xs">{t("rsvpMealsNoParticipants")}</p>
             )}

@@ -357,10 +357,11 @@ export const scheduleBody = z.object({
     .object({
       enabled: z.boolean(),
       kinds: z.array(z.enum(ATTENDANCE_KINDS)).max(ATTENDANCE_KINDS.length).default([]),
+      roleIds: z.array(z.number().int().positive()).max(100).default([]),
     })
     .optional()
     .describe(
-      "Create the activity already asking attendance to these kinds. Only asked-to-someone " +
+      "Create the activity already asking attendance to these roles (or legacy kinds). Only asked-to-someone " +
         "activities appear in the logistics attendance overview.",
     ),
 });

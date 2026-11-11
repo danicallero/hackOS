@@ -22,6 +22,7 @@ import { ContextualError } from "@/components/common/contextual-error";
 import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PublicationControls } from "@/components/common/publication-controls";
+import { RsvpAudienceSelect } from "@/components/common/rsvp-audience-select";
 import { SectionCard } from "@/components/common/section-card";
 import { SidePanelEditor } from "@/components/common/side-panel-editor";
 import { Spinner } from "@/components/common/spinner";
@@ -54,7 +55,7 @@ import {
   type ScheduleOwner,
   type ScheduleTranslations,
 } from "@/lib/logistics";
-import { askableKinds, RSVP_KIND_LABEL, type RsvpKind } from "@/lib/rsvp";
+import type { RsvpKind } from "@/lib/rsvp";
 import { toast } from "@/lib/toast";
 import type { Language } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -216,7 +217,7 @@ export function ScheduleFormModal({
   onSubmit: (
     values: ScheduleInput,
     pendingOwners: PendingOwner[],
-    rsvp?: { enabled: true; kinds: RsvpKind[] },
+    rsvp?: { enabled: true; kinds: RsvpKind[]; roleIds: number[] },
   ) => Promise<{ id: number }>;
   /** Present only when editing an existing item — owner assignment needs a real id. */
   scheduleId?: number;
@@ -229,7 +230,7 @@ export function ScheduleFormModal({
   const [pendingOwners, setPendingOwners] = useState<PendingOwner[]>([]);
   // Create mode only: mark the activity as asking attendance before it exists.
   const [rsvpEnabled, setRsvpEnabled] = useState(false);
-  const [rsvpKinds, setRsvpKinds] = useState<RsvpKind[]>([]);
+  const [rsvpRoleIds, setRsvpRoleIds] = useState<number[]>([]);
   // H50 extension: staged locally so translations can be filled in before
   // the item even exists — persisted right after create/update below.
   const [translations, setTranslations] = useState<ScheduleTranslations>(initialTranslations ?? {});
@@ -253,7 +254,7 @@ export function ScheduleFormModal({
       setScheduledPublish(Boolean(initial.publishAt));
       setPendingOwners([]);
       setRsvpEnabled(false);
-      setRsvpKinds([]);
+      setRsvpRoleIds([]);
       setTranslations(nextTranslations);
     } else if (
       !sameValue(previous.initial, initial) ||
@@ -326,7 +327,9 @@ export function ScheduleFormModal({
     setPending(true);
     try {
       const rsvp =
-        !scheduleId && rsvpEnabled ? ({ enabled: true, kinds: rsvpKinds } as const) : undefined;
+        !scheduleId && rsvpEnabled
+          ? ({ enabled: true, kinds: [] as RsvpKind[], roleIds: rsvpRoleIds } as const)
+          : undefined;
       const result = rsvp
         ? await onSubmit(prepared.values, pendingOwners, rsvp)
         : await onSubmit(prepared.values, pendingOwners);
@@ -346,8 +349,7 @@ export function ScheduleFormModal({
     Object.values(translations).some((translation) => translation?.title?.trim());
   const isParticipant = (values.audiences ?? []).includes("participant");
   const isMeal = isMealActivityKind(values.type);
-  const rsvpKindsForType = askableKinds(isMeal);
-  const rsvpInvalid = rsvpEnabled && rsvpKinds.length === 0;
+  const rsvpInvalid = rsvpEnabled && rsvpRoleIds.length === 0;
   // An item with no audience tag is staff-only, full stop — visibility/publishAt
   // describe when a *tagged* audience gets to see an item, so they're meaningless
   // (and the API silently forces them back to hidden/null) without one (H59 follow-up).
@@ -429,9 +431,6 @@ export function ScheduleFormModal({
                 type,
                 requiresScan: isMealActivityKind(type) || v.requiresScan,
               }));
-              setRsvpKinds((kinds) =>
-                isMealActivityKind(type) ? kinds.filter((kind) => kind !== "participant") : kinds,
-              );
             }}
           >
             <SelectTrigger id="schedule-type" className="w-full">
@@ -584,7 +583,7 @@ export function ScheduleFormModal({
                   checked={rsvpEnabled}
                   onCheckedChange={(enabled) => {
                     setRsvpEnabled(enabled);
-                    if (!enabled) setRsvpKinds([]);
+                    if (!enabled) setRsvpRoleIds([]);
                   }}
                 />
               </div>
@@ -592,32 +591,12 @@ export function ScheduleFormModal({
                 <>
                   <fieldset className="space-y-2">
                     <legend className="text-sm font-medium">{t("rsvpAudience")}</legend>
-                    <div className="flex flex-wrap gap-2">
-                      {rsvpKindsForType.map((kind) => {
-                        const on = rsvpKinds.includes(kind);
-                        return (
-                          <button
-                            key={kind}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() =>
-                              setRsvpKinds((kinds) =>
-                                on ? kinds.filter((k) => k !== kind) : [...kinds, kind],
-                              )
-                            }
-                            className={cn(
-                              "inline-flex min-h-(--target-min) items-center gap-1.5 rounded-button border px-3 text-sm transition-colors",
-                              on
-                                ? "border-primary bg-primary text-primary-foreground"
-                                : "text-muted-foreground hover:bg-accent",
-                            )}
-                          >
-                            {on && <CheckIcon aria-hidden weight="bold" className="size-3.5" />}
-                            {t(RSVP_KIND_LABEL[kind])}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <RsvpAudienceSelect
+                      id="schedule-rsvp-audience"
+                      value={rsvpRoleIds}
+                      onChange={setRsvpRoleIds}
+                      inDialog
+                    />
                     {isMeal && (
                       <p className="text-muted-foreground text-xs">
                         {t("rsvpMealsNoParticipants")}

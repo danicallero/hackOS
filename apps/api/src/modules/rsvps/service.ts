@@ -137,7 +137,7 @@ export async function offeredRsvps(
               ON r.activity_id = a.id AND r.user_id = $1 AND r.event_key = st.event_key
       WHERE st.event_key = $2 AND st.enabled
         AND s.visibility = 'shown' AND s.ends_at > now()
-        AND ($3::text = ANY(st.kinds) OR s.audiences && $6::text[])
+        AND ($3::text = ANY(st.kinds) OR st.role_ids && ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL WHERE ur.user_id = $1) OR s.audiences && $6::text[])
         AND NOT (a.category = ANY($4::text[]) AND $3::text = 'participant')
         AND (NOT $5::boolean OR a.category = ANY($4::text[]))
       ORDER BY s.starts_at, a.id`,
@@ -286,7 +286,7 @@ export async function submitRsvps(
              JOIN activities a ON a.id = st.activity_id
              JOIN schedule s ON s.id = a.schedule_id
             WHERE st.activity_id = $1 AND st.event_key = $2
-              AND ($3::text = ANY(st.kinds) OR s.audiences && $6::text[])
+              AND ($3::text = ANY(st.kinds) OR st.role_ids && ARRAY(SELECT ur.role_id FROM user_roles ur JOIN roles ro ON ro.id = ur.role_id AND ro.deleted_at IS NULL WHERE ur.user_id = $7) OR s.audiences && $6::text[])
               AND (NOT $4::boolean OR a.category = ANY($5::text[]))`,
           [
             input.activityId,
@@ -295,6 +295,7 @@ export async function submitRsvps(
             mealFacade,
             mealKinds(),
             (await roleAudienceTagsForUsers([userId], client)).get(userId) ?? [],
+            userId,
           ],
         );
         // Ended, hidden or switched off since the list was loaded: nothing to store.

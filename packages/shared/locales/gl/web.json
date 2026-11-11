@@ -4325,5 +4325,6 @@
   "publicProfileFieldsOffHint": "Activa o compartir para editar estes campos.",
   "helpDeskResizeStart": "Arrastra para cambiar o inicio de {interval}",
   "helpDeskResizeEnd": "Arrastra para cambiar o final de {interval}",
+  "rsvpAudiencePlaceholder": "Selecciona roles…",
   "profileRsvpTitle": "RSVP"
 }

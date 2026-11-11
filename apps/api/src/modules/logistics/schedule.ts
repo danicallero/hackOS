@@ -15,7 +15,7 @@ import { requestLiveActivitySync } from "../live-activities/kick.js";
 import { normalizeLanguage } from "../notifications/templates.js";
 import type { Language } from "../notifications/translate/index.js";
 import { isTranslationAvailable, translateFields } from "../notifications/translate/index.js";
-import { validateRsvpSettings } from "../rsvps/settings.js";
+import { assertRsvpRoles, validateRsvpSettings } from "../rsvps/settings.js";
 import { roleAudienceTagsForUsers } from "./role-audiences.js";
 
 const SCHEDULE_COLUMNS =
@@ -102,7 +102,7 @@ export interface ScheduleInput {
   /** Language `title`/`description` are written in; defaults to the author's account language. */
   titleLanguage?: Language;
   /** Create the item already asking attendance to these kinds. */
-  rsvp?: { enabled: boolean; kinds: AttendanceKind[] };
+  rsvp?: { enabled: boolean; kinds: AttendanceKind[]; roleIds?: number[] };
 }
 
 export interface SchedulePatch {
@@ -345,17 +345,19 @@ export async function createScheduleItem(actorId: number | null, input: Schedule
       const settings = {
         enabled: true,
         kinds: [...rsvp.kinds].sort((a, b) => a.localeCompare(b)),
+        roleIds: [...(rsvp.roleIds ?? [])].sort((a, b) => a - b),
         nameI18n: null,
         descriptionI18n: null,
         rsvpDate: null,
         closesAt: null,
       };
       validateRsvpSettings(settings, isMealActivityKind(item.type));
+      await assertRsvpRoles(client, settings.roleIds);
       const eventKey = await currentEventKey(client);
       await client.query(
-        `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds)
-         VALUES ($1, $2, $3, $4::text[])`,
-        [activityId, eventKey, settings.enabled, settings.kinds],
+        `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds, role_ids)
+         VALUES ($1, $2, $3, $4::text[], $5::int[])`,
+        [activityId, eventKey, settings.enabled, settings.kinds, settings.roleIds],
       );
     }
     await audit(client, {

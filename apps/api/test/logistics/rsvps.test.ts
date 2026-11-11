@@ -586,6 +586,87 @@ describe("role audiences ask the people holding them (H59)", () => {
   });
 });
 
+describe("RSVPs asked of roles (H59)", () => {
+  it("asks, and counts, whoever holds one of the chosen public roles", async () => {
+    const speaker = await createRole([], { name: "Speaker", eventAccess: true });
+    const holder = await person("mentor");
+    await assignRole(holder, speaker);
+    const outsider = await person("mentor");
+    const organizer = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const pool = await db();
+    const id = await activity({ category: "workshop" });
+    const { rows } = await pool.query(`SELECT schedule_id FROM activities WHERE id = $1`, [id]);
+
+    const saved = await app.inject({
+      method: "PUT",
+      url: `/api/schedule/${rows[0].schedule_id}/rsvp`,
+      headers: { ...asUser(organizer), "idempotency-key": crypto.randomUUID() },
+      payload: {
+        enabled: true,
+        kinds: [],
+        roleIds: [speaker],
+        nameI18n: null,
+        descriptionI18n: null,
+        rsvpDate: null,
+        closesAt: null,
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json().roleIds).toEqual([speaker]);
+    expect((await getItems(holder)).map((item) => item.activityId)).toEqual([id]);
+    expect(await getItems(outsider)).toEqual([]);
+    const again = await app.inject({
+      method: "GET",
+      url: `/api/schedule/${rows[0].schedule_id}/rsvp`,
+      headers: asUser(organizer),
+    });
+    expect(again.json().counts.eligible).toBe(1);
+  });
+
+  it("needs an audience and refuses roles that are not publicly visible", async () => {
+    const hidden = await createRole([], { isVisible: false });
+    const organizer = await createUserWithCapabilities([CAPABILITIES.SCHEDULE_MANAGE]);
+    const pool = await db();
+    const id = await activity({ category: "workshop" });
+    const { rows } = await pool.query(`SELECT schedule_id FROM activities WHERE id = $1`, [id]);
+    const put = (roleIds: number[]) =>
+      app.inject({
+        method: "PUT",
+        url: `/api/schedule/${rows[0].schedule_id}/rsvp`,
+        headers: { ...asUser(organizer), "idempotency-key": crypto.randomUUID() },
+        payload: {
+          enabled: true,
+          kinds: [],
+          roleIds,
+          nameI18n: null,
+          descriptionI18n: null,
+          rsvpDate: null,
+          closesAt: null,
+        },
+      });
+    const none = await put([]);
+    expect(none.statusCode).toBe(400);
+    expect(none.json().error.details.code).toBe("rsvp_kinds_required");
+    const refused = await put([hidden]);
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().error.details.code).toBe("rsvp_role_invalid");
+  });
+
+  it("still never offers meals to participants, even through a role they hold", async () => {
+    const participantRole = await createRole([], { name: "Attendees", eventAccess: true });
+    const participant = await person("participant");
+    await assignRole(participant, participantRole);
+    const pool = await db();
+    const id = await activity({ category: "meal" });
+    await pool.query(
+      `INSERT INTO activity_rsvp_settings (activity_id, event_key, enabled, kinds, role_ids)
+       SELECT $1, event_key, true, '{}', $2::int[] FROM event_config WHERE id = 1`,
+      [id, [participantRole]],
+    );
+    expect(await getItems(participant)).toEqual([]);
+  });
+});
+
 describe("GET /api/logistics/dietary", () => {
   it("lists everyone with intolerances or notes, with counts, and audits the read", async () => {
     const exporter = await createUserWithCapabilities([CAPABILITIES.MEAL_PLANS_EXPORT]);
