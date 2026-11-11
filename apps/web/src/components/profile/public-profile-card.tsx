@@ -350,84 +350,86 @@ export function PublicProfileCard({
       >
         {saveError && <ContextualError message={saveError} />}
         {/* Locked while saving, so no edit is lost when the response lands. */}
-        <fieldset disabled={pending} className="min-w-0 space-y-(--space-within-section)">
-          <div className="flex min-w-0 items-center gap-4">
-            <ProfilePhoto />
-            <div className="min-w-0">
-              <p className="truncate font-medium">
-                {[me.name, me.surname].filter(Boolean).join(" ")}
-              </p>
-              <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+        <fieldset
+          disabled={pending}
+          className={cn(
+            "min-w-0",
+            onboarding
+              ? "space-y-(--space-within-section)"
+              : "grid gap-(--space-within-section) @3xl:grid-cols-[minmax(0,1fr)_17rem] @3xl:gap-8",
+          )}
+        >
+          <div className="min-w-0 space-y-(--space-within-section)">
+            <div className="flex min-w-0 items-center gap-4">
+              <ProfilePhoto />
+              <div className="min-w-0">
+                <p className="truncate font-medium">
+                  {[me.name, me.surname].filter(Boolean).join(" ")}
+                </p>
+                <p className="text-muted-foreground truncate text-sm">{me.email}</p>
+              </div>
             </div>
-          </div>
-          {onboarding ? (
-            <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
-          ) : (
-            <ShareToggleCard
-              checked={settings.directoryVisible}
-              onChange={(directoryVisible) => update({ directoryVisible })}
-              label={t("publicProfileVisible")}
-              hint={t("publicProfileAudience")}
-            />
-          )}
-          {!settings.directoryVisible && helperPublished && (
-            <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
-          )}
-          {/* What sharing would show stays in view while it is off, but cannot be edited. */}
-          <fieldset
-            disabled={!fieldsOpen}
-            className={cn(
-              "min-w-0 space-y-(--space-within-section) transition-opacity",
-              !fieldsOpen && "opacity-55",
-            )}
-          >
-            <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
-            <ProfileTextFields
-              settings={settings}
-              onChange={update}
-              ownAccount
-              githubStatus={githubStatus.data ?? null}
-              className={
-                onboarding
-                  ? "grid items-start gap-4 sm:grid-cols-2"
-                  : "grid items-start gap-4 @xl:grid-cols-2"
-              }
-            />
-            {(!onboarding || profile.cv?.source === "application") && (
-              <CvField
-                cv={profile.cv}
-                ownerName={displayName(me, true)}
-                shareCv={settings.shareCv}
-                onShareChange={(shareCv) => update({ shareCv })}
-                onSaved={(next) => {
-                  commit(next);
-                  // A removed CV is no longer shared; drop a pending share too.
-                  if (!next.cv) {
-                    setEdits((current) =>
-                      current?.shareCv ? { ...current, shareCv: false } : current,
-                    );
-                  }
-                }}
+            {onboarding ? (
+              <p className="text-muted-foreground text-sm">{t("publicProfileAudience")}</p>
+            ) : (
+              <ShareToggleCard
+                checked={settings.directoryVisible}
+                onChange={(directoryVisible) => update({ directoryVisible })}
+                label={t("publicProfileVisible")}
+                hint={t("publicProfileAudience")}
               />
             )}
-          </fieldset>
+            {!settings.directoryVisible && helperPublished && (
+              <p className="text-muted-foreground text-sm">{t("publicProfileHelpDeskOnly")}</p>
+            )}
+            {/* What sharing would show stays in view while it is off, but cannot be edited. */}
+            <fieldset
+              disabled={!fieldsOpen}
+              className={cn(
+                "min-w-0 space-y-(--space-within-section) transition-opacity",
+                !fieldsOpen && "opacity-55",
+              )}
+            >
+              <ProfileVisibilityFields settings={settings} onChange={update} className="" rows />
+              <ProfileTextFields
+                settings={settings}
+                onChange={update}
+                ownAccount
+                githubStatus={githubStatus.data ?? null}
+                className={
+                  onboarding
+                    ? "grid items-start gap-4 sm:grid-cols-2"
+                    : "grid items-start gap-4 @xl:grid-cols-2"
+                }
+              />
+              {(!onboarding || profile.cv?.source === "application") && (
+                <CvField
+                  cv={profile.cv}
+                  ownerName={displayName(me, true)}
+                  shareCv={settings.shareCv}
+                  onShareChange={(shareCv) => update({ shareCv })}
+                  onSaved={(next) => {
+                    commit(next);
+                    // A removed CV is no longer shared; drop a pending share too.
+                    if (!next.cv) {
+                      setEdits((current) =>
+                        current?.shareCv ? { ...current, shareCv: false } : current,
+                      );
+                    }
+                  }}
+                />
+              )}
+            </fieldset>
+          </div>
           {fieldsOpen && (
             <section
               className={
                 onboarding
                   ? "space-y-2 border-t border-border/60 pt-4"
-                  : "grid gap-x-4 gap-y-2 @xl:grid-cols-2"
+                  : "space-y-2 @3xl:sticky @3xl:top-4 @3xl:self-start"
               }
             >
-              <h3
-                className={
-                  onboarding
-                    ? "type-label text-muted-foreground"
-                    : "type-label text-muted-foreground @xl:col-span-2"
-                }
-              >
-                {t("publicProfilePreview")}
-              </h3>
+              <h3 className="type-label text-muted-foreground">{t("publicProfilePreview")}</h3>
               {onboarding ? (
                 <DirectoryCard
                   entry={
@@ -435,9 +437,7 @@ export function PublicProfileCard({
                   }
                 />
               ) : (
-                <div className="@xl:col-start-1">
-                  <DirectoryCard entry={preview ?? profile.preview} />
-                </div>
+                <DirectoryCard entry={preview ?? profile.preview} />
               )}
             </section>
           )}

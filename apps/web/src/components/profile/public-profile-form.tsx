@@ -559,7 +559,7 @@ function HandleInput({
 }) {
   return (
     <div className="col-span-2 row-start-2 flex min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
-      <span className="rounded-l-control text-muted-foreground bg-muted inline-flex shrink-0 items-center border border-r-0 px-3 text-sm">
+      <span className="rounded-l-control text-muted-foreground bg-muted inline-flex w-36 shrink-0 items-center border border-r-0 px-3 text-sm">
         {prefix}
       </span>
       <Input
