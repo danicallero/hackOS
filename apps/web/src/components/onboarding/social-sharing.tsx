@@ -734,7 +734,8 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
   const textW = width - margin * 2;
   const rows = posterRows(ctx, o, textW, layout, 1, 1);
   const textH = rows.reduce((sum, r) => sum + r.lineHeight, 0);
-  const hostBlock = o.host ? layout.host * 2.2 : 20;
+  // The story tilts its pass, whose lower-left corner dips, so it needs a taller strip for the host.
+  const hostBlock = o.host ? layout.host * (o.format === "story" ? 3.4 : 2.2) : 20;
   if (o.format === "story") {
     // The ticket is anchored at the bottom-right corner and grows to the left
     // (and up) as far as the text block allows; tilted a little counter-clockwise.
@@ -753,9 +754,10 @@ export function drawShareCard(ctx: Ctx, o: DrawCardOptions): void {
     drawPass(ctx, o, w);
     drawSeagull(ctx, o, w, layout.gull, 0.8);
     ctx.restore();
+    const dip = w * Math.sin(-tilt);
     drawHost(
       width - margin - (w * Math.cos(tilt)) / 2,
-      bottom + layout.host * 1.7,
+      bottom + dip / 2 + layout.host * 2.4,
       layout.host,
       w,
       "center",

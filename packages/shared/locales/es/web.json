@@ -4230,7 +4230,7 @@
   "helpDeskChallengeAlertsNote": "Solo te avisan las peticiones de los retos elegidos. Sin ninguno, te avisan todas.",
   "helpDeskIntervalBeforeHacking": "No puedes estar disponible antes del hacking.",
   "helpDeskOtherHint": "Llega a todo el apoyo disponible",
-  "helpDeskPlanTitle": "¿Cuándo piensas estar en el recinto?",
+  "helpDeskPlanTitle": "¿Cuándo piensas ofrecer ayuda?",
   "helpDeskPlanNote": "Esto es solo para planificar la logística y la cobertura. Solo recibirás solicitudes de ayuda si estás dentro del recinto cuando se hagan.",
   "helpDeskIntervalOrder": "El final debe ser posterior al inicio.",
   "helpDeskOptions": "Opciones de ayuda",
@@ -4324,5 +4324,6 @@
   "githubLinkAnother": "Vincular otra cuenta",
   "publicProfileFieldsOffHint": "Activa el compartir para editar estos campos.",
   "helpDeskResizeStart": "Arrastra para cambiar el inicio de {interval}",
-  "helpDeskResizeEnd": "Arrastra para cambiar el final de {interval}"
+  "helpDeskResizeEnd": "Arrastra para cambiar el final de {interval}",
+  "profileRsvpTitle": "RSVP"
 }

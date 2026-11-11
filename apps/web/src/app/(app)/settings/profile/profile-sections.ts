@@ -46,7 +46,7 @@ const TABS: TabDef[] = [
   },
   {
     id: "attendance",
-    title: "onboardingStepRsvp",
+    title: "profileRsvpTitle",
     sections: [{ id: "rsvp" }],
   },
   {
