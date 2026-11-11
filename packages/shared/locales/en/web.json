@@ -4231,7 +4231,7 @@
   "helpDeskIntervalBeforeHacking": "You can't be available before the hacking time.",
   "helpDeskOtherHint": "Reaches all available support",
   "helpDeskPlanTitle": "When do you plan to be at the venue?",
-  "helpDeskPlanNote": "You can add several intervals. It is only a plan: people see whether you are inside the venue before calling you.",
+  "helpDeskPlanNote": "This is only for logistics and coverage planning. You will only receive help requests while you are inside the venue when they are made.",
   "helpDeskIntervalOrder": "The end must be after the start.",
   "helpDeskOptions": "Help desk options",
   "helpDeskMySupportProfile": "My support profile",
