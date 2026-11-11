@@ -1,7 +1,7 @@
 # Catering and activity RSVPs
 
 Per-activity RSVPs generalise the sponsor meal plans (#933): an organizer asks
-selected attendance kinds to answer yes / no / not sure for an activity, and
+selected publicly visible roles to answer yes / no / not sure for an activity, and
 logistics reads truthful headcounts.
 Code: `apps/api/src/modules/rsvps/` (service, settings, summary, routes); the
 meal-plan routes are facades over it (`identity/meal-plan.ts`,
@@ -30,7 +30,9 @@ An activity is offered to a person when its settings are enabled for the current
 event key, it is asked to at least one role (`role_ids` non-empty) or legacy kind (`kinds`), its schedule
 entry is `shown` and not ended, and the person has a **derived attendance kind**
 (`attendanceKind`, participant-first) that is in `kinds` or they hold at least one
-of the roles in `role_ids`. The editor picks `role_ids` from the publicly visible
+of the roles in `role_ids` or the schedule entry’s explicit `role:<id>`
+audiences. The same offer query drives web onboarding and next-entry mobile
+tasks. The editor picks `role_ids` from the publicly visible
 roles (the same dropdown as the schedule audience; the API refuses others with
 `400 rsvp_role_invalid`). Migration 0805 moved existing `kinds` to the seeded roles
 they stood for (Participant, Mentor, Sponsor, and the seeded roles with event
@@ -84,19 +86,19 @@ The facade still requires every open meal in a self submission.
 
 ## Web integration points
 
-- `CateringRsvpSection` (`{ userId, onDirtyChange?, onSaved?, footer? }`) renders
-  nothing without open RSVPs. `CateringRsvpForm` is the controlled variant
+- `CateringRsvpSection` (`{ userId, onDirtyChange?, onSaved?, footer? }`) shows
+  an empty state without offered RSVPs. `CateringRsvpForm` is the controlled variant
   (`items`, `save`, `formId`) for a host such as the onboarding flow.
 - `CateringSettingsPanel` (`{ scheduleId, onDirtyChange? }`) owns its Save; it
   must not live inside the schedule entry's `<form>`. The create form sends
   `rsvp: { enabled, kinds, roleIds }` with `POST /api/schedule`, so a new activity can be
   marked as asked without a second request; the same panel edits it later.
-- Locale strings live in `web.json`; their source fragments and a merge script are in
-  `apps/web/locale-fragments/`.
+- Locale strings live in `packages/shared/locales/{es,gl,en}/web.json` and
+  `mobile.json`.
 
 ## Organizer overview and dietary view
 
-- **Attendance** (Logistics › Asistencia, `/logistics/rsvps`; `logistics:stats` or
+- **RSVP** (Logistics › RSVP, `/logistics/rsvps`; `logistics:stats` or
   `meal-plans:export`): only schedule entries asked to at least one kind, in
   time order, with the live Sí / No / No lo sé / Sin respuesta counts and,
   expanded, who answered what (`GET /api/logistics/rsvps/:activityId/people`:
@@ -108,6 +110,9 @@ The facade still requires every open meal in a self submission.
   every current attendee with intolerances or notes, the per-intolerance counts
   and totals; the web filters by intolerance and searches names, companies and
   notes. Every read writes an audit row without content.
-- Attendees change their answers in the onboarding Attendance step (listed only
-  while they still have an open item to answer) and in My profile › Personal
-  details › Attendance (shown while they have open RSVPs).
+- Attendees change their answers in the onboarding RSVP step (listed only
+  while they still have an open item to answer) and in My profile › RSVP
+  (always available with event access). Mobile Account uses the same
+  yes/no/unsure API and shows open activities and closed answers; next-entry
+  profile tasks include pending activity RSVPs for every eligible attendee.
+  Unchanged or unanswered items are never submitted as implicit No answers.

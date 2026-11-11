@@ -1111,5 +1111,13 @@
   "offlineModeUpdated": "Offline mode · Updated {updatedAt}",
   "offlineReconnect": "Reconnect",
   "helpClosed": "The help desk is closed.",
-  "helpClosedOpens": "The help desk is closed. Opens {date}"
+  "helpClosedOpens": "The help desk is closed. Opens {date}",
+  "profileRsvpTitle": "RSVP",
+  "rsvpYes": "Yes",
+  "rsvpNo": "No",
+  "rsvpUnsure": "Not sure",
+  "rsvpUnanswered": "No answer",
+  "couldNotSaveRsvps": "Could not save your answers",
+  "rsvpClosed": "Closed",
+  "rsvpNoItems": "No activities are asking for your RSVP."
 }
