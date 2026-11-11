@@ -2,6 +2,7 @@
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { useRef, useState } from "react";
 import { IconButton } from "@/components/common/icon-button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEventTimeZone } from "@/lib/event-time";
 import { useLocale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -226,99 +227,112 @@ function Track({
       ? [Math.min(drag.anchor, drag.at), Math.max(drag.anchor, drag.at)]
       : null;
   return (
-    <fieldset
-      ref={track}
-      aria-label={label}
-      className={cn(
-        "bg-muted relative m-0 h-10 w-full min-w-0 touch-pan-y overflow-hidden rounded-control border-0 p-0 select-none",
-        interactive && "cursor-crosshair",
-        disabled && !readOnly && "opacity-60",
-      )}
-      onPointerDown={(event) => {
-        if (interactive && event.button === 0 && event.target === event.currentTarget) begin(event);
-      }}
-      onPointerMove={(event) => {
-        if (drag) setDrag({ ...drag, at: minute(event) });
-      }}
-      onPointerUp={finish}
-      onPointerCancel={() => setDrag(null)}
-    >
-      {[6, 12, 18].map((hour) => (
-        <span
-          key={hour}
-          aria-hidden="true"
-          className="bg-background pointer-events-none absolute inset-y-0 w-px"
-          style={{ left: `${(hour / 24) * 100}%` }}
-        />
-      ))}
-      {intervals.map((interval) => {
-        const shown = preview(interval);
-        const movable = interactive && !interval.nextDay;
-        const dragging = drag?.interval === interval;
-        const style = {
-          left: `${(shown.start / DAY_MINUTES) * 100}%`,
-          width: `${((shown.end - shown.start) / DAY_MINUTES) * 100}%`,
-        };
-        const body = dragging ? `${clock(shown.start)}–${clock(shown.end)}` : text(interval);
-        const shared =
-          "bg-chart-1 text-background absolute inset-y-1 overflow-hidden rounded-[4px] px-2 text-left text-[0.6875rem] leading-8 font-medium tabular-nums whitespace-nowrap";
-        if (!interactive) {
-          return (
-            <span key={interval.startsAt} className={shared} style={style}>
-              {body}
-            </span>
+    <TooltipProvider delayDuration={150}>
+      <fieldset
+        ref={track}
+        aria-label={label}
+        className={cn(
+          "bg-muted relative m-0 h-10 w-full min-w-0 touch-pan-y overflow-hidden rounded-control border-0 p-0 select-none",
+          interactive && "cursor-crosshair",
+          disabled && !readOnly && "opacity-60",
+        )}
+        onPointerDown={(event) => {
+          if (interactive && event.button === 0 && event.target === event.currentTarget)
+            begin(event);
+        }}
+        onPointerMove={(event) => {
+          if (drag) setDrag({ ...drag, at: minute(event) });
+        }}
+        onPointerUp={finish}
+        onPointerCancel={() => setDrag(null)}
+      >
+        {[6, 12, 18].map((hour) => (
+          <span
+            key={hour}
+            aria-hidden="true"
+            className="bg-background pointer-events-none absolute inset-y-0 w-px"
+            style={{ left: `${(hour / 24) * 100}%` }}
+          />
+        ))}
+        {intervals.map((interval) => {
+          const shown = preview(interval);
+          const movable = interactive && !interval.nextDay;
+          const dragging = drag?.interval === interval;
+          const style = {
+            left: `${(shown.start / DAY_MINUTES) * 100}%`,
+            width: `${((shown.end - shown.start) / DAY_MINUTES) * 100}%`,
+          };
+          const body = dragging ? `${clock(shown.start)}–${clock(shown.end)}` : text(interval);
+          const shared =
+            "bg-chart-1 text-background absolute inset-y-1 overflow-hidden rounded-[4px] px-2 text-left text-[0.6875rem] leading-8 font-medium tabular-nums text-ellipsis whitespace-nowrap";
+          // A narrow stretch clips its label, so the full range is also in a hover/focus tip.
+          // The same tree while dragging (the tip just stays closed), so the pressed element is never remounted.
+          const tip = (trigger: React.ReactNode) => (
+            <Tooltip key={interval.startsAt} open={dragging ? false : undefined}>
+              <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6}>
+                {text(interval)}
+              </TooltipContent>
+            </Tooltip>
           );
-        }
-        return (
-          <button
-            key={interval.startsAt}
-            type="button"
-            aria-label={describe(interval)}
-            className={cn(
-              shared,
-              "hover:bg-chart-1/85 focus-visible:ring-ring outline-none focus-visible:ring-2",
-              movable ? "cursor-grab touch-none" : "cursor-pointer",
-              dragging && "cursor-grabbing",
-            )}
-            style={style}
-            onPointerDown={(event) => {
-              if (!movable || event.button !== 0) return;
-              event.stopPropagation();
-              begin(event, interval);
-            }}
-            onClick={(event) => {
-              // Keyboard activation; a pointer press is resolved when the pointer is released.
-              if (event.detail === 0 || !movable) onEdit(interval);
+          if (!interactive) {
+            return tip(
+              <span className={shared} style={style}>
+                {body}
+              </span>,
+            );
+          }
+          return tip(
+            <button
+              key={interval.startsAt}
+              type="button"
+              aria-label={describe(interval)}
+              className={cn(
+                shared,
+                "hover:bg-chart-1/85 focus-visible:ring-ring outline-none focus-visible:ring-2",
+                movable ? "cursor-grab touch-none" : "cursor-pointer",
+                dragging && "cursor-grabbing",
+              )}
+              style={style}
+              onPointerDown={(event) => {
+                if (!movable || event.button !== 0) return;
+                event.stopPropagation();
+                begin(event, interval);
+              }}
+              onClick={(event) => {
+                // Keyboard activation; a pointer press is resolved when the pointer is released.
+                if (event.detail === 0 || !movable) onEdit(interval);
+              }}
+            >
+              {movable && !dragging ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-1.5 left-1 w-0.5 cursor-ew-resize rounded-full bg-background/60"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-y-1.5 right-1 w-0.5 cursor-ew-resize rounded-full bg-background/60"
+                  />
+                </>
+              ) : null}
+              {body}
+            </button>,
+          );
+        })}
+        {creating && creating[1] > creating[0] ? (
+          <span
+            aria-hidden="true"
+            className="bg-chart-1/50 pointer-events-none absolute inset-y-1 flex items-center justify-center rounded-[4px] text-xs font-medium tabular-nums"
+            style={{
+              left: `${(creating[0] / DAY_MINUTES) * 100}%`,
+              width: `${((creating[1] - creating[0]) / DAY_MINUTES) * 100}%`,
             }}
           >
-            {movable && !dragging ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-1.5 left-1 w-0.5 cursor-ew-resize rounded-full bg-background/60"
-                />
-                <span
-                  aria-hidden="true"
-                  className="absolute inset-y-1.5 right-1 w-0.5 cursor-ew-resize rounded-full bg-background/60"
-                />
-              </>
-            ) : null}
-            {body}
-          </button>
-        );
-      })}
-      {creating && creating[1] > creating[0] ? (
-        <span
-          aria-hidden="true"
-          className="bg-chart-1/50 pointer-events-none absolute inset-y-1 flex items-center justify-center rounded-[4px] text-xs font-medium tabular-nums"
-          style={{
-            left: `${(creating[0] / DAY_MINUTES) * 100}%`,
-            width: `${((creating[1] - creating[0]) / DAY_MINUTES) * 100}%`,
-          }}
-        >
-          {clock(creating[0])}–{clock(creating[1])}
-        </span>
-      ) : null}
-    </fieldset>
+            {clock(creating[0])}–{clock(creating[1])}
+          </span>
+        ) : null}
+      </fieldset>
+    </TooltipProvider>
   );
 }

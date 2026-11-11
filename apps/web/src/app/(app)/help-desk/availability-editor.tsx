@@ -37,11 +37,14 @@ export function AvailabilityEditor({
   const [dayPrefill, setDayPrefill] = useState<AvailabilityInterval | null>(null);
   const [editing, setEditing] = useState<AvailabilityInterval | null>(null);
   const [pending, setPending] = useState(false);
+  // The intervals as the person just left them, shown until the server answers so a drop does not jump back.
+  const [optimistic, setOptimistic] = useState<AvailabilityInterval[] | null>(null);
   const [error, setError] = useState<unknown>(null);
 
   async function replace(intervals: AvailabilityInterval[]) {
     setPending(true);
     setError(null);
+    setOptimistic(intervals);
     try {
       onSaved(await api.put<MyHelperProfile>(path, { intervals }));
       return true;
@@ -50,6 +53,7 @@ export function AvailabilityEditor({
       return false;
     } finally {
       setPending(false);
+      setOptimistic(null);
     }
   }
 
@@ -94,10 +98,10 @@ export function AvailabilityEditor({
         </Button>
       </div>
       <AvailabilityTimeline
-        intervals={profile.availability}
+        intervals={optimistic ?? profile.availability}
         days={plannedDays}
-        disabled={pending}
         onDrag={(day, startMinute, endMinute) => {
+          if (pending) return;
           const clock = (minute: number) =>
             `${String(Math.floor(minute / 60) % 24).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
           const interval = intervalFrom(day, clock(startMinute), clock(endMinute), zone);
@@ -122,6 +126,7 @@ export function AvailabilityEditor({
           setAdding(true);
         }}
         onAdjust={(interval, startDelta, endDelta) => {
+          if (pending) return;
           const moved = {
             startsAt: new Date(Date.parse(interval.startsAt) + startDelta * 60_000).toISOString(),
             endsAt: new Date(Date.parse(interval.endsAt) + endDelta * 60_000).toISOString(),
