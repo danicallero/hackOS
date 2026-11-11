@@ -209,7 +209,22 @@ jobs:
           pnpm exec playwright install chromium
 
       - name: Run deterministic browser smoke
-        run: pnpm test:ui:browser --project=chromium
+        run: |
+          echo "Browser phase: start Next.js, execute Chromium tests, then upload diagnostics."
+          echo "Runner CPU count: $(nproc)"
+          free -m
+          pnpm test:ui:browser --project=chromium
+
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-diagnostics-${{ github.run_attempt }}
+          path: |
+            artifacts/browser-results.json
+            artifacts/playwright/
+          if-no-files-found: ignore
+          retention-days: 7
 
   mobile-test:
     name: mobile unit tests

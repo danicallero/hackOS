@@ -14,7 +14,13 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? Number(process.env.E2E_WORKERS ?? 3) : undefined,
-  reporter: process.env.CI ? "github" : "list",
+  reporter: process.env.CI
+    ? [
+        [resolve(configDirectory, "progress-reporter.ts")],
+        ["github"],
+        ["json", { outputFile: resolve(repositoryRoot, "artifacts/browser-results.json") }],
+      ]
+    : "list",
   use: {
     baseURL,
     locale: "es-ES",
