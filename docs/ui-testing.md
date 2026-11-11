@@ -57,17 +57,18 @@ The current smoke flow deliberately exercises client-side validation, so it
 does not require a seeded account or a live API. Authenticated flows should
 use a dedicated test account and API fixture rather than production data.
 The shared browser fixture models completed networking onboarding. Catch-all
-`**/api/**` mocks must delegate `/api/me/public-profile` with `route.fallback()`
-so they do not replace that state with an empty response and accidentally open
-the onboarding screen. Onboarding scenarios explicitly override the profile
-route to exercise incomplete, hidden, shared and deferred states.
+`**/api/**` mocks must serve `/api/events/stream` as an event stream and delegate
+`/api/me/public-profile` with `route.fallback()`. Otherwise, reconnecting SSE
+requests or an empty profile response can disturb the scenario or open the
+onboarding screen. Onboarding scenarios explicitly override the profile route
+to exercise incomplete, hidden, shared and deferred states.
 
 The judging save and alignment specs share `e2e/browser/judging-helpers.ts`: it
 installs the room/project API fixtures, review saves and note leases, and
 returns per-test review state and failure controls. Presentation timing, deck
 visibility and challenge memberships remain scenario-specific (#1135).
 
-The Chromium project is the required pull-request smoke subset. CI uses two
+The Chromium project is the required pull-request smoke subset. CI uses three
 isolated browser workers so independent scenarios can overlap. It includes
 the judging-room transition scenario, whose API read model and SSE connection
 are deterministic in-process fixtures. Firefox, WebKit, and mobile Chromium
