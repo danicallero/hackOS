@@ -4,33 +4,28 @@ import { ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FloatingGlassButton, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { RequestFeedback } from "@/components/RequestFeedback";
+import { RsvpFields } from "@/components/rsvp-fields";
 import { haptic } from "@/lib/haptics";
 import { useLocale } from "@/lib/i18n";
 import { useMeContext } from "@/lib/me-context";
 import {
   type DietaryDraft,
   dietaryDraftFromMe,
-  fetchMealPlan,
   isDietaryAnswered,
   markProfileTasksHandled,
-  mealLabel,
-  mealPlanCacheKey,
   parseProfileTasks,
   saveDietary,
-  saveMealPlan,
   setNoRestrictions,
   toggleIntolerance,
 } from "@/lib/profile-tasks";
-import type { MealPlan } from "@/lib/types";
-import { useCachedApi } from "@/lib/use-cached-api";
+import { useRsvps } from "@/lib/rsvps";
 import { useFoodIntolerances } from "@/lib/use-food-intolerances";
 import { colors, type } from "@/theme";
 import { useParticipantLayout } from "@/theme/layout-participant";
 
 /**
- * #933: one sheet for the pending profile tasks (dietary answer, sponsor meal
- * plan). Opened by the root layout's next-entry prompt and, for dietary data
- * only, from the account screen.
+ * H59 / #933: next-entry sheet for dietary answers and activity RSVPs.
+ * Account also opens it to edit the dietary answer.
  */
 export default function ProfileTasksScreen() {
   const readable = useParticipantLayout("form");
@@ -44,37 +39,27 @@ export default function ProfileTasksScreen() {
   const { me, refetch, loading, error } = useMeContext();
   // H7: locked dietary data is not self-editable; skip the step.
   const showDietary = tasks.includes("dietary") && !me?.dietaryLocked;
-  const wantsMeals = tasks.includes("meal_plan");
+  const wantsRsvps = tasks.includes("rsvp") || tasks.includes("meal_plan");
+  const rsvps = useRsvps(wantsRsvps && me ? me.id : null);
   const {
     intolerances,
     error: intolerancesError,
     loading: intolerancesLoading,
     reload: reloadIntolerances,
   } = useFoodIntolerances(showDietary);
-  const mealPlan = useCachedApi<MealPlan>(
-    me ? mealPlanCacheKey(me.id) : "meal-plan:none",
-    fetchMealPlan,
-    { enabled: wantsMeals && Boolean(me) },
-  );
   const [dietary, setDietary] = useState<DietaryDraft | null>(() =>
     me ? dietaryDraftFromMe(me) : null,
   );
-  // Set once the PATCH succeeds, so a retry after a failed PUT resends only the meals.
+  // Set once the PATCH succeeds, so a retry after a failed PUT resends only the RSVP answers.
   const [dietarySaved, setDietarySaved] = useState(false);
-  const [attending, setAttending] = useState<Record<number, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const meId = me?.id;
-  const loadMealPlan = mealPlan.load;
 
   // The sheet mounting is the prompt's one presentation for this session.
   useEffect(() => {
     if (meId !== undefined && !editing) markProfileTasksHandled(meId);
   }, [editing, meId]);
-
-  useEffect(() => {
-    if (wantsMeals && meId !== undefined) void loadMealPlan();
-  }, [loadMealPlan, meId, wantsMeals]);
 
   useEffect(() => {
     if (me && !dietary) setDietary(dietaryDraftFromMe(me));
@@ -83,11 +68,10 @@ export default function ProfileTasksScreen() {
   if (!me || !dietary)
     return <RequestFeedback loading={loading} error={error} onRetry={() => void refetch()} />;
 
-  const plan = mealPlan.data;
   const dietaryReady = !showDietary || isDietaryAnswered(dietary);
-  // A failed plan load must not block saving the dietary answer on its own.
-  const mealsReady = !wantsMeals || plan !== null || mealPlan.error !== null;
-  const nothingToSave = !showDietary && plan === null;
+  // A failed RSVP read must still allow an independent dietary answer to save.
+  const rsvpsReady = !wantsRsvps || rsvps.data !== null || rsvps.error !== null;
+  const nothingToSave = !showDietary && rsvps.data === null;
 
   async function save() {
     if (saving || !me || !dietary) return;
@@ -103,13 +87,12 @@ export default function ProfileTasksScreen() {
           return;
         }
       }
-      if (wantsMeals && plan) {
+      if (wantsRsvps && rsvps.data) {
         try {
-          mealPlan.setData(await saveMealPlan(plan, attending));
+          await rsvps.save();
         } catch {
-          setSaveError(t("mealPlanSaveError"));
-          // The dietary answer may already be stored; reflect it in /api/me.
-          if (showDietary) await refetch();
+          setSaveError(t("couldNotSaveRsvps"));
+          void rsvps.load();
           return;
         }
       }
@@ -121,7 +104,7 @@ export default function ProfileTasksScreen() {
     }
   }
 
-  const canSave = !(!dietaryReady || !mealsReady || nothingToSave);
+  const canSave = !(!dietaryReady || !rsvpsReady || nothingToSave);
   const topInset = process.env.EXPO_OS === "android" ? insets.top : 0;
   const title = editing ? t("accountFoodIntolerances") : t("profileTasksTitle");
 
@@ -214,32 +197,22 @@ export default function ProfileTasksScreen() {
           </>
         ) : null}
 
-        {wantsMeals ? (
-          plan ? (
-            <Section title={t("mealsTitle")} footer={t("mealsLockNote")}>
-              {plan.meals.map((meal, index) => (
-                <View key={meal.activityId}>
-                  {index > 0 ? <Separator /> : null}
-                  <ToggleRow
-                    label={mealLabel(meal, language)}
-                    value={attending[meal.activityId] ?? meal.attending ?? false}
-                    disabled={meal.locked}
-                    onChange={(on) =>
-                      setAttending((current) => ({ ...current, [meal.activityId]: on }))
-                    }
-                  />
-                </View>
-              ))}
-            </Section>
-          ) : mealPlan.error ? (
-            <RequestFeedback
-              error={mealPlan.error}
-              onRetry={() => void mealPlan.load()}
-              retrying={mealPlan.loading}
+        {wantsRsvps ? (
+          <>
+            {!rsvps.data ? (
+              <RequestFeedback
+                loading={rsvps.loading}
+                error={rsvps.error}
+                onRetry={() => void rsvps.load()}
+              />
+            ) : null}
+            <RsvpFields
+              items={rsvps.items}
+              draft={rsvps.draft}
+              disabled={saving}
+              onChange={(id, answer) => rsvps.setDraft((draft) => ({ ...draft, [id]: answer }))}
             />
-          ) : (
-            <RequestFeedback loading />
-          )
+          </>
         ) : null}
 
         {saveError ? (

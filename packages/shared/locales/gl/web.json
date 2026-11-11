@@ -4113,7 +4113,7 @@
   "onboardingStatusDone": "completado",
   "rsvpSectionTitle": "Asistencia",
   "rsvpCustomize": "Personalizar data, textos e peche",
-  "rsvpOverviewTitle": "Asistencia",
+  "rsvpOverviewTitle": "RSVP",
   "rsvpNoAskedActivities": "Ningunha actividade pide asistencia",
   "rsvpAnswersTitle": "Respostas",
   "rsvpNobody": "Ninguén nesta lista",
@@ -4326,5 +4326,7 @@
   "helpDeskResizeStart": "Arrastra para cambiar o inicio de {interval}",
   "helpDeskResizeEnd": "Arrastra para cambiar o final de {interval}",
   "rsvpAudiencePlaceholder": "Selecciona roles…",
-  "profileRsvpTitle": "RSVP"
+  "profileRsvpTitle": "RSVP",
+  "rsvpNoItems": "Non hai actividades que che pidan RSVP.",
+  "helpDeskIntervalAfterLastDay": "A dispoñibilidade debe rematar ao finalizar o último día de hacking."
 }

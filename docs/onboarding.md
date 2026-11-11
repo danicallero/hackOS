@@ -21,8 +21,9 @@ are shown as completed even before a step-state row exists, so migration does no
 re-prompt people who already answered. An explicit Complete action can record
 that fact as a milestone. Completed steps re-open when their underlying fact
 becomes false, and skipped steps re-open on a later configuration revision.
-The RSVP step is pending only for an unlocked offered item without an answer
-(or a required item with an invalid unsure answer); locked unanswered items
+The RSVP step is pending only for an unlocked offered item without an answer;
+explicit unsure answers are valid. Offers come from the same `offeredRsvps`
+query as the profile editor, including role audiences. Locked unanswered items
 never trap onboarding. Welcome, share and completion are persisted milestones.
 
 Attendance is derived in `event_attendance_kinds` and read through

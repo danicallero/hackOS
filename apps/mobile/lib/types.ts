@@ -51,26 +51,12 @@ export interface Me {
   isSponsorRep?: boolean;
   /** #933: profile data to ask for on next entry. */
   pendingProfileTasks?: ProfileTask[];
+  pendingRsvps?: boolean;
   /** H51: first-run prompt to choose notification channels (people with event access). */
   notificationOnboardingRequired?: boolean;
 }
 
-export type ProfileTask = "dietary" | "meal_plan";
-
-/** GET/PUT /api/me/meal-plan (#933). */
-export interface MealPlan {
-  confirmedAt: string | null;
-  meals: {
-    activityId: number;
-    name: string;
-    nameI18n: Record<string, string> | null;
-    startsAt: string;
-    endsAt: string;
-    location: string | null;
-    attending: boolean | null;
-    locked: boolean;
-  }[];
-}
+export type ProfileTask = "dietary" | "meal_plan" | "rsvp";
 
 /** Anonymous event details shown before sign-in. */
 export interface PublicEvent {

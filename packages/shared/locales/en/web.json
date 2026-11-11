@@ -4113,7 +4113,7 @@
   "onboardingStatusDone": "done",
   "rsvpSectionTitle": "Attendance",
   "rsvpCustomize": "Customize date, texts and close",
-  "rsvpOverviewTitle": "Attendance",
+  "rsvpOverviewTitle": "RSVP",
   "rsvpNoAskedActivities": "No activity is asking for attendance",
   "rsvpAnswersTitle": "Answers",
   "rsvpNobody": "Nobody in this list",
@@ -4326,5 +4326,7 @@
   "helpDeskResizeStart": "Drag to change the start of {interval}",
   "helpDeskResizeEnd": "Drag to change the end of {interval}",
   "rsvpAudiencePlaceholder": "Select roles…",
-  "profileRsvpTitle": "RSVP"
+  "profileRsvpTitle": "RSVP",
+  "rsvpNoItems": "No activities are asking for your RSVP.",
+  "helpDeskIntervalAfterLastDay": "Availability must end by the end of the last hacking day."
 }

@@ -1,7 +1,6 @@
 import { apiFetch } from "./api";
-import type { Lang } from "./i18n";
 import { registerSignOutListener } from "./sign-out-events";
-import type { Me, MealPlan, ProfileTask } from "./types";
+import type { Me, ProfileTask } from "./types";
 
 /**
  * #933: the next-entry prompt is shown at most once per signed-in account
@@ -38,7 +37,12 @@ export const PROFILE_TASKS_PATH = "/profile-tasks";
 
 /** H7: locked dietary data is only changed by staff, so it is never asked for. */
 export function promptableProfileTasks(me: Me): ProfileTask[] {
-  return (me.pendingProfileTasks ?? []).filter((task) => task !== "dietary" || !me.dietaryLocked);
+  const tasks = (me.pendingProfileTasks ?? []).filter(
+    (task) => task !== "dietary" || !me.dietaryLocked,
+  );
+  if (me.pendingRsvps && !tasks.includes("meal_plan") && !tasks.includes("rsvp"))
+    tasks.push("rsvp");
+  return tasks;
 }
 
 export function shouldPresentProfileTasks({
@@ -66,7 +70,9 @@ export function shouldPresentProfileTasks({
 
 export function parseProfileTasks(value: string | string[] | undefined): ProfileTask[] {
   const raw = Array.isArray(value) ? value.join(",") : (value ?? "");
-  return (["dietary", "meal_plan"] as const).filter((task) => raw.split(",").includes(task));
+  return (["dietary", "meal_plan", "rsvp"] as const).filter((task) =>
+    raw.split(",").includes(task),
+  );
 }
 
 export interface DietaryDraft {
@@ -115,53 +121,4 @@ export async function saveDietary(draft: DietaryDraft): Promise<void> {
       foodIntoleranceNotes: draft.noRestrictions || notes === "" ? null : notes,
     }),
   });
-}
-
-export function mealPlanCacheKey(userId: number): string {
-  // `user:<id>:` prefix: sign-out and 401 invalidation clear it with the profile.
-  return `user:${userId}:meal-plan`;
-}
-
-export function fetchMealPlan(signal?: AbortSignal): Promise<MealPlan> {
-  return apiFetch<MealPlan>("/api/me/meal-plan", { signal });
-}
-
-/**
- * PUT replaces the whole plan and must answer every unlocked meal. It is only
- * sent from an explicit Save, so an unticked meal is a "not attending" answer
- * (same model as the web checklist).
- */
-export function mealPlanAnswers(
-  plan: MealPlan,
-  overrides: Record<number, boolean> = {},
-): { activityId: number; attending: boolean }[] {
-  return plan.meals
-    .filter((meal) => !meal.locked)
-    .map((meal) => ({
-      activityId: meal.activityId,
-      attending: overrides[meal.activityId] ?? meal.attending ?? false,
-    }));
-}
-
-export function saveMealPlan(
-  plan: MealPlan,
-  overrides: Record<number, boolean>,
-): Promise<MealPlan> {
-  return apiFetch<MealPlan>("/api/me/meal-plan", {
-    method: "PUT",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ meals: mealPlanAnswers(plan, overrides) }),
-  });
-}
-
-/** "Sat 13:30 · Lunch" in the user's language. */
-export function mealLabel(meal: MealPlan["meals"][number], language: Lang): string {
-  const startsAt = new Date(meal.startsAt);
-  const when = Number.isNaN(startsAt.getTime())
-    ? meal.startsAt
-    : `${startsAt.toLocaleDateString(language, { weekday: "short" })} ${startsAt.toLocaleTimeString(
-        language,
-        { hour: "2-digit", minute: "2-digit" },
-      )}`;
-  return `${when} · ${meal.nameI18n?.[language] || meal.name}`;
 }

@@ -2950,3 +2950,24 @@ and location; other inboxes retain that context. A separate Schedule `FilterMenu
 requests and My claims narrows the loaded list without changing queue order.
 Claim notifications name the support person and meeting destination; resolving a
 request notifies the other participants once, with a deep link to the request.
+
+## Personal RSVP answers (H59)
+
+Account shows an RSVP navigation row at the end of Event data only when
+`GET /api/me/rsvps` offers the person at least one activity. Role targeting is
+resolved by the API; event access alone does not show the row.
+It pushes `/(tabs)/others/rsvps`, a subpage in the same native stack as
+notification preferences, with its own large title and native Back item. It reads
+`GET /api/me/rsvps`, including non-meal activities and role-targeted offers,
+with explicit Yes / No / Not sure choices. Closed or cached offline answers
+are read-only. An empty offer list has an explicit empty state; read errors
+have Retry. Save sends only changed, unlocked answers, leaving unanswered
+items untouched.
+
+The next-entry profile sheet also renders this editor for `rsvp` tasks and
+legacy `meal_plan` tasks. `/api/me.pendingRsvps` flags any unanswered, unlocked offer; the client
+adds a local `rsvp` task for it. `pendingProfileTasks` keeps its existing
+`dietary` / `meal_plan` values so older clients do not open an empty sheet
+for an unknown task. The same server offer calculation
+drives web onboarding. Dietary and RSVP changes share the sheet's Save; a
+successful dietary save is retained when retrying a failed RSVP save.

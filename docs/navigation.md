@@ -78,7 +78,7 @@ who scan their badge. See [`diary.md`](./diary.md).
 
 **My profile** (`/settings/profile`, H28, #1083) holds the Wallet, as the
 mobile Account tab does. Tabs selected by `?tab=` through `useUrlTab`: `public` (Public profile),
-`mentoring`, `attendance` (RSVPs to meals and activities, while any is open), `wallet` (ticket and badge, Certificates), `preferences` (language, shirt size, dietary) and `account`
+`mentoring`, `attendance` (RSVPs to meals and activities; always available with event access, with an explicit empty state), `wallet` (ticket and badge, Certificates), `preferences` (language, shirt size, dietary) and `account`
 (identity, Account and security, Active devices, Roles, Danger zone). `?tab=personal`
 opens `account`.
 Each section shows only when its API serves the account: passes unless a pure
@@ -294,7 +294,7 @@ keyboard shortcuts.
 
 Section classification covers the whole Others stack: `queue`, `diary` and
 `operations` own their route (plus `others/team/*`, opened from queue
-operations), and every other `others/*` page (Wallet, notification settings,
+operations), and every other `others/*` page (Wallet, RSVPs, notification settings,
 reminders, announcements, Storage, Statistics, Company tags, Legal, Delete
 account, scan log, sync queue, people and person details) is an Account
 subpage. The Others circle therefore stays on Account — and navigating
@@ -501,3 +501,7 @@ event tabs remain guarded. Publication/profile fields and availability have
 separate saves. Explicit help desk publication makes the helper and stated
 schedule browsable without creating a diary contact or changing networking
 sharing consent (H61–H63).
+
+The Logistics `/logistics/rsvps` destination is labelled **RSVP** in both the sidebar and page header (H59).
+
+At the end of Event data, Mobile Account shows RSVP only when the API offers an activity to the person’s roles. It opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).

@@ -6,6 +6,7 @@ import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { Spinner } from "@/components/common/spinner";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { usePhotoUpload } from "@/components/profile/use-photo-upload";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,12 +30,20 @@ const BADGE = cn(
  * the public profile's photo switch is on. A camera button on the avatar
  * opens the file picker, or a change/remove menu once a photo exists.
  */
-export function ProfilePhoto({ size = "md" }: { size?: "md" | "lg" } = {}) {
+export function ProfilePhoto({
+  size = "md",
+  variant = "avatar",
+}: {
+  size?: "md" | "lg";
+  variant?: "avatar" | "button";
+} = {}) {
   const { me, refresh } = useSessionContext();
   const { t } = useLocale();
   const { input, pick, remove, pending, error } = usePhotoUpload("/api/me/photo", refresh);
   if (!me) return null;
 
+  const triggerClass = variant === "button" ? buttonVariants({ variant: "outline" }) : BADGE;
+  const label = me.image ? t("changePhoto") : t("uploadPhoto");
   const name = [me.name, me.surname].filter(Boolean).join(" ");
   const icon = pending ? <Spinner className="size-4" /> : <CameraIcon className="size-4" />;
   return (
@@ -42,21 +51,24 @@ export function ProfilePhoto({ size = "md" }: { size?: "md" | "lg" } = {}) {
       <legend className="sr-only">{t("profilePhoto")}</legend>
       <input {...input} />
       <div className="relative w-fit">
-        <UserAvatar
-          showInitials
-          name={name}
-          image={me.image}
-          className={size === "lg" ? "size-28" : "size-16"}
-          fallbackClassName={size === "lg" ? "text-3xl" : "text-lg"}
-        />
+        {variant === "avatar" ? (
+          <UserAvatar
+            showInitials
+            name={name}
+            image={me.image}
+            className={size === "lg" ? "size-28" : "size-16"}
+            fallbackClassName={size === "lg" ? "text-3xl" : "text-lg"}
+          />
+        ) : null}
         {me.image ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label={t("changePhoto")}
               disabled={pending !== null}
-              className={BADGE}
+              className={triggerClass}
             >
               {icon}
+              {variant === "button" ? label : null}
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuItem onSelect={pick}>
@@ -75,9 +87,10 @@ export function ProfilePhoto({ size = "md" }: { size?: "md" | "lg" } = {}) {
             aria-label={t("uploadPhoto")}
             disabled={pending !== null}
             onClick={pick}
-            className={BADGE}
+            className={triggerClass}
           >
             {icon}
+            {variant === "button" ? label : null}
           </button>
         )}
       </div>

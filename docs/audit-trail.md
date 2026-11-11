@@ -72,10 +72,15 @@ response and session, autosaves update one entry for at most 30 minutes: the
 original score stays, the final score/changed-field union/last-edit time advance.
 Identical saves produce no event. A different session or reviewer stays separate.
 
-Project draft saves and administrative judging-review updates coalesce for the
+Project draft saves, administrative judging-review updates and helper availability
+autosaves and Help desk opening-window edits coalesce for the
 same actor, entity, action and source while pauses remain under two minutes,
 with a hard 30-minute limit. State transitions, submissions, decisions, permission
 changes and separate operational actions are never coalesced by this policy.
+Availability resizing explicitly records `intervals` as changed even when the
+number of intervals stays the same. Identical availability saves create no event.
+Opening-window edits group only while event-access policy, configured state
+and current open/closed state remain unchanged; those transitions stay separate.
 `last_edited_at` records updates; legacy missing edit times stay missing.
 
 Queue history now also produces a unified audit event for operations that used

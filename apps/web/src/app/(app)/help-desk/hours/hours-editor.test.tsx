@@ -74,6 +74,40 @@ describe("help desk hours (H64)", () => {
     });
     expect(document.querySelector("[role=dialog]")).toBeNull();
   });
+  it("draws daily sliders and permits opening windows longer than 24 hours", async () => {
+    vi.mocked(api.put).mockResolvedValue(base);
+    await act(async () =>
+      root.render(<Editor initial={{ ...base, windows: [], configured: false }} />),
+    );
+    const tracks = [...container.querySelectorAll<HTMLElement>("[data-track]")];
+    expect(tracks).toHaveLength(3);
+    tracks.forEach((track, row) => {
+      track.getBoundingClientRect = () =>
+        ({
+          left: 0,
+          width: 2400,
+          top: row * 60,
+          height: 40,
+          right: 2400,
+          bottom: row * 60 + 40,
+        }) as DOMRect;
+    });
+    const fieldset = container.querySelector("fieldset")!;
+    const fire = (target: Element, type: string, row: number) =>
+      act(async () => {
+        target.dispatchEvent(
+          new MouseEvent(type, { bubbles: true, clientX: 1000, clientY: row * 60 + 20, button: 0 }),
+        );
+      });
+    await fire(tracks[0], "pointerdown", 0);
+    await fire(fieldset, "pointermove", 2);
+    await fire(fieldset, "pointerup", 2);
+    expect(api.put).toHaveBeenCalledWith("/api/helpdesk/schedule", {
+      windows: [{ startsAt: "2027-02-26T10:00:00.000Z", endsAt: "2027-02-28T10:00:00.000Z" }],
+      eventAccessOnly: true,
+    });
+  });
+
   it("refuses an overlapping or reversed window before calling the API", async () => {
     await act(async () => root.render(<Editor />));
     await act(async () =>
@@ -94,9 +128,10 @@ describe("help desk hours (H64)", () => {
     await act(async () => root.render(<Editor initial={{ ...base, windows: [first] }} />));
     await act(async () =>
       userEvent.click(
-        container.querySelector<HTMLButtonElement>('button[aria-label^="helpDeskHoursRemove"]')!,
+        container.querySelector<HTMLButtonElement>('button[aria-label^="helpDeskEditInterval "]')!,
       ),
     );
+    await act(async () => userEvent.click(getByRole(dialog(), "button", { name: "remove" })));
     expect(api.put).toHaveBeenCalledWith("/api/helpdesk/schedule", {
       windows: [],
       eventAccessOnly: true,
@@ -118,7 +153,7 @@ describe("help desk hours (H64)", () => {
     await act(async () => root.render(<Editor />));
     await act(async () =>
       userEvent.click(
-        container.querySelector<HTMLButtonElement>('button[aria-label^="helpDeskHoursEdit"]')!,
+        container.querySelector<HTMLButtonElement>('button[aria-label^="helpDeskEditInterval "]')!,
       ),
     );
     await typeInto("helpDeskTo", "2027-02-27T13:00");

@@ -58,6 +58,10 @@ export default function OthersLayout() {
         options={{ headerShown: true, headerLargeTitle: true, title: t("scannerSyncQueueTitle") }}
       />
       <Stack.Screen
+        name="rsvps"
+        options={{ headerShown: true, headerLargeTitle: true, title: t("profileRsvpTitle") }}
+      />
+      <Stack.Screen
         name="notification-settings/index"
         options={{ headerShown: true, headerLargeTitle: true, title: t("alertsNotifications") }}
       />

@@ -98,7 +98,7 @@ export async function replaceSchedule(
   }
   const changed = await withTransaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock($1)", [SCHEDULE_LOCK]);
-    const { rows } = await readWindows(client);
+    const { rows, now } = await readWindows(client);
     const key = (list: { startsAt: Date; endsAt: Date }[]) =>
       list.map((i) => `${i.startsAt.toISOString()}/${i.endsAt.toISOString()}`).join(",");
     const before = rows.map((r) => ({ startsAt: r.starts_at, endsAt: r.ends_at }));
@@ -121,18 +121,33 @@ export async function replaceSchedule(
         [windows.map((w) => w.startsAt), windows.map((w) => w.endsAt)],
       );
     }
+    const openBefore = isOpen(rows, now);
+    const openAfter = isOpen(
+      windows.map((w) => ({ starts_at: w.startsAt, ends_at: w.endsAt })),
+      now,
+    );
     await audit(client, {
       actorId,
       entityType: "helpdesk_schedule",
       entityId: 1,
       action: "replaced",
+      changedFields: [
+        ...(key(before) !== key(windows) ? ["windows"] : []),
+        ...(accessChanged ? ["eventAccessOnly"] : []),
+        ...((before.length === 0) !== (windows.length === 0) ? ["configured"] : []),
+        ...(openBefore !== openAfter ? ["open"] : []),
+      ],
       before: {
         windows: before.map((w) => ({ startsAt: w.startsAt, endsAt: w.endsAt })),
         eventAccessOnly: accessBefore,
+        configured: before.length > 0,
+        open: openBefore,
       },
       after: {
         windows: windows.map((w) => ({ startsAt: w.startsAt, endsAt: w.endsAt })),
         eventAccessOnly: accessAfter,
+        configured: windows.length > 0,
+        open: openAfter,
       },
     });
     return true;

@@ -56,7 +56,12 @@ for the people who scanned them.
 Availability is a set of dated intervals, replaced as a whole (≤30, each
 ≤24 h, no overlaps). It is a statement of intent only: venue presence comes
 from H24 door scans (`time_logs`, latest scan is `in`), and neither creates
-the other.
+the other. Availability starts no earlier than hacking and may continue through
+midnight after the final hacking day in the event timezone. The event window
+is the fallback when hacking dates are absent; no dates means no date bounds.
+Personal intervals remain limited to 24 actual hours, including clock changes.
+Successive availability edits coalesce in the audit trail under the same
+bounded edit policy as draft autosaves (see `audit-trail.md`).
 
 In My profile → Mentoring the intervals are drawn as one line per event day, one
 under the other, on a continuous time axis. Drag across a line to mark a stretch

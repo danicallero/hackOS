@@ -10,7 +10,7 @@
     "retry": "Reintentar",
     "photoFallback": "No se pudo cargar tu foto; la imagen usa tus iniciales.",
     "cardLine": "Voy a {event}",
-    "caption": "¡Voy a {event}!{details} Nos vemos ahí.{link}",
+    "caption": "¡Voy a {event}!{details} ¡Nos vemos ahí!{link}",
     "download": "Descargar imagen",
     "downloaded": "Imagen descargada",
     "downloadFailed": "No se pudo descargar la imagen.",
@@ -45,7 +45,7 @@
     "retry": "Tentar de novo",
     "photoFallback": "Non se puido cargar a túa foto; a imaxe usa as túas iniciais.",
     "cardLine": "Vou a {event}",
-    "caption": "Vou a {event}!{details} Vémonos aí.{link}",
+    "caption": "Vou a {event}!{details} Vémonos aí!!{link}",
     "download": "Descargar imaxe",
     "downloaded": "Imaxe descargada",
     "downloadFailed": "Non se puido descargar a imaxe.",
@@ -80,7 +80,7 @@
     "retry": "Retry",
     "photoFallback": "Your photo couldn't be loaded; the image uses your initials.",
     "cardLine": "I'm going to {event}",
-    "caption": "I'm going to {event}!{details} See you there.{link}",
+    "caption": "I'm going to {event}!{details} See you there!!{link}",
     "download": "Download image",
     "downloaded": "Image downloaded",
     "downloadFailed": "Couldn't download the image.",
@@ -100,8 +100,8 @@
     "formatStory": "Story",
     "captionHours": "{hours} hours of development",
     "captionIn": "in {place}",
-    "captionDatesSame": "from {start} to {end} {month}",
-    "captionDatesDiff": "from {start} {startMonth} to {end} {endMonth}",
+    "captionDatesSame": "from {month} {start} to {end}",
+    "captionDatesDiff": "from {startMonth} {start} to {endMonth} {end}",
     "networkReady": "Image downloaded and text copied. Paste it in {network}."
   }
 }

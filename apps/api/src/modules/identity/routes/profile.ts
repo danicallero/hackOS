@@ -462,7 +462,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           "the single highest-visible `visibleRoleName` shown elsewhere. `attendanceKind` is derived from current-edition evidence, with participant confirmation taking precedence over mentor, sponsor and staff. `pendingProfileTasks` " +
           "(#933) lists what to ask for on next entry: `dietary` when the caller has event access " +
           "but never gave an explicit dietary answer and the profile is not locked (H7), `meal_plan` when a sponsor representative " +
-          "has an open offered meal without an answer. `eventTimezone` (H45/H47) is the event's IANA timezone: web and mobile show and accept every date and time in that zone, not the device's. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
+          "has an open offered meal without an answer. `pendingRsvps` is true for any unanswered, unlocked offered activity or meal and drives the general RSVP prompt on current clients. `eventTimezone` (H45/H47) is the event's IANA timezone: web and mobile show and accept every date and time in that zone, not the device's. All derived fields come from one repeatable-read database snapshot; event access is true only for an active, non-anonymized account with an assigned non-deleted event-bearing role.",
         summary: "Get my profile",
         response: {
           200: userResponseSchema.extend({
@@ -509,6 +509,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
             hasStatisticsPanels: z.boolean(),
             // #933: profile data the client should ask for on next entry.
             pendingProfileTasks: z.array(z.enum(PENDING_PROFILE_TASKS)),
+            pendingRsvps: z.boolean(),
             // H51: people with event access are asked once, on web and mobile,
             // which channels reach them (email is opt-in for queue, reminders
             // and challenges); false once answered on any device.
@@ -607,6 +608,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
           dietaryLocked,
           hasStatisticsPanels,
           pendingProfileTasks,
+          pendingRsvps: eventAccess && onboarding.facts.openRsvps,
           notificationOnboardingRequired: eventAccess && row.notification_onboarded_at === null,
           eventTimezone,
           attendanceKind: currentAttendanceKind,

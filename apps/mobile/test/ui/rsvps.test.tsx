@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 
-// #933: sponsor meal plan on Account, and the pending-profile-tasks sheet.
+// H59: general RSVP answers in Account and next-entry onboarding.
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -44,6 +44,36 @@ const mockMeContext = {
   refetch: jest.fn().mockResolvedValue(undefined),
 };
 
+jest.mock("@/components/segmented-control", () => {
+  const ReactLib = require("react");
+  const Native = require("react-native");
+  return {
+    SegmentedControl: ({
+      label,
+      values,
+      onChange,
+    }: {
+      label: string;
+      values: string[];
+      onChange: (index: number) => void;
+    }) =>
+      ReactLib.createElement(
+        Native.View,
+        null,
+        values.map((value, index) =>
+          ReactLib.createElement(
+            Native.Pressable,
+            {
+              key: value,
+              accessibilityLabel: `${label}: ${value}`,
+              onPress: () => onChange(index),
+            },
+            ReactLib.createElement(Native.Text, null, value),
+          ),
+        ),
+      ),
+  };
+});
 jest.mock("@expo/ui/community/menu", () => ({
   MenuView: ({ children }: { children: unknown }) => children,
 }));
@@ -207,20 +237,23 @@ jest.mock("@/lib/use-retry-on-reconnect", () => ({ useRetryOnReconnect: jest.fn(
 
 import AccountScreen from "@/components/account-screen";
 import ProfileTasksScreen from "@/components/profile-tasks-screen";
+import RsvpsScreen from "@/components/rsvps-screen";
 import { renderMobile } from "./render";
 
 const lunch = {
   activityId: 11,
   name: "Lunch",
-  nameI18n: null,
-  startsAt: "2026-10-17T11:30:00.000Z",
-  endsAt: "2026-10-17T13:00:00.000Z",
+  description: null,
+  date: "2030-10-17T11:30:00.000Z",
+  closesAt: "2030-10-16T11:30:00.000Z",
   location: null,
-  attending: null,
+  answer: null,
   locked: false,
+  isMeal: true,
 };
-const dinner = { ...lunch, activityId: 12, name: "Dinner", attending: true, locked: true };
-const plan = { confirmedAt: null, meals: [lunch, dinner] };
+const dinner = { ...lunch, activityId: 12, name: "Dinner", answer: "yes", locked: true };
+const workshop = { ...lunch, activityId: 13, name: "Workshop", isMeal: false };
+const plan = { items: [lunch, dinner, workshop] };
 const intolerances = [{ id: 3, label: { en: "Gluten", es: "Gluten", gl: "Glute" } }];
 
 function routeApi(overrides: Record<string, (init?: RequestInit) => unknown> = {}) {
@@ -228,8 +261,8 @@ function routeApi(overrides: Record<string, (init?: RequestInit) => unknown> = {
     const key = `${init?.method ?? "GET"} ${path}`;
     if (overrides[key]) return overrides[key](init);
     if (path === "/api/public/food-intolerances") return { intolerances };
-    if (key === "GET /api/me/meal-plan") return plan;
-    if (key === "PUT /api/me/meal-plan") return plan;
+    if (key === "GET /api/me/rsvps") return plan;
+    if (key === "PUT /api/me/rsvps") return plan;
     if (key === "PATCH /api/me") return {};
     throw new Error(`unexpected ${key}`);
   });
@@ -242,12 +275,6 @@ function bodyOf(method: string, path: string) {
   return call ? JSON.parse(call[1].body) : undefined;
 }
 
-function label(meal: { name: string; startsAt: string }) {
-  return `${new Date(meal.startsAt).toLocaleDateString("en", { weekday: "short" })} ${new Date(
-    meal.startsAt,
-  ).toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })} · ${meal.name}`;
-}
-
 beforeEach(() => {
   jest.clearAllMocks();
   mockCache.clear();
@@ -257,138 +284,164 @@ beforeEach(() => {
   routeApi();
 });
 
-describe("Account meals section", () => {
-  it("submits every unlocked meal only on an explicit Save", async () => {
+describe("Account RSVP subpage (H59)", () => {
+  it("opens RSVP from Account without rendering the editor inline", async () => {
     await renderMobile(<AccountScreen />);
-    const toggle = await screen.findByLabelText(label(lunch));
-    expect(screen.getByLabelText(label(dinner)).props.disabled).toBe(true);
-
-    await act(async () => fireEvent(toggle, "valueChange", true));
-    expect(bodyOf("PUT", "/api/me/meal-plan")).toBeUndefined();
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
-
-    await waitFor(() =>
-      expect(bodyOf("PUT", "/api/me/meal-plan")).toEqual({
-        meals: [{ activityId: 11, attending: true }],
-      }),
-    );
-  });
-
-  it("shows the save error when the plan is rejected", async () => {
-    routeApi({
-      "PUT /api/me/meal-plan": () => {
-        throw new Error("meal_plan_locked");
-      },
-    });
-    await renderMobile(<AccountScreen />);
+    expect(screen.queryByText("Workshop")).toBeNull();
     await act(async () =>
-      fireEvent(await screen.findByLabelText(label(lunch)), "valueChange", true),
+      fireEvent.press(await screen.findByRole("button", { name: "profileRsvpTitle" })),
     );
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
-    expect(await screen.findByText("mealPlanSaveError")).toBeTruthy();
-    // A rejected plan (e.g. a meal locked meanwhile) reloads the server state.
-    expect(
-      mockApiFetch.mock.calls.filter(
-        ([path, init]) => path === "/api/me/meal-plan" && !init?.method,
-      ),
-    ).toHaveLength(2);
+    expect(mockPush).toHaveBeenCalledWith("/(tabs)/others/rsvps");
+    expect(mockApiFetch).toHaveBeenCalledWith("/api/me/rsvps", expect.anything());
   });
 
-  it("keeps the cached plan read-only offline", async () => {
-    mockCache.set("user:7:meal-plan", { data: plan, updatedAt: "2026-10-09T08:00:00.000Z" });
-    mockMeContext.offline = true;
-    routeApi({
-      "GET /api/me/meal-plan": () => {
-        throw new Error("offline");
-      },
-    });
-    await renderMobile(<AccountScreen />);
-    expect((await screen.findByLabelText(label(lunch))).props.disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "accountFoodIntolerances" })).toBeNull();
-  });
-
-  it("never answers the other open meals when one is toggled", async () => {
-    const breakfast = { ...lunch, activityId: 10, name: "Breakfast" };
-    const open = { confirmedAt: null, meals: [breakfast, lunch] };
-    routeApi({ "GET /api/me/meal-plan": () => open, "PUT /api/me/meal-plan": () => open });
-    await renderMobile(<AccountScreen />);
-    await act(async () =>
-      fireEvent(await screen.findByLabelText(label(lunch)), "valueChange", true),
-    );
-    expect(mockApiFetch).not.toHaveBeenCalledWith(
-      "/api/me/meal-plan",
-      expect.objectContaining({ method: "PUT" }),
-    );
-    expect(screen.getByLabelText(label(breakfast)).props.value).toBe(false);
-  });
-
-  it("hides Save once every open meal is answered and unchanged", async () => {
-    const answered = {
-      confirmedAt: "2026-10-09T08:00:00.000Z",
-      meals: [{ ...lunch, attending: false }, dinner],
-    };
-    routeApi({ "GET /api/me/meal-plan": () => answered });
-    await renderMobile(<AccountScreen />);
-    const toggle = await screen.findByLabelText(label(lunch));
-    expect(screen.queryByRole("button", { name: "save" })).toBeNull();
-    await act(async () => fireEvent(toggle, "valueChange", true));
-    expect(screen.getByRole("button", { name: "save" })).toBeTruthy();
-  });
-
-  it("renders without a section on a fresh offline install", async () => {
-    mockMeContext.offline = true;
-    routeApi({
-      "GET /api/me/meal-plan": () => {
-        throw new Error("offline");
-      },
-    });
+  it("hides the Account link when no activity is offered to this person's roles", async () => {
+    routeApi({ "GET /api/me/rsvps": () => ({ items: [] }) });
     await renderMobile(<AccountScreen />);
     await waitFor(() =>
-      expect(mockApiFetch).toHaveBeenCalledWith("/api/me/meal-plan", expect.anything()),
+      expect(mockApiFetch).toHaveBeenCalledWith("/api/me/rsvps", expect.anything()),
     );
-    expect(screen.queryByText("mealsTitle")).toBeNull();
-    expect(screen.getByText("accountNoneDeclared")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "profileRsvpTitle" })).toBeNull();
   });
 
-  it("hides meals from non-sponsors and shows an explicit empty dietary answer", async () => {
-    mockMeContext.me = {
-      ...baseMe,
-      isSponsorRep: false,
-      dietaryConfirmedAt: "2026-10-01T00:00:00.000Z",
-    };
-    await renderMobile(<AccountScreen />);
-    expect(await screen.findByText("noRestrictions")).toBeTruthy();
-    expect(screen.queryByText("mealsTitle")).toBeNull();
+  it("offers activities to non-sponsors and saves only explicitly changed answers", async () => {
+    mockMeContext.me = { ...baseMe, isSponsorRep: false };
+    await renderMobile(<RsvpsScreen />);
+    await screen.findByText("Workshop");
+    expect(screen.queryByLabelText("Dinner: rsvpNo")).toBeNull();
+    expect(bodyOf("PUT", "/api/me/rsvps")).toBeUndefined();
+    await act(async () => fireEvent.press(screen.getByLabelText("Workshop: rsvpUnsure")));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(bodyOf("PUT", "/api/me/rsvps")).toEqual({
+      answers: [{ activityId: 13, answer: "unsure" }],
+    });
     expect(mockApiFetch).not.toHaveBeenCalledWith("/api/me/meal-plan", expect.anything());
+  });
+
+  it("shows errors and reloads offers after a rejected save", async () => {
+    routeApi({
+      "PUT /api/me/rsvps": () => {
+        throw new Error("rsvp_locked");
+      },
+    });
+    await renderMobile(<RsvpsScreen />);
+    await act(async () => fireEvent.press(await screen.findByLabelText("Lunch: rsvpYes")));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(await screen.findByText("couldNotSaveRsvps")).toBeTruthy();
+  });
+
+  it("keeps cached answers visible and read-only offline", async () => {
+    mockCache.set("user:7:rsvps", { data: plan, updatedAt: "2026-10-09T08:00:00.000Z" });
+    mockMeContext.offline = true;
+    routeApi({
+      "GET /api/me/rsvps": () => {
+        throw new Error("offline");
+      },
+    });
+    await renderMobile(<RsvpsScreen />);
+    await screen.findByText("Workshop");
+    expect(screen.queryByLabelText("Workshop: rsvpYes")).toBeNull();
+  });
+
+  it("shows an empty RSVP section instead of making the destination disappear", async () => {
+    routeApi({ "GET /api/me/rsvps": () => ({ items: [] }) });
+    await renderMobile(<RsvpsScreen />);
+    expect(await screen.findByText("rsvpNoItems")).toBeTruthy();
   });
 });
 
 describe("Profile tasks sheet", () => {
-  it("records No restrictions as an explicit empty answer, then the meal plan", async () => {
-    mockParams = { tasks: "dietary,meal_plan" };
+  it("asks a non-sponsor for activity RSVPs on entry and leaves unanswered items untouched", async () => {
+    mockMeContext.me = { ...baseMe, isSponsorRep: false };
+    mockParams = { tasks: "rsvp" };
     await renderMobile(<ProfileTasksScreen />);
-    const save = screen.getByRole("button", { name: "save" });
-    expect(save.props.accessibilityState.disabled).toBe(true);
+    await act(async () => fireEvent.press(await screen.findByLabelText("Workshop: rsvpNo")));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(bodyOf("PUT", "/api/me/rsvps")).toEqual({ answers: [{ activityId: 13, answer: "no" }] });
+    expect(mockBack).toHaveBeenCalled();
+  });
 
+  it("uses the general RSVP editor for the legacy meal-plan task too", async () => {
+    mockParams = { tasks: "meal_plan" };
+    await renderMobile(<ProfileTasksScreen />);
+    await screen.findByText("Lunch");
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(bodyOf("PUT", "/api/me/rsvps")).toEqual({ answers: [] });
+  });
+
+  it("records No restrictions explicitly before saving RSVPs", async () => {
+    mockParams = { tasks: "dietary,rsvp" };
+    await renderMobile(<ProfileTasksScreen />);
     await act(async () =>
       fireEvent(await screen.findByLabelText("noRestrictions"), "valueChange", true),
     );
-    await act(async () =>
-      fireEvent(await screen.findByLabelText(label(lunch)), "valueChange", true),
-    );
+    await act(async () => fireEvent.press(await screen.findByLabelText("Lunch: rsvpYes")));
     await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
-
     expect(bodyOf("PATCH", "/api/me")).toEqual({
       foodIntolerances: [],
       foodIntoleranceNotes: null,
     });
-    expect(bodyOf("PUT", "/api/me/meal-plan")).toEqual({
-      meals: [{ activityId: 11, attending: true }],
+    expect(bodyOf("PUT", "/api/me/rsvps")).toEqual({
+      answers: [{ activityId: 11, answer: "yes" }],
     });
-    expect(mockMeContext.refetch).toHaveBeenCalled();
-    expect(mockBack).toHaveBeenCalled();
   });
 
+  it("defers without saving any answers", async () => {
+    mockParams = { tasks: "rsvp" };
+    await renderMobile(<ProfileTasksScreen />);
+    await screen.findByText("Workshop");
+    await act(async () =>
+      fireEvent.press(screen.getByRole("button", { name: "profileTasksLater" })),
+    );
+    expect(mockBack).toHaveBeenCalled();
+    expect(bodyOf("PUT", "/api/me/rsvps")).toBeUndefined();
+  });
+
+  it("saves dietary alone when the RSVP read fails", async () => {
+    mockParams = { tasks: "dietary,rsvp" };
+    routeApi({
+      "GET /api/me/rsvps": () => {
+        throw new Error("network");
+      },
+    });
+    await renderMobile(<ProfileTasksScreen />);
+    await screen.findByText("network");
+    await act(async () => fireEvent(screen.getByLabelText("noRestrictions"), "valueChange", true));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(bodyOf("PATCH", "/api/me")).toEqual({
+      foodIntolerances: [],
+      foodIntoleranceNotes: null,
+    });
+    expect(bodyOf("PUT", "/api/me/rsvps")).toBeUndefined();
+  });
+
+  it("retains the dietary save if RSVP saving fails and is retried", async () => {
+    mockParams = { tasks: "dietary,rsvp" };
+    let fail = true;
+    routeApi({
+      "PUT /api/me/rsvps": () => {
+        if (fail) throw new Error("rsvp_locked");
+        return plan;
+      },
+    });
+    await renderMobile(<ProfileTasksScreen />);
+    await screen.findByText("Workshop");
+    await act(async () => fireEvent(screen.getByLabelText("noRestrictions"), "valueChange", true));
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    await screen.findByText("couldNotSaveRsvps");
+    expect(mockBack).not.toHaveBeenCalled();
+    fail = false;
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "retry" })));
+    expect(
+      mockApiFetch.mock.calls.filter(
+        ([path, init]) => path === "/api/me" && init?.method === "PATCH",
+      ),
+    ).toHaveLength(1);
+    expect(mockBack).toHaveBeenCalled();
+  });
+});
+
+describe("Dietary tasks", () => {
   it("stays open with an error when the dietary save fails", async () => {
     mockParams = { tasks: "dietary" };
     routeApi({
@@ -439,89 +492,9 @@ describe("Profile tasks sheet", () => {
     expect(mockBack).toHaveBeenCalled();
     expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
   });
+});
 
-  it("skips the dietary step once dietary data is locked and never sends it", async () => {
-    mockParams = { tasks: "dietary,meal_plan" };
-    mockMeContext.me = {
-      ...baseMe,
-      profileLocked: true,
-      dietaryLocked: true,
-      foodIntolerances: [3],
-      foodIntoleranceNotes: " nuts ",
-    };
-    await renderMobile(<ProfileTasksScreen />);
-    await screen.findByLabelText(label(lunch));
-    expect(screen.queryByLabelText("noRestrictions")).toBeNull();
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
-
-    expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
-    expect(bodyOf("PUT", "/api/me/meal-plan")).toBeDefined();
-    expect(mockBack).toHaveBeenCalled();
-  });
-
-  it("saves the dietary answer alone when the meal plan cannot load", async () => {
-    mockParams = { tasks: "dietary,meal_plan" };
-    routeApi({
-      "GET /api/me/meal-plan": () => {
-        throw new Error("network");
-      },
-    });
-    await renderMobile(<ProfileTasksScreen />);
-    expect(await screen.findByText("network")).toBeTruthy();
-    await act(async () => fireEvent(screen.getByLabelText("noRestrictions"), "valueChange", true));
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
-
-    expect(bodyOf("PATCH", "/api/me")).toEqual({
-      foodIntolerances: [],
-      foodIntoleranceNotes: null,
-    });
-    expect(bodyOf("PUT", "/api/me/meal-plan")).toBeUndefined();
-    expect(mockBack).toHaveBeenCalled();
-  });
-
-  it("retries a failed meal plan load", async () => {
-    mockParams = { tasks: "meal_plan" };
-    let fail = true;
-    routeApi({
-      "GET /api/me/meal-plan": () => {
-        if (fail) throw new Error("network");
-        return plan;
-      },
-    });
-    await renderMobile(<ProfileTasksScreen />);
-    await screen.findByText("network");
-    fail = false;
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "retry" })));
-    expect(await screen.findByLabelText(label(lunch))).toBeTruthy();
-  });
-
-  it("keeps a stored dietary answer when only the meal plan save fails", async () => {
-    mockParams = { tasks: "dietary,meal_plan" };
-    let failPut = true;
-    routeApi({
-      "PUT /api/me/meal-plan": () => {
-        if (failPut) throw new Error("meal_plan_locked");
-        return plan;
-      },
-    });
-    await renderMobile(<ProfileTasksScreen />);
-    await act(async () =>
-      fireEvent(await screen.findByLabelText("noRestrictions"), "valueChange", true),
-    );
-    await screen.findByLabelText(label(lunch));
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
-    expect(await screen.findByText("mealPlanSaveError")).toBeTruthy();
-    expect(mockMeContext.refetch).toHaveBeenCalled();
-
-    failPut = false;
-    await act(async () => fireEvent.press(screen.getByRole("button", { name: "retry" })));
-    const calls = (method: string, path: string) =>
-      mockApiFetch.mock.calls.filter(([p, init]) => p === path && init?.method === method);
-    expect(calls("PATCH", "/api/me")).toHaveLength(1);
-    expect(calls("PUT", "/api/me/meal-plan")).toHaveLength(2);
-    expect(mockBack).toHaveBeenCalled();
-  });
-
+describe("Next-entry presentation", () => {
   it("records the prompt as shown only when the sheet opens, not from Account", async () => {
     const { resetProfileTasksHandled, shouldPresentProfileTasks } = require("@/lib/profile-tasks");
     const ready = {
@@ -539,5 +512,23 @@ describe("Profile tasks sheet", () => {
     mockParams = { tasks: "dietary" };
     await renderMobile(<ProfileTasksScreen />);
     expect(shouldPresentProfileTasks(ready)).toBe(false);
+  });
+});
+
+describe("Locked dietary data", () => {
+  it("asks for RSVPs without changing the locked dietary answer", async () => {
+    mockParams = { tasks: "dietary,rsvp" };
+    mockMeContext.me = {
+      ...baseMe,
+      dietaryLocked: true,
+      profileLocked: true,
+      foodIntolerances: [3],
+    };
+    await renderMobile(<ProfileTasksScreen />);
+    await screen.findByText("Workshop");
+    expect(screen.queryByLabelText("noRestrictions")).toBeNull();
+    await act(async () => fireEvent.press(screen.getByRole("button", { name: "save" })));
+    expect(bodyOf("PATCH", "/api/me")).toBeUndefined();
+    expect(bodyOf("PUT", "/api/me/rsvps")).toEqual({ answers: [] });
   });
 });

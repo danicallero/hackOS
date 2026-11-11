@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
+import { EmptyState } from "@/components/common/empty-state";
 import { FormActions } from "@/components/common/form-actions";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { rsvpSaveErrorKey, useRsvps } from "@/hooks/use-rsvps";
 import { useLocale } from "@/lib/i18n";
 import {
@@ -25,7 +27,7 @@ import { toast } from "@/lib/toast";
  *
  * Integration points for the host page:
  * - `<CateringRsvpSection userId onDirtyChange onSaved />` fetches and saves on its own;
- *   render nothing extra when the person has no open RSVPs (it returns null).
+ *   show an explicit empty state when no activity is offered.
  * - `onSaved` runs after a successful save (refresh the session so
  *   `pendingProfileTasks` / the onboarding step re-evaluate).
  * - `<CateringRsvpForm items save .../>` is the controlled form for hosts that
@@ -51,7 +53,8 @@ export function CateringRsvpSection({
   if (loadError && !items) {
     return <ContextualError message={t("couldNotLoadRsvps")} onRetry={reload} />;
   }
-  if (!items || items.length === 0) return null;
+  if (!items) return <Skeleton className="h-24 w-full" />;
+  if (items.length === 0) return <EmptyState title={t("rsvpNoItems")} />;
   // Remount on every stored list so the draft restarts from the stored answers.
   const version = items.map((i) => `${i.activityId}:${i.answer}:${i.locked}`).join(",");
   return (
@@ -70,7 +73,7 @@ export function CateringRsvpSection({
 /**
  * Self-contained variant for the onboarding step and My profile: reads the
  * signed-in user, fetches and saves `/api/me/rsvps`, renders its own Save with
- * the host's `actions` beside it, and renders nothing without open RSVPs.
+ * the host's `actions` beside it, and shows an empty state without offered RSVPs.
  */
 export function CateringRsvp({
   actions,

@@ -85,6 +85,36 @@ it("coalesces only draft edits and retains independent state transitions (H53)",
   expect(result.rows).toHaveLength(4);
 });
 
+it("groups opening-window drags but keeps policy changes separate (H53, H64)", async () => {
+  await getApp();
+  const actor = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);
+  const entry = {
+    actorId: actor,
+    entityType: "helpdesk_schedule",
+    entityId: 1,
+    action: "replaced",
+    changedFields: ["windows"],
+    before: { windows: [] },
+    after: { windows: [] },
+  };
+  await audit(pool, entry);
+  await audit(pool, entry);
+  expect((await pool.query("SELECT id FROM audit_log")).rows).toHaveLength(1);
+  await audit(pool, {
+    ...entry,
+    changedFields: ["eventAccessOnly"],
+    before: { eventAccessOnly: true },
+    after: { eventAccessOnly: false },
+  });
+  await audit(pool, entry);
+  const { rows } = await pool.query("SELECT changed_fields, after FROM audit_log ORDER BY id");
+  expect(rows).toHaveLength(3);
+  expect(rows[1]).toMatchObject({
+    changed_fields: ["eventAccessOnly"],
+    after: { eventAccessOnly: false },
+  });
+});
+
 it("searches system work by its human initiator without making them the executor (H53)", async () => {
   const app = await getApp();
   const actor = await createUserWithCapabilities([CAPABILITIES.AUDIT_READ]);

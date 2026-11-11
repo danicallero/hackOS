@@ -583,6 +583,35 @@ describe("role audiences ask the people holding them (H59)", () => {
     );
     expect((await getItems(holder)).map((item) => item.activityId)).toEqual([id]);
     expect(await getItems(outsider)).toEqual([]);
+    const onboarding = await app.inject({
+      method: "GET",
+      url: "/api/me/onboarding",
+      headers: asUser(holder),
+    });
+    expect(onboarding.statusCode).toBe(200);
+    expect(onboarding.json().steps).toContainEqual(
+      expect.objectContaining({ step: "rsvp", status: "pending" }),
+    );
+    const profile = await app.inject({ method: "GET", url: "/api/me", headers: asUser(holder) });
+    expect(profile.json().pendingRsvps).toBe(true);
+    expect(profile.json().pendingProfileTasks).not.toContain("rsvp");
+    const outsiderOnboarding = await app.inject({
+      method: "GET",
+      url: "/api/me/onboarding",
+      headers: asUser(outsider),
+    });
+    expect(
+      outsiderOnboarding.json().steps.some((step: { step: string }) => step.step === "rsvp"),
+    ).toBe(false);
+    const answer = await app.inject({
+      method: "PUT",
+      url: "/api/me/rsvps",
+      headers: { ...asUser(holder), "idempotency-key": crypto.randomUUID() },
+      payload: { answers: [{ activityId: id, answer: "unsure" }] },
+    });
+    expect(answer.statusCode).toBe(200);
+    const answered = await app.inject({ method: "GET", url: "/api/me", headers: asUser(holder) });
+    expect(answered.json().pendingRsvps).toBe(false);
   });
 });
 

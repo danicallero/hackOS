@@ -87,7 +87,6 @@ const TABS: TabDef[] = [
 export function visibleProfileTabs(
   me: Me,
   isPureApplicant: boolean,
-  hasRsvps = false,
   helperEligible = false,
 ): TabDef[] {
   const visible = (id: ProfileSectionId) => {
@@ -102,7 +101,7 @@ export function visibleProfileTabs(
       case "share":
         return me.hasEventAccess;
       case "rsvp":
-        return me.hasEventAccess && hasRsvps;
+        return me.hasEventAccess;
       case "roles":
         return me.roles.length > 0;
       default:
