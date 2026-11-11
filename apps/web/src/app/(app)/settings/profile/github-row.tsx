@@ -40,7 +40,12 @@ export function GithubRow() {
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <GithubLogoIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
-      <p className="min-w-0 flex-1 truncate text-sm font-medium">{login ?? "GitHub"}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium">GitHub</p>
+        <p className="text-muted-foreground truncate text-sm">
+          {login ? t("githubLinkedAs", { login }) : t("githubNotLinked")}
+        </p>
+      </div>
       {login ? (
         <Button
           variant="outline"

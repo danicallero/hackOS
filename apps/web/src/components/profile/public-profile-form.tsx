@@ -419,6 +419,24 @@ function GithubAccountRow({
   );
 }
 
+/** Networks whose link is a fixed address plus a handle, so only the handle is typed. */
+const HANDLE_PREFIX: Partial<Record<SocialKind, string>> = {
+  linkedin: "linkedin.com/in/",
+  x: "x.com/",
+  instagram: "instagram.com/",
+};
+
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** The handle part of a stored link; a pasted full address is reduced the same way. */
+export function handleOf(url: string, prefix: string): string {
+  const lead = "^(https?://)?(www\\.)?";
+  const value = url.trim();
+  const full = value.replace(new RegExp(`${lead}${escapeRe(prefix)}`, "i"), "");
+  if (full !== value) return full;
+  return value.replace(new RegExp(`${lead}${escapeRe(prefix.split("/")[0])}/?`, "i"), "");
+}
+
 function LinksEditor({
   links,
   onChange,
@@ -475,16 +493,25 @@ function LinksEditor({
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
-                  inputMode="url"
-                  autoComplete="url"
-                  maxLength={200}
-                  placeholder="https://"
-                  aria-label={t("publicProfileLinkUrl")}
-                  value={link.url}
-                  onChange={(e) => replace(link.id, { url: e.target.value })}
-                />
+                {HANDLE_PREFIX[link.kind] ? (
+                  <HandleInput
+                    prefix={HANDLE_PREFIX[link.kind] as string}
+                    url={link.url}
+                    label={t("publicProfileLinkUrl")}
+                    onChange={(url) => replace(link.id, { url })}
+                  />
+                ) : (
+                  <Input
+                    className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={200}
+                    placeholder="https://"
+                    aria-label={t("publicProfileLinkUrl")}
+                    value={link.url}
+                    onChange={(e) => replace(link.id, { url: e.target.value })}
+                  />
+                )}
                 <IconButton
                   variant="ghost"
                   label={t("publicProfileRemoveLink")}
@@ -511,6 +538,37 @@ function LinksEditor({
         </Button>
       )}
     </fieldset>
+  );
+}
+
+function HandleInput({
+  prefix,
+  url,
+  label,
+  onChange,
+}: {
+  prefix: string;
+  url: string;
+  label: string;
+  onChange: (url: string) => void;
+}) {
+  return (
+    <div className="col-span-2 row-start-2 flex min-w-0 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+      <span className="rounded-l-control text-muted-foreground bg-muted inline-flex shrink-0 items-center border border-r-0 px-3 text-sm">
+        {prefix}
+      </span>
+      <Input
+        className="min-w-0 flex-1 rounded-l-none"
+        autoComplete="off"
+        maxLength={150}
+        aria-label={label}
+        value={handleOf(url, prefix)}
+        onChange={(e) => {
+          const handle = handleOf(e.target.value, prefix);
+          onChange(handle ? `https://${prefix}${handle}` : "");
+        }}
+      />
+    </div>
   );
 }
 

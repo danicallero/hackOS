@@ -4307,5 +4307,18 @@
   "knowledgeMerged": "Knowledge areas merged",
   "toastKnowledge": "Knowledge areas",
   "helpDeskFor": "Request for",
-  "helpDeskEventAccessOnly": "Only people with event access can request help"
+  "helpDeskEventAccessOnly": "Only people with event access can request help",
+  "activeDevicesTitle": "Active devices",
+  "thisDevice": "This device",
+  "signOutOtherDevices": "Sign out of all other devices",
+  "signOutDevice": "Sign out of this device",
+  "deviceSignedOut": "Device signed out",
+  "devicesSignedOut": "Other devices signed out",
+  "couldNotLoadDevices": "Could not load your devices.",
+  "couldNotSignOutDevice": "Could not sign out the device.",
+  "unknownDevice": "Unknown device",
+  "activeDeviceSince": "Active {when}",
+  "primaryEmail": "Primary",
+  "githubLinkedAs": "Linked as {login}",
+  "githubNotLinked": "Not linked"
 }

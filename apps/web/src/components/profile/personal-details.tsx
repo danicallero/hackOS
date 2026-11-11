@@ -80,7 +80,16 @@ function valuesFromMe(me: Me): Values {
  * silently clobbered back to "" by Radix's hidden native-select sync.
  */
 /** Onboarding shows the identity fields and the dietary answer as separate steps. */
-export type PersonalDetailsPart = "all" | "identity" | "dietary";
+export type PersonalDetailsPart = "all" | "identity" | "dietary" | "account" | "preferences";
+
+/** Which blocks a part shows: the photo and names, language and shirt size, the dietary answer. */
+const SHOWS = {
+  all: { who: true, prefs: true, dietary: true },
+  identity: { who: true, prefs: true, dietary: false },
+  dietary: { who: false, prefs: false, dietary: true },
+  account: { who: true, prefs: false, dietary: false },
+  preferences: { who: false, prefs: true, dietary: true },
+} as const;
 
 export function PersonalDetails({
   onDirtyChange,
@@ -201,7 +210,7 @@ function PersonalDetailsForm({
       <form className="@container min-w-0" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="min-w-0 space-y-6">
           {saveError && <ContextualError message={saveError} />}
-          {part !== "dietary" && (
+          {SHOWS[part].who && (
             <>
               {/* The account photo saves on its own and leads the details it belongs to (#934). */}
               <div className="flex min-w-0 items-center gap-4">
@@ -250,6 +259,12 @@ function PersonalDetailsForm({
                     />
                   </>
                 )}
+              </div>
+            </>
+          )}
+          {SHOWS[part].prefs && (
+            <>
+              <div className="grid min-w-0 items-start gap-4 @xl:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="language"
@@ -308,7 +323,7 @@ function PersonalDetailsForm({
               </div>
             </>
           )}
-          {part !== "identity" && (
+          {SHOWS[part].dietary && (
             <section className="space-y-4 pt-2">
               <h3 className="type-label text-muted-foreground">{t("dietaryRestrictions")}</h3>
               <FormField
@@ -350,7 +365,7 @@ function PersonalDetailsForm({
                 )}
               />
               {!noRestrictions && (
-                <div className="grid items-start gap-4 @xl:grid-cols-2">
+                <div className="space-y-4">
                   <FormField
                     control={form.control}
                     name="foodIntolerances"

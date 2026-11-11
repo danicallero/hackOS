@@ -371,15 +371,15 @@ describe("PublicProfileCard", () => {
       "input[aria-label=publicProfileLinkUrl]:not([readonly])",
     );
     expect(urls).toHaveLength(2);
-    await act(async () => user.type(urls[0] as HTMLInputElement, " github.com/maria "));
-    expect(container.textContent).toContain("github.com/maria");
+    await act(async () => user.type(urls[0] as HTMLInputElement, " maria "));
+    expect((urls[0] as HTMLInputElement).value).toBe("maria");
     await save();
 
     expect(api.put).toHaveBeenCalledWith(
       "/api/me/public-profile",
       expect.objectContaining({
         bio: "Hi",
-        socials: [{ kind: "linkedin", url: "github.com/maria" }],
+        socials: [{ kind: "linkedin", url: "https://linkedin.com/in/maria" }],
       }),
       expect.anything(),
     );

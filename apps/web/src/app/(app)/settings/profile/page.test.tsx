@@ -52,6 +52,7 @@ vi.mock("./mentoring-section", () => ({ MentoringSection: () => <p>mentor-body</
 vi.mock("@/hooks/use-own-helper-profile", () => ({
   useOwnHelperProfile: () => ({ data: { eligible: helper.eligible } }),
 }));
+vi.mock("./active-devices", () => ({ ActiveDevices: () => <p>devices-body</p> }));
 vi.mock("./danger-zone", () => ({ DangerZone: () => <p>danger-body</p> }));
 vi.mock("./email-card", () => ({ EmailRow: () => null }));
 vi.mock("./password-card", () => ({ PasswordRow: () => null }));
@@ -108,7 +109,7 @@ describe("Profile tabs (H28, #1083)", () => {
 
   it("gives the participant Public profile, Wallet and Account", async () => {
     await render();
-    expect(tabs()).toEqual(["publicProfileTitle", "wallet", "accountTitle"]);
+    expect(tabs()).toEqual(["publicProfileTitle", "wallet", "preferences", "accountTitle"]);
     expect(openPanel()).toHaveLength(1);
     expect(openPanel()[0].textContent).toContain("public-body");
     expect(openPanel()[0].textContent).not.toContain("personal-body");
@@ -159,7 +160,7 @@ describe("Profile tabs (H28, #1083)", () => {
     session.me = { ...participant, hasEventAccess: false, roles: [] };
     session.isPureApplicant = true;
     await render();
-    expect(tabs()).toEqual(["accountTitle"]);
+    expect(tabs()).toEqual(["preferences", "accountTitle"]);
     expect(container.textContent).not.toContain("public-body");
     expect(container.textContent).not.toContain("roles-body");
   });
@@ -186,7 +187,7 @@ describe("Profile tabs (H28, #1083)", () => {
     helper.eligible = true;
     nav.search = "tab=mentoring";
     await render();
-    expect(tabs()).toEqual(["profileMentoringTitle", "accountTitle"]);
+    expect(tabs()).toEqual(["profileMentoringTitle", "preferences", "accountTitle"]);
     expect(openPanel()[0].textContent).toContain("mentor-body");
   });
 
@@ -233,7 +234,7 @@ describe("Profile tabs (H28, #1083)", () => {
     await render();
     expect(container.textContent).toContain("public-body");
     expect(container.textContent).not.toContain("danger-body");
-    await openTab(2);
+    await openTab(3);
     expect(openPanel()[0].textContent).toContain("danger-body");
     expect(container.textContent).toContain("public-body");
   });
@@ -241,9 +242,9 @@ describe("Profile tabs (H28, #1083)", () => {
   it("marks a tab holding unsaved edits", async () => {
     personal.dirty = true;
     await render();
-    await openTab(2);
+    await openTab(3);
     await openTab(0);
-    const profileTab = [...container.querySelectorAll("[role=tab]")][2];
+    const profileTab = [...container.querySelectorAll("[role=tab]")][3];
     expect(profileTab.textContent).toContain("unsavedChanges");
   });
 

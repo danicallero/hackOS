@@ -16,7 +16,10 @@ export function EmailRow() {
       <EnvelopeSimpleIcon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{t("emailAddressTitle")}</p>
-        <p className="text-muted-foreground break-all text-sm">{me.email}</p>
+        <p className="text-muted-foreground break-all text-sm">
+          {me.email}
+          <span className="text-foreground ml-2 text-xs">{t("primaryEmail")}</span>
+        </p>
       </div>
       {me.emailVerified ? (
         <StatusBadge tone="success">{t("verified")}</StatusBadge>

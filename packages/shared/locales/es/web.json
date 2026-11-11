@@ -4307,5 +4307,18 @@
   "knowledgeMerged": "Áreas fusionadas",
   "toastKnowledge": "Áreas de conocimiento",
   "helpDeskFor": "Solicitud para",
-  "helpDeskEventAccessOnly": "Solo quien tiene acceso al evento puede pedir ayuda"
+  "helpDeskEventAccessOnly": "Solo quien tiene acceso al evento puede pedir ayuda",
+  "activeDevicesTitle": "Dispositivos activos",
+  "thisDevice": "Este dispositivo",
+  "signOutOtherDevices": "Cerrar sesión en el resto de dispositivos",
+  "signOutDevice": "Cerrar sesión en este dispositivo",
+  "deviceSignedOut": "Sesión cerrada en el dispositivo",
+  "devicesSignedOut": "Sesión cerrada en el resto de dispositivos",
+  "couldNotLoadDevices": "No se pudieron cargar tus dispositivos.",
+  "couldNotSignOutDevice": "No se pudo cerrar la sesión del dispositivo.",
+  "unknownDevice": "Dispositivo desconocido",
+  "activeDeviceSince": "Activo {when}",
+  "primaryEmail": "Principal",
+  "githubLinkedAs": "Vinculada como {login}",
+  "githubNotLinked": "Sin vincular"
 }

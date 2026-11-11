@@ -114,7 +114,7 @@ completion list replace them. Confetti on the completion step is decorative
 
 My profile keeps everything reachable afterwards, in tabs: Public profile, Mentoring (Mentor profile and Help desk, only
 for people who can offer help), Attendance (the meals and activities they were asked about, viewable and editable until each closes), Wallet (passes, certificates and the share
-image) and Account (personal details, sign-in, roles). `?tab=personal` opens Account. `?tab=help-desk` still opens Mentoring.
+image) and Preferences (language, shirt size, dietary) and Account (identity, sign-in, active devices, roles). `?tab=personal` opens Account. `?tab=help-desk` still opens Mentoring.
 
 ## Tests
 

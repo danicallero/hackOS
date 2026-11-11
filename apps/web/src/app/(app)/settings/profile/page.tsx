@@ -18,6 +18,7 @@ import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import type { Me } from "@/lib/types";
 import { useUrlTab } from "@/lib/url-tab";
+import { ActiveDevices } from "./active-devices";
 import { DangerZone } from "./danger-zone";
 import { EmailRow } from "./email-card";
 import { GithubRow } from "./github-row";
@@ -65,11 +66,13 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   if (!visited.has(tab)) setVisited(new Set([...visited, tab]));
   const [dirty, setDirty] = useState<Record<EditableSection, boolean>>({
     personal: false,
+    prefs: false,
     public: false,
     mentor: false,
     rsvp: false,
   });
   const onPersonalDirty = useDirtySetter(setDirty, "personal");
+  const onPrefsDirty = useDirtySetter(setDirty, "prefs");
   const onPublicDirty = useDirtySetter(setDirty, "public");
   const onMentorDirty = useDirtySetter(setDirty, "mentor");
   const onRsvpDirty = useDirtySetter(setDirty, "rsvp");
@@ -77,7 +80,9 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
   function body(id: ProfileSectionId) {
     switch (id) {
       case "personal":
-        return <PersonalDetails onDirtyChange={onPersonalDirty} />;
+        return <PersonalDetails part="account" onDirtyChange={onPersonalDirty} />;
+      case "prefs":
+        return <PersonalDetails part="preferences" onDirtyChange={onPrefsDirty} />;
       case "public":
         return me.hasEventAccess ? <PublicProfileCard onDirtyChange={onPublicDirty} /> : null;
       case "mentor":
@@ -98,6 +103,8 @@ function ProfileSettings({ me, isPureApplicant }: { me: Me; isPureApplicant: boo
             <GithubRow />
           </ul>
         );
+      case "devices":
+        return <ActiveDevices />;
       case "roles":
         return <ProfileRoles me={me} />;
       case "danger":
