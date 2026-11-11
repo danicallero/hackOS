@@ -25,7 +25,6 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { AccountRsvps } from "@/components/account-rsvps";
 import {
   AccountWalletButton,
   AccountWalletOverlay,
@@ -468,7 +467,13 @@ export default function AccountScreen() {
         </View>
 
         {me.hasEventAccess ? (
-          <AccountRsvps userId={me.id} offline={Boolean(offline)} onSaved={refetch} />
+          <Section>
+            <AccountSubpageRow
+              label={t("profileRsvpTitle")}
+              icon="calendar.badge.checkmark"
+              onPress={() => router.push("/(tabs)/others/rsvps")}
+            />
+          </Section>
         ) : null}
 
         {canViewStaffStatistics(me.capabilities) || canManageStands(me.capabilities) ? (

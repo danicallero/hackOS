@@ -28,6 +28,7 @@ describe("operations navigation", () => {
       "/(tabs)/others",
       "/(tabs)/others/wallet",
       "/(tabs)/others/notification-settings",
+      "/(tabs)/others/rsvps",
       "/(tabs)/others/notification-settings/announcements",
       "/(tabs)/others/reminders/schedule",
       "/(tabs)/others/announcements",
@@ -87,6 +88,8 @@ describe("operations navigation", () => {
     }
   });
   it.each([
+    "/others/rsvps",
+    "/(tabs)/others/rsvps",
     "/others/notification-settings/live-activities",
     "/(tabs)/others/notification-settings/live-activities",
     "/others/wallet",

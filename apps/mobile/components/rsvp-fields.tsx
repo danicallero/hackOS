@@ -13,17 +13,19 @@ export function RsvpFields({
   draft,
   onChange,
   disabled = false,
+  showTitle = true,
 }: {
   items: RsvpItem[];
   draft: Record<number, RsvpAnswer>;
   onChange: (id: number, answer: RsvpAnswer) => void;
   disabled?: boolean;
+  showTitle?: boolean;
 }) {
   const { t, language } = useLocale();
   const values = [t("rsvpYes"), t("rsvpNo"), t("rsvpUnsure")];
   if (!items.length) return null;
   return (
-    <Section title={t("profileRsvpTitle")}>
+    <Section title={showTitle ? t("profileRsvpTitle") : undefined}>
       {items.map((item, index) => {
         const answer = item.locked ? item.answer : (draft[item.activityId] ?? item.answer);
         return (
