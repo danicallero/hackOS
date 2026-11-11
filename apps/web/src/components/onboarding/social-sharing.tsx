@@ -72,6 +72,7 @@ export interface SocialSharingProps {
    */
   onSkip?: () => void;
   className?: string;
+  hideTitle?: boolean;
 }
 
 export type ShareFormat = "landscape" | "square" | "portrait" | "story";
@@ -164,8 +165,16 @@ function captionDates(
   const copy = copyFragments[language];
   const startMonth = part(start, { month: "long" });
   const endMonth = part(end, { month: "long" });
-  const startDay = part(start, { day: "numeric" });
-  const endDay = part(end, { day: "numeric" });
+  const dayLabel = (date: Date) => {
+    const day = part(date, { day: "numeric" });
+    if (language !== "en") return day;
+    const suffix = { one: "st", two: "nd", few: "rd", other: "th", zero: "th", many: "th" }[
+      new Intl.PluralRules("en", { type: "ordinal" }).select(Number(day))
+    ];
+    return `${day}${suffix}`;
+  };
+  const startDay = dayLabel(start);
+  const endDay = dayLabel(end);
   if (startMonth === endMonth && startDay === endDay) return null;
   return startMonth === endMonth
     ? fill(copy.captionDatesSame, { start: startDay, end: endDay, month: startMonth })
@@ -191,7 +200,9 @@ export function buildCaption(
   const url = publicEventUrl(event.url);
   return fill(copy.caption, {
     event: eventTitle(event),
-    details: details ? ` ${details.charAt(0).toLocaleUpperCase(language)}${details.slice(1)}.` : "",
+    details: details
+      ? `\n\n${details.charAt(0).toLocaleUpperCase(language)}${details.slice(1)}.`
+      : "",
     link: url ? `\n\n${url.href}` : "",
   });
 }
@@ -848,6 +859,7 @@ export function SocialSharing({
   onContinue,
   onSkip,
   className,
+  hideTitle = false,
 }: SocialSharingProps) {
   const { language } = useLocale();
   const copy = copyFragments[language];
@@ -1058,7 +1070,7 @@ export function SocialSharing({
       aria-labelledby={`${ids}-title`}
       className={cn("mx-auto w-full max-w-xl space-y-4", className)}
     >
-      <h2 id={`${ids}-title`} className="type-section-title">
+      <h2 id={`${ids}-title`} className={hideTitle ? "sr-only" : "type-section-title"}>
         {copy.title}
       </h2>
 

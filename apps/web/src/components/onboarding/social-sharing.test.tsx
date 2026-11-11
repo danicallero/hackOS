@@ -101,18 +101,37 @@ describe("caption and share links", () => {
   };
 
   it("words the caption per language and only includes supplied details", () => {
-    expect(buildCaption("es", event)).toBe("¡Voy a HackUDC 2027! Nos vemos ahí.");
+    expect(buildCaption("es", event)).toBe("¡Voy a HackUDC 2027! ¡Nos vemos ahí!");
     expect(buildCaption("es", { ...event, ...window, url: "https://hackudc.com" })).toBe(
-      "¡Voy a HackUDC 2027! 36 horas de desarrollo en A Coruña del 28 al 29 de octubre. Nos vemos ahí.\n\nhttps://hackudc.com/",
+      "¡Voy a HackUDC 2027!\n\n36 horas de desarrollo en A Coruña del 28 al 29 de octubre. ¡Nos vemos ahí!\n\nhttps://hackudc.com/",
     );
     expect(buildCaption("en", { ...event, ...window })).toBe(
-      "I'm going to HackUDC 2027! 36 hours of development in A Coruña from 28 to 29 October. See you there.",
+      "I'm going to HackUDC 2027!\n\n36 hours of development in A Coruña from October 28th to 29th. See you there!!",
     );
     expect(buildCaption("gl", { ...event, ...window })).toBe(
-      "Vou a HackUDC 2027! 36 horas de desenvolvemento en A Coruña do 28 ao 29 de outubro. Vémonos aí.",
+      "Vou a HackUDC 2027!\n\n36 horas de desenvolvemento en A Coruña do 28 ao 29 de outubro. Vémonos aí!!",
     );
     expect(buildCaption("gl", { ...event, location: "A Coruña" })).toBe(
-      "Vou a HackUDC 2027! En A Coruña. Vémonos aí.",
+      "Vou a HackUDC 2027!\n\nEn A Coruña. Vémonos aí!!",
+    );
+  });
+
+  it("uses the requested announcement copy with dynamic edition facts", () => {
+    expect(
+      buildCaption("en", {
+        name: "HackUDC 2027 development",
+        year: 2027,
+        hours: 38,
+        location: "A Coruña",
+        dates: {
+          start: "2026-10-28T08:00:00Z",
+          end: "2026-10-30T20:00:00Z",
+          timezone: "Europe/Madrid",
+        },
+        url: "https://hackudc.com/",
+      }),
+    ).toBe(
+      "I'm going to HackUDC 2027 development!\n\n38 hours of development in A Coruña from October 28th to 30th. See you there!!\n\nhttps://hackudc.com/",
     );
   });
 
@@ -126,13 +145,13 @@ describe("caption and share links", () => {
           timezone: "Europe/Madrid",
         },
       }),
-    ).toBe("¡Voy a HackUDC 2027! Del 30 de octubre al 1 de noviembre. Nos vemos ahí.");
+    ).toBe("¡Voy a HackUDC 2027!\n\nDel 30 de octubre al 1 de noviembre. ¡Nos vemos ahí!");
   });
 
   it("adds the event link on its own line, without query, fragment or credentials", () => {
     expect(
       buildCaption("es", { ...event, url: "https://user:pw@hackudc.com/path?token=abc#frag" }),
-    ).toBe("¡Voy a HackUDC 2027! Nos vemos ahí.\n\nhttps://hackudc.com/path");
+    ).toBe("¡Voy a HackUDC 2027! ¡Nos vemos ahí!\n\nhttps://hackudc.com/path");
     expect(publicEventUrl("javascript:alert(1)")).toBeNull();
     expect(publicEventUrl("not a url")).toBeNull();
     expect(publicEventUrl(undefined)).toBeNull();
@@ -414,6 +433,14 @@ describe("<SocialSharing />", () => {
   const button = (name: RegExp) =>
     [...container.querySelectorAll("button")].find((b) => name.test(b.textContent ?? ""));
 
+  it("hides the redundant visible title when the surrounding Wallet section names it", async () => {
+    await mount({ hideTitle: true });
+    expect(container.querySelector("h2")?.className).toBe("sr-only");
+    expect(container.querySelector("section")?.getAttribute("aria-labelledby")).toBe(
+      container.querySelector("h2")?.id,
+    );
+  });
+
   it("generates a preview from the private photo route without sharing anything by itself", async () => {
     const open = vi.spyOn(window, "open");
     await mount();
@@ -479,7 +506,7 @@ describe("<SocialSharing />", () => {
       expect(a.rel).toContain("noopener");
       expect(a.rel).toContain("noreferrer");
     }
-    const caption = "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.";
+    const caption = "¡Voy a HackUDC 2027!\n\nEn A Coruña. ¡Nos vemos ahí!";
     expect(new URL(linkedin.href).searchParams.get("text")).toBe(caption);
     expect(new URL(x.href).searchParams.get("text")).toBe(caption);
     expect(document.body.textContent).toContain("no adjuntan la imagen");
@@ -492,7 +519,7 @@ describe("<SocialSharing />", () => {
     await vi.waitFor(() => expect(menuItem(/Copiar texto/)).toBeDefined());
     await act(async () => user.click(menuItem(/Copiar texto/) as Element));
     expect(await navigator.clipboard.readText()).toBe(
-      "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.",
+      "¡Voy a HackUDC 2027!\n\nEn A Coruña. ¡Nos vemos ahí!",
     );
     expect(toast.success).toHaveBeenCalledWith("Texto copiado", expect.anything());
   });
@@ -538,7 +565,7 @@ describe("<SocialSharing />", () => {
     await mount();
     await openShareMenu();
     await act(async () => (menuItem(label) as HTMLElement).click());
-    const caption = "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.";
+    const caption = "¡Voy a HackUDC 2027!\n\nEn A Coruña. ¡Nos vemos ahí!";
     expect(await navigator.clipboard.readText()).toBe(caption);
     expect(saveBlob).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith(
