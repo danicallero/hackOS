@@ -530,21 +530,24 @@ describe("<SocialSharing />", () => {
     });
   });
 
-  it("downloads the image and copies the text before opening LinkedIn", async () => {
+  it.each([
+    ["LinkedIn", /LinkedIn/, "linkedin.com", "Pégalo en LinkedIn."],
+    ["X", /^X$/, "x.com", "Pégalo en X."],
+  ])("downloads the image and copies the text before opening %s", async (_name, label, host, tail) => {
     const open = vi.spyOn(window, "open").mockReturnValue({} as Window);
     await mount();
     await openShareMenu();
-    await act(async () => (menuItem(/LinkedIn/) as HTMLElement).click());
+    await act(async () => (menuItem(label) as HTMLElement).click());
     const caption = "¡Voy a HackUDC 2027! En A Coruña. Nos vemos ahí.";
     expect(await navigator.clipboard.readText()).toBe(caption);
     expect(saveBlob).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith(
-      expect.stringContaining("linkedin.com"),
+      expect.stringContaining(host),
       "_blank",
       "noopener,noreferrer",
     );
     expect(toast.success).toHaveBeenCalledWith(
-      "Imagen descargada y texto copiado. Pégalo en LinkedIn.",
+      `Imagen descargada y texto copiado. ${tail}`,
       expect.anything(),
     );
   });

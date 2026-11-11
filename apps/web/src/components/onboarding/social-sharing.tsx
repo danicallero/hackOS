@@ -1002,18 +1002,20 @@ export function SocialSharing({
     }
   };
 
-  /** LinkedIn cannot receive the image from a link: save it and copy the text first, then open it. */
-  const shareOnLinkedIn = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    event.preventDefault();
-    const target = linkedInShareUrl(caption);
-    // The text is copied while this page still has focus, then the image is saved.
-    void navigator.clipboard?.writeText(caption).catch(() => undefined);
-    const saved = saveAsFile();
-    setActed(true);
-    toast.success(saved ? copy.linkedinReady : copy.copied, { compactTitle: copy.linkedin });
-    // The tab is opened inside the click so a pop-up blocker allows it.
-    if (!window.open(target, "_blank", "noopener,noreferrer")) window.location.assign(target);
-  };
+  /** LinkedIn and X cannot receive the image from a link: save it and copy the text first, then open the network. */
+  const shareOnNetwork =
+    (target: string, network: string) => (event: React.MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault();
+      // The text is copied while this page still has focus, then the image is saved.
+      void navigator.clipboard?.writeText(caption).catch(() => undefined);
+      const saved = saveAsFile();
+      setActed(true);
+      toast.success(saved ? text("networkReady", { network }) : copy.copied, {
+        compactTitle: network,
+      });
+      // The tab is opened inside the click so a pop-up blocker allows it.
+      if (!window.open(target, "_blank", "noopener,noreferrer")) window.location.assign(target);
+    };
 
   const copyCaption = async () => {
     try {
@@ -1150,7 +1152,7 @@ export function SocialSharing({
                 href={linkedInShareUrl(caption)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={shareOnLinkedIn}
+                onClick={shareOnNetwork(linkedInShareUrl(caption), copy.linkedin)}
               >
                 <LinkedinLogoIcon aria-hidden />
                 {copy.linkedin}
@@ -1161,7 +1163,7 @@ export function SocialSharing({
                 href={xShareUrl(caption)}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => setActed(true)}
+                onClick={shareOnNetwork(xShareUrl(caption), copy.x)}
               >
                 <XLogoIcon aria-hidden />
                 {copy.x}

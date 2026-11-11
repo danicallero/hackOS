@@ -15,7 +15,7 @@
     "downloaded": "Imagen descargada",
     "downloadFailed": "No se pudo descargar la imagen.",
     "shareMenu": "Compartir",
-    "attachNote": "LinkedIn y X no adjuntan la imagen. Con LinkedIn la descargamos y copiamos el texto por ti.",
+    "attachNote": "LinkedIn y X no adjuntan la imagen. Al elegirlos la descargamos y copiamos el texto por ti.",
     "copy": "Copiar texto",
     "copied": "Texto copiado",
     "copyFailed": "No se pudo copiar el texto.",
@@ -32,7 +32,7 @@
     "captionIn": "en {place}",
     "captionDatesSame": "del {start} al {end} de {month}",
     "captionDatesDiff": "del {start} de {startMonth} al {end} de {endMonth}",
-    "linkedinReady": "Imagen descargada y texto copiado. Pégalo en LinkedIn."
+    "networkReady": "Imagen descargada y texto copiado. Pégalo en {network}."
   },
   "gl": {
     "title": "Conta o nas redes",
@@ -50,7 +50,7 @@
     "downloaded": "Imaxe descargada",
     "downloadFailed": "Non se puido descargar a imaxe.",
     "shareMenu": "Compartir",
-    "attachNote": "LinkedIn e X non engaden a imaxe. Con LinkedIn descargámola e copiamos o texto por ti.",
+    "attachNote": "LinkedIn e X non engaden a imaxe. Ao elixilos descargámola e copiamos o texto por ti.",
     "copy": "Copiar texto",
     "copied": "Texto copiado",
     "copyFailed": "Non se puido copiar o texto.",
@@ -67,7 +67,7 @@
     "captionIn": "en {place}",
     "captionDatesSame": "do {start} ao {end} de {month}",
     "captionDatesDiff": "do {start} de {startMonth} ao {end} de {endMonth}",
-    "linkedinReady": "Imaxe descargada e texto copiado. Pégao en LinkedIn."
+    "networkReady": "Imaxe descargada e texto copiado. Pégao en {network}."
   },
   "en": {
     "title": "Share it",
@@ -85,7 +85,7 @@
     "downloaded": "Image downloaded",
     "downloadFailed": "Couldn't download the image.",
     "shareMenu": "Share",
-    "attachNote": "LinkedIn and X don't attach the image. With LinkedIn we download it and copy the text for you.",
+    "attachNote": "LinkedIn and X don't attach the image. Choosing either downloads it and copies the text for you.",
     "copy": "Copy text",
     "copied": "Text copied",
     "copyFailed": "Couldn't copy the text.",
@@ -102,6 +102,6 @@
     "captionIn": "in {place}",
     "captionDatesSame": "from {start} to {end} {month}",
     "captionDatesDiff": "from {start} {startMonth} to {end} {endMonth}",
-    "linkedinReady": "Image downloaded and text copied. Paste it in LinkedIn."
+    "networkReady": "Image downloaded and text copied. Paste it in {network}."
   }
 }
