@@ -71,6 +71,10 @@ fi
 SH
 RUN chmod +x /usr/local/bin/start-server.sh
 
+# The runtime user is not root: Next writes optimized images (and fetch results)
+# to .next/cache, which must exist and be writable or /_next/image answers 500.
+RUN mkdir -p /repo/apps/web/.next/cache && chown -R node:node /repo/apps/web/.next/cache
+
 USER node
 EXPOSE 3001
 
