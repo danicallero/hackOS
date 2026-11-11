@@ -27,7 +27,7 @@ The header's gear menu holds Coverage (`HELPDESK_COVERAGE`) and My support profi
 `HelpDeskSectionHeader` (title plus sibling links) as Home and Projects do; there
 is no layout. The helper record renders the people reader's `PersonProfile`
 (`people/[userId]/person-detail.tsx`) from the API's `profile`, followed by the
-stated availability and any challenge restrictions. Its role capsule sits in the profile header;
+planned availability and any challenge restrictions. Its role capsule sits in the profile header;
 company name and logo have their own row immediately before knowledge. Presence
 is only a green dot at the avatar edge when inside (with a screen-reader label),
 never an outside placeholder. Knowledge falls back to the card's topics. Publishing
@@ -69,7 +69,7 @@ grouped by event day ("Sat 27 · 10:00–13:00") over a compact 24 h track
 first 24 hours of the API's `suggestedInterval` (hacking window); each existing interval also has Edit, replacing it atomically without deleting the saved interval first. Failed replacements retain the saved schedule and the editor draft; order, overlap and over-24 h errors
 show inline, and each row has a labelled Remove. Every change
 saves immediately. Times use the event time zone (`useEventTimeZone`); grouping
-and validation live in `schedule.ts`. Stated availability and venue presence
+and validation live in `schedule.ts`. Planned availability and venue presence
 always render as distinct states.
 
 Coverage (`coverage/`) shows, for organizers: Right now (scheduled and inside the venue as independent totals, with no inferred intersection), a per-day bar timeline of helpers scheduled per slot

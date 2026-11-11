@@ -12,7 +12,7 @@ import { useLocale } from "@/lib/i18n";
 import type { AvailabilityInterval } from "./model";
 
 /**
- * The From / To dialog shared by the stated availability (H62) and the help
+ * The From / To dialog shared by the planned availability (H62) and the help
  * desk opening hours (H64): two event-zone date-times prefilled from `initial`,
  * the order check, the caller's own rule (`validate`, returning the message to
  * show or null) and an optional muted summary. Saving hands back the instants.

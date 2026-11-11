@@ -56,7 +56,7 @@ export function adjustment(
 }
 
 /**
- * Stated availability (H62) as one line per event day: drag across a line to
+ * Planned availability (H62) as one line per event day: drag across a line to
  * mark when you are around (30-minute steps), drag a marked stretch to move it
  * or either of its edges to change its time, or press it to edit or remove it.
  * A plain press on an empty spot opens the add dialog for that day, and the Add

@@ -17,7 +17,7 @@ import type { AvailabilityInterval, MyHelperProfile } from "./model";
 import { durationMinutes, eventDay, intervalFrom, intervalProblem, nextDayOf } from "./schedule";
 
 /**
- * Stated availability (H62): the saved intervals as rows per event day, an
+ * Planned availability (H62): the saved intervals as rows per event day, an
  * Add dialog (day, from, to) and a Remove action per row. Each change saves
  * the complete replacement immediately, so there is no draft to lose.
  */

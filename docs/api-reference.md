@@ -292,7 +292,7 @@ lives in identity but follows the profile's photo switch. Full detail:
 ### helpdesk (H61–H67)
 Help desk: helper profiles (`/api/me/helper-profile`, projected from the
 public profile so the bio is shared), the self-service knowledge catalogue,
-stated availability, browsing helpers, help requests with H65 routing to
+planned availability, browsing helpers, help requests with H65 routing to
 available present helpers (with admin-set opening hours for new requests), single-winner claims and organizer coverage under
 `/api/helpdesk`. Full detail: [`help-desk.md`](./help-desk.md); client
 contract: [`help-desk-contract.md`](./help-desk-contract.md).

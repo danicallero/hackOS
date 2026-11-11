@@ -73,7 +73,7 @@ Architecture & modules:
 - [Onboarding social sharing](./onboarding-social-sharing.md) — the share
   step's card component.
 - [Help desk (H61-H67)](./help-desk.md) — helper profiles sharing the public
-  bio, knowledge catalogue, stated availability versus presence, request
+  bio, knowledge catalogue, planned availability versus presence, request
   routing, atomic claims and coverage; client contract in
   [`help-desk-contract.md`](./help-desk-contract.md).
 - [Content reports (H18)](./content-reports.md) — attendee reports of projects and
