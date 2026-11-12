@@ -33,7 +33,7 @@ export function buildResponseColumns({
     },
     {
       id: "status",
-      width: "w-36",
+      width: "w-48",
       header: t("statusColumn"),
       sortValue: (r) => r.status,
       cell: (r) => (

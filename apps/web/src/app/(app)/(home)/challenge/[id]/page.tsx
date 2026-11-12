@@ -166,8 +166,7 @@ export default function PublicChallengePage() {
                     <ol className="divide-y divide-border/60">
                       {winners.map((winner) => (
                         <li key={winner.rank} className="space-y-3 py-3 first:pt-0 last:pb-0">
-                          <StatusBadge tone="success" dot={false}>
-                            <TrophyIcon aria-hidden="true" />
+                          <StatusBadge tone="success" icon={<TrophyIcon aria-hidden="true" />}>
                             {t("rankLabel", { rank: winner.rank })}
                           </StatusBadge>
                           <p className="type-section-title text-balance">{winner.repoName}</p>

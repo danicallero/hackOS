@@ -213,14 +213,10 @@ export default function TvControlPage() {
               />
             </div>
             <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`size-2 rounded-full ${connected ? "bg-success" : "bg-destructive"}`}
-                  aria-hidden="true"
-                />
-                <span className="text-muted-foreground">
+              <div>
+                <StatusBadge tone={connected ? "success" : "danger"}>
                   {connected ? t("tvFeedConnected") : t("tvFeedReconnecting")}
-                </span>
+                </StatusBadge>
               </div>
               <div>
                 {current?.source === "manual" && (
@@ -244,12 +240,9 @@ export default function TvControlPage() {
         title={t("displayMode")}
         description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
         footer={
-          <div className="flex items-center gap-3">
-            {isDraftUnbroadcast && <StatusBadge tone="warning">{t("dataStatusDraft")}</StatusBadge>}
-            <SubmitButton pending={busy} onClick={requestBroadcast}>
-              {t("showOnTvs")}
-            </SubmitButton>
-          </div>
+          <SubmitButton pending={busy} onClick={requestBroadcast}>
+            {t("showOnTvs")}
+          </SubmitButton>
         }
       >
         <fieldset>

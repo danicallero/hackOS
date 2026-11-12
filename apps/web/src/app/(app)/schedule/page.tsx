@@ -350,7 +350,7 @@ export default function SchedulePage() {
             onValueChange: setQuery,
           }}
           filters={filters}
-          searchOwnRowOnMobile
+          searchOwnRowWhenNarrow
           actions={
             <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
               {canEdit && selectedIds.size > 0 && (

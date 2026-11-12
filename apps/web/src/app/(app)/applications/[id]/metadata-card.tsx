@@ -14,7 +14,6 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
   Accordion,
@@ -318,9 +317,9 @@ export function MetadataCard({
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
                           {field.value && (
-                            <StatusBadge tone="neutral" dot={false}>
+                            <span className="text-muted-foreground text-xs">
                               {t("requiredAtSubmitBadge")}
-                            </StatusBadge>
+                            </span>
                           )}
                         </div>
                         <FormControl>

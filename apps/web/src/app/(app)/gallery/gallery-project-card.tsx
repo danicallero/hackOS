@@ -135,8 +135,12 @@ export function GalleryProjectCard({ project }: { project: NativeProject }) {
         </div>
       )}
       {project.winners?.map((winner) => (
-        <StatusBadge key={winner.challengeId} tone="success" dot={false} className="max-w-full">
-          <TrophyIcon aria-hidden="true" className="size-4 shrink-0" />
+        <StatusBadge
+          key={winner.challengeId}
+          tone="success"
+          icon={<TrophyIcon aria-hidden="true" />}
+          className="max-w-full"
+        >
           <span className="wrap-anywhere">
             {winner.challengeTitle} · {t("rankLabel", { rank: winner.rank })}
           </span>

@@ -224,8 +224,11 @@ export function RoleEditor({
     <div className="flex flex-wrap items-center gap-2">
       <h1 className="type-page-title text-balance">{role.name}</h1>
       {isProtected && (
-        <StatusBadge tone="neutral" dot={false}>
-          <LockIcon aria-hidden="true" className="size-3" /> {t("systemRoleBadge")}
+        <StatusBadge
+          icon={<LockIcon aria-hidden="true" />}
+          className="text-muted-foreground font-normal"
+        >
+          {t("systemRoleBadge")}
         </StatusBadge>
       )}
     </div>

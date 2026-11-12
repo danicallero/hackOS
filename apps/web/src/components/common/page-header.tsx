@@ -30,6 +30,7 @@ export function PageHeader({
   headingLevel?: 1 | 2;
   /** Narrow screens leave room for the app's sidebar trigger; public pages have none. */
   reserveNavigation?: boolean;
+  /** Record state; leads the line under the title, ahead of `meta`, never beside the title. */
   state?: React.ReactNode;
   /** Identity metadata under the title (email, badge id) — not a description. */
   meta?: React.ReactNode;
@@ -70,9 +71,13 @@ export function PageHeader({
           {context && <div className="type-meta">{context}</div>}
           <div className="heading-row min-h-(--line-height-page-title) flex flex-wrap items-center gap-(--space-related)">
             <Heading className="type-page-title text-balance">{title}</Heading>
-            {state && <div className="shrink-0">{state}</div>}
           </div>
-          {meta && <div className="flex flex-wrap items-center gap-(--space-related)">{meta}</div>}
+          {(state || meta) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {state}
+              {meta}
+            </div>
+          )}
           {description && (
             <p className="max-w-prose text-muted-foreground text-pretty text-sm">{description}</p>
           )}

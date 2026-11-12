@@ -64,9 +64,7 @@ export function ApplicationHeader({
         }
         state={
           !canDiscard && status ? (
-            <StatusBadge tone={statusTone(status)} dot={false}>
-              {statusLabel(status, t)}
-            </StatusBadge>
+            <StatusBadge tone={statusTone(status)}>{statusLabel(status, t)}</StatusBadge>
           ) : undefined
         }
       />

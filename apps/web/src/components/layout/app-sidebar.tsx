@@ -10,7 +10,6 @@ import { BrandMark } from "@/components/common/brand";
 import { ShortcutKbd, ShortcutTooltip } from "@/components/common/shortcut-hint";
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { UserMenu } from "@/components/layout/user-menu";
-import { Badge } from "@/components/ui/badge";
 import {
   Sidebar,
   SidebarContent,
@@ -87,27 +86,6 @@ function NavLink({
       item.activePaths?.some((path) => matchesPath(pathname, path)) ||
       false);
   const Icon = item.icon;
-
-  if (item.soon) {
-    return (
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          disabled
-          className={`cursor-not-allowed opacity-55 ${className ?? ""}`}
-          tooltip={`${t(item.title)} — ${t("comingSoon")}`}
-        >
-          <Icon />
-          <span>{t(item.title)}</span>
-          <Badge
-            variant="outline"
-            className="ml-auto text-[10px] group-data-[collapsible=icon]:hidden"
-          >
-            {t("soon")}
-          </Badge>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-    );
-  }
 
   return (
     <SidebarMenuItem>
