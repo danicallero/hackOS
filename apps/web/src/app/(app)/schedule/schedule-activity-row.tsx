@@ -18,7 +18,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { useAudienceRoles } from "@/hooks/use-audience-roles";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem, type ScheduleAudience } from "@/lib/logistics";
 import { toast } from "@/lib/toast";
@@ -368,7 +368,6 @@ export function ActivityRow({
         return canEdit && !publishAtDisabledHint ? (
           <EditablePublishDateCell
             value={item.publishAt}
-            locale={language}
             fieldLabel={t("schedulePublishDateColumn")}
             onSave={savePublishAt}
           />
@@ -380,7 +379,7 @@ export function ActivityRow({
             —
           </span>
         ) : item.publishAt ? (
-          formatScheduledDateTime(item.publishAt, language)
+          formatEventDate(item.publishAt, language, "dateTime")
         ) : (
           t("notSet")
         );

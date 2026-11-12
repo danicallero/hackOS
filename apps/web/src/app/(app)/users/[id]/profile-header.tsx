@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { BackLink } from "@/components/common/back-link";
 import { IconButton } from "@/components/common/icon-button";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -88,6 +89,7 @@ export function ProfileHeader({
   return (
     <>
       <PageHeader
+        context={<BackLink href="/users" label={t("users")} />}
         className="flex-row items-start justify-between gap-2 [&>[data-slot=action-group]]:shrink-0"
         leading={<UserPhoto user={user} onChanged={onPhotoChanged} />}
         title={fullName(user)}

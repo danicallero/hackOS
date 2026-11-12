@@ -1,7 +1,6 @@
 {
   "apiError_degree_in_use": "Este grao úsase en solicitudes. Consolídao noutro grao antes de eliminalo.",
   "signOut": "Pechar sesión",
-  "welcomeBack": "Benvida de novo",
   "forgotPassword": "Esqueciches o contrasinal?",
   "checkEmail": "Revisa o teu correo",
   "resetPassword": "Restablece o contrasinal",

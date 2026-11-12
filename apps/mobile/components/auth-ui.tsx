@@ -136,7 +136,7 @@ export function AuthHeader({
             alignItems: "center",
             backgroundColor: colors.accent,
             borderCurve: "continuous",
-            borderRadius: 20,
+            borderRadius: radius.container,
             justifyContent: "center",
             minHeight: 68,
             minWidth: 68,
@@ -224,7 +224,7 @@ export function AuthField({
           backgroundColor: colors.surface,
           borderColor: error ? colors.destructive : focused ? colors.accent : colors.separator,
           borderCurve: "continuous",
-          borderRadius: 12,
+          borderRadius: radius.control,
           borderWidth: focused ? 2 : 1,
           flexDirection: "row",
           minHeight: 52,
@@ -304,7 +304,7 @@ export function AuthAlert({ message, testID }: { message: string; testID?: strin
       style={{
         backgroundColor: colors.destructiveSurface,
         borderCurve: "continuous",
-        borderRadius: 12,
+        borderRadius: radius.container,
         padding: 12,
       }}
     >

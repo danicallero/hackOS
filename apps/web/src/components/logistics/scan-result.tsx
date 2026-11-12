@@ -11,7 +11,7 @@ export function ScanResult({ result }: { result: ActivityScanResult }) {
     <div
       className={cn(
         "rounded-lg border p-4",
-        result.repeat ? "border-warning/50 bg-warning/10" : "border-success/40 bg-success/10",
+        result.repeat ? "border-warning/40 bg-warning/10" : "border-success/40 bg-success/10",
       )}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">

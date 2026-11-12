@@ -1,9 +1,8 @@
 "use client";
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
-import Link from "next/link";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -52,7 +51,7 @@ function PersonReader({ userId }: { userId: number }) {
   // Hidden and missing profiles share the 404, so both read as "not found".
   const missing = !validId || isNotFoundError(error);
 
-  const back = <ProfileBackLink href="/people" label={t("backToPeople")} />;
+  const back = <BackLink href="/people" label={t("diary")} />;
 
   if (!entry || missing) {
     return (
@@ -84,19 +83,6 @@ function PersonReader({ userId }: { userId: number }) {
   }
 
   return <PersonProfile entry={entry} context={back} />;
-}
-
-/** The labelled return link above a profile's name. */
-export function ProfileBackLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <ArrowLeftIcon aria-hidden="true" className="size-4" />
-      {label}
-    </Link>
-  );
 }
 
 /**

@@ -25,7 +25,7 @@ export function PublicationSummary({
         <div>
           <dt className="text-muted-foreground">{t("publishAtLabel")}</dt>
           <dd className="mt-1">
-            {formatEventDate(enterprise.available_from, language, "dateTimeMedium")}
+            {formatEventDate(enterprise.available_from, language, "dateTime")}
           </dd>
         </div>
       )}

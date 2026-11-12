@@ -6,6 +6,7 @@ import { useId, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
 import { Modal } from "@/components/common/modal";
 import { SectionCard } from "@/components/common/section-card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -87,12 +88,14 @@ export function ResetJudgingDataTab({ icon: Icon }: { icon: PhosphorIcon }) {
         className="border-destructive/40"
       >
         <div className="space-y-4">
-          <div className="rounded-md border border-destructive/35 bg-destructive/5 p-4">
-            <p className="text-destructive text-sm font-medium">{t("resetJudgingDataWarning")}</p>
-            <p className="text-muted-foreground mt-1 text-pretty text-sm">
-              {t("resetJudgingDataUseOnlyWhenNeeded")}
-            </p>
-          </div>
+          <Alert variant="destructive" role="none">
+            <AlertDescription>
+              <p className="text-destructive text-sm font-medium">{t("resetJudgingDataWarning")}</p>
+              <p className="text-muted-foreground text-pretty text-sm">
+                {t("resetJudgingDataUseOnlyWhenNeeded")}
+              </p>
+            </AlertDescription>
+          </Alert>
           {resetComplete && (
             <p role="status" className="text-success text-sm">
               {t("judgingDataReset")}

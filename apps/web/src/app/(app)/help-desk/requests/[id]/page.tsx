@@ -1,12 +1,12 @@
 "use client";
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { useParams, useSearchParams } from "next/navigation";
+import { BackLink } from "@/components/common/back-link";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
 import { useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
-import { ProfileBackLink } from "../../../people/[userId]/person-detail";
 import type { HelpRequest } from "../../model";
 import { requestListSource } from "../../navigation";
 import { RequestDetail } from "../../request-list";
@@ -29,7 +29,7 @@ export default function RequestPage() {
   const mine = requester && !(helper && request?.viewer.notified);
   const returnTo =
     source ?? (mine ? "/help-desk?tab=mine" : helper ? "/help-desk?tab=claims" : "/help-desk");
-  const back = <ProfileBackLink href={returnTo} label={t("helpDeskAllRequests")} />;
+  const back = <BackLink href={returnTo} label={t("helpDeskAllRequests")} />;
   return (
     <PageLayout width="reading">
       <PageHeader

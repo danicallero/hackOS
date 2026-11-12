@@ -13,6 +13,7 @@ import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api } from "@/lib/api";
@@ -399,22 +400,21 @@ export default function QueuePage() {
       />
 
       {actionError && (
-        <div
-          role="alert"
-          className="border-destructive/40 bg-destructive/5 text-destructive flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm"
-        >
-          <span>{actionError}</span>
-          <IconButton
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            label={t("dismiss")}
-            onClick={() => setActionError(null)}
-            className="shrink-0"
-          >
-            <XIcon aria-hidden="true" />
-          </IconButton>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-start justify-between gap-3">
+            <span>{actionError}</span>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              label={t("dismiss")}
+              onClick={() => setActionError(null)}
+              className="shrink-0"
+            >
+              <XIcon aria-hidden="true" />
+            </IconButton>
+          </AlertDescription>
+        </Alert>
       )}
 
       {roomsLoading || roomView.loading ? (

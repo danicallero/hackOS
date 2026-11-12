@@ -134,7 +134,6 @@ function VerifyEmailInner() {
             <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
           <h1 className="type-section-title text-balance">{t("emailVerified")}</h1>
-          <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
           <Button onClick={() => router.push(next)}>

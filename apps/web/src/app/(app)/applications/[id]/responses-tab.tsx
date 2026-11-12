@@ -195,7 +195,7 @@ export function ResponsesTab({
     [visibleRows, selectedId],
   );
 
-  const columns = buildResponseColumns({ t, meId: me?.id, workspace });
+  const columns = buildResponseColumns({ t, language, meId: me?.id, workspace });
 
   function fileLabel(field: TemplateField) {
     const label = pickText(field.label, language).trim();

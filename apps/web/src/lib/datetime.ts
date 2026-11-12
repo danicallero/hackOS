@@ -12,21 +12,6 @@ import type { Language } from "./types";
 // Every formatter and input helper here works in the EVENT's time zone
 // (H45/H47), not the browser's: see `./event-time`.
 
-const SHORT_DATE_TIME: Intl.DateTimeFormatOptions = {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-};
-
-/** Shared "en-GB" short display format (e.g. "05 Jan 2026, 14:30") used across
- * admin tables (audit log, invite links) so every surface renders timestamps
- * identically, in the event zone. */
-export const shortDateTimeFmt = {
-  format: (date: Date) => formatInZone(date, getEventTimeZone(), "en-GB", SHORT_DATE_TIME),
-};
-
 /** ISO instant -> `yyyy-MM-ddTHH:mm` wall clock in the event zone (input value). */
 export function toDatetimeLocal(
   iso: string | null,
@@ -44,8 +29,6 @@ export function fromDatetimeLocal(
   if (!value) return null;
   return wallClockToInstant(value, timeZone);
 }
-
-const dateTimeLocalPattern = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/;
 
 /**
  * Event IANA zone id plus its UTC offset (e.g. "Europe/Madrid (UTC+2)"), so
@@ -68,24 +51,6 @@ export function formatEventClock(value: string | number | Date, locale?: string)
   return formatInZone(value, getEventTimeZone(), locale, { hour: "2-digit", minute: "2-digit" });
 }
 
-export function formatScheduledDateTime(value: string, locale?: string): string {
-  const localMatch = dateTimeLocalPattern.exec(value);
-  if (localMatch) {
-    const [, year, month, day, hour, minute] = localMatch;
-    return `${day}/${month}/${year} ${hour}:${minute}`;
-  }
-
-  return (
-    formatInZone(value, getEventTimeZone(), locale, {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }) || value
-  );
-}
-
 /**
  * Named display formats. Every presentation of a timestamp goes through
  * `formatEventDate`/`eventDateFormat` so it renders in the event zone and the
@@ -93,8 +58,9 @@ export function formatScheduledDateTime(value: string, locale?: string): string 
  */
 const DATE_PRESETS = {
   /** "5 Jan 2026" */
-  date: { dateStyle: "medium" },
-  /** "5 Jan 2026, 14:30" */
+  date: { day: "numeric", month: "short", year: "numeric" },
+  /** "05 Jan 2026, 14:30": the one format for any stored timestamp. Explicit
+   * fields, not dateStyle/timeStyle, so browsers cannot swap "," for "at". */
   dateTime: {
     day: "2-digit",
     month: "short",
@@ -102,10 +68,6 @@ const DATE_PRESETS = {
     hour: "2-digit",
     minute: "2-digit",
   },
-  /** "5 Jan 2026, 2:30 PM" with the locale's own medium date and short time. */
-  dateTimeMedium: { dateStyle: "medium", timeStyle: "short" },
-  /** "5 January 2026 at 2:30 PM" with the locale's own long date and short time. */
-  dateTimeLong: { dateStyle: "long", timeStyle: "short" },
   /** "05 Jan, 14:30" */
   dayMonthTime: { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" },
   /** "5 Jan" */
