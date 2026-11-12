@@ -58,7 +58,7 @@ test("shows private field edits and follows related request actions", async ({ p
 });
 
 // H53: long real-world field lists must not push the subject and actor offscreen.
-test("keeps every audit column visible with long change metadata", async ({ page }, info) => {
+test("keeps audit content visible in wide and compact layouts", async ({ page }, info) => {
   await page.addInitScript(() => localStorage.setItem("hackos.cookie-notice.dismissed", "true"));
   await installApplicationReviewFixture(page.context());
   await page.route("**/api/me", (route) =>
@@ -116,6 +116,22 @@ test("keeps every audit column visible with long change metadata", async ({ page
   }
   for (const width of [1440, 1024]) {
     await page.setViewportSize({ width, height: 1000 });
+    if (width === 1024) {
+      const rows = page.getByRole("link", { name: /Application form #1/ });
+      await expect(rows).toHaveCount(2);
+      for (const label of [/^Entity:?$/, /^Actor:?$/, /^Source:?$/])
+        await expect(rows.first().getByText(label)).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: info.outputPath(`audit-columns-${width}.png`),
+        fullPage: true,
+      });
+      continue;
+    }
     const table = page.getByRole("table");
     for (const name of ["When", "Action", "Entity", "Actor", "Source"])
       await expect(table.getByRole("columnheader", { name, exact: true })).toBeInViewport();
