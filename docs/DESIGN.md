@@ -1386,8 +1386,13 @@ architecture: [`mobile.md`](./mobile.md).**
   source of visual values; import from `@/theme`. Colours (`colors`) are UIKit
   semantic colours on iOS and the same palette as fixed light/dark pairs on
   Android (never Material You, never a Material ripple). `space` (4-pt grid plus
-  the 6/10 UIKit half-steps), `radius` (`control` 12, `container` 14, `sheet` 22,
-  `full` capsule, always with `borderCurve: "continuous"`), `type` (Apple text
+  the 6/10 UIKit half-steps), `radius` (`chip` 10, `control` 12, `container` 14, `sheet` 22,
+  `full` capsule, always with `borderCurve: "continuous"`). One radius per role:
+  fields and glass controls `control`; cards, grouped sections, banners and
+  floating menus `container`; modals `sheet`; buttons and badges `full`; a
+  segment nested in a padded track is the track radius minus the padding
+  (`chip` inside a `control` track). Circles derived from their own size
+  (44 pt icon buttons, 50 pt glass buttons) keep half their side as the radius, `type` (Apple text
   styles, plus `compact` 14) and `motion` (durations and springs) are in
   `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
   spread into a style); screens

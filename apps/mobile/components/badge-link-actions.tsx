@@ -6,6 +6,7 @@ import { ActionButton, MenuTriggerIcon } from "@/components/native-ui";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useNfcSupported } from "@/lib/use-nfc-supported";
 import { colors } from "@/theme/colors";
+import { radius } from "@/theme/tokens";
 
 export interface ScanActionLabels {
   nfc: MessageKey;
@@ -47,14 +48,14 @@ export function BadgeLinkActions({
         isInteractive={!disabled}
         glassEffectStyle="regular"
         tintColor={colors.primaryAction}
-        style={{ flex: 1, borderRadius: 25, overflow: "hidden" }}
+        style={{ flex: 1, borderRadius: radius.full, overflow: "hidden" }}
       >
         <ActionButton
           testID={testID}
           icon={nfcSupported ? "wave.3.right" : "qrcode.viewfinder"}
           label={t(nfcSupported ? labels.nfc : labels.qr)}
           variant="filled"
-          style={{ borderRadius: 25, backgroundColor: "transparent" }}
+          style={{ borderRadius: radius.full, backgroundColor: "transparent" }}
           disabled={disabled}
           onPress={nfcSupported ? onNfc : () => onAlternative("qr")}
         />
