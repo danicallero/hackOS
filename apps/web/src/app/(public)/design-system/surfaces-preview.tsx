@@ -158,7 +158,6 @@ export function SurfacesPreview() {
           <Modal
             size="sm"
             title={t("surfaceDecision")}
-            description={t("surfaceDecisionHelp")}
             trigger={<Button variant="outline">{t("surfaceOpenDecision")}</Button>}
             footer={
               <>
@@ -184,13 +183,11 @@ export function SurfacesPreview() {
       </SectionCard>
       <EditorPreview open={editorOpen} onOpenChange={setEditorOpen} />
       <SectionCard variant="plain" title={t("surfaceFeedback")}>
-        <p className="type-meta">{t("surfaceFeedbackHelp")}</p>
         <ActionGroup>
           {(["saved", "unsaved", "saving", "error"] as const).map((state) => (
             <SaveStatus key={state} state={state} />
           ))}
         </ActionGroup>
-        <p className="type-meta">{t("surfaceToastHelp")}</p>
         {noticeVisible && (
           <p data-preview-notice className="text-sm">
             {t("surfaceDecisionHelp")}
@@ -438,7 +435,6 @@ function EditorPreview({
       open={open}
       onOpenChange={changeOpen}
       title={t("surfaceOpenEditor")}
-      description={t("surfaceDecisionHelp")}
       size={size}
       footer={
         <FormActions

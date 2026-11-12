@@ -9,7 +9,7 @@
 // applications form uses FIELD_KINDS below and i18n labels {en,es,gl}
 // (plan/07 §2).
 
-import { fromDatetimeLocal, shortDateTimeFmt, toDatetimeLocal } from "@/lib/datetime";
+import { fromDatetimeLocal, toDatetimeLocal } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
 import type { Tone } from "@/lib/tones";
 import type { I18nText } from "@/lib/types";
@@ -249,11 +249,6 @@ export const toLocalInput = (iso: string | null | undefined): string =>
 
 /** Event-zone datetime input value -> ISO string (UTC) or null when blank. */
 export const fromLocalInput = fromDatetimeLocal;
-
-export function fmtDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  return shortDateTimeFmt.format(new Date(iso)) || "—";
-}
 
 /** avg_score may be a numeric string; render to 1 decimal or a dash. */
 export function fmtScore(avg: number | string | null): string {

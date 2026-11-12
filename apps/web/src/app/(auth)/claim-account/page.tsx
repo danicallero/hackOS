@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -203,7 +202,7 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader>
-          <h1 className="type-section-title text-balance">{t("inviteUnavailable")}</h1>
+          <h1 className="type-page-title text-balance">{t("inviteUnavailable")}</h1>
         </CardHeader>
         <CardContent>
           <Link href="/login" className="text-sm underline underline-offset-4">
@@ -218,10 +217,7 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircleIcon aria-hidden="true" className="size-6" />
-          </div>
-          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("accountCreated")}
           </h1>
         </CardHeader>
@@ -254,7 +250,7 @@ function ClaimInner() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("createYourAccount")}</h1>
+        <h1 className="type-page-title text-balance">{t("createYourAccount")}</h1>
         {lookup.reusable && (
           <p className="text-muted-foreground text-pretty text-sm">
             {t("reusableInviteRole", { role: inviteRole })}

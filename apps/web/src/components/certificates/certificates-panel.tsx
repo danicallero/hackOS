@@ -252,7 +252,7 @@ export function CertificatesPanel({
 
       {staff && others.length > 0 && (
         <section className="space-y-1">
-          <h3 className="text-muted-foreground text-sm font-medium">
+          <h3 className="type-subheading text-muted-foreground">
             {t("certificateOtherDocuments")}
           </h3>
           <ul className="divide-border/60 divide-y">
@@ -299,7 +299,7 @@ export function CertificatesPanel({
       {staff && (
         <section className="space-y-4 border-t pt-5">
           <div className="space-y-1">
-            <h3 className="font-medium">{t("certificateCertifiedHours")}</h3>
+            <h3 className="type-subheading">{t("certificateCertifiedHours")}</h3>
             <p className="text-muted-foreground text-sm tabular-nums">
               {t("certificateHoursSoFar", { hours: String(eligibility.hours) })}
               {eligibility.certifiedHours != null &&

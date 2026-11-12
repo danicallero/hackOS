@@ -40,7 +40,7 @@ export function FileLink({
     >
       {children ?? (
         <>
-          <FileTextIcon aria-hidden="true" className="size-3.5" />
+          <FileTextIcon aria-hidden="true" />
           {t("viewFileLabel")}
         </>
       )}

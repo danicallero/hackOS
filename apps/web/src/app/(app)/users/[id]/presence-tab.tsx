@@ -153,7 +153,7 @@ export function PresenceSection({ userId }: { userId: number }) {
         ) : undefined
       }
     >
-      <h3 className="text-balance font-medium">{t("presenceSummary")}</h3>
+      <h3 className="type-subheading text-balance">{t("presenceSummary")}</h3>
       <div className="grid gap-4 sm:grid-cols-2">
         <StatCard
           label={t("presenceGuaranteedHours")}
@@ -169,7 +169,7 @@ export function PresenceSection({ userId }: { userId: number }) {
       </div>
       <div className="border-t pt-5">
         <div className="mb-4">
-          <h3 className="text-balance font-medium">{t("presenceTimeline")}</h3>
+          <h3 className="type-subheading text-balance">{t("presenceTimeline")}</h3>
           <p className="text-muted-foreground text-pretty mt-1 text-sm">
             {t("presenceTimelineFooter")}
           </p>

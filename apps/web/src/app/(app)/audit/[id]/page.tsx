@@ -8,6 +8,7 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AccessDenied } from "@/components/common/access-denied";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
@@ -82,6 +83,7 @@ export default function AuditEntryPage() {
   return (
     <PageLayout width="reading">
       <PageHeader
+        context={<BackLink href="/audit" label={t("auditLog")} />}
         title={getActionLabel(row.action, t)}
         meta={
           <span className="text-muted-foreground text-xs">

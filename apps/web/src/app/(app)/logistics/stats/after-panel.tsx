@@ -174,7 +174,7 @@ export function AfterPanel({
           getRowId={(row) => String(row.userId)}
           loading={loading}
           error={error ? { message: error, onRetry } : undefined}
-          empty={{ icon: UsersIcon, title: t("noAttendanceData") }}
+          empty={{ title: t("noAttendanceData") }}
         />
       </SectionCard>
     </div>

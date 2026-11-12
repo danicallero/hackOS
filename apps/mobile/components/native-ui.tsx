@@ -341,7 +341,7 @@ export function StatusPill({
           alignSelf: "flex-start",
           backgroundColor: palette.background,
           borderCurve: "continuous",
-          borderRadius: 999,
+          borderRadius: radius.full,
           paddingHorizontal: 10,
           paddingVertical: 5,
         },
@@ -512,7 +512,7 @@ export function LegacyScreenHeader({
             <GlassView
               colorScheme="auto"
               glassEffectStyle="regular"
-              style={{ borderRadius: 12, flex: 1, height: 40, overflow: "hidden" }}
+              style={{ borderRadius: radius.control, flex: 1, height: 40, overflow: "hidden" }}
             >
               <View
                 style={{
@@ -1089,7 +1089,7 @@ export function EmptyState({
           alignItems: "center",
           backgroundColor: colors.surface,
           borderCurve: "continuous",
-          borderRadius: 18,
+          borderRadius: radius.container,
           justifyContent: "center",
           minHeight: 64,
           minWidth: 64,

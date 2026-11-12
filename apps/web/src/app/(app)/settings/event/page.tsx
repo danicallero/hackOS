@@ -209,7 +209,7 @@ export default function EventSettingsPage() {
                 href="/settings/event"
                 className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
               >
-                <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+                <ArrowLeftIcon aria-hidden="true" className="size-4" />
                 {t("backToEventSettings")}
               </Link>
             ) : undefined
@@ -222,7 +222,7 @@ export default function EventSettingsPage() {
               <section key={group.id} aria-labelledby={`settings-group-${group.id}`}>
                 <h2
                   id={`settings-group-${group.id}`}
-                  className="mb-2 text-sm font-semibold text-muted-foreground"
+                  className="type-subheading mb-2 text-muted-foreground"
                 >
                   {t(group.label)}
                 </h2>

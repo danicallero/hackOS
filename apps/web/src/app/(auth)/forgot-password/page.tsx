@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -70,10 +69,7 @@ function ForgotPasswordForm() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
-          </div>
-          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("checkEmail")}
           </h1>
           <CardDescription>{t("resetEmailSent")}</CardDescription>
@@ -93,7 +89,7 @@ function ForgotPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("resetPassword")}</h1>
+        <h1 className="type-page-title text-balance">{t("resetPassword")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>

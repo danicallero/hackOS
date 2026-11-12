@@ -415,7 +415,7 @@ function JudgingQuestionRow({
         disabled={disabled || index === 0}
         onClick={() => onMove(-1)}
       >
-        <ArrowUpIcon aria-hidden="true" className="size-3.5" />
+        <ArrowUpIcon aria-hidden="true" className="size-4" />
       </IconButton>
       <IconButton
         label={t("moveFieldDown")}
@@ -423,7 +423,7 @@ function JudgingQuestionRow({
         disabled={disabled || index === count - 1}
         onClick={() => onMove(1)}
       >
-        <ArrowDownIcon aria-hidden="true" className="size-3.5" />
+        <ArrowDownIcon aria-hidden="true" className="size-4" />
       </IconButton>
     </div>
   );
@@ -457,7 +457,7 @@ function JudgingQuestionRow({
       ref={cardRef}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
-      className="border-l-primary space-y-4 border-l-4"
+      className="border-primary/60 ring-primary/30 space-y-4 ring-1"
     >
       {topRow}
 

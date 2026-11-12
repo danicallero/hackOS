@@ -7,13 +7,12 @@
 // back. Visibility is scoped server-side exactly like the overview list.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
-import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { Modal } from "@/components/common/modal";
 import { PageHeader } from "@/components/common/page-header";
@@ -134,6 +133,8 @@ export default function ReviewDetailPage() {
     }
   }, [detail, message, t]);
 
+  const reviewsBack = <BackLink href="/queue/reviews" label={t("reviewsOverview")} />;
+
   if (loading) {
     return (
       <div className="flex min-h-80 items-center justify-center">
@@ -145,19 +146,10 @@ export default function ReviewDetailPage() {
   if (!detail) {
     return (
       <PageLayout width="reading">
-        <PageHeader title={t("reviewDetailTitle")} />
+        <PageHeader context={reviewsBack} title={t("reviewDetailTitle")} />
         <EmptyState
-          icon={LockIcon}
           title={loadError ?? t("couldNotLoadReviews")}
           description={t("reviewDetailAccessDesc")}
-          action={
-            <Button size="sm" asChild variant="outline">
-              <Link href="/queue/reviews">
-                <ArrowLeftIcon aria-hidden="true" className="size-4" />
-                {t("backToReviews")}
-              </Link>
-            </Button>
-          }
         />
       </PageLayout>
     );
@@ -167,6 +159,7 @@ export default function ReviewDetailPage() {
   return (
     <PageLayout width="reading">
       <PageHeader
+        context={reviewsBack}
         title={project.name}
         description={textForDisplay(challenge.title)}
         state={
@@ -209,9 +202,7 @@ export default function ReviewDetailPage() {
             <div>
               <dt className="text-muted-foreground text-sm">{t("lastUpdated")}</dt>
               <dd className="text-sm">
-                {review.updatedAt
-                  ? formatEventDate(review.updatedAt, language, "dateTimeMedium")
-                  : "—"}
+                {review.updatedAt ? formatEventDate(review.updatedAt, language, "dateTime") : "—"}
               </dd>
             </div>
           </dl>
@@ -311,7 +302,7 @@ export default function ReviewDetailPage() {
                 <span className="text-foreground font-medium">
                   {version.authorName || t("judgeFallback")}
                 </span>{" "}
-                · {formatEventDate(version.createdAt, language, "dateTimeMedium")} ·{" "}
+                · {formatEventDate(version.createdAt, language, "dateTime")} ·{" "}
                 {version.changedFields.map((f) => changedFieldLabel(f, panel, t)).join(", ")}
               </li>
             ))}

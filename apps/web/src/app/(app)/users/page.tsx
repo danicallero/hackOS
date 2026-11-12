@@ -8,7 +8,6 @@ import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { TableIcon } from "@phosphor-icons/react/dist/csr/Table";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -36,12 +35,12 @@ import { usePersistedState } from "@/hooks/use-persisted-state";
 import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { applicationStatusTone } from "@/lib/application-workflow";
-import { shortDateTimeFmt } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { usersDirectoryKey } from "@/lib/list-resources";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
-import type { UserListItem } from "@/lib/types";
+import type { Language, UserListItem } from "@/lib/types";
 import { loadUserDirectory } from "@/lib/user-directory";
 import { UsersActions } from "./users-actions";
 
@@ -54,8 +53,6 @@ function fullName(u: UserListItem): string {
 function avatarName(u: UserListItem): string {
   return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;
 }
-
-const dateFmt = shortDateTimeFmt;
 
 /** H8: roles are arbitrary names now, not a fixed category set — show the name as-is. */
 function roleLabel(role: UserListItem["visibleRoleName"], t: Translate): string {
@@ -170,6 +167,7 @@ function UserPhotoSlot({
 function buildColumns(
   presentIds: Set<number> | null,
   t: Translate,
+  language: Language,
   reservePhoto: boolean,
 ): Column<UserListItem>[] {
   return [
@@ -181,11 +179,7 @@ function buildColumns(
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <UserPhotoSlot user={u} reserve={reservePhoto} className="size-7" />
           <span className="font-medium">{fullName(u)}</span>
-          {u.isTestAccount && (
-            <StatusBadge tone="warning" dot={false}>
-              {t("reviewFixture")}
-            </StatusBadge>
-          )}
+          {u.isTestAccount && <StatusBadge tone="warning">{t("reviewFixture")}</StatusBadge>}
         </div>
       ),
     },
@@ -265,7 +259,7 @@ function buildColumns(
       sortValue: (u) => Date.parse(u.createdAt),
       cell: (u) => (
         <span className="text-muted-foreground text-sm">
-          {dateFmt.format(new Date(u.createdAt))}
+          {formatEventDate(u.createdAt, language, "dateTime")}
         </span>
       ),
     },
@@ -275,12 +269,14 @@ function buildColumns(
 function UserMobileRow({
   user,
   t,
+  language,
   columns,
   presentIds,
   reservePhoto,
 }: {
   user: UserListItem;
   t: Translate;
+  language: Language;
   columns: Column<UserListItem>[];
   presentIds: Set<number> | null;
   reservePhoto: boolean;
@@ -295,22 +291,18 @@ function UserMobileRow({
     presence: presentIds === null ? "—" : t(presentIds.has(user.id) ? "present" : "away"),
     shirt: user.shirtSize ?? "—",
     language: user.language.toUpperCase(),
-    created: dateFmt.format(new Date(user.createdAt)),
+    created: formatEventDate(user.createdAt, language, "dateTime"),
   };
   return (
     <Link
       href={`/users/${user.id}`}
-      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
       <UserPhotoSlot user={user} reserve={reservePhoto} className="mt-0.5 size-9" />
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex min-w-0 flex-wrap items-start gap-2">
           <span className="min-w-0 flex-1 wrap-break-word font-medium">{name}</span>
-          {user.isTestAccount && (
-            <StatusBadge tone="warning" dot={false}>
-              {t("reviewFixture")}
-            </StatusBadge>
-          )}
+          {user.isTestAccount && <StatusBadge tone="warning">{t("reviewFixture")}</StatusBadge>}
         </div>
         <dl className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1.5 text-xs">
           {columns
@@ -348,7 +340,7 @@ function UserMobileRow({
 }
 
 export default function UsersPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const isMobile = useIsMobile();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
@@ -499,12 +491,12 @@ export default function UsersPage() {
   const reservePhoto = useMemo(() => users.some((user) => user.image), [users]);
   const columns = useMemo(
     () =>
-      buildColumns(presentIds, t, reservePhoto).filter(
+      buildColumns(presentIds, t, language, reservePhoto).filter(
         (column) =>
           visibleColumns.has(column.id as UserColumnId) &&
           (column.id !== "presence" || showPresence),
       ),
-    [visibleColumns, presentIds, showPresence, t, reservePhoto],
+    [visibleColumns, presentIds, showPresence, t, language, reservePhoto],
   );
 
   function toggleColumn(id: UserColumnId, checked: boolean) {
@@ -626,6 +618,7 @@ export default function UsersPage() {
             <UserMobileRow
               user={u}
               t={t}
+              language={language}
               columns={columns}
               presentIds={presentIds}
               reservePhoto={reservePhoto}
@@ -636,7 +629,6 @@ export default function UsersPage() {
           loading={loading}
           error={loadError ? { message: loadError, onRetry: () => reloadUsers() } : undefined}
           empty={{
-            icon: UsersIcon,
             title: t("noUsersYet"),
           }}
           filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}

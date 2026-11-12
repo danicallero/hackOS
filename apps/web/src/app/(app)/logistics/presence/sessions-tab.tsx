@@ -57,7 +57,7 @@ function getOpenSessionColumns(
       id: "stale",
       header: t("statusColumn"),
       cell: (row) => (
-        <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
+        <StatusBadge tone={row.stale ? "warning" : "neutral"}>
           {row.stale ? t("staleCheck") : t("fresh")}
         </StatusBadge>
       ),
@@ -142,7 +142,6 @@ export function SessionsTab({
           pageSize={10}
           error={sessionsError}
           empty={{
-            icon: DoorOpenIcon,
             title: t("noOpenSessions"),
             description: t("noOpenSessionsDesc"),
           }}

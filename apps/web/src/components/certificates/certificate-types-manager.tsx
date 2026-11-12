@@ -253,7 +253,7 @@ function DefinitionEditor({
     <form onSubmit={(event) => void save(event)} className="space-y-5">
       {error && <ContextualError message={error} />}
       <fieldset disabled={pending} className="space-y-5">
-        <h3 className="font-medium">{t("certificateEditorWording")}</h3>
+        <h3 className="type-subheading">{t("certificateEditorWording")}</h3>
         <Tabs value={locale} onValueChange={(v) => setLocale(v as Language)}>
           <TabsList aria-label={t("language")}>
             {LANGS.map((lang) => (
@@ -333,7 +333,7 @@ function DefinitionEditor({
           </div>
         )}
         <section className="space-y-3">
-          <h3 className="font-medium">{t("certificateEditorRecipients")}</h3>
+          <h3 className="type-subheading">{t("certificateEditorRecipients")}</h3>
           {toggle("enabled", "certificateTypeEnabled")}
           {toggle("selfService", "certificateSelfService")}
           {acceptedSpot && <p className="text-sm">{t("certificateAllEventAccess")}</p>}
@@ -361,7 +361,7 @@ function DefinitionEditor({
           {toggle("allowGuests", "certificateAllowGuests")}
         </section>
         <section className="space-y-3">
-          <h3 className="font-medium">{t("certificateEditorRules")}</h3>
+          <h3 className="type-subheading">{t("certificateEditorRules")}</h3>
           {toggle("attendancePolicy", "certificateUseAttendancePolicy")}
           {toggle("requiresActivity", "certificateRequiresTalk")}
           {toggle("requiresEventEnd", "certificateRequiresEventEnd")}

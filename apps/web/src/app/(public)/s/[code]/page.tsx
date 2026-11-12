@@ -5,7 +5,6 @@
 // other browser lands here. Signed in, the tag is collected through the same
 // diary scan as the app; signed out, the page offers sign-in and returns here.
 
-import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -69,10 +68,7 @@ export default function CompanyTagPage() {
           </div>
         ) : status === "unauthenticated" ? (
           <>
-            <div className="bg-muted grid size-24 place-items-center rounded-full">
-              <StorefrontIcon aria-hidden="true" className="text-muted-foreground size-10" />
-            </div>
-            <h1 className="text-2xl font-semibold">{t("companyTagSignInTitle")}</h1>
+            <h1 className="type-page-title">{t("companyTagSignInTitle")}</h1>
             <p className="text-muted-foreground max-w-xs">{t("companyTagSignInBody")}</p>
             <Button asChild size="lg" className="w-full max-w-xs">
               <Link href={withReturnPath("/login", path)}>{t("signIn")}</Link>
@@ -83,10 +79,7 @@ export default function CompanyTagPage() {
           <Collected result={state.result} />
         ) : state.status === "error" ? (
           <>
-            <div className="bg-muted grid size-24 place-items-center rounded-full">
-              <StorefrontIcon aria-hidden="true" className="text-muted-foreground size-10" />
-            </div>
-            <h1 className="text-2xl font-semibold">{t("companyTagNotCollected")}</h1>
+            <h1 className="type-page-title">{t("companyTagNotCollected")}</h1>
             <p className="text-muted-foreground max-w-xs" role="alert">
               {state.key ? t(state.key) : state.text}
             </p>
@@ -105,7 +98,7 @@ function Collected({ result }: { result: ScanResult }) {
   if (result.kind === "person" || !result.sponsor) {
     return (
       <>
-        <h1 className="text-2xl font-semibold">
+        <h1 className="type-page-title">
           {t("companyTagSavedPerson", { name: result.person?.displayName ?? "" })}
         </h1>
         <Button asChild>
@@ -131,7 +124,7 @@ function Collected({ result }: { result: ScanResult }) {
       </div>
       <div className="space-y-1">
         <p className="text-muted-foreground text-sm">{t("companyTagCollected")}</p>
-        <h1 className="text-2xl font-semibold">{sponsor.name}</h1>
+        <h1 className="type-page-title">{sponsor.name}</h1>
       </div>
       <Button asChild size="lg" className="w-full max-w-xs">
         <Link href="/people?tab=companies">{t("companyTagOpenDiary")}</Link>

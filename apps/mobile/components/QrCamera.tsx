@@ -23,7 +23,7 @@ import CameraCapabilities from "@/modules/camera-capabilities";
 import { colors } from "@/theme/colors";
 import { CHROME_MAX_FONT_SIZE_MULTIPLIER } from "@/theme/dynamic-type";
 import { type OperatorLayout, scanFrameSize } from "@/theme/layout-screens";
-import { type } from "@/theme/tokens";
+import { radius, type } from "@/theme/tokens";
 
 export function QrCamera({
   onValue,
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   },
   cameraControlPressable: {
     alignItems: "center",
-    borderRadius: 999,
+    borderRadius: radius.full,
     flex: 1,
     justifyContent: "center",
   },
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: colors.accent,
     borderCurve: "continuous",
-    borderRadius: 14,
+    borderRadius: radius.full,
     marginTop: 8,
     minWidth: 200,
     padding: 14,

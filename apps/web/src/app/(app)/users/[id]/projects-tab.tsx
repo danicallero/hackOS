@@ -63,7 +63,7 @@ function ProjectLink({ href, label }: { href: string; label: string }) {
   return (
     <Button variant="ghost" size="sm" asChild className="px-2">
       <a href={href} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>
-        <ArrowSquareOutIcon aria-hidden="true" className="size-3.5" />
+        <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
         {label}
       </a>
     </Button>

@@ -8,7 +8,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -54,7 +53,7 @@ function AuditMobileRow({ row }: { row: AuditRow }) {
       className="focus-visible:ring-ring block px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-2">
+        <div className="min-w-0 space-y-1">
           <time
             className="text-muted-foreground block text-xs tabular-nums"
             dateTime={row.created_at}
@@ -65,25 +64,26 @@ function AuditMobileRow({ row }: { row: AuditRow }) {
         </div>
         <CaretRightIcon className="text-muted-foreground mt-1 size-4 shrink-0" aria-hidden="true" />
       </div>
-      <dl className="mt-3 grid min-w-0 gap-2 text-sm sm:grid-cols-2">
-        <div className="min-w-0">
-          <dt className="text-muted-foreground text-xs">{t("colEntity")}</dt>
-          <dd className="mt-0.5 break-words">{entityLabel}</dd>
+      <dl className="mt-2 flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1.5 text-xs">
+        <div className="flex max-w-full items-baseline gap-1 wrap-anywhere">
+          <dt className="text-muted-foreground shrink-0">{t("colEntity")}:</dt>
+          <dd className="min-w-0">{entityLabel}</dd>
         </div>
-        <div className="min-w-0">
-          <dt className="text-muted-foreground text-xs">{t("colActor")}</dt>
-          <dd className="mt-0.5 break-words">
+        <div className="flex max-w-full items-baseline gap-1 wrap-anywhere">
+          <dt className="text-muted-foreground shrink-0">{t("colActor")}:</dt>
+          <dd className="min-w-0">
             {actorLabel}
             {row.initiated_by && (
-              <p className="text-muted-foreground text-xs">
-                {t("auditInitiatedBy")}: {row.initiator_name || `#${row.initiated_by}`}
-              </p>
+              <span className="text-muted-foreground">
+                {" "}
+                ({t("auditInitiatedBy")}: {row.initiator_name || `#${row.initiated_by}`})
+              </span>
             )}
           </dd>
         </div>
-        <div className="min-w-0">
-          <dt className="text-muted-foreground text-xs">{t("colSource")}</dt>
-          <dd className="mt-0.5">
+        <div className="flex max-w-full items-baseline gap-1 wrap-anywhere">
+          <dt className="text-muted-foreground shrink-0">{t("colSource")}:</dt>
+          <dd className="min-w-0">
             {row.source ? (
               <span className="capitalize">{getAuditSourceLabel(row.source, t)}</span>
             ) : (
@@ -393,7 +393,6 @@ export default function AuditPage() {
         }
         renderMobileRow={(r) => <AuditMobileRow row={r} />}
         empty={{
-          icon: LogIcon,
           title: t("noAuditEntriesTitle"),
           description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}

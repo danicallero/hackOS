@@ -44,7 +44,7 @@ import { useLiveQuery } from "@/hooks/use-live-query";
 import { useNow } from "@/hooks/use-now";
 import { notifyNotificationsRead } from "@/hooks/use-unread-count";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { logisticsApi, type PublicScheduleItem } from "@/lib/logistics";
 import {
@@ -148,7 +148,7 @@ function categoryLabel(
 }
 
 export function MessagesTab() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [offset, setOffset] = useState(0);
   // Which items are expanded to show the full body + every other payload field.
@@ -267,7 +267,7 @@ export function MessagesTab() {
                   onClick={() => toggleExpanded(item)}
                   aria-expanded={isOpen}
                   aria-controls={`message-${item.id}`}
-                  className="button-interaction flex w-full items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-5"
+                  className="button-interaction flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-5"
                 >
                   <span
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}
@@ -284,7 +284,7 @@ export function MessagesTab() {
                         dateTime={item.created_at}
                         className="shrink-0 text-muted-foreground text-xs tabular-nums"
                       >
-                        {formatScheduledDateTime(item.created_at)}
+                        {formatEventDate(item.created_at, language, "dateTime")}
                       </time>
                     </div>
                     {body && !isOpen && (
@@ -400,7 +400,7 @@ export function MessagesTab() {
 }
 
 export function PreferencesTab() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const channelLabels = channelLabelMap(t);
   const [prefs, setPrefs] = useState<PreferencesResponse | null>(null);
   const [scheduleItems, setScheduleItems] = useState<PublicScheduleItem[]>([]);
@@ -687,7 +687,9 @@ export function PreferencesTab() {
                     options={addableActivities}
                     value=""
                     getId={(item) => item.id}
-                    getLabel={(item) => `${item.title} — ${formatScheduledDateTime(item.startsAt)}`}
+                    getLabel={(item) =>
+                      `${item.title} — ${formatEventDate(item.startsAt, language, "dateTime")}`
+                    }
                     onChange={(id) => void addReminder(id)}
                     disabled={busy || pendingRemovalCount > 0}
                     inDialog

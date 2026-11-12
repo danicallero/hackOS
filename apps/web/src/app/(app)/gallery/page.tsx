@@ -33,12 +33,7 @@ function galleryClosedNotice(
   if (error.status !== 403 || !details?.reason?.startsWith("gallery_")) return null;
   if (details.reason !== "gallery_closed" || !details.opensAt) return copy.galleryNotOpen;
   // Server component: the client-side event-time store is unavailable here.
-  const date = formatEventDate(
-    details.opensAt,
-    language,
-    "dateTimeLong",
-    details.timeZone || "UTC",
-  );
+  const date = formatEventDate(details.opensAt, language, "dateTime", details.timeZone || "UTC");
   return copy.galleryOpensOn.replace("{date}", date);
 }
 

@@ -23,13 +23,12 @@ import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useRoles } from "@/hooks/use-roles";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { shortDateTimeFmt } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { toast } from "@/lib/toast";
 import type { EnterpriseInviteLink, InviteListItem, UserInviteLink } from "@/lib/types";
 import { InviteUserDialog } from "./invite-dialog";
 
-const dateFmt = shortDateTimeFmt;
 type Redemption = {
   email: string;
   name: string | null;
@@ -81,7 +80,7 @@ function statusLabel(status: InviteStatus, t: Translate): string {
 
 /** The persistent invitation workspace (#777): one composer, one list, one inspector. */
 export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boolean }) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const copy = useCopyToClipboard();
   const [emails, setEmails] = useState<InviteListItem[]>([]);
   const [links, setLinks] = useState<UserInviteLink[]>([]);
@@ -246,7 +245,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
       header: t("colExpires"),
       cell: (row) => (
         <span className="text-muted-foreground text-sm">
-          {row.expires ? dateFmt.format(new Date(row.expires)) : t("linkNeverExpires")}
+          {row.expires ? formatEventDate(row.expires, language, "dateTime") : t("linkNeverExpires")}
         </span>
       ),
     },
@@ -256,7 +255,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
       sortValue: (row) => row.created,
       cell: (row) => (
         <span className="text-muted-foreground text-sm">
-          {dateFmt.format(new Date(row.created))}
+          {formatEventDate(row.created, language, "dateTime")}
         </span>
       ),
     },
@@ -347,7 +346,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
         error={loadFailure ? { message: loadFailure, onRetry: retryLoad } : undefined}
         searchable={(row) => `${row.label} ${row.enterprise ?? ""}`}
         searchPlaceholder={t("searchByEmailType")}
-        empty={{ icon: EnvelopeSimpleIcon, title: t("noActiveInvitations") }}
+        empty={{ title: t("noActiveInvitations") }}
       />
       <SidePanelEditor
         open={selected !== null}
@@ -446,7 +445,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
                         : t("colExpires")}
                     </p>
                     <time className="text-muted-foreground text-xs">
-                      {dateFmt.format(new Date(selected.expires))}
+                      {formatEventDate(selected.expires, language, "dateTime")}
                     </time>
                   </li>
                 )}
@@ -459,7 +458,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
                       <p className="text-muted-foreground text-xs">{selected.usedByEmail}</p>
                     )}
                     <time className="text-muted-foreground text-xs">
-                      {dateFmt.format(new Date(selected.usedAt))}
+                      {formatEventDate(selected.usedAt, language, "dateTime")}
                     </time>
                   </li>
                 )}
@@ -473,7 +472,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
                       <p className="font-medium">{redemption.name ?? redemption.email}</p>
                       <p className="text-muted-foreground text-xs">{redemption.email}</p>
                       <time className="text-muted-foreground text-xs">
-                        {dateFmt.format(new Date(redemption.redeemedAt))}
+                        {formatEventDate(redemption.redeemedAt, language, "dateTime")}
                         {redemption.redeemedIp ? ` · ${redemption.redeemedIp}` : ""}
                         {redemption.redeemedUserAgent ? ` · ${redemption.redeemedUserAgent}` : ""}
                       </time>
@@ -488,7 +487,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
                         : t("inviteLinkCreated")}
                   </p>
                   <time className="text-muted-foreground text-xs">
-                    {dateFmt.format(new Date(selected.created))}
+                    {formatEventDate(selected.created, language, "dateTime")}
                   </time>
                 </li>
               </ol>

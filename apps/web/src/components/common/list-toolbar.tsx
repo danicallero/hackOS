@@ -14,7 +14,7 @@ export function ListToolbar({
   actions,
   actionsBeforeFilters = false,
   feedback,
-  searchOwnRowOnMobile = false,
+  searchOwnRowWhenNarrow = false,
 }: {
   search: SearchFieldProps;
   filters?: readonly FilterDefinition[];
@@ -22,14 +22,14 @@ export function ListToolbar({
   /** Puts the actions right after the search field, e.g. the button that submits it. */
   actionsBeforeFilters?: boolean;
   feedback?: React.ReactNode;
-  /** Below `sm` the search takes its own row so wide actions cannot shrink it (#1178). */
-  searchOwnRowOnMobile?: boolean;
+  /** In a narrow toolbar the search takes its own row so wide actions cannot shrink it (#1178). */
+  searchOwnRowWhenNarrow?: boolean;
 }) {
   const { t } = useLocale();
   const isMobile = useIsMobile();
   const hasFilters = Boolean(filters?.length);
   return (
-    <div className="space-y-3">
+    <div className="@container space-y-3">
       <PageToolbar
         label={t("pageDataControls")}
         className={cn(
@@ -39,12 +39,15 @@ export function ListToolbar({
             : hasFilters || actions
               ? "grid-cols-[minmax(0,1fr)_auto]"
               : "grid-cols-1",
-          searchOwnRowOnMobile && hasFilters && actions && "max-sm:grid-cols-[auto_minmax(0,1fr)]",
+          searchOwnRowWhenNarrow &&
+            hasFilters &&
+            actions &&
+            "@max-2xl:grid-cols-[auto_minmax(0,1fr)]",
         )}
       >
         <SearchField
           {...search}
-          className={cn(searchOwnRowOnMobile && "max-sm:col-span-full", search.className)}
+          className={cn(searchOwnRowWhenNarrow && "@max-2xl:col-span-full", search.className)}
         />
         {actionsBeforeFilters && actions}
         {hasFilters && (
@@ -54,7 +57,7 @@ export function ListToolbar({
             className="contents"
             chipsClassName={cn(
               "col-span-full row-start-2 flex flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-1",
-              searchOwnRowOnMobile && actions && "max-sm:row-start-3",
+              searchOwnRowWhenNarrow && actions && "@max-2xl:row-start-3",
             )}
           />
         )}

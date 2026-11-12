@@ -13,7 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { api } from "@/lib/api";
 import { apiErrorReason } from "@/lib/api-error-reason";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { pickText, useLocale } from "@/lib/i18n";
 import type { MealPlan, MealPlanMeal } from "@/lib/meal-plan";
 import { useCan } from "@/lib/session";
@@ -122,7 +122,7 @@ export function MealPlanSection({ userId }: { userId: number }) {
               <label htmlFor={id} className="min-w-0 flex-1 text-sm">
                 {pickText(meal.nameI18n, language) || meal.name}
                 <span className="ml-2 text-muted-foreground tabular-nums">
-                  {formatScheduledDateTime(meal.startsAt, language)}
+                  {formatEventDate(meal.startsAt, language, "dateTime")}
                 </span>
               </label>
               {!(meal.activityId in draft) ? (

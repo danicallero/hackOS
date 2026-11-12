@@ -11,6 +11,7 @@ import { PasswordInput } from "@/components/common/password-input";
 import { Spinner } from "@/components/common/spinner";
 import { SubmitButton } from "@/components/common/submit-button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import {
   Form,
@@ -124,7 +125,7 @@ function LoginInner() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("welcomeBack")}</h1>
+        <h1 className="type-page-title text-balance">{t("signIn")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -143,13 +144,15 @@ function LoginInner() {
                     <Link href="/privacy" className="underline underline-offset-2">
                       {t("privacyPolicy")}
                     </Link>
-                    <button
+                    <Button
                       type="button"
-                      className="button-interaction underline underline-offset-2"
+                      variant="link"
+                      size="xs"
+                      className="text-inherit"
                       onClick={dismissRemovalProgress}
                     >
                       {t("dismiss")}
-                    </button>
+                    </Button>
                   </div>
                 </AlertDescription>
               </Alert>

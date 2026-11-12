@@ -148,7 +148,7 @@ export function DegreesManager() {
         loading={loading}
         filteredEmpty={{ active: search.trim().length > 0, onClear: () => setSearch("") }}
         error={error ? { message: error, onRetry: () => load() } : undefined}
-        empty={{ icon: GraduationCapIcon, title: t("noDegreesYetTitle") }}
+        empty={{ title: t("noDegreesYetTitle") }}
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

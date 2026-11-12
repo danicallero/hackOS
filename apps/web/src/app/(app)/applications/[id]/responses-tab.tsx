@@ -195,7 +195,7 @@ export function ResponsesTab({
     [visibleRows, selectedId],
   );
 
-  const columns = buildResponseColumns({ t, meId: me?.id, workspace });
+  const columns = buildResponseColumns({ t, language, meId: me?.id, workspace });
 
   function fileLabel(field: TemplateField) {
     const label = pickText(field.label, language).trim();
@@ -271,7 +271,7 @@ export function ResponsesTab({
   return (
     <div className="space-y-4">
       <ListToolbar
-        searchOwnRowOnMobile
+        searchOwnRowWhenNarrow
         search={{
           id: "response-search",
           label: t("searchResponses"),
@@ -800,7 +800,7 @@ export function ResponsesTab({
       )}
       <DataTable
         renderMobileRow={(row) => (
-          <div className="flex items-start gap-3 p-4">
+          <div className="flex items-start gap-3 px-4 py-3">
             {canDecide && (
               <Checkbox
                 className="mt-1"
@@ -816,11 +816,11 @@ export function ResponsesTab({
                 }
               />
             )}
-            <div className="min-w-0 flex-1 space-y-3">
+            <div className="min-w-0 flex-1 space-y-2">
               <button
                 type="button"
                 onClick={() => setSelectedId(row.id)}
-                className="focus-visible:ring-ring flex min-h-11 w-full items-start gap-2 rounded-sm text-left outline-none focus-visible:ring-2"
+                className="button-interaction focus-visible:ring-ring flex min-h-11 w-full items-start gap-2 rounded-sm text-left outline-none focus-visible:ring-2"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block wrap-break-word font-medium">{row.name ?? row.email}</span>
@@ -836,7 +836,7 @@ export function ResponsesTab({
               <StatusBadge tone={applicationStatusTone(row.status)}>
                 {applicationStatusLabel(row.status, t)}
               </StatusBadge>
-              <dl className="grid gap-2 text-xs">
+              <dl className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1.5 text-xs">
                 {columns
                   .filter((column) => {
                     if (column.id === "applicant" || column.id === "status") return false;
@@ -849,10 +849,10 @@ export function ResponsesTab({
                   .map((column) => (
                     <div
                       key={column.id}
-                      className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1"
+                      className="flex max-w-full items-baseline gap-1 wrap-anywhere"
                     >
-                      <dt className="text-muted-foreground">{column.header}</dt>
-                      <dd>{column.cell(row)}</dd>
+                      <dt className="text-muted-foreground shrink-0">{column.header}:</dt>
+                      <dd className="min-w-0">{column.cell(row)}</dd>
                     </div>
                   ))}
               </dl>
@@ -873,7 +873,6 @@ export function ResponsesTab({
         onVisibleRowsChange={setVisibleRows}
         pageSize={15}
         empty={{
-          icon: FileTextIcon,
           title: t("noResponsesTitle"),
           description:
             statusFilter.length === 0 &&

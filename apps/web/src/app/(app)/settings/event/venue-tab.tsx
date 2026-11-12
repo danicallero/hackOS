@@ -88,7 +88,7 @@ function VenuePreview({
             className="text-primary inline-flex shrink-0 items-center gap-1 text-sm hover:underline"
           >
             {t("openInMap")}
-            <ArrowSquareOutIcon aria-hidden="true" className="size-3.5" />
+            <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
           </a>
         )}
       </div>

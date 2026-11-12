@@ -368,12 +368,12 @@ function StaffEditForm({
           />
           <Separator className="my-4" />
           <div className="space-y-4">
-            <h4 className="text-sm font-medium">{t("primaryEmailLabel")}</h4>
+            <h4 className="type-subheading">{t("primaryEmailLabel")}</h4>
             <div className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground">
                 {t("currentEmailInline", { email: user.email })}
               </span>
-              <StatusBadge tone={user.emailVerified ? "success" : "warning"} dot={false}>
+              <StatusBadge tone={user.emailVerified ? "success" : "warning"}>
                 {user.emailVerified ? t("verified") : t("unverified")}
               </StatusBadge>
             </div>

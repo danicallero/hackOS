@@ -116,7 +116,7 @@ export function GalleryProjectCard({ project }: { project: NativeProject }) {
                 align="start"
                 className="max-h-80 max-w-[calc(100vw-2rem)] overflow-y-auto"
               >
-                <h3 className="mb-3 font-medium">{t("challenges")}</h3>
+                <h3 className="type-subheading mb-3">{t("challenges")}</h3>
                 <ul className="space-y-3">
                   {challenges.map((challenge) => (
                     <li key={challenge.id} className="flex items-start justify-between gap-3">
@@ -135,8 +135,12 @@ export function GalleryProjectCard({ project }: { project: NativeProject }) {
         </div>
       )}
       {project.winners?.map((winner) => (
-        <StatusBadge key={winner.challengeId} tone="success" dot={false} className="max-w-full">
-          <TrophyIcon aria-hidden="true" className="size-4 shrink-0" />
+        <StatusBadge
+          key={winner.challengeId}
+          tone="success"
+          icon={<TrophyIcon aria-hidden="true" />}
+          className="max-w-full"
+        >
           <span className="wrap-anywhere">
             {winner.challengeTitle} · {t("rankLabel", { rank: winner.rank })}
           </span>

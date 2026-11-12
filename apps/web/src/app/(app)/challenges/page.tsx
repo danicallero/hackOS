@@ -5,7 +5,6 @@ import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { EyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
 import { EyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -200,7 +199,6 @@ export default function ChallengesPage() {
           ) : undefined
         }
         empty={{
-          icon: TrophyIcon,
           title: t("noChallengesYetTitle"),
           description: canAdmin ? t("createFirstEnterpriseChallenge") : t("noChallengeAssignedYet"),
         }}

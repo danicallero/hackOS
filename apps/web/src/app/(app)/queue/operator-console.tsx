@@ -6,6 +6,7 @@ import { DotsThreeIcon } from "@phosphor-icons/react/dist/csr/DotsThree";
 import { ListBulletsIcon } from "@phosphor-icons/react/dist/csr/ListBullets";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
+import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +16,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Surface } from "@/components/ui/surface";
 import { textForDisplay } from "@/lib/challenges";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { entryAction, moveQueueEntryToPosition, type QueueEntry, type RoomView } from "@/lib/queue";
@@ -116,12 +116,10 @@ export function QueueOperatorConsole({
   return (
     <div className="space-y-5">
       {visibleRooms.length === 0 ? (
-        <Surface padding="spacious" className="text-center">
-          <p className="text-sm font-medium">{t("queueNoMatchingTeams")}</p>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {t("queueNoMatchingTeamsDescription")}
-          </p>
-        </Surface>
+        <EmptyState
+          title={t("queueNoMatchingTeams")}
+          description={t("queueNoMatchingTeamsDescription")}
+        />
       ) : (
         <div className="grid gap-5 lg:grid-cols-3">
           {visibleRooms.map((room) => (
@@ -168,7 +166,7 @@ function RoomOperatorCard({
       bodyClassName="p-0"
     >
       <div className="border-b px-4 py-3.5 sm:px-5">
-        <h3 className="mb-3 text-sm font-semibold">{t("queueWaitingRoomTeams")}</h3>
+        <h3 className="type-subheading mb-3">{t("queueWaitingRoomTeams")}</h3>
         {called.length > 0 ? (
           <div className="space-y-2">
             {called.map((entry, index) => (
@@ -192,7 +190,7 @@ function RoomOperatorCard({
       </div>
 
       <div className="px-4 py-3.5 sm:px-5">
-        <h3 className="mb-3 text-sm font-semibold">{t("queueNextTeams")}</h3>
+        <h3 className="type-subheading mb-3">{t("queueNextTeams")}</h3>
         {next ? (
           <div className="rounded-control border">
             <WaitingTeamRow

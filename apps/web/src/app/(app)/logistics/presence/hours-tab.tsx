@@ -2,7 +2,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useMemo, useState } from "react";
 import { ActionGroup } from "@/components/common/action-group";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -114,7 +113,6 @@ export function HoursTab({
         pageSize={10}
         error={hoursError}
         empty={{
-          icon: UsersIcon,
           title: t("noPresenceYet"),
           description: t("noPresenceYetDesc"),
         }}

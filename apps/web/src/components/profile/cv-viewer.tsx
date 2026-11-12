@@ -6,6 +6,7 @@ import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { type ReactNode, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
@@ -147,15 +148,16 @@ export function CvViewer({
                 <DownloadSimpleIcon aria-hidden="true" />
               </a>
             ) : (
-              <button
+              <IconButton
                 type="button"
                 disabled
-                className={dialogIconButtonClass}
-                aria-label={t("downloadCv")}
-                title={t("downloadCv")}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                label={t("downloadCv")}
               >
                 <DownloadSimpleIcon aria-hidden="true" />
-              </button>
+              </IconButton>
             )}
             <a
               href={apiAssetUrl(path)}
@@ -192,7 +194,6 @@ export function CvViewer({
           ) : (
             // Browsers without an inline PDF viewer (Chrome on Android) get the file itself.
             <EmptyState
-              icon={FilePdfIcon}
               title={state.filename}
               className="flex-1"
               action={
@@ -206,11 +207,7 @@ export function CvViewer({
             />
           )
         ) : state.status === "missing" ? (
-          <EmptyState
-            icon={FilePdfIcon}
-            title={notFoundTitle ?? t("personNotFound")}
-            className="flex-1"
-          />
+          <EmptyState title={notFoundTitle ?? t("personNotFound")} className="flex-1" />
         ) : (
           <div className="flex flex-1 items-center justify-center">
             <ContextualError

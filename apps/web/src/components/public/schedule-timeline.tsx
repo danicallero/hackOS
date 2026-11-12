@@ -477,7 +477,7 @@ export function ScheduleTimeline({
             )}
             {showResponsible && selectedItem.owners && selectedItem.owners.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium">{t("ownersLabel")}</h3>
+                <h3 className="type-subheading">{t("ownersLabel")}</h3>
                 <p className="text-muted-foreground whitespace-pre-wrap text-pretty">
                   {selectedItem.owners
                     .map(
@@ -491,7 +491,7 @@ export function ScheduleTimeline({
             )}
             {showResponsible && selectedItem.contactNote && (
               <div>
-                <h3 className="text-sm font-medium">{t("contactNoteLabel")}</h3>
+                <h3 className="type-subheading">{t("contactNoteLabel")}</h3>
                 <p className="text-muted-foreground whitespace-pre-wrap text-pretty">
                   {selectedItem.contactNote}
                 </p>
@@ -499,7 +499,7 @@ export function ScheduleTimeline({
             )}
             {showResponsible && selectedItem.notes && (
               <div>
-                <h3 className="text-sm font-medium">{t("internalNotesLabel")}</h3>
+                <h3 className="type-subheading">{t("internalNotesLabel")}</h3>
                 <p className="whitespace-pre-wrap text-pretty">{selectedItem.notes}</p>
               </div>
             )}

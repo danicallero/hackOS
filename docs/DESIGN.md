@@ -86,9 +86,10 @@ Each row: value → intent → boundary.
 | Accent | one interactive accent | CTAs and active states only. Never decorative, never a background wash. One per view. |
 | Error recovery | Brand blue, ink and red | The branded full-page error illustration uses the active edition palette. Do not reuse it for regular warnings or inline errors. |
 | Status colours | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
-| Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Never inside cards. |
+| Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Every `<h1>` uses it, including auth, public and system pages (maintenance, pending removal, legal, company tag). Never inside cards. |
 | Section title | 18/24 Rockwell regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
 | Body | 14/20 regular | Default text. |
+| Subheading | 14/20 semibold sans (`type-subheading`) | The h2-h4 inside a card, panel or dialog that groups related fields or rows under a Section title. Not for page or section titles, and not on landing headings. |
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
 | Meta | 12/16 muted (`type-meta`) | Timestamps, counts, secondary facts. **No artificial tracking** — never add `tracking-*` to shared headings or metadata. |
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
@@ -97,6 +98,10 @@ Each row: value → intent → boundary.
 | App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
 | Full radius | buttons, avatars, status dots | Not for fields or content surfaces. Status labels do not need a capsule. |
+
+- **Radius roles.** `rounded-md` (6 px) for fields and menu items, `rounded-lg` (8 px) for every content surface, row wash and bubble, `rounded-full` for buttons, avatars and dots. Do not use `rounded-xl` or `rounded-2xl` outside the TV surfaces.
+- **Big numbers.** A metric is a `StatCard`. Where a numeral sits inside a section or other composition (a `dl`, a progress sentence), it uses the StatCard treatment: `text-2xl font-semibold tabular-nums`. `text-3xl` numerals are not used on web outside TV.
+- **Selected editor.** The question or field currently being edited is marked by `border-primary/60` plus `ring-1 ring-primary/30`, never a coloured left stripe (`border-l-*`). Loading placeholders use `Skeleton`, never hand-rolled `animate-pulse` blocks.
 
 Shared page and section title rows align icons and counters to the visible
 capital height (`heading-row`), rather than the different fonts’ line boxes.
@@ -339,7 +344,10 @@ Server variants do not read React context; their default weight is `regular`.
 Client defaults live in `components/providers.tsx`'s `IconContext`: `regular`,
 24 px, `currentColor`. Keep existing `size-*` utilities for contextual sizing:
 usually 16 px in controls/navigation, 14 px beside compact metadata, 20–24 px
-for prominent states. Use `weight="fill"` for selected dots; preserve `animate-spin`
+for prominent states. Icons beside a text label or inside a
+`Button`/`IconButton` of `sm` size or larger are 16 px (`size-4`, the button default);
+14 px is only for icons beside `text-xs` metadata and 12 px only inside `xs` and
+`icon-xs` controls, status labels (which size their own `icon`) and sort arrows. Use `weight="fill"` for selected dots; preserve `animate-spin`
 on `SpinnerGapIcon`. Use `weight`, not Lucide's `strokeWidth`, to change the style.
 
 An icon must help identify an action, state, content type or real identity.
@@ -550,9 +558,22 @@ ordinary text, not status pills; reserve badges for meaningful changing state.
 descriptions only for risk/policy, disabled actions explain themselves.**
 
 `PageHeader` anatomy: optional `leading` (avatar/logo on record pages) →
-optional `context` (breadcrumb or workspace label) → title → `state` (nearby
-count/status when useful) → optional `meta` (identity metadata: email, badge
-id) → one `primaryAction` + optional `secondaryActions`.
+optional `context` (breadcrumb or workspace label) → title → a line under it
+holding `state` (the record's status) followed by optional `meta` (identity
+metadata: email, badge id) → one `primaryAction` + optional
+`secondaryActions`. A status never sits beside the title: without a capsule
+it reads as stray text there, so it leads the line below.
+
+- **Record pages carry one back link in `context`.** `BackLink`
+  (`components/common/back-link.tsx`): a quiet arrow plus the parent's name
+  ("Users", "Applications"), the same on every record route. It steps back
+  through browser history when the entry just below is the parent list (search,
+  filters, page and scroll return intact) and otherwise goes to the canonical
+  parent. Don't hand-roll arrow links or put "Back to…" buttons in
+  `secondaryActions` or empty states. Tab changes inside a record use
+  `replace`, so Back leaves the record in one press. In-page drill-downs that
+  change `?role=`/`tab` state, not the route, use `DrilldownBackButton`, which
+  looks the same.
 
 - **Record pages use the same header as every other page.** An avatar goes in
   `leading` and the identity line in `meta` — don't hand-roll a second header
@@ -655,7 +676,7 @@ build a universal page component with domain flags.
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
 | `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
-| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowOnMobile` gives the search its own row below `sm` when the actions are wide (Schedule). |
+| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowWhenNarrow` gives the search its own row when the toolbar itself is narrower than 42 rem and the actions are wide (Schedule, application responses). It measures the toolbar, not the viewport: the sidebar takes its share of a mid-width window. |
 | `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
@@ -858,9 +879,14 @@ explain the available retry/reload path, never silently overwrite another edit.
   A headerless `SectionCard` must not render an orphan top separator.
 - Badges communicate a meaningful categorical state (pending, confirmed,
   published, paused, conflict), with a localized label and semantic tone.
-  The default presentation is a quiet label with an optional semantic dot,
-  without a border, tinted background or capsule padding. Do not repeat the
-  same state through a dot, border and background at once.
+  The default presentation is a quiet label with a semantic marker, without a
+  border, tinted background or capsule padding. The marker is the tone dot, or
+  an `icon` in its place when a glyph names the state better (trophy, lock,
+  sync). A state always has exactly one marker: a bare label reads as stray
+  text and loses its tone, and a dot beside an icon repeats it. Text that
+  needs no marker is not a state: render it as ordinary (usually muted) text.
+  Do not repeat the same state through a dot, border and background at once,
+  or beside a heading or description that already says it.
   Operational status labels use foreground contrast and the label type scale.
   Adjacent states retain individual dots and enough spacing to read as separate
   facts; removing their capsules must not turn them into muted running text.
@@ -973,8 +999,9 @@ anything else.
 | A short, self-contained dialog that passed the test above | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog; anything the table above sends to a route |
 | A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
+| Inline notice about the surrounding content (error, warning, success) | `Alert` with `variant` `destructive`, `warning` or `success`, plus `AlertTitle`/`AlertDescription`; one tint (`/40` border, `/10` fill) for every tone. Keep the role the situation needs (`role="status"` for non-urgent updates) | Hand-rolled `border-warning/40 bg-warning/10` boxes with their own opacities |
 | Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
-| Communicate entity status | `StatusBadge` with a `tone` and optional dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Coloured prose, custom pills, badges for static metadata |
+| Communicate entity status | `StatusBadge` with a `tone` and its dot, or an `icon` replacing the dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Coloured prose, custom pills, badges for static metadata |
 | A dashboard metric | `StatCard` (delta/footer slots for meters/sparklines); compact definition lists for supporting scanner totals, with the primary count emphasized | An identical card for every supporting count |
 | Comparative data, sorting, bulk selection | `DataTable<T>` | Custom table markup |
 | A horizontal tab bar | `TabBar` (scrolls itself when the triggers outgrow the container) | Bare `TabsList` with a per-page `overflow-x-auto` wrapper or `flex-wrap`, which the fixed pill height clips |
@@ -984,7 +1011,7 @@ anything else.
 | An interactive overlay inside another overlay | Use the shared `DropdownMenu`, `Select`, or `Popover`; their content stays in the nearest overlay scope. Give a common combobox `inDialog` so its list uses the same scope | A body-ported child that steals focus, clips, or makes the parent dismiss when its trigger is clicked again |
 | Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
-| Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
+| Zero-state | `EmptyState` (title, optional line, one direct CTA) | Prose explaining where to navigate, or an icon in a tinted circle |
 | Long-form save feedback | `FormActions` + `SaveStatus` (`lib/save-state.ts`), sticky within the owning form | Silent autosave, per-section save buttons |
 | Application-template fields (any kind) | `TemplateFieldControl` — the single renderer both applicant form and staff review use | A second field renderer |
 | Gate UI by permission | `useCan(cap)` | Checking `me.role` |
@@ -1004,6 +1031,14 @@ skeleton loading, contextual errors, one-CTA empty states.**
 
 Tables and lists:
 
+- List rows and their narrow-width `renderMobileRow` use `px-4 py-3`; dense
+  staff tables and rows holding inline controls may be tighter. The mobile row
+  follows Users: name (and email) first, then compact inline `Label: value`
+  pairs (`dl` with `flex flex-wrap gap-x-4 gap-y-1.5 text-xs`), never stacked
+  label-over-value blocks.
+- A native `<button>` is only for whole-row disclosures, sortable headings,
+  selectable cards, drag handles and menu items; it carries `button-interaction`
+  (or its own ring) and a 24 px target. Ordinary actions use `Button`/`IconButton`.
 - Navigation rows are links or fully keyboard-operable controls with focus
   styling and an accessible name — never mouse-only `onClick` rows.
 - Search gets a real label (persistent or visually hidden), a clear action,
@@ -1012,6 +1047,14 @@ Tables and lists:
   one offers "Clear filters".
 - No two columns in one table share a header: a repeated header makes sorting
   do two different things depending on which one is clicked (#299).
+- A table adapts to its own width, not the viewport: `DataTable` switches to
+  `renderMobileRow` rows when its container is narrower than 48 rem (the
+  sidebar makes a mid-width window narrower than its breakpoint suggests).
+  A fixed-layout table keeps a minimum width (14 rem per unsized column plus
+  the sized ones) and scrolls rather than letting a flexible column collapse
+  under its neighbour. Size a status column for its longest translated label.
+- Record metadata in a header is label + value (`Grants` muted, `Participant`
+  in foreground weight), not a lowercase sentence fragment.
 - Bulk actions appear only after selection and state what set they affect.
 - Wide operational tables preserve readable column widths and scroll
   horizontally instead of compressing every field into an overlapping grid.
@@ -1077,6 +1120,15 @@ Loading / empty / error:
   the only channel for a critical failure.
 - An empty state adds an action only when the page has no other way out — if a
   persistent back/escape control is already on screen, don't repeat it (#299).
+- `EmptyState` is a title, an optional line saying what is true or what to do,
+  and at most one action. It takes no icon and has no tinted container: type and
+  spacing carry the hierarchy. Say what is actually the case ("No applicant has
+  completed the form."), not that something "will appear here". A bordered
+  drop destination in a builder is a target, not an empty state, and keeps its
+  dashed outline.
+- Confirmation and error pages (sign-up, verify email, link expired, account
+  deleted) lead with their heading; they do not stack an icon in a tinted circle
+  above it. Circles are for avatars, initials, presence dots and timeline markers.
 - **Capability-denied pages render `<AccessDenied ask={t("…")} />` and nothing
   else** (`components/common/access-denied.tsx`, issue #298). The heading is
   the same everywhere because the fact is the same everywhere; the only
@@ -1297,6 +1349,18 @@ otherwise add no label. Native mobile pickers only speak the phone's zone, so
 (`toPickerDate`) and converts the answer back (`fromPickerDate`). Public pages
 and the TV already format with the zone in `GET /api/public/event`.
 
+On web there is one display path: `formatEventDate(value, language, preset)`
+(or `eventDateFormat` for a reusable formatter) in `lib/datetime.ts`. It
+follows the UI language and the event zone, never the browser's. Any stored
+timestamp ("submitted", "created", "opens", "expires", a publish time) uses the
+`dateTime` preset ("05 Jan 2026, 14:30"), so it reads the same on every screen.
+Presets spell out their fields instead of `dateStyle`/`timeStyle`, because
+browsers differ on the glue ("," versus "at"). Add a new named preset for a
+genuinely different shape (compact `dayMonthTime`, chart buckets, `clock`);
+do not call `Intl.DateTimeFormat` or `toLocale*String` for a displayed
+timestamp. Only `datetime-local` input values use `toDatetimeLocal` /
+`fromDatetimeLocal`.
+
 ## 11. Web specifics
 
 **Summary: Next.js 16 + shadcn (vendored) + Tailwind v4 tokens; sidebar
@@ -1374,8 +1438,13 @@ architecture: [`mobile.md`](./mobile.md).**
   source of visual values; import from `@/theme`. Colours (`colors`) are UIKit
   semantic colours on iOS and the same palette as fixed light/dark pairs on
   Android (never Material You, never a Material ripple). `space` (4-pt grid plus
-  the 6/10 UIKit half-steps), `radius` (`control` 12, `container` 14, `sheet` 22,
-  `full` capsule, always with `borderCurve: "continuous"`), `type` (Apple text
+  the 6/10 UIKit half-steps), `radius` (`chip` 10, `control` 12, `container` 14, `sheet` 22,
+  `full` capsule, always with `borderCurve: "continuous"`). One radius per role:
+  fields and glass controls `control`; cards, grouped sections, banners and
+  floating menus `container`; modals `sheet`; buttons and badges `full`; a
+  segment nested in a padded track is the track radius minus the padding
+  (`chip` inside a `control` track). Circles derived from their own size
+  (44 pt icon buttons, 50 pt glass buttons) keep half their side as the radius, `type` (Apple text
   styles, plus `compact` 14) and `motion` (durations and springs) are in
   `theme/tokens.ts`. Font weight stops at 700. Text is `AppText` (or `type.*`
   spread into a style); screens

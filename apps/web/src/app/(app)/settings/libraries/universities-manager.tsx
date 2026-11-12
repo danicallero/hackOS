@@ -198,7 +198,6 @@ export function UniversitiesManager() {
           },
         }}
         empty={{
-          icon: GraduationCapIcon,
           title: search.trim() ? t("noMatchesTitle") : t("noUniversitiesYetTitle"),
         }}
         rowActions={(row) => (

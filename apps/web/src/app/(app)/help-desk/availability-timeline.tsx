@@ -303,7 +303,7 @@ export function AvailabilityTimeline({
               className="grid min-w-0 items-center gap-x-6 gap-y-1 py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"
             >
               <div className="flex items-center justify-between gap-2">
-                <h4 className="text-sm font-medium tabular-nums">{dayLabel(day)}</h4>
+                <h4 className="type-subheading tabular-nums">{dayLabel(day)}</h4>
                 {!readOnly && onAddDay ? (
                   <IconButton
                     variant="ghost"

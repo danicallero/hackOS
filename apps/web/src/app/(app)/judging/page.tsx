@@ -6,12 +6,13 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
-import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api } from "@/lib/api";
@@ -398,20 +399,21 @@ export default function QueuePage() {
       />
 
       {actionError && (
-        <div
-          role="alert"
-          className="border-destructive/40 bg-destructive/5 text-destructive flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm"
-        >
-          <span>{actionError}</span>
-          <button
-            type="button"
-            aria-label={t("dismiss")}
-            onClick={() => setActionError(null)}
-            className="button-interaction shrink-0 opacity-70 transition-opacity hover:opacity-100"
-          >
-            <XIcon aria-hidden="true" className="size-4" />
-          </button>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-start justify-between gap-3">
+            <span>{actionError}</span>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              label={t("dismiss")}
+              onClick={() => setActionError(null)}
+              className="shrink-0"
+            >
+              <XIcon aria-hidden="true" />
+            </IconButton>
+          </AlertDescription>
+        </Alert>
       )}
 
       {roomsLoading || roomView.loading ? (
@@ -420,11 +422,7 @@ export default function QueuePage() {
         </div>
       ) : !view ? (
         <div className="flex flex-1 items-center justify-center">
-          <EmptyState
-            icon={DoorOpenIcon}
-            title={t("noRoomSelected")}
-            description={t("noRoomSelectedDesc")}
-          />
+          <EmptyState title={t("noRoomSelected")} description={t("noRoomSelectedDesc")} />
         </div>
       ) : (
         // Two-column region fills the remaining height. Left column is a fixed

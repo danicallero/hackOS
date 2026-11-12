@@ -6,8 +6,6 @@
 // (the address is unverified). Loading the page is read-only so link scanners
 // cannot delete anything.
 
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
-import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -108,9 +106,6 @@ function DeleteAccountInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircleIcon aria-hidden="true" className="size-6" />
-          </div>
           <CardTitle>{t("accountDeleted")}</CardTitle>
         </CardHeader>
       </Card>
@@ -121,9 +116,6 @@ function DeleteAccountInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-            <WarningIcon aria-hidden="true" className="size-6" />
-          </div>
           <CardTitle>
             {phase.kind === "verified"
               ? t("removalLinkVerifiedTitle")

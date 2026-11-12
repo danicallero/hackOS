@@ -6,7 +6,6 @@ import { sponsorShareKey } from "@hackos/shared/applications";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, TemplateFieldControl } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,7 +65,7 @@ export function AnswersSection({
   const { t } = useLocale();
   return (
     <div className="space-y-4">
-      {answerSections.length === 0 && <h3 className="text-sm font-medium">{t("answersLabel")}</h3>}
+      {answerSections.length === 0 && <h3 className="type-subheading">{t("answersLabel")}</h3>}
       {answerFields.length > 0 ? (
         <div className="space-y-4">
           {groupApplicationFields(answerFields, answerSections)
@@ -318,14 +317,12 @@ export function ReviewsPage({
 function ReviewBubble({ review }: { review: ReviewEntry }) {
   const { t, language } = useLocale();
   return (
-    <li className="border-border bg-muted/20 space-y-2 rounded-xl border p-4">
+    <li className="border-border bg-muted/20 space-y-2 rounded-lg border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">{review.author_name ?? t("unknownReviewer")}</p>
         <div className="flex items-center gap-2">
           {review.score != null && (
-            <StatusBadge tone="neutral" dot={false}>
-              {review.score}/5
-            </StatusBadge>
+            <span className="text-sm font-medium tabular-nums">{review.score}/5</span>
           )}
           <span className="text-muted-foreground text-xs">
             {formatEventDate(review.updated_at, language, "date")}

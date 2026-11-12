@@ -14,7 +14,6 @@ import { DateTimeInput } from "@/components/common/datetime-input";
 import { MultiSelect } from "@/components/common/multi-select";
 import { SaveStatus } from "@/components/common/save-status";
 import { SectionCard } from "@/components/common/section-card";
-import { StatusBadge } from "@/components/common/status-badge";
 import { SubmitButton } from "@/components/common/submit-button";
 import {
   Accordion,
@@ -72,7 +71,7 @@ function SettingsGroup({
   if (defaultOpen) {
     return (
       <section className={cn("space-y-4", className)}>
-        <h3 className="text-sm font-semibold">{title}</h3>
+        <h3 className="type-subheading">{title}</h3>
         {children}
       </section>
     );
@@ -309,7 +308,7 @@ export function MetadataCard({
             <SettingsGroup title={t("advancedFormOptions")} className="lg:col-span-2">
               <div className="grid gap-6 lg:grid-cols-2">
                 <div className="space-y-3">
-                  <h4 className="text-sm font-medium">{t("builderLogistics")}</h4>
+                  <h4 className="type-subheading">{t("builderLogistics")}</h4>
                   <FormField
                     control={rhf.control}
                     name="ask_shirt_size"
@@ -318,9 +317,9 @@ export function MetadataCard({
                         <div className="flex min-w-0 flex-wrap items-center gap-2">
                           <FormLabel className="font-normal">{t("askShirtSizeLabel")}</FormLabel>
                           {field.value && (
-                            <StatusBadge tone="neutral" dot={false}>
+                            <span className="text-muted-foreground text-xs">
                               {t("requiredAtSubmitBadge")}
-                            </StatusBadge>
+                            </span>
                           )}
                         </div>
                         <FormControl>
@@ -345,7 +344,7 @@ export function MetadataCard({
                   />
                 </div>
                 <div className="space-y-3">
-                  <h4 className="text-sm font-medium">{t("builderAccess")}</h4>
+                  <h4 className="type-subheading">{t("builderAccess")}</h4>
                   <FormField
                     control={rhf.control}
                     name="grants_role_ids"
@@ -404,7 +403,7 @@ export function ApplicationDangerZone({ onDelete }: { onDelete: () => void }) {
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 space-y-1">
-          <h3 className="text-sm font-semibold text-foreground">{t("deleteApplicationForm")}</h3>
+          <h3 className="type-subheading text-foreground">{t("deleteApplicationForm")}</h3>
           <p className="text-muted-foreground text-pretty text-sm">
             {t("deleteApplicationFormDesc")}
           </p>

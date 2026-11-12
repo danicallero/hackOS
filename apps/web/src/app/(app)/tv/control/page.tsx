@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useEventSource } from "@/hooks/use-event-source";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { isLanguage, languageName, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -59,7 +59,7 @@ function isTvControlMode(mode: string): mode is TvControlMode {
 }
 
 export default function TvControlPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const MODES = useMemo(() => buildModes(t), [t]);
   const canControl = useCan(CAPABILITIES.TV_CONTROL);
   const [current, setCurrent] = useState<TvState | null>(null);
@@ -157,9 +157,6 @@ export default function TvControlPage() {
 
   if (!canControl) return <AccessDenied ask={t("tvControlDeniedDesc")} />;
 
-  const currentModeLabel = current
-    ? (MODES.find((item) => item.value === current.mode)?.label ?? current.mode)
-    : null;
   // A "live" draft can drift from the broadcast payload without the mode
   // itself changing (an operator hides a block, retargets the timer, …) — the
   // comparison has to reach into the payload, not just the mode name, or the
@@ -186,11 +183,6 @@ export default function TvControlPage() {
 
       <SectionCard
         title={t("currentBroadcast")}
-        description={
-          current
-            ? t("currentlyShowing", { mode: currentModeLabel ?? current.mode })
-            : t("loadingCurrentMode")
-        }
         action={
           isManuallySelected ? (
             <Button variant="outline" disabled={busy} onClick={() => void resetToRooms()}>
@@ -213,14 +205,10 @@ export default function TvControlPage() {
               />
             </div>
             <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-2">
-                <span
-                  className={`size-2 rounded-full ${connected ? "bg-success" : "bg-destructive"}`}
-                  aria-hidden="true"
-                />
-                <span className="text-muted-foreground">
+              <div>
+                <StatusBadge tone={connected ? "success" : "danger"}>
                   {connected ? t("tvFeedConnected") : t("tvFeedReconnecting")}
-                </span>
+                </StatusBadge>
               </div>
               <div>
                 {current?.source === "manual" && (
@@ -232,7 +220,9 @@ export default function TvControlPage() {
               </div>
               {current?.broadcastAt && current.source === "manual" && (
                 <p className="text-muted-foreground">
-                  {t("lastBroadcastAt", { time: formatScheduledDateTime(current.broadcastAt) })}
+                  {t("lastBroadcastAt", {
+                    time: formatEventDate(current.broadcastAt, language, "dateTime"),
+                  })}
                 </p>
               )}
             </div>
@@ -242,14 +232,11 @@ export default function TvControlPage() {
 
       <SectionCard
         title={t("displayMode")}
-        description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
+        description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : undefined}
         footer={
-          <div className="flex items-center gap-3">
-            {isDraftUnbroadcast && <StatusBadge tone="warning">{t("dataStatusDraft")}</StatusBadge>}
-            <SubmitButton pending={busy} onClick={requestBroadcast}>
-              {t("showOnTvs")}
-            </SubmitButton>
-          </div>
+          <SubmitButton pending={busy} onClick={requestBroadcast}>
+            {t("showOnTvs")}
+          </SubmitButton>
         }
       >
         <fieldset>

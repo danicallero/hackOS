@@ -98,7 +98,7 @@ export function LibraryManager({
       className="space-y-4 border-t border-border/60 pt-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 id={`library-title-${libraryId}`} className="font-medium text-balance">
+        <h3 id={`library-title-${libraryId}`} className="type-subheading text-balance">
           {t("fieldKindLibrary")}{" "}
           <span className="text-muted-foreground text-sm tabular-nums">{items.length}</span>
         </h3>

@@ -45,7 +45,7 @@ function MaintenanceScreen({ phase }: { phase: string }) {
         className="w-full max-w-lg space-y-4 rounded-lg border bg-background p-6 shadow-sm"
       >
         <p className="text-primary text-sm font-semibold">hackOS</p>
-        <h1 id="maintenance-title" className="text-balance text-2xl font-semibold">
+        <h1 id="maintenance-title" className="type-page-title text-balance">
           {t("maintenanceTitle")}
         </h1>
         <p role="status" className="text-muted-foreground text-pretty">

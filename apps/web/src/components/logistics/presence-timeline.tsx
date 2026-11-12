@@ -6,6 +6,7 @@ import { TimerIcon } from "@phosphor-icons/react/dist/ssr/Timer";
 import { WarningIcon } from "@phosphor-icons/react/dist/ssr/Warning";
 import { WrenchIcon } from "@phosphor-icons/react/dist/ssr/Wrench";
 import { StatusBadge } from "@/components/common/status-badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/hooks/use-now";
 import { eventDateFormat, formatDurationMinutes } from "@/lib/datetime";
@@ -40,16 +41,15 @@ export function PresenceTimeline({
   return (
     <div className="space-y-4">
       {data.conflicts.map((conflict) => (
-        <div
+        <Alert
           key={`${conflict.firstLogId}-${conflict.secondLogId}`}
-          role="alert"
+          variant="destructive"
           aria-live="assertive"
-          className="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-4"
         >
-          <WarningIcon className="text-destructive mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <div className="min-w-0 flex-1">
+          <WarningIcon aria-hidden="true" />
+          <AlertDescription className="min-w-0">
             <p className="text-destructive font-medium">{t("presenceConflictTitle")}</p>
-            <p className="text-pretty mt-1 text-sm">
+            <p className="text-foreground text-pretty text-sm">
               {t("presenceConflictBody", {
                 from: dateTime.format(new Date(conflict.from)),
                 to: dateTime.format(new Date(conflict.to)),
@@ -67,8 +67,8 @@ export function PresenceTimeline({
                 {t("presenceResolveConflict")}
               </Button>
             )}
-          </div>
-        </div>
+          </AlertDescription>
+        </Alert>
       ))}
 
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
@@ -190,8 +190,7 @@ function PresenceTimelineRow({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {window && (
-            <StatusBadge tone={statusTone} dot={false}>
-              <StatusIcon className="size-3" aria-hidden="true" />
+            <StatusBadge tone={statusTone} icon={<StatusIcon aria-hidden="true" />}>
               {window.conflict
                 ? t("presenceWindow_conflict")
                 : t(

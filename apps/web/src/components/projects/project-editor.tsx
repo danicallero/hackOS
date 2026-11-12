@@ -360,7 +360,7 @@ export function ProjectEditor({
           </>
         }
         recordState={
-          <StatusBadge tone={status === "submitted" ? "success" : "neutral"} dot={false}>
+          <StatusBadge tone={status === "submitted" ? "success" : "neutral"}>
             {t(status === "submitted" ? "dataStatusSubmitted" : "dataStatusDraft")}
           </StatusBadge>
         }

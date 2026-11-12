@@ -88,7 +88,7 @@ function ResetPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("setNewPassword")}</h1>
+        <h1 className="type-page-title text-balance">{t("setNewPassword")}</h1>
       </CardHeader>
       <CardContent>
         {!token ? (

@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { MultiSelect } from "@/components/common/multi-select";
 import { PageHeader } from "@/components/common/page-header";
@@ -138,6 +139,7 @@ export default function QueueDetailPage() {
   if (status === "error" || !queue) {
     return (
       <div className="space-y-6">
+        <BackLink href="/queue?tab=queues" label={t("judgingQueues")} />
         <EmptyState title={t("queueNotFound")} />
       </div>
     );
@@ -263,12 +265,15 @@ export default function QueueDetailPage() {
 
   return (
     <PageLayout width="workspace">
-      <PageHeader title={queue.group.display_name} meta={queue.group.enterprise_name} />
+      <PageHeader
+        context={<BackLink href="/queue?tab=queues" label={t("judgingQueues")} />}
+        title={queue.group.display_name}
+        meta={queue.group.enterprise_name}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard
           title={t("queueTeams")}
-          description={t("queueTeamCount", { count: queue.entries.length })}
           action={
             queue.entries.length > 0 ? (
               <div className="relative w-full sm:w-72">
@@ -471,7 +476,7 @@ export default function QueueDetailPage() {
           <SectionCard title={t("challengesInThisQueue")} bodyClassName="p-0">
             <ul className="divide-border divide-y">
               {queue.challenges.map((challenge) => (
-                <li key={challenge.id} className="truncate px-4 py-2.5 text-sm sm:px-5">
+                <li key={challenge.id} className="truncate px-4 py-3 text-sm sm:px-5">
                   {challenge.title}
                 </li>
               ))}

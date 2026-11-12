@@ -373,7 +373,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
 
       <SectionCard
         title={isMeal ? t("mealLineTitle") : t("activityDoorTitle")}
-        description={isMeal ? t("scanEachBadgeDesc") : t("scanBadgesEntranceDesc")}
+        description={isMeal ? t("scanEachBadgeDesc") : undefined}
         icon={ScanIcon}
         bodyClassName="space-y-5"
       >
@@ -383,7 +383,6 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
           </div>
         ) : items.length === 0 ? (
           <EmptyState
-            icon={isMeal ? BowlFoodIcon : PulseIcon}
             title={isMeal ? t("noMealsDefinedTitle") : t("noRegistrableActivitiesTitle")}
             description={
               isMeal ? t("mealsCreatedInScheduleDesc") : t("markActivitiesRequiresScanDesc")
