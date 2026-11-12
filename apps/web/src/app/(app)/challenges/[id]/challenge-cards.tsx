@@ -3,6 +3,7 @@
 import type { I18nText, Question } from "@hackos/shared/questions";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
+import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -597,7 +598,7 @@ function WinnersCard({ challengeId }: { challengeId: number }) {
               {winners.map((winner) => (
                 <li key={winner.rank} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="flex items-center gap-3">
-                    <StatusBadge tone="success">
+                    <StatusBadge tone="success" icon={<TrophyIcon aria-hidden="true" />}>
                       {t("rankLabel", { rank: winner.rank })}
                     </StatusBadge>
                     <span className="font-medium">{winner.repoName}</span>

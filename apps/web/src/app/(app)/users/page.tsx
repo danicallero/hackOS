@@ -181,11 +181,7 @@ function buildColumns(
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <UserPhotoSlot user={u} reserve={reservePhoto} className="size-7" />
           <span className="font-medium">{fullName(u)}</span>
-          {u.isTestAccount && (
-            <StatusBadge tone="warning" dot={false}>
-              {t("reviewFixture")}
-            </StatusBadge>
-          )}
+          {u.isTestAccount && <StatusBadge tone="warning">{t("reviewFixture")}</StatusBadge>}
         </div>
       ),
     },
@@ -306,11 +302,7 @@ function UserMobileRow({
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex min-w-0 flex-wrap items-start gap-2">
           <span className="min-w-0 flex-1 wrap-break-word font-medium">{name}</span>
-          {user.isTestAccount && (
-            <StatusBadge tone="warning" dot={false}>
-              {t("reviewFixture")}
-            </StatusBadge>
-          )}
+          {user.isTestAccount && <StatusBadge tone="warning">{t("reviewFixture")}</StatusBadge>}
         </div>
         <dl className="flex min-w-0 flex-wrap items-start gap-x-4 gap-y-1.5 text-xs">
           {columns

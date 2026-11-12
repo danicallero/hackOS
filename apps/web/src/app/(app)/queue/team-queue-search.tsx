@@ -8,6 +8,7 @@ import { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -313,15 +314,20 @@ export function TeamQueueSearch({
                         {eta && <span>{eta}</span>}
                         <span>{queueStatusLabel(entry.status, t)}</span>
                         {!entry.eligible && (
-                          <span className="text-warning font-medium">{t("projectIneligible")}</span>
+                          <StatusBadge tone="warning" className="text-xs">
+                            {t("projectIneligible")}
+                          </StatusBadge>
                         )}
                         {entry.busy_room_name && (
-                          <span className="text-warning inline-flex items-center gap-1 font-medium">
-                            <WarningIcon aria-hidden="true" className="size-3.5" />
+                          <StatusBadge
+                            tone="warning"
+                            icon={<WarningIcon aria-hidden="true" />}
+                            className="text-xs"
+                          >
                             {t(evaluating ? "queueBusyEvaluatingIn" : "queueBusyWaitingAt", {
                               room: entry.busy_room_name,
                             })}
-                          </span>
+                          </StatusBadge>
                         )}
                       </div>
                     </div>

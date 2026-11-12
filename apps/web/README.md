@@ -442,8 +442,9 @@ Shared page, section, modal and panel headers use `heading-row` to align
 visible title capitals with icons and `type-meta` counters. Useful section icons stay in the title row, independently of descriptions;
 icons that merely decorate or repeat a heading are omitted.
 
-`StatusBadge` uses the shared `StatusDot` presentation: a quiet label with an
-optional semantic dot, without pill borders or tinted backgrounds. Static roles,
+`StatusBadge` uses the shared `StatusDot` presentation: a quiet label with a
+semantic marker (the tone dot, or an `icon` in its place), without pill borders
+or tinted backgrounds. A state always keeps its marker. Static roles,
 identifiers and other metadata remain ordinary text.
 
 `SectionCard variant="plain"` keeps the shared section heading/actions without

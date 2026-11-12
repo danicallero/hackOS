@@ -15,7 +15,7 @@ vi.mock("@/components/common/filter-menu", () => ({
 
 import { ListToolbar } from "./list-toolbar";
 
-function render(searchOwnRowOnMobile: boolean) {
+function render(searchOwnRowWhenNarrow: boolean) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   act(() =>
@@ -24,7 +24,7 @@ function render(searchOwnRowOnMobile: boolean) {
         search={{ label: "Search", value: "", onValueChange: () => {} }}
         filters={[{ id: "kind" } as never]}
         actions={<button type="button">Export</button>}
-        searchOwnRowOnMobile={searchOwnRowOnMobile}
+        searchOwnRowWhenNarrow={searchOwnRowWhenNarrow}
       />,
     ),
   );
@@ -34,22 +34,22 @@ function render(searchOwnRowOnMobile: boolean) {
 describe("ListToolbar", () => {
   it("keeps the inline search by default", () => {
     const toolbar = render(false).querySelector("[data-slot=page-toolbar]");
-    expect(toolbar?.className).not.toContain("max-sm:grid-cols");
+    expect(toolbar?.className).not.toContain("@max-2xl:grid-cols");
     expect(toolbar?.querySelector("input")?.parentElement?.className).not.toContain(
       "col-span-full",
     );
   });
 
-  it("gives the search its own row on mobile and moves chips below the actions (#1178)", () => {
+  it("gives the search its own row when narrow and moves chips below the actions (#1178)", () => {
     const container = render(true);
     expect(container.querySelector("[data-slot=page-toolbar]")?.className).toContain(
-      "max-sm:grid-cols-[auto_minmax(0,1fr)]",
+      "@max-2xl:grid-cols-[auto_minmax(0,1fr)]",
     );
     expect(container.querySelector("input")?.parentElement?.className).toContain(
-      "max-sm:col-span-full",
+      "@max-2xl:col-span-full",
     );
     expect(container.querySelector("[data-testid=filters]")?.getAttribute("data-chips")).toContain(
-      "max-sm:row-start-3",
+      "@max-2xl:row-start-3",
     );
   });
 });

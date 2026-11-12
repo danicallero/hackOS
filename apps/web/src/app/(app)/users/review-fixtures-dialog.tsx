@@ -167,9 +167,9 @@ export function ReviewFixturesDialog({
                 </p>
               </div>
               {status && status.generation > 0 && (
-                <StatusBadge tone="neutral" dot={false}>
+                <span className="text-muted-foreground text-xs tabular-nums">
                   {t("reviewFixturesGeneration", { generation: status.generation })}
-                </StatusBadge>
+                </span>
               )}
             </div>
             {statusLoading ? (
@@ -187,7 +187,7 @@ export function ReviewFixturesDialog({
                             {fixtureKindLabel(account.kind, t)}
                           </p>
                         </div>
-                        <StatusBadge tone={available ? "success" : "neutral"} dot={false}>
+                        <StatusBadge tone={available ? "success" : "neutral"}>
                           {available
                             ? t("reviewFixturesAvailable")
                             : t("reviewFixturesUnavailable")}
@@ -236,7 +236,7 @@ export function ReviewFixturesDialog({
           {result && (
             <div className="space-y-3" role="status" aria-live="polite">
               <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge tone="success" dot={false}>
+                <StatusBadge tone="success">
                   {t("reviewFixturesGeneration", { generation: result.generation })}
                 </StatusBadge>
                 <span className="text-muted-foreground text-sm">
