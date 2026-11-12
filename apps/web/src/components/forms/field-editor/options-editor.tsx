@@ -106,7 +106,7 @@ export function OptionsEditor({
         onClick={add}
         className="text-muted-foreground"
       >
-        <PlusIcon aria-hidden="true" className="size-3.5" />
+        <PlusIcon aria-hidden="true" className="size-4" />
         {t("addOption")}
       </Button>
     </div>

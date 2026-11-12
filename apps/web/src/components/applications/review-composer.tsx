@@ -15,9 +15,9 @@ import {
   useState,
 } from "react";
 import type { FileViewerSide } from "@/components/applications/review-file-docking";
+import { IconButton } from "@/components/common/icon-button";
 import { SaveStatus } from "@/components/common/save-status";
 import { ScaleButtons } from "@/components/common/scale-buttons";
-import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocale } from "@/lib/i18n";
@@ -103,15 +103,16 @@ export function ReviewPanelCard({
         {dragHandle}
         <p className="min-w-0 flex-1 text-sm font-medium">{t("yourReview")}</p>
         {props.onOpenReviewWindow && (
-          <button
+          <IconButton
             type="button"
-            className={dialogIconButtonClass}
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
             onClick={props.onOpenReviewWindow}
-            aria-label={t("openReviewWindow")}
-            title={t("openReviewWindow")}
+            label={t("openReviewWindow")}
           >
             <ArrowSquareOutIcon aria-hidden="true" />
-          </button>
+          </IconButton>
         )}
       </div>
       <ReviewComposerFields {...props} />
@@ -256,10 +257,12 @@ export function FloatingReviewPanel(props: ReviewComposerProps) {
       };
 
   const dragHandle = (
-    <button
+    <IconButton
       type="button"
+      variant="ghost"
+      size="icon-sm"
       className={cn(
-        dialogIconButtonClass,
+        "text-muted-foreground",
         "button-static cursor-grab touch-none active:cursor-grabbing",
       )}
       onPointerDown={startDragging}
@@ -267,11 +270,10 @@ export function FloatingReviewPanel(props: ReviewComposerProps) {
       onPointerUp={stopDragging}
       onPointerCancel={stopDragging}
       onKeyDown={moveWithKeyboard}
-      aria-label={t("moveReviewPanel")}
-      title={t("moveReviewPanel")}
+      label={t("moveReviewPanel")}
     >
       <DotsSixVerticalIcon aria-hidden="true" />
-    </button>
+    </IconButton>
   );
 
   return (

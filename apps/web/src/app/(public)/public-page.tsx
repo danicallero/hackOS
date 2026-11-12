@@ -142,13 +142,15 @@ export function PublicPage({ embedded = false }: { embedded?: boolean }) {
         {!content && error && (
           <div className="border-t py-16 text-center">
             <p className="text-muted-foreground font-medium">{error}</p>
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => void load()}
-              className="button-interaction mt-4 underline underline-offset-4"
+              className="mt-4"
             >
               {t("tryAgain")}
-            </button>
+            </Button>
           </div>
         )}
 

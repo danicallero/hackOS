@@ -314,7 +314,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
                 type="button"
                 onClick={() => setOpenId(item.enterpriseId)}
                 aria-label={item.entry ? item.name : `${item.name}: ${t("diaryNotCollected")}`}
-                className="hover:bg-muted/60 focus-visible:ring-ring flex w-full flex-col items-center gap-2 rounded-lg px-1 py-3 outline-none transition-colors focus-visible:ring-2 active:bg-muted"
+                className="button-interaction hover:bg-muted/60 focus-visible:ring-ring flex w-full flex-col items-center gap-2 rounded-lg px-1 py-3 outline-none transition-colors focus-visible:ring-2 active:bg-muted"
               >
                 <CompanyBadge item={item} />
                 <span
@@ -407,7 +407,7 @@ export function CompanyCollection({ nameOf }: { nameOf: ChallengeName }) {
                     <span className="truncate">
                       {open.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                     </span>
-                    <ArrowSquareOutIcon aria-hidden="true" className="size-3.5 shrink-0" />
+                    <ArrowSquareOutIcon aria-hidden="true" className="size-4 shrink-0" />
                     <span className="sr-only">{t("diaryOpensInNewTab")}</span>
                   </a>
                 )}

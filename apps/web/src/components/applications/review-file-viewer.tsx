@@ -10,6 +10,7 @@ import { DotsSixVerticalIcon } from "@phosphor-icons/react/dist/csr/DotsSixVerti
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DragHandle } from "@/components/common/drag-handle";
+import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { useLocale } from "@/lib/i18n";
@@ -109,20 +110,21 @@ export function ApplicationFileViewer({
               >
                 <ArrowSquareOutIcon aria-hidden="true" />
               </a>
-              <button
+              <IconButton
                 type="button"
-                className={dialogIconButtonClass}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
                 onClick={() => void toggleFullscreen()}
-                aria-label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
+                label={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
                 aria-pressed={isFullscreen}
-                title={t(isFullscreen ? "exitFullscreenFile" : "fullscreenFile")}
               >
                 {isFullscreen ? (
                   <ArrowsInSimpleIcon aria-hidden="true" />
                 ) : (
                   <ArrowsOutSimpleIcon aria-hidden="true" />
                 )}
-              </button>
+              </IconButton>
             </>
           )}
           {dragHandle ?? (
@@ -141,32 +143,34 @@ export function ApplicationFileViewer({
           )}
           {files.length > 1 && (
             <div className="flex items-center gap-1">
-              <button
+              <IconButton
                 type="button"
-                className={dialogIconButtonClass}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
                 disabled={activeIndex === 0}
                 onClick={() => onIndexChange(Math.max(0, activeIndex - 1))}
-                aria-label={t("previousFile")}
-                title={t("previousFile")}
+                label={t("previousFile")}
               >
                 <CaretLeftIcon aria-hidden="true" />
-              </button>
+              </IconButton>
               <span
                 className="text-muted-foreground min-w-14 text-center text-xs tabular-nums"
                 aria-live="polite"
               >
                 {t("filePosition", { current: activeIndex + 1, total: files.length })}
               </span>
-              <button
+              <IconButton
                 type="button"
-                className={dialogIconButtonClass}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
                 disabled={activeIndex === files.length - 1}
                 onClick={() => onIndexChange(Math.min(files.length - 1, activeIndex + 1))}
-                aria-label={t("nextFile")}
-                title={t("nextFile")}
+                label={t("nextFile")}
               >
                 <CaretRightIcon aria-hidden="true" />
-              </button>
+              </IconButton>
             </div>
           )}
         </div>

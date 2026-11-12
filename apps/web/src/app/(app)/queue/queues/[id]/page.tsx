@@ -476,7 +476,7 @@ export default function QueueDetailPage() {
           <SectionCard title={t("challengesInThisQueue")} bodyClassName="p-0">
             <ul className="divide-border divide-y">
               {queue.challenges.map((challenge) => (
-                <li key={challenge.id} className="truncate px-4 py-2.5 text-sm sm:px-5">
+                <li key={challenge.id} className="truncate px-4 py-3 text-sm sm:px-5">
                   {challenge.title}
                 </li>
               ))}

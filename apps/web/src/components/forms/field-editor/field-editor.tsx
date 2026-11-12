@@ -136,7 +136,7 @@ export function FieldEditor({
           onMove(-1);
         }}
       >
-        <ArrowUpIcon className="size-3.5" aria-hidden="true" />
+        <ArrowUpIcon className="size-4" aria-hidden="true" />
       </IconButton>
       <IconButton
         type="button"
@@ -149,7 +149,7 @@ export function FieldEditor({
           onMove(1);
         }}
       >
-        <ArrowDownIcon className="size-3.5" aria-hidden="true" />
+        <ArrowDownIcon className="size-4" aria-hidden="true" />
       </IconButton>
       {!active && (
         <IconButton

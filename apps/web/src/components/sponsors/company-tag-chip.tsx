@@ -39,7 +39,7 @@ export function CompanyTagChip({ tag, className }: { tag: StandTag; className?: 
           void copy(tag.code);
         }}
       >
-        <CopyIcon aria-hidden="true" className="size-3.5" />
+        <CopyIcon aria-hidden="true" className="size-4" />
       </IconButton>
     </span>
   );

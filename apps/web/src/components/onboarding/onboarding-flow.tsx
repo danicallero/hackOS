@@ -201,7 +201,7 @@ export function OnboardingFlow() {
                 aria-current={current ? "step" : undefined}
                 aria-label={`${t(STEP_TITLES[item.step])}${done ? ` · ${t("onboardingStatusDone")}` : ""}`}
                 className={cn(
-                  "inline-flex size-8 items-center justify-center rounded-full border text-sm tabular-nums transition-colors",
+                  "button-interaction inline-flex size-8 items-center justify-center rounded-full border text-sm tabular-nums transition-colors",
                   done && "border-success bg-success text-success-foreground",
                   !done && current && "border-primary bg-primary text-primary-foreground",
                   !done && !current && "text-muted-foreground hover:bg-accent",

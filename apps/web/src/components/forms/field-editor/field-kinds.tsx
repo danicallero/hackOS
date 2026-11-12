@@ -104,7 +104,7 @@ export function AddFieldMenu({
         <Button type="button" size={size} variant={variant} className={className}>
           <PlusIcon aria-hidden="true" />
           {t("addField")}
-          <CaretDownIcon className="size-3.5" aria-hidden="true" />
+          <CaretDownIcon className="size-4" aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
