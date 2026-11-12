@@ -45,6 +45,7 @@ import {
   shouldPresentProfileTasks,
 } from "@/lib/profile-tasks";
 import { registerForPushNotifications } from "@/lib/push";
+import { useRouterTabBarInsets } from "@/lib/router-tabs-inset";
 import { useOrientationPolicy } from "@/lib/screen-orientation";
 import { startPersonalEventStream, subscribeToServerEvent } from "@/lib/server-events";
 import { sideRegionForInsets, useSideRegion } from "@/lib/side-region";
@@ -691,9 +692,13 @@ function RootLayoutNav({
 /** A persistent, non-interactive safety cue whenever requests target development. */
 function DevelopmentIndicator() {
   const insets = useSafeAreaInsets();
+  const tabBarInsets = useRouterTabBarInsets();
   // Outside the frame that provides the side region, so derived from the insets.
   const sideInsets = useSideInsets();
   const sideRegion = sideRegionForInsets(sideInsets);
+  const indicatorHeight = type.caption.lineHeight + 4;
+  const topSafeAreaHasRoom = insets.top >= indicatorHeight;
+  const useBottomCorner = sideRegion.edge || !topSafeAreaHasRoom;
   return (
     <View
       pointerEvents="none"
@@ -705,15 +710,15 @@ function DevelopmentIndicator() {
         borderCurve: "continuous",
         borderRadius: radius.full,
         paddingHorizontal: 9,
-        paddingVertical: 4,
+        paddingVertical: 2,
         position: "absolute",
-        // Beside a side column it sits in the bottom corner away from it, clear of the
-        // column's bars; elsewhere top-right below the status indicators.
-        ...(sideRegion.edge
-          ? { bottom: Math.max(insets.bottom, 8) + 4, left: 12 }
+        // Use the reserved top safe area on notched phones so it stays clear of
+        // navigation controls. Compact displays without room there use the space above tabs.
+        ...(useBottomCorner
+          ? { bottom: tabBarInsets.contentBottomInset + 4, left: 12 }
           : {
               right: sideInsets.right + 12,
-              top: Math.max(0, insets.top - 4),
+              top: insets.top - indicatorHeight - 4,
             }),
         zIndex: 10,
       }}
