@@ -13,3 +13,13 @@ export const TONE_DOT: Record<Tone, string> = {
   danger: "bg-destructive",
   info: "bg-info",
 };
+
+/** Colour of an icon standing in for the status dot. */
+export const TONE_ICON: Record<Tone, string> = {
+  neutral: "text-muted-foreground",
+  brand: "text-primary",
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-destructive",
+  info: "text-info",
+};

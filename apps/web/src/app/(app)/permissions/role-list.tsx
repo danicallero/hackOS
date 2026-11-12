@@ -160,8 +160,11 @@ function RoleRow({
           )}
           <span className="truncate text-sm font-medium">{role.name}</span>
           {locked && (
-            <StatusBadge tone="neutral" dot={false} className="shrink-0">
-              <LockIcon aria-hidden="true" className="size-3" /> {t("systemRoleBadge")}
+            <StatusBadge
+              icon={<LockIcon aria-hidden="true" />}
+              className="text-muted-foreground shrink-0 font-normal"
+            >
+              {t("systemRoleBadge")}
             </StatusBadge>
           )}
         </span>

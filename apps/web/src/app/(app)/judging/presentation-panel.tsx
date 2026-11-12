@@ -15,7 +15,6 @@ import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { AlertModal } from "@/components/common/alert-modal";
 import { ContextualError } from "@/components/common/contextual-error";
 import { QueueStatusDot } from "@/components/common/queue-status-badge";
-import { StatusBadge } from "@/components/common/status-badge";
 import { useProjectGithubActivity } from "@/components/projects/github-activity";
 import { ProjectAnswers } from "@/components/projects/project-answers";
 import { Button } from "@/components/ui/button";
@@ -223,7 +222,6 @@ export function PresentationPanel({
               <h2 className="type-section-title truncate">{t("waitingForNextTeam")}</h2>
               <p className="text-muted-foreground text-sm">{t("bringTeamPrompt")}</p>
             </div>
-            <StatusBadge tone="neutral">{t("idle")}</StatusBadge>
           </div>
           <Separator />
         </>
