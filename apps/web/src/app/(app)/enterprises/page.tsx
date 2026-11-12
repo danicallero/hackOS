@@ -197,7 +197,7 @@ export default function EnterprisesPage() {
           data={[]}
           getRowId={(e) => String(e.id)}
           loading
-          empty={{ icon: BuildingsIcon, title: t("loadingEnterprise") }}
+          empty={{ title: t("loadingEnterprise") }}
         />
       </PageLayout>
     );
@@ -334,7 +334,6 @@ export default function EnterprisesPage() {
             ) : undefined
           }
           empty={{
-            icon: BuildingsIcon,
             title: t("noEnterprisesYetTitle"),
             description: t("createFirstSponsorEnterprise"),
           }}

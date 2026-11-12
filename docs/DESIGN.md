@@ -1011,7 +1011,7 @@ anything else.
 | An interactive overlay inside another overlay | Use the shared `DropdownMenu`, `Select`, or `Popover`; their content stays in the nearest overlay scope. Give a common combobox `inDialog` so its list uses the same scope | A body-ported child that steals focus, clips, or makes the parent dismiss when its trigger is clicked again |
 | Pick one row from a table-backed list (users, enterprises, activities, …) | `UserPicker` (server-searched) or `EntityCombobox` (client-filtered, already-fetched list) | A `Select` dumping every row flat — unusable once the table grows past a handful of rows |
 | A set of same-shaped objects users drill into (esp. mobile) | Cards / drill-down list rows | A horizontally scrolling table |
-| Zero-state | `EmptyState` with one direct CTA | Prose explaining where to navigate |
+| Zero-state | `EmptyState` (title, optional line, one direct CTA) | Prose explaining where to navigate, or an icon in a tinted circle |
 | Long-form save feedback | `FormActions` + `SaveStatus` (`lib/save-state.ts`), sticky within the owning form | Silent autosave, per-section save buttons |
 | Application-template fields (any kind) | `TemplateFieldControl` — the single renderer both applicant form and staff review use | A second field renderer |
 | Gate UI by permission | `useCan(cap)` | Checking `me.role` |
@@ -1120,6 +1120,15 @@ Loading / empty / error:
   the only channel for a critical failure.
 - An empty state adds an action only when the page has no other way out — if a
   persistent back/escape control is already on screen, don't repeat it (#299).
+- `EmptyState` is a title, an optional line saying what is true or what to do,
+  and at most one action. It takes no icon and has no tinted container: type and
+  spacing carry the hierarchy. Say what is actually the case ("No applicant has
+  completed the form."), not that something "will appear here". A bordered
+  drop destination in a builder is a target, not an empty state, and keeps its
+  dashed outline.
+- Confirmation and error pages (sign-up, verify email, link expired, account
+  deleted) lead with their heading; they do not stack an icon in a tinted circle
+  above it. Circles are for avatars, initials, presence dots and timeline markers.
 - **Capability-denied pages render `<AccessDenied ask={t("…")} />` and nothing
   else** (`components/common/access-denied.tsx`, issue #298). The heading is
   the same everywhere because the fact is the same everywhere; the only

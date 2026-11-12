@@ -1,4 +1,3 @@
-import { LockIcon } from "@phosphor-icons/react/dist/ssr/Lock";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { useLocale } from "@/lib/i18n";
@@ -9,7 +8,7 @@ export function AccessDenied({ ask }: { ask: string }) {
   return (
     <div className="space-y-6">
       <PageHeader title={t("noAccessTitle")} />
-      <EmptyState icon={LockIcon} title={ask} />
+      <EmptyState title={ask} />
     </div>
   );
 }

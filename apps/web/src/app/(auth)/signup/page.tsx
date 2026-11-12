@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -174,9 +173,6 @@ function SignUpInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
-          </div>
           <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("checkInbox")}
           </h1>

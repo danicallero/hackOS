@@ -1,13 +1,9 @@
 "use client";
 
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
-import { CalendarDotsIcon } from "@phosphor-icons/react/dist/csr/CalendarDots";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
-import { FolderSimpleIcon } from "@phosphor-icons/react/dist/csr/FolderSimple";
-import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
 import { Spinner } from "@/components/common/spinner";
 import { PublicFooter } from "@/components/layout/public-footer";
@@ -263,9 +259,7 @@ function PublicPageContent({
 
       {openApplications.length > 0 && (
         <section aria-labelledby="applications-title" className="py-12">
-          <SectionHeading icon={ClipboardTextIcon} id="applications-title">
-            {t("openApplications")}
-          </SectionHeading>
+          <SectionHeading id="applications-title">{t("openApplications")}</SectionHeading>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {openApplications.map((form) => (
               <div
@@ -296,9 +290,7 @@ function PublicPageContent({
 
       {screenAnnouncements.length > 0 && (
         <section aria-labelledby="announcements-title" className="py-12">
-          <SectionHeading icon={MegaphoneIcon} id="announcements-title">
-            {t("publicAnnouncements")}
-          </SectionHeading>
+          <SectionHeading id="announcements-title">{t("publicAnnouncements")}</SectionHeading>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {screenAnnouncements.map((item) => (
               <article key={item.id} className="rounded-surface border p-5">
@@ -313,9 +305,7 @@ function PublicPageContent({
       )}
 
       <section aria-labelledby="schedule-title" className="py-12">
-        <SectionHeading icon={CalendarDotsIcon} id="schedule-title">
-          {t("publicSchedule")}
-        </SectionHeading>
+        <SectionHeading id="schedule-title">{t("publicSchedule")}</SectionHeading>
         {upcomingSchedule.length ? (
           <ol className="mt-6 divide-y">
             {upcomingSchedule.map((item) => (
@@ -336,9 +326,10 @@ function PublicPageContent({
             ))}
           </ol>
         ) : (
-          <EmptyNotice>
-            {schedule.length ? t("scheduleNoUpcoming") : t("schedulePending")}
-          </EmptyNotice>
+          <EmptyState
+            className="mt-6"
+            title={schedule.length ? t("scheduleNoUpcoming") : t("schedulePending")}
+          />
         )}
         {schedule.length > 0 && (
           <Button
@@ -355,9 +346,7 @@ function PublicPageContent({
       </section>
 
       <section aria-labelledby="challenges-title" className="py-12">
-        <SectionHeading icon={TrophyIcon} id="challenges-title">
-          {t("challengesAndPrizes")}
-        </SectionHeading>
+        <SectionHeading id="challenges-title">{t("challengesAndPrizes")}</SectionHeading>
         {challenges.length ? (
           <div className="mt-6 grid auto-rows-fr gap-4 md:grid-cols-2">
             {challenges.map((challenge) => (
@@ -389,14 +378,12 @@ function PublicPageContent({
             ))}
           </div>
         ) : (
-          <EmptyNotice>{t("challengesPending")}</EmptyNotice>
+          <EmptyState className="mt-6" title={t("challengesPending")} />
         )}
       </section>
 
       <section aria-labelledby="gallery-title" className="py-12">
-        <SectionHeading icon={FolderSimpleIcon} id="gallery-title">
-          {t("projectGallery")}
-        </SectionHeading>
+        <SectionHeading id="gallery-title">{t("projectGallery")}</SectionHeading>
         <Button
           asChild
           variant="outline"
@@ -423,7 +410,7 @@ function PublicPageContent({
             className="mt-6 h-auto min-h-[var(--control-height-default)] max-w-full whitespace-normal"
           />
         ) : (
-          <EmptyNotice>{t("sponsorsPending")}</EmptyNotice>
+          <EmptyState className="mt-6" title={t("sponsorsPending")} />
         )}
       </section>
 
@@ -446,35 +433,14 @@ function PublicPageContent({
   );
 }
 
-function SectionHeading({
-  icon: Icon,
-  id,
-  children,
-}: {
-  icon: typeof CalendarDotsIcon;
-  id: string;
-  children: React.ReactNode;
-}) {
+function SectionHeading({ id, children }: { id: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <span className="bg-primary/10 text-primary grid size-8 shrink-0 place-items-center rounded-full">
-        <Icon className="size-4" aria-hidden="true" />
-      </span>
-      <h2
-        id={id}
-        tabIndex={-1}
-        className="landing-section-heading min-w-0 wrap-anywhere text-balance font-display text-2xl font-normal"
-      >
-        {children}
-      </h2>
-    </div>
-  );
-}
-
-function EmptyNotice({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-muted-foreground mt-6 rounded-surface border border-dashed p-6 text-center text-sm">
+    <h2
+      id={id}
+      tabIndex={-1}
+      className="landing-section-heading min-w-0 wrap-anywhere text-balance font-display text-2xl font-normal"
+    >
       {children}
-    </p>
+    </h2>
   );
 }

@@ -155,7 +155,7 @@ export function KnowledgeManager() {
         loading={loading}
         filteredEmpty={{ active: search.trim().length > 0, onClear: () => setSearch("") }}
         error={error ? { message: error, onRetry: () => load() } : undefined}
-        empty={{ icon: BrainIcon, title: t("noKnowledgeYetTitle") }}
+        empty={{ title: t("noKnowledgeYetTitle") }}
         rowActions={(row) => (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

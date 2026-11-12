@@ -873,7 +873,6 @@ export function ResponsesTab({
         onVisibleRowsChange={setVisibleRows}
         pageSize={15}
         empty={{
-          icon: FileTextIcon,
           title: t("noResponsesTitle"),
           description:
             statusFilter.length === 0 &&

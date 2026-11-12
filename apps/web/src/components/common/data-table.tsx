@@ -1,6 +1,5 @@
 "use client";
 
-import type { Icon as PhosphorIcon } from "@phosphor-icons/react";
 import { ArrowDownIcon } from "@phosphor-icons/react/dist/csr/ArrowDown";
 import { ArrowsDownUpIcon } from "@phosphor-icons/react/dist/csr/ArrowsDownUp";
 import { ArrowUpIcon } from "@phosphor-icons/react/dist/csr/ArrowUp";
@@ -79,7 +78,7 @@ interface DataTableProps<T> {
   pageSize?: number;
   pageSizeOptions?: readonly number[];
   loading?: boolean;
-  empty?: { icon?: PhosphorIcon; title: string; description?: string; action?: React.ReactNode };
+  empty?: { title: string; description?: string; action?: React.ReactNode };
   filteredEmpty?: {
     active: boolean;
     onClear: () => void;
@@ -398,7 +397,6 @@ export function DataTable<T>({
       />
     ) : (
       <EmptyState
-        icon={empty?.icon}
         title={empty?.title ?? t("nothingToShow")}
         description={empty?.description}
         action={empty?.action}
