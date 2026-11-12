@@ -44,7 +44,7 @@ import { emitTabReselect } from "@/lib/tab-reselect";
 import { useTabShortcuts } from "@/lib/tab-shortcuts";
 import type { TabKey } from "@/lib/tabs";
 import { colors } from "@/theme/colors";
-import { MIN_TARGET, type } from "@/theme/tokens";
+import { MIN_TARGET, radius, type } from "@/theme/tokens";
 
 type TabLabelKey =
   | "tabAccount"
@@ -653,7 +653,7 @@ function AndroidOverflowMenu({
                   borderColor:
                     colorScheme === "dark" ? "rgba(255,255,255,0.14)" : "rgba(0,0,0,0.08)",
                   borderCurve: "continuous",
-                  borderRadius: 18,
+                  borderRadius: radius.container,
                   borderWidth: 0.5,
                   elevation: 12,
                   overflow: "hidden",

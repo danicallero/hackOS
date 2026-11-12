@@ -6,7 +6,7 @@ import { alert } from "@/lib/alert";
 import { useLocale } from "@/lib/i18n";
 import { startNfcRead } from "@/lib/nfc-reader";
 import { colors } from "@/theme/colors";
-import { type } from "@/theme/tokens";
+import { radius, type } from "@/theme/tokens";
 
 export function NfcReader({
   visible,
@@ -94,7 +94,7 @@ export function NfcReader({
           accessibilityViewIsModal
           style={{
             backgroundColor: colors.background,
-            borderRadius: 28,
+            borderRadius: radius.sheet,
             padding: 24,
             gap: 24,
             alignItems: "center",

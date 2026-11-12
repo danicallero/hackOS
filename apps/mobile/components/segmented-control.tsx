@@ -1,7 +1,7 @@
 import { Pressable, Text, View } from "react-native";
 import { haptic } from "@/lib/haptics";
 import { colors } from "@/theme/colors";
-import { type } from "@/theme/tokens";
+import { radius, type } from "@/theme/tokens";
 
 export interface SegmentedControlProps {
   values: string[];
@@ -24,7 +24,7 @@ export function SegmentedControl({
       style={{
         backgroundColor: colors.elevatedSurface,
         borderCurve: "continuous",
-        borderRadius: 9,
+        borderRadius: radius.control,
         flexDirection: "row",
         gap: 2,
         padding: 2,
@@ -51,7 +51,7 @@ export function SegmentedControl({
               alignItems: "center",
               backgroundColor: selected ? colors.surface : colors.transparent,
               borderCurve: "continuous",
-              borderRadius: 7,
+              borderRadius: radius.chip,
               boxShadow: selected ? colors.controlShadow : undefined,
               flex: 1,
               justifyContent: "center",
