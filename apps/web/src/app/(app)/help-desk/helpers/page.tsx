@@ -3,7 +3,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { BookOpenIcon } from "@phosphor-icons/react/dist/csr/BookOpen";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { IdentificationBadgeIcon } from "@phosphor-icons/react/dist/csr/IdentificationBadge";
-import { UsersThreeIcon } from "@phosphor-icons/react/dist/csr/UsersThree";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -203,7 +202,6 @@ export default function HelpdeskPage() {
               : undefined
           }
           empty={{
-            icon: UsersThreeIcon,
             title: t(query ? "helpDeskNoMatches" : "helpDeskNoHelpers"),
           }}
           filteredEmpty={{

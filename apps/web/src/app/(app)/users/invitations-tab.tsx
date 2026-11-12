@@ -347,7 +347,7 @@ export function InvitationsScreen({ sponsorOnly = false }: { sponsorOnly?: boole
         error={loadFailure ? { message: loadFailure, onRetry: retryLoad } : undefined}
         searchable={(row) => `${row.label} ${row.enterprise ?? ""}`}
         searchPlaceholder={t("searchByEmailType")}
-        empty={{ icon: EnvelopeSimpleIcon, title: t("noActiveInvitations") }}
+        empty={{ title: t("noActiveInvitations") }}
       />
       <SidePanelEditor
         open={selected !== null}

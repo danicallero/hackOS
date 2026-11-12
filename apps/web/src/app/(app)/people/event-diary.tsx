@@ -1,7 +1,6 @@
 "use client";
 
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { AddressBookIcon } from "@phosphor-icons/react/dist/csr/AddressBook";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { AlertModal } from "@/components/common/alert-modal";
@@ -274,7 +273,7 @@ function DiaryPage() {
         renderMobileRow={(row) => <PersonMobileRow row={row} t={t} nameOf={nameOf} />}
         loading={entries === null && !loadError}
         error={loadError ? { message: loadError, onRetry: load } : undefined}
-        empty={{ icon: AddressBookIcon, title: t("diaryEmpty") }}
+        empty={{ title: t("diaryEmpty") }}
         filteredEmpty={{
           active: filtering,
           onClear: () => {

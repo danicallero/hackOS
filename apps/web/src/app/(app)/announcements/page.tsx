@@ -9,7 +9,6 @@ import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
-import { MegaphoneIcon } from "@phosphor-icons/react/dist/csr/Megaphone";
 import { PencilIcon } from "@phosphor-icons/react/dist/csr/Pencil";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
@@ -252,7 +251,6 @@ export default function AnnouncementsPage() {
           </div>
         )}
         empty={{
-          icon: MegaphoneIcon,
           title: t("noAnnouncementsYet"),
           description: t("publishFirstOne"),
         }}

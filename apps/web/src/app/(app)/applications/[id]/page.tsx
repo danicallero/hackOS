@@ -19,7 +19,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
@@ -269,7 +268,6 @@ export default function ApplicationDetailPage() {
                 </>
               ) : (
                 <EmptyState
-                  icon={LockIcon}
                   title={t("metadataUnavailable")}
                   description={t("metadataUnavailableDesc")}
                 />

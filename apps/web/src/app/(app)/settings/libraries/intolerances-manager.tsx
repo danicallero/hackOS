@@ -217,7 +217,6 @@ export function IntolerancesManager() {
         error={loadError ? { message: loadError, onRetry: () => load() } : undefined}
         filteredEmpty={{ active: query.length > 0, onClear: () => setSearch("") }}
         empty={{
-          icon: ForkKnifeIcon,
           title: t("noIntolerancesYetTitle"),
         }}
         rowActions={(row) => (

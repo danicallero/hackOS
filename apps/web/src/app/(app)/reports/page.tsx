@@ -3,7 +3,6 @@
 // H18 report inbox: attendee reports of projects and public profiles, closed by organisers.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { FlagIcon } from "@phosphor-icons/react/dist/csr/Flag";
 import Link from "next/link";
 import { useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -189,7 +188,7 @@ export default function ReportsPage() {
             : undefined
         }
         getRowLabel={(r) => `${t(REASON_KEY[r.reason])} #${r.id}`}
-        empty={{ icon: FlagIcon, title: t("noReportsTitle") }}
+        empty={{ title: t("noReportsTitle") }}
       />
     </PageLayout>
   );

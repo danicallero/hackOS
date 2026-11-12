@@ -4,8 +4,6 @@
 // #token=… so a link scanner's GET cannot release a place. The visitor must
 // press the button; the bearer token is sent in the POST body.
 
-import { CalendarXIcon } from "@phosphor-icons/react/dist/csr/CalendarX";
-import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -83,9 +81,6 @@ function DeclineInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-warning/10 text-warning mb-2 grid size-12 place-items-center rounded-full">
-            <WarningIcon aria-hidden="true" className="size-6" />
-          </div>
           <CardTitle>{t("confirmationExpiredTitle")}</CardTitle>
           <CardDescription role="alert">{t("confirmationExpiredDesc")}</CardDescription>
         </CardHeader>
@@ -102,9 +97,6 @@ function DeclineInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-            <WarningIcon aria-hidden="true" className="size-6" />
-          </div>
           <CardTitle>
             {linkInvalid ? t("confirmationLinkInvalidTitle") : t("declineFailed")}
           </CardTitle>
@@ -133,9 +125,6 @@ function DeclineInner() {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
-        <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-          <CalendarXIcon aria-hidden="true" className="size-6" />
-        </div>
         <CardTitle>{alreadyDone ? t("alreadyReleased") : t("placeReleased")}</CardTitle>
         <CardDescription>{t("placeReleasedDesc")}</CardDescription>
       </CardHeader>

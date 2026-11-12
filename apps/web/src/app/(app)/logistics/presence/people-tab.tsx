@@ -1,7 +1,6 @@
 "use client";
 
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { SectionCard } from "@/components/common/section-card";
@@ -125,7 +124,7 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
         searchPlaceholder={t("peopleSearchPlaceholder")}
         pageSize={20}
         error={error ? { message: error, onRetry: load } : undefined}
-        empty={{ icon: UsersIcon, title: t("noPeopleYet") }}
+        empty={{ title: t("noPeopleYet") }}
       />
     </SectionCard>
   );

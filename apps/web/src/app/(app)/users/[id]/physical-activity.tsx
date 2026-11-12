@@ -4,7 +4,6 @@
 
 import { isMealActivityKind } from "@hackos/shared/activity-kinds";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
 import { SectionCard } from "@/components/common/section-card";
@@ -73,7 +72,6 @@ export function PhysicalActivity({
       getRowId={(p) => String(p.id)}
       pageSize={10}
       empty={{
-        icon: ClipboardTextIcon,
         title: t("noPassesYet"),
         description: t("passesWillAppear"),
       }}

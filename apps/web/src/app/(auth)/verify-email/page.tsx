@@ -1,8 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
-import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimple";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef } from "react";
@@ -108,9 +106,6 @@ function VerifyEmailInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-            <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
-          </div>
           <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
@@ -130,9 +125,6 @@ function VerifyEmailInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
-            <CheckCircleIcon aria-hidden="true" className="size-6" />
-          </div>
           <h1 className="type-section-title text-balance">{t("emailVerified")}</h1>
           <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
         </CardHeader>
@@ -154,9 +146,6 @@ function VerifyEmailInner() {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
-        <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-          <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
-        </div>
         <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verificationInstructions")}</CardDescription>
       </CardHeader>
@@ -227,9 +216,6 @@ function PendingVerification({ email, next }: { email: string; next: string }) {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
-        <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
-          <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
-        </div>
         <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verifyPendingBody", { email })}</CardDescription>
       </CardHeader>

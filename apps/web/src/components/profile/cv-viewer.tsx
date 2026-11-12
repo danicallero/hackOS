@@ -192,7 +192,6 @@ export function CvViewer({
           ) : (
             // Browsers without an inline PDF viewer (Chrome on Android) get the file itself.
             <EmptyState
-              icon={FilePdfIcon}
               title={state.filename}
               className="flex-1"
               action={
@@ -206,11 +205,7 @@ export function CvViewer({
             />
           )
         ) : state.status === "missing" ? (
-          <EmptyState
-            icon={FilePdfIcon}
-            title={notFoundTitle ?? t("personNotFound")}
-            className="flex-1"
-          />
+          <EmptyState title={notFoundTitle ?? t("personNotFound")} className="flex-1" />
         ) : (
           <div className="flex flex-1 items-center justify-center">
             <ContextualError

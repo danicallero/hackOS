@@ -1,8 +1,6 @@
 "use client";
 
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
-import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
@@ -146,9 +144,6 @@ function ConfirmInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-warning/10 text-warning mb-2 grid size-12 place-items-center rounded-full">
-            <WarningIcon aria-hidden="true" className="size-6" />
-          </div>
           <CardTitle>{t("confirmationExpiredTitle")}</CardTitle>
           <CardDescription role="alert">{t("confirmationExpiredDesc")}</CardDescription>
         </CardHeader>
@@ -175,9 +170,6 @@ function ConfirmInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <div className="bg-destructive/10 text-destructive mb-2 grid size-12 place-items-center rounded-full">
-            <WarningIcon aria-hidden="true" className="size-6" />
-          </div>
           <CardTitle>
             {linkInvalid ? t("confirmationLinkInvalidTitle") : t("confirmationFailed")}
           </CardTitle>
@@ -197,14 +189,9 @@ function ConfirmInner() {
   const confirmation = (
     <Card>
       <CardHeader className="gap-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-success/10 text-success grid size-10 shrink-0 -translate-y-1 place-items-center rounded-full">
-            <CheckCircleIcon aria-hidden="true" className="size-5" />
-          </div>
-          <h1 className="type-page-title text-balance">
-            {alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")}
-          </h1>
-        </div>
+        <h1 className="type-page-title text-balance">
+          {alreadyDone ? t("alreadyConfirmed") : t("placeConfirmed")}
+        </h1>
         {holderName && (
           <div className="space-y-1">
             <p className="type-section-title break-words">{holderName}</p>

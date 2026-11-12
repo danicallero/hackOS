@@ -142,7 +142,6 @@ export function SessionsTab({
           pageSize={10}
           error={sessionsError}
           empty={{
-            icon: DoorOpenIcon,
             title: t("noOpenSessions"),
             description: t("noOpenSessionsDesc"),
           }}

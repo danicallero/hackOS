@@ -15,7 +15,6 @@ import { FileCsvIcon } from "@phosphor-icons/react/dist/csr/FileCsv";
 import { FileZipIcon } from "@phosphor-icons/react/dist/csr/FileZip";
 import { QrCodeIcon } from "@phosphor-icons/react/dist/csr/QrCode";
 import { ScanIcon } from "@phosphor-icons/react/dist/csr/Scan";
-import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -635,7 +634,7 @@ export default function CompanyTagsPage() {
           error={
             loadError && !hasLoaded.current ? { message: loadError, onRetry: load } : undefined
           }
-          empty={{ icon: StorefrontIcon, title: t("noEnterprisesYetTitle") }}
+          empty={{ title: t("noEnterprisesYetTitle") }}
           filteredEmpty={{ active: hasFilters, onClear: clearFilters }}
         />
       </div>

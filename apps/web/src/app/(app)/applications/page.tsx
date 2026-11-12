@@ -6,7 +6,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import Link from "next/link";
@@ -155,7 +154,6 @@ export default function ApplicationsPage() {
         searchable={(f) => `${f.name} ${grantedRoleNameLabel(f.granted_role_name, t)}`}
         searchPlaceholder={t("searchFormsPlaceholder")}
         empty={{
-          icon: ClipboardTextIcon,
           title: t("noApplicationFormsYet"),
           description: canManage ? t("createFirstFormDesc") : t("formsWillAppear"),
           action: canManage ? (

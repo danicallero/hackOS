@@ -383,7 +383,6 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
           </div>
         ) : items.length === 0 ? (
           <EmptyState
-            icon={isMeal ? BowlFoodIcon : PulseIcon}
             title={isMeal ? t("noMealsDefinedTitle") : t("noRegistrableActivitiesTitle")}
             description={
               isMeal ? t("mealsCreatedInScheduleDesc") : t("markActivitiesRequiresScanDesc")
