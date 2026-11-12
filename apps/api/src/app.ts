@@ -123,6 +123,19 @@ export async function buildApp(): Promise<App> {
   await registerApiDocs(app, pkg.version);
 
   registerErrorHandler(app);
+  // Body-less actions (cancel, release, resolve) from clients that still declare
+  // a JSON content type: an empty body is no body, not a malformed one. Dropping
+  // the header before parsing leaves every scoped body parser untouched.
+  app.addHook("onRequest", async (req) => {
+    const length = req.headers["content-length"];
+    if (
+      (length === undefined || length === "0") &&
+      req.headers["transfer-encoding"] === undefined &&
+      req.headers["content-type"]?.startsWith("application/json")
+    ) {
+      delete req.headers["content-type"];
+    }
+  });
 
   registerHealthRoutes(app);
 

@@ -95,7 +95,10 @@ refresh it, or `useServerResource(key, fetcher)` for a plain read (dictionaries,
 meal plan). `resourceKey` is required and must contain every parameter the
 fetcher uses; entries are scoped to the signed-in identity, dropped on identity
 change, shared by concurrent readers and reused for 30 seconds. A caller's own
-`refetch()`/`reload()` bypasses the cached value. Do not add module-level
+`refetch()`/`reload()` bypasses the cached value. When a change also
+reaches views that are not mounted (a list behind its detail page), call
+`expireServerStatePrefix(prefix)`: those entries stay paintable but their next
+read goes to the API. Do not add module-level
 caches or `useEffect` + `api.get` reads, and never turn a failed read into an
 empty or hard-coded list: expose `error` and render `ContextualError` with a
 retry.

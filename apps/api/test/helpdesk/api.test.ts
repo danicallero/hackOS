@@ -430,7 +430,10 @@ describe("H64-H65 requests and routing", () => {
     const mate = await createUserWithCapabilities(participantCaps);
     const projectId = await team([p, mate]);
 
-    expect((await call("GET", "/api/helpdesk/projects", p)).statusCode).toBe(404);
+    // Installed mobile builds still ask for the retired team list.
+    const teams = await call("GET", "/api/helpdesk/projects", p);
+    expect(teams.statusCode).toBe(200);
+    expect(teams.json()).toEqual({ projects: [] });
     // An older client may still send the retired team field; it is ignored.
     const created = await call("POST", "/api/helpdesk/requests", p, {
       description: "I am stuck",
@@ -469,7 +472,7 @@ describe("H64-H65 requests and routing", () => {
     expect(second.statusCode).toBe(409);
   });
 
-  it("answers 400, not 500, to a body-less action sent as JSON (H64)", async () => {
+  it("accepts a body-less action sent as JSON, as installed mobile builds do (H64)", async () => {
     const p = await createUserWithCapabilities(participantCaps);
     const created = await call("POST", "/api/helpdesk/requests", p, {
       description: "Stuck",
@@ -482,8 +485,23 @@ describe("H64-H65 requests and routing", () => {
       url: `/api/helpdesk/requests/${created.json().id}/cancel`,
       headers: { ...asUser(p), "idempotency-key": key(), "content-type": "application/json" },
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json().error.code).toBe("bad_request");
+    expect(res.statusCode).toBe(200);
+    expect(res.json().status).toBe("cancelled");
+
+    const malformed = await app.inject({
+      method: "POST",
+      url: "/api/helpdesk/requests",
+      headers: { ...asUser(p), "idempotency-key": key(), "content-type": "application/json" },
+      payload: "{not json",
+    });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json().error.code).toBe("bad_request");
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/helpdesk/requests",
+      headers: { ...asUser(p), "idempotency-key": key(), "content-type": "application/json" },
+    });
+    expect(empty.statusCode).toBe(400);
   });
 
   it("notifies available, present helpers who match any topic", async () => {

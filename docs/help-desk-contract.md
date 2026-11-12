@@ -194,6 +194,7 @@ readable by browsers through the existing photo route.
 
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
+| `GET /api/helpdesk/projects` | `helpdesk:request` | — | Retired: always `{ projects: [] }`, kept only so installed mobile builds open the request form; do not call it |
 | `GET /api/helpdesk/challenges` | `helpdesk:request` | — | `{ challenges: {id, name, mine}[] }` visible non-test challenges, the caller's own project challenges first (`mine: true`) |
 | `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, challengeId?: visible challenge id or null, preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller already has an open/claimed request; 409 `helpdesk_closed` outside the configured opening hours; 403 without event access or active membership in `projectId`. |
 | `GET /api/helpdesk/requests/mine` | `helpdesk:request` | — | `{ requests: HelpRequest[] }` the caller's own, newest first |

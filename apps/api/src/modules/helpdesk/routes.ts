@@ -426,6 +426,20 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
     },
     async (req) => ({ challenges: await listRequestChallenges(req.userId as number) }),
   );
+  r.get(
+    "/api/helpdesk/projects",
+    {
+      config: cap(CAPABILITIES.HELPDESK_REQUEST),
+      preHandler: requireCapability(CAPABILITIES.HELPDESK_REQUEST),
+      schema: {
+        deprecated: true,
+        summary: "List teams for a help request (retired)",
+        description:
+          "Always `{ projects: [] }`. Requests belong to one requester (H64) and there is nothing to choose; the route stays only so installed mobile builds that still ask for the team list open the request form without an error. New clients must not call it.",
+      },
+    },
+    async () => ({ projects: [] }),
+  );
   r.post(
     "/api/helpdesk/requests",
     {
