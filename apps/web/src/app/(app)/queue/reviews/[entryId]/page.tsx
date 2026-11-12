@@ -209,9 +209,7 @@ export default function ReviewDetailPage() {
             <div>
               <dt className="text-muted-foreground text-sm">{t("lastUpdated")}</dt>
               <dd className="text-sm">
-                {review.updatedAt
-                  ? formatEventDate(review.updatedAt, language, "dateTimeMedium")
-                  : "—"}
+                {review.updatedAt ? formatEventDate(review.updatedAt, language, "dateTime") : "—"}
               </dd>
             </div>
           </dl>
@@ -311,7 +309,7 @@ export default function ReviewDetailPage() {
                 <span className="text-foreground font-medium">
                   {version.authorName || t("judgeFallback")}
                 </span>{" "}
-                · {formatEventDate(version.createdAt, language, "dateTimeMedium")} ·{" "}
+                · {formatEventDate(version.createdAt, language, "dateTime")} ·{" "}
                 {version.changedFields.map((f) => changedFieldLabel(f, panel, t)).join(", ")}
               </li>
             ))}

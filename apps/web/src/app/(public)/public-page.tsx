@@ -45,7 +45,7 @@ type Content = {
 };
 
 const dateTime = (value: string, timezone: string, language: Language) =>
-  formatEventDate(value, language, "dateTimeMedium", timezone);
+  formatEventDate(value, language, "dateTime", timezone);
 
 /**
  * H8: label for a public form's `granted_role_name` — the name of its

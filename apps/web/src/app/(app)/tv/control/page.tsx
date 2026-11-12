@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useEventSource } from "@/hooks/use-event-source";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { isLanguage, languageName, useLocale } from "@/lib/i18n";
 import { useCan } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -59,7 +59,7 @@ function isTvControlMode(mode: string): mode is TvControlMode {
 }
 
 export default function TvControlPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const MODES = useMemo(() => buildModes(t), [t]);
   const canControl = useCan(CAPABILITIES.TV_CONTROL);
   const [current, setCurrent] = useState<TvState | null>(null);
@@ -232,7 +232,9 @@ export default function TvControlPage() {
               </div>
               {current?.broadcastAt && current.source === "manual" && (
                 <p className="text-muted-foreground">
-                  {t("lastBroadcastAt", { time: formatScheduledDateTime(current.broadcastAt) })}
+                  {t("lastBroadcastAt", {
+                    time: formatEventDate(current.broadcastAt, language, "dateTime"),
+                  })}
                 </p>
               )}
             </div>
