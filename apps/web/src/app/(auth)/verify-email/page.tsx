@@ -111,7 +111,7 @@ function VerifyEmailInner() {
           <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
             <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
-          <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+          <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
           <form method="post" action={`${API_URL}/api/auth/verify-email/confirm`}>
@@ -133,7 +133,7 @@ function VerifyEmailInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
-          <h1 className="type-section-title text-balance">{t("emailVerified")}</h1>
+          <h1 className="type-page-title text-balance">{t("emailVerified")}</h1>
           <CardDescription>{t("emailVerifiedDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
@@ -157,7 +157,7 @@ function VerifyEmailInner() {
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
           <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
         </div>
-        <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+        <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verificationInstructions")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -230,7 +230,7 @@ function PendingVerification({ email, next }: { email: string; next: string }) {
         <div className="bg-muted text-muted-foreground mb-2 grid size-12 place-items-center rounded-full">
           <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
         </div>
-        <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+        <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verifyPendingBody", { email })}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

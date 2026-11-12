@@ -62,7 +62,7 @@ function Pass({
       aria-label={title}
       className="rounded-surface border bg-card flex min-w-0 flex-col gap-4 p-4 sm:p-5"
     >
-      <h3 className="flex items-center gap-2 text-sm font-medium">
+      <h3 className="type-subheading flex items-center gap-2">
         <Icon aria-hidden="true" className="text-muted-foreground size-5 shrink-0" />
         {title}
       </h3>

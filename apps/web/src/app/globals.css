@@ -190,6 +190,12 @@
     line-height: var(--line-height-section-title);
   }
 
+  .type-subheading {
+    font-size: var(--font-size-body);
+    font-weight: 600;
+    line-height: var(--line-height-body);
+  }
+
   .type-label {
     font-size: var(--font-size-label);
     font-weight: 500;

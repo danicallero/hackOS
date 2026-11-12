@@ -86,9 +86,10 @@ Each row: value → intent → boundary.
 | Accent | one interactive accent | CTAs and active states only. Never decorative, never a background wash. One per view. |
 | Error recovery | Brand blue, ink and red | The branded full-page error illustration uses the active edition palette. Do not reuse it for regular warnings or inline errors. |
 | Status colours | via `tones.ts` | Reserved for actual state (queue, decision, sync). Never used to make neutral UI "more colorful". |
-| Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Never inside cards. |
+| Page title | 24/32 Rockwell regular (`type-page-title`) | One per page, in `PageHeader`. Every `<h1>` uses it, including auth, public and system pages (maintenance, pending removal, legal, company tag). Never inside cards. |
 | Section title | 18/24 Rockwell regular (`type-section-title`) | Titles a `Section`/`SectionCard`. Not a substitute for the page title. |
 | Body | 14/20 regular | Default text. |
+| Subheading | 14/20 semibold sans (`type-subheading`) | The h2-h4 inside a card, panel or dialog that groups related fields or rows under a Section title. Not for page or section titles, and not on landing headings. |
 | Label | 13/18 medium (`type-label`) | Form labels and control captions. |
 | Meta | 12/16 muted (`type-meta`) | Timestamps, counts, secondary facts. **No artificial tracking** — never add `tracking-*` to shared headings or metadata. |
 | Data | `tabular-nums` | Any column of numbers. Monospace only for identifiers and timers — never for prose. |
@@ -97,6 +98,10 @@ Each row: value → intent → boundary.
 | App frame | 12 px radius, subtle border + small shadow | Desktop navigation is the one floating panel; the main content stays on the shared shell canvas without an outer card. |
 | Overlays | 8 px radius; small shadow (menus/popovers), large shadow (modals) | Elevation communicates "floating above the page" and nothing else. |
 | Full radius | buttons, avatars, status dots | Not for fields or content surfaces. Status labels do not need a capsule. |
+
+- **Radius roles.** `rounded-md` (6 px) for fields and menu items, `rounded-lg` (8 px) for every content surface, row wash and bubble, `rounded-full` for buttons, avatars and dots. Do not use `rounded-xl` or `rounded-2xl` outside the TV surfaces.
+- **Big numbers.** A metric is a `StatCard`. Where a numeral sits inside a section or other composition (a `dl`, a progress sentence), it uses the StatCard treatment: `text-2xl font-semibold tabular-nums`. `text-3xl` numerals are not used on web outside TV.
+- **Selected editor.** The question or field currently being edited is marked by `border-primary/60` plus `ring-1 ring-primary/30`, never a coloured left stripe (`border-l-*`). Loading placeholders use `Skeleton`, never hand-rolled `animate-pulse` blocks.
 
 Shared page and section title rows align icons and counters to the visible
 capital height (`heading-row`), rather than the different fonts’ line boxes.

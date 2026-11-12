@@ -28,7 +28,7 @@ export function LegalPage({
         className="outline-none mx-auto max-w-3xl px-5 py-12 sm:px-8 sm:py-16"
       >
         <header className="border-b pb-8">
-          <h1 className="mt-2 text-balance text-3xl font-semibold sm:text-4xl">{title}</h1>
+          <h1 className="type-page-title mt-2 text-balance">{title}</h1>
           <p className="text-muted-foreground mt-4 max-w-2xl text-pretty text-base leading-7">
             {description}
           </p>

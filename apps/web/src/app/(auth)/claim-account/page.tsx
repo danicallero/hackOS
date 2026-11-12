@@ -203,7 +203,7 @@ function ClaimInner() {
     return (
       <Card>
         <CardHeader>
-          <h1 className="type-section-title text-balance">{t("inviteUnavailable")}</h1>
+          <h1 className="type-page-title text-balance">{t("inviteUnavailable")}</h1>
         </CardHeader>
         <CardContent>
           <Link href="/login" className="text-sm underline underline-offset-4">
@@ -221,7 +221,7 @@ function ClaimInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <CheckCircleIcon aria-hidden="true" className="size-6" />
           </div>
-          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("accountCreated")}
           </h1>
         </CardHeader>
@@ -254,7 +254,7 @@ function ClaimInner() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("createYourAccount")}</h1>
+        <h1 className="type-page-title text-balance">{t("createYourAccount")}</h1>
         {lookup.reusable && (
           <p className="text-muted-foreground text-pretty text-sm">
             {t("reusableInviteRole", { role: inviteRole })}

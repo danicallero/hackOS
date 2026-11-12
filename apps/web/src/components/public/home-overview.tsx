@@ -52,8 +52,11 @@ export function HomeOverview({
         <SectionCard variant="plain" title={t("publicAnnouncements")}>
           <div className="grid gap-4 md:grid-cols-2">
             {screenAnnouncements.map((item) => (
-              <article key={item.id} className="border-l-2 border-primary bg-primary/5 px-4 py-3">
-                <h3 className="font-medium">{item.title}</h3>
+              <article
+                key={item.id}
+                className="border-primary/30 bg-primary/5 rounded-lg border px-4 py-3"
+              >
+                <h3 className="type-subheading">{item.title}</h3>
                 <p className="mt-1 whitespace-pre-wrap text-pretty text-sm text-muted-foreground">
                   {item.body}
                 </p>

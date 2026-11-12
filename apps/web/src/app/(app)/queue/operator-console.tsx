@@ -168,7 +168,7 @@ function RoomOperatorCard({
       bodyClassName="p-0"
     >
       <div className="border-b px-4 py-3.5 sm:px-5">
-        <h3 className="mb-3 text-sm font-semibold">{t("queueWaitingRoomTeams")}</h3>
+        <h3 className="type-subheading mb-3">{t("queueWaitingRoomTeams")}</h3>
         {called.length > 0 ? (
           <div className="space-y-2">
             {called.map((entry, index) => (
@@ -192,7 +192,7 @@ function RoomOperatorCard({
       </div>
 
       <div className="px-4 py-3.5 sm:px-5">
-        <h3 className="mb-3 text-sm font-semibold">{t("queueNextTeams")}</h3>
+        <h3 className="type-subheading mb-3">{t("queueNextTeams")}</h3>
         {next ? (
           <div className="rounded-control border">
             <WaitingTeamRow

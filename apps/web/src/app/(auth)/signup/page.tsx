@@ -177,7 +177,7 @@ function SignUpInner() {
           <div className="bg-success/10 text-success mb-2 grid size-12 place-items-center rounded-full">
             <EnvelopeSimpleIcon aria-hidden="true" className="size-6" />
           </div>
-          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("checkInbox")}
           </h1>
           <CardDescription>{t("verificationSent", { email: submittedEmail })}</CardDescription>
@@ -215,7 +215,7 @@ function SignUpInner() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("createYourAccount")}</h1>
+        <h1 className="type-page-title text-balance">{t("createYourAccount")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>

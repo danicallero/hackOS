@@ -400,7 +400,7 @@ export function EventTab({
               />
               <div className="border-t pt-4 space-y-4">
                 <div className="flex items-center justify-between gap-4">
-                  <h3 id={reminderLabelId} className="text-balance text-sm font-semibold">
+                  <h3 id={reminderLabelId} className="type-subheading text-balance">
                     {t("eventReminderTitle")}
                   </h3>
                   <Switch

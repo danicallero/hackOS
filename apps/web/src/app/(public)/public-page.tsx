@@ -271,7 +271,7 @@ function PublicPageContent({
                 className="hover:border-primary/30 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between rounded-surface border p-5 transition-colors"
               >
                 <div className="min-w-0">
-                  <h3 className="font-medium">{form.name}</h3>
+                  <h3 className="type-subheading">{form.name}</h3>
                   <p className="text-muted-foreground mt-1 text-sm">
                     <span>{grantedRoleNameLabel(form.granted_role_name, t)}</span>
                     {form.close_at
@@ -300,7 +300,7 @@ function PublicPageContent({
           <div className="mt-6 grid gap-3 md:grid-cols-2">
             {screenAnnouncements.map((item) => (
               <article key={item.id} className="rounded-surface border p-5">
-                <h3 className="font-medium">{item.title}</h3>
+                <h3 className="type-subheading">{item.title}</h3>
                 <p className="text-muted-foreground text-pretty mt-2 wrap-anywhere whitespace-pre-wrap text-sm">
                   {item.body}
                 </p>
@@ -322,7 +322,7 @@ function PublicPageContent({
                   {dateTime(item.startsAt, event.timezone, language)}
                 </time>
                 <div>
-                  <h3 className="font-medium">{item.title}</h3>
+                  <h3 className="type-subheading">{item.title}</h3>
                   {item.description && (
                     <p className="text-muted-foreground text-pretty mt-1 text-sm">
                       {item.description}

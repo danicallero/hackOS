@@ -119,7 +119,7 @@ export function PendingRemovalScreen({
       >
         <div className="space-y-2">
           <p className="text-primary text-sm font-semibold">hackOS</p>
-          <h1 id="pending-removal-title" className="text-balance text-2xl font-semibold">
+          <h1 id="pending-removal-title" className="type-page-title text-balance">
             {t(processing ? "accountRemovalProcessingTitle" : "accountRemovalPendingTitle")}
           </h1>
           <p className="text-muted-foreground text-pretty">
