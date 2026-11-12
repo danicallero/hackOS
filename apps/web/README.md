@@ -389,7 +389,9 @@ work in the **event's** timezone (`GET /api/me` `eventTimezone`, published by
 `DateTimeInput` and the schedule's time columns add a terse zone name.
 
 Key components: `PageHeader`, `SectionCard`, `StatCard`, `StatusBadge`,
-`EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `ContextualError`,
+`EmptyState`, `DataTable`, `TabBar`, `Modal`, `AlertModal`, `Alert` (inline
+notice; `destructive`/`warning`/`success` variants share one tint, never
+hand-roll tinted boxes), `ContextualError`,
 `FullPageError`,
 `AccessDenied`, `Spinner`, `SubmitButton`, `PasswordInput`,
 `QrCode`, `MultiSelect`, `TemplateFieldControl`, `FileUploadField`, `UserPicker`,

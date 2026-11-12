@@ -973,6 +973,7 @@ anything else.
 | A short, self-contained dialog that passed the test above | `Modal` (controlled or `trigger`) | Hand-rolled Radix Dialog; anything the table above sends to a route |
 | A single-record editor opened from a list or workspace | `SidePanelEditor` | Recreating a right sheet's focus, close, header and footer behavior in a route component |
 | Report a failed load/submit in place | `ContextualError` (+ retry) | A toast alone |
+| Inline notice about the surrounding content (error, warning, success) | `Alert` with `variant` `destructive`, `warning` or `success`, plus `AlertTitle`/`AlertDescription`; one tint (`/40` border, `/10` fill) for every tone. Keep the role the situation needs (`role="status"` for non-urgent updates) | Hand-rolled `border-warning/40 bg-warning/10` boxes with their own opacities |
 | Confirm a completed action | Toast (Sileo) | A modal interrupting the flow |
 | Communicate entity status | `StatusBadge` with a `tone` and optional dot (queue states: `QueueStatusBadge`); `StatusDot` is the shared quiet dot/label presentation. Neither needs a pill or outline. | Coloured prose, custom pills, badges for static metadata |
 | A dashboard metric | `StatCard` (delta/footer slots for meters/sparklines); compact definition lists for supporting scanner totals, with the primary count emphasized | An identical card for every supporting count |

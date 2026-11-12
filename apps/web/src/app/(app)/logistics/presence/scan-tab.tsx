@@ -19,6 +19,7 @@ import { PersonCardView } from "@/components/logistics/person-card";
 import { PersonSearchResults } from "@/components/logistics/person-search-results";
 import { QrScanButton } from "@/components/logistics/qr-scanner";
 import { errorMessage, Field, InlineError } from "@/components/logistics/ui";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -325,24 +326,18 @@ export function ScanTab({
       </SectionCard>
 
       {recentScan && (
-        <div
-          className="border-success/40 bg-success/10 text-success-foreground flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm"
-          role="status"
-          aria-live="polite"
-        >
-          <CheckCircleIcon className="text-success mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="font-medium">
-              {recentScan.kind === "in" ? t("entryRecorded") : t("exitRecorded")}
-            </p>
-            <p className="text-muted-foreground truncate">
-              {t("lastPresenceScan", {
-                person: recentScan.person,
-                time: timeFmt.format(new Date(recentScan.at)),
-              })}
-            </p>
-          </div>
-        </div>
+        <Alert variant="success" role="status" aria-live="polite">
+          <CheckCircleIcon className="text-success" aria-hidden="true" />
+          <AlertTitle>
+            {recentScan.kind === "in" ? t("entryRecorded") : t("exitRecorded")}
+          </AlertTitle>
+          <AlertDescription className="block truncate">
+            {t("lastPresenceScan", {
+              person: recentScan.person,
+              time: timeFmt.format(new Date(recentScan.at)),
+            })}
+          </AlertDescription>
+        </Alert>
       )}
 
       {card && (
@@ -350,13 +345,15 @@ export function ScanTab({
           <SectionCard title={personName(card)} bodyClassName="space-y-4">
             <PersonCardView card={card} />
             {presCard?.openSince && (
-              <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-                <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
-                {t("alreadyOpenSession", {
-                  time: timeFmt.format(new Date(presCard.openSince)),
-                  hours: hoursSince(presCard.openSince, t),
-                })}
-              </div>
+              <Alert variant="warning" role="none">
+                <WarningIcon aria-hidden="true" />
+                <AlertDescription>
+                  {t("alreadyOpenSession", {
+                    time: timeFmt.format(new Date(presCard.openSince)),
+                    hours: hoursSince(presCard.openSince, t),
+                  })}
+                </AlertDescription>
+              </Alert>
             )}
           </SectionCard>
 
