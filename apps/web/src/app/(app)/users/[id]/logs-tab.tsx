@@ -3,7 +3,6 @@
 // Audit trail for this person (H53).
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import { useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
 import { EmptyState } from "@/components/common/empty-state";
@@ -126,7 +125,6 @@ function AuditLogSection({ userId }: { userId: number }) {
         getRowId={(r) => String(r.id)}
         pageSize={15}
         empty={{
-          icon: LogIcon,
           title: t("noAuditEntriesYet"),
           description: t("auditEntriesAppearHere"),
         }}

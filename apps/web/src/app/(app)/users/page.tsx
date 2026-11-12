@@ -8,7 +8,6 @@ import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
 import { TableIcon } from "@phosphor-icons/react/dist/csr/Table";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { TicketIcon } from "@phosphor-icons/react/dist/csr/Ticket";
-import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -630,7 +629,6 @@ export default function UsersPage() {
           loading={loading}
           error={loadError ? { message: loadError, onRetry: () => reloadUsers() } : undefined}
           empty={{
-            icon: UsersIcon,
             title: t("noUsersYet"),
           }}
           filteredEmpty={{ active: hasFilters, onClear: clearUserFilters }}

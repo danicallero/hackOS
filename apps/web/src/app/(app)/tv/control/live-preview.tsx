@@ -1,6 +1,7 @@
 "use client";
 
 import { LiveScreen } from "@/app/(public)/tv/live-screen";
+import { EmptyState } from "@/components/common/empty-state";
 import type { PublicEvent, PublicSponsor } from "@/components/public/public-types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useServerResource } from "@/hooks/use-server-resource";
@@ -47,9 +48,7 @@ export function LiveModePreview({ config }: { config: LiveScreenConfig }) {
             />
           </div>
         ) : error ? (
-          <div className="text-muted-foreground flex h-full w-full items-center justify-center p-4 text-center text-sm">
-            {t("draftPreviewUnavailable")}
-          </div>
+          <EmptyState className="h-full" title={t("draftPreviewUnavailable")} />
         ) : (
           <Skeleton className="h-full w-full rounded-none" />
         )}

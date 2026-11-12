@@ -5,7 +5,6 @@
 // Access is scoped server-side — admins see everything, a sponsor rep only
 // ever sees their own enterprise's challenges (see api reviews.ts).
 
-import { ClipboardTextIcon } from "@phosphor-icons/react/dist/csr/ClipboardText";
 import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
@@ -236,7 +235,7 @@ export default function ReviewsOverviewPage() {
         }
         searchPlaceholder={t("searchReviewsPlaceholder")}
         pageSize={20}
-        empty={{ icon: ClipboardTextIcon, title: t("noReviewsYet") }}
+        empty={{ title: t("noReviewsYet") }}
       />
     </PageLayout>
   );

@@ -8,7 +8,6 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
-import { LogIcon } from "@phosphor-icons/react/dist/csr/Log";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
@@ -394,7 +393,6 @@ export default function AuditPage() {
         }
         renderMobileRow={(r) => <AuditMobileRow row={r} />}
         empty={{
-          icon: LogIcon,
           title: t("noAuditEntriesTitle"),
           description: hasFilters ? t("noEntriesMatchFilters") : t("sensitiveActionsAppearDesc"),
         }}

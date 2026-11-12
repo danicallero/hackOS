@@ -7,7 +7,6 @@
 // back. Visibility is scoped server-side exactly like the overview list.
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
-import { LockIcon } from "@phosphor-icons/react/dist/csr/Lock";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import Link from "next/link";
@@ -149,7 +148,6 @@ export default function ReviewDetailPage() {
       <PageLayout width="reading">
         <PageHeader context={reviewsBack} title={t("reviewDetailTitle")} />
         <EmptyState
-          icon={LockIcon}
           title={loadError ?? t("couldNotLoadReviews")}
           description={t("reviewDetailAccessDesc")}
         />

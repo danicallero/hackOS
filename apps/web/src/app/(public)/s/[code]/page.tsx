@@ -5,7 +5,6 @@
 // other browser lands here. Signed in, the tag is collected through the same
 // diary scan as the app; signed out, the page offers sign-in and returns here.
 
-import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -69,9 +68,6 @@ export default function CompanyTagPage() {
           </div>
         ) : status === "unauthenticated" ? (
           <>
-            <div className="bg-muted grid size-24 place-items-center rounded-full">
-              <StorefrontIcon aria-hidden="true" className="text-muted-foreground size-10" />
-            </div>
             <h1 className="text-2xl font-semibold">{t("companyTagSignInTitle")}</h1>
             <p className="text-muted-foreground max-w-xs">{t("companyTagSignInBody")}</p>
             <Button asChild size="lg" className="w-full max-w-xs">
@@ -83,9 +79,6 @@ export default function CompanyTagPage() {
           <Collected result={state.result} />
         ) : state.status === "error" ? (
           <>
-            <div className="bg-muted grid size-24 place-items-center rounded-full">
-              <StorefrontIcon aria-hidden="true" className="text-muted-foreground size-10" />
-            </div>
             <h1 className="text-2xl font-semibold">{t("companyTagNotCollected")}</h1>
             <p className="text-muted-foreground max-w-xs" role="alert">
               {state.key ? t(state.key) : state.text}

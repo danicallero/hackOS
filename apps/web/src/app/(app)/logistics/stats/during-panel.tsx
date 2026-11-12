@@ -5,7 +5,6 @@ import { BowlFoodIcon } from "@phosphor-icons/react/dist/csr/BowlFood";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/csr/DownloadSimple";
 import { PulseIcon } from "@phosphor-icons/react/dist/csr/Pulse";
 import { SealCheckIcon } from "@phosphor-icons/react/dist/csr/SealCheck";
-import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import { UsersIcon } from "@phosphor-icons/react/dist/csr/Users";
 import { useCallback, useEffect, useState } from "react";
 import { type Column, DataTable } from "@/components/common/data-table";
@@ -174,7 +173,7 @@ export function DuringPanel({
                 ? { message: errorMessage(stats.error, t, t("couldNotLoadStatistics")) }
                 : undefined
             }
-            empty={{ icon: BowlFoodIcon, title: t("noMealScansYet") }}
+            empty={{ title: t("noMealScansYet") }}
           />
         </SectionCard>
         <SectionCard
@@ -192,7 +191,7 @@ export function DuringPanel({
                 ? { message: errorMessage(stats.error, t, t("couldNotLoadStatistics")) }
                 : undefined
             }
-            empty={{ icon: PulseIcon, title: t("noActivityScansYet") }}
+            empty={{ title: t("noActivityScansYet") }}
             onRowClick={(row) => setSelectedActivity({ id: row.activityId, meal: false })}
           />
         </SectionCard>
@@ -304,7 +303,7 @@ function StaffRankingSection() {
         searchPlaceholder={t("searchStaffMember")}
         searchLabel={t("searchStaffMember")}
         pageSize={10}
-        empty={{ icon: TrophyIcon, title: t("noStaffScansYet") }}
+        empty={{ title: t("noStaffScansYet") }}
       />
     </SectionCard>
   );

@@ -6,7 +6,6 @@
 
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { EVENTS, REALTIME_SCOPES } from "@hackos/shared/events";
-import { DoorOpenIcon } from "@phosphor-icons/react/dist/csr/DoorOpen";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
@@ -423,11 +422,7 @@ export default function QueuePage() {
         </div>
       ) : !view ? (
         <div className="flex flex-1 items-center justify-center">
-          <EmptyState
-            icon={DoorOpenIcon}
-            title={t("noRoomSelected")}
-            description={t("noRoomSelectedDesc")}
-          />
+          <EmptyState title={t("noRoomSelected")} description={t("noRoomSelectedDesc")} />
         </div>
       ) : (
         // Two-column region fills the remaining height. Left column is a fixed
