@@ -657,7 +657,7 @@ build a universal page component with domain flags.
 | `PageLayout` | Content 1280 px, reading 896 px, or a genuinely wider operational workspace. One canvas; shell owns viewport padding. |
 | `PageHeader` | One page title with optional real identity, metadata/state and page actions. |
 | `SearchField` | Labelled search input, decorative search icon and accessible clear action that returns focus to the input. `/` focuses it (§9). |
-| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowOnMobile` gives the search its own row below `sm` when the actions are wide (Schedule). |
+| `ListToolbar` | Users-style broad search, shared `FilterMenu`, trailing view/export actions and optional feedback; active chips occupy a separate row. `searchOwnRowWhenNarrow` gives the search its own row when the toolbar itself is narrower than 42 rem and the actions are wide (Schedule, application responses). It measures the toolbar, not the viewport: the sidebar takes its share of a mid-width window. |
 | `PageToolbar` | Lower-level labelled control region for specialized operational controls that do not fit the list composition. |
 | `TabBar` | One segmented selector using Radix Tabs. `full` distributes width; `content` hugs labels. Same selection/focus behavior. |
 | `SectionCard` | Common heading/state/actions/body; `plain` for related open sections, bounded default for independent objects. |
@@ -1019,6 +1019,14 @@ Tables and lists:
   one offers "Clear filters".
 - No two columns in one table share a header: a repeated header makes sorting
   do two different things depending on which one is clicked (#299).
+- A table adapts to its own width, not the viewport: `DataTable` switches to
+  `renderMobileRow` rows when its container is narrower than 48 rem (the
+  sidebar makes a mid-width window narrower than its breakpoint suggests).
+  A fixed-layout table keeps a minimum width (14 rem per unsized column plus
+  the sized ones) and scrolls rather than letting a flexible column collapse
+  under its neighbour. Size a status column for its longest translated label.
+- Record metadata in a header is label + value (`Grants` muted, `Participant`
+  in foreground weight), not a lowercase sentence fragment.
 - Bulk actions appear only after selection and state what set they affect.
 - Wide operational tables preserve readable column widths and scroll
   horizontally instead of compressing every field into an overlapping grid.
