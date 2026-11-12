@@ -1,6 +1,6 @@
 "use client";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { MultiSelect } from "@/components/common/multi-select";
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +10,25 @@ import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { type MessageKey, useLocale } from "@/lib/i18n";
+import { expireServerStatePrefix } from "@/lib/server-state";
 import type { HelpTopic } from "./model";
+
+const expireHelpdesk = () => expireServerStatePrefix(["helpdesk"]);
 
 export function useHelpdesk<T>(key: readonly (string | number)[], path: string, enabled = true) {
   const resource = useLiveQuery(
     (signal) => api.get<T>(path, { signal }),
     domainScope(SSE_TOPICS.HELPDESK),
     [EVENTS.DOMAIN_CHANGED, EVENTS.HELPDESK_REQUEST_CHANGED],
-    { resourceKey: ["helpdesk", ...key], enabled },
+    {
+      resourceKey: ["helpdesk", ...key],
+      enabled,
+      // A change also reaches help desk views that are not mounted now (the
+      // list behind a request's page): their cached read must not look fresh
+      // when the person goes back to them.
+      onEvent: expireHelpdesk,
+      onResync: expireHelpdesk,
+    },
   );
   const timeSensitive = ["helpers", "helper", "coverage"].includes(String(key[0]));
   useEffect(() => {
@@ -28,7 +39,13 @@ export function useHelpdesk<T>(key: readonly (string | number)[], path: string, 
     }, 60_000);
     return () => window.clearInterval(timer);
   }, [enabled, timeSensitive, resource.refetch]);
-  return resource;
+  // The caller's own refetch follows its mutation; do not wait for the stream to say so.
+  const liveRefetch = resource.refetch;
+  const refetch = useCallback(() => {
+    expireHelpdesk();
+    liveRefetch();
+  }, [liveRefetch]);
+  return { ...resource, refetch };
 }
 export function HelpdeskError({
   error,

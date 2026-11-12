@@ -54,6 +54,11 @@ rest, from `/api/helpdesk/challenges`) and a "Prefer a sponsor" switch.
 Request rows and detail show the challenge and the sponsor preference. Request
 help is the primary header action of every help desk page
 (`requests/request-help-action.tsx`), for `HELPDESK_REQUEST`.
+`useHelpdesk` expires every cached help desk read (`expireServerStatePrefix`)
+on each help desk event and on the caller's own refetch, so a list left behind
+while its request page changes it re-reads when the person goes back instead of
+showing the 30-second cached copy.
+
 A request always belongs to the person who sends it; there is no team
 selection. API business errors use the existing localized error-reason resolver.
 A successful inbox claim opens Assigned to me so meeting instructions and lifecycle

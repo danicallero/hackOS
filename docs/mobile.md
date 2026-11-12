@@ -1712,11 +1712,17 @@ any eligible helper with challenges in the event, a "Challenge alerts" row
 multi-select sheet used by the request creator (`challengeIds`; none selected
 = every request; the checkmark saves the draft, Close discards it); the
 knowledge topics; then
-"When you plan to be here": one row per hacking day (`planDays` from
-`suggestedInterval`: hacking window, else event window) whose value lists that
-day's ranges. A day row opens a sheet with that day's ranges edited by clock
-only (`DateTimeField timeOnly`), Add and remove, and Save; nobody can be
-available before the hacking time (checked on the client and by the API). Saves
+"When you plan to be here" (`availability-timeline.tsx`), the web timeline on
+a phone: one 24-hour line per hacking day (`planDays` from `suggestedInterval`:
+hacking window, else event window, always including its last day), the stated
+stretches marked on it and listed beside the day, the time before hacking
+dimmed, the hours under the last line. A stretch crossing midnight continues on
+the next day's line (`dayPieces`). Touching a free spot starts a two-hour
+stretch at that half hour (`slotInterval`), the day's plus adds one at the usual
+hour, and touching a stretch opens it; the sheet sets one stretch by clock
+(`DateTimeField timeOnly`; an end at or before the start means the next day,
+named beside it), with Remove for a saved one. There is no dragging. Nobody can
+be available before the hacking time (checked on the client and by the API). Saves
 are optimistic (controls never disable or fade while one is in flight, so toggles
 do not flicker); the server's last answer replaces the guess.
 
