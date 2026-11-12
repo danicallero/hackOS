@@ -190,8 +190,7 @@ function PresenceTimelineRow({
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           {window && (
-            <StatusBadge tone={statusTone} dot={false}>
-              <StatusIcon className="size-3" aria-hidden="true" />
+            <StatusBadge tone={statusTone} icon={<StatusIcon aria-hidden="true" />}>
               {window.conflict
                 ? t("presenceWindow_conflict")
                 : t(

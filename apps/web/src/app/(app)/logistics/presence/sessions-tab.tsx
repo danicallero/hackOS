@@ -57,7 +57,7 @@ function getOpenSessionColumns(
       id: "stale",
       header: t("statusColumn"),
       cell: (row) => (
-        <StatusBadge tone={row.stale ? "warning" : "neutral"} dot={false}>
+        <StatusBadge tone={row.stale ? "warning" : "neutral"}>
           {row.stale ? t("staleCheck") : t("fresh")}
         </StatusBadge>
       ),

@@ -278,7 +278,6 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
                                 ? "danger"
                                 : "neutral"
                           }
-                          dot={false}
                         >
                           {t(
                             role.general_state === "allow"
@@ -327,10 +326,7 @@ export function StatsVisibility({ scopeKey }: { scopeKey: string }) {
                                 </span>
                                 <div className="flex flex-wrap items-center justify-end gap-2">
                                   {state === "inherit" && (
-                                    <StatusBadge
-                                      tone={inheritedAllow ? "success" : "danger"}
-                                      dot={false}
-                                    >
+                                    <StatusBadge tone={inheritedAllow ? "success" : "danger"}>
                                       {t(
                                         inheritedAllow
                                           ? "statisticsInheritedAllow"

@@ -54,8 +54,6 @@ export interface NavItem {
   hideIfNoProject?: boolean;
   /** Hidden until the caller actually has a queue entry of their own (issue #424). */
   hideIfNoQueueItems?: boolean;
-  /** Not built yet — shown disabled with a "Soon" badge. */
-  soon?: boolean;
   /** Dynamic Statistics ACL may expose the workspace without a global capability. */
   statisticsVisible?: boolean;
   /**
@@ -159,8 +157,7 @@ interface NavGroup {
 
 /**
  * Every destination the caller can open, grouped like the sidebar: the
- * personal area, then each workspace with a visible item. Unbuilt (`soon`)
- * items are left out because they cannot be opened (quick search, #1182).
+ * personal area, then each workspace with a visible item (quick search, #1182).
  */
 export function visibleNavGroups(isVisible: (item: NavItem) => boolean): NavGroup[] {
   const groups: NavGroup[] = [
@@ -171,7 +168,7 @@ export function visibleNavGroups(isVisible: (item: NavItem) => boolean): NavGrou
     .map((group) => ({
       id: group.id,
       label: group.label,
-      items: group.items.filter((item) => !item.soon && isVisible(item)),
+      items: group.items.filter(isVisible),
     }))
     .filter((group) => group.items.length > 0);
 }

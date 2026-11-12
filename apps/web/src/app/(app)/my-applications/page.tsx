@@ -147,7 +147,7 @@ export default function MyApplicationsPage() {
                   </div>
                 </div>
                 {!r.can_delete_draft && (
-                  <StatusBadge className="shrink-0" tone={statusTone(r.status)} dot={false}>
+                  <StatusBadge className="shrink-0" tone={statusTone(r.status)}>
                     {statusLabel(r.status, t)}
                   </StatusBadge>
                 )}

@@ -112,6 +112,27 @@ interface DataTableProps<T> {
   ) => React.ReactNode;
 }
 
+/** Room an unsized column keeps in a fixed layout, in rem. */
+const FLEXIBLE_COLUMN_MIN_REM = 14;
+
+/**
+ * A fixed layout hands unsized columns only the leftover width, which reaches
+ * zero in a narrow container and lets their content run under the next
+ * column. Flooring the table makes it scroll instead.
+ */
+function fixedLayoutMinWidth(
+  columns: readonly { width?: string }[],
+  selectable: boolean,
+): string | undefined {
+  if (!columns.some((col) => col.width)) return undefined;
+  let rem = selectable ? 2.5 : 0;
+  for (const col of columns) {
+    const spacing = col.width?.match(/(?:^|\s)w-(\d+(?:\.\d+)?)(?:\s|$)/);
+    rem += spacing ? Number(spacing[1]) / 4 : FLEXIBLE_COLUMN_MIN_REM;
+  }
+  return `${rem}rem`;
+}
+
 const alignClass = { left: "text-left", right: "text-right", center: "text-center" } as const;
 
 function DataTableCell({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -413,7 +434,7 @@ export function DataTable<T>({
           {toolbar && <ActionGroup className="ml-auto">{toolbar}</ActionGroup>}
         </PageToolbar>
       )}
-      <Card className="gap-0 overflow-hidden py-0">
+      <Card className="@container gap-0 overflow-hidden py-0">
         {mutationError && (
           <ContextualError
             message={mutationError.message}
@@ -421,12 +442,17 @@ export function DataTable<T>({
             className="m-4"
           />
         )}
-        <div className={cn("overflow-x-auto", renderMobileRow && "hidden md:block")}>
+        <div className={cn("overflow-x-auto", renderMobileRow && "hidden @3xl:block")}>
           {isEmpty ? (
             <div className="min-w-0">{renderEmptyState()}</div>
           ) : (
             <Table
               className={cn(columns.some((col) => col.width) && "table-fixed", tableClassName)}
+              style={
+                tableClassName?.includes("min-w-")
+                  ? undefined
+                  : { minWidth: fixedLayoutMinWidth(columns, Boolean(selectable)) }
+              }
             >
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -599,7 +625,7 @@ export function DataTable<T>({
           )}
         </div>
         {renderMobileRow && (
-          <div className="md:hidden">
+          <div className="@3xl:hidden">
             {error ? (
               <div className="p-4">
                 <ContextualError message={error.message} onRetry={error.onRetry} />

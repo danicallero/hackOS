@@ -6,6 +6,7 @@ import { SignOutIcon } from "@phosphor-icons/react/dist/csr/SignOut";
 import { useCallback, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { IconButton } from "@/components/common/icon-button";
+import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
 import { useLocale } from "@/lib/i18n";
@@ -106,10 +107,8 @@ export function ActiveDevices() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {deviceName(session.userAgent) || t("unknownDevice")}
-                  {isCurrent && (
-                    <span className="text-success ml-2 text-xs font-normal">{t("thisDevice")}</span>
-                  )}
                 </p>
+                {isCurrent && <StatusBadge tone="success">{t("thisDevice")}</StatusBadge>}
                 {!isCurrent && (
                   <p className="text-muted-foreground text-sm">
                     {t("activeDeviceSince", { when: when.format(new Date(session.updatedAt)) })}

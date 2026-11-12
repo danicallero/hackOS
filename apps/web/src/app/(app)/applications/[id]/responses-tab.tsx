@@ -271,7 +271,7 @@ export function ResponsesTab({
   return (
     <div className="space-y-4">
       <ListToolbar
-        searchOwnRowOnMobile
+        searchOwnRowWhenNarrow
         search={{
           id: "response-search",
           label: t("searchResponses"),
