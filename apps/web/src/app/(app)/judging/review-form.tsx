@@ -15,6 +15,7 @@ import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react"
 import { QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Spinner } from "@/components/common/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -468,46 +469,41 @@ export function ReviewForm({
         ) : (
           <div className="space-y-5">
             {saveError && (
-              <div
-                role="alert"
-                className="border-destructive/40 bg-destructive/5 text-destructive flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"
-              >
-                <span>{saveError}</span>
-                {dirty && canJudge && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!online || saving}
-                    onClick={() => void save(false)}
-                  >
-                    {t("retry")}
-                  </Button>
-                )}
-              </div>
+              <Alert variant="destructive">
+                <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                  <span>{saveError}</span>
+                  {dirty && canJudge && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={!online || saving}
+                      onClick={() => void save(false)}
+                    >
+                      {t("retry")}
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
             )}
             {syncState === "offline" && (
-              <div
-                role="status"
-                className="border-warning/40 bg-warning/10 text-warning-foreground rounded-md border p-3 text-sm"
-              >
-                {t("offlineEvaluationPending")}
-              </div>
+              <Alert variant="warning" role="status">
+                <AlertDescription>{t("offlineEvaluationPending")}</AlertDescription>
+              </Alert>
             )}
             {syncState === "conflict" && (
-              <div
-                role="alert"
-                className="border-destructive/40 bg-destructive/5 rounded-md border p-3 text-sm"
-              >
-                <p>{t("evaluationConflictDescription")}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => void loadRemote(false)}>
-                    {t("loadLatestEvaluation")}
-                  </Button>
-                  <Button size="sm" onClick={() => void save(false)}>
-                    {t("keepMyEvaluation")}
-                  </Button>
-                </div>
-              </div>
+              <Alert variant="destructive">
+                <AlertDescription className="text-foreground">
+                  <p>{t("evaluationConflictDescription")}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void loadRemote(false)}>
+                      {t("loadLatestEvaluation")}
+                    </Button>
+                    <Button size="sm" onClick={() => void save(false)}>
+                      {t("keepMyEvaluation")}
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
             )}
             {externalUpdate && !conflict && (
               <p role="status" className="text-muted-foreground text-sm">
@@ -515,12 +511,14 @@ export function ReviewForm({
               </p>
             )}
             {requiredUnansweredCount > 0 && (
-              <div className="border-warning/40 bg-warning/10 text-warning-foreground flex items-center gap-2 rounded-md border p-3 text-sm">
-                <WarningIcon aria-hidden="true" className="size-4 shrink-0" />
-                {requiredUnansweredCount === 1
-                  ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })
-                  : t("requiredFieldUnansweredOther", { count: requiredUnansweredCount })}
-              </div>
+              <Alert variant="warning" role="none">
+                <WarningIcon aria-hidden="true" />
+                <AlertDescription>
+                  {requiredUnansweredCount === 1
+                    ? t("requiredFieldUnansweredOne", { count: requiredUnansweredCount })
+                    : t("requiredFieldUnansweredOther", { count: requiredUnansweredCount })}
+                </AlertDescription>
+              </Alert>
             )}
             {sessions.length > 0 && (
               <div className="rounded-md border px-3 py-2">
