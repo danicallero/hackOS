@@ -34,7 +34,13 @@ describe("formatEventDate", () => {
     );
     expect(formatEventDate(instant, "en", "weekdayClock", "Asia/Tokyo")).toMatch(/^Fri,? 17:30$/);
     expect(formatEventDate(instant, "en", "dayMonthHour", MADRID)).toMatch(/10 Jul.*10/);
-    expect(formatEventDate(instant, "en", "dateTimeLong", "UTC")).toMatch(/10 July 2026.*08:30/);
+  });
+
+  it("renders every stored timestamp as one explicit date-time, per language", () => {
+    expect(formatEventDate(instant, "en", "dateTime", "UTC")).toBe("10 Jul 2026, 08:30");
+    expect(formatEventDate(instant, "es", "dateTime", "UTC")).toMatch(/^10 jul\.? 2026,? 08:30$/i);
+    expect(formatEventDate(instant, "en", "dateTime", "UTC")).not.toMatch(/\bat\b/);
+    expect(formatEventDate(instant, "en", "date", "UTC")).toBe("10 Jul 2026");
   });
 
   it("returns an empty string for missing or invalid values", () => {

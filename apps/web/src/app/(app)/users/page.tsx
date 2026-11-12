@@ -35,12 +35,12 @@ import { usePersistedState } from "@/hooks/use-persisted-state";
 import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
 import { applicationStatusTone } from "@/lib/application-workflow";
-import { shortDateTimeFmt } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import { usersDirectoryKey } from "@/lib/list-resources";
 import { logisticsApi } from "@/lib/logistics";
 import { useCan } from "@/lib/session";
-import type { UserListItem } from "@/lib/types";
+import type { Language, UserListItem } from "@/lib/types";
 import { loadUserDirectory } from "@/lib/user-directory";
 import { UsersActions } from "./users-actions";
 
@@ -53,8 +53,6 @@ function fullName(u: UserListItem): string {
 function avatarName(u: UserListItem): string {
   return [u.name, u.surname].filter(Boolean).join(" ").trim() || u.email;
 }
-
-const dateFmt = shortDateTimeFmt;
 
 /** H8: roles are arbitrary names now, not a fixed category set — show the name as-is. */
 function roleLabel(role: UserListItem["visibleRoleName"], t: Translate): string {
@@ -169,6 +167,7 @@ function UserPhotoSlot({
 function buildColumns(
   presentIds: Set<number> | null,
   t: Translate,
+  language: Language,
   reservePhoto: boolean,
 ): Column<UserListItem>[] {
   return [
@@ -260,7 +259,7 @@ function buildColumns(
       sortValue: (u) => Date.parse(u.createdAt),
       cell: (u) => (
         <span className="text-muted-foreground text-sm">
-          {dateFmt.format(new Date(u.createdAt))}
+          {formatEventDate(u.createdAt, language, "dateTime")}
         </span>
       ),
     },
@@ -270,12 +269,14 @@ function buildColumns(
 function UserMobileRow({
   user,
   t,
+  language,
   columns,
   presentIds,
   reservePhoto,
 }: {
   user: UserListItem;
   t: Translate;
+  language: Language;
   columns: Column<UserListItem>[];
   presentIds: Set<number> | null;
   reservePhoto: boolean;
@@ -290,7 +291,7 @@ function UserMobileRow({
     presence: presentIds === null ? "—" : t(presentIds.has(user.id) ? "present" : "away"),
     shirt: user.shirtSize ?? "—",
     language: user.language.toUpperCase(),
-    created: dateFmt.format(new Date(user.createdAt)),
+    created: formatEventDate(user.createdAt, language, "dateTime"),
   };
   return (
     <Link
@@ -339,7 +340,7 @@ function UserMobileRow({
 }
 
 export default function UsersPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const isMobile = useIsMobile();
   const COLUMN_LABEL = useMemo(() => columnLabel(t), [t]);
   const [q, setQ] = usePersistedState("users-list:q", "");
@@ -490,12 +491,12 @@ export default function UsersPage() {
   const reservePhoto = useMemo(() => users.some((user) => user.image), [users]);
   const columns = useMemo(
     () =>
-      buildColumns(presentIds, t, reservePhoto).filter(
+      buildColumns(presentIds, t, language, reservePhoto).filter(
         (column) =>
           visibleColumns.has(column.id as UserColumnId) &&
           (column.id !== "presence" || showPresence),
       ),
-    [visibleColumns, presentIds, showPresence, t, reservePhoto],
+    [visibleColumns, presentIds, showPresence, t, language, reservePhoto],
   );
 
   function toggleColumn(id: UserColumnId, checked: boolean) {
@@ -617,6 +618,7 @@ export default function UsersPage() {
             <UserMobileRow
               user={u}
               t={t}
+              language={language}
               columns={columns}
               presentIds={presentIds}
               reservePhoto={reservePhoto}

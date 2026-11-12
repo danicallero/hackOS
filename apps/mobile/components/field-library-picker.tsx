@@ -6,7 +6,7 @@ import { RequestFeedback } from "@/components/RequestFeedback";
 import { apiFetch } from "@/lib/api";
 import { useLocale } from "@/lib/i18n";
 import { colors } from "@/theme/colors";
-import { type } from "@/theme/tokens";
+import { radius, type } from "@/theme/tokens";
 import { RowButton } from "./project-ui";
 import { SymbolView } from "./symbol";
 
@@ -148,7 +148,7 @@ export function FieldLibraryPicker({
               autoCapitalize="none"
               style={{
                 backgroundColor: colors.surface,
-                borderRadius: 14,
+                borderRadius: radius.container,
                 color: colors.label,
                 fontSize: type.body.fontSize,
                 minHeight: 44,
@@ -167,7 +167,7 @@ export function FieldLibraryPicker({
                 style={{
                   backgroundColor: colors.surface,
                   borderCurve: "continuous",
-                  borderRadius: 14,
+                  borderRadius: radius.container,
                   overflow: "hidden",
                 }}
               >

@@ -373,7 +373,7 @@ export function ActivityScannerCard({ category }: { category: "meal" | "activity
 
       <SectionCard
         title={isMeal ? t("mealLineTitle") : t("activityDoorTitle")}
-        description={isMeal ? t("scanEachBadgeDesc") : t("scanBadgesEntranceDesc")}
+        description={isMeal ? t("scanEachBadgeDesc") : undefined}
         icon={ScanIcon}
         bodyClassName="space-y-5"
       >

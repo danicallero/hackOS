@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/hooks/use-now";
 import { ApiError, api } from "@/lib/api";
@@ -131,12 +132,11 @@ export function PendingRemovalScreen({
           </p>
         </div>
 
-        <p
-          role="alert"
-          className="border-destructive/40 bg-destructive/5 rounded-md border p-4 text-sm"
-        >
-          {t(processing ? "accountRemovalProcessingBody" : "accountRemovalPendingBody")}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription className="text-foreground">
+            {t(processing ? "accountRemovalProcessingBody" : "accountRemovalPendingBody")}
+          </AlertDescription>
+        </Alert>
 
         {!processing && (
           <div aria-live="polite" role="status" className="rounded-md border bg-muted/30 p-4">

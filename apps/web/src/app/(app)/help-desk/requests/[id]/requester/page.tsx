@@ -1,9 +1,10 @@
 "use client";
 import { useParams, useSearchParams } from "next/navigation";
+import { BackLink } from "@/components/common/back-link";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageLayout } from "@/components/common/page-layout";
 import { useLocale } from "@/lib/i18n";
-import { PersonProfile, ProfileBackLink } from "../../../../people/[userId]/person-detail";
+import { PersonProfile } from "../../../../people/[userId]/person-detail";
 import type { HelpRequest } from "../../../model";
 import { requestListSource } from "../../../navigation";
 import { HelpdeskError, HelpdeskLoading, useHelpdesk } from "../../../shared";
@@ -19,7 +20,7 @@ export default function RequesterPage() {
   );
   const profile = resource.data?.requesterProfile;
   const back = (
-    <ProfileBackLink
+    <BackLink
       href={`/help-desk/requests/${id}${source ? `?from=${encodeURIComponent(source)}` : ""}`}
       label={t("helpDeskViewRequest")}
     />

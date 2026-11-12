@@ -24,6 +24,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -200,6 +201,7 @@ export default function ApplicationDetailPage() {
   return (
     <PageLayout>
       <PageHeader
+        context={<BackLink href="/applications" label={t("applications")} />}
         title={form ? form.name : t("applicationNumber", { id })}
         state={
           form && w ? (
@@ -340,29 +342,35 @@ function StatsStrip({ stats }: { stats: ApplicationStats }) {
     (c.rejected_internal ?? 0) + (c.rejected ?? 0) + (c.declined ?? 0) + (c.expired ?? 0);
   const declinedUnsent = c.rejected_internal ?? 0;
   const declinedSent = c.rejected ?? 0;
+  // Sublines list only the non-zero parts; all-zero shows none.
+  const joinHint = (parts: Array<string | null>) => parts.filter(Boolean).join(" · ") || undefined;
+  const draftCount = stats.draft_count ?? 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         label={t("responsesLabel")}
         value={String(nonDraft)}
         icon={UsersIcon}
-        hint={t("nonDraftHint", { n: stats.draft_count ?? 0 })}
+        hint={draftCount > 0 ? t("nonDraftHint", { n: draftCount }) : undefined}
       />
       <StatCard
         label={t("acceptedLabel")}
         value={String(accepted)}
-        hint={t("unsentSentHint", { unsent: acceptedUnsent, sent: acceptedSent })}
+        hint={joinHint([
+          acceptedUnsent > 0 ? t("statUnsentCount", { n: acceptedUnsent }) : null,
+          acceptedSent > 0 ? t("statSentCount", { n: acceptedSent }) : null,
+        ])}
       />
       <StatCard label={t("confirmed")} value={String(c.confirmed ?? 0)} />
       <StatCard
         label={t("declined")}
         value={String(declined)}
-        hint={t("declinedHint", {
-          unsent: declinedUnsent,
-          sent: declinedSent,
-          declined: c.declined ?? 0,
-          expired: c.expired ?? 0,
-        })}
+        hint={joinHint([
+          declinedUnsent > 0 ? t("statUnsentCount", { n: declinedUnsent }) : null,
+          declinedSent > 0 ? t("statSentCount", { n: declinedSent }) : null,
+          (c.declined ?? 0) > 0 ? t("statDeclinedCount", { n: c.declined ?? 0 }) : null,
+          (c.expired ?? 0) > 0 ? t("statExpiredCount", { n: c.expired ?? 0 }) : null,
+        ])}
       />
     </div>
   );

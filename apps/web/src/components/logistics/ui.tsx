@@ -1,4 +1,5 @@
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Label } from "@/components/ui/label";
 import { apiErrorText } from "@/lib/api-error-text";
 import type { Translate } from "@/lib/i18n";
@@ -39,14 +40,9 @@ export function Field({
 /** Inline error banner shown under a scanner/form action. */
 export function InlineError({ message }: { message: string }) {
   return (
-    <div
-      role="alert"
-      aria-live="assertive"
-      aria-atomic="true"
-      className="border-destructive/40 bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg border px-3 py-2 text-sm"
-    >
-      <XIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-      <span>{message}</span>
-    </div>
+    <Alert variant="destructive" aria-live="assertive" aria-atomic="true">
+      <XIcon aria-hidden="true" />
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
   );
 }

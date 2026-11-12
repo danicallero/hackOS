@@ -21,7 +21,7 @@ import {
 import { useServerResource } from "@/hooks/use-server-resource";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { shortDateTimeFmt } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type MessageKey, useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { toast } from "@/lib/toast";
@@ -57,7 +57,7 @@ const personName = (person: Person) =>
   [person.name, person.surname].filter(Boolean).join(" ") || `#${person.id}`;
 
 export default function ReportsPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const { can } = useSessionContext();
   const allowed = can(CAPABILITIES.USERS_WRITE) || can(CAPABILITIES.PROJECTS_EDIT);
   const [status, setStatus] = useState<Status>("open");
@@ -127,7 +127,7 @@ export default function ReportsPage() {
       id: "when",
       header: t("colWhen"),
       cell: (r) => (
-        <span className="text-sm">{shortDateTimeFmt.format(new Date(r.createdAt))}</span>
+        <span className="text-sm">{formatEventDate(r.createdAt, language, "dateTime")}</span>
       ),
     },
     {

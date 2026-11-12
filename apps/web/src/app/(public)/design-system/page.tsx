@@ -61,7 +61,6 @@ export default function DesignSystemPage() {
       >
         <h1 className="type-page-title">{t("designSystemTitle")}</h1>
         <SectionCard title={t("designSystemLiveActions")} variant="plain">
-          <p className="type-meta">{t("designSystemLiveActionsHelp")}</p>
           <ActionGroup data-live-actions>
             {actions.map(([variant, label]) => (
               <PreviewDialog key={variant} variant={variant} label={label} />
@@ -70,7 +69,6 @@ export default function DesignSystemPage() {
         </SectionCard>
         <SurfacesPreview />
         <SectionCard title={t("designSystemActions")} variant="plain">
-          <p className="type-meta">{t("designSystemButtonStatesHelp")}</p>
           <div className="space-y-6">
             {actions.map(([variant, label]) => (
               <div key={variant} className="space-y-3" data-button-specimen={variant}>

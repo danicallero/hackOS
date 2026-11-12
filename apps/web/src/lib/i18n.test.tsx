@@ -19,9 +19,9 @@ vi.mock("next/navigation", () => ({ usePathname: vi.fn(() => "/") }));
 const bootstrapScript = readFileSync(resolve(process.cwd(), "public/locale-bootstrap.js"), "utf8");
 const globalStyles = readFileSync(resolve(process.cwd(), "src/app/globals.css"), "utf8");
 const welcome: Record<Language, string> = {
-  es: "Te damos la bienvenida",
-  gl: "Benvida de novo",
-  en: "Welcome back",
+  es: "Iniciar sesión",
+  gl: "Iniciar sesión",
+  en: "Sign in",
 };
 
 interface BootstrapOptions {
@@ -68,7 +68,7 @@ function runBootstrap({ cookie = "", stored, languages = [] }: BootstrapOptions 
 
 function LocalizedCopy() {
   const { t } = useLocale();
-  return <p>{t("welcomeBack")}</p>;
+  return <p>{t("signIn")}</p>;
 }
 
 describe("locale bootstrap", () => {

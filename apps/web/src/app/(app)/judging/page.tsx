@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard";
 import { ApiError, api } from "@/lib/api";
@@ -397,20 +398,19 @@ export default function QueuePage() {
       />
 
       {actionError && (
-        <div
-          role="alert"
-          className="border-destructive/40 bg-destructive/5 text-destructive flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm"
-        >
-          <span>{actionError}</span>
-          <button
-            type="button"
-            aria-label={t("dismiss")}
-            onClick={() => setActionError(null)}
-            className="button-interaction shrink-0 opacity-70 transition-opacity hover:opacity-100"
-          >
-            <XIcon aria-hidden="true" className="size-4" />
-          </button>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-start justify-between gap-3">
+            <span>{actionError}</span>
+            <button
+              type="button"
+              aria-label={t("dismiss")}
+              onClick={() => setActionError(null)}
+              className="button-interaction shrink-0 opacity-70 transition-opacity hover:opacity-100"
+            >
+              <XIcon aria-hidden="true" className="size-4" />
+            </button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {roomsLoading || roomView.loading ? (

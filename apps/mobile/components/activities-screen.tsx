@@ -48,7 +48,7 @@ import { screenGutter } from "@/theme/layout";
 import { PANE_TITLE_TOP, useActivityPaneLayout } from "@/theme/layout-activity-pane";
 import { useParticipantLayout } from "@/theme/layout-participant";
 import { SCREEN_TITLE, TWO_PANE_BAND } from "@/theme/screen-title";
-import { type } from "@/theme/tokens";
+import { radius, type } from "@/theme/tokens";
 
 /** How often the "Now"/"Next" marker re-evaluates which row it belongs to. */
 const MARKER_TICK_MS = 60_000;
@@ -573,7 +573,7 @@ const ActivityRow = memo(function ActivityRow({
         backgroundColor: colors.elevatedSurface,
         borderColor: marker || selected ? colors.accent : colors.transparent,
         borderCurve: "continuous",
-        borderRadius: 999,
+        borderRadius: radius.full,
         borderWidth: selected ? 2 : marker ? 1.5 : 0,
         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
         flexDirection: "row",
@@ -588,7 +588,7 @@ const ActivityRow = memo(function ActivityRow({
         style={{
           alignItems: "center",
           backgroundColor: colors.accentSurface,
-          borderRadius: 999,
+          borderRadius: radius.full,
           height: 42,
           justifyContent: "center",
           width: 42,

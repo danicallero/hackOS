@@ -2,8 +2,8 @@
 
 import { StatusBadge } from "@/components/common/status-badge";
 import { isScheduled, type Visibility, visibilityTone } from "@/lib/challenges";
-import { formatScheduledDateTime } from "@/lib/datetime";
-import { LOCALE_CODES, useLocale } from "@/lib/i18n";
+import { formatEventDate } from "@/lib/datetime";
+import { useLocale } from "@/lib/i18n";
 
 /**
  * Visible / hidden badge. With `availableFrom`, a hidden item whose reveal is
@@ -41,7 +41,7 @@ export function RevealCell({
       <div className="flex items-center gap-2">
         <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
         <span className="text-muted-foreground text-sm">
-          {formatScheduledDateTime(availableFrom, LOCALE_CODES[language])}
+          {formatEventDate(availableFrom, language, "dateTime")}
         </span>
       </div>
     );
@@ -49,9 +49,7 @@ export function RevealCell({
   if (visibility === "visible") {
     return (
       <span className="text-muted-foreground text-sm">
-        {availableFrom
-          ? formatScheduledDateTime(availableFrom, LOCALE_CODES[language])
-          : t("immediate")}
+        {availableFrom ? formatEventDate(availableFrom, language, "dateTime") : t("immediate")}
       </span>
     );
   }

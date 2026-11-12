@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { formatScheduledDateTime } from "@/lib/datetime";
+import { formatEventDate } from "@/lib/datetime";
 import { type Translate, useLocale } from "@/lib/i18n";
 import type { Announcement, AnnouncementInput } from "@/lib/notifications";
 import { notificationsApi } from "@/lib/notifications";
@@ -78,7 +78,7 @@ function deliveryLabel(state: DeliveryState, t: Translate): string {
 }
 
 export default function AnnouncementsPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const canManage = useCan(CAPABILITIES.ANNOUNCEMENTS_MANAGE);
   const canSendEmail = useCan(CAPABILITIES.NOTIFICATIONS_SEND);
   const [busy, setBusy] = useState(false);
@@ -164,9 +164,9 @@ export default function AnnouncementsPage() {
       sortValue: (a) => a.publish_at ?? "",
       cell: (a) => (
         <span className="text-muted-foreground text-xs">
-          {a.publish_at ? formatScheduledDateTime(a.publish_at) : t("immediate")}
+          {a.publish_at ? formatEventDate(a.publish_at, language, "dateTime") : t("immediate")}
           {" → "}
-          {a.expires_at ? formatScheduledDateTime(a.expires_at) : t("noEnd")}
+          {a.expires_at ? formatEventDate(a.expires_at, language, "dateTime") : t("noEnd")}
         </span>
       ),
     },
@@ -194,7 +194,7 @@ export default function AnnouncementsPage() {
       sortValue: (a) => a.created_at,
       cell: (a) => (
         <span className="text-muted-foreground text-xs">
-          {formatScheduledDateTime(a.created_at)}
+          {formatEventDate(a.created_at, language, "dateTime")}
         </span>
       ),
     },

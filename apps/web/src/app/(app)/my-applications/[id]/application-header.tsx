@@ -3,6 +3,7 @@
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useState } from "react";
 import { AlertModal } from "@/components/common/alert-modal";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { PageHeader } from "@/components/common/page-header";
 import { StatusBadge } from "@/components/common/status-badge";
@@ -43,6 +44,7 @@ export function ApplicationHeader({
   return (
     <>
       <PageHeader
+        context={<BackLink href="/my-applications" label={t("myApplications")} />}
         title={title}
         className="flex-row items-start justify-between gap-2"
         description={description}
