@@ -76,8 +76,6 @@ export const createRequestBody = z
     location: line(120),
     topicIds: z.array(id).max(5),
     other: z.boolean(),
-    /** H64: an active project membership makes this a team request. */
-    projectId: id.nullable().optional(),
     challengeId: id.nullable().optional(),
     preferSponsor: z.boolean().default(false),
   })

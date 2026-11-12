@@ -40,9 +40,9 @@ const STATUS_COLOR = {
   cancelled: "text-muted-foreground",
 };
 
-/** Who the request is for: the team's project, else the requester. */
+/** Who the request is for: always its one requester. */
 function requestFor(request: HelpRequest, t: Translate) {
-  return request.project?.name ?? request.requester?.displayName ?? t("helpDeskRemovedAccount");
+  return request.requester?.displayName ?? t("helpDeskRemovedAccount");
 }
 
 function topicNames(request: HelpRequest, t: Translate) {
@@ -135,7 +135,7 @@ export function RequestTable({
   returnHref?: string;
   reload: () => void;
   onClaimed?: () => void;
-  /** `helper`: the inbox; `requester`: my and my team's requests. */
+  /** `helper`: the inbox; `requester`: my requests. */
   audience: "helper" | "requester";
 }) {
   const { t, language } = useLocale();
@@ -189,7 +189,6 @@ export function RequestTable({
           [
             request.description,
             contextLine(request, t),
-            request.project?.name,
             ...(audience === "helper" ? [request.requester?.displayName, request.location] : []),
           ]
             .filter(Boolean)
@@ -210,11 +209,7 @@ export function RequestTable({
       cell: (request) => (
         <div className="min-w-0 max-w-md space-y-0.5 whitespace-normal">
           <p className="line-clamp-2 font-medium wrap-anywhere">{request.description}</p>
-          <p className="text-muted-foreground text-xs">
-            {[audience === "requester" ? request.project?.name : null, contextLine(request, t)]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+          <p className="text-muted-foreground text-xs">{contextLine(request, t)}</p>
         </div>
       ),
     },
@@ -312,9 +307,7 @@ export function RequestTable({
               </p>
               <p className="text-muted-foreground text-xs wrap-anywhere">
                 {[
-                  ...(audience === "helper"
-                    ? [requestFor(request, t), request.location]
-                    : [request.project?.name]),
+                  ...(audience === "helper" ? [requestFor(request, t), request.location] : []),
                   formatEventDate(request.createdAt, language, "dayMonthTime"),
                 ]
                   .filter(Boolean)
@@ -382,10 +375,6 @@ export function RequestDetail({
       label: t("helpDeskFor"),
       value: !request.requesterProfile ? (
         requestFor(request, t)
-      ) : request.project ? (
-        <>
-          {request.project.name} · <RequesterLink request={request} source={source} />
-        </>
       ) : (
         <RequesterLink request={request} source={source} />
       ),

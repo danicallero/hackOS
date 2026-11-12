@@ -5,7 +5,6 @@ import { View } from "react-native";
 import { EmptyState, Section, Separator, ToggleRow } from "@/components/native-ui";
 import { NoResultsState } from "@/components/no-results-state";
 import { RequestFeedback } from "@/components/RequestFeedback";
-import { CheckRow } from "@/components/searchable-picker";
 import { InfoNotice } from "@/components/status-notice";
 import { alert } from "@/lib/alert";
 import {
@@ -25,7 +24,7 @@ import { ChallengeField, HelpInput, HelpPage, HelpText, TopicField } from "./pri
 import { RequestRow } from "./rows";
 
 /**
- * Server-backed request list: the caller's own/team requests, the helper inbox or their claims.
+ * Server-backed request list: the caller's own requests, the helper inbox or their claims.
  * The owner loads the resource so its pull-to-refresh and the list share one request.
  */
 export function HelpRequestList({
@@ -84,7 +83,7 @@ export function HelpRequestList({
   );
 }
 
-/** H64: a modal form (Close / Send) for me or one of my teams, with topics or Other. */
+/** H64: a modal form (Close / Send) for the caller's own request, with topics or Other. */
 export function NewHelpRequestScreen() {
   const { t, language } = useLocale();
   const router = useRouter();
@@ -97,16 +96,12 @@ export function NewHelpRequestScreen() {
   const existing = useHelpResource<HelpRequest>(
     edit ? `/api/helpdesk/requests/${encodeURIComponent(edit)}` : null,
   );
-  const teams = useHelpResource<{ projects: { id: number; name: string }[] }>(
-    allowed && !edit ? "/api/helpdesk/projects" : null,
-  );
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [topics, setTopics] = useState<HelpTopic[]>([]);
   const [other, setOther] = useState(false);
   const [challenge, setChallenge] = useState<HelpChallenge | null>(null);
   const [preferSponsor, setPreferSponsor] = useState(false);
-  const [projectId, setProjectId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [created, setCreated] = useState<number | null>(null);
@@ -141,8 +136,7 @@ export function NewHelpRequestScreen() {
       topics.length > 0 ||
       other ||
       challenge !== null ||
-      preferSponsor ||
-      projectId !== null;
+      preferSponsor;
   useHelpDraftGuard(!created && dirty, busy);
   useEffect(() => {
     if (created && edit) router.back();
@@ -192,7 +186,6 @@ export function NewHelpRequestScreen() {
         location: location.trim(),
         topicIds: topics.map((topic) => topic.id),
         other,
-        projectId,
         ...(challenge ? { challengeId: challenge.id } : {}),
         preferSponsor,
       });
@@ -203,7 +196,6 @@ export function NewHelpRequestScreen() {
       setBusy(false);
     }
   }
-  const projects = edit ? [] : (teams.data?.projects ?? []);
   return (
     <HelpPage
       title={t(edit ? "helpEdit" : "helpRequest")}
@@ -228,31 +220,6 @@ export function NewHelpRequestScreen() {
         <>
           {hours.closed ? (
             <InfoNotice icon="clock" text={helpClosedText(hours.schedule, language, t)} />
-          ) : null}
-          {!edit && teams.error ? (
-            <RequestFeedback error={teams.error} onRetry={() => void teams.load()} />
-          ) : null}
-          {projects.length > 0 ? (
-            <Section>
-              <CheckRow
-                label={t("helpForMe")}
-                selected={projectId === null}
-                disabled={busy}
-                onPress={() => setProjectId(null)}
-              />
-              {projects.map((project) => (
-                <View key={project.id}>
-                  <Separator inset={16} />
-                  <CheckRow
-                    label={project.name}
-                    detail={t("helpForTeam")}
-                    selected={projectId === project.id}
-                    disabled={busy}
-                    onPress={() => setProjectId(project.id)}
-                  />
-                </View>
-              ))}
-            </Section>
           ) : null}
           <Section>
             <HelpInput

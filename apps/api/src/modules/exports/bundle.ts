@@ -142,7 +142,7 @@ export async function buildExportBundle(
     ).rows[0] ?? null;
   const helpRequests = (
     await db.query(
-      `SELECT hr.id, hr.status, hr.description, hr.location, hr.other, hr.repo_id,
+      `SELECT hr.id, hr.status, hr.description, hr.location, hr.other,
               hr.meeting_mode, hr.meeting_location, hr.created_at, hr.claimed_at,
               hr.resolved_at, hr.cancelled_at,
               COALESCE((SELECT jsonb_agg(t.name ORDER BY t.name)

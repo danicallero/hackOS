@@ -593,7 +593,7 @@ export async function isListedHelper(db: Queryable, userId: number): Promise<boo
 }
 
 /**
- * H64, H66: the requester and active team members of a request a helper
+ * H64, H66: the requester of a request a helper
  * claimed (or resolved) may open that helper's profile even if the helper was
  * unpublished since. Knowing an id grants nothing: it needs the claim.
  */
@@ -605,9 +605,7 @@ export async function claimedForViewer(
   const { rows } = await db.query(
     `SELECT 1 FROM help_requests hr
       WHERE hr.claimed_by = $2 AND hr.status IN ('claimed', 'resolved')
-        AND (hr.requester_id = $1 OR (hr.repo_id IS NOT NULL AND EXISTS (
-          SELECT 1 FROM submissions s WHERE s.repo_id = hr.repo_id AND s.user_id = $1
-             AND s.status = 'active')))
+        AND hr.requester_id = $1
       LIMIT 1`,
     [viewerId, helperId],
   );

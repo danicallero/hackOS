@@ -36,9 +36,7 @@ export default function RequestPage() {
         context={back}
         title={
           request
-            ? (request.project?.name ??
-              request.requester?.displayName ??
-              t("helpDeskRemovedAccount"))
+            ? (request.requester?.displayName ?? t("helpDeskRemovedAccount"))
             : t("helpDeskViewRequest")
         }
       />

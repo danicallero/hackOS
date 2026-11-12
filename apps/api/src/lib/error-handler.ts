@@ -21,6 +21,24 @@ export function registerErrorHandler(app: FastifyInstance): void {
         },
       });
     }
+    // Fastify's own request rejections (empty or malformed JSON body, unsupported
+    // media type, oversized payload) are the client's fault, never a 500.
+    const status = (err as { statusCode?: unknown } | null)?.statusCode;
+    const code = (err as { code?: unknown } | null)?.code;
+    if (
+      typeof status === "number" &&
+      status >= 400 &&
+      status < 500 &&
+      typeof code === "string" &&
+      code.startsWith("FST_ERR_")
+    ) {
+      return reply.code(status).send({
+        error: {
+          code: "bad_request",
+          message: (err as { message?: string }).message ?? "Invalid request",
+        },
+      });
+    }
     if (isTimeoutError(err)) dbTimeoutsTotal.inc();
     req.log.error(err);
     return reply.code(500).send({

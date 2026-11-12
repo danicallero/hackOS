@@ -24,7 +24,6 @@ vi.mock("../shared", () => ({
 }));
 const request = {
   id: 12,
-  project: null,
   topics: [{ id: 3, name: "Frontend" }],
   other: false,
   challenge: { id: 5, name: "AI" },

@@ -174,12 +174,6 @@ export function HelpRequestScreen() {
 
             <Section>
               <InfoRow label={t("helpPlace")} value={request.location} />
-              {request.project ? (
-                <>
-                  <Separator />
-                  <InfoRow label={t("helpTeam")} value={request.project.name} />
-                </>
-              ) : null}
               <Separator />
               {request.requesterProfile ? (
                 // A helper can open the requester's public profile (H64, H66).

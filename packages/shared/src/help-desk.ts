@@ -58,7 +58,6 @@ export interface HelpRequest {
   other: boolean;
   challenge: { id: number; name: string } | null;
   preferSponsor: boolean;
-  project: { id: number; name: string } | null;
   requester: { userId: number; displayName: string } | null;
   routing: "matched" | "fallback" | "sponsor" | "none";
   notifiedCount: number;

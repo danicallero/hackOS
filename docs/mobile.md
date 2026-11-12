@@ -1650,7 +1650,7 @@ access gate lets only that route and `app/help-topics.tsx` through
 (`use-helper-preparation-access`).
 
 **Root (`components/help-desk/home-screen.tsx`).** Participants default to
-their own and team requests (`/api/helpdesk/requests/mine`); eligible helpers
+their own requests (`/api/helpdesk/requests/mine`); eligible helpers
 default to the open inbox (`inbox?scope=open`) with My claims; people with both
 get a segmented control over all three lists. Request rows show the ask, who and
 where, topics and a status pill; an empty list uses the shared empty state.
@@ -1721,8 +1721,7 @@ search as People, and Schedule's persistent `FilterMenu` beside it (Role and
 Knowledge multi-selects over the loaded list, `filterHelpers` in
 `lib/help-desk.ts`). The root's first row opens it with "N available".
 
-**Requests (H64–H66).** New request (sheet, Close / Send): for me or one of my teams
-(checkmark rows, only when the person has teams), details and location in one
+**Requests (H64–H66).** New request (sheet, Close / Send), always for the person sending it: details and location in one
 group, Knowledge topics and Challenge rows in another, and a "Prefer a sponsor"
 switch with its one-line consequence. "Other" is its own group above the catalogue in the topic
 picker (`app/help-topics.tsx`, laid out like the challenge picker's None; the
@@ -1740,8 +1739,8 @@ the requester's own project challenges first; one tap chooses and closes.
 Request rows show the challenge and "Prefers a sponsor" on a secondary line;
 the detail has Challenge and Prefer a sponsor rows. Detail reads like a Calendar
 event: the ask as the title with a status row and time, then location,
-requester, team and topics, then a Helper section whose row opens the claiming
-helper's profile (the API lets the requester and team read it) followed by the
+requester and topics, then a Helper section whose row opens the claiming
+helper's profile (the API lets the requester read it) followed by the
 meeting row ("On the way to Table 20" / "Meet at …"). Actions follow the
 server's `viewer` permissions: Claim is the prominent toolbar item with a menu
 (On my way / Meet elsewhere…, the latter asking for the place), Resolve likewise;
