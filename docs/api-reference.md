@@ -617,6 +617,12 @@ return silent success or swallow a failure. The global error handler
 | `TooManyRequestsError` | 429 | `too_many_requests` — carries `retryAfterSeconds` |
 | `ServiceUnavailableError` | 503 | `service_unavailable` — a dependent provider/credential isn't configured (e.g. unset Wallet signing keys) |
 
+A request Fastify itself rejects before the handler (an empty or malformed JSON
+body, an unsupported media type, an oversized payload) keeps its 4xx status with
+`code: "bad_request"`; it is never a 500. Body-less actions such as
+`POST /api/helpdesk/requests/:id/cancel` must not declare
+`content-type: application/json`.
+
 #### Machine-readable reasons (#996)
 
 `error.code` stays the generic class code above. When a client has to tell

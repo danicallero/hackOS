@@ -4174,7 +4174,7 @@
   "capabilityDescriptionHelpdeskRequest": "Consultar perfís de apoio e pedir axuda para ti ou o teu equipo.",
   "capabilityDescriptionHelpdeskCoverage": "Consultar cobertura prevista e presenza actual no recinto.",
   "capabilityDescriptionHelpdeskManage": "Renomear e combinar temas do catálogo de coñecementos.",
-  "helpDeskCancelConsequence": "A solicitude pecharase para ti e o teu equipo. Poderás enviar outra despois.",
+  "helpDeskCancelConsequence": "A solicitude pecharase. Poderás enviar outra despois.",
   "helpDeskIntervalIncomplete": "Escolle un día, unha hora de inicio e unha de fin.",
   "helpDeskIntervalOverlap": "Solápase cunha dispoñibilidade que xa engadiches.",
   "helpDeskIntervalTooLong": "Un intervalo pode durar como máximo 24 horas.",

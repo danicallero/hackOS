@@ -347,4 +347,33 @@ describe("multiplexed authorization and wire contract (#892)", () => {
     // Delivery is ordered on one connection: the no-op would precede this one.
     await expect.poll(signals).toBe(3);
   });
+  it("wakes help desk lists when a request is created, cancelled or claimed (H64-H66)", async () => {
+    const requester = await createUserWithCapabilities([CAPABILITIES.HELPDESK_REQUEST]);
+    const helper = await createUserWithCapabilities([CAPABILITIES.HELPDESK_OFFER]);
+    const mine = await open(requester, ["domain:helpdesk", "personal"]);
+    const inbox = await open(helper, ["domain:helpdesk", "personal"]);
+    const signals = (c: typeof mine) => c.text().split('"topic":"domain:helpdesk"').length - 1;
+    const post = (url: string, as: number, payload?: object) =>
+      app.inject({
+        method: "POST",
+        url,
+        headers: { ...asUser(as), "idempotency-key": crypto.randomUUID() },
+        ...(payload ? { payload } : {}),
+      });
+
+    const created = await post("/api/helpdesk/requests", requester, {
+      description: "Stuck",
+      location: "Table 1",
+      topicIds: [],
+      other: true,
+    });
+    expect(created.statusCode).toBe(201);
+    await expect.poll(() => signals(mine)).toBe(1);
+    await expect.poll(() => signals(inbox)).toBe(1);
+
+    const cancelled = await post(`/api/helpdesk/requests/${created.json().id}/cancel`, requester);
+    expect(cancelled.statusCode).toBe(200);
+    await expect.poll(() => signals(mine)).toBe(2);
+    await expect.poll(() => signals(inbox)).toBe(2);
+  });
 });

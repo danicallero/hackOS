@@ -23,10 +23,12 @@ export { coverageDays, validAvailability, validHelpRequest } from "@hackos/share
 
 export const canBrowseHelpDesk = canUseHelpDesk;
 export function helpMutation<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
+  // A JSON content type with no body is a malformed request: cancel, release and resolve send none.
   return apiFetch<T>(path, {
     method,
-    headers: { "content-type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    ...(body === undefined
+      ? {}
+      : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
   });
 }
 

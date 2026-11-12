@@ -16,9 +16,9 @@ of help desk writes.
 | `/help-desk/helpers` | Support team: search by name, company or knowledge; Role, Knowledge and current-state filters; role at the right edge, company below the name, green presence dot on the avatar only when inside | Any browse capability |
 | `/help-desk/helpers/:userId` | The helper's public profile (same `PersonProfile` as people), schedule and presence | Any browse capability |
 | `/settings/profile?tab=public` | Public profile tab, Help desk section below the editor: publish, challenge alerts, knowledge, availability (`/help-desk/profile` redirects here) | API eligibility, including accepted mentors before their role is assigned |
-| `/help-desk/requests` | Create and follow individual and team requests | `HELPDESK_REQUEST` |
+| `/help-desk/requests` | Create and follow own requests | `HELPDESK_REQUEST` |
 | `/help-desk/requests/:id/requester` | The requester's public profile (same `PersonProfile`), when the API's `requesterProfile` is non-null | Helpers who can read the request |
-| `/help-desk/requests/:id` | Follow a request, including notification links | API-authorized requester, team member, helper or coverage reader |
+| `/help-desk/requests/:id` | Follow a request, including notification links | API-authorized requester, helper or coverage reader |
 | `/help-desk/inbox` | Compatible entry to the unified selector, defaulting to Open for eligible helpers | `HELPDESK_OFFER` |
 | `/help-desk/hours` | Opening hours editor (H64) | `HELPDESK_MANAGE` |
 | `/help-desk/coverage` | Event coverage timeline, topic counts and current presence | `HELPDESK_COVERAGE` |
@@ -54,9 +54,8 @@ rest, from `/api/helpdesk/challenges`) and a "Prefer a sponsor" switch.
 Request rows and detail show the challenge and the sponsor preference. Request
 help is the primary header action of every help desk page
 (`requests/request-help-action.tsx`), for `HELPDESK_REQUEST`.
-Personal/team selection uses the API's active-project list. Team updates use the
-same authorized request projection, including meeting instructions and allowed
-actions. API business errors use the existing localized error-reason resolver.
+A request always belongs to the person who sends it; there is no team
+selection. API business errors use the existing localized error-reason resolver.
 A successful inbox claim opens Assigned to me so meeting instructions and lifecycle
 actions remain in view. A lost concurrent claim retains a visible explanation and refreshes the inbox.
 Creation and editing share `requests/request-editor.tsx`: closing a dirty form confirms discard within the owning modal, cancelling keeps the draft, and pending writes cannot dismiss it. Controls disable during writes; the API client preserves mutation intent keys
@@ -81,8 +80,7 @@ a fabricated presence count.
 Requests render with `RequestTable` (rows on narrow screens) and `RequestDetail`.
 The shared `ListToolbar`/`FilterMenu` provides text search plus simultaneous status
 and challenge choices, persistent checkbox focus, removable chips and Clear filters.
-My requests omits the caller's identity and current location, retaining project
-context for team requests; meeting instructions keep the helper name and a requested
+My requests omits the caller's identity and current location; meeting instructions keep the helper name and a requested
 destination, while an on-the-way update does not repeat the caller's location.
 Every status uses its own symbol and readable label; open reads "Waiting for support".
 The directory's available count follows actual presence, independently of planned
@@ -117,7 +115,7 @@ availability; `coverage-model.test.ts` the coverage derivation.
 concurrent-claim feedback, removed identities and the helper link. Profile page
 tests cover the helper section and eligibility-based tab. Navigation tests cover
 the separate capabilities. API integration tests own routing, transaction
-concurrency, authorization, notification idempotency and team visibility.
+concurrency, authorization, notification idempotency and requester-only visibility.
 
 
 The Support team role label and role filter use the person's highest assigned

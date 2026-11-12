@@ -1437,19 +1437,17 @@ async function scrubRelationships(
   // keep the users row, so the cascade alone would not remove it.
   await client.query(`DELETE FROM user_public_profiles WHERE user_id = $1`, [userId]);
   // H61-H66: the helper card, its knowledge and schedule, and routed-audience
-  // rows go. Requests survive for the team without the person: an individual
-  // request loses its text and is cancelled if still active; a claim held by
+  // rows go. The person's own requests lose their text and requester and
+  // are cancelled if still active; a claim held by
   // the person returns to open so the requester can be helped by someone else.
   await client.query(`DELETE FROM help_request_recipients WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM helper_profiles WHERE user_id = $1`, [userId]);
   await client.query(
     `UPDATE help_requests
-        SET status = CASE WHEN repo_id IS NULL AND status IN ('open', 'claimed')
-                          THEN 'cancelled' ELSE status END,
-            cancelled_at = CASE WHEN repo_id IS NULL AND status IN ('open', 'claimed')
-                                THEN now() ELSE cancelled_at END,
-            description = CASE WHEN repo_id IS NULL THEN '' ELSE description END,
-            location = CASE WHEN repo_id IS NULL THEN '' ELSE location END,
+        SET status = CASE WHEN status IN ('open', 'claimed') THEN 'cancelled' ELSE status END,
+            cancelled_at = CASE WHEN status IN ('open', 'claimed') THEN now() ELSE cancelled_at END,
+            description = '',
+            location = '',
             requester_id = NULL
       WHERE requester_id = $1`,
     [userId],
