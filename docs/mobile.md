@@ -1705,7 +1705,8 @@ switch on, and the screen mirrors it; unpublishing leaves sharing as is); for
 any eligible helper with challenges in the event, a "Challenge alerts" row
 (All requests, or the chosen challenge names) that opens the same searchable
 multi-select sheet used by the request creator (`challengeIds`; none selected
-= every request); the knowledge topics; then
+= every request; the checkmark saves the draft, Close discards it); the
+knowledge topics; then
 "When you plan to be here": one row per hacking day (`planDays` from
 `suggestedInterval`: hacking window, else event window) whose value lists that
 day's ranges. A day row opens a sheet with that day's ranges edited by clock

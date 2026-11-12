@@ -592,6 +592,28 @@ describe("account photo (#934)", () => {
     expect((await get(`/api/users/${me}`, staff)).json().image).toBe(image);
   });
 
+  it("shows scanner operators the photo their roster links only while it is shared", async () => {
+    const me = await person();
+    const image = (await upload("/api/me/photo", me, PNG, "me.png", "image/png")).json().image;
+    const operator = await createUserWithCapabilities([CAPABILITIES.ACCREDIT_SCAN]);
+    const rosterPhoto = async () =>
+      (await get("/api/scanner/snapshot", operator))
+        .json()
+        .people.find((entry: { userId: number }) => entry.userId === me).photoUrl;
+
+    await putProfile(me, VISIBLE);
+    expect(await rosterPhoto()).toBeNull();
+    expect((await get(image, operator)).statusCode).toBe(404);
+
+    await putProfile(me, { ...VISIBLE, showPhoto: true });
+    expect(await rosterPhoto()).toBe(image);
+    expect((await get(image, operator)).statusCode).toBe(200);
+
+    await putProfile(me, { ...VISIBLE, directoryVisible: false, showPhoto: true });
+    expect(await rosterPhoto()).toBeNull();
+    expect((await get(image, operator)).statusCode).toBe(404);
+  });
+
   it("rejects unsupported, oversize and empty images and the old URL field", async () => {
     const me = await person();
     const url = "/api/me/photo";

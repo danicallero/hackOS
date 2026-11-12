@@ -114,6 +114,16 @@ export function requireCapability(capability: Capability): preHandlerHookHandler
   };
 }
 
+export async function userHasAnyCapability(
+  context: Parameters<typeof userHasCapability>[0],
+  capabilities: readonly Capability[],
+): Promise<boolean> {
+  for (const capability of capabilities) {
+    if (await userHasCapability(context, capability)) return true;
+  }
+  return false;
+}
+
 /**
  * Route guard that passes if the caller holds ANY of the listed capabilities.
  * Used where an action is legitimately reachable from more than one role-view
@@ -122,10 +132,7 @@ export function requireCapability(capability: Capability): preHandlerHookHandler
 export function requireAnyCapability(...capabilities: Capability[]): preHandlerHookHandler {
   return async (req: FastifyRequest, _reply: FastifyReply) => {
     if (req.userId == null) throw new UnauthorizedError();
-    const context = getRequestAuthorizationContext(req);
-    for (const cap of capabilities) {
-      if (await userHasCapability(context, cap)) return;
-    }
+    if (await userHasAnyCapability(getRequestAuthorizationContext(req), capabilities)) return;
     throw new ForbiddenError(`Missing one of capabilities: ${capabilities.join(", ")}`, {
       capabilities,
     });

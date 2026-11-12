@@ -8,6 +8,7 @@ import {
   getRequestAuthorizationContext,
   requireAuth,
   requireCapability,
+  userHasAnyCapability,
   userHasCapability,
 } from "../../../lib/capabilities.js";
 import {
@@ -34,14 +35,16 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
 import { photoPublishedInDirectory, savedByReader } from "../../directory/service.js";
 import { helperPhotoShown, mayOpenHelper, mayOpenRequester } from "../../helpdesk/helpers.js";
+import { SCANNER_ROSTER_CAPABILITIES } from "../../logistics/scanner-sync.js";
 import { hasEventAccess } from "../role.js";
 
 /**
  * Account photo (#934). The owner uploads it to private object storage; it
  * is never served from a public bucket URL. `GET /api/users/:id/photo`
  * re-checks access on every request: the person, staff who can read users,
- * or an attendee who saved the person in their diary (#935) while the person
- * shows the photo on their public profile.
+ * and, while the person shows the photo on their public profile, a scanner
+ * operator (whose roster links it) or an attendee who saved the person in
+ * their diary (#935).
  */
 
 const photoParams = z.object({ id: z.coerce.number().int().positive() });
@@ -52,30 +55,11 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
   const readerId = req.userId as number;
   if (readerId === subjectId) return true;
   const context = getRequestAuthorizationContext(req);
-  if (await userHasCapability(context, CAPABILITIES.USERS_READ)) {
-    try {
-      await assertFixtureSubjectScope(pool, readerId, subjectId);
-      return true;
-    } catch (err) {
-      if (err instanceof AppError) return false;
-      throw err;
-    }
-  }
-  const scannerCapabilities = [
-    CAPABILITIES.ACCREDIT_SCAN,
-    CAPABILITIES.PRESENCE_SCAN,
-    CAPABILITIES.ACTIVITY_SCAN,
-    CAPABILITIES.LOGISTICS_STATS,
-    CAPABILITIES.SCHEDULE_MANAGE,
-  ];
-  if (
-    (
-      await Promise.all(
-        scannerCapabilities.map((capability) => userHasCapability(context, capability)),
-      )
-    ).some(Boolean) &&
-    (await photoPublishedInDirectory(pool, subjectId))
-  ) {
+  const staffReader =
+    (await userHasCapability(context, CAPABILITIES.USERS_READ)) ||
+    ((await userHasAnyCapability(context, SCANNER_ROSTER_CAPABILITIES)) &&
+      (await photoPublishedInDirectory(pool, subjectId)));
+  if (staffReader) {
     try {
       await assertFixtureSubjectScope(pool, readerId, subjectId);
       return true;

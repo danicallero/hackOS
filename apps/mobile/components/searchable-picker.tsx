@@ -135,9 +135,10 @@ export function SearchablePickerSheet({
   onQuery: (text: string) => void;
   /** Close: undo this visit's edits before the sheet dismisses. */
   onDiscard?: () => void;
-  /** Optional save action for pickers that commit a draft to the API. */
+  /** The checkmark saves through this instead of just dismissing; the sheet stays open until it navigates. */
   onConfirm?: () => void;
   confirmDisabled?: boolean;
+  /** Holds the sheet open while a save is in flight. */
   closeDisabled?: boolean;
   children: ReactNode;
 }) {
@@ -146,6 +147,7 @@ export function SearchablePickerSheet({
   const navigation = useNavigation();
   const readable = useParticipantLayout("form");
   const glass = isRealLiquidGlassAvailable();
+  const confirmLabel = t(onConfirm ? "save" : "close");
   const confirm = () => {
     if (confirmDisabled) return;
     if (onConfirm) onConfirm();
@@ -177,7 +179,7 @@ export function SearchablePickerSheet({
         : () => (
             <CircleButton
               icon="checkmark"
-              label={t("close")}
+              label={confirmLabel}
               prominent
               disabled={confirmDisabled}
               onPress={confirm}
@@ -214,7 +216,7 @@ export function SearchablePickerSheet({
             separateBackground
             variant="prominent"
             icon="checkmark"
-            accessibilityLabel={t("close")}
+            accessibilityLabel={confirmLabel}
             disabled={confirmDisabled}
             onPress={confirm}
           />

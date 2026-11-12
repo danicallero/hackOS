@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { EmptyState, Section, Separator } from "@/components/native-ui";
 import { NoResultsState } from "@/components/no-results-state";
@@ -11,36 +11,40 @@ import { helpMutation, type MyHelperProfile } from "@/lib/help-desk";
 import { useLocale } from "@/lib/i18n";
 import { useHelpResource } from "@/lib/use-help-resource";
 
-/** H61: searchable multi-select for the helper's challenge alert preferences. */
+/**
+ * H61: which challenges alert this helper, in the same searchable sheet as the
+ * request's challenge picker. Rows edit a draft; the checkmark saves it and
+ * Close leaves the profile as it was. No challenge chosen means every request.
+ */
 export function HelperChallengePickerScreen() {
   const { t } = useLocale();
   const router = useRouter();
   const result = useHelpResource<MyHelperProfile<DirectoryEntry>>("/api/me/helper-profile");
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<number[] | null>(null);
+  // Null until a row is touched, so the saved choice shows as soon as it loads.
+  const [draft, setDraft] = useState<number[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    if (result.data) setSelected(result.data.challengeIds);
-  }, [result.data]);
-
   const profile = result.data;
+  const selected = draft ?? profile?.challengeIds ?? [];
+  const inert = busy || !profile;
   const needle = query.trim().toLocaleLowerCase();
   const matching = (profile?.challengeOptions ?? []).filter(
     (challenge) => !needle || challenge.name.toLocaleLowerCase().includes(needle),
   );
 
-  function toggle(id: number) {
-    if (selected === null) return;
+  function choose(next: number[]) {
     void haptic("selection");
-    setSelected(
-      selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id],
-    );
+    setDraft(next);
   }
 
   async function save() {
-    if (!profile || selected === null || busy) return;
+    if (inert) return;
+    if (draft === null) {
+      router.back();
+      return;
+    }
     setBusy(true);
     setSaveError(null);
     try {
@@ -49,7 +53,7 @@ export function HelperChallengePickerScreen() {
         {
           published: profile.published,
           topicIds: profile.topics.map((topic) => topic.id),
-          challengeIds: selected,
+          challengeIds: draft,
         },
         "PUT",
       );
@@ -70,7 +74,7 @@ export function HelperChallengePickerScreen() {
       query={query}
       onQuery={setQuery}
       onConfirm={() => void save()}
-      confirmDisabled={busy || selected === null}
+      confirmDisabled={inert}
       closeDisabled={busy}
     >
       <RequestFeedback
@@ -80,31 +84,37 @@ export function HelperChallengePickerScreen() {
       />
       {saveError ? <RequestFeedback error={saveError} onRetry={() => void save()} /> : null}
       {!needle && profile ? (
-        <Section footer={t("helpChallengeAlertsNote")}>
+        <Section>
           <CheckRow
             label={t("helpAlertsAll")}
-            selected={selected?.length === 0}
-            disabled={busy || selected === null}
-            onPress={() => {
-              void haptic("selection");
-              setSelected([]);
-            }}
+            selected={selected.length === 0}
+            disabled={busy}
+            onPress={() => choose([])}
           />
         </Section>
       ) : null}
       {matching.length > 0 ? (
-        <Section>
-          {matching.map((challenge, index) => (
-            <View key={challenge.id}>
-              {index > 0 ? <Separator /> : null}
-              <CheckRow
-                label={challenge.name}
-                selected={selected?.includes(challenge.id) ?? false}
-                disabled={busy || selected === null}
-                onPress={() => toggle(challenge.id)}
-              />
-            </View>
-          ))}
+        <Section footer={needle ? undefined : t("helpChallengeAlertsNote")}>
+          {matching.map((challenge, index) => {
+            const chosen = selected.includes(challenge.id);
+            return (
+              <View key={challenge.id}>
+                {index > 0 ? <Separator /> : null}
+                <CheckRow
+                  label={challenge.name}
+                  selected={chosen}
+                  disabled={busy}
+                  onPress={() =>
+                    choose(
+                      chosen
+                        ? selected.filter((id) => id !== challenge.id)
+                        : [...selected, challenge.id],
+                    )
+                  }
+                />
+              </View>
+            );
+          })}
         </Section>
       ) : profile ? (
         needle ? (

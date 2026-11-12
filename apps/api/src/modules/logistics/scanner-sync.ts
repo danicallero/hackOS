@@ -1,8 +1,21 @@
+import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { pool } from "../../db/pool.js";
 import { isSyntheticOperator, scannerSubjectScope } from "../../lib/fixture-subject-scope.js";
 import { photoUrl } from "../../lib/profile-files.js";
 import type { Language } from "../notifications/translate/index.js";
 import { scannableActivitySql, scannableCategoriesParam } from "./scannable.js";
+
+/**
+ * Who may read the scanner roster. The photo route admits the same holders to
+ * the shared photos the roster links, so both read this one list.
+ */
+export const SCANNER_ROSTER_CAPABILITIES = [
+  CAPABILITIES.ACCREDIT_SCAN,
+  CAPABILITIES.PRESENCE_SCAN,
+  CAPABILITIES.ACTIVITY_SCAN,
+  CAPABILITIES.LOGISTICS_STATS,
+  CAPABILITIES.SCHEDULE_MANAGE,
+] as const;
 
 /**
  * H22-H26 scanner seed/sync payload. Native scanners keep this deliberately

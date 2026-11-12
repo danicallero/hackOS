@@ -14,6 +14,8 @@ import {
 } from "@/lib/help-topic-selection";
 import { useLocale } from "@/lib/i18n";
 
+const PAGE = 50;
+
 /**
  * H61/H64: the shared knowledge catalogue in the same searchable sheet as the
  * project challenge picker. Tapping a row toggles it in the draft the form
@@ -29,11 +31,15 @@ export function HelpTopicPickerScreen() {
   const opening = useRef({ selected, other });
   const [query, setQuery] = useState("");
   const [topics, setTopics] = useState<HelpTopic[] | null>(null);
-  const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [addError, setAddError] = useState<Error | null>(null);
   const [adding, setAdding] = useState(false);
   const [retry, setRetry] = useState(0);
+  // H64: a request can only ask for what an available helper covers right now;
+  // a helper editing their own knowledge sees the whole catalogue.
+  const availableOnly = !allowAdd;
+  const latestSelected = useRef(selected);
+  latestSelected.current = selected;
   // biome-ignore lint/correctness/useExhaustiveDependencies: retry repeats the catalogue request after an error.
   useEffect(() => {
     let active = true;
@@ -41,19 +47,24 @@ export function HelpTopicPickerScreen() {
       () => {
         const search = query.trim();
         void apiFetch<{ topics: HelpTopic[] }>(
-          `/api/helpdesk/topics?q=${encodeURIComponent(search)}&limit=50${allowAdd ? "" : "&available=1"}`,
+          `/api/helpdesk/topics?q=${encodeURIComponent(search)}&limit=${PAGE}${availableOnly ? "&available=1" : ""}`,
         )
           .then((result) => {
             if (!active) return;
             setTopics(result.topics);
-            setLoadedQuery(search);
             setError(null);
+            // A complete, unfiltered answer is the whole current offer: a topic
+            // chosen earlier that left it would route the request to nobody.
+            if (availableOnly && !search && result.topics.length < PAGE) {
+              const offered = new Set(result.topics.map((topic) => topic.id));
+              const kept = latestSelected.current.filter((topic) => offered.has(topic.id));
+              if (kept.length !== latestSelected.current.length) setTopicSelection(kept);
+            }
           })
           .catch((cause) => {
             if (!active) return;
             // Rows of an earlier search must not pass for this one's answer.
             setTopics(null);
-            setLoadedQuery(search);
             setError(cause instanceof Error ? cause : new Error(String(cause)));
           });
       },
@@ -63,22 +74,7 @@ export function HelpTopicPickerScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [allowAdd, query, retry]);
-  useEffect(() => {
-    if (
-      !allowOther ||
-      allowAdd ||
-      query.trim() ||
-      loadedQuery !== query.trim() ||
-      !topics ||
-      error
-    ) {
-      return;
-    }
-    const availableIds = new Set(topics.map((topic) => topic.id));
-    const current = selected.filter((topic) => availableIds.has(topic.id));
-    if (current.length !== selected.length) setTopicSelection(current);
-  }, [allowAdd, allowOther, error, loadedQuery, query, selected, topics]);
+  }, [availableOnly, query, retry]);
   const name = query.trim().replace(/\s+/g, " ");
   const known = [...selected, ...(topics ?? [])].some(
     (topic) => topic.name.toLocaleLowerCase() === name.toLocaleLowerCase(),

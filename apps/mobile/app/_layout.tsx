@@ -689,6 +689,9 @@ function RootLayoutNav({
   );
 }
 
+/** The smallest top inset of a Dynamic Island iPhone; a notch stops at 50. */
+const DYNAMIC_ISLAND_TOP_INSET = 54;
+
 /** A persistent, non-interactive safety cue whenever requests target development. */
 function DevelopmentIndicator() {
   const insets = useSafeAreaInsets();
@@ -697,7 +700,10 @@ function DevelopmentIndicator() {
   const sideInsets = useSideInsets();
   const sideRegion = sideRegionForInsets(sideInsets);
   const indicatorHeight = type.caption.lineHeight + 4;
-  const topSafeAreaHasRoom = insets.top >= indicatorHeight;
+  // Only a Dynamic Island leaves a free band under the status icons. A notch,
+  // a plain status bar and Android's bar are all filled to their bottom edge.
+  const topSafeAreaHasRoom =
+    process.env.EXPO_OS === "ios" && insets.top >= DYNAMIC_ISLAND_TOP_INSET;
   const useBottomCorner = sideRegion.edge || !topSafeAreaHasRoom;
   return (
     <View
@@ -712,8 +718,8 @@ function DevelopmentIndicator() {
         paddingHorizontal: 9,
         paddingVertical: 2,
         position: "absolute",
-        // Use the reserved top safe area on notched phones so it stays clear of
-        // navigation controls. Compact displays without room there use the space above tabs.
+        // Under the status icons it stays clear of every header control; without
+        // that band it sits above the tabs instead.
         ...(useBottomCorner
           ? { bottom: tabBarInsets.contentBottomInset + 4, left: 12 }
           : {

@@ -776,6 +776,7 @@ describe("profile avatar placeholder", () => {
     const controller = {
       anchorFrame: { left: 100, top: 220, width: 96, height: 96 },
       hostOrigin: { x: 0, y: 0 },
+      nameBoundary: { value: 330 },
       scrollOffset: { value: 0 },
       simple: false,
       target: island,
@@ -798,25 +799,26 @@ describe("profile avatar placeholder", () => {
   });
 
   describe("handover after the carry", () => {
-    const controllerAt = (offset: number) =>
+    const controllerAt = (offset: number, nameBoundary = 410) =>
       ({
         anchorFrame: { left: 100, top: 300, width: 96, height: 96 },
         anchorRef: { current: null },
         carryDistance: 40,
         hostOrigin: { x: 0, y: 0 },
+        nameBoundary: { value: nameBoundary },
         onAnchorLayout: () => {},
         scrollOffset: { value: offset },
         simple: false,
         target: island,
       }) as unknown as ProfileAvatarCollapseController;
-    const render = async (offset: number) =>
+    const render = async (offset: number, nameBoundary?: number) =>
       renderMobile(
         <>
           <ProfileAvatarCollapseAnchor controller={controllerAt(offset)} size={96}>
             <Text testID="anchor-photo">AH</Text>
           </ProfileAvatarCollapseAnchor>
           <ProfileAvatarCollapse
-            controller={controllerAt(offset)}
+            controller={controllerAt(offset, nameBoundary)}
             image={null}
             name="Admin HackOS"
             size={96}
@@ -844,6 +846,26 @@ describe("profile avatar placeholder", () => {
       await render(41);
       expect(anchorOpacity()).toBe(0);
       expect(maskOpacity()).toBe(1);
+    });
+
+    const clipHeight = () =>
+      StyleSheet.flatten(
+        screen.getByTestId("profile-avatar-name-clip", { includeHiddenElements: true }).props.style,
+      ).height;
+
+    it("clips the mask at the name as the content scrolls up", async () => {
+      await render(41);
+      expect(clipHeight()).toBe(410 - 41 - 2);
+    });
+
+    it("never clips to a negative height once the name has left the screen", async () => {
+      await render(600);
+      expect(clipHeight()).toBe(0);
+    });
+
+    it("keeps the mask hidden until the name has been measured", async () => {
+      await render(41, -1);
+      expect(clipHeight()).toBe(0);
     });
   });
 });

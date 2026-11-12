@@ -56,7 +56,7 @@ import {
 } from "./presence.js";
 import { exportHoursCsv } from "./presence-export.js";
 import { queryScanLog, staffScanCounts, staffScanRanking } from "./scan-log.js";
-import { scannerSnapshot } from "./scanner-sync.js";
+import { SCANNER_ROSTER_CAPABILITIES, scannerSnapshot } from "./scanner-sync.js";
 import {
   addScheduleOwner,
   callerScheduleAudiences,
@@ -227,13 +227,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
   );
   const scanRead = requireAnyCapability(CAPABILITIES.ACTIVITY_SCAN, CAPABILITIES.LOGISTICS_STATS);
   const ticketRead = requireAnyCapability(CAPABILITIES.USERS_READ, CAPABILITIES.ACCREDIT_SCAN);
-  const logisticsRead = requireAnyCapability(
-    CAPABILITIES.ACCREDIT_SCAN,
-    CAPABILITIES.PRESENCE_SCAN,
-    CAPABILITIES.ACTIVITY_SCAN,
-    CAPABILITIES.LOGISTICS_STATS,
-    CAPABILITIES.SCHEDULE_MANAGE,
-  );
+  const logisticsRead = requireAnyCapability(...SCANNER_ROSTER_CAPABILITIES);
   const access = {
     authenticated: { kind: "authenticated" } as const,
     publicContent: { kind: "public", anonymousCategory: "public-content" } as const,
@@ -260,16 +254,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       kind: "capability",
       anyOf: [CAPABILITIES.USERS_READ, CAPABILITIES.ACCREDIT_SCAN],
     } as const,
-    logisticsRead: {
-      kind: "capability",
-      anyOf: [
-        CAPABILITIES.ACCREDIT_SCAN,
-        CAPABILITIES.PRESENCE_SCAN,
-        CAPABILITIES.ACTIVITY_SCAN,
-        CAPABILITIES.LOGISTICS_STATS,
-        CAPABILITIES.SCHEDULE_MANAGE,
-      ],
-    } as const,
+    logisticsRead: { kind: "capability", anyOf: SCANNER_ROSTER_CAPABILITIES } as const,
   } satisfies Record<string, RouteAccessPolicy>;
 
   // Full replace-all seed for the native SQLite scanners. Each successful
