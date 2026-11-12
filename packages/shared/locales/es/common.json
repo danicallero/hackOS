@@ -1,7 +1,6 @@
 {
   "apiError_degree_in_use": "Este grado se usa en solicitudes. Consolídalo en otro grado antes de eliminarlo.",
   "signOut": "Cerrar sesión",
-  "welcomeBack": "Te damos la bienvenida",
   "forgotPassword": "¿Has olvidado la contraseña?",
   "checkEmail": "Revisa tu correo",
   "resetPassword": "Restablece la contraseña",

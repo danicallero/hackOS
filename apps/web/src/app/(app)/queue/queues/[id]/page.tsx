@@ -274,7 +274,6 @@ export default function QueueDetailPage() {
       <div className="grid gap-6 lg:grid-cols-[2fr_1fr]">
         <SectionCard
           title={t("queueTeams")}
-          description={t("queueTeamCount", { count: queue.entries.length })}
           action={
             queue.entries.length > 0 ? (
               <div className="relative w-full sm:w-72">
