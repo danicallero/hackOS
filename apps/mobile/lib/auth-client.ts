@@ -3,7 +3,7 @@ import { inferAdditionalFields } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 import type { ApiMode } from "./api-mode";
-import { clientBuildHeaders } from "./client-build";
+import { clientHeaders } from "./client-build";
 import { API_URL } from "./env";
 import { notifySignOut } from "./sign-out-events";
 import { isUpgradeRequired, markUpgradeRequired } from "./upgrade-required";
@@ -24,7 +24,7 @@ function createMobileAuthClient(mode: ApiMode = "production") {
   return createAuthClient({
     baseURL: API_URL,
     fetchOptions: {
-      headers: clientBuildHeaders(),
+      headers: clientHeaders(),
       // Sign-in and session calls hit the same floor as application reads (#999).
       onError: ({ error }) => {
         if (isUpgradeRequired(error.status, (error as { code?: string }).code)) {

@@ -1,6 +1,6 @@
 import { isMaintenanceError, maintenancePhaseOf } from "@hackos/shared/maintenance";
 import { authClient } from "./auth-client";
-import { clientBuildHeaders } from "./client-build";
+import { clientHeaders } from "./client-build";
 import { API_URL } from "./env";
 import { intentKey, settleIntentKey } from "./idempotency-key";
 import { maintenanceStore } from "./maintenance";
@@ -77,8 +77,7 @@ export async function apiFetch<T>(path: string, init?: ApiFetchInit): Promise<T>
   const url = `${API_URL.replace(/\/+$/, "")}${path}`;
   const method = requestInit.method?.toUpperCase() ?? "GET";
   const mutationHeaders = new Headers(requestInit.headers);
-  for (const [name, value] of Object.entries(clientBuildHeaders()))
-    mutationHeaders.set(name, value);
+  for (const [name, value] of Object.entries(clientHeaders())) mutationHeaders.set(name, value);
   const intent =
     !["GET", "HEAD", "OPTIONS"].includes(method) && !mutationHeaders.has("Idempotency-Key")
       ? `${method} ${path} ${typeof requestInit.body === "string" ? requestInit.body : ""}`

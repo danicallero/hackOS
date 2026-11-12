@@ -13,4 +13,13 @@ describe("deviceName", () => {
     );
     expect(deviceName(null)).toBe("");
   });
+
+  it("names the phone the app is signed in on", () => {
+    expect(deviceName("hackOS/42 (iPhone 15 Pro; iOS 18.1)")).toBe("hackOS app · iPhone 15 Pro");
+    expect(deviceName("hackOS (samsung SM-G991B; Android 14)")).toBe(
+      "hackOS app · samsung SM-G991B",
+    );
+    // Builds that predate the app's own user-agent.
+    expect(deviceName("Expo/1017756 CFNetwork/1568.200.51 Darwin/24.1.0")).toBe("hackOS app");
+  });
 });
