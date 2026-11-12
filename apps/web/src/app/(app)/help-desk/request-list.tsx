@@ -112,8 +112,7 @@ export function RequestStatus({ request }: { request: HelpRequest }) {
   const { t } = useLocale();
   const Icon = STATUS_ICON[request.status];
   return (
-    <StatusBadge dot={false} className="gap-1.5">
-      <Icon aria-hidden="true" className={`size-4 shrink-0 ${STATUS_COLOR[request.status]}`} />
+    <StatusBadge icon={<Icon aria-hidden="true" className={STATUS_COLOR[request.status]} />}>
       {t(REQUEST_STATUS[request.status])}
     </StatusBadge>
   );

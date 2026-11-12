@@ -11,6 +11,7 @@ import { EnvelopeSimpleIcon } from "@phosphor-icons/react/dist/csr/EnvelopeSimpl
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -92,6 +93,7 @@ export default function EnterpriseDetailPage() {
     }
     return (
       <div className="space-y-6">
+        <BackLink href="/enterprises" label={t("enterprises")} />
         <EmptyState
           title={t("enterpriseNotFoundTitle")}
           description={errorMsg || t("enterpriseNotLoadedDesc")}
@@ -104,6 +106,7 @@ export default function EnterpriseDetailPage() {
     <PageLayout>
       {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <PageHeader
+        context={<BackLink href="/enterprises" label={t("enterprises")} />}
         leading={
           <Avatar size="lg">
             {enterprise.logo_url ? (

@@ -25,6 +25,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -201,6 +202,7 @@ export default function ApplicationDetailPage() {
   return (
     <PageLayout>
       <PageHeader
+        context={<BackLink href="/applications" label={t("applications")} />}
         title={form ? form.name : t("applicationNumber", { id })}
         state={
           form && w ? (
@@ -216,14 +218,18 @@ export default function ApplicationDetailPage() {
         }
         meta={
           form ? (
-            <span className="text-muted-foreground text-xs">
-              {[
-                t("grantsRoleInline", { role: grantedRoleNameLabel(form.granted_role_name, t) }),
-                form.capacity != null ? t("quotaInline", { capacity: form.capacity }) : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
+            <dl className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <div className="flex gap-1.5">
+                <dt className="text-muted-foreground">{t("colGrantedRole")}</dt>
+                <dd className="font-medium">{grantedRoleNameLabel(form.granted_role_name, t)}</dd>
+              </div>
+              {form.capacity != null && (
+                <div className="flex gap-1.5">
+                  <dt className="text-muted-foreground">{t("colQuota")}</dt>
+                  <dd className="font-medium tabular-nums">{form.capacity}</dd>
+                </div>
+              )}
+            </dl>
           ) : undefined
         }
       />

@@ -165,7 +165,7 @@ export function ApplicationTab({ userId }: { userId: number }) {
                   : t("draftInline")}
               </p>
             </div>
-            <StatusBadge tone={applicationStatusTone(r.status)} dot={false}>
+            <StatusBadge tone={applicationStatusTone(r.status)}>
               {applicationStatusLabel(r.status, t)}
             </StatusBadge>
             <Button

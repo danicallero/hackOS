@@ -3,18 +3,19 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useParams } from "next/navigation";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
 import { PageLayout } from "@/components/common/page-layout";
+import { VisibilityBadge } from "@/components/common/publication-status";
 import { Spinner } from "@/components/common/spinner";
 import { StaleDataNotice } from "@/components/common/stale-data-notice";
-import { StatusBadge } from "@/components/common/status-badge";
 import { TrackTiming } from "@/components/projects/track-timing";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api, isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import { type Challenge, isScheduled, textForDisplay, visibilityTone } from "@/lib/challenges";
+import { type Challenge, textForDisplay } from "@/lib/challenges";
 import { useLocale } from "@/lib/i18n";
 import { useSessionContext } from "@/lib/session";
 import { ChallengeAlertDialog } from "./challenge-alert-dialog";
@@ -68,6 +69,7 @@ export default function ChallengeDetailPage() {
     }
     return (
       <div className="space-y-6">
+        <BackLink href="/challenges" label={t("challenges")} />
         <EmptyState
           title={t("challengeNotFoundTitle")}
           description={errorMsg || t("challengeNotLoadedDesc")}
@@ -80,6 +82,7 @@ export default function ChallengeDetailPage() {
     <PageLayout width="reading">
       {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <PageHeader
+        context={<BackLink href="/challenges" label={t("challenges")} />}
         title={textForDisplay(challenge.title)}
         secondaryActions={
           (canAdmin || me?.isSponsorRep || me?.isEnterpriseJudge) && (
@@ -92,14 +95,10 @@ export default function ChallengeDetailPage() {
           ) : undefined
         }
         state={
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={visibilityTone(challenge.visibility)} className="capitalize">
-              {challenge.visibility}
-            </StatusBadge>
-            {challenge.visibility === "hidden" && isScheduled(challenge.available_from) && (
-              <StatusBadge tone="warning">{t("dataStatusScheduled")}</StatusBadge>
-            )}
-          </div>
+          <VisibilityBadge
+            visibility={challenge.visibility}
+            availableFrom={challenge.available_from}
+          />
         }
       />
 

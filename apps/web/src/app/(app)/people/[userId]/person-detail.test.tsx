@@ -21,6 +21,7 @@ vi.mock("@/lib/api", () => ({
   },
   isNotFoundError: (err: unknown) => (err as { status?: number } | null)?.status === 404,
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn() }) }));
 vi.mock("@/hooks/use-event-source", () => ({
   useEventSource: (...args: unknown[]) => {
     env.eventSource(...args);
@@ -125,7 +126,7 @@ describe("PersonDetail (#934, #935)", () => {
     );
     expect(document.querySelector("[role=dialog]")?.textContent).toContain("cvViewerTitle");
     vi.unstubAllGlobals();
-    expect(container.querySelector("a[href='/people']")?.textContent).toBe("backToPeople");
+    expect(container.querySelector("a[href='/people']")?.textContent).toBe("diary");
     expect(env.eventSource).toHaveBeenCalledWith(
       "domain:directory",
       expect.objectContaining({ events: ["domain.changed"] }),
