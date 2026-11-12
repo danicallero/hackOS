@@ -267,7 +267,7 @@ export function MessagesTab() {
                   onClick={() => toggleExpanded(item)}
                   aria-expanded={isOpen}
                   aria-controls={`message-${item.id}`}
-                  className="button-interaction flex w-full items-start gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-5"
+                  className="button-interaction flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring sm:px-5"
                 >
                   <span
                     className={`mt-1.5 size-2 shrink-0 rounded-full ${unread ? "bg-primary" : "bg-transparent"}`}

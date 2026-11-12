@@ -241,7 +241,7 @@ function DraftRoomRow({
             onClick={() => onCreate(trimmedName, location.trim())}
             loading={saving}
           >
-            <PlusIcon className="size-3.5" aria-hidden="true" />
+            <PlusIcon className="size-4" aria-hidden="true" />
             {t("addAction")}
           </Button>
           <Button size="sm" variant="ghost" disabled={saving} onClick={onCancel}>
@@ -376,7 +376,7 @@ export function RoomsTable({
                       label={t("editRoomAria", { room: room.name })}
                       onClick={() => onOpenEdit(room.id)}
                     >
-                      <PencilIcon className="size-3.5" aria-hidden="true" />
+                      <PencilIcon className="size-4" aria-hidden="true" />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -395,7 +395,7 @@ export function RoomsTable({
               <TableCell colSpan={5} className="border-t border-dashed py-2">
                 <div className="sticky left-0 flex w-full max-w-[calc(100vw-2rem)] justify-center">
                   <Button variant="ghost" size="sm" onClick={onDraftOpen}>
-                    <PlusIcon className="size-3.5" aria-hidden="true" />
+                    <PlusIcon className="size-4" aria-hidden="true" />
                     {t("addRoomHere")}
                   </Button>
                 </div>

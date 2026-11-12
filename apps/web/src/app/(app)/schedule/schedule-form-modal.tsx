@@ -617,7 +617,7 @@ export function ScheduleFormModal({
             <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="button-interaction flex items-center gap-2 text-sm font-medium"
+                className="button-interaction flex min-h-(--target-min) items-center gap-2 text-sm font-medium"
               >
                 <CaretDownIcon
                   aria-hidden="true"

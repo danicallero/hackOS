@@ -52,7 +52,7 @@ export function BackLink({
         className,
       )}
     >
-      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+      <ArrowLeftIcon aria-hidden="true" className="size-4" />
       {label}
     </Link>
   );

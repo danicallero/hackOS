@@ -6,9 +6,9 @@
 
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { IconButton } from "@/components/common/icon-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FormSection, TemplateField } from "@/lib/applications";
@@ -77,14 +77,15 @@ export function ReviewViewMenu({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
+        <IconButton
           type="button"
-          className={dialogIconButtonClass}
-          aria-label={t("customizeReviewView")}
-          title={t("customizeReviewView")}
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground"
+          label={t("customizeReviewView")}
         >
           <SlidersHorizontalIcon aria-hidden="true" />
-        </button>
+        </IconButton>
       </PopoverTrigger>
       <PopoverContent align="end" className="max-h-[70dvh] w-80 space-y-4 overflow-y-auto">
         {groups.map((group, index) => (

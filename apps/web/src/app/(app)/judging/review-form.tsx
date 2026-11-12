@@ -12,12 +12,12 @@ import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WifiSlashIcon } from "@phosphor-icons/react/dist/csr/WifiSlash";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from "react";
+import { IconButton } from "@/components/common/icon-button";
 import { QuestionField } from "@/components/common/question-field";
 import { ReviewStatusBadge } from "@/components/common/review-status-badge";
 import { Spinner } from "@/components/common/spinner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { dialogIconButtonClass } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { overlayVariants } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
@@ -441,15 +441,16 @@ export function ReviewForm({
         </span>
         <ReviewStatusBadge status={status === "submitted" ? "submitted" : "draft"} />
         {column && onClose && (
-          <button
+          <IconButton
             type="button"
-            className={dialogIconButtonClass}
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground"
             onClick={onClose}
-            title={t("close")}
+            label={t("close")}
           >
             <XIcon aria-hidden="true" />
-            <span className="sr-only">{t("close")}</span>
-          </button>
+          </IconButton>
         )}
       </header>
       <div

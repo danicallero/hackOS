@@ -297,7 +297,7 @@ function UserMobileRow({
   return (
     <Link
       href={`/users/${user.id}`}
-      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-2.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
+      className="focus-visible:ring-ring flex min-w-0 items-start gap-3 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset"
     >
       <UserPhotoSlot user={user} reserve={reservePhoto} className="mt-0.5 size-9" />
       <div className="min-w-0 flex-1 space-y-2">
