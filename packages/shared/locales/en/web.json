@@ -2644,6 +2644,7 @@
   "loadingTvDisplay": "Loading TV display",
   "groupSharedQueue": "{count} rooms · shared queue",
   "backToEvent": "Back to event",
+  "backToParent": "Back to {name}",
   "loadingChallenge": "Loading challenge",
   "challengeUnpublishedDesc": "It may have been unpublished or the link is incorrect.",
   "judgingCriteriaTitle": "Judging criteria",

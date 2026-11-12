@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 import { TrophyIcon } from "@phosphor-icons/react/dist/csr/Trophy";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect } from "react";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -97,13 +97,11 @@ export default function PublicChallengePage() {
             </div>
           )
         }
-        secondaryActions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href={authenticated ? "/event" : "/"}>
-              <ArrowLeftIcon aria-hidden="true" />
-              {t("backToEvent")}
-            </Link>
-          </Button>
+        context={
+          <BackLink
+            href={authenticated ? "/event" : "/"}
+            label={t(authenticated ? "eventInformation" : "home")}
+          />
         }
       />
 
@@ -122,7 +120,7 @@ export default function PublicChallengePage() {
       )}
 
       {challenge === null && !challengeError && (
-        // The persistent "Back to event" button above is the page's stable
+        // The persistent back link above is the page's stable
         // escape hatch; a second one here said it twice (#299).
         <EmptyState
           title={t("challengeNotFoundTitle")}

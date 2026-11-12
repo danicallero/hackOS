@@ -11,9 +11,9 @@ export function DrilldownBackButton({ label, onClick }: { label: string; onClick
     <button
       type="button"
       onClick={onClick}
-      className="button-interaction text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-sm transition-colors"
+      className="button-interaction type-meta hover:text-foreground inline-flex items-center gap-1 transition-colors"
     >
-      <ArrowLeftIcon aria-hidden="true" className="size-4" />
+      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
       {label}
     </button>
   );

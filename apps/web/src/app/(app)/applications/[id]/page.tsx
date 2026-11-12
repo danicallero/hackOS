@@ -25,6 +25,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AlertModal } from "@/components/common/alert-modal";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -201,6 +202,7 @@ export default function ApplicationDetailPage() {
   return (
     <PageLayout>
       <PageHeader
+        context={<BackLink href="/applications" label={t("applications")} />}
         title={form ? form.name : t("applicationNumber", { id })}
         state={
           form && w ? (

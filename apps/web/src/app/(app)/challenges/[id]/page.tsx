@@ -3,6 +3,7 @@
 import { CAPABILITIES } from "@hackos/shared/capabilities";
 import { domainScope, EVENTS, SSE_TOPICS } from "@hackos/shared/events";
 import { useParams } from "next/navigation";
+import { BackLink } from "@/components/common/back-link";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/common/page-header";
@@ -68,6 +69,7 @@ export default function ChallengeDetailPage() {
     }
     return (
       <div className="space-y-6">
+        <BackLink href="/challenges" label={t("challenges")} />
         <EmptyState
           title={t("challengeNotFoundTitle")}
           description={errorMsg || t("challengeNotLoadedDesc")}
@@ -80,6 +82,7 @@ export default function ChallengeDetailPage() {
     <PageLayout width="reading">
       {stale && <StaleDataNotice onRetry={() => refetch()} />}
       <PageHeader
+        context={<BackLink href="/challenges" label={t("challenges")} />}
         title={textForDisplay(challenge.title)}
         secondaryActions={
           (canAdmin || me?.isSponsorRep || me?.isEnterpriseJudge) && (

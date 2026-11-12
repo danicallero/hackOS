@@ -28,6 +28,7 @@ filters. CSV exports require `logistics:stats`.
 - [Mobile: custom tabs and overflow selector](#mobile-custom-tabs-and-overflow-selector-h55)
 - [Decision-only applications](#decision-only-applications)
 - [Association-aware domain pages](#association-aware-domain-pages)
+- [Back navigation on record pages](#back-navigation-on-record-pages)
 
 ## Principle
 
@@ -505,3 +506,50 @@ sharing consent (H61–H63).
 The Logistics `/logistics/rsvps` destination is labelled **RSVP** in both the sidebar and page header (H59).
 
 At the end of Event data, Mobile Account shows RSVP only when the API offers an activity to the person’s roles. It opens personal RSVP answers at `/(tabs)/others/rsvps`, using the same push and native back navigation as notification preferences. Account remains selected, and reselecting it returns to the profile (H59, H55).
+
+## Back navigation on record pages
+
+Every drill-down record page has one return control: `BackLink`
+(`apps/web/src/components/common/back-link.tsx`) in `PageHeader`'s `context`
+slot (`ProjectsSectionHeader` and the help desk pages use the same one).
+
+- **Where it goes.** `href` is the record's canonical parent and the label is
+  that parent's name. `lib/in-app-history.ts`, installed once by
+  `InAppHistoryTracker` in `app/(app)/layout.tsx`, stamps every `pushState` /
+  `replaceState` with its position and remembers the URL. If the entry
+  just below the current one is the parent's pathname, the link calls
+  `router.back()`, so the list returns with its search, filters, page and
+  scroll. Otherwise it is a plain link to `href`.
+- **Direct opens never dead-end or leave the app.** A new tab, deep link,
+  refresh or an entry the app did not create is unknown to the tracker, so the
+  link goes to the canonical parent. A record that replaced its list entry
+  (single-project redirect) is not mistaken for a pushed one. Arriving from a
+  different page than the parent (a user opened from the audit log) also goes
+  to the canonical parent, never to a page the label does not name.
+- **No history writes at the target.** If the current URL already equals `href`
+  the click does nothing. Modified clicks (new tab) are left to the browser.
+  Unsaved-changes guards intercept the click as for any link.
+- **Tabs and filters inside a record use `replace`** (`useUrlTab`), so they add
+  no history entries and one Back leaves the record.
+
+| Record route | Canonical parent |
+| --- | --- |
+| `/challenge/:id` | `/event` (public: `/`) |
+| `/applications/:id` | `/applications` |
+| `/audit/:id` | `/audit` |
+| `/challenges/:id` | `/challenges` |
+| `/enterprises/:id` | `/enterprises` |
+| `/gallery/:id` | `/gallery` |
+| `/my-applications/:id` | `/my-applications` |
+| `/my-project/:id` | `/my-project?view=all` |
+| `/projects/:id` | `/projects` |
+| `/people/:userId` | `/people` |
+| `/queue/queues/:id` | `/queue?tab=queues` |
+| `/queue/reviews/:entryId` | `/queue/reviews` |
+| `/users/:id` | `/users` |
+| `/help-desk/requests/:id`, `…/requester`, `/help-desk/helpers/:userId` | the originating list or request (`?from=`) |
+
+`/applications/response/:id` and `/permissions/:roleId` are redirects and have
+no header. `DrilldownBackButton` stays for in-page state (permissions role,
+live-activities settings): it is a state change, not a route, and is styled like
+`BackLink`.

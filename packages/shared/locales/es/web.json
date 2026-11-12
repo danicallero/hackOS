@@ -2644,6 +2644,7 @@
   "loadingTvDisplay": "Cargando pantalla de TV",
   "groupSharedQueue": "{count} salas · cola compartida",
   "backToEvent": "Volver al evento",
+  "backToParent": "Volver a {name}",
   "loadingChallenge": "Cargando reto",
   "challengeUnpublishedDesc": "Puede que se haya despublicado o que el enlace sea incorrecto.",
   "judgingCriteriaTitle": "Criterios de evaluación",

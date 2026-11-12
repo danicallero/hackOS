@@ -556,6 +556,17 @@ metadata: email, badge id) → one `primaryAction` + optional
 `secondaryActions`. A status never sits beside the title: without a capsule
 it reads as stray text there, so it leads the line below.
 
+- **Record pages carry one back link in `context`.** `BackLink`
+  (`components/common/back-link.tsx`): a quiet arrow plus the parent's name
+  ("Users", "Applications"), the same on every record route. It steps back
+  through browser history when the entry just below is the parent list (search,
+  filters, page and scroll return intact) and otherwise goes to the canonical
+  parent. Don't hand-roll arrow links or put "Back to…" buttons in
+  `secondaryActions` or empty states. Tab changes inside a record use
+  `replace`, so Back leaves the record in one press. In-page drill-downs that
+  change `?role=`/`tab` state, not the route, use `DrilldownBackButton`, which
+  looks the same.
+
 - **Record pages use the same header as every other page.** An avatar goes in
   `leading` and the identity line in `meta` — don't hand-roll a second header
   layout with its own `h1` size and an `ml-auto` action block, which strands
