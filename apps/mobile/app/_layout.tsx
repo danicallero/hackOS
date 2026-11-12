@@ -679,6 +679,7 @@ function RootLayoutNav({
           <Stack.Screen name="helper-profile" options={{ headerShown: true }} />
           <Stack.Screen name="help-challenges" options={helpSheetOptions} />
           <Stack.Screen name="help-topics" options={helpSheetOptions} />
+          <Stack.Screen name="help-helper-challenges" options={helpSheetOptions} />
         </Stack.Protected>
         {/* #935 company-tag links resolve for any session state. */}
         <Stack.Screen name="s/[code]" options={{ headerShown: false }} />

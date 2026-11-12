@@ -334,6 +334,22 @@ export async function listMyRequests(userId: number): Promise<HelpRequestView[]>
   return toViews(pool, rows, await isActiveHelper(pool, userId), userId);
 }
 
+/** H64: projects the caller can choose as the requesting team. */
+export async function listRequestProjects(userId: number): Promise<{ id: number; name: string }[]> {
+  const { rows } = await pool.query<{ id: number; name: string }>(
+    `SELECT r.id, r.name
+       FROM submissions s
+       JOIN repos r ON r.id = s.repo_id
+       JOIN users u ON u.id = s.user_id
+      WHERE s.user_id = $1 AND s.status = 'active'
+        AND u.account_state = 'active' AND u.anonymized_at IS NULL
+        AND r.is_test_account = u.is_test_account
+      ORDER BY lower(r.name), r.id`,
+    [userId],
+  );
+  return rows.map((row) => ({ id: Number(row.id), name: row.name }));
+}
+
 export async function listInbox(
   userId: number,
   scope: "open" | "mine",
@@ -506,8 +522,23 @@ export async function createRequest(
       throw new ForbiddenError("The help desk is only available to event attendees");
     }
     await assertHelpdeskOpen(client);
-    // Always for the caller: a person's request, never a team's.
-    const repoId = null;
+    const repoId = input.projectId ?? null;
+    if (repoId !== null) {
+      // Keep membership stable through the request transaction so a concurrent
+      // team removal cannot create a request for someone who has just left.
+      const { rows } = await client.query(
+        `SELECT 1
+           FROM submissions s
+           JOIN repos r ON r.id = s.repo_id
+           JOIN users u ON u.id = s.user_id
+          WHERE s.repo_id = $1 AND s.user_id = $2 AND s.status = 'active'
+            AND u.account_state = 'active' AND u.anonymized_at IS NULL
+            AND r.is_test_account = u.is_test_account
+          FOR SHARE OF s`,
+        [repoId, userId],
+      );
+      if (!rows[0]) throw new ForbiddenError("Not an active project member");
+    }
     await assertTopicsExist(client, topicIds);
     const challengeId = input.challengeId ?? null;
     if (challengeId != null) {

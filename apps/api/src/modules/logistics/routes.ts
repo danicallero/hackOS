@@ -282,7 +282,7 @@ export function registerLogisticsRoutes(app: FastifyInstance): void {
       schema: {
         summary: "Synchronize native scanner data",
         description:
-          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys. Anonymized accounts (H54) are excluded from `people`. Rate limited per staff user (#538, docs/rate-limiting.md).",
+          "Returns the lightweight people, current/revoked badge, activity, and scan-count snapshot used by offline native scanners. Person cards include an authenticated photo URL only when that person shares their photo on their public profile. A successful response replaces the local snapshot; queued mutations remain separate and replay with idempotency keys. Anonymized accounts (H54) are excluded from `people`. Rate limited per staff user (#538, docs/rate-limiting.md).",
         response: { 200: scannerSnapshotResponse },
       },
     },

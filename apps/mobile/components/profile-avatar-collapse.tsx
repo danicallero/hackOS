@@ -124,7 +124,9 @@ export function useProfileAvatarCollapse(
   const staticAvatar = reduceMotion || lateralIsland;
   // Layout gap between the anchor's bottom and the view below it (`simple`).
   const anchorBottom = useRef<number | null>(null);
+  const anchorLayoutTop = useRef<number | null>(null);
   const nameTop = useRef<number | null>(null);
+  const nameTopPosition = useSharedValue(-1);
   const [simpleGap, setSimpleGap] = useState(0);
   const updateSimpleGap = useCallback(() => {
     if (anchorBottom.current === null || nameTop.current === null) return;
@@ -134,6 +136,13 @@ export function useProfileAvatarCollapse(
   const anchorRef = useRef<View>(null);
   const [hostOrigin, setHostOrigin] = useState({ x: 0, y: 0 });
   const [anchorFrame, setAnchorFrame] = useState<ProfileAvatarFrame | null>(null);
+  const updateOverlayNameTop = useCallback(
+    (anchorTop: number) => {
+      if (anchorLayoutTop.current === null || nameTop.current === null) return;
+      nameTopPosition.value = anchorTop + nameTop.current - anchorLayoutTop.current;
+    },
+    [nameTopPosition],
+  );
   // Plain scroll before the morph starts (#935). The Android gooey view keeps
   // its own rise with the content, so only the island mask carries.
   const carryDistance =
@@ -266,6 +275,7 @@ export function useProfileAvatarCollapse(
               previous.x === hostX && previous.y === hostY ? previous : { x: hostX, y: hostY },
             );
             const next = { left: x - hostX, top: y - hostY + offset, width, height };
+            updateOverlayNameTop(next.top);
             setAnchorFrame((previous) =>
               previous &&
               previous.left === next.left &&
@@ -279,7 +289,7 @@ export function useProfileAvatarCollapse(
         });
       });
     },
-    [scrollOffset],
+    [scrollOffset, updateOverlayNameTop],
   );
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -363,9 +373,12 @@ export function useProfileAvatarCollapse(
     hostOrigin,
     contentMinHeight,
     hostRef,
+    nameTopPosition,
+    viewportHeight: viewport,
     onAnchorLayout: (event?: LayoutChangeEvent) => {
       const layout = event?.nativeEvent?.layout;
       if (layout) {
+        anchorLayoutTop.current = layout.y;
         anchorBottom.current = layout.y + layout.height;
         updateSimpleGap();
       }
@@ -373,6 +386,7 @@ export function useProfileAvatarCollapse(
     },
     onNameLayout: ({ nativeEvent }: LayoutChangeEvent) => {
       nameTop.current = nativeEvent.layout.y;
+      if (anchorFrame) updateOverlayNameTop(anchorFrame.top);
       updateSimpleGap();
     },
     onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
@@ -567,9 +581,11 @@ export function ProfileAvatarCollapse({
     anchorFrame,
     carryDistance: carry,
     hostOrigin,
+    nameTopPosition,
     scrollOffset,
     simple,
     target,
+    viewportHeight,
   } = controller;
   const start = anchorFrame ?? { left: 0, top: 0, width: size, height: size };
   const destination = {
@@ -627,6 +643,11 @@ export function ProfileAvatarCollapse({
     }),
     [anchorFrame, carry, scrollOffset],
   );
+  const overlayClipStyle = useAnimatedStyle(() => {
+    if (nameTopPosition.value < 0) return { height: 0 };
+    const nameTopInViewport = nameTopPosition.value - scrollOffset.value - 2;
+    return { height: Math.max(0, Math.min(viewportHeight, nameTopInViewport)) };
+  }, [nameTopPosition, scrollOffset, viewportHeight]);
   // The image carries its own clip, matching the mask's circle, so no frame
   // shows it square while the native mask catches up (#935).
   const contentStyle = useAnimatedStyle(() => {
@@ -680,167 +701,198 @@ export function ProfileAvatarCollapse({
   const fallbackColor = variant === "account" ? colors.accent : colors.accentSurface;
   const initialsColor = variant === "account" ? colors.accentText : colors.onAccentSurface;
   const initials = variant === "account" ? avatarInitials(name) : diaryInitials(name);
+  const clipStyle = [
+    {
+      left: 0,
+      overflow: "hidden" as const,
+      position: "absolute" as const,
+      right: 0,
+      top: 0,
+      zIndex: 21,
+    },
+    overlayClipStyle,
+  ];
   if (gooey && AnimatedProfileGooeyView) {
     return (
       <Animated.View
-        testID="profile-avatar-collapse-mask"
         accessible={false}
         importantForAccessibility="no-hide-descendants"
         pointerEvents="none"
-        style={[{ position: "absolute", ...gooeyBox, zIndex: 21 }, overlayStyle]}
+        style={clipStyle}
       >
-        <AnimatedProfileGooeyView
-          testID="profile-avatar-gooey"
-          animatedProps={gooeyProps}
-          holeX={gooeyHole.left + gooeyHole.width / 2}
-          holeY={gooeyHole.top + gooeyHole.height / 2}
-          holeDiameter={Math.min(gooeyHole.width, gooeyHole.height)}
-          style={absoluteFill}
+        <Animated.View
+          testID="profile-avatar-collapse-mask"
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={[{ position: "absolute", ...gooeyBox, zIndex: 21 }, overlayStyle]}
         >
-          {/* Laid out once at the expanded frame; the native view scales it. */}
-          <View
-            collapsable={false}
-            style={{
-              position: "absolute",
-              left: gooeyStart.left,
-              top: gooeyStart.top,
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              overflow: "hidden",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: source || children ? colors.elevatedSurface : fallbackColor,
-            }}
+          <AnimatedProfileGooeyView
+            testID="profile-avatar-gooey"
+            animatedProps={gooeyProps}
+            holeX={gooeyHole.left + gooeyHole.width / 2}
+            holeY={gooeyHole.top + gooeyHole.height / 2}
+            holeDiameter={Math.min(gooeyHole.width, gooeyHole.height)}
+            style={absoluteFill}
           >
-            {children ??
-              (source ? (
-                <Image
-                  accessible={false}
-                  source={source}
-                  cachePolicy={persist ? "disk" : "memory"}
-                  contentFit="cover"
-                  style={{ height: size, width: size, borderRadius: size / 2 }}
-                />
-              ) : (
-                <>
-                  <Text
+            {/* Laid out once at the expanded frame; the native view scales it. */}
+            <View
+              collapsable={false}
+              style={{
+                position: "absolute",
+                left: gooeyStart.left,
+                top: gooeyStart.top,
+                width: size,
+                height: size,
+                borderRadius: size / 2,
+                overflow: "hidden",
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: source || children ? colors.elevatedSurface : fallbackColor,
+              }}
+            >
+              {children ??
+                (source ? (
+                  <Image
                     accessible={false}
-                    style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
-                  >
-                    {initials}
-                  </Text>
-                  {loader}
-                </>
-              ))}
-          </View>
-        </AnimatedProfileGooeyView>
+                    source={source}
+                    cachePolicy={persist ? "disk" : "memory"}
+                    contentFit="cover"
+                    style={{ height: size, width: size, borderRadius: size / 2 }}
+                  />
+                ) : (
+                  <>
+                    <Text
+                      accessible={false}
+                      style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
+                    >
+                      {initials}
+                    </Text>
+                    {loader}
+                  </>
+                ))}
+            </View>
+          </AnimatedProfileGooeyView>
+        </Animated.View>
       </Animated.View>
     );
   }
   return (
     <Animated.View
-      testID="profile-avatar-collapse-mask"
       accessible={false}
       importantForAccessibility="no-hide-descendants"
       pointerEvents="none"
-      style={[{ position: "absolute", ...bounds, zIndex: 21 }, overlayStyle]}
+      style={clipStyle}
     >
-      <MaskedView
-        style={{ flex: 1 }}
-        androidRenderingMode="software"
-        maskElement={
-          <Svg
-            width={bounds.width}
-            height={bounds.height}
-            viewBox={`0 0 ${bounds.width} ${bounds.height}`}
-          >
-            <AnimatedPath fill="#fff" animatedProps={maskProps} />
-          </Svg>
-        }
+      <Animated.View
+        testID="profile-avatar-collapse-mask"
+        accessible={false}
+        importantForAccessibility="no-hide-descendants"
+        pointerEvents="none"
+        style={[{ position: "absolute", ...bounds, zIndex: 21 }, overlayStyle]}
       >
-        <View
-          style={[
-            absoluteFill,
-            { backgroundColor: source || children ? colors.elevatedSurface : fallbackColor },
-          ]}
-        />
-        {children || source ? (
-          <Animated.View style={[{ position: "absolute", overflow: "hidden" }, contentStyle]}>
-            {children ?? (
-              <>
-                <Image
-                  accessible={false}
-                  source={source}
-                  cachePolicy={persist ? "disk" : "memory"}
-                  contentFit="cover"
-                  style={{ height: "100%", width: "100%" }}
-                />
-                <Animated.View style={[absoluteFill, softBlurStyle]}>
+        <MaskedView
+          style={{ flex: 1 }}
+          androidRenderingMode="software"
+          maskElement={
+            <Svg
+              width={bounds.width}
+              height={bounds.height}
+              viewBox={`0 0 ${bounds.width} ${bounds.height}`}
+            >
+              <AnimatedPath fill="#fff" animatedProps={maskProps} />
+            </Svg>
+          }
+        >
+          <View
+            style={[
+              absoluteFill,
+              { backgroundColor: source || children ? colors.elevatedSurface : fallbackColor },
+            ]}
+          />
+          {children || source ? (
+            <Animated.View style={[{ position: "absolute", overflow: "hidden" }, contentStyle]}>
+              {children ?? (
+                <>
                   <Image
                     accessible={false}
-                    blurRadius={6}
                     source={source}
                     cachePolicy={persist ? "disk" : "memory"}
                     contentFit="cover"
-                    style={absoluteFill}
+                    style={{ height: "100%", width: "100%" }}
                   />
-                </Animated.View>
-                <Animated.View style={[absoluteFill, strongBlurStyle]}>
-                  <Image
-                    accessible={false}
-                    blurRadius={18}
-                    source={source}
-                    cachePolicy={persist ? "disk" : "memory"}
-                    contentFit="cover"
-                    style={absoluteFill}
-                  />
-                </Animated.View>
-              </>
-            )}
-          </Animated.View>
-        ) : (
+                  <Animated.View style={[absoluteFill, softBlurStyle]}>
+                    <Image
+                      accessible={false}
+                      blurRadius={6}
+                      source={source}
+                      cachePolicy={persist ? "disk" : "memory"}
+                      contentFit="cover"
+                      style={absoluteFill}
+                    />
+                  </Animated.View>
+                  <Animated.View style={[absoluteFill, strongBlurStyle]}>
+                    <Image
+                      accessible={false}
+                      blurRadius={18}
+                      source={source}
+                      cachePolicy={persist ? "disk" : "memory"}
+                      contentFit="cover"
+                      style={absoluteFill}
+                    />
+                  </Animated.View>
+                </>
+              )}
+            </Animated.View>
+          ) : (
+            <Animated.View
+              style={[
+                { position: "absolute", alignItems: "center", justifyContent: "center" },
+                initialsStyle,
+              ]}
+            >
+              <Animated.Text
+                accessible={false}
+                style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
+              >
+                {initials}
+              </Animated.Text>
+              {loader}
+            </Animated.View>
+          )}
+          <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, blackStyle]} />
+          <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, coverStyle]} />
           <Animated.View
             style={[
-              { position: "absolute", alignItems: "center", justifyContent: "center" },
-              initialsStyle,
+              {
+                position: "absolute",
+                left: localTarget.left + localTarget.width / 2 - 50,
+                top: localTarget.top + localTarget.height - 2,
+                width: 100,
+                height: 100,
+              },
+              gradientStyle,
             ]}
           >
-            <Animated.Text
-              accessible={false}
-              style={{ color: initialsColor, fontSize: size * 0.36, fontWeight: "700" }}
-            >
-              {initials}
-            </Animated.Text>
-            {loader}
+            <Svg height="100" width="100" viewBox="0 0 100 100">
+              <Defs>
+                <RadialGradient
+                  id={gradientId}
+                  cx="50"
+                  cy="88"
+                  r="90"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <Stop offset="0" stopColor="#000" stopOpacity="0" />
+                  <Stop offset="0.87" stopColor="#000" stopOpacity="0" />
+                  <Stop offset="1" stopColor="#000" stopOpacity="1" />
+                </RadialGradient>
+              </Defs>
+              <Rect fill={`url(#${gradientId})`} height="100" width="100" />
+            </Svg>
           </Animated.View>
-        )}
-        <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, blackStyle]} />
-        <Animated.View style={[absoluteFill, { backgroundColor: "#000" }, coverStyle]} />
-        <Animated.View
-          style={[
-            {
-              position: "absolute",
-              left: localTarget.left + localTarget.width / 2 - 50,
-              top: localTarget.top + localTarget.height - 2,
-              width: 100,
-              height: 100,
-            },
-            gradientStyle,
-          ]}
-        >
-          <Svg height="100" width="100" viewBox="0 0 100 100">
-            <Defs>
-              <RadialGradient id={gradientId} cx="50" cy="88" r="90" gradientUnits="userSpaceOnUse">
-                <Stop offset="0" stopColor="#000" stopOpacity="0" />
-                <Stop offset="0.87" stopColor="#000" stopOpacity="0" />
-                <Stop offset="1" stopColor="#000" stopOpacity="1" />
-              </RadialGradient>
-            </Defs>
-            <Rect fill={`url(#${gradientId})`} height="100" width="100" />
-          </Svg>
-        </Animated.View>
-      </MaskedView>
+        </MaskedView>
+      </Animated.View>
     </Animated.View>
   );
 }

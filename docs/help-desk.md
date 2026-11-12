@@ -113,11 +113,12 @@ creates no diary contact and returns nothing beyond the card.
 
 ## Requests (H64-H66)
 
-A request is always for the caller (the team option was removed; requests
-stored with a project keep their team rules). Opening one requires event
-access. At most one request is active (open or claimed) per person (partial
-unique indexes plus a
-locked check), so double submits cannot open two.
+A request may be for the caller or one of their active project teams (H64).
+Opening one requires event access, and team membership is checked in the same
+transaction that creates the request. At most one request is active (open or
+claimed) per person or team (partial unique indexes plus a locked check), so
+double submits cannot open two. Cancelling withdraws the request and keeps its
+audited history; it does not physically delete the record.
 
 **Routing (H65)** runs once, at creation, inside the creating transaction:
 

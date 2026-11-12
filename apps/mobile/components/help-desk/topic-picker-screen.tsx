@@ -29,6 +29,7 @@ export function HelpTopicPickerScreen() {
   const opening = useRef({ selected, other });
   const [query, setQuery] = useState("");
   const [topics, setTopics] = useState<HelpTopic[] | null>(null);
+  const [loadedQuery, setLoadedQuery] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [addError, setAddError] = useState<Error | null>(null);
   const [adding, setAdding] = useState(false);
@@ -38,18 +39,21 @@ export function HelpTopicPickerScreen() {
     let active = true;
     const timer = setTimeout(
       () => {
+        const search = query.trim();
         void apiFetch<{ topics: HelpTopic[] }>(
-          `/api/helpdesk/topics?q=${encodeURIComponent(query.trim())}&limit=50`,
+          `/api/helpdesk/topics?q=${encodeURIComponent(search)}&limit=50${allowAdd ? "" : "&available=1"}`,
         )
           .then((result) => {
             if (!active) return;
             setTopics(result.topics);
+            setLoadedQuery(search);
             setError(null);
           })
           .catch((cause) => {
             if (!active) return;
             // Rows of an earlier search must not pass for this one's answer.
             setTopics(null);
+            setLoadedQuery(search);
             setError(cause instanceof Error ? cause : new Error(String(cause)));
           });
       },
@@ -59,7 +63,22 @@ export function HelpTopicPickerScreen() {
       active = false;
       clearTimeout(timer);
     };
-  }, [query, retry]);
+  }, [allowAdd, query, retry]);
+  useEffect(() => {
+    if (
+      !allowOther ||
+      allowAdd ||
+      query.trim() ||
+      loadedQuery !== query.trim() ||
+      !topics ||
+      error
+    ) {
+      return;
+    }
+    const availableIds = new Set(topics.map((topic) => topic.id));
+    const current = selected.filter((topic) => availableIds.has(topic.id));
+    if (current.length !== selected.length) setTopicSelection(current);
+  }, [allowAdd, allowOther, error, loadedQuery, query, selected, topics]);
   const name = query.trim().replace(/\s+/g, " ");
   const known = [...selected, ...(topics ?? [])].some(
     (topic) => topic.name.toLocaleLowerCase() === name.toLocaleLowerCase(),

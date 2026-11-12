@@ -1,3 +1,4 @@
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { AdaptiveFrame } from "@/components/adaptive-frame";
@@ -48,11 +49,11 @@ export function HelperProfileSection({
   onProfileChange?: (profile: MyHelperProfile<DirectoryEntry>) => void;
 } = {}) {
   const { t, language } = useLocale();
+  const router = useRouter();
   const [profile, setProfile] = useState<MyHelperProfile<DirectoryEntry> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [draft, setDraft] = useState<DayDraft | null>(null);
-  const [picking, setPicking] = useState(false);
   const latest = useRef<{
     profile: MyHelperProfile<DirectoryEntry> | null;
     saveProfile: (
@@ -70,9 +71,11 @@ export function HelperProfileSection({
       setError(cause instanceof Error ? cause : new Error(String(cause)));
     }
   }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
   useEffect(() => {
     if (profile) onProfileChange?.(profile);
   }, [profile, onProfileChange]);
@@ -240,7 +243,7 @@ export function HelperProfileSection({
                   ? t("helpAlertsAll")
                   : profile.challenges.map((challenge) => challenge.name).join(", ")
               }
-              onPress={() => setPicking(true)}
+              onPress={() => router.push("/help-helper-challenges")}
             />
           </>
         ) : null}
@@ -319,53 +322,6 @@ export function HelperProfileSection({
             accessibilityState={{ busy }}
             disabled={busy}
             onPress={commitDay}
-          />
-        </AdaptiveFrame>
-      </SheetModal>
-      <SheetModal visible={picking} animationType="slide" onRequestClose={() => setPicking(false)}>
-        <AdaptiveFrame>
-          <View style={{ alignItems: "center", height: 76, justifyContent: "center" }}>
-            <Text
-              accessibilityRole="header"
-              style={{ color: colors.label, fontSize: type.body.fontSize, fontWeight: "600" }}
-            >
-              {t("helpChallengeAlerts")}
-            </Text>
-          </View>
-          <View style={{ gap: 24, paddingHorizontal: 16 }}>
-            <Section footer={t("helpChallengeAlertsNote")}>
-              {profile.challengeOptions.map((option, index) => {
-                const selected = profile.challengeIds.includes(option.id);
-                return (
-                  <View key={option.id}>
-                    <NavRow
-                      title={option.name}
-                      chevron={false}
-                      icon={selected ? "checkmark.circle.fill" : "circle"}
-                      accessibilityLabel={option.name}
-                      onPress={() =>
-                        void saveProfile(
-                          profile.published,
-                          profile.topics,
-                          selected
-                            ? profile.challengeIds.filter((id) => id !== option.id)
-                            : [...profile.challengeIds, option.id],
-                        )
-                      }
-                    />
-                    {index < profile.challengeOptions.length - 1 ? <Separator inset={16} /> : null}
-                  </View>
-                );
-              })}
-            </Section>
-          </View>
-          <FloatingGlassButton
-            top={16}
-            side="right"
-            icon="checkmark"
-            tintColor={colors.accent}
-            accessibilityLabel={t("save")}
-            onPress={() => setPicking(false)}
           />
         </AdaptiveFrame>
       </SheetModal>

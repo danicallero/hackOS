@@ -61,6 +61,29 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
       throw err;
     }
   }
+  const scannerCapabilities = [
+    CAPABILITIES.ACCREDIT_SCAN,
+    CAPABILITIES.PRESENCE_SCAN,
+    CAPABILITIES.ACTIVITY_SCAN,
+    CAPABILITIES.LOGISTICS_STATS,
+    CAPABILITIES.SCHEDULE_MANAGE,
+  ];
+  if (
+    (
+      await Promise.all(
+        scannerCapabilities.map((capability) => userHasCapability(context, capability)),
+      )
+    ).some(Boolean) &&
+    (await photoPublishedInDirectory(pool, subjectId))
+  ) {
+    try {
+      await assertFixtureSubjectScope(pool, readerId, subjectId);
+      return true;
+    } catch (err) {
+      if (err instanceof AppError) return false;
+      throw err;
+    }
+  }
   if (
     (await savedByReader(pool, readerId, subjectId)) &&
     (await hasEventAccess(pool, readerId)) &&
@@ -266,7 +289,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         params: photoParams,
         summary: "Read a person's photo",
         description:
-          "Streams an account photo after checking this request: the person themself, a user reader, or an attendee with event access who saved the person in their diary, while the person shares a public profile with the photo. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
+          "Streams an account photo after checking this request: the person themself, a user reader, a logistics-capability holder when the person shares the photo in their public profile, an attendee with event access who saved the person in their diary, or an authorized help desk reader. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
       },
     },
     async (req, reply) => {
