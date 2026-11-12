@@ -211,7 +211,7 @@ function FaqItemsDisplay({ items }: { items: FaqItem[] }) {
       {textItems.map((item, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: static admin-authored content, no stable id.
         <div key={index} className="space-y-1">
-          <h3 className="text-sm font-medium">{textForDisplay(item.heading)}</h3>
+          <h3 className="type-subheading">{textForDisplay(item.heading)}</h3>
           <p className="text-muted-foreground text-pretty whitespace-pre-wrap text-sm">
             {textForDisplay(item.body)}
           </p>

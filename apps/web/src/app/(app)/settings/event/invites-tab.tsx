@@ -93,7 +93,7 @@ export function InvitesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
           stickyFooter
           footer={<FormActions pending={formState.isSubmitting} state={saveState} />}
         >
-          <h3 className="text-balance text-sm font-semibold">{t("invitesSponsorsGroup")}</h3>
+          <h3 className="type-subheading text-balance">{t("invitesSponsorsGroup")}</h3>
           <FormField
             control={form.control}
             name="requireSponsorShirtSize"
@@ -128,9 +128,7 @@ export function InvitesTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
               </FormItem>
             )}
           />
-          <h3 className="border-t pt-4 text-balance text-sm font-semibold">
-            {t("invitesStaffGroup")}
-          </h3>
+          <h3 className="type-subheading border-t pt-4 text-balance">{t("invitesStaffGroup")}</h3>
           <FormField
             control={form.control}
             name="requireStaffShirtSize"

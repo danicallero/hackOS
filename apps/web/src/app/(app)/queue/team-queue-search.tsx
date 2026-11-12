@@ -217,7 +217,7 @@ export function TeamQueueSearch({
     <Surface padding="compact" className="space-y-4" aria-label={t("queueTeamSearch")}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold">{t("queueTeamSearch")}</h2>
+          <h2 className="type-subheading">{t("queueTeamSearch")}</h2>
           <p className="text-muted-foreground mt-1 text-sm">{t("queueTeamSearchDescription")}</p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label={t("queueCloseSearch")} onClick={onClose}>
@@ -275,7 +275,7 @@ export function TeamQueueSearch({
       {selectedTeam && (
         <div className="space-y-3" aria-live="polite">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="min-w-0 truncate text-sm font-semibold" title={selectedTeam.repoName}>
+            <h3 className="type-subheading min-w-0 truncate" title={selectedTeam.repoName}>
               {selectedTeam.repoName}
             </h3>
             {!loading && (

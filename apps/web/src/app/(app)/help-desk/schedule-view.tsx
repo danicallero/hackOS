@@ -66,7 +66,7 @@ export function ScheduleDays({
           aria-label={dayLabel(day)}
           className="grid min-w-0 gap-x-6 gap-y-2 py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"
         >
-          <h4 className="text-sm font-medium tabular-nums">{dayLabel(day)}</h4>
+          <h4 className="type-subheading tabular-nums">{dayLabel(day)}</h4>
           <div className="min-w-0 space-y-2">
             <ul className="space-y-1">
               {list.map((interval) => (

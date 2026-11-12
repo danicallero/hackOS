@@ -106,7 +106,7 @@ function VerifyEmailInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+          <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         </CardHeader>
         <CardContent>
           <form method="post" action={`${API_URL}/api/auth/verify-email/confirm`}>
@@ -125,7 +125,7 @@ function VerifyEmailInner() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <h1 className="type-section-title text-balance">{t("emailVerified")}</h1>
+          <h1 className="type-page-title text-balance">{t("emailVerified")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-center">
           <Button onClick={() => router.push(next)}>
@@ -145,7 +145,7 @@ function VerifyEmailInner() {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
-        <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+        <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verificationInstructions")}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -215,7 +215,7 @@ function PendingVerification({ email, next }: { email: string; next: string }) {
   return (
     <Card>
       <CardHeader className="items-center justify-items-center text-center">
-        <h1 className="type-section-title text-balance">{t("verifyEmail")}</h1>
+        <h1 className="type-page-title text-balance">{t("verifyEmail")}</h1>
         <CardDescription>{t("verifyPendingBody", { email })}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">

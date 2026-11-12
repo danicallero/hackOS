@@ -73,7 +73,7 @@ function DropSection({
       ref={setNodeRef}
       className={cn("space-y-2 rounded-lg", isOver && "outline-2 outline-dashed outline-primary")}
     >
-      <h2 className="font-medium text-sm">{title}</h2>
+      <h2 className="type-subheading">{title}</h2>
       {children}
     </section>
   );

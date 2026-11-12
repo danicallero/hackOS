@@ -237,7 +237,7 @@ export function FieldEditor({
       data-field-id={fieldId}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
-      className="border-l-primary scroll-mt-20 space-y-4 border-l-4"
+      className="border-primary/60 ring-primary/30 scroll-mt-20 space-y-4 ring-1"
     >
       {topRow}
 

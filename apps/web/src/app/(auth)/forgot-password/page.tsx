@@ -69,7 +69,7 @@ function ForgotPasswordForm() {
     return (
       <Card>
         <CardHeader className="items-center justify-items-center text-center">
-          <h1 ref={confirmationHeading} tabIndex={-1} className="type-section-title text-balance">
+          <h1 ref={confirmationHeading} tabIndex={-1} className="type-page-title text-balance">
             {t("checkEmail")}
           </h1>
           <CardDescription>{t("resetEmailSent")}</CardDescription>
@@ -89,7 +89,7 @@ function ForgotPasswordForm() {
   return (
     <Card>
       <CardHeader>
-        <h1 className="type-section-title text-balance">{t("resetPassword")}</h1>
+        <h1 className="type-page-title text-balance">{t("resetPassword")}</h1>
       </CardHeader>
       <CardContent>
         <Form {...form}>

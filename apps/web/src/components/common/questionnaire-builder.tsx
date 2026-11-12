@@ -457,7 +457,7 @@ function JudgingQuestionRow({
       ref={cardRef}
       padding="compact"
       onClick={(e) => e.stopPropagation()}
-      className="border-l-primary space-y-4 border-l-4"
+      className="border-primary/60 ring-primary/30 space-y-4 ring-1"
     >
       {topRow}
 

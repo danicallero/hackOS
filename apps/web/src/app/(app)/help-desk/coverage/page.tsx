@@ -92,11 +92,11 @@ export function NowSection({ report }: { report: CoverageReport }) {
       <dl className="grid items-start gap-x-8 gap-y-5 sm:grid-cols-2">
         <div className="space-y-1">
           <dt className="text-sm font-medium">{t("helpDeskScheduledCount")}</dt>
-          <dd className="text-2xl tabular-nums">{scheduled}</dd>
+          <dd className="text-2xl font-semibold tabular-nums">{scheduled}</dd>
         </div>
         <div className="space-y-1">
           <dt className="text-sm font-medium">{t("helpDeskPresent")}</dt>
-          <dd className="text-2xl tabular-nums">{present}</dd>
+          <dd className="text-2xl font-semibold tabular-nums">{present}</dd>
         </div>
       </dl>
     </SectionCard>
@@ -171,7 +171,7 @@ function TimelineSection({
                     .join(" ")}
                 </p>
               </div>
-              <p className="text-3xl font-semibold tabular-nums">
+              <p className="text-2xl font-semibold tabular-nums">
                 {selected.scheduled}
                 <span className="text-muted-foreground ml-2 text-sm font-normal">
                   {t("helpDeskScheduledCount")}

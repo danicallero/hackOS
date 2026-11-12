@@ -19,6 +19,7 @@ import { PageLayout } from "@/components/common/page-layout";
 import { SectionCard } from "@/components/common/section-card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -84,8 +85,8 @@ export default function MyApplicationsPage() {
         <PageHeader title={t("myApplications")} />
         <div role="status" className="space-y-4">
           <span className="sr-only">{t("loading")}</span>
-          <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
-          <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
+          <Skeleton className="h-28 rounded-lg" />
+          <Skeleton className="h-28 rounded-lg" />
         </div>
       </PageLayout>
     );

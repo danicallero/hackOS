@@ -89,7 +89,7 @@ export function ApplicationFileViewer({
     <section
       aria-label={t("applicationFilesLabel")}
       className={cn(
-        "border-border bg-card flex min-h-0 flex-col space-y-3 overflow-hidden rounded-xl border p-4 sm:p-5",
+        "border-border bg-card flex min-h-0 flex-col space-y-3 overflow-hidden rounded-lg border p-4 sm:p-5",
         className,
       )}
     >

@@ -77,7 +77,7 @@ export function CookieNotice() {
       {/* Keep copy and dismissal in separate grid tracks so long localized text cannot cover the close control (#676). */}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
         <div className="col-start-1 row-start-1 min-w-0 wrap-break-word sm:col-start-2">
-          <h2 id="cookie-notice-title" className="text-balance text-base font-semibold">
+          <h2 id="cookie-notice-title" className="type-subheading text-balance">
             {t("cookieNoticeTitle")}
           </h2>
           <p className="text-muted-foreground mt-1.5 text-pretty text-xs leading-5 sm:text-sm">

@@ -114,7 +114,7 @@ export function OnboardingTab({ onDirtyChange }: { onDirtyChange: (dirty: boolea
             return (
               <li key={step} className="space-y-3 py-4 first:pt-0">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-medium">{t(STEP_TITLES[step])}</h3>
+                  <h3 className="type-subheading">{t(STEP_TITLES[step])}</h3>
                   <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                     <ToggleField
                       id={`${id}-enabled`}

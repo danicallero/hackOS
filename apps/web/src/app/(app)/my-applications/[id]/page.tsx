@@ -26,6 +26,7 @@ import { SectionCard } from "@/components/common/section-card";
 import { SubmitButton } from "@/components/common/submit-button";
 import { TemplateFieldControl, templateFieldId } from "@/components/common/template-field-control";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Section } from "@/components/ui/surface";
 import { getFoodIntolerances, useFoodIntolerances } from "@/hooks/use-food-intolerances";
 import { useLiveReload } from "@/hooks/use-live-reload";
@@ -430,9 +431,9 @@ export default function MyApplicationDetailPage() {
         />
         <div role="status" className="space-y-4">
           <span className="sr-only">{t("loading")}</span>
-          <div className="h-5 w-2/3 max-w-md animate-pulse rounded bg-muted motion-reduce:animate-none" />
-          <div className="h-28 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
-          <div className="h-52 animate-pulse rounded-lg border bg-muted/50 motion-reduce:animate-none" />
+          <Skeleton className="h-5 w-2/3 max-w-md" />
+          <Skeleton className="h-28 rounded-lg" />
+          <Skeleton className="h-52 rounded-lg" />
         </div>
       </PageLayout>
     );
@@ -553,7 +554,7 @@ export default function MyApplicationDetailPage() {
               key={group.section?.key ?? `ungrouped-${i}`}
               className={
                 group.section
-                  ? "border-border bg-muted/20 space-y-4 rounded-xl border p-4 sm:p-5"
+                  ? "border-border bg-muted/20 space-y-4 rounded-lg border p-4 sm:p-5"
                   : "space-y-4"
               }
             >

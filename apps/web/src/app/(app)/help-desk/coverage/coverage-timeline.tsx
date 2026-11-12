@@ -135,7 +135,7 @@ function DayRow({
       className="grid min-w-0 gap-x-4 gap-y-1 py-3 sm:grid-cols-[7.5rem_minmax(0,1fr)]"
     >
       <div className="min-w-0">
-        <h3 className="text-sm font-medium">{label}</h3>
+        <h3 className="type-subheading">{label}</h3>
         <p className="text-muted-foreground text-xs tabular-nums">{summary}</p>
       </div>
       <div className="min-w-0 space-y-1">

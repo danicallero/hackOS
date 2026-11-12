@@ -95,7 +95,7 @@ export function ReviewPanelCard({
   return (
     <div
       className={cn(
-        "border-border bg-popover space-y-3 rounded-xl border p-4 shadow-floating",
+        "border-border bg-popover space-y-3 rounded-lg border p-4 shadow-floating",
         className,
       )}
     >
@@ -280,7 +280,7 @@ export function FloatingReviewPanel(props: ReviewComposerProps) {
     <div
       ref={panelRef}
       data-dialog-floating
-      className="pointer-events-auto fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-xl"
+      className="pointer-events-auto fixed z-[70] w-[min(24rem,calc(100vw-2rem))] rounded-lg"
       style={panelStyle}
     >
       <ReviewPanelCard {...props} dragHandle={dragHandle} />

@@ -871,10 +871,7 @@ export function QuestionsCard({
                 const section = sections.find((s) => s._id === dragActive.id);
                 return (
                   section && (
-                    <Surface
-                      padding="compact"
-                      className="border-l-primary shadow-floating border-l-4"
-                    >
+                    <Surface padding="compact" className="border-primary/60 shadow-floating">
                       <div className="font-medium">{section.title[language] || section.key}</div>
                     </Surface>
                   )
