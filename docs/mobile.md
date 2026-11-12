@@ -534,6 +534,11 @@ only for its framework-neutral principles.
 
 - `lib/auth-client.ts` — Better Auth client using `expo-secure-store` for
   session storage instead of a cookie jar (H4's explicit requirement).
+- `lib/client-build.ts` — headers on every request: the build number (#999)
+  and a `hackOS/<build> (<model>; <system>)` user-agent. Better Auth stores it
+  on the session at sign-in, so the web's Active devices list names the phone;
+  a session opened by an older build keeps the generic "hackOS app" label
+  until it signs in again.
 - `lib/api.ts` — thin wrapper around the auth client's underlying fetch so
   every API call (not just `/api/auth/*`) carries the restored session.
 - `app/(auth)/sign-in.tsx` — email/password only; no in-app registration. The
