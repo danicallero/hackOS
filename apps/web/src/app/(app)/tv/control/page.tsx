@@ -157,9 +157,6 @@ export default function TvControlPage() {
 
   if (!canControl) return <AccessDenied ask={t("tvControlDeniedDesc")} />;
 
-  const currentModeLabel = current
-    ? (MODES.find((item) => item.value === current.mode)?.label ?? current.mode)
-    : null;
   // A "live" draft can drift from the broadcast payload without the mode
   // itself changing (an operator hides a block, retargets the timer, …) — the
   // comparison has to reach into the payload, not just the mode name, or the
@@ -186,11 +183,6 @@ export default function TvControlPage() {
 
       <SectionCard
         title={t("currentBroadcast")}
-        description={
-          current
-            ? t("currentlyShowing", { mode: currentModeLabel ?? current.mode })
-            : t("loadingCurrentMode")
-        }
         action={
           isManuallySelected ? (
             <Button variant="outline" disabled={busy} onClick={() => void resetToRooms()}>
@@ -238,7 +230,7 @@ export default function TvControlPage() {
 
       <SectionCard
         title={t("displayMode")}
-        description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : t("draftMatchesLiveDesc")}
+        description={isDraftUnbroadcast ? t("draftNotYetBroadcastDesc") : undefined}
         footer={
           <SubmitButton pending={busy} onClick={requestBroadcast}>
             {t("showOnTvs")}
