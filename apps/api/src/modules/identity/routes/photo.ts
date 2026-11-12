@@ -8,6 +8,7 @@ import {
   getRequestAuthorizationContext,
   requireAuth,
   requireCapability,
+  userHasAnyCapability,
   userHasCapability,
 } from "../../../lib/capabilities.js";
 import {
@@ -34,14 +35,16 @@ import { routeAccessConfig as routeAccess } from "../../../lib/route-policy.js";
 import { putObject } from "../../../lib/storage.js";
 import { photoPublishedInDirectory, savedByReader } from "../../directory/service.js";
 import { helperPhotoShown, mayOpenHelper, mayOpenRequester } from "../../helpdesk/helpers.js";
+import { SCANNER_ROSTER_CAPABILITIES } from "../../logistics/scanner-sync.js";
 import { hasEventAccess } from "../role.js";
 
 /**
  * Account photo (#934). The owner uploads it to private object storage; it
  * is never served from a public bucket URL. `GET /api/users/:id/photo`
  * re-checks access on every request: the person, staff who can read users,
- * or an attendee who saved the person in their diary (#935) while the person
- * shows the photo on their public profile.
+ * and, while the person shows the photo on their public profile, a scanner
+ * operator (whose roster links it) or an attendee who saved the person in
+ * their diary (#935).
  */
 
 const photoParams = z.object({ id: z.coerce.number().int().positive() });
@@ -52,7 +55,11 @@ async function canSeePhoto(req: FastifyRequest, subjectId: number): Promise<bool
   const readerId = req.userId as number;
   if (readerId === subjectId) return true;
   const context = getRequestAuthorizationContext(req);
-  if (await userHasCapability(context, CAPABILITIES.USERS_READ)) {
+  const staffReader =
+    (await userHasCapability(context, CAPABILITIES.USERS_READ)) ||
+    ((await userHasAnyCapability(context, SCANNER_ROSTER_CAPABILITIES)) &&
+      (await photoPublishedInDirectory(pool, subjectId)));
+  if (staffReader) {
     try {
       await assertFixtureSubjectScope(pool, readerId, subjectId);
       return true;
@@ -266,7 +273,7 @@ export function registerPhotoRoutes(app: FastifyInstance): void {
         params: photoParams,
         summary: "Read a person's photo",
         description:
-          "Streams an account photo after checking this request: the person themself, a user reader, or an attendee with event access who saved the person in their diary, while the person shares a public profile with the photo. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
+          "Streams an account photo after checking this request: the person themself, a user reader, a logistics-capability holder when the person shares the photo in their public profile, an attendee with event access who saved the person in their diary, or an authorized help desk reader. Any other case, and a missing photo, answer 404. The `v` query parameter only versions the URL. Cached privately for 5 minutes (#934).",
       },
     },
     async (req, reply) => {

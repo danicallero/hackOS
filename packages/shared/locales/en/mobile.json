@@ -1085,7 +1085,7 @@
   "helpPrefersSponsor": "Prefers a sponsor",
   "helpChallengeAlerts": "Challenge alerts",
   "helpAlertsAll": "All requests",
-  "helpChallengeAlertsNote": "Only requests about the selected challenges alert you. Select none to get every request.",
+  "helpChallengeAlertsNote": "Only requests about the selected challenges alert you.",
   "helpBeforeHacking": "You can't be available before the hacking time.",
   "helpMentorAvailable": "Available to mentor",
   "helpHoursTitle": "When you plan to be here",

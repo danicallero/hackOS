@@ -425,6 +425,45 @@ describe("H63 helper profile detail", () => {
 });
 
 describe("H64-H65 requests and routing", () => {
+  it("lists the caller's active teams and accepts a team request only from a member", async () => {
+    const p = await createUserWithCapabilities(participantCaps);
+    const mate = await createUserWithCapabilities(participantCaps);
+    const outsider = await createUserWithCapabilities(participantCaps);
+    const projectId = await team([p, mate]);
+    await team([mate]);
+
+    const available = await call("GET", "/api/helpdesk/projects", p);
+    expect(available.statusCode).toBe(200);
+    expect(available.json().projects).toHaveLength(1);
+    expect(available.json().projects[0]).toMatchObject({ id: projectId });
+
+    const created = await call("POST", "/api/helpdesk/requests", p, {
+      description: "The team is stuck",
+      location: "Table 12",
+      topicIds: [],
+      other: true,
+      projectId,
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toMatchObject({
+      project: { id: projectId },
+      viewer: { canCancel: true },
+    });
+    const teammateRequests = await call("GET", "/api/helpdesk/requests/mine", mate);
+    expect(teammateRequests.json().requests.map((request: { id: number }) => request.id)).toContain(
+      created.json().id,
+    );
+
+    const rejected = await call("POST", "/api/helpdesk/requests", outsider, {
+      description: "Not on this team",
+      location: "Table 12",
+      topicIds: [],
+      other: true,
+      projectId,
+    });
+    expect(rejected.statusCode).toBe(403);
+  });
+
   it("notifies available, present helpers who match any topic", async () => {
     const p = await createUserWithCapabilities(participantCaps);
     const fe = await topic("Frontend", p);

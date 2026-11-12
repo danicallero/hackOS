@@ -24,6 +24,7 @@ import {
   LegacyScreenHeader,
   Separator,
 } from "@/components/native-ui";
+import { PersonAvatar } from "@/components/person-avatar";
 import { PressableFeedback } from "@/components/pressable-feedback";
 import { RequestFeedback } from "@/components/RequestFeedback";
 import { OfflineNotice } from "@/components/status-notice";
@@ -45,7 +46,7 @@ import { isPadIdiom } from "@/lib/tabs";
 import { useAndroidTopInset } from "@/lib/use-android-top-inset";
 import { isSyncConflict, useScannerSync } from "@/lib/use-scanner";
 import { useTrueTopScroll } from "@/lib/use-true-top-scroll";
-import { colors, radius, type } from "@/theme";
+import { colors, type } from "@/theme";
 import { isAccessibilityTextSize } from "@/theme/dynamic-type";
 import { useOperatorListColumn } from "@/theme/layout-screens";
 
@@ -527,23 +528,7 @@ const PersonRow = memo(function PersonRow({
         paddingVertical: 9,
       }}
     >
-      <View
-        style={{
-          alignItems: "center",
-          backgroundColor: colors.accentSurface,
-          borderRadius: radius.full,
-          height: 40,
-          justifyContent: "center",
-          width: 40,
-        }}
-      >
-        <SymbolView
-          name="person.fill"
-          tintColor={colors.onAccentSurface}
-          size={18}
-          accessible={false}
-        />
-      </View>
+      <PersonAvatar size={40} name={displayName} uri={person.photoUrl ?? null} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text
           numberOfLines={accessibilityText ? undefined : 1}

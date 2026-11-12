@@ -2,6 +2,7 @@ import MaskedView from "@react-native-masked-view/masked-view";
 import * as Device from "expo-device";
 import { Image } from "expo-image";
 import {
+  type ComponentProps,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -124,7 +125,11 @@ export function useProfileAvatarCollapse(
   const staticAvatar = reduceMotion || lateralIsland;
   // Layout gap between the anchor's bottom and the view below it (`simple`).
   const anchorBottom = useRef<number | null>(null);
+  const anchorLayoutTop = useRef<number | null>(null);
   const nameTop = useRef<number | null>(null);
+  // The name's top edge in the overlay's coordinates at rest; negative until
+  // both it and the anchor are measured. The overlay never paints below it.
+  const nameBoundary = useSharedValue(-1);
   const [simpleGap, setSimpleGap] = useState(0);
   const updateSimpleGap = useCallback(() => {
     if (anchorBottom.current === null || nameTop.current === null) return;
@@ -134,6 +139,15 @@ export function useProfileAvatarCollapse(
   const anchorRef = useRef<View>(null);
   const [hostOrigin, setHostOrigin] = useState({ x: 0, y: 0 });
   const [anchorFrame, setAnchorFrame] = useState<ProfileAvatarFrame | null>(null);
+  // The anchor and the name are siblings, so their layout offsets place the
+  // name relative to the anchor's measured overlay frame.
+  const updateNameBoundary = useCallback(
+    (anchorTop: number) => {
+      if (anchorLayoutTop.current === null || nameTop.current === null) return;
+      nameBoundary.value = anchorTop + nameTop.current - anchorLayoutTop.current;
+    },
+    [nameBoundary],
+  );
   // Plain scroll before the morph starts (#935). The Android gooey view keeps
   // its own rise with the content, so only the island mask carries.
   const carryDistance =
@@ -266,6 +280,7 @@ export function useProfileAvatarCollapse(
               previous.x === hostX && previous.y === hostY ? previous : { x: hostX, y: hostY },
             );
             const next = { left: x - hostX, top: y - hostY + offset, width, height };
+            updateNameBoundary(next.top);
             setAnchorFrame((previous) =>
               previous &&
               previous.left === next.left &&
@@ -279,7 +294,7 @@ export function useProfileAvatarCollapse(
         });
       });
     },
-    [scrollOffset],
+    [scrollOffset, updateNameBoundary],
   );
 
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -363,9 +378,11 @@ export function useProfileAvatarCollapse(
     hostOrigin,
     contentMinHeight,
     hostRef,
+    nameBoundary,
     onAnchorLayout: (event?: LayoutChangeEvent) => {
       const layout = event?.nativeEvent?.layout;
       if (layout) {
+        anchorLayoutTop.current = layout.y;
         anchorBottom.current = layout.y + layout.height;
         updateSimpleGap();
       }
@@ -373,6 +390,7 @@ export function useProfileAvatarCollapse(
     },
     onNameLayout: ({ nativeEvent }: LayoutChangeEvent) => {
       nameTop.current = nativeEvent.layout.y;
+      if (anchorFrame) updateNameBoundary(anchorFrame.top);
       updateSimpleGap();
     },
     onHostLayout: ({ nativeEvent }: LayoutChangeEvent) => {
@@ -531,7 +549,35 @@ const AnimatedProfileGooeyView = ProfileGooeyView
   ? Animated.createAnimatedComponent(ProfileGooeyView)
   : null;
 
-export function ProfileAvatarCollapse({
+/** Gap kept between the overlay's clip and the name's first line. */
+const NAME_BOUNDARY_GAP = 2;
+
+/**
+ * The morphing avatar floats above the scroll content, so it is clipped at the
+ * name's top edge: text scrolling up never passes underneath the photo.
+ */
+export function ProfileAvatarCollapse(props: ComponentProps<typeof ProfileAvatarMorph>) {
+  const { anchorFrame, nameBoundary, scrollOffset, simple } = props.controller;
+  const clipStyle = useAnimatedStyle(() => {
+    if (nameBoundary.value < 0) return { height: 0 };
+    return { height: Math.max(0, nameBoundary.value - scrollOffset.value - NAME_BOUNDARY_GAP) };
+  }, [nameBoundary, scrollOffset]);
+  if (!anchorFrame || simple) return null;
+  return (
+    <Animated.View
+      testID="profile-avatar-name-clip"
+      pointerEvents="none"
+      style={[
+        { left: 0, overflow: "hidden", position: "absolute", right: 0, top: 0, zIndex: 21 },
+        clipStyle,
+      ]}
+    >
+      <ProfileAvatarMorph {...props} />
+    </Animated.View>
+  );
+}
+
+function ProfileAvatarMorph({
   controller,
   image,
   name,

@@ -98,7 +98,7 @@ export function NewHelpRequestScreen() {
     edit ? `/api/helpdesk/requests/${encodeURIComponent(edit)}` : null,
   );
   const teams = useHelpResource<{ projects: { id: number; name: string }[] }>(
-    allowed ? "/api/helpdesk/projects" : null,
+    allowed && !edit ? "/api/helpdesk/projects" : null,
   );
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");

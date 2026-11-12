@@ -166,7 +166,7 @@ means always open. Only creating requests is gated.
 
 | Method & path | Guard | Body / query | Response |
 | --- | --- | --- | --- |
-| `GET /api/helpdesk/topics` | browse or eligible helper | `?q=<text>&limit=1..50` (default 20; `q` matches anywhere, case/accent-insensitive) | `{ topics: HelpTopic[] }` |
+| `GET /api/helpdesk/topics` | browse or eligible helper | `?q=<text>&limit=1..50&available=1` (default 20; `q` matches anywhere, case/accent-insensitive; `available=1` limits results to topics offered by published helpers currently at the venue) | `{ topics: HelpTopic[] }` |
 | `POST /api/helpdesk/topics` | eligible helper or `helpdesk:manage` (else 403 `helper_not_eligible`) | `{ name: string }` (1-60 chars, trimmed, inner spaces collapsed) | `201 { topic, created: true }` or `200 { topic, created: false }` when an equivalent name exists. Rate-limited (20/hour/user). |
 | `PATCH /api/helpdesk/topics/:id` | `helpdesk:manage` | `{ name }` | `HelpTopic`; 409 `topic_name_taken` |
 | `POST /api/helpdesk/topics/:id/merge` | `helpdesk:manage` | `{ targetId }` | `HelpTopic` (target); moves profiles and requests, deletes source |
@@ -195,12 +195,13 @@ readable by browsers through the existing photo route.
 
 | Method & path | Guard | Body | Response |
 | --- | --- | --- | --- |
+| `GET /api/helpdesk/projects` | `helpdesk:request` | — | `{ projects: {id, name}[] }` active projects the caller can select as the requesting team |
 | `GET /api/helpdesk/challenges` | `helpdesk:request` | — | `{ challenges: {id, name, mine}[] }` visible non-test challenges, the caller's own project challenges first (`mine: true`) |
-| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, challengeId?: number \| null (visible challenge, else 400), preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 409 `helpdesk_closed` outside the configured opening hours; 403 when not a member of `projectId`. |
+| `POST /api/helpdesk/requests` | `helpdesk:request` + event access | `{ description (1-500), location (1-120), topicIds: number[] (0-5), other: boolean, projectId?: positive integer or null (active team membership required), challengeId?: visible challenge id or null, preferSponsor?: boolean (default false) }` — needs ≥1 topic or `other` | `201 HelpRequest`. 409 `help_request_active` when the caller (individual) or the team (project) already has an open/claimed request; 409 `helpdesk_closed` outside the configured opening hours; 403 without event access or active membership in `projectId`. |
 | `GET /api/helpdesk/requests/mine` | `helpdesk:request` | — | `{ requests: HelpRequest[] }` own + teams', newest first |
 | `GET /api/helpdesk/requests/:id` | requester, team member, helper (`helpdesk:offer` eligible), coverage, `helpdesk:manage` | — | `HelpRequest & { requesterProfile: DirectoryEntry \| null }` — the profile only for a routed helper, the claimer or `helpdesk:manage`, and only while the requester shares their public profile; 404 otherwise |
 | `PATCH /api/helpdesk/requests/:id` | requester or team member | `{ description, location, topicIds, other, challengeId?, preferSponsor? }` (creation rules) | `HelpRequest`, moved to the end of the queue and re-routed (only new matches are notified); 409 `help_request_already_claimed` when claimed, `help_request_closed` when resolved/cancelled |
-| `POST /api/helpdesk/requests/:id/cancel` | requester or team member | — | `HelpRequest` (`cancelled`); 409 `help_request_closed` when resolved/cancelled |
+| `POST /api/helpdesk/requests/:id/cancel` | requester or team member | — | `HelpRequest` (`cancelled`, retained in history); 409 `help_request_closed` when resolved/cancelled |
 
 ### Requests — helper side (H65, H66)
 

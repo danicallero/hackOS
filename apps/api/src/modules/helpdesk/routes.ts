@@ -38,6 +38,7 @@ import {
   listInbox,
   listMyRequests,
   listRequestChallenges,
+  listRequestProjects,
   releaseRequest,
   resolveRequest,
 } from "./requests.js";
@@ -426,6 +427,19 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
     },
     async (req) => ({ challenges: await listRequestChallenges(req.userId as number) }),
   );
+  r.get(
+    "/api/helpdesk/projects",
+    {
+      config: cap(CAPABILITIES.HELPDESK_REQUEST),
+      preHandler: requireCapability(CAPABILITIES.HELPDESK_REQUEST),
+      schema: {
+        summary: "List teams for a help request",
+        description:
+          "Active projects the caller belongs to (H64). The caller may open a request for themself or one of these teams.",
+      },
+    },
+    async (req) => ({ projects: await listRequestProjects(req.userId as number) }),
+  );
   r.post(
     "/api/helpdesk/requests",
     {
@@ -435,7 +449,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         body: createRequestBody,
         summary: "Request help",
         description:
-          "Opens a help request for the caller (H64), always for them personally: a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per person (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access. Audited.",
+          "Opens a help request for the caller or an active team selected by `projectId` (H64): a description (≤500), where they are (≤120), up to 5 catalogue topics and/or `other`, optionally `challengeId` (a visible challenge, else 400) and `preferSponsor` (default false, requires a selected challenge). Team membership is checked in the creating transaction. Routing (H65) runs once now, among available present helpers: a helper who limited themselves to some challenges is a candidate only for those challenges; sponsors of the request's challenge match regardless of topic; with `preferSponsor` and at least one available representative of the chosen challenge’s company only those representatives are notified (`routing: sponsor`). Otherwise: published helpers present at the venue (H24; stated intervals are advisory) and know ANY requested topic are notified (`routing: matched`); with Other, or when no such helper matches, every available present helper is (`fallback`); nobody available leaves it open with `none`, still visible in every helper's inbox. Notices go to the inbox and push (category `helpdesk`). One active request per person or team (409 `help_request_active`); 409 `helpdesk_closed` while configured opening hours are closed (H64, GET /api/helpdesk/schedule); 403 without event access or active team membership. Audited.",
       },
     },
     async (req, reply) => reply.code(201).send(await createRequest(req.userId as number, req.body)),
@@ -501,7 +515,7 @@ export function registerHelpdeskRoutes(app: FastifyInstance): void {
         params: idParams,
         summary: "Cancel a help request",
         description:
-          "The requester or any team member withdraws an open or claimed request; a claiming helper is notified. 409 `help_request_closed` once resolved or cancelled; 404 for anyone else. Audited (H64).",
+          "The requester or any team member withdraws an open or claimed request; its status becomes `cancelled` and the audited record remains in history. A claiming helper is notified. 409 `help_request_closed` once resolved or cancelled; 404 for anyone else (H64).",
       },
     },
     async (req) => cancelRequest(req.userId as number, req.params.id),
