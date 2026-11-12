@@ -11,6 +11,7 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessDenied } from "@/components/common/access-denied";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { Spinner } from "@/components/common/spinner";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { confirmDiscardUnsavedChanges } from "@/hooks/use-unsaved-changes-guard";
@@ -403,14 +404,16 @@ export default function QueuePage() {
           className="border-destructive/40 bg-destructive/5 text-destructive flex items-start justify-between gap-3 rounded-md border px-4 py-3 text-sm"
         >
           <span>{actionError}</span>
-          <button
+          <IconButton
             type="button"
-            aria-label={t("dismiss")}
+            variant="ghost"
+            size="icon-xs"
+            label={t("dismiss")}
             onClick={() => setActionError(null)}
-            className="button-interaction shrink-0 opacity-70 transition-opacity hover:opacity-100"
+            className="shrink-0"
           >
-            <XIcon aria-hidden="true" className="size-4" />
-          </button>
+            <XIcon aria-hidden="true" />
+          </IconButton>
         </div>
       )}
 

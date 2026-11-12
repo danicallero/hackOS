@@ -6,6 +6,7 @@ import { FilePdfIcon } from "@phosphor-icons/react/dist/csr/FilePdf";
 import { type ReactNode, useEffect, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
+import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { Button } from "@/components/ui/button";
 import { dialogIconButtonClass } from "@/components/ui/dialog";
@@ -147,15 +148,16 @@ export function CvViewer({
                 <DownloadSimpleIcon aria-hidden="true" />
               </a>
             ) : (
-              <button
+              <IconButton
                 type="button"
                 disabled
-                className={dialogIconButtonClass}
-                aria-label={t("downloadCv")}
-                title={t("downloadCv")}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                label={t("downloadCv")}
               >
                 <DownloadSimpleIcon aria-hidden="true" />
-              </button>
+              </IconButton>
             )}
             <a
               href={apiAssetUrl(path)}

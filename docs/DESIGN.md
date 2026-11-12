@@ -339,7 +339,10 @@ Server variants do not read React context; their default weight is `regular`.
 Client defaults live in `components/providers.tsx`'s `IconContext`: `regular`,
 24 px, `currentColor`. Keep existing `size-*` utilities for contextual sizing:
 usually 16 px in controls/navigation, 14 px beside compact metadata, 20–24 px
-for prominent states. Use `weight="fill"` for selected dots; preserve `animate-spin`
+for prominent states. Icons beside a text label or inside a
+`Button`/`IconButton` of `sm` size or larger are 16 px (`size-4`, the button default);
+14 px is only for icons beside `text-xs` metadata and 12 px only inside `xs` and
+`icon-xs` controls, status labels (which size their own `icon`) and sort arrows. Use `weight="fill"` for selected dots; preserve `animate-spin`
 on `SpinnerGapIcon`. Use `weight`, not Lucide's `strokeWidth`, to change the style.
 
 An icon must help identify an action, state, content type or real identity.
@@ -1011,6 +1014,14 @@ skeleton loading, contextual errors, one-CTA empty states.**
 
 Tables and lists:
 
+- List rows and their narrow-width `renderMobileRow` use `px-4 py-3`; dense
+  staff tables and rows holding inline controls may be tighter. The mobile row
+  follows Users: name (and email) first, then compact inline `Label: value`
+  pairs (`dl` with `flex flex-wrap gap-x-4 gap-y-1.5 text-xs`), never stacked
+  label-over-value blocks.
+- A native `<button>` is only for whole-row disclosures, sortable headings,
+  selectable cards, drag handles and menu items; it carries `button-interaction`
+  (or its own ring) and a 24 px target. Ordinary actions use `Button`/`IconButton`.
 - Navigation rows are links or fully keyboard-operable controls with focus
   styling and an accessible name — never mouse-only `onClick` rows.
 - Search gets a real label (persistent or visually hidden), a clear action,

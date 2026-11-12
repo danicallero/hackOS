@@ -638,13 +638,10 @@ export function DirectoryCard({ entry }: { entry: DirectoryEntry }) {
             name={entry.displayName}
             notFoundTitle={entry.cvUrl === OWN_CV_PATH ? t("noFileUploadedPeriod") : undefined}
             trigger={
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 pt-1 text-sm underline-offset-4 hover:underline"
-              >
-                <FilePdfIcon aria-hidden="true" className="text-muted-foreground size-4 shrink-0" />
+              <Button type="button" variant="link" size="sm" className="-ml-3 text-foreground">
+                <FilePdfIcon aria-hidden="true" className="text-muted-foreground" />
                 {t("viewCv")}
-              </button>
+              </Button>
             }
           />
         )}

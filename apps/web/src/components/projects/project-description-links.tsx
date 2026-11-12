@@ -41,7 +41,7 @@ export function ProjectDescriptionLinks({
               className="inline-flex items-center gap-1.5 text-sm underline underline-offset-4 decoration-muted-foreground/50 hover:decoration-foreground focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-4"
             >
               {link.label}
-              <ArrowSquareOutIcon aria-hidden="true" className="size-3.5" />
+              <ArrowSquareOutIcon aria-hidden="true" className="size-4" />
             </a>
           ))}
         </div>

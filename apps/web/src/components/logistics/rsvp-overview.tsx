@@ -89,7 +89,7 @@ export function RsvpOverview() {
               aria-expanded={expanded}
               aria-controls={panelId}
               onClick={() => setOpen(expanded ? null : item.id)}
-              className="flex w-full flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-left hover:bg-accent/50"
+              className="button-interaction flex w-full flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-left hover:bg-accent/50"
             >
               <span className="min-w-0 flex-1 basis-56">
                 <span className="block font-medium wrap-anywhere">

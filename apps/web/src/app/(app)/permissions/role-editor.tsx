@@ -554,7 +554,7 @@ function CapabilityGroup({
       <CollapsibleTrigger asChild>
         <button
           type="button"
-          className="button-interaction hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-2.5 text-left"
+          className="button-interaction hover:bg-muted/50 flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
         >
           <span className="type-label text-muted-foreground">{domain}</span>
           <CaretDownIcon
@@ -570,10 +570,7 @@ function CapabilityGroup({
         {capabilities.map((cap) => {
           const description = capabilityDescription(cap, t);
           return (
-            <div
-              key={cap}
-              className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
-            >
+            <div key={cap} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{prettifyCapability(cap, t)}</p>
                 {description && (

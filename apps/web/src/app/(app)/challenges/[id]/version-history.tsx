@@ -10,6 +10,7 @@ import { useCallback, useState } from "react";
 import { ContextualError } from "@/components/common/contextual-error";
 import { EmptyState } from "@/components/common/empty-state";
 import { Spinner } from "@/components/common/spinner";
+import { Button } from "@/components/ui/button";
 import { useLiveQuery } from "@/hooks/use-live-query";
 import { api } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
@@ -143,15 +144,17 @@ export function VersionHistory({ challengeId }: { challengeId: number }) {
               <p className="mt-1 text-xs">{changed.map((labelKey) => t(labelKey)).join(", ")}</p>
             ) : null}
             {(changed.length > 0 || index === versions.length - 1) && (
-              <button
+              <Button
                 type="button"
+                variant="link"
+                size="xs"
                 onClick={() => toggleExpanded(version.id)}
-                className="button-interaction text-primary mt-1 text-xs underline underline-offset-2"
+                className="mt-1"
               >
                 {expanded.has(version.id)
                   ? t("hideVersionDetailsLabel")
                   : t("viewVersionDetailsLabel")}
-              </button>
+              </Button>
             )}
             {expanded.has(version.id) && (
               <dl className="border-border mt-2 space-y-2 rounded-md border p-2">

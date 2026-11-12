@@ -462,7 +462,7 @@ function CvField({
               trigger={
                 <button
                   type="button"
-                  className="inline-flex min-w-0 max-w-full items-center gap-2 text-sm underline-offset-4 hover:underline"
+                  className="button-interaction inline-flex min-h-(--target-min) min-w-0 max-w-full items-center gap-2 text-sm underline-offset-4 hover:underline"
                 >
                   <FilePdfIcon
                     aria-hidden="true"

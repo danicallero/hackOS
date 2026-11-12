@@ -36,7 +36,7 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
   }, [load]);
 
   const renderStatuses = (row: PersonDirectoryEntry) => (
-    <span className="flex flex-wrap gap-x-4 gap-y-2">
+    <span className="flex flex-wrap gap-x-4 gap-y-1.5">
       <StatusBadge tone={row.confirmed ? "success" : "warning"}>
         {row.confirmed ? t("confirmed") : t("notConfirmed")}
       </StatusBadge>
@@ -103,11 +103,11 @@ export function PeopleTab({ onOpenPerson }: { onOpenPerson: (userId: number) => 
                 {[row.name, row.surname].filter(Boolean).join(" ") || `#${row.userId}`}
               </span>
               {row.email && (
-                <span className="text-muted-foreground block wrap-anywhere text-sm">
+                <span className="text-muted-foreground block wrap-anywhere text-xs">
                   {row.email}
                 </span>
               )}
-              <span className="text-muted-foreground block wrap-anywhere text-sm">
+              <span className="text-muted-foreground block wrap-anywhere text-xs">
                 {row.badgeId ?? t("noBadge")}
               </span>
               {renderStatuses(row)}

@@ -5,7 +5,7 @@
 import { FileTextIcon } from "@phosphor-icons/react/dist/csr/FileText";
 import { GavelIcon } from "@phosphor-icons/react/dist/csr/Gavel";
 import { PaperPlaneTiltIcon } from "@phosphor-icons/react/dist/csr/PaperPlaneTilt";
-import { dialogIconButtonClass } from "@/components/ui/dialog";
+import { IconButton } from "@/components/common/icon-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -285,15 +285,16 @@ export function DecisionMenu({
   return (
     <DropdownMenu dir="ltr">
       <DropdownMenuTrigger asChild>
-        <button
+        <IconButton
           type="button"
-          className={dialogIconButtonClass}
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground"
           disabled={busy}
-          aria-label={t("decisionMenuLabel")}
-          title={t("decisionMenuLabel")}
+          label={t("decisionMenuLabel")}
         >
           <GavelIcon aria-hidden="true" />
-        </button>
+        </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-52" style={{ direction: "ltr" }}>
         {items}

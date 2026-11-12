@@ -48,12 +48,12 @@ export function ProjectDescription({ text, projectName }: { text: string; projec
         >
           {expanded ? (
             <>
-              <CaretUpIcon aria-hidden="true" className="size-3.5" />
+              <CaretUpIcon aria-hidden="true" className="size-4" />
               {t("showLess")}
             </>
           ) : (
             <>
-              <CaretDownIcon aria-hidden="true" className="size-3.5" />
+              <CaretDownIcon aria-hidden="true" className="size-4" />
               {t("showMore")}
             </>
           )}

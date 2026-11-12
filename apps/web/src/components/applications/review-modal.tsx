@@ -44,6 +44,7 @@ import { type ReviewSyncMessage, useReviewSync } from "@/components/applications
 import { ReviewViewMenu, useReviewView } from "@/components/applications/review-view-menu";
 import { useReviewAutosave } from "@/components/applications/use-review-autosave";
 import { AlertModal } from "@/components/common/alert-modal";
+import { IconButton } from "@/components/common/icon-button";
 import { Modal } from "@/components/common/modal";
 import { StatusBadge } from "@/components/common/status-badge";
 import { type FieldValue, templateFieldId } from "@/components/common/template-field-control";
@@ -543,26 +544,28 @@ export function ReviewModal({
   const canRevealReviews = canManage;
   const candidateNavigation = onNavigate ? (
     <>
-      <button
+      <IconButton
         type="button"
-        className={dialogIconButtonClass}
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground"
         disabled={!canGoPrev}
         onClick={() => onNavigate("prev")}
-        aria-label={t("previousCandidate")}
-        title={t("previousCandidate")}
+        label={t("previousCandidate")}
       >
         <CaretLeftIcon aria-hidden="true" />
-      </button>
-      <button
+      </IconButton>
+      <IconButton
         type="button"
-        className={dialogIconButtonClass}
+        variant="ghost"
+        size="icon-sm"
+        className="text-muted-foreground"
         disabled={!canGoNext}
         onClick={() => onNavigate("next")}
-        aria-label={t("nextCandidate")}
-        title={t("nextCandidate")}
+        label={t("nextCandidate")}
       >
         <CaretRightIcon aria-hidden="true" />
-      </button>
+      </IconButton>
     </>
   ) : null;
   const showEditAction = canEdit && Boolean(template?.length);
@@ -754,34 +757,36 @@ export function ReviewModal({
         headerActions={
           <>
             <div className="hidden items-center gap-1 sm:flex sm:flex-wrap sm:justify-end">
-              <button
+              <IconButton
                 type="button"
-                className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
-                aria-label={t("copyResponseLink")}
-                title={t("copyResponseLink")}
+                variant="ghost"
+                size="icon-sm"
+                className={cn("text-muted-foreground", "hidden sm:inline-flex")}
+                label={t("copyResponseLink")}
                 onClick={copyResponseLink}
               >
                 <LinkIcon aria-hidden="true" />
-              </button>
+              </IconButton>
               {onNavigate && (
                 <div className="hidden items-center gap-1 sm:flex">{candidateNavigation}</div>
               )}
               {decisionMenu}
-              <button
+              <IconButton
                 type="button"
-                className={dialogIconButtonClass}
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
                 onClick={() => setViewAll((current) => !current)}
                 aria-pressed={viewAll || editing}
                 disabled={editing}
-                aria-label={t("viewAllDetails")}
-                title={t("viewAllDetails")}
+                label={t("viewAllDetails")}
               >
                 {viewAll || editing ? (
                   <EyeIcon aria-hidden="true" weight="fill" />
                 ) : (
                   <EyeSlashIcon aria-hidden="true" />
                 )}
-              </button>
+              </IconButton>
               {!editing && (
                 <ReviewViewMenu
                   groups={groupApplicationFields(answerFields, answerSections)}
@@ -808,26 +813,28 @@ export function ReviewModal({
                     <FloppyDiskIcon aria-hidden="true" />
                   </Button>
                 ) : (
-                  <button
+                  <IconButton
                     type="button"
-                    className={dialogIconButtonClass}
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground"
                     onClick={startEdit}
-                    aria-label={t("editAnswers")}
-                    title={t("editAnswers")}
+                    label={t("editAnswers")}
                   >
                     <PencilIcon aria-hidden="true" />
-                  </button>
+                  </IconButton>
                 ))}
               {showExportAction && (
-                <button
+                <IconButton
                   type="button"
-                  className={cn(dialogIconButtonClass, "hidden sm:inline-flex")}
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn("text-muted-foreground", "hidden sm:inline-flex")}
                   onClick={() => void exportAnswers(response, answerFields, answerValues, lang, t)}
-                  aria-label={t("exportAnswers")}
-                  title={t("exportAnswers")}
+                  label={t("exportAnswers")}
                 >
                   <DownloadSimpleIcon aria-hidden="true" />
-                </button>
+                </IconButton>
               )}
             </div>
             <ReviewActions

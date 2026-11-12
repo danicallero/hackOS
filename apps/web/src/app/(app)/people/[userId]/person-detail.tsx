@@ -93,7 +93,7 @@ export function ProfileBackLink({ href, label }: { href: string; label: string }
       href={href}
       className="inline-flex items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
     >
-      <ArrowLeftIcon aria-hidden="true" className="size-3.5" />
+      <ArrowLeftIcon aria-hidden="true" className="size-4" />
       {label}
     </Link>
   );

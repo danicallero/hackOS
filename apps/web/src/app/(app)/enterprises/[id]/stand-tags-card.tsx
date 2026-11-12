@@ -377,7 +377,7 @@ export function StandTagsCard({
                         label={t("standTagCopyCodeOf", { code: tag.label ?? tag.code })}
                         onClick={() => void copy(tag.code)}
                       >
-                        <CopyIcon aria-hidden="true" className="size-3.5" />
+                        <CopyIcon aria-hidden="true" className="size-4" />
                       </IconButton>
                     </div>
                     <p className="text-muted-foreground text-xs">

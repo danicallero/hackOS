@@ -529,10 +529,10 @@ export function ActivityRow({
               }}
               onClick={onOpenEdit}
             >
-              <PencilIcon className="size-3.5" aria-hidden="true" />
+              <PencilIcon className="size-4" aria-hidden="true" />
             </IconButton>
             <IconButton variant="ghost" size="icon-sm" label={t("duplicate")} onClick={onDuplicate}>
-              <CopyIcon className="size-3.5" aria-hidden="true" />
+              <CopyIcon className="size-4" aria-hidden="true" />
             </IconButton>
             <IconButton
               variant="ghost"
@@ -541,7 +541,7 @@ export function ActivityRow({
               className="text-destructive"
               onClick={onDelete}
             >
-              <TrashIcon className="size-3.5" aria-hidden="true" />
+              <TrashIcon className="size-4" aria-hidden="true" />
             </IconButton>
           </div>
         </TableCell>
