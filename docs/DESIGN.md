@@ -1297,6 +1297,18 @@ otherwise add no label. Native mobile pickers only speak the phone's zone, so
 (`toPickerDate`) and converts the answer back (`fromPickerDate`). Public pages
 and the TV already format with the zone in `GET /api/public/event`.
 
+On web there is one display path: `formatEventDate(value, language, preset)`
+(or `eventDateFormat` for a reusable formatter) in `lib/datetime.ts`. It
+follows the UI language and the event zone, never the browser's. Any stored
+timestamp ("submitted", "created", "opens", "expires", a publish time) uses the
+`dateTime` preset ("05 Jan 2026, 14:30"), so it reads the same on every screen.
+Presets spell out their fields instead of `dateStyle`/`timeStyle`, because
+browsers differ on the glue ("," versus "at"). Add a new named preset for a
+genuinely different shape (compact `dayMonthTime`, chart buckets, `clock`);
+do not call `Intl.DateTimeFormat` or `toLocale*String` for a displayed
+timestamp. Only `datetime-local` input values use `toDatetimeLocal` /
+`fromDatetimeLocal`.
+
 ## 11. Web specifics
 
 **Summary: Next.js 16 + shadcn (vendored) + Tailwind v4 tokens; sidebar

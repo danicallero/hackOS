@@ -21,18 +21,14 @@ import { useLiveQuery } from "@/hooks/use-live-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { isNotFoundError } from "@/lib/api";
 import { apiErrorText } from "@/lib/api-error-text";
-import {
-  type ApplicationForm,
-  fmtDateTime,
-  grantedRoleNameLabel,
-  windowState,
-} from "@/lib/applications";
+import { type ApplicationForm, grantedRoleNameLabel, windowState } from "@/lib/applications";
+import { formatEventDate } from "@/lib/datetime";
 import { useLocale } from "@/lib/i18n";
 import { applicationsResource, fetchListResource } from "@/lib/list-resources";
 import { useCan } from "@/lib/session";
 
 export default function ApplicationsPage() {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const isMobile = useIsMobile();
   const canManage = useCan(CAPABILITIES.APPLICATIONS_MANAGE);
   const canExport = useCan(CAPABILITIES.EXPORTS_RUN);
@@ -91,13 +87,21 @@ export default function ApplicationsPage() {
       id: "opens",
       header: t("colOpens"),
       sortValue: (f) => f.open_at ?? "",
-      cell: (f) => <span className="text-muted-foreground text-sm">{fmtDateTime(f.open_at)}</span>,
+      cell: (f) => (
+        <span className="text-muted-foreground text-sm">
+          {formatEventDate(f.open_at, language, "dateTime") || "—"}
+        </span>
+      ),
     },
     {
       id: "closes",
       header: t("colCloses"),
       sortValue: (f) => f.close_at ?? "",
-      cell: (f) => <span className="text-muted-foreground text-sm">{fmtDateTime(f.close_at)}</span>,
+      cell: (f) => (
+        <span className="text-muted-foreground text-sm">
+          {formatEventDate(f.close_at, language, "dateTime") || "—"}
+        </span>
+      ),
     },
     {
       id: "capacity",

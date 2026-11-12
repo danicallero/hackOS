@@ -6,16 +6,20 @@ import {
   applicationStatusLabel,
   applicationStatusTone,
 } from "@/lib/application-workflow";
-import { fmtDateTime, fmtScore, type ResponseRow } from "@/lib/applications";
+import { fmtScore, type ResponseRow } from "@/lib/applications";
+import { formatEventDate } from "@/lib/datetime";
 import type { Translate } from "@/lib/i18n";
+import type { Language } from "@/lib/types";
 
 /** Table columns of the responses list; the Sent workspace adds delivery and deadline. */
 export function buildResponseColumns({
   t,
+  language,
   meId,
   workspace,
 }: {
   t: Translate;
+  language: Language;
   meId: number | undefined;
   workspace: ApplicationWorkspace;
 }): Column<ResponseRow>[] {
@@ -67,7 +71,9 @@ export function buildResponseColumns({
       align: "right",
       sortValue: (r) => r.submitted_at ?? "",
       cell: (r) => (
-        <span className="text-muted-foreground text-sm">{fmtDateTime(r.submitted_at)}</span>
+        <span className="text-muted-foreground text-sm">
+          {formatEventDate(r.submitted_at, language, "dateTime") || "—"}
+        </span>
       ),
     },
   ];
@@ -81,7 +87,9 @@ export function buildResponseColumns({
       sortValue: (r) => r.decision_sent_at ?? "",
       cell: (r) => (
         <span className="text-muted-foreground text-sm tabular-nums">
-          {r.decision_sent_at ? fmtDateTime(r.decision_sent_at) : t("notSentYet")}
+          {r.decision_sent_at
+            ? formatEventDate(r.decision_sent_at, language, "dateTime") || "—"
+            : t("notSentYet")}
         </span>
       ),
     });
@@ -93,7 +101,9 @@ export function buildResponseColumns({
       sortValue: (r) => r.confirmation_expires_at ?? "",
       cell: (r) => (
         <span className="text-muted-foreground text-sm tabular-nums">
-          {r.confirmation_expires_at ? fmtDateTime(r.confirmation_expires_at) : "—"}
+          {r.confirmation_expires_at
+            ? formatEventDate(r.confirmation_expires_at, language, "dateTime") || "—"
+            : "—"}
         </span>
       ),
     });
